@@ -28,9 +28,11 @@ public sealed class MorphFacePackageWorkspace : IDisposable
             "LE BioMorphFace Editor",
             "Workspaces");
         Directory.CreateDirectory(workspaceDirectory);
+        // LEC derives BioWare's import/load tier from the filename prefix (for
+        // example, BioD_ files may resolve LE2 post-load startup imports).
         WorkingPath = Path.Combine(
             workspaceDirectory,
-            $".{Path.GetFileNameWithoutExtension(SourcePath)}.{Guid.NewGuid():N}.workspace.pcc");
+            $"{Path.GetFileNameWithoutExtension(SourcePath)}.{Guid.NewGuid():N}.workspace.pcc");
         File.Copy(SourcePath, WorkingPath, overwrite: false);
     }
 

@@ -1,0 +1,16 @@
+bin/
+obj/
+.vs/
+.idea/
+TestResults/
+artifacts/
+.codex-build/
+.codex-temp/
+docs/PROJECT-CONTEXT.md
+fixtures/local/*
+!fixtures/local/.gitkeep
+tests/Global Morphs/
+*.user
+*.suo
+***.received.*
+***.approved.*

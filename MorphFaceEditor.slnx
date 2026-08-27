@@ -1,0 +1,17 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/MorphFaceEditor/MorphFaceEditor.csproj" />
+    <Project Path="src/MorphFaceEditor.Core/MorphFaceEditor.Core.csproj" />
+    <Project Path="src/MorphFaceEditor.LegendaryExplorer/MorphFaceEditor.LegendaryExplorer.csproj" />
+    <Project Path="src/MorphFaceEditor.Rendering/MorphFaceEditor.Rendering.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MorphFaceEditor.Tests/MorphFaceEditor.Tests.csproj" />
+  </Folder>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/MorphFaceEditor.Benchmarks/MorphFaceEditor.Benchmarks.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/MorphFaceEditor.DataCompiler/MorphFaceEditor.DataCompiler.csproj" />
+  </Folder>
+</Solution>

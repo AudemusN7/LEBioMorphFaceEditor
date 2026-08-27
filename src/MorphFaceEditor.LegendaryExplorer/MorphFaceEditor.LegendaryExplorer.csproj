@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <AssemblyName>MorphFaceEditor.LegendaryExplorer</AssemblyName>
+    <RootNamespace>MorphFaceEditor.LegendaryExplorer</RootNamespace>
+    <LecDirectory>$(MSBuildThisFileDirectory)..\..\lib\LegendaryExplorerCore</LecDirectory>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MorphFaceEditor.Core\MorphFaceEditor.Core.csproj" />
+    <InternalsVisibleTo Include="MorphFaceEditor.Tests" />
+    <Reference Include="LegendaryExplorerCore">
+      <HintPath>$(LecDirectory)\LegendaryExplorerCore.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <None Include="$(LecDirectory)\LegendaryExplorerCore.pdb"
+          Link="LegendaryExplorerCore.pdb"
+          CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="$(LecDirectory)\CompressionWrappers.dll"
+             Link="CompressionWrappers.dll"
+             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="$(LecDirectory)\TexConverter.dll"
+             Link="TexConverter.dll"
+             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="$(LecDirectory)\ISACTTools.dll"
+             Link="ISACTTools.dll"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BCnEncoder.Net" />
+    <PackageReference Include="BCnEncoder.Net.ImageSharp" />
+    <PackageReference Include="CommunityToolkit.Diagnostics" />
+    <PackageReference Include="Microsoft.IO.RecyclableMemoryStream" />
+    <PackageReference Include="Newtonsoft.Json" />
+    <PackageReference Include="Serilog" />
+    <PackageReference Include="SharpDX.D3DCompiler" />
+    <PackageReference Include="SharpGLTF.Toolkit" />
+    <PackageReference Include="SixLabors.ImageSharp" />
+    <PackageReference Include="System.IO.Hashing" />
+  </ItemGroup>
+
+  <Target Name="VerifyLegendaryExplorerCorePin" BeforeTargets="ResolveReferences">
+    <GetFileHash Files="$(LecDirectory)\LegendaryExplorerCore.dll" Algorithm="SHA256">
+      <Output TaskParameter="Items" ItemName="_LecCoreHash" />
+    </GetFileHash>
+    <Error Condition="'%(_LecCoreHash.FileHash)' != '5BEFC63667C5B14E1605E8DBB6183ED9C784FCBC9F15B0F2F1B64E97ED6089B0'"
+           Text="LegendaryExplorerCore.dll does not match pinned commit 804db0b9a37d6184e8a06e4fecb30270d2fb48c8." />
+  </Target>
+</Project>

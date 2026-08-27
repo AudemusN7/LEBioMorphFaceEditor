@@ -7,6 +7,7 @@ using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.Models;
 using MorphFaceEditor.Services;
 using LegendaryExplorerCore.Packages;
+using LegendaryExplorerCore.Packages.CloningImportingAndRelinking;
 using LegendaryExplorerCore.Unreal;
 using LegendaryExplorerCore.Unreal.BinaryConverters;
 using LecTexture2D = LegendaryExplorerCore.Unreal.Classes.Texture2D;
@@ -18,6 +19,7 @@ public static class PackageContextTests
 {
     public static IReadOnlyList<TestCase> All { get; } =
     [
+        new("LE2 BioD workspaces retain post-load import resolution", Le2BioDWorkspaceRetainsPostLoadResolution),
         new("LE1 context clone creates an independently named face and material child", CloneLe1Morph),
         new("LE1 context delete trashes a face only in its package workspace", DeleteLe1Morph),
         new("LE1 morph export creates and extends a dependency-only PCC without changing paths", ExportLe1MorphPackage),
@@ -34,6 +36,27 @@ public static class PackageContextTests
         new("UModel staging package contains only baked mesh geometry", MeshExportStagingIsGeometryOnly),
         new("real baked mesh projects back into its profile target span", RealBakedMeshInverts)
     ];
+
+    private static void Le2BioDWorkspaceRetainsPostLoadResolution()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        var sourcePath = Path.Combine(Path.GetTempPath(), $"BioD_MFE_PostLoad_{Guid.NewGuid():N}.pcc");
+        MEPackageHandler.CreateAndSavePackage(sourcePath, MEGame.LE2);
+        try
+        {
+            using var workspace = new MorphFacePackageWorkspace(sourcePath);
+            TestAssert.True(
+                EntryImporter.IsSafeToImportFrom(
+                    "Startup_METR_Patch01_INT.pcc",
+                    MEGame.LE2,
+                    workspace.WorkingPath),
+                "The temporary workspace filename prevented imports from LE2's patch startup package.");
+        }
+        finally
+        {
+            File.Delete(sourcePath);
+        }
+    }
 
     private static void BrokenAttachmentMaterialFallsBack()
     {

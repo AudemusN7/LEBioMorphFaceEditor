@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <AssemblyName>MorphFaceEditor.Tests</AssemblyName>
+    <RootNamespace>MorphFaceEditor.Tests</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\tools\MorphFaceEditor.DataCompiler\MorphFaceEditor.DataCompiler.csproj" />
+    <ProjectReference Include="..\..\src\MorphFaceEditor.Core\MorphFaceEditor.Core.csproj" />
+    <ProjectReference Include="..\..\src\MorphFaceEditor.Rendering\MorphFaceEditor.Rendering.csproj" />
+    <ProjectReference Include="..\..\src\MorphFaceEditor\MorphFaceEditor.csproj" />
+    <Reference Include="LegendaryExplorerCore">
+      <HintPath>..\..\lib\LegendaryExplorerCore\LegendaryExplorerCore.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+</Project>

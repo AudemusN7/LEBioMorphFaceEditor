@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>MorphFaceEditor</AssemblyName>
+    <RootNamespace>MorphFaceEditor</RootNamespace>
+    <Version>0.1.0-alpha.1</Version>
+    <ApplicationIcon>..\..\icon.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <Resource Include="..\..\icon.ico" Link="icon.ico" />
+    <EmbeddedResource Include="Assets\MorphTargets\*.mft.br"
+                      LogicalName="MorphFaceEditor.Assets.MorphTargets.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Assets\Randomisation\*.mfr.br"
+                      LogicalName="MorphFaceEditor.Assets.Randomisation.%(Filename)%(Extension)" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\MorphFaceEditor.Core\MorphFaceEditor.Core.csproj" />
+    <ProjectReference Include="..\MorphFaceEditor.LegendaryExplorer\MorphFaceEditor.LegendaryExplorer.csproj" />
+    <ProjectReference Include="..\MorphFaceEditor.Rendering\MorphFaceEditor.Rendering.csproj" />
+  </ItemGroup>
+</Project>

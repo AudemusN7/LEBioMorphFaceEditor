@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AssemblyName>MorphFaceEditor.Rendering</AssemblyName>
+    <RootNamespace>MorphFaceEditor.Rendering</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\MorphFaceEditor.Core\MorphFaceEditor.Core.csproj" />
+    <PackageReference Include="SharpDX" />
+    <PackageReference Include="SharpDX.D3DCompiler" />
+    <PackageReference Include="SharpDX.Direct3D11" />
+    <PackageReference Include="SharpDX.DXGI" />
+    <PackageReference Include="SharpDX.Mathematics" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Shaders\HeadPreview.hlsl"
+                      LogicalName="MorphFaceEditor.Rendering.Shaders.HeadPreview.hlsl" />
+  </ItemGroup>
+</Project>

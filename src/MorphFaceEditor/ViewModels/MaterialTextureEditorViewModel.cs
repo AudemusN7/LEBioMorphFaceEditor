@@ -289,7 +289,21 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject
         {
             options.AddRange(_registryCandidates
                 .Where(candidate => !localPaths.Contains(candidate.InstancedPath))
-                .Select(candidate => new MaterialTextureOption(null, RegistryCandidate: candidate)));
+                .Select(candidate =>
+                {
+                    var occurrence = candidate.EffectiveOccurrence;
+                    var asset = new PackageAssetListItem(new AssetIdentity(
+                        occurrence.PackagePath,
+                        candidate.InstancedPath,
+                        occurrence.ExportUIndex,
+                        "Texture2D"));
+                    asset.ConfigureThumbnailLoader(async () => TextureThumbnailFactory.Create(
+                        await _references.LoadTextureAsync(
+                            occurrence.PackagePath,
+                            candidate.InstancedPath,
+                            _definition)));
+                    return new MaterialTextureOption(asset, RegistryCandidate: candidate);
+                }));
         }
         if (currentTexture is not null && !options.Any(option => option.MatchesIdentity(currentTexture.Source)))
         {
@@ -316,7 +330,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject
             option.InstancedPath.Equals(activePath, StringComparison.OrdinalIgnoreCase)) return 0;
         if (ContainsAny(option.InstancedPath, _registryProfile.PreferredPathFragments)) return 1;
         if (ContainsAny(option.InstancedPath, _registryProfile.SharedPathFragments)) return 2;
-        return option.Asset is not null ? 3 : 4;
+        return option.RegistryCandidate is null ? 3 : 4;
     }
 
     private static bool ContainsAny(string path, IReadOnlyList<string> fragments) =>

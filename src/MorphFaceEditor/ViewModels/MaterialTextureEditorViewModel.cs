@@ -81,6 +81,15 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject
         get => _searchText;
         set
         {
+            // An editable WPF ComboBox writes its selected item's display text back through
+            // the Text binding. That is selection synchronisation, not a user search.
+            if (SelectedTexture is { } selected &&
+                string.Equals(value, selected.DisplayName, StringComparison.OrdinalIgnoreCase))
+            {
+                _searchText = string.Empty;
+                ApplySearch();
+                return;
+            }
             if (SetProperty(ref _searchText, value))
             {
                 ApplySearch();

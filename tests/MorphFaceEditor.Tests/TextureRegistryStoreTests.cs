@@ -158,7 +158,7 @@ public static class TextureRegistryStoreTests
     private static void UnsupportedSchemaIsOutdated()
     {
         using var fixture = RegistryFixture.Create();
-        fixture.WriteHeaderOnly(MorphFaceGame.LE3, schemaVersion: 99);
+        fixture.WriteHeaderOnly(MorphFaceGame.LE3, schemaVersion: 1);
 
         TestAssert.Equal(TextureRegistryState.Outdated, fixture.Store.GetStatus(MorphFaceGame.LE3).State);
     }

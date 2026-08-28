@@ -6,6 +6,7 @@ public static class MaterialTests
     public static IReadOnlyList<TestCase> All { get; } =
         MaterialSchemaTests.All
             .Concat(MaterialEditingTests.All)
+            .Concat(ObjectDatabaseTests.All)
             .Concat(MaterialRendererTests.All)
             .Concat(HumanSkinMaterialTests.All)
             .Concat(HairMaterialTests.All)

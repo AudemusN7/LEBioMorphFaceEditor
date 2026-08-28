@@ -997,15 +997,15 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             return false;
         }
-        if (!Editor.IsDirty)
-        {
-            return true;
-        }
         if (Editor.Material.HasExternalRegistrySelections)
         {
             ErrorMessage = "This face uses an installed texture-registry selection. Saving it will be enabled once the path-preserving texture materialisation stage is complete.";
             Status = "External texture selection is preview-only for now.";
             return false;
+        }
+        if (!Editor.IsDirty)
+        {
+            return true;
         }
 
         IsBusy = true;
@@ -1044,6 +1044,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         if (_packageWorkspace is null || PackagePath is null)
         {
+            return false;
+        }
+        if (Editor?.Material.HasExternalRegistrySelections == true)
+        {
+            ErrorMessage = "This face uses an installed texture-registry selection. Saving it will be enabled once the path-preserving texture materialisation stage is complete.";
+            Status = "External texture selection is preview-only for now.";
             return false;
         }
         if (Editor?.IsDirty == true && !await FlushEditorToWorkspaceAsync())

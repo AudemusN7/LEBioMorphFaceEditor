@@ -29,7 +29,8 @@ public static class TextureCatalogProjector
         MorphFaceGame game,
         TextureCatalogProfile profile,
         IEnumerable<TextureCatalogIndexEntry> entries,
-        ITextureCatalogOccurrenceResolver resolver)
+        ITextureCatalogOccurrenceResolver resolver,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(entries);
@@ -37,7 +38,7 @@ public static class TextureCatalogProjector
 
         return entries
             .Where(entry => IsRelevantPath(entry.InstancedPath, profile))
-            .Select(entry => ProjectEntry(game, entry, resolver))
+            .Select(entry => ProjectEntry(game, entry, resolver, cancellationToken))
             .Where(candidate => candidate is not null)
             .Cast<TextureCatalogCandidate>()
             .OrderBy(candidate => candidate.InstancedPath, StringComparer.OrdinalIgnoreCase)
@@ -47,15 +48,20 @@ public static class TextureCatalogProjector
     private static TextureCatalogCandidate? ProjectEntry(
         MorphFaceGame game,
         TextureCatalogIndexEntry entry,
-        ITextureCatalogOccurrenceResolver resolver)
+        ITextureCatalogOccurrenceResolver resolver,
+        CancellationToken cancellationToken)
     {
-        var occurrences = entry.PackagePaths
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Select(packagePath => resolver.TryResolve(game, packagePath, entry.InstancedPath, out var occurrence)
-                ? occurrence
-                : null)
-            .Where(occurrence => occurrence is not null)
-            .Cast<TextureCatalogOccurrence>()
+        cancellationToken.ThrowIfCancellationRequested();
+        var resolved = new List<TextureCatalogOccurrence>();
+        foreach (var packagePath in entry.PackagePaths.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (resolver.TryResolve(game, packagePath, entry.InstancedPath, out var occurrence))
+            {
+                resolved.Add(occurrence);
+            }
+        }
+        var occurrences = resolved
             .OrderByDescending(occurrence => occurrence.MountPriority)
             .ThenByDescending(occurrence => occurrence.Origin)
             .ThenBy(occurrence => occurrence.PackagePath, StringComparer.OrdinalIgnoreCase)

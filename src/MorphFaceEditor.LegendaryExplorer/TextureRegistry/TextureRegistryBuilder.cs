@@ -19,8 +19,20 @@ public sealed record TextureRegistryBuildProgress(
     string? CurrentPackageName,
     int TextureCount);
 
+public interface ITextureRegistryBuilder
+{
+    Task<TextureRegistryStatus> RebuildAsync(
+        MorphFaceGame game,
+        IProgress<TextureRegistryBuildProgress>? progress = null,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<TextureRegistryStatus>> RebuildAllAsync(
+        IProgress<TextureRegistryBuildProgress>? progress = null,
+        CancellationToken cancellationToken = default);
+}
+
 /// <summary>Builds one compact registry directly from a single traversal of effective packages.</summary>
-public sealed class TextureRegistryBuilder
+public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
 {
     private readonly TextureRegistryStore _store;
     private readonly ITextureRegistryPackageScanner _scanner;

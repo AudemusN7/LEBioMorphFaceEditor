@@ -70,6 +70,16 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
     public IReadOnlyList<MaterialVectorEditorViewModel> Vectors { get; }
     public IReadOnlyList<MaterialTextureEditorViewModel> Textures { get; }
     public bool HasExternalRegistrySelections => Textures.Any(texture => texture.HasExternalRegistrySelection);
+    public void UpdateRegistryCandidates(
+        IReadOnlyList<TextureCatalogCandidate> candidates,
+        TextureCatalogProfile profile,
+        bool isRegistryAvailable)
+    {
+        foreach (var texture in Textures)
+        {
+            texture.UpdateRegistryCandidates(candidates, profile, isRegistryAvailable);
+        }
+    }
     public ResolvedHeadMaterialSet Materials => _session.Materials;
     public MorphFaceMaterialOverrides CreateOverrides() => _session.CreateOverrides();
     public void SetNumericValues(

@@ -18,7 +18,8 @@ public static class TextureCatalogTests
         new("texture catalogue: duplicate paths keep the highest mounted occurrence", DuplicatePathsKeepEffectiveOccurrence),
         new("texture catalogue: projector filters paths and verifies exact Texture2D exports", ProjectorFiltersAndVerifies),
         new("texture catalogue: current local texture remains local when its path is indexed", CurrentLocalTextureRemainsLocal),
-        new("texture catalogue: projection honours cancellation before package resolution", ProjectionHonoursCancellation)
+        new("texture catalogue: projection honours cancellation before package resolution", ProjectionHonoursCancellation),
+        new("texture catalogue: picker accepts registry candidates after the editor is already open", PickerAcceptsRegistryCandidatesAfterOpen)
     ];
 
     private static void ActiveTextureRanksFirst()
@@ -155,6 +156,34 @@ public static class TextureCatalogTests
         {
             // Expected: cancellation must be checked before any PCC is opened.
         }
+    }
+
+    private static void PickerAcceptsRegistryCandidatesAfterOpen()
+    {
+        var session = MaterialTestFixtures.CreateSession();
+        var current = session.GetSelectedTexture("HED_Diff")!;
+        var registryCandidate = Candidate("BIOG_HMM_HED_PROMorph.Adds.HMM_HED_PRO_Custom", "mod.pcc", TextureCatalogOrigin.Mod);
+        using var reader = new MorphFacePackageReader();
+        var editor = new MaterialTextureEditorViewModel(
+            session,
+            new MaterialParameterDefinition("HED_Diff", "Diffuse", "skin", MaterialParameterKind.Texture,
+                HeadMaterialFamily.Skin, TextureRole: TextureRole.Diffuse,
+                ColorSpace: TextureColorSpace.Srgb, AlphaPolicy: TextureAlphaPolicy.Ignore),
+            new PackageReferenceService(reader),
+            current.Source.PackagePath,
+            [new PackageAssetListItem(current.Source)],
+            message => throw new Exception(message));
+
+        editor.UpdateRegistryCandidates(
+            [registryCandidate],
+            new TextureCatalogProfile("le3-human-male", ["HMM_HED"], []),
+            isRegistryAvailable: true);
+
+        TestAssert.True(editor.IsRegistryAvailable, "The already-open picker did not adopt the ready registry state.");
+        TestAssert.True(editor.Candidates.Any(option => option.RegistryCandidate == registryCandidate),
+            "The background registry result did not populate the already-open picker.");
+        TestAssert.True(editor.SelectedTexture?.Asset?.Identity == current.Source,
+            "Populating registry candidates replaced the current local texture selection.");
     }
 
     private static TextureCatalogCandidate Candidate(

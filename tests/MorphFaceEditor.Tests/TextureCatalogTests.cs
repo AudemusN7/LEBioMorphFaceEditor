@@ -21,6 +21,7 @@ public static class TextureCatalogTests
         new("texture catalogue: duplicate paths keep the highest mounted occurrence", DuplicatePathsKeepEffectiveOccurrence),
         new("texture catalogue: current local texture remains local when its path is indexed", CurrentLocalTextureRemainsLocal),
         new("texture catalogue: picker accepts registry candidates after the editor is already open", PickerAcceptsRegistryCandidatesAfterOpen),
+        new("texture catalogue: selected display text does not become a search filter", SelectedDisplayTextDoesNotFilterPicker),
         new("texture catalogue: missing registry preserves every package texture", MissingRegistryPreservesEveryPackageTexture),
         new("texture catalogue: local path suppresses installed duplicate", LocalPathSuppressesInstalledDuplicate),
         new("texture catalogue: merged picker ranks by relevance and source", MergedPickerRanksByRelevanceAndSource),
@@ -189,6 +190,7 @@ public static class TextureCatalogTests
             "BIOG_SAL_HED_PROMorph_R.Add.SAL_HED_PRO_Add1",
             "BIOG_HMM_HIR_PRO.Hair.HMM_HIR_Diff",
             "biog_hmf_hir_pro.hair.hmf_hir_norm",
+            "BIOG_HMM_EYE.Eye.EYE_Iris_Norm",
             "BIOG_ASA_EYE.Materials.ASA_EYE_Diff",
             "BIOG_KRO_EYE.Materials.KRO_EYE_Norm"
         ];
@@ -338,6 +340,35 @@ public static class TextureCatalogTests
             "The background registry result did not populate the already-open picker.");
         TestAssert.True(editor.SelectedTexture?.Asset?.Identity == current.Source,
             "Populating registry candidates replaced the current local texture selection.");
+    }
+
+    private static void SelectedDisplayTextDoesNotFilterPicker()
+    {
+        var session = MaterialTestFixtures.CreateSession();
+        var current = session.GetSelectedTexture("HED_Diff")!;
+        var registryCandidate = Candidate(
+            "BIOG_HMM_HED_PROMorph.Adds.HMM_HED_PRO_Custom",
+            "mod.pcc",
+            TextureCatalogOrigin.Mod);
+        using var reader = new MorphFacePackageReader();
+        var editor = CreateTextureEditor(
+            session,
+            reader,
+            [new PackageAssetListItem(current.Source)],
+            [registryCandidate],
+            new TextureCatalogProfile("le3-human-male", ["HMM_HED"], []),
+            true);
+
+        editor.SearchText = "FaceD";
+        TestAssert.True(!editor.Candidates.Any(option => option.RegistryCandidate == registryCandidate),
+            "The test search did not narrow the picker before selection synchronisation.");
+
+        // WPF writes the selected item's display value back through an editable ComboBox's Text binding.
+        editor.SearchText = editor.SelectedTexture!.DisplayName;
+
+        TestAssert.Equal(string.Empty, editor.SearchText);
+        TestAssert.True(editor.Candidates.Any(option => option.RegistryCandidate == registryCandidate),
+            "Selecting a searched texture left the picker trapped behind its previous query.");
     }
 
     private static TextureCatalogCandidate Candidate(

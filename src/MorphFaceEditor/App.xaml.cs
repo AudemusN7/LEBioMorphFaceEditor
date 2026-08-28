@@ -25,12 +25,14 @@ public partial class App : Application
         LegendaryExplorerCoreRuntime.Initialize(TaskScheduler.FromCurrentSynchronizationContext());
 
         var sceneFactory = new HeadPreviewSceneFactory();
+        var textureRegistryPaths = TextureRegistryPaths.CreateDefault();
+        var textureRegistryStore = new TextureRegistryStore(textureRegistryPaths);
+        var textureRegistryBuilder = new TextureRegistryBuilder(textureRegistryStore);
+        var textureRegistrySettings = new TextureRegistrySettingsViewModel(
+            textureRegistryStore, textureRegistryBuilder);
         var objectDatabasePaths = ObjectDatabasePaths.CreateDefault();
         var objectDatabaseProvider = new ObjectDatabaseProvider(objectDatabasePaths);
-        var objectDatabaseBuilder = new ObjectDatabaseBuilder(objectDatabasePaths, objectDatabaseProvider);
         var textureCatalogService = new TextureCatalogService(objectDatabaseProvider);
-        var objectDatabaseSettings = new ObjectDatabaseSettingsViewModel(
-            objectDatabaseProvider, objectDatabaseBuilder, textureCatalogService.Invalidate);
         var packageReader = new MorphFacePackageReader();
         var referenceService = new PackageReferenceService(packageReader, textureCatalogService);
         var profiles = MorphFaceProfileRegistry.CreateDefault();
@@ -38,7 +40,7 @@ public partial class App : Application
         var packageWriter = new MorphFacePackageWriter();
         var packageContext = new MorphFacePackageContextService();
         _viewModel = new MainWindowViewModel(
-            new WpfEditorDialogService(objectDatabaseSettings),
+            new WpfEditorDialogService(textureRegistrySettings),
             new MorphFaceCatalogService(profiles),
             new MorphFacePreviewLoadService(sceneFactory, targets, profiles, packageReader),
             sceneFactory,

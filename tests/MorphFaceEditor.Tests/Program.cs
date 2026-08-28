@@ -6,7 +6,7 @@ var suites = new Dictionary<string, IReadOnlyList<TestCase>>(StringComparer.Ordi
     ["core"] = DeformationTests.All.Concat(EditingTests.All).Concat(RandomisationTests.Runtime).ToArray(),
     ["materials"] = MaterialTests.All,
     ["rendering"] = RenderingTests.All,
-    ["ui"] = UiSmokeTests.All.Concat(ObjectDatabaseSettingsTests.All)
+    ["ui"] = UiSmokeTests.All.Concat(ObjectDatabaseSettingsTests.All).Concat(TextureRegistrySettingsTests.All)
         .Concat(MorphTargetCatalogTests.All).Concat(CustomMeshTests.All).ToArray(),
     ["package"] = PackageContextTests.All,
     ["tooling"] = RandomisationTests.Tooling

@@ -8,10 +8,10 @@ namespace MorphFaceEditor.Services;
 
 public sealed class WpfEditorDialogService : IEditorDialogService
 {
-    private readonly ObjectDatabaseSettingsViewModel _objectDatabaseSettings;
+    private readonly TextureRegistrySettingsViewModel _textureRegistrySettings;
 
-    public WpfEditorDialogService(ObjectDatabaseSettingsViewModel objectDatabaseSettings) =>
-        _objectDatabaseSettings = objectDatabaseSettings;
+    public WpfEditorDialogService(TextureRegistrySettingsViewModel textureRegistrySettings) =>
+        _textureRegistrySettings = textureRegistrySettings;
     public string? ChoosePackage(string? initialDirectory = null)
     {
         var dialog = new OpenFileDialog
@@ -124,7 +124,7 @@ public sealed class WpfEditorDialogService : IEditorDialogService
         }.ShowDialog();
 
     public void ShowObjectDatabaseSettings() =>
-        _ = new ObjectDatabaseSettingsWindow(_objectDatabaseSettings)
+        _ = new TextureRegistrySettingsWindow(_textureRegistrySettings)
         {
             Owner = Application.Current.MainWindow
         }.ShowDialog();

@@ -19,8 +19,68 @@ public static class TextureCatalogTests
         new("texture catalogue: projector filters paths and verifies exact Texture2D exports", ProjectorFiltersAndVerifies),
         new("texture catalogue: current local texture remains local when its path is indexed", CurrentLocalTextureRemainsLocal),
         new("texture catalogue: projection honours cancellation before package resolution", ProjectionHonoursCancellation),
-        new("texture catalogue: picker accepts registry candidates after the editor is already open", PickerAcceptsRegistryCandidatesAfterOpen)
+        new("texture catalogue: picker accepts registry candidates after the editor is already open", PickerAcceptsRegistryCandidatesAfterOpen),
+        new("texture registry: discovery admits morph HIR and shared-eye paths", DiscoveryAdmitsSupportedPaths),
+        new("texture registry: occurrence retains mip storage metadata", OccurrenceRetainsMipStorageMetadata),
+        new("texture registry: availability resolves installed and local paths", AvailabilityResolvesMergedPaths),
+        new("texture registry: ambiguous object names are not resolved", AmbiguousObjectNamesAreRejected)
     ];
+
+    private static void OccurrenceRetainsMipStorageMetadata()
+    {
+        var occurrence = Occurrence("BioG_Sal.pcc", 0, TextureCatalogOrigin.BaseGame) with
+        {
+            Mips = [new TextureMipStorageRecord(0, 1024, 512, 0x11, 524288, 131072, 4096, "Textures_DLC_MOD")]
+        };
+
+        var mip = occurrence.Mips.Single();
+        TestAssert.Equal(0x11, mip.StorageType);
+        TestAssert.Equal(4096, mip.ExternalOffset);
+        TestAssert.Equal("Textures_DLC_MOD", mip.TextureCacheName);
+    }
+
+    private static void DiscoveryAdmitsSupportedPaths()
+    {
+        string[] admitted =
+        [
+            "BIOG_SAL_HED_PROMorph_R.Add.SAL_HED_PRO_Add1",
+            "BIOG_HMM_HIR_PRO.Hair.HMM_HIR_Diff",
+            "biog_hmf_hir_pro.hair.hmf_hir_norm",
+            "BIOG_ASA_EYE.Materials.ASA_EYE_Diff",
+            "BIOG_KRO_EYE.Materials.KRO_EYE_Norm"
+        ];
+
+        TestAssert.True(admitted.All(TextureRegistryDiscovery.IsRelevantPath),
+            "A supported morph, HIR, or shared-eye path was excluded from registry discovery.");
+        TestAssert.True(!TextureRegistryDiscovery.IsRelevantPath("EngineResources.WhiteSquareTexture"),
+            "An unrelated engine texture was admitted to the installed registry.");
+    }
+
+    private static void AvailabilityResolvesMergedPaths()
+    {
+        const string localPath = "WorkingPackage.Textures.Custom_Diff";
+        const string installedPath = "BIOG_SAL_HED_PROMorph_R.Add.SAL_HED_PRO_Add1";
+        var availability = new TextureCatalogAvailability(
+            [localPath],
+            [Candidate(installedPath, "BioG_Sal.pcc")]);
+
+        TestAssert.True(availability.TryResolve(localPath.ToLowerInvariant(), out var resolvedLocal),
+            "The merged catalogue did not resolve a local path case-insensitively.");
+        TestAssert.Equal(localPath, resolvedLocal);
+        TestAssert.True(availability.TryResolve("SAL_HED_PRO_Add1", out var resolvedInstalled),
+            "A unique installed object name did not resolve through the merged catalogue.");
+        TestAssert.Equal(installedPath, resolvedInstalled);
+    }
+
+    private static void AmbiguousObjectNamesAreRejected()
+    {
+        var availability = new TextureCatalogAvailability(
+            ["WorkingPackage.Textures.Shared_Diff"],
+            [Candidate("BIOG_SAL_HED_PROMorph_R.Add.Shared_Diff", "BioG_Sal.pcc")]);
+
+        TestAssert.True(!availability.TryResolve("Shared_Diff", out _),
+            "An ambiguous object-name-only texture request resolved to an arbitrary package.");
+    }
 
     private static void ActiveTextureRanksFirst()
     {

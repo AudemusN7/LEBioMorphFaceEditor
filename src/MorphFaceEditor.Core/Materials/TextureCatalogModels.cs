@@ -32,6 +32,7 @@ public sealed record TextureCatalogOccurrence(
     bool HasExternalMips,
     string? TextureFileCacheName)
 {
+    public IReadOnlyList<TextureMipStorageRecord> Mips { get; init; } = [];
     public string PackageName => Path.GetFileName(PackagePath);
     public string OriginLabel => Origin switch
     {

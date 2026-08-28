@@ -132,8 +132,11 @@
                             <TextBlock Text="{Binding Details}" Foreground="{StaticResource Accent}" FontSize="9" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
                     </Grid>
-                    <ComboBox ItemsSource="{Binding Candidates}" SelectedItem="{Binding SelectedTexture}" Margin="0,7,0,0"
-                              ToolTip="Select another Texture2D export inside the open PCC">
+                    <TextBlock Text="{Binding RegistryStatusLabel}" Foreground="{StaticResource MutedText}" FontSize="9" Margin="0,7,0,0" TextTrimming="CharacterEllipsis" />
+                    <ComboBox ItemsSource="{Binding Candidates}" SelectedItem="{Binding SelectedTexture}" Margin="0,3,0,0"
+                              IsEditable="True" IsTextSearchEnabled="False" StaysOpenOnEdit="True"
+                              Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                              ToolTip="Search verified installed Texture2D exports by name, path, source package, or origin">
                         <ComboBox.ItemTemplate>
                             <DataTemplate>
                                 <Grid MouseEnter="OnTextureCandidateMouseEnter">
@@ -144,12 +147,16 @@
                                     <Border Width="24" Height="24" Background="#0B0E12" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
                                         <Image Source="{Binding Asset.Thumbnail}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" />
                                     </Border>
-                                    <TextBlock Grid.Column="1" Text="{Binding DisplayName}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{Binding SourceDescription}" Foreground="{StaticResource MutedText}" FontSize="9" TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
                                     <Grid.ToolTip>
                                         <Border Background="{StaticResource PanelBackground}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="8">
                                             <StackPanel>
                                                 <Image Source="{Binding Asset.Thumbnail}" Width="192" Height="192" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" />
                                                 <TextBlock Text="{Binding DisplayName}" Foreground="{StaticResource SecondaryText}" FontSize="10" Margin="0,6,0,0" MaxWidth="240" TextWrapping="Wrap" />
+                                                <TextBlock Text="{Binding SourceDescription}" Foreground="{StaticResource MutedText}" FontSize="10" Margin="0,3,0,0" MaxWidth="240" TextWrapping="Wrap" />
                                                 <TextBlock Text="{Binding Asset.ThumbnailError}" Foreground="#FFFF8C8C" FontSize="10" Margin="0,4,0,0" TextWrapping="Wrap" />
                                             </StackPanel>
                                         </Border>

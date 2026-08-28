@@ -14,8 +14,9 @@ public static class ObjectDatabaseSettingsTests
         new("object database settings: ready MFE row exposes provenance", ReadyMfeRowExposesProvenance),
         new("object database settings: status uses traffic-light colours", StatusUsesTrafficLightColours),
         new("object database settings: rebuild actions become cancel actions while active", RebuildActionsBecomeCancelActions),
-        new("object database settings: rebuilding one game refreshes only its row", RebuildingOneGameRefreshesItsRow)
-        ,new("object database settings: rebuilding all refreshes every row", RebuildingAllRefreshesEveryRow)
+        new("object database settings: rebuilding one game refreshes only its row", RebuildingOneGameRefreshesItsRow),
+        new("object database settings: rebuilding all refreshes every row", RebuildingAllRefreshesEveryRow),
+        new("object database settings: completed rebuild invalidates that catalogue", CompletedRebuildInvalidatesCatalogue)
     ];
 
     private static void ReadyMfeRowExposesProvenance()
@@ -132,6 +133,28 @@ public static class ObjectDatabaseSettingsTests
 
             TestAssert.True(settings.Rows.All(row => row.StatusLabel == "Ready" && row.SourceLabel == "MFE"),
                 "Rebuild all did not refresh every game to its MFE-owned database status.");
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); }
+    }
+
+    private static void CompletedRebuildInvalidatesCatalogue()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"MFE-ObjectDatabaseSettings-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var paths = new ObjectDatabasePaths(Path.Combine(root, "Mfe"), Path.Combine(root, "Shared"));
+            var provider = new ObjectDatabaseProvider(paths);
+            var invalidated = new List<MorphFaceGame>();
+            var settings = new ObjectDatabaseSettingsViewModel(
+                provider,
+                new ObjectDatabaseBuilder(paths, provider, new FakeGenerator(CreateDatabase(MEGame.LE1)), _ => ["fixture.pcc"]),
+                invalidated.Add);
+
+            settings.RebuildAsync(MorphFaceGame.LE1).GetAwaiter().GetResult();
+
+            TestAssert.True(invalidated.SequenceEqual([MorphFaceGame.LE1]),
+                "A completed rebuild did not invalidate the compact catalogue for the rebuilt game.");
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); }
     }

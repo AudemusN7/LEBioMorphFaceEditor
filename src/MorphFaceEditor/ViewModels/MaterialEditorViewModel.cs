@@ -24,7 +24,10 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
         string packagePath,
         IReadOnlyList<MorphFaceEditor.Models.PackageAssetListItem> textureCandidates,
         Action<string> reportError,
-        IHeadEditorUiProfile uiProfile)
+        IHeadEditorUiProfile uiProfile,
+        IReadOnlyList<TextureCatalogCandidate>? registryCandidates = null,
+        TextureCatalogProfile? registryProfile = null,
+        bool isRegistryAvailable = false)
     {
         _session = session;
         Scalars = session.ScalarNames
@@ -50,7 +53,10 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
                 references,
                 packagePath,
                 textureCandidates,
-                reportError))
+                reportError,
+                registryCandidates,
+                registryProfile,
+                isRegistryAvailable))
             .OrderBy(value => value.Group)
             .ThenBy(value => value.Label)
             .ToArray();
@@ -63,6 +69,7 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
     public IReadOnlyList<MaterialScalarEditorViewModel> Scalars { get; }
     public IReadOnlyList<MaterialVectorEditorViewModel> Vectors { get; }
     public IReadOnlyList<MaterialTextureEditorViewModel> Textures { get; }
+    public bool HasExternalRegistrySelections => Textures.Any(texture => texture.HasExternalRegistrySelection);
     public ResolvedHeadMaterialSet Materials => _session.Materials;
     public MorphFaceMaterialOverrides CreateOverrides() => _session.CreateOverrides();
     public void SetNumericValues(

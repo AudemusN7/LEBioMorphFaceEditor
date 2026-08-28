@@ -60,7 +60,13 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
 
     public void WriteAtomic(
         TextureRegistrySnapshot snapshot,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        WriteAtomic(snapshot, cancellationToken, beforeVerification: null);
+
+    internal void WriteAtomic(
+        TextureRegistrySnapshot snapshot,
+        CancellationToken cancellationToken,
+        Action? beforeVerification)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         cancellationToken.ThrowIfCancellationRequested();
@@ -94,6 +100,7 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
                 output.Flush(flushToDisk: true);
             }
 
+            beforeVerification?.Invoke();
             var verified = ReadFile(temporaryPath, game);
             if (verified.SchemaVersion != snapshot.SchemaVersion ||
                 verified.Game != snapshot.Game ||

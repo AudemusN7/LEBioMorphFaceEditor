@@ -1,6 +1,6 @@
 # Compact Texture Registry Design
 
-**Status:** Approved by Audemus on 28 August 2026.
+**Status:** Implemented through compact build, runtime picker merge, and installed-pool randomisation on the `dev` branch on 28 August 2026. Path-preserving save-time materialisation remains the next delivery stage.
 
 ## Purpose
 

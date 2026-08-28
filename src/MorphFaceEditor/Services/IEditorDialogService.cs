@@ -19,7 +19,7 @@ public interface IEditorDialogService
         string assetPath,
         UnsavedChangesScope scope = UnsavedChangesScope.Package);
     void ShowInformation(string title, string message);
-    void ShowObjectDatabaseSettings();
+    void ShowTextureRegistrySettings();
 }
 
 public sealed record MorphPackageSaveRequest(string DestinationPackagePath, bool CreateNewPackage);

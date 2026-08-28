@@ -39,7 +39,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly AsyncRelayCommand _saveMorphToPccCommand;
     private readonly RelayCommand _editBackgroundColorCommand;
     private readonly RelayCommand _dismissErrorCommand;
-    private readonly RelayCommand _objectDatabaseSettingsCommand;
+    private readonly RelayCommand _textureRegistrySettingsCommand;
     private readonly AsyncRelayCommand _cloneMorphCommand;
     private readonly AsyncRelayCommand _deleteMorphCommand;
     private readonly AsyncRelayCommand _convertMorphCommand;
@@ -124,7 +124,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             () => !IsBusy && Editor is not null && _loadedFace is not null && _packageWorkspace is not null);
         _editBackgroundColorCommand = new RelayCommand(EditBackgroundColor);
         _dismissErrorCommand = new RelayCommand(() => ErrorMessage = null);
-        _objectDatabaseSettingsCommand = new RelayCommand(_dialogs.ShowObjectDatabaseSettings);
+        _textureRegistrySettingsCommand = new RelayCommand(_dialogs.ShowTextureRegistrySettings);
         _cloneMorphCommand = new AsyncRelayCommand(CloneMorphAsync, CanUseFaceContextMenu);
         _deleteMorphCommand = new AsyncRelayCommand(DeleteMorphAsync, CanUseFaceContextMenu);
         _convertMorphCommand = new AsyncRelayCommand(ConvertMorphAsync, CanUseFaceContextMenu);
@@ -167,7 +167,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public ICommand SaveMorphToPccCommand => _saveMorphToPccCommand;
     public ICommand EditBackgroundColorCommand => _editBackgroundColorCommand;
     public ICommand DismissErrorCommand => _dismissErrorCommand;
-    public ICommand ObjectDatabaseSettingsCommand => _objectDatabaseSettingsCommand;
+    public ICommand TextureRegistrySettingsCommand => _textureRegistrySettingsCommand;
     public ICommand CloneMorphCommand => _cloneMorphCommand;
     public ICommand DeleteMorphCommand => _deleteMorphCommand;
     public ICommand ConvertMorphCommand => _convertMorphCommand;

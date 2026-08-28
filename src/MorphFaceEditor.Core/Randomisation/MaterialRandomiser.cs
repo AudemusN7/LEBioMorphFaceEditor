@@ -17,7 +17,8 @@ public static class MaterialRandomiser
         IReadOnlySet<string> textureFamilyScope,
         int strengthPercent,
         int randomSeed,
-        IReadOnlyDictionary<string, string>? currentTextures = null)
+        IReadOnlyDictionary<string, string>? currentTextures = null,
+        IReadOnlySet<string>? excludedTextureSignatures = null)
     {
         ArgumentNullException.ThrowIfNull(donor);
         ArgumentNullException.ThrowIfNull(compatibleDonors);
@@ -64,7 +65,8 @@ public static class MaterialRandomiser
         }
 
         var textures = SelectTextureFamilies(
-            donor, compatibleDonors, profile.ProfileKey, textureFamilyScope, strengthPercent, random);
+            donor, compatibleDonors, profile.ProfileKey, textureFamilyScope, strengthPercent, random,
+            excludedTextureSignatures);
         var vectors = new Dictionary<string, Vector4>(currentVectors, StringComparer.OrdinalIgnoreCase);
         foreach (var name in vectorScope.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
         {
@@ -109,7 +111,8 @@ public static class MaterialRandomiser
         string profileKey,
         IReadOnlySet<string> scope,
         int strength,
-        MorphRandomiser.StableRandom random)
+        MorphRandomiser.StableRandom random,
+        IReadOnlySet<string>? excludedTextureSignatures)
     {
         var result = new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
         foreach (var family in scope.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
@@ -120,19 +123,22 @@ public static class MaterialRandomiser
                 .Cast<IReadOnlyDictionary<string, string>>()
                 .GroupBy(TextureSignature, StringComparer.OrdinalIgnoreCase)
                 .Select(value => value.First())
+                .Where(value => excludedTextureSignatures?.Contains(TextureSignature(value)) != true)
                 .OrderBy(TextureSignature, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
             if (candidates.Length == 0) continue;
 
             IReadOnlyDictionary<string, string>? selected = null;
             if (strength == 0 && donor.MaterialTextureFamilies.TryGetValue(family, out var seedFamily) &&
-                !IsBlacklistedTextureFamily(profileKey, family, seedFamily))
+                !IsBlacklistedTextureFamily(profileKey, family, seedFamily) &&
+                excludedTextureSignatures?.Contains(TextureSignature(seedFamily)) != true)
             {
                 selected = seedFamily;
             }
             else if (!ShouldBalanceTextureFamily(family) &&
                      donor.MaterialTextureFamilies.TryGetValue(family, out seedFamily) &&
-                     !IsBlacklistedTextureFamily(profileKey, family, seedFamily))
+                     !IsBlacklistedTextureFamily(profileKey, family, seedFamily) &&
+                     excludedTextureSignatures?.Contains(TextureSignature(seedFamily)) != true)
             {
                 selected = seedFamily;
             }
@@ -162,6 +168,12 @@ public static class MaterialRandomiser
         return profileKey.Contains("asari", StringComparison.OrdinalIgnoreCase) &&
                family.StartsWith("addition:", StringComparison.OrdinalIgnoreCase) &&
                values.Values.Any(value => value.Contains("GBL_ARM_ALL_Norm", StringComparison.OrdinalIgnoreCase));
+    }
+
+    public static string TextureFamilySignature(IReadOnlyDictionary<string, string> values)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        return TextureSignature(values);
     }
 
     private static string TextureSignature(IReadOnlyDictionary<string, string> values) =>

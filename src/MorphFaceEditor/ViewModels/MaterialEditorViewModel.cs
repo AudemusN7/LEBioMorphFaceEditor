@@ -3,6 +3,7 @@ using System.IO;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Core.Materials;
+using MorphFaceEditor.Core.Randomisation;
 using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.Services;
 
@@ -70,6 +71,9 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
     public IReadOnlyList<MaterialVectorEditorViewModel> Vectors { get; }
     public IReadOnlyList<MaterialTextureEditorViewModel> Textures { get; }
     public bool HasExternalRegistrySelections => Textures.Any(texture => texture.HasExternalRegistrySelection);
+    public bool CanResolveTexturePath(string parameterName, string instancedPath) =>
+        Textures.FirstOrDefault(texture => texture.Name.Equals(parameterName, StringComparison.OrdinalIgnoreCase))
+            ?.CanResolveInstancedPath(instancedPath) == true;
     public void UpdateRegistryCandidates(
         IReadOnlyList<TextureCatalogCandidate> candidates,
         TextureCatalogProfile profile,
@@ -112,6 +116,7 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
         var applicableVectors = vectors.Where(value => vectorNames.Contains(value.Key))
             .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase);
         var decoded = new Dictionary<string, DecodedTextureAsset?>(StringComparer.OrdinalIgnoreCase);
+        var failedTextureFamilySignatures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var appliedFamilies = 0;
         foreach (var family in textureFamilies.OrderBy(value => value.Key, StringComparer.OrdinalIgnoreCase))
         {
@@ -149,13 +154,14 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
             catch (Exception exception)
             {
                 AppLog.Warning($"Skipped unresolved randomisation texture family '{family.Key}': {exception.Message}");
+                failedTextureFamilySignatures.Add(MaterialRandomiser.TextureFamilySignature(family.Value));
                 continue;
             }
             foreach (var value in resolved) decoded[value.Key] = value.Value;
             appliedFamilies++;
         }
         return new PreparedMaterialRandomisation(
-            applicableScalars, applicableVectors, decoded, appliedFamilies);
+            applicableScalars, applicableVectors, decoded, appliedFamilies, failedTextureFamilySignatures);
     }
 
     private static bool IsRequiredRandomisationTextureMember(string family, string parameterName) =>
@@ -244,4 +250,5 @@ public sealed record PreparedMaterialRandomisation(
     IReadOnlyDictionary<string, float> Scalars,
     IReadOnlyDictionary<string, System.Numerics.Vector4> Vectors,
     IReadOnlyDictionary<string, DecodedTextureAsset?> Textures,
-    int AppliedTextureFamilies);
+    int AppliedTextureFamilies,
+    IReadOnlySet<string> FailedTextureFamilySignatures);

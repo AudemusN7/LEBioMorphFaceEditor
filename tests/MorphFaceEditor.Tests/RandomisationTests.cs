@@ -30,6 +30,8 @@ public static class RandomisationTests
         new("texture-dependent selector rules remain valid", TextureDependentSelectorsRemainValid),
         new("LE1 Batarian material randomisation falls back to compatible pooled donors", Le1BatarianUsesCompatibleMaterialDonors),
         new("material donor compatibility follows cross-game species and human pools", MaterialDonorsUseApprovedCrossGamePools),
+        new("installed texture randomisation keeps only complete resolvable families", InstalledTextureRandomisationFiltersFamilies),
+        new("material randomisation excludes an unreadable texture family signature", MaterialRandomisationExcludesFailedSignature),
         new("cursed randomisation wakes zero morphs within Mgamerz ranges", CursedRandomisationWakesZeroMorphs),
         new("cursed randomisation fuzzes only Mgamerz facial bones and numeric materials", CursedRandomisationFuzzesBonesAndMaterials),
         new("zero-strength cursed randomisation is an exact no-op", ZeroStrengthCursedRandomisationIsNoOp),
@@ -38,6 +40,89 @@ public static class RandomisationTests
         new("invalid feature batches do not partially mutate the session", InvalidFeatureBatchIsAtomic),
         new("unchanged feature batches create no history", UnchangedFeatureBatchCreatesNoHistory)
     ];
+
+    private static void MaterialRandomisationExcludesFailedSignature()
+    {
+        MorphRandomisationDonor Donor(string id, string path) => new(
+            id, "le3-human-male", new HashSet<string>(), new Dictionary<string, float>())
+        {
+            MaterialTextureFamilies = new Dictionary<string, IReadOnlyDictionary<string, string>>
+            {
+                ["face"] = new Dictionary<string, string> { ["HED_Diff"] = path }
+            }
+        };
+        var failed = Donor("failed", "Installed.Failed_Diff");
+        var fallback = Donor("fallback", "Installed.Fallback_Diff");
+        var failedSignature = MaterialRandomiser.TextureFamilySignature(
+            failed.MaterialTextureFamilies["face"]);
+
+        var proposal = MaterialRandomiser.CreateProposal(
+            failed, [failed, fallback], PolicyProfile("le3-human-male", [], []),
+            Values(), new Dictionary<string, Vector4>(), [],
+            new HashSet<string>(), new HashSet<string>(),
+            new HashSet<string>(["face"], StringComparer.OrdinalIgnoreCase),
+            100, 17, excludedTextureSignatures: new HashSet<string>([failedSignature], StringComparer.OrdinalIgnoreCase));
+
+        TestAssert.Equal("Installed.Fallback_Diff", proposal.TextureFamilies["face"]["HED_Diff"]);
+    }
+
+    private static void InstalledTextureRandomisationFiltersFamilies()
+    {
+        var donor = new MorphRandomisationDonor(
+            "LE3.HMM.Registry",
+            "le3-human-male",
+            new HashSet<string>(),
+            new Dictionary<string, float>())
+        {
+            MaterialTextureFamilies = new Dictionary<string, IReadOnlyDictionary<string, string>>
+            {
+                ["human-scalp"] = new Dictionary<string, string>
+                {
+                    ["HED_Scalp_Diff"] = "Installed.Scalp_Diff",
+                    ["HED_Scalp_Norm"] = "Installed.Scalp_Norm",
+                    ["HED_Scalp_Spec"] = "Missing.Optional_Spec"
+                },
+                ["human-face"] = new Dictionary<string, string>
+                {
+                    ["HED_Diff"] = "Installed.Face_Diff",
+                    ["HED_Norm"] = "Missing.Face_Norm"
+                }
+            }
+        };
+        var corpus = new MorphRandomisationCorpus(
+            MorphRandomisationCorpus.CurrentFormatVersion,
+            new Dictionary<MorphRandomisationPoolKey, IReadOnlyList<MorphRandomisationDonor>>
+            {
+                [MorphRandomisationPoolKey.HumanMaleLe3] = [donor]
+            })
+        {
+            MaterialProfiles = new Dictionary<string, MaterialRandomisationProfile>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["le3-human-male"] = new MaterialRandomisationProfile(
+                    "le3-human-male",
+                    new Dictionary<string, MaterialScalarStatistics>(),
+                    new Dictionary<string, MaterialVectorStatistics>(),
+                    new HashSet<string>(["human-scalp", "human-face"], StringComparer.OrdinalIgnoreCase))
+            }
+        };
+        var catalog = new MorphRandomisationCatalog(corpus);
+        var available = new HashSet<(string Parameter, string Path)>
+        {
+            ("HED_Scalp_Diff", "Installed.Scalp_Diff"),
+            ("HED_Scalp_Norm", "Installed.Scalp_Norm"),
+            ("HED_Diff", "Installed.Face_Diff")
+        };
+
+        var projected = catalog.ProjectInstalledMaterialDonors(
+            "le3-human-male", (parameter, path) => available.Contains((parameter, path))).Single();
+
+        TestAssert.True(projected.MaterialTextureFamilies.ContainsKey("human-scalp"),
+            "A family with both required installed members was removed because an optional member was unavailable.");
+        TestAssert.True(!projected.MaterialTextureFamilies["human-scalp"].ContainsKey("HED_Scalp_Spec"),
+            "An unavailable optional member remained in the installed family projection.");
+        TestAssert.True(!projected.MaterialTextureFamilies.ContainsKey("human-face"),
+            "A family missing a required normal map remained eligible for randomisation.");
+    }
 
     public static IReadOnlyList<TestCase> Tooling { get; } =
     [

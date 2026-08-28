@@ -13,8 +13,94 @@ public static class TextureRegistryStoreTests
         new("texture registry store: wrong game payload is rejected", WrongGamePayloadIsRejected),
         new("texture registry store: unsupported schema is outdated", UnsupportedSchemaIsOutdated),
         new("texture registry store: malformed payload is failed", MalformedPayloadIsFailed),
-        new("texture registry store: cancelled write preserves active file", CancelledWritePreservesActiveFile)
+        new("texture registry store: cancelled write preserves active file", CancelledWritePreservesActiveFile),
+        new("texture registry builder: scans each package once", BuilderScansEachPackageOnce),
+        new("texture registry builder: groups paths by mount precedence", BuilderGroupsPathsByMountPrecedence),
+        new("texture registry builder: reports scan write verify phases", BuilderReportsEveryPhase),
+        new("texture registry builder: cancelled rebuild preserves active file", CancelledBuildPreservesActiveFile),
+        new("texture registry builder: rebuild all is sequential", BuilderRebuildAllIsSequential)
     ];
+
+    private static void BuilderScansEachPackageOnce()
+    {
+        using var fixture = RegistryFixture.Create();
+        var scanner = new FakePackageScanner();
+        var builder = fixture.CreateBuilder(scanner, _ => ["A.pcc", "B.pcc", "C.pcc"]);
+
+        _ = builder.RebuildAsync(MorphFaceGame.LE1).GetAwaiter().GetResult();
+
+        TestAssert.True(scanner.Paths.OrderBy(value => value).SequenceEqual(["A.pcc", "B.pcc", "C.pcc"]),
+            "The builder skipped or reopened an effective package.");
+    }
+
+    private static void BuilderGroupsPathsByMountPrecedence()
+    {
+        using var fixture = RegistryFixture.Create();
+        const string texturePath = "BIOG_SAL_HED_PROMorph_R.Add.SAL_HED_PRO_Add1";
+        var scanner = new FakePackageScanner(new Dictionary<string, IReadOnlyList<TextureRegistryScannedTexture>>
+        {
+            ["Base.pcc"] = [new(texturePath, Occurrence("Base.pcc", 0, TextureCatalogOrigin.BaseGame))],
+            ["Mod.pcc"] = [new(texturePath, Occurrence("Mod.pcc", 9021, TextureCatalogOrigin.Mod))]
+        });
+        var builder = fixture.CreateBuilder(scanner, _ => ["Base.pcc", "Mod.pcc"]);
+
+        _ = builder.RebuildAsync(MorphFaceGame.LE3).GetAwaiter().GetResult();
+        var candidate = fixture.Store.Read(MorphFaceGame.LE3).Candidates.Single();
+
+        TestAssert.Equal("Mod.pcc", candidate.EffectiveOccurrence.PackagePath);
+        TestAssert.Equal(2, candidate.Occurrences.Count);
+    }
+
+    private static void BuilderReportsEveryPhase()
+    {
+        using var fixture = RegistryFixture.Create();
+        var progress = new CapturingProgress<TextureRegistryBuildProgress>();
+        var builder = fixture.CreateBuilder(new FakePackageScanner(), _ => ["A.pcc", "B.pcc"]);
+
+        _ = builder.RebuildAsync(MorphFaceGame.LE2, progress).GetAwaiter().GetResult();
+
+        TestAssert.True(progress.Values.Select(value => value.Phase).Distinct().SequenceEqual(
+                [TextureRegistryBuildPhase.ScanningPackages, TextureRegistryBuildPhase.WritingRegistry,
+                 TextureRegistryBuildPhase.VerifyingRegistry, TextureRegistryBuildPhase.Ready]),
+            "The builder did not report scan, write, verify, and ready in order.");
+        TestAssert.Equal(2, progress.Values.Last().PackagesProcessed);
+    }
+
+    private static void CancelledBuildPreservesActiveFile()
+    {
+        using var fixture = RegistryFixture.Create();
+        fixture.Store.WriteAtomic(Snapshot(TextureCatalogGame.LE1));
+        var path = fixture.Paths.GetPath(MorphFaceGame.LE1);
+        var before = File.ReadAllBytes(path);
+        using var cancellation = new CancellationTokenSource();
+        var scanner = new FakePackageScanner(onScan: cancellation.Cancel);
+        var builder = fixture.CreateBuilder(scanner, _ => ["A.pcc", "B.pcc"]);
+
+        try
+        {
+            _ = builder.RebuildAsync(MorphFaceGame.LE1, null, cancellation.Token).GetAwaiter().GetResult();
+            throw new Exception("A cancelled registry build completed.");
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected.
+        }
+
+        TestAssert.True(before.SequenceEqual(File.ReadAllBytes(path)),
+            "Cancellation replaced the previously verified registry.");
+    }
+
+    private static void BuilderRebuildAllIsSequential()
+    {
+        using var fixture = RegistryFixture.Create();
+        var scanner = new FakePackageScanner();
+        var builder = fixture.CreateBuilder(scanner, game => [$"{game}.pcc"]);
+
+        _ = builder.RebuildAllAsync().GetAwaiter().GetResult();
+
+        TestAssert.True(scanner.Games.SequenceEqual([MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3]),
+            "Rebuild All did not process LE1, LE2, and LE3 sequentially.");
+    }
 
     private static void SnapshotRoundTripPreservesMetadata()
     {
@@ -120,6 +206,13 @@ public static class TextureRegistryStoreTests
             [new TextureCatalogCandidate(game, "BIOG_SAL_HED_PROMorph_R.Add.SAL_HED_PRO_Add1", occurrence, [occurrence])]);
     }
 
+    private static TextureCatalogOccurrence Occurrence(
+        string packagePath,
+        int mountPriority,
+        TextureCatalogOrigin origin) => new(
+        packagePath, 42, mountPriority, origin, 1024, 1024,
+        "PF_DXT1", "TEXTUREGROUP_Character", false, null);
+
     private sealed class RegistryFixture : IDisposable
     {
         private readonly string _root;
@@ -133,6 +226,11 @@ public static class TextureRegistryStoreTests
 
         public TextureRegistryPaths Paths { get; }
         public TextureRegistryStore Store { get; }
+
+        public TextureRegistryBuilder CreateBuilder(
+            ITextureRegistryPackageScanner scanner,
+            Func<MorphFaceGame, IReadOnlyList<string>> loadedFiles) =>
+            new(Store, scanner, loadedFiles);
 
         public static RegistryFixture Create()
         {
@@ -156,5 +254,33 @@ public static class TextureRegistryStoreTests
         {
             if (Directory.Exists(_root)) Directory.Delete(_root, recursive: true);
         }
+    }
+
+    private sealed class FakePackageScanner(
+        IReadOnlyDictionary<string, IReadOnlyList<TextureRegistryScannedTexture>>? results = null,
+        Action? onScan = null) : ITextureRegistryPackageScanner
+    {
+        private readonly IReadOnlyDictionary<string, IReadOnlyList<TextureRegistryScannedTexture>> _results =
+            results ?? new Dictionary<string, IReadOnlyList<TextureRegistryScannedTexture>>();
+
+        public List<string> Paths { get; } = [];
+        public List<MorphFaceGame> Games { get; } = [];
+
+        public IReadOnlyList<TextureRegistryScannedTexture> Scan(
+            MorphFaceGame game,
+            string packagePath,
+            CancellationToken cancellationToken)
+        {
+            Games.Add(game);
+            Paths.Add(packagePath);
+            onScan?.Invoke();
+            return _results.GetValueOrDefault(packagePath) ?? [];
+        }
+    }
+
+    private sealed class CapturingProgress<T> : IProgress<T>
+    {
+        public List<T> Values { get; } = [];
+        public void Report(T value) => Values.Add(value);
     }
 }

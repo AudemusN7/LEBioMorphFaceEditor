@@ -278,7 +278,7 @@ Run:
 
 ```powershell
 dotnet run --project tests/MorphFaceEditor.Tests -c Release -- --suite materials "texture registry"
-dotnet build "LE BioMorphFace Editor.sln" -c Release
+dotnet build MorphFaceEditor.slnx -c Release
 ```
 
 Expected: all registry tests pass and the solution builds with zero warnings and errors.
@@ -538,7 +538,7 @@ Run:
 
 ```powershell
 dotnet run --project tests/MorphFaceEditor.Tests -c Release -- --suite all
-dotnet build "LE BioMorphFace Editor.sln" -c Release
+dotnet build MorphFaceEditor.slnx -c Release
 ```
 
 Expected: every test passes; build completes with zero warnings and zero errors.

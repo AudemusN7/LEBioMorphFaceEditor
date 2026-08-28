@@ -659,7 +659,11 @@
         </Grid>
 
         <Border Grid.Row="2" Background="#151A20" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0">
-            <TextBlock Text="{Binding Status}" Foreground="{StaticResource SecondaryText}" FontSize="11" VerticalAlignment="Center" Margin="12,0" TextTrimming="CharacterEllipsis" />
+            <Grid Margin="12,0">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding Status}" Foreground="{StaticResource SecondaryText}" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                <Button Grid.Column="1" Content="Texture Databases…" Command="{Binding ObjectDatabaseSettingsCommand}" Padding="8,2" FontSize="10" VerticalAlignment="Center" ToolTip="Manage the game-wide Texture2D discovery databases" />
+            </Grid>
         </Border>
     </Grid>
 </Window>

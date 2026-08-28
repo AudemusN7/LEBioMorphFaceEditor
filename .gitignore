@@ -6,6 +6,7 @@ TestResults/
 artifacts/
 .codex-build/
 .codex-temp/
+.worktrees/
 docs/PROJECT-CONTEXT.md
 fixtures/local/*
 !fixtures/local/.gitkeep

@@ -20,33 +20,31 @@ public sealed class TextureCatalogService(TextureRegistryStore store)
         MorphFaceGame game,
         CancellationToken cancellationToken = default)
     {
-        var initialStatus = store.GetStatus(game);
-        if (initialStatus.State != TextureRegistryState.Ready || initialStatus.FilePath is null)
-            return new TextureCatalogReadResult(initialStatus, []);
-
-        var fingerprint = Fingerprint(initialStatus);
+        var fingerprint = store.GetFileFingerprint(game);
         lock (_cacheLock)
         {
             if (_cache.TryGetValue(game, out var cached) && cached.Fingerprint == fingerprint)
-                return new TextureCatalogReadResult(initialStatus, cached.Candidates);
+                return new TextureCatalogReadResult(cached.Status, cached.Candidates);
         }
 
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var status = store.GetStatus(game);
-            if (status.State != TextureRegistryState.Ready || status.FilePath is null)
-                return new TextureCatalogReadResult(status, []);
-            fingerprint = Fingerprint(status);
+            fingerprint = store.GetFileFingerprint(game);
             lock (_cacheLock)
             {
                 if (_cache.TryGetValue(game, out var cached) && cached.Fingerprint == fingerprint)
-                    return new TextureCatalogReadResult(status, cached.Candidates);
+                    return new TextureCatalogReadResult(cached.Status, cached.Candidates);
             }
+
+            var status = await Task.Run(() => store.GetStatus(game), cancellationToken).ConfigureAwait(false);
+            if (status.State != TextureRegistryState.Ready || status.FilePath is null)
+                return new TextureCatalogReadResult(status, []);
 
             var snapshot = await Task.Run(() => store.Read(game), cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
-            lock (_cacheLock) _cache[game] = new CachedCatalog(fingerprint, snapshot.Candidates);
+            fingerprint = store.GetFileFingerprint(game);
+            lock (_cacheLock) _cache[game] = new CachedCatalog(fingerprint, status, snapshot.Candidates);
             return new TextureCatalogReadResult(status, snapshot.Candidates);
         }
         finally
@@ -60,9 +58,8 @@ public sealed class TextureCatalogService(TextureRegistryStore store)
         lock (_cacheLock) _cache.Remove(game);
     }
 
-    private static CatalogFingerprint Fingerprint(TextureRegistryStatus status) =>
-        new(status.FilePath!, status.FileSize ?? 0, status.LastBuilt);
-
-    private sealed record CatalogFingerprint(string FilePath, long FileSize, DateTimeOffset? LastBuilt);
-    private sealed record CachedCatalog(CatalogFingerprint Fingerprint, IReadOnlyList<TextureCatalogCandidate> Candidates);
+    private sealed record CachedCatalog(
+        (string Path, long Length, DateTime LastWriteTimeUtc)? Fingerprint,
+        TextureRegistryStatus Status,
+        IReadOnlyList<TextureCatalogCandidate> Candidates);
 }

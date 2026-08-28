@@ -1,6 +1,7 @@
 using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
+using MorphFaceEditor.Core.Randomisation;
 using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.LegendaryExplorer.TextureRegistry;
 using MorphFaceEditor.Models;
@@ -25,11 +26,77 @@ public static class TextureCatalogTests
         new("texture catalogue: missing registry preserves every package texture", MissingRegistryPreservesEveryPackageTexture),
         new("texture catalogue: local path suppresses installed duplicate", LocalPathSuppressesInstalledDuplicate),
         new("texture catalogue: merged picker ranks by relevance and source", MergedPickerRanksByRelevanceAndSource),
+        new("texture catalogue: texture editor resolves installed paths without guessing", TextureEditorResolvesInstalledPathsWithoutGuessing),
+        new("randomisation texture: required decode failure reports family signature", RequiredDecodeFailureReportsFamilySignature),
         new("texture registry: discovery admits morph HIR and shared-eye paths", DiscoveryAdmitsSupportedPaths),
         new("texture registry: occurrence retains mip storage metadata", OccurrenceRetainsMipStorageMetadata),
         new("texture registry: availability resolves installed and local paths", AvailabilityResolvesMergedPaths),
         new("texture registry: ambiguous object names are not resolved", AmbiguousObjectNamesAreRejected)
     ];
+
+    private static void RequiredDecodeFailureReportsFamilySignature()
+    {
+        var session = MaterialTestFixtures.CreateSession();
+        var current = session.GetSelectedTexture("HED_Diff")!;
+        var diffuse = Candidate("BIOG_HMM_HED_PROMorph.Add.Missing_Diff", "missing.pcc");
+        var normal = Candidate("BIOG_HMM_HED_PROMorph.Add.Missing_Norm", "missing.pcc");
+        using var reader = new MorphFacePackageReader();
+        var editor = new MaterialEditorViewModel(
+            session,
+            new StubColorDialogService(),
+            new PackageReferenceService(reader),
+            current.Source.PackagePath,
+            [new PackageAssetListItem(current.Source)],
+            _ => { },
+            new HumanMaleFeatureMetadataCatalog(),
+            [diffuse, normal],
+            new TextureCatalogProfile("le3-human-male", ["HMM_HED"], []),
+            true);
+        var family = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["HED_Diff"] = diffuse.InstancedPath,
+            ["HED_Norm"] = normal.InstancedPath
+        };
+
+        var prepared = editor.PrepareRandomisationAsync(
+                new Dictionary<string, float>(),
+                new Dictionary<string, System.Numerics.Vector4>(),
+                new Dictionary<string, IReadOnlyDictionary<string, string>> { ["human-face"] = family })
+            .GetAwaiter().GetResult();
+
+        TestAssert.True(prepared.FailedTextureFamilySignatures.Contains(
+                MaterialRandomiser.TextureFamilySignature(family)),
+            "A required decode failure did not identify the family that must be excluded on retry.");
+    }
+
+    private sealed class StubColorDialogService : IHdrColorDialogService
+    {
+        public bool ExtendedSliders { get; set; }
+        public System.Numerics.Vector4? Edit(
+            string title, System.Numerics.Vector4 value, Action<System.Numerics.Vector4> livePreview) => null;
+        public System.Numerics.Vector4? EditStandard(
+            string title, System.Numerics.Vector4 value, Action<System.Numerics.Vector4> livePreview) => null;
+    }
+
+    private static void TextureEditorResolvesInstalledPathsWithoutGuessing()
+    {
+        var session = MaterialTestFixtures.CreateSession();
+        var current = session.GetSelectedTexture("HED_Diff")!;
+        var unique = Candidate("BIOG_SAL_HED_PROMorph.Add.Unique_Diff", "sal.pcc");
+        var ambiguousA = Candidate("BIOG_A_PROMorph.Add.Shared_Diff", "a.pcc");
+        var ambiguousB = Candidate("BIOG_B_PROMorph.Add.Shared_Diff", "b.pcc");
+        using var reader = new MorphFacePackageReader();
+        var editor = CreateTextureEditor(session, reader,
+            [new PackageAssetListItem(current.Source)], [unique, ambiguousA, ambiguousB],
+            TextureCatalogProfile.Empty, true);
+
+        TestAssert.True(editor.CanResolveInstancedPath(unique.InstancedPath),
+            "An exact installed texture path was unavailable to randomisation.");
+        TestAssert.True(editor.CanResolveInstancedPath("Unique_Diff"),
+            "A unique installed object name was unavailable to randomisation.");
+        TestAssert.True(!editor.CanResolveInstancedPath("Shared_Diff"),
+            "An ambiguous object name was treated as a resolvable randomisation texture.");
+    }
 
     private static void MissingRegistryPreservesEveryPackageTexture()
     {

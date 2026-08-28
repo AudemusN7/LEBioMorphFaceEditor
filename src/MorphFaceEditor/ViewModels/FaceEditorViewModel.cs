@@ -328,31 +328,48 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             var materialValueCount = 0;
             if (hasMaterial && materialProfile is not null)
             {
-                var compatibleMaterialDonors = _randomisationCatalog.CompatibleMaterialDonors(_profileKey);
+                var compatibleMaterialDonors = _randomisationCatalog.ProjectInstalledMaterialDonors(
+                    _profileKey, Material.CanResolveTexturePath);
                 var textureFamilies = compatibleMaterialDonors
                     .SelectMany(value => value.MaterialTextureFamilies)
                     .Where(family => family.Value.Keys.Any(requestedTextureNames.Contains))
                     .Select(value => value.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
-                var materialProposal = MaterialRandomiser.CreateProposal(
-                    donor, compatibleMaterialDonors, materialProfile,
-                    Material.Scalars.ToDictionary(value => value.Name, value => value.Value, StringComparer.OrdinalIgnoreCase),
-                    Material.Vectors.ToDictionary(value => value.Name, value => value.Value, StringComparer.OrdinalIgnoreCase),
-                    Material.Scalars.Select(value => new MaterialRandomisationScalarBounds(
-                        value.Name, value.Minimum, value.Maximum)).ToArray(),
-                    scalarScope, vectorScope, textureFamilies, MaterialRandomisationStrength, seed,
-                    Material.Textures.ToDictionary(value => value.Name, value => value.SourceName,
-                        StringComparer.OrdinalIgnoreCase));
-                var dependentVectors = MaterialRandomiser.DependentVectorNames(
-                    materialProfile.ProfileKey, materialProposal.TextureFamilies,
-                    Material.Textures.ToDictionary(value => value.Name, value => value.SourceName,
-                        StringComparer.OrdinalIgnoreCase));
-                preparedMaterial = await Material.PrepareRandomisationAsync(
-                    materialProposal.Scalars.Where(value => scalarScope.Contains(value.Key))
-                        .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase),
-                    materialProposal.Vectors.Where(value => vectorScope.Contains(value.Key) ||
-                                                             dependentVectors.Contains(value.Key))
-                        .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase),
-                    materialProposal.TextureFamilies);
+                var currentScalars = Material.Scalars.ToDictionary(
+                    value => value.Name, value => value.Value, StringComparer.OrdinalIgnoreCase);
+                var currentVectors = Material.Vectors.ToDictionary(
+                    value => value.Name, value => value.Value, StringComparer.OrdinalIgnoreCase);
+                var currentTextures = Material.Textures.ToDictionary(
+                    value => value.Name, value => value.SourceName, StringComparer.OrdinalIgnoreCase);
+                var scalarBounds = Material.Scalars.Select(value => new MaterialRandomisationScalarBounds(
+                    value.Name, value.Minimum, value.Maximum)).ToArray();
+                var eligibleSignatureCount = compatibleMaterialDonors
+                    .SelectMany(value => value.MaterialTextureFamilies.Values)
+                    .Select(MaterialRandomiser.TextureFamilySignature)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Count();
+                var excludedSignatures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                for (var attempt = 0; attempt <= eligibleSignatureCount; attempt++)
+                {
+                    var materialProposal = MaterialRandomiser.CreateProposal(
+                        donor, compatibleMaterialDonors, materialProfile,
+                        currentScalars, currentVectors, scalarBounds,
+                        scalarScope, vectorScope, textureFamilies, MaterialRandomisationStrength, seed,
+                        currentTextures, excludedSignatures);
+                    var dependentVectors = MaterialRandomiser.DependentVectorNames(
+                        materialProfile.ProfileKey, materialProposal.TextureFamilies, currentTextures);
+                    preparedMaterial = await Material.PrepareRandomisationAsync(
+                        materialProposal.Scalars.Where(value => scalarScope.Contains(value.Key))
+                            .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase),
+                        materialProposal.Vectors.Where(value => vectorScope.Contains(value.Key) ||
+                                                                 dependentVectors.Contains(value.Key))
+                            .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase),
+                        materialProposal.TextureFamilies);
+                    if (preparedMaterial.FailedTextureFamilySignatures.Count == 0) break;
+                    var added = false;
+                    foreach (var failedSignature in preparedMaterial.FailedTextureFamilySignatures)
+                        added |= excludedSignatures.Add(failedSignature);
+                    if (!added) break;
+                }
                 materialValueCount = scalarScope.Count + vectorScope.Count;
             }
 

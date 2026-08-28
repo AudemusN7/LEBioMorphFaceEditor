@@ -158,15 +158,18 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject
     public Task<DecodedTextureAsset> ResolveInstancedPathAsync(string instancedPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(instancedPath);
-        var objectName = instancedPath.Split('.').Last();
-        var candidate = _allCandidates.FirstOrDefault(value =>
-            value.InstancedPath.Equals(instancedPath, StringComparison.OrdinalIgnoreCase) ||
-            value.ObjectName.Equals(objectName, StringComparison.OrdinalIgnoreCase));
-        var identity = candidate?.Asset?.Identity ?? new AssetIdentity(
-            candidate?.RegistryCandidate?.EffectiveOccurrence.PackagePath ?? _packagePath,
-            instancedPath, 0, "Texture2D");
+        var candidate = FindResolvableOption(instancedPath)
+            ?? throw new FileNotFoundException($"Texture '{instancedPath}' is not available in the open package or installed registry.");
+        var identity = candidate.Asset?.Identity ?? new AssetIdentity(
+            candidate.RegistryCandidate!.EffectiveOccurrence.PackagePath,
+            candidate.InstancedPath,
+            candidate.RegistryCandidate.EffectiveOccurrence.ExportUIndex,
+            "Texture2D");
         return ResolveReferenceAsync(identity);
     }
+
+    public bool CanResolveInstancedPath(string instancedPath) =>
+        !string.IsNullOrWhiteSpace(instancedPath) && FindResolvableOption(instancedPath) is not null;
 
     /// <summary>Applies a catalogue that completed after the material editor became interactive.</summary>
     public void UpdateRegistryCandidates(
@@ -311,6 +314,21 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject
     private static bool ContainsAny(string path, IReadOnlyList<string> fragments) =>
         fragments.Any(fragment => !string.IsNullOrWhiteSpace(fragment) &&
             path.Contains(fragment, StringComparison.OrdinalIgnoreCase));
+
+    private MaterialTextureOption? FindResolvableOption(string instancedPath)
+    {
+        var exact = _allCandidates.FirstOrDefault(value =>
+            value.InstancedPath.Equals(instancedPath, StringComparison.OrdinalIgnoreCase));
+        if (exact is not null) return exact;
+        var objectName = instancedPath.Split('.').Last();
+        var matches = _allCandidates
+            .Where(value => value.ObjectName.Equals(objectName, StringComparison.OrdinalIgnoreCase))
+            .GroupBy(value => value.InstancedPath, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .Take(2)
+            .ToArray();
+        return matches.Length == 1 ? matches[0] : null;
+    }
 
     private MaterialTextureOption FindOptionForCurrentTexture(string? instancedPath)
     {

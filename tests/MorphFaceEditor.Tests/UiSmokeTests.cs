@@ -42,7 +42,7 @@ public static class UiSmokeTests
         new("repeated cursed randomisation does not compound", RepeatedCursedRandomisationDoesNotCompound),
         new("embedded randomisation corpus loads all pools and excludes Broke", EmbeddedRandomisationCorpusLoads),
         new("editor error banners can be dismissed", ErrorBannerCanBeDismissed),
-        new("object database settings command opens the settings dialog", ObjectDatabaseSettingsCommandOpensDialog),
+        new("texture registry settings command opens the settings dialog", TextureRegistrySettingsCommandOpensDialog),
         new("WPF resources construct and nested menus expose their popup", HdrPickerConstructs),
         new("Human Male UI profile orders, groups, and filters features", HumanMaleProfileOrganizesFeatures),
         new("LE3 Human Male UI hides inert eye metadata and marks vestigial pupils", Le3HumanMaleProfileOrganizesFeatures),
@@ -83,16 +83,16 @@ public static class UiSmokeTests
         TestAssert.Equal<string?>(null, viewModel.ErrorMessage);
     }
 
-    private static void ObjectDatabaseSettingsCommandOpensDialog()
+    private static void TextureRegistrySettingsCommandOpensDialog()
     {
         using var reader = new MorphFacePackageReader();
         var dialogs = new StubEditorDialogs();
         using var viewModel = CreateMainWindowViewModel(reader, dialogs);
 
-        viewModel.ObjectDatabaseSettingsCommand.Execute(null);
+        viewModel.TextureRegistrySettingsCommand.Execute(null);
 
-        TestAssert.True(dialogs.ObjectDatabaseSettingsWasShown,
-            "The Object Database Settings command did not open the settings dialog.");
+        TestAssert.True(dialogs.TextureRegistrySettingsWasShown,
+            "The Texture Registry Settings command did not open the settings dialog.");
     }
 
     private static void ComboModelsDisplayLabels()
@@ -678,7 +678,7 @@ public static class UiSmokeTests
 
     private sealed class StubEditorDialogs : IEditorDialogService
     {
-        public bool ObjectDatabaseSettingsWasShown { get; private set; }
+        public bool TextureRegistrySettingsWasShown { get; private set; }
         public string? ChoosePackage(string? initialDirectory = null) => null;
         public MorphPackageSaveRequest? ChooseMorphPackageDestination(string suggestedFileName, string sourcePackagePath) => null;
         public MorphConversionSaveRequest? ChooseMorphConversionDestination(MorphFaceGame sourceGame, string suggestedFileName, string sourcePackagePath) => null;
@@ -689,7 +689,7 @@ public static class UiSmokeTests
         public bool ConfirmDeleteMorph(string facePath) => false;
         public UnsavedChangesChoice ConfirmUnsavedChanges(string assetPath, UnsavedChangesScope scope = UnsavedChangesScope.Package) => UnsavedChangesChoice.Cancel;
         public void ShowInformation(string title, string message) { }
-        public void ShowObjectDatabaseSettings() => ObjectDatabaseSettingsWasShown = true;
+        public void ShowTextureRegistrySettings() => TextureRegistrySettingsWasShown = true;
     }
 
     private static void LodSpecificMorphControlsAreMarked()

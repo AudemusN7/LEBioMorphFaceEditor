@@ -28,9 +28,11 @@ public partial class App : Application
         var objectDatabasePaths = ObjectDatabasePaths.CreateDefault();
         var objectDatabaseProvider = new ObjectDatabaseProvider(objectDatabasePaths);
         var objectDatabaseBuilder = new ObjectDatabaseBuilder(objectDatabasePaths, objectDatabaseProvider);
-        var objectDatabaseSettings = new ObjectDatabaseSettingsViewModel(objectDatabaseProvider, objectDatabaseBuilder);
+        var textureCatalogService = new TextureCatalogService(objectDatabaseProvider);
+        var objectDatabaseSettings = new ObjectDatabaseSettingsViewModel(
+            objectDatabaseProvider, objectDatabaseBuilder, textureCatalogService.Invalidate);
         var packageReader = new MorphFacePackageReader();
-        var referenceService = new PackageReferenceService(packageReader);
+        var referenceService = new PackageReferenceService(packageReader, textureCatalogService);
         var profiles = MorphFaceProfileRegistry.CreateDefault();
         var targets = new MorphTargetCatalog();
         var packageWriter = new MorphFacePackageWriter();

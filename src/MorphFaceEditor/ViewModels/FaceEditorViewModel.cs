@@ -3,6 +3,7 @@ using MorphFaceEditor.Core.Deformation;
 using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.Services;
 using MorphFaceEditor.Core.Randomisation;
+using MorphFaceEditor.Core.Materials;
 
 namespace MorphFaceEditor.ViewModels;
 
@@ -52,7 +53,10 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         string profileKey = "le1-human-male",
         MorphRandomisationCatalog? randomisationCatalog = null,
         Func<int>? randomSeedFactory = null,
-        RandomisationInclusionState? randomisationInclusionState = null)
+        RandomisationInclusionState? randomisationInclusionState = null,
+        IReadOnlyList<TextureCatalogCandidate>? registryTextureCandidates = null,
+        TextureCatalogProfile? textureCatalogProfile = null,
+        bool isTextureRegistryAvailable = false)
     {
         _session = session;
         _profileKey = profileKey;
@@ -108,7 +112,8 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             .ToArray();
         AttachmentMeshes = [HairMesh, .. OtherMeshes];
         Material = new MaterialEditorViewModel(
-            materialSession, colorDialog, references, packagePath, textureCandidates, reportError, metadataCatalog);
+            materialSession, colorDialog, references, packagePath, textureCandidates, reportError, metadataCatalog,
+            registryTextureCandidates, textureCatalogProfile, isTextureRegistryAvailable);
         Categories = metadataCatalog.Categories
             .Select(category => new EditorFeatureCategoryViewModel(
                 category,

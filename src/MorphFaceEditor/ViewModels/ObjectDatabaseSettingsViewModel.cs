@@ -9,6 +9,7 @@ public sealed class ObjectDatabaseSettingsViewModel : ObservableObject
 {
     private readonly ObjectDatabaseProvider _provider;
     private readonly ObjectDatabaseBuilder _builder;
+    private readonly Action<MorphFaceGame>? _catalogInvalidator;
     private CancellationTokenSource? _buildCancellation;
     private bool _isBuilding;
     private bool _isRebuildingAll;
@@ -17,12 +18,14 @@ public sealed class ObjectDatabaseSettingsViewModel : ObservableObject
 
     public ObjectDatabaseSettingsViewModel(
         ObjectDatabaseProvider provider,
-        ObjectDatabaseBuilder builder)
+        ObjectDatabaseBuilder builder,
+        Action<MorphFaceGame>? catalogInvalidator = null)
     {
         ArgumentNullException.ThrowIfNull(provider);
         ArgumentNullException.ThrowIfNull(builder);
         _provider = provider;
         _builder = builder;
+        _catalogInvalidator = catalogInvalidator;
         Rows =
         [
             new ObjectDatabaseSettingsRowViewModel(MorphFaceGame.LE1, provider.GetStatus(MorphFaceGame.LE1)),
@@ -79,6 +82,7 @@ public sealed class ObjectDatabaseSettingsViewModel : ObservableObject
         {
             var status = await _builder.RebuildAsync(game, CreateProgress(), _buildCancellation!.Token);
             row.Update(status);
+            _catalogInvalidator?.Invoke(game);
         }
         catch (OperationCanceledException)
         {
@@ -108,7 +112,10 @@ public sealed class ObjectDatabaseSettingsViewModel : ObservableObject
         {
             var statuses = await _builder.RebuildAllAsync(CreateProgress(), _buildCancellation!.Token);
             foreach (var status in statuses)
+            {
                 Rows.Single(row => row.Game == status.Game).Update(status);
+                _catalogInvalidator?.Invoke(status.Game);
+            }
         }
         catch (OperationCanceledException)
         {

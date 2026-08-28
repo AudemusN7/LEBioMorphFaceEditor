@@ -1,6 +1,7 @@
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.LegendaryExplorer;
+using MorphFaceEditor.LegendaryExplorer.TextureRegistry;
 using MorphFaceEditor.Models;
 
 namespace MorphFaceEditor.Services;
@@ -9,7 +10,9 @@ public sealed record PackageReferenceCatalog(
     IReadOnlyList<PackageAssetListItem> Textures,
     IReadOnlyList<PackageAssetListItem> SkeletalMeshes);
 
-public sealed class PackageReferenceService(MorphFacePackageReader reader)
+public sealed class PackageReferenceService(
+    MorphFacePackageReader reader,
+    TextureCatalogService? textureCatalogService = null)
 {
     private readonly SemaphoreSlim _readerGate = new(1, 1);
     private static readonly MaterialParameterDefinition ThumbnailDefinition = new(
@@ -72,6 +75,14 @@ public sealed class PackageReferenceService(MorphFacePackageReader reader)
         CancellationToken cancellationToken = default) => ReadAsync(
             () => reader.LoadTexture(packagePath, texturePath, definition),
             cancellationToken);
+
+    public Task<TextureCatalogReadResult> ReadTextureCatalogAsync(
+        MorphFaceGame game,
+        TextureCatalogProfile profile,
+        CancellationToken cancellationToken = default) => textureCatalogService is null
+        ? Task.FromResult(new TextureCatalogReadResult(
+            new ObjectDatabaseStatus(game, ObjectDatabaseState.Missing, null, null, null, null, null), []))
+        : textureCatalogService.ReadAsync(game, profile, cancellationToken);
 
     public Task<LoadedAttachment> LoadAttachmentAsync(
         string packagePath,

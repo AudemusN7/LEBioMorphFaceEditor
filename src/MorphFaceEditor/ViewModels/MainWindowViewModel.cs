@@ -654,6 +654,16 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             {
                 AppLog.Warning(warning);
             }
+            Status = "Indexing installed texture choices…";
+            var textureCatalogProfile = TextureCatalogProfiles.For(result.Profile);
+            var textureCatalog = await _referenceService.ReadTextureCatalogAsync(
+                result.Loaded.Game,
+                textureCatalogProfile,
+                cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            AppLog.Information(textureCatalog.IsAvailable
+                ? $"Texture registry loaded for {result.Profile.DisplayName}: {textureCatalog.Candidates.Count:N0} verified candidates."
+                : $"Texture registry is unavailable for {result.Profile.DisplayName}; no usable {result.Loaded.Game} object database was found.");
             var topology = result.Loaded.BaseHead.Topology;
             var oracle = result.EditingSession.Evaluation.OriginalOracleReport;
             var materialOverrides = result.Loaded.Document.MaterialOverrides;
@@ -678,7 +688,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 SetEditorError,
                 result.Profile.Key,
                 _randomisationCatalog,
-                randomisationInclusionState: _randomisationInclusionState);
+                randomisationInclusionState: _randomisationInclusionState,
+                registryTextureCandidates: textureCatalog.Candidates,
+                textureCatalogProfile: textureCatalogProfile,
+                isTextureRegistryAvailable: textureCatalog.IsAvailable);
             var speciesKey = PreviewCameraGrouping.SpeciesForProfile(result.Profile.Key);
             if (string.Equals(_loadedSpeciesKey, speciesKey, StringComparison.OrdinalIgnoreCase))
             {
@@ -988,6 +1001,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             return true;
         }
+        if (Editor.Material.HasExternalRegistrySelections)
+        {
+            ErrorMessage = "This face uses an installed texture-registry selection. Saving it will be enabled once the path-preserving texture materialisation stage is complete.";
+            Status = "External texture selection is preview-only for now.";
+            return false;
+        }
 
         IsBusy = true;
         ErrorMessage = null;
@@ -1115,6 +1134,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         if (Editor is null || _loadedFace is null || PackagePath is null || WorkspacePackagePath is null)
         {
+            return;
+        }
+        if (Editor.Material.HasExternalRegistrySelections)
+        {
+            ErrorMessage = "This face uses an installed texture-registry selection. Export is disabled until path-preserving texture materialisation is complete.";
+            Status = "External texture selection is preview-only for now.";
             return;
         }
         var sourceName = SelectedFace?.DisplayName ?? _loadedFace.Document.Source.InstancedPath.Split('.').Last();

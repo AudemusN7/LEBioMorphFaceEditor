@@ -1,4 +1,3 @@
-using System.Collections.ObjectModel;
 using System.IO;
 using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Core.Domain;
@@ -70,7 +69,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject
     public string Group => _definition.Group;
     public string CategoryKey => _definition.Group;
     public string Description => _definition.Description;
-    public ObservableCollection<MaterialTextureOption> Candidates { get; }
+    public IReadOnlyList<MaterialTextureOption> Candidates { get; private set; }
     public bool IsRegistryAvailable => _isRegistryAvailable;
     public bool HasExternalRegistrySelection => SelectedTexture?.RegistryCandidate is not null;
     public string RegistryStatusLabel => _isRegistryAvailable
@@ -83,11 +82,15 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject
         {
             // An editable WPF ComboBox writes its selected item's display text back through
             // the Text binding. That is selection synchronisation, not a user search.
-            if (SelectedTexture is { } selected &&
-                string.Equals(value, selected.DisplayName, StringComparison.OrdinalIgnoreCase))
+            if (_allCandidates.Any(candidate =>
+                    string.Equals(value, candidate.DisplayName, StringComparison.OrdinalIgnoreCase)))
             {
-                _searchText = string.Empty;
-                ApplySearch();
+                if (_searchText.Length > 0)
+                {
+                    _searchText = string.Empty;
+                    OnPropertyChanged();
+                    ApplySearch();
+                }
                 return;
             }
             if (SetProperty(ref _searchText, value))
@@ -262,12 +265,8 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject
             .ThenBy(option => option.ObjectName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(option => option.InstancedPath, StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        Candidates.Clear();
-        Candidates.Add(none);
-        foreach (var option in filtered)
-        {
-            Candidates.Add(option);
-        }
+        Candidates = [none, .. filtered];
+        OnPropertyChanged(nameof(Candidates));
     }
 
     private IReadOnlyList<MaterialTextureOption> BuildOptions(DecodedTextureAsset? currentTexture)

@@ -2,11 +2,16 @@ using System.IO;
 using Microsoft.Win32;
 using System.Windows;
 using MorphFaceEditor.Views;
+using MorphFaceEditor.ViewModels;
 
 namespace MorphFaceEditor.Services;
 
 public sealed class WpfEditorDialogService : IEditorDialogService
 {
+    private readonly ObjectDatabaseSettingsViewModel _objectDatabaseSettings;
+
+    public WpfEditorDialogService(ObjectDatabaseSettingsViewModel objectDatabaseSettings) =>
+        _objectDatabaseSettings = objectDatabaseSettings;
     public string? ChoosePackage(string? initialDirectory = null)
     {
         var dialog = new OpenFileDialog
@@ -114,6 +119,12 @@ public sealed class WpfEditorDialogService : IEditorDialogService
 
     public void ShowInformation(string title, string message) =>
         _ = new EditorMessageWindow(title, message)
+        {
+            Owner = Application.Current.MainWindow
+        }.ShowDialog();
+
+    public void ShowObjectDatabaseSettings() =>
+        _ = new ObjectDatabaseSettingsWindow(_objectDatabaseSettings)
         {
             Owner = Application.Current.MainWindow
         }.ShowDialog();

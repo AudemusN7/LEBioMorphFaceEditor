@@ -42,6 +42,7 @@ public static class UiSmokeTests
         new("repeated cursed randomisation does not compound", RepeatedCursedRandomisationDoesNotCompound),
         new("embedded randomisation corpus loads all pools and excludes Broke", EmbeddedRandomisationCorpusLoads),
         new("editor error banners can be dismissed", ErrorBannerCanBeDismissed),
+        new("object database settings command opens the settings dialog", ObjectDatabaseSettingsCommandOpensDialog),
         new("WPF resources construct and nested menus expose their popup", HdrPickerConstructs),
         new("Human Male UI profile orders, groups, and filters features", HumanMaleProfileOrganizesFeatures),
         new("LE3 Human Male UI hides inert eye metadata and marks vestigial pupils", Le3HumanMaleProfileOrganizesFeatures),
@@ -80,6 +81,18 @@ public static class UiSmokeTests
         viewModel.DismissErrorCommand.Execute(null);
         TestAssert.True(!viewModel.HasError, "Dismissing the error left the banner visible.");
         TestAssert.Equal<string?>(null, viewModel.ErrorMessage);
+    }
+
+    private static void ObjectDatabaseSettingsCommandOpensDialog()
+    {
+        using var reader = new MorphFacePackageReader();
+        var dialogs = new StubEditorDialogs();
+        using var viewModel = CreateMainWindowViewModel(reader, dialogs);
+
+        viewModel.ObjectDatabaseSettingsCommand.Execute(null);
+
+        TestAssert.True(dialogs.ObjectDatabaseSettingsWasShown,
+            "The Object Database Settings command did not open the settings dialog.");
     }
 
     private static void ComboModelsDisplayLabels()
@@ -391,7 +404,9 @@ public static class UiSmokeTests
             "The known broken LE3 HMM donor remained in the embedded corpus.");
     }
 
-    private static MainWindowViewModel CreateMainWindowViewModel(MorphFacePackageReader reader)
+    private static MainWindowViewModel CreateMainWindowViewModel(
+        MorphFacePackageReader reader,
+        StubEditorDialogs? dialogs = null)
     {
         var sceneFactory = new HeadPreviewSceneFactory();
         var profiles = MorphFaceProfileRegistry.CreateDefault();
@@ -399,7 +414,7 @@ public static class UiSmokeTests
         var writer = new MorphFacePackageWriter();
         var context = new MorphFacePackageContextService();
         return new MainWindowViewModel(
-            new StubEditorDialogs(),
+            dialogs ?? new StubEditorDialogs(),
             new MorphFaceCatalogService(profiles),
             new MorphFacePreviewLoadService(sceneFactory, targets, profiles, reader),
             sceneFactory,
@@ -663,6 +678,7 @@ public static class UiSmokeTests
 
     private sealed class StubEditorDialogs : IEditorDialogService
     {
+        public bool ObjectDatabaseSettingsWasShown { get; private set; }
         public string? ChoosePackage(string? initialDirectory = null) => null;
         public MorphPackageSaveRequest? ChooseMorphPackageDestination(string suggestedFileName, string sourcePackagePath) => null;
         public MorphConversionSaveRequest? ChooseMorphConversionDestination(MorphFaceGame sourceGame, string suggestedFileName, string sourcePackagePath) => null;
@@ -673,6 +689,7 @@ public static class UiSmokeTests
         public bool ConfirmDeleteMorph(string facePath) => false;
         public UnsavedChangesChoice ConfirmUnsavedChanges(string assetPath, UnsavedChangesScope scope = UnsavedChangesScope.Package) => UnsavedChangesChoice.Cancel;
         public void ShowInformation(string title, string message) { }
+        public void ShowObjectDatabaseSettings() => ObjectDatabaseSettingsWasShown = true;
     }
 
     private static void LodSpecificMorphControlsAreMarked()

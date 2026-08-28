@@ -3,6 +3,7 @@ using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.Services;
 using MorphFaceEditor.ViewModels;
 using MorphFaceEditor.Infrastructure;
+using MorphFaceEditor.LegendaryExplorer.TextureRegistry;
 
 namespace MorphFaceEditor;
 
@@ -24,6 +25,10 @@ public partial class App : Application
         LegendaryExplorerCoreRuntime.Initialize(TaskScheduler.FromCurrentSynchronizationContext());
 
         var sceneFactory = new HeadPreviewSceneFactory();
+        var objectDatabasePaths = ObjectDatabasePaths.CreateDefault();
+        var objectDatabaseProvider = new ObjectDatabaseProvider(objectDatabasePaths);
+        var objectDatabaseBuilder = new ObjectDatabaseBuilder(objectDatabasePaths, objectDatabaseProvider);
+        var objectDatabaseSettings = new ObjectDatabaseSettingsViewModel(objectDatabaseProvider, objectDatabaseBuilder);
         var packageReader = new MorphFacePackageReader();
         var referenceService = new PackageReferenceService(packageReader);
         var profiles = MorphFaceProfileRegistry.CreateDefault();
@@ -31,7 +36,7 @@ public partial class App : Application
         var packageWriter = new MorphFacePackageWriter();
         var packageContext = new MorphFacePackageContextService();
         _viewModel = new MainWindowViewModel(
-            new WpfEditorDialogService(),
+            new WpfEditorDialogService(objectDatabaseSettings),
             new MorphFaceCatalogService(profiles),
             new MorphFacePreviewLoadService(sceneFactory, targets, profiles, packageReader),
             sceneFactory,

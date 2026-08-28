@@ -12,7 +12,10 @@ public static class ObjectDatabaseSettingsTests
     public static IReadOnlyList<TestCase> All { get; } =
     [
         new("object database settings: ready MFE row exposes provenance", ReadyMfeRowExposesProvenance),
+        new("object database settings: status uses traffic-light colours", StatusUsesTrafficLightColours),
+        new("object database settings: rebuild actions become cancel actions while active", RebuildActionsBecomeCancelActions),
         new("object database settings: rebuilding one game refreshes only its row", RebuildingOneGameRefreshesItsRow)
+        ,new("object database settings: rebuilding all refreshes every row", RebuildingAllRefreshesEveryRow)
     ];
 
     private static void ReadyMfeRowExposesProvenance()
@@ -56,6 +59,32 @@ public static class ObjectDatabaseSettingsTests
         writer.Write(0);
     }
 
+    private static void StatusUsesTrafficLightColours()
+    {
+        var ready = new ObjectDatabaseSettingsRowViewModel(
+            MorphFaceGame.LE1,
+            new ObjectDatabaseStatus(MorphFaceGame.LE1, ObjectDatabaseState.Ready,
+                ObjectDatabaseSource.LegendaryExplorer, 2, "fixture.bin", 1, DateTimeOffset.UtcNow));
+        var missing = new ObjectDatabaseSettingsRowViewModel(
+            MorphFaceGame.LE2,
+            new ObjectDatabaseStatus(MorphFaceGame.LE2, ObjectDatabaseState.Missing,
+                null, null, null, null, null));
+
+        TestAssert.Equal("#63C174", ready.StatusColour);
+        TestAssert.Equal("#E36D6D", missing.StatusColour);
+    }
+
+    private static void RebuildActionsBecomeCancelActions()
+    {
+        var paths = new ObjectDatabasePaths(Path.GetTempPath(), Path.GetTempPath());
+        var provider = new ObjectDatabaseProvider(paths);
+        var settings = new ObjectDatabaseSettingsViewModel(provider, new ObjectDatabaseBuilder(paths, provider));
+
+        TestAssert.Equal("Rebuild", settings.ActionLabel);
+        settings.BeginBuild();
+        TestAssert.Equal("Cancel", settings.ActionLabel);
+    }
+
     private static void RebuildingOneGameRefreshesItsRow()
     {
         var root = Path.Combine(Path.GetTempPath(), $"MFE-ObjectDatabaseSettings-{Guid.NewGuid():N}");
@@ -86,6 +115,25 @@ public static class ObjectDatabaseSettingsTests
                 Directory.Delete(root, recursive: true);
             }
         }
+    }
+
+    private static void RebuildingAllRefreshesEveryRow()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"MFE-ObjectDatabaseSettings-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var paths = new ObjectDatabasePaths(Path.Combine(root, "Mfe"), Path.Combine(root, "Shared"));
+            var provider = new ObjectDatabaseProvider(paths);
+            var builder = new ObjectDatabaseBuilder(paths, provider, new FakeGenerator(CreateDatabase(MEGame.LE1)), _ => ["fixture.pcc"]);
+            var settings = new ObjectDatabaseSettingsViewModel(provider, builder);
+
+            settings.RebuildAllAsync().GetAwaiter().GetResult();
+
+            TestAssert.True(settings.Rows.All(row => row.StatusLabel == "Ready" && row.SourceLabel == "MFE"),
+                "Rebuild all did not refresh every game to its MFE-owned database status.");
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); }
     }
 
     private static ObjectInstanceDB CreateDatabase(MEGame game)

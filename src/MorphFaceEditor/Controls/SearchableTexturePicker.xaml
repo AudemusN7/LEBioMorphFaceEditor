@@ -7,7 +7,6 @@
                       MinHeight="26"
                       Focusable="True"
                       HorizontalContentAlignment="Stretch"
-                      PreviewMouseLeftButtonDown="OnPickerPreviewMouseLeftButtonDown"
                       PreviewMouseWheel="OnPickerPreviewMouseWheel"
                       PreviewKeyDown="OnPickerPreviewKeyDown"
                       ToolTip="Choose a texture">
@@ -54,13 +53,14 @@
                Placement="Bottom"
                IsOpen="{Binding IsChecked, ElementName=PickerButton, Mode=TwoWay}"
                AllowsTransparency="True"
-               StaysOpen="False"
+               StaysOpen="True"
                Opened="OnPopupOpened"
                Closed="OnPopupClosed">
             <Border Width="{Binding ActualWidth, ElementName=Root}"
                     MinWidth="360"
                     MaxHeight="440"
                     Padding="6"
+                    PreviewKeyDown="OnPopupPreviewKeyDown"
                     Background="{StaticResource PanelBackground}"
                     BorderBrush="{StaticResource BorderBrush}"
                     BorderThickness="1">

@@ -330,9 +330,14 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             {
                 var compatibleMaterialDonors = _randomisationCatalog.ProjectInstalledMaterialDonors(
                     _profileKey, Material.CanResolveTexturePath);
+                var availableTextureNames = Material.Textures.Select(value => value.Name)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
                 var textureFamilies = compatibleMaterialDonors
                     .SelectMany(value => value.MaterialTextureFamilies)
-                    .Where(family => family.Value.Keys.Any(requestedTextureNames.Contains))
+                    .Where(family => IsTextureFamilyInScope(
+                        family.Value,
+                        requestedTextureNames,
+                        availableTextureNames))
                     .Select(value => value.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
                 var currentScalars = Material.Scalars.ToDictionary(
                     value => value.Name, value => value.Value, StringComparer.OrdinalIgnoreCase);
@@ -419,8 +424,13 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             var donor = _randomisationCatalog.SelectDonor(_profileKey, seed, requireMaterial: true);
             var requestedNames = requested.Textures.Select(value => value.Name)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var availableTextureNames = Material.Textures.Select(value => value.Name)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
             cursedTextureFamilies = donor.MaterialTextureFamilies
-                .Where(family => family.Value.Keys.Any(requestedNames.Contains))
+                .Where(family => IsTextureFamilyInScope(
+                    family.Value,
+                    requestedNames,
+                    availableTextureNames))
                 .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase);
         }
         var preparedMaterial = await Material.PrepareRandomisationAsync(
@@ -486,6 +496,15 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             .SelectMany(group => group.Values).Distinct().ToArray(),
         Categories.Where(category => category.TextureInclusion?.IsIncluded != false)
             .SelectMany(category => category.Textures).Distinct().ToArray());
+
+    internal static bool IsTextureFamilyInScope(
+        IReadOnlyDictionary<string, string> family,
+        IReadOnlySet<string> requestedTextureNames,
+        IReadOnlySet<string> availableTextureNames)
+    {
+        var applicableMembers = family.Keys.Where(availableTextureNames.Contains).ToArray();
+        return applicableMembers.Length > 0 && applicableMembers.All(requestedTextureNames.Contains);
+    }
 
     private bool CanRandomiseScope(EditorRandomisationScope scope)
     {

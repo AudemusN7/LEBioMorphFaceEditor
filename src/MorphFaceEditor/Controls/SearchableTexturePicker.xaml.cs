@@ -7,19 +7,30 @@ namespace MorphFaceEditor.Controls;
 
 public partial class SearchableTexturePicker : UserControl
 {
-    private bool _suppressPickerClick;
+    private Window? _ownerWindow;
 
     public SearchableTexturePicker() => InitializeComponent();
 
     private void OnPopupOpened(object? sender, EventArgs e)
     {
+        _ownerWindow = Window.GetWindow(this);
+        if (_ownerWindow is not null)
+        {
+            _ownerWindow.PreviewMouseDown += OnOwnerPreviewMouseDown;
+            _ownerWindow.Deactivated += OnOwnerDeactivated;
+        }
         SearchBox.Focus();
         SearchBox.SelectAll();
     }
 
     private void OnPopupClosed(object? sender, EventArgs e)
     {
-        _suppressPickerClick = PickerButton.IsMouseOver && Mouse.LeftButton == MouseButtonState.Pressed;
+        if (_ownerWindow is not null)
+        {
+            _ownerWindow.PreviewMouseDown -= OnOwnerPreviewMouseDown;
+            _ownerWindow.Deactivated -= OnOwnerDeactivated;
+            _ownerWindow = null;
+        }
         PickerButton.IsChecked = false;
         if (DataContext is MaterialTextureEditorViewModel { SearchText.Length: > 0 } editor)
         {
@@ -27,12 +38,22 @@ public partial class SearchableTexturePicker : UserControl
         }
     }
 
-    private void OnPickerPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    private void OnOwnerPreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (_suppressPickerClick || PickerPopup.IsOpen)
+        if (!PickerButton.IsMouseOver)
         {
-            _suppressPickerClick = false;
             PickerPopup.IsOpen = false;
+        }
+    }
+
+    private void OnOwnerDeactivated(object? sender, EventArgs e) => PickerPopup.IsOpen = false;
+
+    private void OnPopupPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape)
+        {
+            PickerPopup.IsOpen = false;
+            PickerButton.Focus();
             e.Handled = true;
         }
     }

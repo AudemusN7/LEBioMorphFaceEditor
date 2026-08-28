@@ -110,6 +110,9 @@ public sealed class MorphRandomisationCatalog
             ? parameterName is "HED_Diff" or "HED_Norm"
             : family.Equals("human-scalp", StringComparison.OrdinalIgnoreCase)
                 ? parameterName is "HED_Scalp_Diff" or "HED_Scalp_Norm"
+                : family.EndsWith("-face", StringComparison.OrdinalIgnoreCase)
+                    ? parameterName.EndsWith("_HED_Diff", StringComparison.OrdinalIgnoreCase) ||
+                      parameterName.EndsWith("_HED_Norm", StringComparison.OrdinalIgnoreCase)
                 : true;
 
     public MaterialRandomisationProfile? GetMaterialProfile(string profileKey) =>

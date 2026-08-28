@@ -19,7 +19,7 @@ public sealed record TextureRegistrySnapshot(
     int InstalledPackageCount,
     IReadOnlyList<TextureCatalogCandidate> Candidates)
 {
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
 }
 
 /// <summary>Shared, non-exclusive discovery rules used by the one-pass installed-package scanner.</summary>
@@ -33,6 +33,7 @@ public static class TextureRegistryDiscovery
         "HMM_EYE",
         "HMF_EYE",
         "HED_EYE",
+        "EYE_",
         "ASA_EYE",
         "SAL_EYE",
         "TUR_EYE",

@@ -1,6 +1,9 @@
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.LegendaryExplorer.TextureRegistry;
+using MorphFaceEditor.Models;
+using MorphFaceEditor.Services;
+using MorphFaceEditor.ViewModels;
 
 namespace MorphFaceEditor.Tests;
 
@@ -13,7 +16,9 @@ public static class TextureCatalogTests
         new("texture catalogue: profile matches precede shared and general textures", ProfileMatchesRankBeforeSharedAndGeneral),
         new("texture catalogue: search matches path package and origin", SearchMatchesUserFacingProvenance),
         new("texture catalogue: duplicate paths keep the highest mounted occurrence", DuplicatePathsKeepEffectiveOccurrence),
-        new("texture catalogue: projector filters paths and verifies exact Texture2D exports", ProjectorFiltersAndVerifies)
+        new("texture catalogue: projector filters paths and verifies exact Texture2D exports", ProjectorFiltersAndVerifies),
+        new("texture catalogue: current local texture remains local when its path is indexed", CurrentLocalTextureRemainsLocal),
+        new("texture catalogue: projection honours cancellation before package resolution", ProjectionHonoursCancellation)
     ];
 
     private static void ActiveTextureRanksFirst()
@@ -101,6 +106,55 @@ public static class TextureCatalogTests
         TestAssert.Equal(2, preferred.Occurrences.Count);
         TestAssert.True(candidates.Any(candidate => candidate.InstancedPath == sharedEyePath),
             "A profile-declared shared eye texture was not admitted to the compact catalogue.");
+    }
+
+    private static void CurrentLocalTextureRemainsLocal()
+    {
+        var session = MaterialTestFixtures.CreateSession();
+        var current = session.GetSelectedTexture("HED_Diff")!;
+        var registryCandidate = new TextureCatalogCandidate(
+            TextureCatalogGame.LE3,
+            current.Source.InstancedPath,
+            Occurrence("DLC_MOD_Texture\\CookedPCConsole\\external.pcc", 9000, TextureCatalogOrigin.Mod),
+            [Occurrence("DLC_MOD_Texture\\CookedPCConsole\\external.pcc", 9000, TextureCatalogOrigin.Mod)]);
+        using var reader = new MorphFacePackageReader();
+        var editor = new MaterialTextureEditorViewModel(
+            session,
+            new MaterialParameterDefinition("HED_Diff", "Diffuse", "skin", MaterialParameterKind.Texture,
+                HeadMaterialFamily.Skin, TextureRole: TextureRole.Diffuse,
+                ColorSpace: TextureColorSpace.Srgb, AlphaPolicy: TextureAlphaPolicy.Ignore),
+            new PackageReferenceService(reader),
+            current.Source.PackagePath,
+            [new PackageAssetListItem(current.Source)],
+            message => throw new Exception(message),
+            [registryCandidate],
+            new TextureCatalogProfile("le3-human-male", ["HMM_HED"], []),
+            isRegistryAvailable: true);
+
+        TestAssert.True(editor.SelectedTexture?.Asset?.Identity == current.Source,
+            "The current local texture was replaced by a registry option solely because its instanced path matched.");
+        TestAssert.True(!editor.HasExternalRegistrySelection,
+            "A current local texture sharing a registry path was incorrectly treated as an external selection.");
+    }
+
+    private static void ProjectionHonoursCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        try
+        {
+            _ = TextureCatalogProjector.Project(
+                MorphFaceGame.LE1,
+                TextureCatalogProfile.Empty,
+                [new TextureCatalogIndexEntry("BIOG_HMM_HED_PROMorph.Adds.Texture", ["fixture.pcc"])],
+                new FakeOccurrenceResolver(new Dictionary<(string Package, string Path), TextureCatalogOccurrence>()),
+                cancellation.Token);
+            throw new Exception("Cancelled texture-catalogue projection completed.");
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected: cancellation must be checked before any PCC is opened.
+        }
     }
 
     private static TextureCatalogCandidate Candidate(

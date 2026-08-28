@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.IO;
 using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
@@ -57,8 +58,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject
                 .Select(candidate => new MaterialTextureOption(null, RegistryCandidate: candidate))
                 .ToList()
             : [];
-        if (currentTexture is not null && !options.Any(option =>
-                string.Equals(option.InstancedPath, currentTexture.Source.InstancedPath, StringComparison.OrdinalIgnoreCase)))
+        if (currentTexture is not null)
         {
             var currentAsset = new PackageAssetListItem(currentTexture.Source);
             currentAsset.SetThumbnail(currentTexture);
@@ -72,9 +72,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject
         Candidates = new ObservableCollection<MaterialTextureOption>(_allCandidates);
         _initializing = true;
         var current = session.GetSelectedTexture(Name)?.Source.InstancedPath;
-        _selectedTexture = Candidates.FirstOrDefault(candidate =>
-            string.Equals(candidate.InstancedPath, current, StringComparison.OrdinalIgnoreCase))
-            ?? Candidates[0];
+        _selectedTexture = FindOptionForCurrentTexture(current);
         _initializing = false;
         RefreshPreview();
     }
@@ -150,9 +148,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject
     {
         var current = _session.GetSelectedTexture(Name)?.Source.InstancedPath;
         _initializing = true;
-        SelectedTexture = Candidates.FirstOrDefault(candidate =>
-            string.Equals(candidate.InstancedPath, current, StringComparison.OrdinalIgnoreCase))
-            ?? Candidates[0];
+        SelectedTexture = FindOptionForCurrentTexture(current);
         _initializing = false;
         RefreshPreview();
         OnPropertyChanged(nameof(SourceName));
@@ -162,15 +158,11 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject
     public async Task<DecodedTextureAsset> ResolveReferenceAsync(AssetIdentity reference)
     {
         ArgumentNullException.ThrowIfNull(reference);
-        var cached = Candidates.FirstOrDefault(candidate => string.Equals(
-            candidate.InstancedPath,
-            reference.InstancedPath,
-            StringComparison.OrdinalIgnoreCase))?.ResolvedTexture;
+        var option = _allCandidates.FirstOrDefault(candidate => candidate.MatchesIdentity(reference));
+        var cached = option?.ResolvedTexture;
         if (cached is not null) return cached;
-        var candidate = _allCandidates.FirstOrDefault(value => string.Equals(
-            value.InstancedPath, reference.InstancedPath, StringComparison.OrdinalIgnoreCase));
         return await _references.LoadTextureAsync(
-            candidate?.RegistryCandidate?.EffectiveOccurrence.PackagePath ?? _packagePath,
+            option?.RegistryCandidate?.EffectiveOccurrence.PackagePath ?? reference.PackagePath,
             reference.InstancedPath,
             _definition);
     }
@@ -252,6 +244,19 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject
             Candidates.Add(option);
         }
     }
+
+    private MaterialTextureOption FindOptionForCurrentTexture(string? instancedPath)
+    {
+        if (instancedPath is null)
+        {
+            return _allCandidates[0];
+        }
+        var current = _session.GetSelectedTexture(Name)?.Source;
+        return current is not null
+            ? _allCandidates.FirstOrDefault(candidate => candidate.MatchesIdentity(current))
+                ?? _allCandidates[0]
+            : _allCandidates[0];
+    }
 }
 
 public sealed record MaterialTextureOption(
@@ -267,6 +272,19 @@ public sealed record MaterialTextureOption(
     public string SourceDescription => RegistryCandidate is { } candidate
         ? $"{candidate.DisplayOrigin} · {candidate.EffectiveOccurrence.PackageName} · {candidate.EffectiveOccurrence.Width}×{candidate.EffectiveOccurrence.Height} · {candidate.EffectiveOccurrence.PixelFormat}"
         : Asset is null ? string.Empty : $"Open package · {Asset.ObjectName}";
+    public bool MatchesIdentity(AssetIdentity identity)
+    {
+        ArgumentNullException.ThrowIfNull(identity);
+        if (Asset?.Identity == identity)
+        {
+            return true;
+        }
+        return RegistryCandidate is { } candidate &&
+               candidate.InstancedPath.Equals(identity.InstancedPath, StringComparison.OrdinalIgnoreCase) &&
+               Path.GetFullPath(candidate.EffectiveOccurrence.PackagePath).Equals(
+                   Path.GetFullPath(identity.PackagePath), StringComparison.OrdinalIgnoreCase) &&
+               candidate.EffectiveOccurrence.ExportUIndex == identity.UIndex;
+    }
     public System.Windows.Media.ImageSource? Thumbnail => Asset?.Thumbnail;
     public string? ThumbnailError => Asset?.ThumbnailError;
     public Task EnsureThumbnailAsync() => Asset?.EnsureThumbnailAsync() ?? Task.CompletedTask;

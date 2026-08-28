@@ -21,7 +21,9 @@ public sealed record TextureCatalogReadResult(
 public sealed class TextureCatalogService(ObjectDatabaseProvider provider)
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly object _cacheLock = new();
     private readonly Dictionary<(MorphFaceGame Game, string ProfileKey), CachedCatalog> _cache = [];
+    private readonly Dictionary<MorphFaceGame, int> _generations = [];
 
     public async Task<TextureCatalogReadResult> ReadAsync(
         MorphFaceGame game,
@@ -29,52 +31,75 @@ public sealed class TextureCatalogService(ObjectDatabaseProvider provider)
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(profile);
-        var status = provider.GetStatus(game);
-        if (status.State != ObjectDatabaseState.Ready || status.FilePath is null)
+        var initialStatus = provider.GetStatus(game);
+        if (initialStatus.State != ObjectDatabaseState.Ready || initialStatus.FilePath is null)
         {
-            return new TextureCatalogReadResult(status, []);
+            return new TextureCatalogReadResult(initialStatus, []);
         }
 
-        var fingerprint = new CatalogFingerprint(status.FilePath, status.FileSize ?? 0, status.LastWriteTime);
         var cacheKey = (game, profile.Key);
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+        while (true)
         {
-            if (_cache.TryGetValue(cacheKey, out var cached) && cached.Fingerprint == fingerprint)
+            await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
             {
-                return new TextureCatalogReadResult(status, cached.Candidates);
-            }
+                var status = provider.GetStatus(game);
+                if (status.State != ObjectDatabaseState.Ready || status.FilePath is null)
+                {
+                    return new TextureCatalogReadResult(status, []);
+                }
+                var fingerprint = new CatalogFingerprint(status.FilePath, status.FileSize ?? 0, status.LastWriteTime);
+                int generation;
+                lock (_cacheLock)
+                {
+                    if (_cache.TryGetValue(cacheKey, out var cached) && cached.Fingerprint == fingerprint)
+                    {
+                        return new TextureCatalogReadResult(status, cached.Candidates);
+                    }
+                    generation = _generations.GetValueOrDefault(game);
+                }
 
-            return await Task.Run(() => Build(game, profile, status, fingerprint, cacheKey, cancellationToken), cancellationToken)
-                .ConfigureAwait(false);
-        }
-        finally
-        {
-            _gate.Release();
+                var built = await Task.Run(() => Build(
+                        game, profile, status, fingerprint, cacheKey, generation, cancellationToken), cancellationToken)
+                    .ConfigureAwait(false);
+                if (!built.WasInvalidated)
+                {
+                    return built.Result;
+                }
+            }
+            finally
+            {
+                _gate.Release();
+            }
         }
     }
 
     public void Invalidate(MorphFaceGame game)
     {
-        foreach (var key in _cache.Keys.Where(key => key.Game == game).ToArray())
+        lock (_cacheLock)
         {
-            _cache.Remove(key);
+            _generations[game] = _generations.GetValueOrDefault(game) + 1;
+            foreach (var key in _cache.Keys.Where(key => key.Game == game).ToArray())
+            {
+                _cache.Remove(key);
+            }
         }
     }
 
-    private TextureCatalogReadResult Build(
+    private CatalogBuildResult Build(
         MorphFaceGame game,
         TextureCatalogProfile profile,
         ObjectDatabaseStatus status,
         CatalogFingerprint fingerprint,
         (MorphFaceGame Game, string ProfileKey) cacheKey,
+        int generation,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (!provider.TryOpenActive(game, out var database) || database is null)
         {
             var unavailable = provider.GetStatus(game) with { State = ObjectDatabaseState.Missing };
-            return new TextureCatalogReadResult(unavailable, []);
+            return new CatalogBuildResult(new TextureCatalogReadResult(unavailable, []), WasInvalidated: false);
         }
 
         using var resolver = new PackageTextureCatalogOccurrenceResolver(game);
@@ -89,13 +114,29 @@ public sealed class TextureCatalogService(ObjectDatabaseProvider provider)
                 cancellationToken.ThrowIfCancellationRequested();
                 return new TextureCatalogIndexEntry(path, database.GetFilesContainingObject(path) ?? []);
             });
-        var candidates = TextureCatalogProjector.Project(game, profile, entries, resolver);
-        _cache[cacheKey] = new CachedCatalog(fingerprint, candidates);
-        return new TextureCatalogReadResult(status, candidates);
+        var candidates = TextureCatalogProjector.Project(game, profile, entries, resolver, cancellationToken);
+        var latestStatus = provider.GetStatus(game);
+        var latestFingerprint = latestStatus.State == ObjectDatabaseState.Ready && latestStatus.FilePath is not null
+            ? new CatalogFingerprint(latestStatus.FilePath, latestStatus.FileSize ?? 0, latestStatus.LastWriteTime)
+            : null;
+        if (latestFingerprint != fingerprint)
+        {
+            return new CatalogBuildResult(new TextureCatalogReadResult(latestStatus, []), WasInvalidated: true);
+        }
+        lock (_cacheLock)
+        {
+            if (_generations.GetValueOrDefault(game) != generation)
+            {
+                return new CatalogBuildResult(new TextureCatalogReadResult(status, []), WasInvalidated: true);
+            }
+            _cache[cacheKey] = new CachedCatalog(fingerprint, candidates);
+        }
+        return new CatalogBuildResult(new TextureCatalogReadResult(status, candidates), WasInvalidated: false);
     }
 
     private sealed record CatalogFingerprint(string FilePath, long FileSize, DateTimeOffset? LastWriteTime);
     private sealed record CachedCatalog(CatalogFingerprint Fingerprint, IReadOnlyList<TextureCatalogCandidate> Candidates);
+    private sealed record CatalogBuildResult(TextureCatalogReadResult Result, bool WasInvalidated);
 }
 
 /// <summary>Resolves OIDB locations in bounded batches and captures source metadata for later preview/porting.</summary>

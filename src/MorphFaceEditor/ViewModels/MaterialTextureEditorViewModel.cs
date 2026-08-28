@@ -18,6 +18,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject
     private readonly PackageReferenceService _references;
     private readonly string _packagePath;
     private readonly Action<string> _reportError;
+    private readonly IReadOnlyList<PackageAssetListItem> _localCandidates;
     private IReadOnlyList<TextureCatalogCandidate> _registryCandidates;
     private TextureCatalogProfile _registryProfile;
     private bool _isRegistryAvailable;
@@ -44,33 +45,20 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject
         _references = references;
         _packagePath = packagePath;
         _reportError = reportError;
+        _localCandidates = candidates;
         _registryCandidates = registryCandidates ?? [];
         _registryProfile = registryProfile ?? TextureCatalogProfile.Empty;
         _isRegistryAvailable = isRegistryAvailable;
-        // Preserve an already-authored external reference even when it is absent from local candidates.
         var currentTexture = session.GetSelectedTexture(Name);
-        var options = _isRegistryAvailable
-            ? TextureCatalogSearch.FilterAndRank(
-                    _registryCandidates,
-                    _registryProfile,
-                    currentTexture?.Source.InstancedPath,
-                    string.Empty)
-                .Select(candidate => new MaterialTextureOption(null, RegistryCandidate: candidate))
-                .ToList()
-            : [];
-        if (currentTexture is not null)
-        {
-            var currentAsset = new PackageAssetListItem(currentTexture.Source);
-            currentAsset.SetThumbnail(currentTexture);
-            options.Insert(0, new MaterialTextureOption(currentAsset, currentTexture));
-        }
         var defaultTextureName = session.GetDefaultTexture(Name)?.Source.InstancedPath.Split('.').Last();
         var noneLabel = defaultTextureName is null
             ? "None (material default)"
             : $"None (material default: {defaultTextureName})";
-        _allCandidates = [new MaterialTextureOption(null, DisplayNameOverride: noneLabel), .. options];
-        Candidates = new ObservableCollection<MaterialTextureOption>(_allCandidates);
+        _allCandidates = [new MaterialTextureOption(null, DisplayNameOverride: noneLabel)];
+        _allCandidates.AddRange(BuildOptions(currentTexture));
+        Candidates = [];
         _initializing = true;
+        ApplySearch();
         var current = session.GetSelectedTexture(Name)?.Source.InstancedPath;
         _selectedTexture = FindOptionForCurrentTexture(current);
         _initializing = false;
@@ -86,8 +74,8 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject
     public bool IsRegistryAvailable => _isRegistryAvailable;
     public bool HasExternalRegistrySelection => SelectedTexture?.RegistryCandidate is not null;
     public string RegistryStatusLabel => _isRegistryAvailable
-        ? $"{_registryCandidates.Count:N0} installed texture choices"
-        : "Texture registry unavailable — build the active game's database in Texture Databases.";
+        ? $"{_registryCandidates.Count:N0} installed choices · {_localCandidates.Count:N0} open-package choices"
+        : $"{_localCandidates.Count:N0} open-package choices · installed choices unavailable — build the active game's registry in Texture Databases.";
     public string SearchText
     {
         get => _searchText;
@@ -192,28 +180,13 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject
         _registryProfile = profile;
         _isRegistryAvailable = isRegistryAvailable;
         var currentTexture = _session.GetSelectedTexture(Name);
-        var options = _isRegistryAvailable
-            ? TextureCatalogSearch.FilterAndRank(
-                    _registryCandidates,
-                    _registryProfile,
-                    currentTexture?.Source.InstancedPath,
-                    string.Empty)
-                .Select(candidate => new MaterialTextureOption(null, RegistryCandidate: candidate))
-                .ToList()
-            : [];
-        if (currentTexture is not null && !options.Any(option => option.MatchesIdentity(currentTexture.Source)))
-        {
-            var currentAsset = new PackageAssetListItem(currentTexture.Source);
-            currentAsset.SetThumbnail(currentTexture);
-            options.Insert(0, new MaterialTextureOption(currentAsset, currentTexture));
-        }
         var defaultTextureName = _session.GetDefaultTexture(Name)?.Source.InstancedPath.Split('.').Last();
         var noneLabel = defaultTextureName is null
             ? "None (material default)"
             : $"None (material default: {defaultTextureName})";
         _allCandidates.Clear();
         _allCandidates.Add(new MaterialTextureOption(null, DisplayNameOverride: noneLabel));
-        _allCandidates.AddRange(options);
+        _allCandidates.AddRange(BuildOptions(currentTexture));
         _initializing = true;
         ApplySearch();
         SelectedTexture = FindOptionForCurrentTexture(currentTexture?.Source.InstancedPath);
@@ -269,23 +242,75 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject
 
     private void ApplySearch()
     {
-        var filtered = _isRegistryAvailable
-            ? TextureCatalogSearch.FilterAndRank(
-                _registryCandidates,
-                _registryProfile,
-                _session.GetSelectedTexture(Name)?.Source.InstancedPath,
-                SearchText)
-                .Select(candidate => _allCandidates.First(option => option.RegistryCandidate == candidate))
-                .ToArray()
-            : _allCandidates.Where(option => option.DisplayName.Contains(SearchText, StringComparison.OrdinalIgnoreCase)).ToArray();
         var none = _allCandidates[0];
+        var activePath = _session.GetSelectedTexture(Name)?.Source.InstancedPath;
+        var filtered = _allCandidates.Skip(1)
+            .Where(option => MatchesSearch(option, SearchText))
+            .OrderBy(option => Rank(option, activePath))
+            .ThenBy(option => option.ObjectName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(option => option.InstancedPath, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
         Candidates.Clear();
         Candidates.Add(none);
-        foreach (var option in filtered.Where(option => !ReferenceEquals(option, none)))
+        foreach (var option in filtered)
         {
             Candidates.Add(option);
         }
     }
+
+    private IReadOnlyList<MaterialTextureOption> BuildOptions(DecodedTextureAsset? currentTexture)
+    {
+        var options = _localCandidates
+            .GroupBy(asset => asset.Identity.InstancedPath, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .Select(asset =>
+            {
+                var resolved = currentTexture is not null && asset.Identity == currentTexture.Source
+                    ? currentTexture
+                    : null;
+                if (resolved is not null) asset.SetThumbnail(resolved);
+                return new MaterialTextureOption(asset, resolved);
+            })
+            .ToList();
+        var localPaths = options.Select(option => option.InstancedPath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (_isRegistryAvailable)
+        {
+            options.AddRange(_registryCandidates
+                .Where(candidate => !localPaths.Contains(candidate.InstancedPath))
+                .Select(candidate => new MaterialTextureOption(null, RegistryCandidate: candidate)));
+        }
+        if (currentTexture is not null && !options.Any(option => option.MatchesIdentity(currentTexture.Source)))
+        {
+            var currentAsset = new PackageAssetListItem(currentTexture.Source);
+            currentAsset.SetThumbnail(currentTexture);
+            options.Add(new MaterialTextureOption(currentAsset, currentTexture));
+        }
+        return options;
+    }
+
+    private static bool MatchesSearch(MaterialTextureOption option, string searchText)
+    {
+        var query = searchText.Trim();
+        return query.Length == 0 ||
+               option.ObjectName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+               option.InstancedPath.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+               option.SourceDescription.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+               option.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private int Rank(MaterialTextureOption option, string? activePath)
+    {
+        if (!string.IsNullOrWhiteSpace(activePath) &&
+            option.InstancedPath.Equals(activePath, StringComparison.OrdinalIgnoreCase)) return 0;
+        if (ContainsAny(option.InstancedPath, _registryProfile.PreferredPathFragments)) return 1;
+        if (ContainsAny(option.InstancedPath, _registryProfile.SharedPathFragments)) return 2;
+        return option.Asset is not null ? 3 : 4;
+    }
+
+    private static bool ContainsAny(string path, IReadOnlyList<string> fragments) =>
+        fragments.Any(fragment => !string.IsNullOrWhiteSpace(fragment) &&
+            path.Contains(fragment, StringComparison.OrdinalIgnoreCase));
 
     private MaterialTextureOption FindOptionForCurrentTexture(string? instancedPath)
     {

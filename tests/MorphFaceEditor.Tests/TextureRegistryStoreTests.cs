@@ -18,8 +18,23 @@ public static class TextureRegistryStoreTests
         new("texture registry builder: groups paths by mount precedence", BuilderGroupsPathsByMountPrecedence),
         new("texture registry builder: reports scan write verify phases", BuilderReportsEveryPhase),
         new("texture registry builder: cancelled rebuild preserves active file", CancelledBuildPreservesActiveFile),
-        new("texture registry builder: rebuild all is sequential", BuilderRebuildAllIsSequential)
+        new("texture registry builder: rebuild all is sequential", BuilderRebuildAllIsSequential),
+        new("texture registry runtime: reads compact file without source packages", RuntimeReadsWithoutSourcePackages)
     ];
+
+    private static void RuntimeReadsWithoutSourcePackages()
+    {
+        using var fixture = RegistryFixture.Create();
+        fixture.Store.WriteAtomic(Snapshot(TextureCatalogGame.LE1));
+        var service = new TextureCatalogService(fixture.Store);
+
+        var result = service.ReadAsync(MorphFaceGame.LE1).GetAwaiter().GetResult();
+
+        TestAssert.True(result.IsAvailable, "A verified compact registry was reported unavailable.");
+        TestAssert.Equal(1, result.Candidates.Count);
+        TestAssert.Equal("DLC_MOD_Custom\\CookedPCConsole\\BioG_Sal.pcc",
+            result.Candidates.Single().EffectiveOccurrence.PackagePath);
+    }
 
     private static void BuilderScansEachPackageOnce()
     {

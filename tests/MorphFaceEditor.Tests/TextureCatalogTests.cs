@@ -1,3 +1,5 @@
+using MorphFaceEditor.Core.Editing;
+using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.LegendaryExplorer.TextureRegistry;
@@ -20,11 +22,87 @@ public static class TextureCatalogTests
         new("texture catalogue: current local texture remains local when its path is indexed", CurrentLocalTextureRemainsLocal),
         new("texture catalogue: projection honours cancellation before package resolution", ProjectionHonoursCancellation),
         new("texture catalogue: picker accepts registry candidates after the editor is already open", PickerAcceptsRegistryCandidatesAfterOpen),
+        new("texture catalogue: missing registry preserves every package texture", MissingRegistryPreservesEveryPackageTexture),
+        new("texture catalogue: local path suppresses installed duplicate", LocalPathSuppressesInstalledDuplicate),
+        new("texture catalogue: merged picker ranks by relevance and source", MergedPickerRanksByRelevanceAndSource),
         new("texture registry: discovery admits morph HIR and shared-eye paths", DiscoveryAdmitsSupportedPaths),
         new("texture registry: occurrence retains mip storage metadata", OccurrenceRetainsMipStorageMetadata),
         new("texture registry: availability resolves installed and local paths", AvailabilityResolvesMergedPaths),
         new("texture registry: ambiguous object names are not resolved", AmbiguousObjectNamesAreRejected)
     ];
+
+    private static void MissingRegistryPreservesEveryPackageTexture()
+    {
+        var session = MaterialTestFixtures.CreateSession();
+        var current = session.GetSelectedTexture("HED_Diff")!;
+        var unrelated = new PackageAssetListItem(new AssetIdentity(
+            current.Source.PackagePath, "WorkingPackage.Textures.Unrelated", 99, "Texture2D"));
+        using var reader = new MorphFacePackageReader();
+        var editor = CreateTextureEditor(session, reader,
+            [new PackageAssetListItem(current.Source), unrelated]);
+
+        TestAssert.True(editor.Candidates.Any(option => option.Asset == unrelated),
+            "A package-local texture disappeared because the installed registry was unavailable.");
+    }
+
+    private static void LocalPathSuppressesInstalledDuplicate()
+    {
+        var session = MaterialTestFixtures.CreateSession();
+        var current = session.GetSelectedTexture("HED_Diff")!;
+        var local = new PackageAssetListItem(new AssetIdentity(
+            current.Source.PackagePath, "WorkingPackage.Textures.Custom_Diff", 99, "Texture2D"));
+        var installed = Candidate(local.Identity.InstancedPath, "DLC_MOD_Custom\\external.pcc", TextureCatalogOrigin.Mod);
+        using var reader = new MorphFacePackageReader();
+        var editor = CreateTextureEditor(session, reader,
+            [new PackageAssetListItem(current.Source), local], [installed],
+            new TextureCatalogProfile("le3-human-male", ["HMM_HED"], ["HED_EYE"]), true);
+
+        var matches = editor.Candidates.Where(option =>
+            option.InstancedPath.Equals(local.Identity.InstancedPath, StringComparison.OrdinalIgnoreCase)).ToArray();
+        TestAssert.Equal(1, matches.Length);
+        TestAssert.True(matches[0].Asset == local && matches[0].RegistryCandidate is null,
+            "An installed duplicate displaced or accompanied its authoritative package-local texture.");
+    }
+
+    private static void MergedPickerRanksByRelevanceAndSource()
+    {
+        var session = MaterialTestFixtures.CreateSession();
+        var current = session.GetSelectedTexture("HED_Diff")!;
+        var localOther = new PackageAssetListItem(new AssetIdentity(
+            current.Source.PackagePath, "WorkingPackage.Textures.Z_Local", 99, "Texture2D"));
+        var preferred = Candidate("BIOG_HMM_HED_PROMorph.Add.HMM_HED_A", "preferred.pcc");
+        var shared = Candidate("BIOG_HED_EYE.Textures.HED_EYE_A", "eyes.pcc");
+        var general = Candidate("BIOG_SAL_HED_PROMorph.Add.SAL_HED_A", "general.pcc");
+        using var reader = new MorphFacePackageReader();
+        var editor = CreateTextureEditor(session, reader,
+            [new PackageAssetListItem(current.Source), localOther], [general, shared, preferred],
+            new TextureCatalogProfile("le3-human-male", ["HMM_HED"], ["HED_EYE"]), true);
+
+        var ordered = editor.Candidates.Where(option => !option.IsNone).Select(option => option.InstancedPath).ToArray();
+        TestAssert.True(ordered.SequenceEqual(
+                [current.Source.InstancedPath, preferred.InstancedPath, shared.InstancedPath,
+                 localOther.Identity.InstancedPath, general.InstancedPath]),
+            "The merged picker did not rank active, preferred, shared, other local, and other installed textures in order.");
+    }
+
+    private static MaterialTextureEditorViewModel CreateTextureEditor(
+        MaterialEditingSession session,
+        MorphFacePackageReader reader,
+        IReadOnlyList<PackageAssetListItem> local,
+        IReadOnlyList<TextureCatalogCandidate>? installed = null,
+        TextureCatalogProfile? profile = null,
+        bool available = false) => new(
+        session,
+        new MaterialParameterDefinition("HED_Diff", "Diffuse", "skin", MaterialParameterKind.Texture,
+            HeadMaterialFamily.Skin, TextureRole: TextureRole.Diffuse,
+            ColorSpace: TextureColorSpace.Srgb, AlphaPolicy: TextureAlphaPolicy.Ignore),
+        new PackageReferenceService(reader),
+        session.GetSelectedTexture("HED_Diff")!.Source.PackagePath,
+        local,
+        message => throw new Exception(message),
+        installed,
+        profile,
+        available);
 
     private static void OccurrenceRetainsMipStorageMetadata()
     {

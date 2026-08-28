@@ -41,8 +41,10 @@ public static class MaterialRandomiser
             throw new ArgumentException("Material scalar bounds must be finite and ordered.", nameof(scalarBounds));
         }
 
-        var random = new MorphRandomiser.StableRandom(
+        var numericRandom = new MorphRandomiser.StableRandom(
             unchecked((ulong)(uint)randomSeed) ^ 0x8CB92BA72F3D8DD7UL);
+        var textureRandom = new MorphRandomiser.StableRandom(
+            unchecked((ulong)(uint)randomSeed) ^ 0xD1B54A32D192ED03UL);
         var scalars = new Dictionary<string, float>(currentScalars, StringComparer.OrdinalIgnoreCase);
         foreach (var name in scalarScope.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
         {
@@ -61,11 +63,11 @@ public static class MaterialRandomiser
             {
                 limit = new MaterialRandomisationScalarBounds(name, statistics.P10, statistics.P90);
             }
-            scalars[name] = SampleScalar(seedValue, statistics, limit, strengthPercent, random);
+            scalars[name] = SampleScalar(seedValue, statistics, limit, strengthPercent, numericRandom);
         }
 
         var textures = SelectTextureFamilies(
-            donor, compatibleDonors, profile.ProfileKey, textureFamilyScope, strengthPercent, random,
+            donor, compatibleDonors, profile.ProfileKey, textureFamilyScope, strengthPercent, textureRandom,
             excludedTextureSignatures);
         var vectors = new Dictionary<string, Vector4>(currentVectors, StringComparer.OrdinalIgnoreCase);
         foreach (var name in vectorScope.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
@@ -77,11 +79,11 @@ public static class MaterialRandomiser
                 continue;
             }
             vectors[name] = statistics.Kind == MaterialVectorRandomisationKind.Selector
-                ? SampleSelector(seedValue, statistics.SelectorStates, strengthPercent, random)
-                : SampleColour(seedValue, FindColourTarget(name, seedValue, compatibleDonors, random),
-                    statistics, strengthPercent, random);
+                ? SampleSelector(seedValue, statistics.SelectorStates, strengthPercent, numericRandom)
+                : SampleColour(seedValue, FindColourTarget(name, seedValue, compatibleDonors, numericRandom),
+                    statistics, strengthPercent, numericRandom);
         }
-        ApplyTextureDependencies(profile.ProfileKey, textures, currentTextures, vectors, random);
+        ApplyTextureDependencies(profile.ProfileKey, textures, currentTextures, vectors, numericRandom);
 
         return new MaterialRandomisationProposal(donor.Id, randomSeed, scalars, vectors, textures);
     }

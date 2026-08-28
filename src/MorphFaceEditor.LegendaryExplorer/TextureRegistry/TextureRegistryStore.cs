@@ -58,6 +58,13 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
 
     public TextureRegistrySnapshot Read(MorphFaceGame game) => ReadFile(paths.GetPath(game), game);
 
+    internal (string Path, long Length, DateTime LastWriteTimeUtc)? GetFileFingerprint(MorphFaceGame game)
+    {
+        var path = paths.GetPath(game);
+        var file = new FileInfo(path);
+        return file.Exists ? (path, file.Length, file.LastWriteTimeUtc) : null;
+    }
+
     public void WriteAtomic(
         TextureRegistrySnapshot snapshot,
         CancellationToken cancellationToken = default) =>

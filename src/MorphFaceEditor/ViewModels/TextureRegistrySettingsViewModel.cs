@@ -101,27 +101,31 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
             return;
         }
 
-        var previous = Rows.ToDictionary(row => row.Game, row => row.Status);
         BeginBuild(cancellationToken, rebuildingAll: true, activeGame: null);
         try
         {
-            var statuses = await _builder.RebuildAllAsync(CreateProgress(), _buildCancellation!.Token);
-            foreach (var status in statuses)
+            foreach (var row in Rows)
             {
-                Rows.Single(row => row.Game == status.Game).Update(status);
-                _catalogInvalidator?.Invoke(status.Game);
+                var previous = row.Status;
+                row.Update(previous with { State = TextureRegistryState.Building, ErrorMessage = null });
+                try
+                {
+                    var status = await _builder.RebuildAsync(row.Game, CreateProgress(), _buildCancellation!.Token);
+                    row.Update(status);
+                    _catalogInvalidator?.Invoke(row.Game);
+                }
+                catch (OperationCanceledException)
+                {
+                    row.Update(previous with { State = TextureRegistryState.Cancelled, ErrorMessage = null });
+                    break;
+                }
+                catch (Exception exception)
+                {
+                    AppLog.Error($"Texture registry build failed for {row.Game} during Rebuild All.", exception);
+                    row.Update(previous with { State = TextureRegistryState.Failed, ErrorMessage = exception.Message });
+                    break;
+                }
             }
-        }
-        catch (OperationCanceledException)
-        {
-            foreach (var row in Rows.Where(row => row.Status.State == TextureRegistryState.Building))
-                row.Update(previous[row.Game] with { State = TextureRegistryState.Cancelled, ErrorMessage = null });
-        }
-        catch (Exception exception)
-        {
-            AppLog.Error("Texture registry Rebuild All failed.", exception);
-            foreach (var row in Rows.Where(row => row.Status.State == TextureRegistryState.Building))
-                row.Update(previous[row.Game] with { State = TextureRegistryState.Failed, ErrorMessage = exception.Message });
         }
         finally
         {

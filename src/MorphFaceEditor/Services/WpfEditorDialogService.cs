@@ -123,7 +123,7 @@ public sealed class WpfEditorDialogService : IEditorDialogService
             Owner = Application.Current.MainWindow
         }.ShowDialog();
 
-    public void ShowObjectDatabaseSettings() =>
+    public void ShowTextureRegistrySettings() =>
         _ = new TextureRegistrySettingsWindow(_textureRegistrySettings)
         {
             Owner = Application.Current.MainWindow

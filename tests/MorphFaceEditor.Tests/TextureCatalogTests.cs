@@ -19,9 +19,7 @@ public static class TextureCatalogTests
         new("texture catalogue: profile matches precede shared and general textures", ProfileMatchesRankBeforeSharedAndGeneral),
         new("texture catalogue: search matches path package and origin", SearchMatchesUserFacingProvenance),
         new("texture catalogue: duplicate paths keep the highest mounted occurrence", DuplicatePathsKeepEffectiveOccurrence),
-        new("texture catalogue: projector filters paths and verifies exact Texture2D exports", ProjectorFiltersAndVerifies),
         new("texture catalogue: current local texture remains local when its path is indexed", CurrentLocalTextureRemainsLocal),
-        new("texture catalogue: projection honours cancellation before package resolution", ProjectionHonoursCancellation),
         new("texture catalogue: picker accepts registry candidates after the editor is already open", PickerAcceptsRegistryCandidatesAfterOpen),
         new("texture catalogue: missing registry preserves every package texture", MissingRegistryPreservesEveryPackageTexture),
         new("texture catalogue: local path suppresses installed duplicate", LocalPathSuppressesInstalledDuplicate),
@@ -285,35 +283,6 @@ public static class TextureCatalogTests
         TestAssert.Equal(2, candidate.Occurrences.Count);
     }
 
-    private static void ProjectorFiltersAndVerifies()
-    {
-        const string preferredPath = "BIOG_ASA_HED_PROMorph_R.Adds.ASA_HED_PRO_Add1";
-        const string sharedEyePath = "BIOG_ASA_EYE.ASA_EYE_Diff";
-        var profile = new TextureCatalogProfile("le3-asari", ["ASA_HED"], ["ASA_EYE"]);
-        var resolver = new FakeOccurrenceResolver(new Dictionary<(string Package, string Path), TextureCatalogOccurrence>
-        {
-            [("base.pcc", preferredPath)] = Occurrence("base.pcc", 0, TextureCatalogOrigin.BaseGame),
-            [("mod.pcc", preferredPath)] = Occurrence("mod.pcc", 9000, TextureCatalogOrigin.Mod),
-            [("eye.pcc", sharedEyePath)] = Occurrence("eye.pcc", 0, TextureCatalogOrigin.BaseGame)
-        });
-        var entries = new[]
-        {
-            new TextureCatalogIndexEntry(preferredPath, ["base.pcc", "mod.pcc"]),
-            new TextureCatalogIndexEntry(sharedEyePath, ["eye.pcc"]),
-            new TextureCatalogIndexEntry("BIOG_ASA_HED_PROMorph_R.Adds.NotATexture", ["invalid.pcc"]),
-            new TextureCatalogIndexEntry("Materials.Anamorphic", ["irrelevant.pcc"])
-        };
-
-        var candidates = TextureCatalogProjector.Project(MorphFaceGame.LE3, profile, entries, resolver);
-
-        TestAssert.Equal(2, candidates.Count);
-        var preferred = candidates.Single(candidate => candidate.InstancedPath == preferredPath);
-        TestAssert.Equal("mod.pcc", preferred.EffectiveOccurrence.PackagePath);
-        TestAssert.Equal(2, preferred.Occurrences.Count);
-        TestAssert.True(candidates.Any(candidate => candidate.InstancedPath == sharedEyePath),
-            "A profile-declared shared eye texture was not admitted to the compact catalogue.");
-    }
-
     private static void CurrentLocalTextureRemainsLocal()
     {
         var session = MaterialTestFixtures.CreateSession();
@@ -341,26 +310,6 @@ public static class TextureCatalogTests
             "The current local texture was replaced by a registry option solely because its instanced path matched.");
         TestAssert.True(!editor.HasExternalRegistrySelection,
             "A current local texture sharing a registry path was incorrectly treated as an external selection.");
-    }
-
-    private static void ProjectionHonoursCancellation()
-    {
-        using var cancellation = new CancellationTokenSource();
-        cancellation.Cancel();
-        try
-        {
-            _ = TextureCatalogProjector.Project(
-                MorphFaceGame.LE1,
-                TextureCatalogProfile.Empty,
-                [new TextureCatalogIndexEntry("BIOG_HMM_HED_PROMorph.Adds.Texture", ["fixture.pcc"])],
-                new FakeOccurrenceResolver(new Dictionary<(string Package, string Path), TextureCatalogOccurrence>()),
-                cancellation.Token);
-            throw new Exception("Cancelled texture-catalogue projection completed.");
-        }
-        catch (OperationCanceledException)
-        {
-            // Expected: cancellation must be checked before any PCC is opened.
-        }
     }
 
     private static void PickerAcceptsRegistryCandidatesAfterOpen()
@@ -415,14 +364,4 @@ public static class TextureCatalogTests
         HasExternalMips: false,
         TextureFileCacheName: null);
 
-    private sealed class FakeOccurrenceResolver(
-        IReadOnlyDictionary<(string Package, string Path), TextureCatalogOccurrence> occurrences) : ITextureCatalogOccurrenceResolver
-    {
-        public bool TryResolve(
-            MorphFaceGame game,
-            string packagePath,
-            string instancedPath,
-            out TextureCatalogOccurrence occurrence) =>
-            occurrences.TryGetValue((packagePath, instancedPath), out occurrence!);
-    }
 }

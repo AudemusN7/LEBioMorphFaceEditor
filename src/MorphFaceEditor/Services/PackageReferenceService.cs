@@ -78,11 +78,10 @@ public sealed class PackageReferenceService(
 
     public Task<TextureCatalogReadResult> ReadTextureCatalogAsync(
         MorphFaceGame game,
-        TextureCatalogProfile profile,
         CancellationToken cancellationToken = default) => textureCatalogService is null
         ? Task.FromResult(new TextureCatalogReadResult(
-            new ObjectDatabaseStatus(game, ObjectDatabaseState.Missing, null, null, null, null, null), []))
-        : textureCatalogService.ReadAsync(game, profile, cancellationToken);
+            new TextureRegistryStatus(game, TextureRegistryState.Missing, null, null, null, null, null), []))
+        : textureCatalogService.ReadAsync(game, cancellationToken);
 
     public Task<LoadedAttachment> LoadAttachmentAsync(
         string packagePath,

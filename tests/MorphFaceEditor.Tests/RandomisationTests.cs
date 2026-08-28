@@ -5,6 +5,7 @@ using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.DataCompiler;
 using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.Services;
+using MorphFaceEditor.ViewModels;
 using System.Numerics;
 
 namespace MorphFaceEditor.Tests;
@@ -33,6 +34,7 @@ public static class RandomisationTests
         new("embedded randomisation corpus exposes face and eye texture families", EmbeddedCorpusExposesFaceAndEyeFamilies),
         new("embedded texture families remain eligible under registry discovery", EmbeddedFamiliesMatchRegistryDiscovery),
         new("installed texture randomisation keeps only complete resolvable families", InstalledTextureRandomisationFiltersFamilies),
+        new("texture family scope honours disabled texture categories", TextureFamilyScopeHonoursDisabledCategories),
         new("material randomisation excludes an unreadable texture family signature", MaterialRandomisationExcludesFailedSignature),
         new("cursed randomisation wakes zero morphs within Mgamerz ranges", CursedRandomisationWakesZeroMorphs),
         new("cursed randomisation fuzzes only Mgamerz facial bones and numeric materials", CursedRandomisationFuzzesBonesAndMaterials),
@@ -164,6 +166,25 @@ public static class RandomisationTests
             "An unavailable optional member remained in the installed family projection.");
         TestAssert.True(!projected.MaterialTextureFamilies.ContainsKey("human-face"),
             "A family missing a required normal map remained eligible for randomisation.");
+    }
+
+    private static void TextureFamilyScopeHonoursDisabledCategories()
+    {
+        var family = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["HED_Diff"] = "Installed.Face_Diff",
+            ["HED_Norm"] = "Installed.Face_Norm",
+            ["HED_Mask"] = "Installed.Face_Mask"
+        };
+        var available = family.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var allRequested = family.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var maskCategoryDisabled = new HashSet<string>(["HED_Diff", "HED_Norm"],
+            StringComparer.OrdinalIgnoreCase);
+
+        TestAssert.True(FaceEditorViewModel.IsTextureFamilyInScope(family, allRequested, available),
+            "A fully enabled coherent texture family was excluded.");
+        TestAssert.True(!FaceEditorViewModel.IsTextureFamilyInScope(family, maskCategoryDisabled, available),
+            "A coherent texture family crossed into a disabled texture category.");
     }
 
     public static IReadOnlyList<TestCase> Tooling { get; } =

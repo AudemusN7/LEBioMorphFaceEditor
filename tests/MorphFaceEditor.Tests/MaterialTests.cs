@@ -7,6 +7,7 @@ public static class MaterialTests
         MaterialSchemaTests.All
             .Concat(MaterialEditingTests.All)
             .Concat(ObjectDatabaseTests.All)
+            .Concat(TextureRegistryStoreTests.All)
             .Concat(TextureCatalogTests.All)
             .Concat(MaterialRendererTests.All)
             .Concat(HumanSkinMaterialTests.All)

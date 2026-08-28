@@ -654,16 +654,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             {
                 AppLog.Warning(warning);
             }
-            Status = "Indexing installed texture choices…";
             var textureCatalogProfile = TextureCatalogProfiles.For(result.Profile);
-            var textureCatalog = await _referenceService.ReadTextureCatalogAsync(
-                result.Loaded.Game,
-                textureCatalogProfile,
-                cancellationToken);
-            cancellationToken.ThrowIfCancellationRequested();
-            AppLog.Information(textureCatalog.IsAvailable
-                ? $"Texture registry loaded for {result.Profile.DisplayName}: {textureCatalog.Candidates.Count:N0} verified candidates."
-                : $"Texture registry is unavailable for {result.Profile.DisplayName}; no usable {result.Loaded.Game} object database was found.");
             var topology = result.Loaded.BaseHead.Topology;
             var oracle = result.EditingSession.Evaluation.OriginalOracleReport;
             var materialOverrides = result.Loaded.Document.MaterialOverrides;
@@ -689,9 +680,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 result.Profile.Key,
                 _randomisationCatalog,
                 randomisationInclusionState: _randomisationInclusionState,
-                registryTextureCandidates: textureCatalog.Candidates,
+                registryTextureCandidates: [],
                 textureCatalogProfile: textureCatalogProfile,
-                isTextureRegistryAvailable: textureCatalog.IsAvailable);
+                isTextureRegistryAvailable: false);
             var speciesKey = PreviewCameraGrouping.SpeciesForProfile(result.Profile.Key);
             if (string.Equals(_loadedSpeciesKey, speciesKey, StringComparison.OrdinalIgnoreCase))
             {
@@ -716,6 +707,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             AppLog.Information(
                 $"Face loaded: '{LoadedFacePath}', editable={result.EditingSession.CanEdit}, " +
                 $"vertices={topology.VertexCount}, targets={result.EditingSession.Evaluation.Resolution.WeightedTargets.Count}.");
+            _ = PopulateTextureRegistryAsync(
+                editor,
+                result.Loaded.Game,
+                result.Profile,
+                textureCatalogProfile,
+                cancellationToken);
             return true;
         }
         catch (OperationCanceledException)
@@ -735,6 +732,43 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         finally
         {
             IsBusy = false;
+        }
+    }
+
+    private async Task PopulateTextureRegistryAsync(
+        FaceEditorViewModel editor,
+        MorphFaceGame game,
+        MorphFaceProfile profile,
+        TextureCatalogProfile catalogProfile,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            AppLog.Information($"Texture registry indexing started for {profile.DisplayName} ({game}).");
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+            var catalog = await Task.Run(
+                () => _referenceService.ReadTextureCatalogAsync(game, catalogProfile, cancellationToken),
+                cancellationToken);
+            if (cancellationToken.IsCancellationRequested || Editor != editor)
+            {
+                return;
+            }
+
+            editor.UpdateRegistryTextureCandidates(
+                catalog.Candidates,
+                catalogProfile,
+                catalog.IsAvailable);
+            AppLog.Information(catalog.IsAvailable
+                ? $"Texture registry loaded for {profile.DisplayName}: {catalog.Candidates.Count:N0} verified candidates in {System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalSeconds:F1}s."
+                : $"Texture registry is unavailable for {profile.DisplayName}; no usable {game} object database was found.");
+        }
+        catch (OperationCanceledException)
+        {
+            AppLog.Information($"Texture registry indexing cancelled for {profile.DisplayName} ({game}).");
+        }
+        catch (Exception exception)
+        {
+            AppLog.Warning($"Texture registry indexing failed for {profile.DisplayName} ({game}): {exception.Message}");
         }
     }
 

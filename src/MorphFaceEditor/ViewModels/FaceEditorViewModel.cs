@@ -170,6 +170,11 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     }
     public IReadOnlyList<BoneAxisEditorViewModel> Bones { get; }
     public MaterialEditorViewModel Material { get; }
+    public void UpdateRegistryTextureCandidates(
+        IReadOnlyList<TextureCatalogCandidate> candidates,
+        TextureCatalogProfile profile,
+        bool isRegistryAvailable) =>
+        Material.UpdateRegistryCandidates(candidates, profile, isRegistryAvailable);
     public HairMeshEditorViewModel HairMesh { get; }
     public IReadOnlyList<HairMeshEditorViewModel> OtherMeshes { get; }
     public IReadOnlyList<HairMeshEditorViewModel> AttachmentMeshes { get; }

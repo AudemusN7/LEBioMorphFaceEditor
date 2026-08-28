@@ -36,9 +36,47 @@ public static class TextureCatalogProjector
         ArgumentNullException.ThrowIfNull(entries);
         ArgumentNullException.ThrowIfNull(resolver);
 
-        return entries
-            .Where(entry => IsRelevantPath(entry.InstancedPath, profile))
-            .Select(entry => ProjectEntry(game, entry, resolver, cancellationToken))
+        var relevant = entries
+            .Where(entry =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return IsRelevantPath(entry.InstancedPath, profile);
+            })
+            .ToArray();
+        var entriesByPackage = new Dictionary<string, List<TextureCatalogIndexEntry>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in relevant)
+        {
+            foreach (var packagePath in entry.PackagePaths.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                if (!entriesByPackage.TryGetValue(packagePath, out var paths))
+                {
+                    entriesByPackage.Add(packagePath, paths = []);
+                }
+                paths.Add(entry);
+            }
+        }
+
+        var occurrencesByPath = new Dictionary<string, List<TextureCatalogOccurrence>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (packagePath, packageEntries) in entriesByPackage)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (var entry in packageEntries)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (resolver.TryResolve(game, packagePath, entry.InstancedPath, out var occurrence))
+                {
+                    if (!occurrencesByPath.TryGetValue(entry.InstancedPath, out var occurrences))
+                    {
+                        occurrencesByPath.Add(entry.InstancedPath, occurrences = []);
+                    }
+                    occurrences.Add(occurrence);
+                }
+            }
+        }
+
+        return relevant
+            .Select(entry => ProjectEntry(game, entry.InstancedPath,
+                occurrencesByPath.GetValueOrDefault(entry.InstancedPath) ?? [], cancellationToken))
             .Where(candidate => candidate is not null)
             .Cast<TextureCatalogCandidate>()
             .OrderBy(candidate => candidate.InstancedPath, StringComparer.OrdinalIgnoreCase)
@@ -47,20 +85,11 @@ public static class TextureCatalogProjector
 
     private static TextureCatalogCandidate? ProjectEntry(
         MorphFaceGame game,
-        TextureCatalogIndexEntry entry,
-        ITextureCatalogOccurrenceResolver resolver,
+        string instancedPath,
+        IEnumerable<TextureCatalogOccurrence> resolved,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var resolved = new List<TextureCatalogOccurrence>();
-        foreach (var packagePath in entry.PackagePaths.Distinct(StringComparer.OrdinalIgnoreCase))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (resolver.TryResolve(game, packagePath, entry.InstancedPath, out var occurrence))
-            {
-                resolved.Add(occurrence);
-            }
-        }
         var occurrences = resolved
             .OrderByDescending(occurrence => occurrence.MountPriority)
             .ThenByDescending(occurrence => occurrence.Origin)
@@ -68,7 +97,7 @@ public static class TextureCatalogProjector
             .ToArray();
         return occurrences.Length == 0
             ? null
-            : new TextureCatalogCandidate(ToCatalogGame(game), entry.InstancedPath, occurrences[0], occurrences);
+            : new TextureCatalogCandidate(ToCatalogGame(game), instancedPath, occurrences[0], occurrences);
     }
 
     /// <summary>Fast path-only admission filter used before resolving OIDB locations.</summary>

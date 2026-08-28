@@ -18,9 +18,9 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject
     private readonly PackageReferenceService _references;
     private readonly string _packagePath;
     private readonly Action<string> _reportError;
-    private readonly IReadOnlyList<TextureCatalogCandidate> _registryCandidates;
-    private readonly TextureCatalogProfile _registryProfile;
-    private readonly bool _isRegistryAvailable;
+    private IReadOnlyList<TextureCatalogCandidate> _registryCandidates;
+    private TextureCatalogProfile _registryProfile;
+    private bool _isRegistryAvailable;
     private readonly List<MaterialTextureOption> _allCandidates;
     private MaterialTextureOption? _selectedTexture;
     private ImageSource? _previewThumbnail;
@@ -178,6 +178,48 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject
             candidate?.RegistryCandidate?.EffectiveOccurrence.PackagePath ?? _packagePath,
             instancedPath, 0, "Texture2D");
         return ResolveReferenceAsync(identity);
+    }
+
+    /// <summary>Applies a catalogue that completed after the material editor became interactive.</summary>
+    public void UpdateRegistryCandidates(
+        IReadOnlyList<TextureCatalogCandidate> candidates,
+        TextureCatalogProfile profile,
+        bool isRegistryAvailable)
+    {
+        ArgumentNullException.ThrowIfNull(candidates);
+        ArgumentNullException.ThrowIfNull(profile);
+        _registryCandidates = candidates;
+        _registryProfile = profile;
+        _isRegistryAvailable = isRegistryAvailable;
+        var currentTexture = _session.GetSelectedTexture(Name);
+        var options = _isRegistryAvailable
+            ? TextureCatalogSearch.FilterAndRank(
+                    _registryCandidates,
+                    _registryProfile,
+                    currentTexture?.Source.InstancedPath,
+                    string.Empty)
+                .Select(candidate => new MaterialTextureOption(null, RegistryCandidate: candidate))
+                .ToList()
+            : [];
+        if (currentTexture is not null && !options.Any(option => option.MatchesIdentity(currentTexture.Source)))
+        {
+            var currentAsset = new PackageAssetListItem(currentTexture.Source);
+            currentAsset.SetThumbnail(currentTexture);
+            options.Insert(0, new MaterialTextureOption(currentAsset, currentTexture));
+        }
+        var defaultTextureName = _session.GetDefaultTexture(Name)?.Source.InstancedPath.Split('.').Last();
+        var noneLabel = defaultTextureName is null
+            ? "None (material default)"
+            : $"None (material default: {defaultTextureName})";
+        _allCandidates.Clear();
+        _allCandidates.Add(new MaterialTextureOption(null, DisplayNameOverride: noneLabel));
+        _allCandidates.AddRange(options);
+        _initializing = true;
+        ApplySearch();
+        SelectedTexture = FindOptionForCurrentTexture(currentTexture?.Source.InstancedPath);
+        _initializing = false;
+        OnPropertyChanged(nameof(IsRegistryAvailable));
+        OnPropertyChanged(nameof(RegistryStatusLabel));
     }
 
     private void RefreshPreview()

@@ -149,6 +149,9 @@ public static class TextureCatalogTests
                 [current.Source.InstancedPath, preferred.InstancedPath, shared.InstancedPath,
                  localOther.Identity.InstancedPath, general.InstancedPath]),
             "The merged picker did not rank active, preferred, shared, other local, and other installed textures in order.");
+        var installedOption = editor.Candidates.Single(option => option.RegistryCandidate == preferred);
+        TestAssert.True(installedOption.Asset is not null && installedOption.Asset.Thumbnail is null,
+            "An installed texture was not given a lazy thumbnail source.");
     }
 
     private static MaterialTextureEditorViewModel CreateTextureEditor(

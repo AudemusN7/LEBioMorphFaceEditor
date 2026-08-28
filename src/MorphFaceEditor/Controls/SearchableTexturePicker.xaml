@@ -5,8 +5,36 @@
     <Grid>
         <ToggleButton x:Name="PickerButton"
                       MinHeight="26"
+                      Focusable="True"
                       HorizontalContentAlignment="Stretch"
+                      PreviewMouseLeftButtonDown="OnPickerPreviewMouseLeftButtonDown"
+                      PreviewMouseWheel="OnPickerPreviewMouseWheel"
+                      PreviewKeyDown="OnPickerPreviewKeyDown"
                       ToolTip="Choose a texture">
+            <ToggleButton.Template>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="Chrome"
+                            Background="{StaticResource RaisedBackground}"
+                            BorderBrush="{StaticResource BorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="3"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Chrome" Property="Background" Value="{StaticResource HoverBackground}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource Accent}" />
+                            <Setter TargetName="Chrome" Property="Background" Value="{StaticResource PressedBackground}" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource Accent}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </ToggleButton.Template>
             <Grid Margin="5,1">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -51,6 +79,8 @@
                              SelectionChanged="OnSelectionChanged"
                              MaxHeight="390"
                              ScrollViewer.CanContentScroll="True"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto"
                              VirtualizingPanel.IsVirtualizing="True"
                              VirtualizingPanel.VirtualizationMode="Recycling">
                         <ListBox.ItemsPanel>
@@ -75,6 +105,22 @@
                                         <TextBlock Text="{Binding SourceDescription}" Foreground="{StaticResource MutedText}"
                                                    FontSize="9" TextTrimming="CharacterEllipsis" />
                                     </StackPanel>
+                                    <Grid.ToolTip>
+                                        <Border Background="{StaticResource PanelBackground}"
+                                                BorderBrush="{StaticResource BorderBrush}"
+                                                BorderThickness="1" Padding="8">
+                                            <StackPanel>
+                                                <Image Source="{Binding Asset.Thumbnail}" Width="192" Height="192"
+                                                       Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" />
+                                                <TextBlock Text="{Binding DisplayName}" Foreground="{StaticResource SecondaryText}"
+                                                           FontSize="10" Margin="0,6,0,0" MaxWidth="260" TextWrapping="Wrap" />
+                                                <TextBlock Text="{Binding SourceDescription}" Foreground="{StaticResource MutedText}"
+                                                           FontSize="10" Margin="0,3,0,0" MaxWidth="260" TextWrapping="Wrap" />
+                                                <TextBlock Text="{Binding Asset.ThumbnailError}" Foreground="#FFFF8C8C"
+                                                           FontSize="10" Margin="0,4,0,0" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                        </Border>
+                                    </Grid.ToolTip>
                                 </Grid>
                             </DataTemplate>
                         </ListBox.ItemTemplate>

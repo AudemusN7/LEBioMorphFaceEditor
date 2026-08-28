@@ -369,6 +369,12 @@ public static class TextureCatalogTests
         TestAssert.Equal(string.Empty, editor.SearchText);
         TestAssert.True(editor.Candidates.Any(option => option.RegistryCandidate == registryCandidate),
             "Selecting a searched texture left the picker trapped behind its previous query.");
+
+        var candidateCount = editor.Candidates.Count;
+        editor.SearchText = registryCandidate.InstancedPath;
+        TestAssert.Equal(candidateCount, editor.Candidates.Count);
+        TestAssert.True(editor.Candidates.Any(option => option.RegistryCandidate == registryCandidate),
+            "Selection synchronisation arriving before SelectedItem rebuilt the candidate list.");
     }
 
     private static TextureCatalogCandidate Candidate(

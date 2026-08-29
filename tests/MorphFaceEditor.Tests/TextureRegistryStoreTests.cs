@@ -14,6 +14,7 @@ public static class TextureRegistryStoreTests
         new("texture registry store: unsupported schema is outdated", UnsupportedSchemaIsOutdated),
         new("texture registry store: malformed payload is failed", MalformedPayloadIsFailed),
         new("texture registry store: cancelled write preserves active file", CancelledWritePreservesActiveFile),
+        new("texture registry store: concurrent writes use independent temporary files", ConcurrentWritesUseIndependentTemporaryFiles),
         new("texture registry builder: scans each package once", BuilderScansEachPackageOnce),
         new("texture registry builder: groups paths by mount precedence", BuilderGroupsPathsByMountPrecedence),
         new("texture registry builder: reports scan write verify phases", BuilderReportsEveryPhase),
@@ -195,6 +196,37 @@ public static class TextureRegistryStoreTests
         TestAssert.True(before.SequenceEqual(File.ReadAllBytes(path)),
             "Cancellation changed the previously verified registry.");
         TestAssert.True(!File.Exists($"{path}.tmp"), "Cancellation left an adjacent temporary file.");
+    }
+
+    private static void ConcurrentWritesUseIndependentTemporaryFiles()
+    {
+        using var fixture = RegistryFixture.Create();
+        var secondStore = new TextureRegistryStore(fixture.Paths);
+        using var firstReadyToVerify = new ManualResetEventSlim();
+        using var releaseFirst = new ManualResetEventSlim();
+        var firstSnapshot = Snapshot(TextureCatalogGame.LE2) with { InstalledPackageCount = 101 };
+        var secondSnapshot = Snapshot(TextureCatalogGame.LE2) with { InstalledPackageCount = 202 };
+        var first = Task.Run(() => fixture.Store.WriteAtomic(
+            firstSnapshot,
+            CancellationToken.None,
+            () =>
+            {
+                firstReadyToVerify.Set();
+                releaseFirst.Wait();
+            }));
+        TestAssert.True(firstReadyToVerify.Wait(TimeSpan.FromSeconds(2)),
+            "The first registry write did not reach verification.");
+
+        var second = Task.Run(() => secondStore.WriteAtomic(secondSnapshot));
+        second.GetAwaiter().GetResult();
+        releaseFirst.Set();
+        first.GetAwaiter().GetResult();
+
+        var reopened = fixture.Store.Read(MorphFaceGame.LE2);
+        TestAssert.True(reopened.InstalledPackageCount is 101 or 202,
+            "Concurrent verified writers produced an unexpected registry payload.");
+        TestAssert.Equal(0, Directory.GetFiles(
+            Path.GetDirectoryName(fixture.Paths.GetPath(MorphFaceGame.LE2))!, "*.tmp").Length);
     }
 
     private static TextureRegistrySnapshot Snapshot(TextureCatalogGame game)

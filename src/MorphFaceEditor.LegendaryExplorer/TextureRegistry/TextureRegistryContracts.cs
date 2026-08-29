@@ -3,6 +3,7 @@ namespace MorphFaceEditor.LegendaryExplorer.TextureRegistry;
 /// <summary>Observable lifecycle of one MFE-owned compact texture registry.</summary>
 public enum TextureRegistryState
 {
+    Checking,
     Missing,
     Ready,
     Building,

@@ -37,11 +37,10 @@ public sealed class TextureCatalogService(TextureRegistryStore store)
                     return new TextureCatalogReadResult(cached.Status, cached.Candidates);
             }
 
-            var status = await Task.Run(() => store.GetStatus(game), cancellationToken).ConfigureAwait(false);
-            if (status.State != TextureRegistryState.Ready || status.FilePath is null)
+            var stored = await Task.Run(() => store.ReadWithStatus(game), cancellationToken).ConfigureAwait(false);
+            var status = stored.Status;
+            if (stored.Snapshot is not { } snapshot)
                 return new TextureCatalogReadResult(status, []);
-
-            var snapshot = await Task.Run(() => store.Read(game), cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             fingerprint = store.GetFileFingerprint(game);
             lock (_cacheLock) _cache[game] = new CachedCatalog(fingerprint, status, snapshot.Candidates);

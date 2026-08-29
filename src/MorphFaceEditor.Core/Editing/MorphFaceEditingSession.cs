@@ -29,6 +29,8 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
     private readonly HashSet<string> _originalFeatureNames;
     private readonly IReadOnlyList<string> _featureOrder;
     private readonly Dictionary<string, Vector3> _boneOverrides;
+    private readonly IReadOnlyList<BoneTranslation> _defaultTemplateBones;
+    private readonly IReadOnlyDictionary<string, Vector3> _defaultBoneOverrides;
     private IReadOnlyList<BoneTranslation> _templateBones;
     private HashSet<string>? _pastedBoneNames;
     private readonly SemanticEditHistory _history = new();
@@ -93,6 +95,9 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
                 bone => bone.BoneName,
                 bone => bone.Translation - composedByName[bone.BoneName].Translation,
                 StringComparer.OrdinalIgnoreCase);
+        _defaultTemplateBones = _templateBones.ToArray();
+        _defaultBoneOverrides = new Dictionary<string, Vector3>(
+            _boneOverrides, StringComparer.OrdinalIgnoreCase);
         _positionCorrections = DetectPositionCorrections(resolution);
         Evaluation = Evaluate(includeOracle: true);
         ValidationErrors = ValidateEditableTargets(Evaluation.Resolution);
@@ -227,15 +232,27 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
 
     public float GetBoneAxis(string boneName, int axis)
     {
-        var translation = Evaluation.FinalSkeleton.Single(bone =>
-            string.Equals(bone.BoneName, boneName, StringComparison.OrdinalIgnoreCase)).Translation;
-        return axis switch
+        if (TryGetBoneAxis(boneName, axis, out var value)) return value;
+        throw new KeyNotFoundException($"Bone '{boneName}' is not present in the current evaluated skeleton.");
+    }
+
+    public bool TryGetBoneAxis(string boneName, int axis, out float value)
+    {
+        var bone = Evaluation.FinalSkeleton.FirstOrDefault(candidate =>
+            string.Equals(candidate.BoneName, boneName, StringComparison.OrdinalIgnoreCase));
+        if (bone is null)
         {
-            0 => translation.X,
-            1 => translation.Y,
-            2 => translation.Z,
+            value = 0;
+            return false;
+        }
+        value = axis switch
+        {
+            0 => bone.Translation.X,
+            1 => bone.Translation.Y,
+            2 => bone.Translation.Z,
             _ => throw new ArgumentOutOfRangeException(nameof(axis))
         };
+        return true;
     }
 
     public void BeginFeatureEdit(string name) => BeginEdit(FeatureKey(name), GetFeature(name));
@@ -343,6 +360,29 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
             {
                 EditCommitted?.Invoke(this, EventArgs.Empty);
             }
+        }
+        Refresh();
+    }
+
+    /// <summary>Restores the construction-time morph and final-skeleton state as one undoable edit.</summary>
+    public void ResetToDefaults()
+    {
+        EnsureEditable();
+        var before = CaptureAuthoringState();
+        var after = new MorphFaceAuthoringState(
+            _featureOrder.ToDictionary(name => name, _ => 0f, StringComparer.OrdinalIgnoreCase),
+            _defaultTemplateBones.ToArray(),
+            new Dictionary<string, Vector3>(_defaultBoneOverrides, StringComparer.OrdinalIgnoreCase),
+            null);
+        if (AuthoringStatesEqual(before, after))
+        {
+            return;
+        }
+
+        RestoreAuthoringState(after);
+        if (!_replayingHistory && _history.Record(new SemanticMorphStateEdit(before, after)))
+        {
+            EditCommitted?.Invoke(this, EventArgs.Empty);
         }
         Refresh();
     }
@@ -656,6 +696,11 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
             {
                 SetFeatures(useAfter ? batch.After : batch.Before);
             }
+            else if (edit is SemanticMorphStateEdit stateEdit)
+            {
+                RestoreAuthoringState(useAfter ? stateEdit.After : stateEdit.Before);
+                Refresh();
+            }
             else if (edit is SemanticValueEdit valueEdit)
             {
                 var value = useAfter ? valueEdit.After : valueEdit.Before;
@@ -687,6 +732,37 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
         }
     }
 
+    private MorphFaceAuthoringState CaptureAuthoringState() => new(
+        new Dictionary<string, float>(_features, StringComparer.OrdinalIgnoreCase),
+        _templateBones.ToArray(),
+        new Dictionary<string, Vector3>(_boneOverrides, StringComparer.OrdinalIgnoreCase),
+        _pastedBoneNames is null
+            ? null
+            : new HashSet<string>(_pastedBoneNames, StringComparer.OrdinalIgnoreCase));
+
+    private void RestoreAuthoringState(MorphFaceAuthoringState state)
+    {
+        _features.Clear();
+        foreach (var value in state.Features) _features[value.Key] = value.Value;
+        _templateBones = state.TemplateBones.ToArray();
+        _boneOverrides.Clear();
+        foreach (var value in state.BoneOverrides) _boneOverrides[value.Key] = value.Value;
+        _pastedBoneNames = state.PastedBoneNames is null
+            ? null
+            : new HashSet<string>(state.PastedBoneNames, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static bool AuthoringStatesEqual(MorphFaceAuthoringState left, MorphFaceAuthoringState right) =>
+        left.Features.Count == right.Features.Count &&
+        left.Features.All(value => right.Features.TryGetValue(value.Key, out var other) && other == value.Value) &&
+        left.TemplateBones.SequenceEqual(right.TemplateBones) &&
+        left.BoneOverrides.Count == right.BoneOverrides.Count &&
+        left.BoneOverrides.All(value =>
+            right.BoneOverrides.TryGetValue(value.Key, out var other) && other == value.Value) &&
+        (left.PastedBoneNames is null
+            ? right.PastedBoneNames is null
+            : right.PastedBoneNames is not null && left.PastedBoneNames.SetEquals(right.PastedBoneNames));
+
     private static string FeatureKey(string name) => $"feature:{name}";
     private static string BoneKey(string name, int axis) => $"bone:{name}:{axis}";
 
@@ -699,3 +775,9 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
     private static bool IsFinite(Vector3 value) =>
         float.IsFinite(value.X) && float.IsFinite(value.Y) && float.IsFinite(value.Z);
 }
+
+internal sealed record MorphFaceAuthoringState(
+    IReadOnlyDictionary<string, float> Features,
+    IReadOnlyList<BoneTranslation> TemplateBones,
+    IReadOnlyDictionary<string, Vector3> BoneOverrides,
+    IReadOnlySet<string>? PastedBoneNames);

@@ -610,6 +610,12 @@ float3 EvaluateSpecular(
             * lobeColour
             * (primary * primaryTint + secondary * secondaryTint);
     }
+    else if (family == 14)
+    {
+        // PROShort01 has its own literal custom-lighting equation below.
+        // Keep it out of the renderer's generic Blinn response.
+        return 0;
+    }
     else
     {
         specular = pow(max(normalHalf, 0.0001), 32) * 0.15;
@@ -742,6 +748,27 @@ float3 EvaluateSubsurfaceLight(
     }
 
     return albedo * wrapContribution + transmission;
+}
+
+float3 EvaluateMaskedHairLight(
+    float3 geometricNormal,
+    float3 fibreTangent,
+    float3 view,
+    float3 light,
+    float3 diffuseColour,
+    float3 specularColour)
+{
+    float normalLight = saturate(dot(geometricNormal, light));
+    float diffuseAnisotropy = sqrt(saturate(
+        1 - dot(fibreTangent, light) * dot(fibreTangent, light)));
+    float3 halfDirection = normalize(view + light);
+    float tangentHalf = dot(fibreTangent, halfDirection);
+    float specularAnisotropy = pow(
+        max(sqrt(saturate(1 - tangentHalf * tangentHalf)), 0.0001),
+        500);
+    return normalLight * (
+        diffuseColour * diffuseAnisotropy
+        + specularColour * specularAnisotropy);
 }
 
 float4 PSMain(
@@ -965,6 +992,14 @@ float4 PSMain(
     if (diagnostic > 0.5)
     {
         albedo = BaseColor.rgb;
+    }
+    else if (family == 14)
+    {
+        // Both independently recovered PROShort01 masters use Opac_M01.R
+        // against Material::OpacityMaskClipValue (0.15). The texture alpha
+        // and remaining colour channels are not part of coverage.
+        clip(maskSample.r - 0.15);
+        albedo = diffuseSample.rgb;
     }
     else if (family == 1)
     {
@@ -1628,6 +1663,44 @@ float4 PSMain(
 
     float3 lit = (albedo * diffuseLighting + specularLighting + subsurfaceLighting) * LightingParameters.x
         + eyeBaseReflection;
+
+    if (family == 14 && diagnostic < 0.5)
+    {
+        // PROShort01 stores a tangent-space fibre direction in Tang.RG. Its
+        // positive Z is reconstructed exactly like the SM3 bytecode; the
+        // material never samples the similarly named _Norm asset.
+        float2 fibreXY = detailSample.rg * 2 - 1;
+        float tangentEnergy = dot(fibreXY, fibreXY);
+        float3 tangentFibre = float3(
+            fibreXY,
+            sqrt(saturate(1 - tangentEnergy)));
+        float3 fibreTangent = normalize(
+            tangent * tangentFibre.x
+            + bitangent * tangentFibre.y
+            + geometricNormal * tangentFibre.z);
+        float3 specularColour = TextureFlags1.x > 0.5
+            ? AuxiliaryTexture1.Sample(MaterialSampler, materialUv).rgb
+            : 0;
+
+        // The no-light-map base permutation uses the view/normal half-vector
+        // for a separate exponent-500 anisotropic lobe, then adds diffuse
+        // scaled by the authored tangent XY energy.
+        float3 ambientHalf = normalize(view + geometricNormal);
+        float tangentAmbient = dot(fibreTangent, ambientHalf);
+        float ambientSpecular = pow(
+            max(sqrt(saturate(1 - tangentAmbient * tangentAmbient)), 0.0001),
+            500);
+        float3 maskedHairLighting = environmentLighting * (
+            diffuseSample.rgb * tangentEnergy
+            + specularColour * ambientSpecular);
+        maskedHairLighting += KeyLightColor.rgb * EvaluateMaskedHairLight(
+            geometricNormal, fibreTangent, view, keyLight, diffuseSample.rgb, specularColour);
+        maskedHairLighting += FillLightColor.rgb * EvaluateMaskedHairLight(
+            geometricNormal, fibreTangent, view, fillLight, diffuseSample.rgb, specularColour);
+        maskedHairLighting += RimLightColor.rgb * EvaluateMaskedHairLight(
+            geometricNormal, fibreTangent, view, rimLight, diffuseSample.rgb, specularColour);
+        lit = maskedHairLighting * LightingParameters.x;
+    }
 
     if (LightingParameters.w > 0.5)
     {

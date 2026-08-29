@@ -59,6 +59,24 @@ public sealed class MorphRandomisationCatalog
                 : null);
     }
 
+    public MorphRandomisationDonor SelectMaterialDonor(
+        string profileKey,
+        int randomSeed,
+        string? excludedDonorId = null)
+    {
+        var pool = MorphRandomisationPoolRouter.Resolve(profileKey);
+        bool IsCompatible(MorphRandomisationDonor donor) =>
+            IsCompatibleMaterialDonorProfile(profileKey, donor.SourceProfileKey) && donor.HasMaterialEvidence;
+        var candidates = Corpus.Pools.GetValueOrDefault(pool)?.Where(IsCompatible).ToArray() ?? [];
+        var hasDistinctCandidate = excludedDonorId is not null && candidates.Any(donor =>
+            !donor.Id.Equals(excludedDonorId, StringComparison.OrdinalIgnoreCase));
+        return MorphRandomiser.SelectDonor(
+            Corpus, pool, randomSeed,
+            donor => IsCompatible(donor) &&
+                     (!hasDistinctCandidate ||
+                      !donor.Id.Equals(excludedDonorId, StringComparison.OrdinalIgnoreCase)));
+    }
+
     public IReadOnlyList<MorphRandomisationDonor> CompatibleMaterialDonors(string profileKey)
     {
         try
@@ -74,6 +92,46 @@ public sealed class MorphRandomisationCatalog
             return [];
         }
     }
+
+    public IReadOnlyList<MorphRandomisationDonor> ProjectInstalledMaterialDonors(
+        string profileKey,
+        Func<string, string, bool> canResolveParameterPath)
+    {
+        ArgumentNullException.ThrowIfNull(canResolveParameterPath);
+        return CompatibleMaterialDonors(profileKey)
+            .Select(donor => donor with
+            {
+                MaterialTextureFamilies = donor.MaterialTextureFamilies
+                    .Select(family => new
+                    {
+                        family.Key,
+                        Available = family.Value
+                            .Where(member => canResolveParameterPath(member.Key, member.Value))
+                            .ToDictionary(member => member.Key, member => member.Value,
+                                StringComparer.OrdinalIgnoreCase),
+                        Required = family.Value
+                            .Where(member => IsRequiredTextureMember(family.Key, member.Key))
+                            .Select(member => member.Key)
+                            .ToArray()
+                    })
+                    .Where(family => family.Available.Count > 0 &&
+                                     family.Required.All(family.Available.ContainsKey))
+                    .ToDictionary(family => family.Key,
+                        family => (IReadOnlyDictionary<string, string>)family.Available,
+                        StringComparer.OrdinalIgnoreCase)
+            })
+            .ToArray();
+    }
+
+    private static bool IsRequiredTextureMember(string family, string parameterName) =>
+        family.Equals("human-face", StringComparison.OrdinalIgnoreCase)
+            ? parameterName is "HED_Diff" or "HED_Norm"
+            : family.Equals("human-scalp", StringComparison.OrdinalIgnoreCase)
+                ? parameterName is "HED_Scalp_Diff" or "HED_Scalp_Norm"
+                : family.EndsWith("-face", StringComparison.OrdinalIgnoreCase)
+                    ? parameterName.EndsWith("_HED_Diff", StringComparison.OrdinalIgnoreCase) ||
+                      parameterName.EndsWith("_HED_Norm", StringComparison.OrdinalIgnoreCase)
+                : true;
 
     public MaterialRandomisationProfile? GetMaterialProfile(string profileKey) =>
         ResolveMaterialProfileKey(profileKey) is { } key ? Corpus.MaterialProfiles.GetValueOrDefault(key) : null;

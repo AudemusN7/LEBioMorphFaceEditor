@@ -16,6 +16,7 @@
                       LogicalName="MorphFaceEditor.Assets.Randomisation.%(Filename)%(Extension)" />
   </ItemGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="MorphFaceEditor.Tests" />
     <ProjectReference Include="..\MorphFaceEditor.Core\MorphFaceEditor.Core.csproj" />
     <ProjectReference Include="..\MorphFaceEditor.LegendaryExplorer\MorphFaceEditor.LegendaryExplorer.csproj" />
     <ProjectReference Include="..\MorphFaceEditor.Rendering\MorphFaceEditor.Rendering.csproj" />

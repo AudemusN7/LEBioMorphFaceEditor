@@ -3,6 +3,7 @@ using System.IO;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Core.Materials;
+using MorphFaceEditor.Core.Randomisation;
 using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.Services;
 
@@ -20,11 +21,14 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
     public MaterialEditorViewModel(
         MaterialEditingSession session,
         IHdrColorDialogService colorDialog,
-        PackageReferenceService references,
+        ITextureReferenceLoader references,
         string packagePath,
         IReadOnlyList<MorphFaceEditor.Models.PackageAssetListItem> textureCandidates,
         Action<string> reportError,
-        IHeadEditorUiProfile uiProfile)
+        IHeadEditorUiProfile uiProfile,
+        IReadOnlyList<TextureCatalogCandidate>? registryCandidates = null,
+        TextureCatalogProfile? registryProfile = null,
+        bool isRegistryAvailable = false)
     {
         _session = session;
         Scalars = session.ScalarNames
@@ -50,7 +54,10 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
                 references,
                 packagePath,
                 textureCandidates,
-                reportError))
+                reportError,
+                registryCandidates,
+                registryProfile,
+                isRegistryAvailable))
             .OrderBy(value => value.Group)
             .ThenBy(value => value.Label)
             .ToArray();
@@ -63,6 +70,20 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
     public IReadOnlyList<MaterialScalarEditorViewModel> Scalars { get; }
     public IReadOnlyList<MaterialVectorEditorViewModel> Vectors { get; }
     public IReadOnlyList<MaterialTextureEditorViewModel> Textures { get; }
+    public bool HasExternalRegistrySelections => Textures.Any(texture => texture.HasExternalRegistrySelection);
+    public bool CanResolveTexturePath(string parameterName, string instancedPath) =>
+        Textures.FirstOrDefault(texture => texture.Name.Equals(parameterName, StringComparison.OrdinalIgnoreCase))
+            ?.CanResolveInstancedPath(instancedPath) == true;
+    public void UpdateRegistryCandidates(
+        IReadOnlyList<TextureCatalogCandidate> candidates,
+        TextureCatalogProfile profile,
+        bool isRegistryAvailable)
+    {
+        foreach (var texture in Textures)
+        {
+            texture.UpdateRegistryCandidates(candidates, profile, isRegistryAvailable);
+        }
+    }
     public ResolvedHeadMaterialSet Materials => _session.Materials;
     public MorphFaceMaterialOverrides CreateOverrides() => _session.CreateOverrides();
     public void SetNumericValues(
@@ -95,6 +116,7 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
         var applicableVectors = vectors.Where(value => vectorNames.Contains(value.Key))
             .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase);
         var decoded = new Dictionary<string, DecodedTextureAsset?>(StringComparer.OrdinalIgnoreCase);
+        var failedTextureFamilySignatures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var appliedFamilies = 0;
         foreach (var family in textureFamilies.OrderBy(value => value.Key, StringComparer.OrdinalIgnoreCase))
         {
@@ -132,13 +154,14 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
             catch (Exception exception)
             {
                 AppLog.Warning($"Skipped unresolved randomisation texture family '{family.Key}': {exception.Message}");
+                failedTextureFamilySignatures.Add(MaterialRandomiser.TextureFamilySignature(family.Value));
                 continue;
             }
             foreach (var value in resolved) decoded[value.Key] = value.Value;
             appliedFamilies++;
         }
         return new PreparedMaterialRandomisation(
-            applicableScalars, applicableVectors, decoded, appliedFamilies);
+            applicableScalars, applicableVectors, decoded, appliedFamilies, failedTextureFamilySignatures);
     }
 
     private static bool IsRequiredRandomisationTextureMember(string family, string parameterName) =>
@@ -146,12 +169,16 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
             ? parameterName is "HED_Diff" or "HED_Norm"
             : family.Equals("human-scalp", StringComparison.OrdinalIgnoreCase)
                 ? parameterName is "HED_Scalp_Diff" or "HED_Scalp_Norm"
+                : family.EndsWith("-face", StringComparison.OrdinalIgnoreCase)
+                    ? parameterName.EndsWith("_HED_Diff", StringComparison.OrdinalIgnoreCase) ||
+                      parameterName.EndsWith("_HED_Norm", StringComparison.OrdinalIgnoreCase)
                 : true;
     public void ApplyRandomisation(PreparedMaterialRandomisation values)
     {
         ArgumentNullException.ThrowIfNull(values);
         _session.SetValues(values.Scalars, values.Vectors, values.Textures);
     }
+    public void ResetToDefaults() => _session.ResetToDefaults();
     public void ReplaceAttachmentMaterials(
         ResolvedHeadMaterialSet materials,
         ResolvedHeadMaterialSet? replacementTextureMaterials = null) =>
@@ -219,6 +246,7 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
         }
         _session.MaterialsChanged -= OnMaterialsChanged;
         _session.HistoryChanged -= OnHistoryChanged;
+        foreach (var texture in Textures) texture.Dispose();
         _disposed = true;
     }
 }
@@ -227,4 +255,5 @@ public sealed record PreparedMaterialRandomisation(
     IReadOnlyDictionary<string, float> Scalars,
     IReadOnlyDictionary<string, System.Numerics.Vector4> Vectors,
     IReadOnlyDictionary<string, DecodedTextureAsset?> Textures,
-    int AppliedTextureFamilies);
+    int AppliedTextureFamilies,
+    IReadOnlySet<string> FailedTextureFamilySignatures);

@@ -5,6 +5,7 @@ using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.DataCompiler;
 using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.Services;
+using MorphFaceEditor.ViewModels;
 using System.Numerics;
 
 namespace MorphFaceEditor.Tests;
@@ -30,7 +31,13 @@ public static class RandomisationTests
         new("texture-dependent selector rules remain valid", TextureDependentSelectorsRemainValid),
         new("LE1 Batarian material randomisation falls back to compatible pooled donors", Le1BatarianUsesCompatibleMaterialDonors),
         new("material donor compatibility follows cross-game species and human pools", MaterialDonorsUseApprovedCrossGamePools),
+        new("embedded randomisation corpus exposes face and eye texture families", EmbeddedCorpusExposesFaceAndEyeFamilies),
+        new("embedded texture families remain eligible under registry discovery", EmbeddedFamiliesMatchRegistryDiscovery),
+        new("installed texture randomisation keeps only complete resolvable families", InstalledTextureRandomisationFiltersFamilies),
+        new("texture family scope honours disabled texture categories", TextureFamilyScopeHonoursDisabledCategories),
+        new("material randomisation excludes an unreadable texture family signature", MaterialRandomisationExcludesFailedSignature),
         new("cursed randomisation wakes zero morphs within Mgamerz ranges", CursedRandomisationWakesZeroMorphs),
+        new("cursed randomisation wakes zero material and facial-bone channels", CursedRandomisationWakesZeroExtraChannels),
         new("cursed randomisation fuzzes only Mgamerz facial bones and numeric materials", CursedRandomisationFuzzesBonesAndMaterials),
         new("zero-strength cursed randomisation is an exact no-op", ZeroStrengthCursedRandomisationIsNoOp),
         new("cursed randomisation keeps extreme finite inputs finite", CursedRandomisationKeepsExtremeInputsFinite),
@@ -39,12 +46,155 @@ public static class RandomisationTests
         new("unchanged feature batches create no history", UnchangedFeatureBatchCreatesNoHistory)
     ];
 
+    private static void MaterialRandomisationExcludesFailedSignature()
+    {
+        MorphRandomisationDonor Donor(string id, string path) => new(
+            id, "le3-human-male", new HashSet<string>(), new Dictionary<string, float>())
+        {
+            MaterialTextureFamilies = new Dictionary<string, IReadOnlyDictionary<string, string>>
+            {
+                ["face"] = new Dictionary<string, string> { ["HED_Diff"] = path }
+            }
+        };
+        var failed = Donor("failed", "Installed.Failed_Diff");
+        var fallback = Donor("fallback", "Installed.Fallback_Diff");
+        var failedSignature = MaterialRandomiser.TextureFamilySignature(
+            failed.MaterialTextureFamilies["face"]);
+
+        var proposal = MaterialRandomiser.CreateProposal(
+            failed, [failed, fallback], PolicyProfile("le3-human-male", [], []),
+            Values(), new Dictionary<string, Vector4>(), [],
+            new HashSet<string>(), new HashSet<string>(),
+            new HashSet<string>(["face"], StringComparer.OrdinalIgnoreCase),
+            100, 17, excludedTextureSignatures: new HashSet<string>([failedSignature], StringComparer.OrdinalIgnoreCase));
+
+        TestAssert.Equal("Installed.Fallback_Diff", proposal.TextureFamilies["face"]["HED_Diff"]);
+    }
+
+    private static void EmbeddedCorpusExposesFaceAndEyeFamilies()
+    {
+        var catalog = MorphRandomisationCatalog.LoadEmbedded();
+        var human = catalog.EligibleTextureParameters("le1-human-male");
+        var salarian = catalog.EligibleTextureParameters("le1-salarian");
+        var turian = catalog.EligibleTextureParameters("le3-turian");
+
+        TestAssert.True(human.Contains("HED_Diff") && human.Contains("EYE_Diff"),
+            "The embedded human pool omitted face or eye textures.");
+        TestAssert.True(salarian.Contains("SAL_HED_Diff") && salarian.Contains("SAL_HED_EYE_Diff"),
+            "The embedded Salarian pool omitted face or eye textures.");
+        TestAssert.True(turian.Contains("TUR_HED_Diff") &&
+                        (turian.Contains("TUR_EYE_Diff") || turian.Contains("EYE_Diff")),
+            "The embedded Turian pool omitted face or eye textures.");
+    }
+
+    private static void EmbeddedFamiliesMatchRegistryDiscovery()
+    {
+        var catalog = MorphRandomisationCatalog.LoadEmbedded();
+        foreach (var profileKey in catalog.Corpus.MaterialProfiles.Keys)
+        {
+            var expectedFamilyKeys = catalog.CompatibleMaterialDonors(profileKey)
+                .SelectMany(donor => donor.MaterialTextureFamilies.Keys)
+                .Where(key => key.EndsWith("-face", StringComparison.OrdinalIgnoreCase) ||
+                              key.EndsWith("-eyes", StringComparison.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            var projected = catalog.ProjectInstalledMaterialDonors(
+                profileKey,
+                (_, path) => TextureRegistryDiscovery.IsRelevantPath(path));
+            var projectedKeys = projected.SelectMany(donor => donor.MaterialTextureFamilies.Keys)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var familyKey in expectedFamilyKeys)
+            {
+                TestAssert.True(projectedKeys.Contains(familyKey),
+                    $"{profileKey} {familyKey} has no family that can survive compact-registry discovery.");
+            }
+        }
+    }
+
+    private static void InstalledTextureRandomisationFiltersFamilies()
+    {
+        var donor = new MorphRandomisationDonor(
+            "LE3.HMM.Registry",
+            "le3-human-male",
+            new HashSet<string>(),
+            new Dictionary<string, float>())
+        {
+            MaterialTextureFamilies = new Dictionary<string, IReadOnlyDictionary<string, string>>
+            {
+                ["human-scalp"] = new Dictionary<string, string>
+                {
+                    ["HED_Scalp_Diff"] = "Installed.Scalp_Diff",
+                    ["HED_Scalp_Norm"] = "Installed.Scalp_Norm",
+                    ["HED_Scalp_Spec"] = "Missing.Optional_Spec"
+                },
+                ["human-face"] = new Dictionary<string, string>
+                {
+                    ["HED_Diff"] = "Installed.Face_Diff",
+                    ["HED_Norm"] = "Missing.Face_Norm"
+                }
+            }
+        };
+        var corpus = new MorphRandomisationCorpus(
+            MorphRandomisationCorpus.CurrentFormatVersion,
+            new Dictionary<MorphRandomisationPoolKey, IReadOnlyList<MorphRandomisationDonor>>
+            {
+                [MorphRandomisationPoolKey.HumanMaleLe3] = [donor]
+            })
+        {
+            MaterialProfiles = new Dictionary<string, MaterialRandomisationProfile>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["le3-human-male"] = new MaterialRandomisationProfile(
+                    "le3-human-male",
+                    new Dictionary<string, MaterialScalarStatistics>(),
+                    new Dictionary<string, MaterialVectorStatistics>(),
+                    new HashSet<string>(["human-scalp", "human-face"], StringComparer.OrdinalIgnoreCase))
+            }
+        };
+        var catalog = new MorphRandomisationCatalog(corpus);
+        var available = new HashSet<(string Parameter, string Path)>
+        {
+            ("HED_Scalp_Diff", "Installed.Scalp_Diff"),
+            ("HED_Scalp_Norm", "Installed.Scalp_Norm"),
+            ("HED_Diff", "Installed.Face_Diff")
+        };
+
+        var projected = catalog.ProjectInstalledMaterialDonors(
+            "le3-human-male", (parameter, path) => available.Contains((parameter, path))).Single();
+
+        TestAssert.True(projected.MaterialTextureFamilies.ContainsKey("human-scalp"),
+            "A family with both required installed members was removed because an optional member was unavailable.");
+        TestAssert.True(!projected.MaterialTextureFamilies["human-scalp"].ContainsKey("HED_Scalp_Spec"),
+            "An unavailable optional member remained in the installed family projection.");
+        TestAssert.True(!projected.MaterialTextureFamilies.ContainsKey("human-face"),
+            "A family missing a required normal map remained eligible for randomisation.");
+    }
+
+    private static void TextureFamilyScopeHonoursDisabledCategories()
+    {
+        var family = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["HED_Diff"] = "Installed.Face_Diff",
+            ["HED_Norm"] = "Installed.Face_Norm",
+            ["HED_Mask"] = "Installed.Face_Mask"
+        };
+        var available = family.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var allRequested = family.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var maskCategoryDisabled = new HashSet<string>(["HED_Diff", "HED_Norm"],
+            StringComparer.OrdinalIgnoreCase);
+
+        TestAssert.True(FaceEditorViewModel.IsTextureFamilyInScope(family, allRequested, available),
+            "A fully enabled coherent texture family was excluded.");
+        TestAssert.True(!FaceEditorViewModel.IsTextureFamilyInScope(family, maskCategoryDisabled, available),
+            "A coherent texture family crossed into a disabled texture category.");
+    }
+
     public static IReadOnlyList<TestCase> Tooling { get; } =
     [
         new("randomisation bundle round-trips deterministically", BundleRoundTripsDeterministically),
         new("corpus compilation distinguishes unavailable zero and nonzero features", CompilationPreservesFeatureStates),
         new("corpus compilation reports and excludes empty and reviewed donors", CompilationReportsExclusions),
         new("corpus compilation classifies material vectors and atomic texture families", CompilationClassifiesMaterials),
+        new("corpus compilation groups face and eye textures for every species", CompilationGroupsFaceAndEyeTextures),
         new("default compiler profiles expose all approved donor pools", DefaultDefinitionsExposeApprovedPools)
     ];
 
@@ -793,6 +943,84 @@ public static class RandomisationTests
             donor.MaterialTextureFamilies["human-face-mask"]["HED_Mask"]);
         TestAssert.Equal("HMM_Beard_Diff",
             donor.MaterialTextureFamilies["addition:HED_Addn"]["HED_Addn"]);
+    }
+
+    private static void CursedRandomisationWakesZeroExtraChannels()
+    {
+        var result = CursedMorphRandomiser.CreateExtrasProposal(
+            [new BoneTranslation("eye_left", Vector3.Zero)],
+            Values(("Emis_Scalar", 0), ("HED_EYE_FX_Scalar", 0), ("ZeroCentred", 0)),
+            new Dictionary<string, Vector4>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Emis_Color"] = Vector4.Zero,
+                ["HED_EYE_FX_Vector"] = Vector4.Zero
+            },
+            100,
+            321,
+            [
+                new MaterialRandomisationScalarBounds("Emis_Scalar", 0, 10),
+                new MaterialRandomisationScalarBounds("HED_EYE_FX_Scalar", -1, 1),
+                new MaterialRandomisationScalarBounds("ZeroCentred", -4, 4)
+            ]);
+
+        TestAssert.True(result.ScalarValues["Emis_Scalar"] is > 0 and <= 10,
+            "Zero eye emissive remained asleep in cursed mode.");
+        TestAssert.True(result.ScalarValues["HED_EYE_FX_Scalar"] is >= -1 and <= 1 and not 0,
+            "Zero eye FX strength remained asleep in cursed mode.");
+        TestAssert.True(result.ScalarValues["ZeroCentred"] is >= -4 and <= 4 and not 0,
+            "A generic zero-centred scalar remained asleep in cursed mode.");
+        TestAssert.True(result.VectorValues.Values.All(value =>
+                value.X != 0 && value.Y != 0 && value.Z != 0 && value.W != 0),
+            "A zero material-vector component remained asleep in cursed mode.");
+        var eye = result.BoneValues.Single().Translation;
+        TestAssert.True(eye.X != 0 && eye.Y != 0 && eye.Z != 0,
+            "A zero facial-bone axis remained asleep in cursed mode.");
+    }
+
+    private static void CompilationGroupsFaceAndEyeTextures()
+    {
+        var profiles = new[]
+        {
+            Definition("le1-human-male", MorphFaceGame.LE1, new HashSet<string>(["A"])),
+            Definition("le1-salarian", MorphFaceGame.LE1, new HashSet<string>(["A"]))
+        };
+        var human = RawFace(MorphFaceGame.LE1, "LE1.Human", ("A", 0.5f)) with
+        {
+            MaterialTextures = new Dictionary<string, string>
+            {
+                ["HED_Diff"] = "Human.Face_Diff",
+                ["HED_Norm"] = "Human.Face_Norm",
+                ["EYE_Diff"] = "Human.Eye_Diff",
+                ["EYE_Iris_Norm"] = "Human.Eye_Iris_Norm"
+            }
+        };
+        var salarian = RawFace(MorphFaceGame.LE1, "LE1.Salarian", ("A", 0.5f)) with
+        {
+            MaterialTextures = new Dictionary<string, string>
+            {
+                ["SAL_HED_Diff"] = "Salarian.Face_Diff",
+                ["SAL_HED_Norm"] = "Salarian.Face_Norm",
+                ["SAL_HED_EYE_Diff"] = "Salarian.Eye_Diff",
+                ["SAL_HED_EYE_Norm"] = "Salarian.Eye_Norm",
+                ["SAL_HED_EYE_Spec"] = "Salarian.Eye_Spec"
+            }
+        };
+
+        var humanDonor = RandomisationCorpusCompiler.Compile([human], [profiles[0]], [])
+            .Corpus.Pools[MorphRandomisationPoolKey.HumanMaleLe12].Single();
+        var salarianDonor = RandomisationCorpusCompiler.Compile([salarian], [profiles[1]], [])
+            .Corpus.Pools[MorphRandomisationPoolKey.HumanMaleLe12].Single();
+
+        TestAssert.True(humanDonor.MaterialTextureFamilies["human-eyes"].Keys
+                .ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(["EYE_Diff", "EYE_Iris_Norm"]),
+            "Human eye textures were omitted from the coherent randomisation pool.");
+        TestAssert.True(salarianDonor.MaterialTextureFamilies["salarian-face"].Keys
+                .ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(["SAL_HED_Diff", "SAL_HED_Norm"]),
+            "Salarian face textures were omitted from the coherent randomisation pool.");
+        TestAssert.True(salarianDonor.MaterialTextureFamilies["salarian-eyes"].Keys
+                .ToHashSet(StringComparer.OrdinalIgnoreCase)
+                .SetEquals(["SAL_HED_EYE_Diff", "SAL_HED_EYE_Norm", "SAL_HED_EYE_Spec"]),
+            "Salarian eye textures were omitted from the coherent randomisation pool.");
     }
 
     private static void DefaultDefinitionsExposeApprovedPools()

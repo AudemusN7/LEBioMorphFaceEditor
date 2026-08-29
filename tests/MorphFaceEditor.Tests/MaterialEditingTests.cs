@@ -1,5 +1,6 @@
 using System.Numerics;
 using MorphFaceEditor.Core.Editing;
+using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.Rendering;
@@ -17,6 +18,7 @@ public static class MaterialEditingTests
         new("material history tolerates redundant and reordered pointer completion", MaterialHistoryToleratesPointerCompletion),
         new("material randomisation batch is atomic and reversible", MaterialRandomisationBatchIsAtomic),
         new("material defaults clear loaded overrides and undo", MaterialDefaultsClearLoadedOverrides),
+        new("material paste restores defaults for omitted values", MaterialPasteRestoresOmittedDefaults),
         new("HDR picker previews live and commits once on Apply", HdrPreviewCommitsOnce),
         new("package texture reference updates detached bindings and undoes", PackageTextureReferenceUpdatesBindings),
         new("package texture reference supports None and undo", PackageTextureReferenceSupportsNone),
@@ -217,6 +219,23 @@ public static class MaterialEditingTests
         TestAssert.True(session.CreateOverrides().Scalars.Count == 1 && session.CreateOverrides().Vectors.Count == 1 &&
                         session.CreateOverrides().Textures.Count == 1,
             "Undo did not restore the loaded material overrides.");
+    }
+
+    private static void MaterialPasteRestoresOmittedDefaults()
+    {
+        var session = CreateSession();
+        session.SetScalar("HED_Norm_Blend", 0.9f);
+        session.SetVector("SkinTone", new Vector4(0.2f, 0.3f, 0.4f, 1));
+
+        session.ApplyMaterialData(
+            new MorphFaceMaterialData([], [], []),
+            new Dictionary<string, DecodedTextureAsset?>());
+
+        TestAssert.Near(0.5f, session.GetScalar("HED_Norm_Blend"), 0);
+        TestAssert.Equal(Vector4.One, session.GetVector("SkinTone"));
+        TestAssert.True(session.CreateOverrides().Scalars.Count == 0 &&
+                        session.CreateOverrides().Vectors.Count == 0,
+            "An empty material paste retained values that were omitted from its override payload.");
     }
 
     private static void PackageTextureReferenceUpdatesBindings()

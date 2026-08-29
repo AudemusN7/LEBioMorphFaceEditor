@@ -419,6 +419,10 @@ internal sealed class MorphFaceMaterialReader(
         {
             AddAsariLiteralTextures(master, textureValues);
         }
+        else if (family == HeadMaterialFamily.MaskedHair)
+        {
+            AddMaskedHairLiteralTextures(master, textureValues);
+        }
 
         var decodedTextures = textureValues
             .Where(pair => pair.Value.IsA("Texture2D"))
@@ -487,6 +491,8 @@ internal sealed class MorphFaceMaterialReader(
             vectorValues,
             decodedTextures)
         {
+            DefaultScalars = scalarValues,
+            DefaultVectors = vectorValues,
             DefaultTextures = decodedTextures,
             SupportedScalars = supportedScalars,
             SupportedVectors = supportedVectors,
@@ -621,6 +627,40 @@ internal sealed class MorphFaceMaterialReader(
         }
     }
 
+    private void AddMaskedHairLiteralTextures(
+        ExportEntry master,
+        Dictionary<string, ExportEntry> textures)
+    {
+        var material = ObjectBinary.From<Material>(master);
+        var uniformTextures = material.SM3MaterialResource.UniformExpressionTextures;
+        var (shaderMap, _) = ShaderCacheManipulator.GetMaterialShaderMapAndShaders(master);
+        AddLiteral("__PROShort01_Opacity", 0);
+        AddLiteral("__PROShort01_Diffuse", 1);
+        AddLiteral("__PROShort01_Tangent", 2);
+        AddLiteral("__PROShort01_Specular", 3);
+        return;
+
+        void AddLiteral(string name, int uniformIndex)
+        {
+            if (uniformIndex >= shaderMap.Uniform2DTextureExpressions.Length)
+            {
+                return;
+            }
+            var textureIndex = shaderMap.Uniform2DTextureExpressions[uniformIndex].TextureIndex;
+            if (textureIndex < 0 || textureIndex >= uniformTextures.Length)
+            {
+                return;
+            }
+            var source = ResolveOptional(
+                master.FileRef.GetEntry(uniformTextures[textureIndex]),
+                $"PROShort01 hair master '{master.InstancedFullPath}' uniform texture {uniformIndex}");
+            if (source is not null)
+            {
+                textures[name] = source;
+            }
+        }
+    }
+
     private static MaterialParameterDefinition DescribeTexture(string name, HeadMaterialFamily family) => name switch
     {
         "__ASA_SkinNoise" => new MaterialParameterDefinition(
@@ -628,6 +668,19 @@ internal sealed class MorphFaceMaterialReader(
             TextureRole: TextureRole.Detail, ColorSpace: TextureColorSpace.Srgb),
         "__ASA_SpecMultiplierMask" => new MaterialParameterDefinition(
             name, "Asari specular multiplier mask", "Internal", MaterialParameterKind.Texture, family,
+            TextureRole: TextureRole.Specular, ColorSpace: TextureColorSpace.Linear),
+        "__PROShort01_Opacity" => new MaterialParameterDefinition(
+            name, "PROShort01 opacity", "Internal", MaterialParameterKind.Texture, family,
+            TextureRole: TextureRole.Mask, ColorSpace: TextureColorSpace.Linear,
+            AlphaPolicy: TextureAlphaPolicy.Mask),
+        "__PROShort01_Diffuse" => new MaterialParameterDefinition(
+            name, "PROShort01 diffuse", "Internal", MaterialParameterKind.Texture, family,
+            TextureRole: TextureRole.Diffuse, ColorSpace: TextureColorSpace.Srgb),
+        "__PROShort01_Tangent" => new MaterialParameterDefinition(
+            name, "PROShort01 fibre tangent", "Internal", MaterialParameterKind.Texture, family,
+            TextureRole: TextureRole.Tangent, ColorSpace: TextureColorSpace.Linear),
+        "__PROShort01_Specular" => new MaterialParameterDefinition(
+            name, "PROShort01 specular", "Internal", MaterialParameterKind.Texture, family,
             TextureRole: TextureRole.Specular, ColorSpace: TextureColorSpace.Linear),
         _ => HumanMaterialProfiles.Describe(name, MaterialParameterKind.Texture, family)
     };
@@ -928,6 +981,8 @@ internal sealed class MorphFaceMaterialReader(
         }
         if (value.Contains("_hat_", StringComparison.OrdinalIgnoreCase) ||
             value.Contains("hat", StringComparison.OrdinalIgnoreCase)) return HeadMaterialFamily.Accessory;
+        if (value.Contains("PROShort01", StringComparison.OrdinalIgnoreCase) ||
+            value.Contains("PROShort_01", StringComparison.OrdinalIgnoreCase)) return HeadMaterialFamily.MaskedHair;
         if (value.Contains("lash", StringComparison.OrdinalIgnoreCase)) return HeadMaterialFamily.Lashes;
         if (value.Contains("eye", StringComparison.OrdinalIgnoreCase)) return HeadMaterialFamily.Eyes;
         if (value.Contains("scalp", StringComparison.OrdinalIgnoreCase)) return HeadMaterialFamily.Scalp;

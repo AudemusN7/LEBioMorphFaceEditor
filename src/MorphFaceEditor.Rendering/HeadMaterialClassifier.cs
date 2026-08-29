@@ -51,6 +51,10 @@ public static class HeadMaterialClassifier
         {
             return HeadMaterialFamily.Accessory;
         }
+        if (ContainsAny(name, "PROShort01", "PROShort_01"))
+        {
+            return HeadMaterialFamily.MaskedHair;
+        }
         if (ContainsAny(name, "hair", "_hir_"))
         {
             return HeadMaterialFamily.Hair;

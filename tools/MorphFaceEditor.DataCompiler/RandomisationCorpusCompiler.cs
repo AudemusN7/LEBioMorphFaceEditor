@@ -464,6 +464,8 @@ public static class RandomisationCorpusCompiler
         {
             Add("human-face", textures.Where(value => value.Key is "HED_Diff" or "HED_Norm"),
                 "HED_Diff", "HED_Norm");
+            Add("human-eyes", textures.Where(value =>
+                value.Key.Contains("EYE", StringComparison.OrdinalIgnoreCase)));
             Add("human-face-mask", textures.Where(value =>
                 value.Key.Equals("HED_Mask", StringComparison.OrdinalIgnoreCase)), "HED_Mask");
             var scalp = textures.Where(value =>
@@ -471,7 +473,35 @@ public static class RandomisationCorpusCompiler
                 value.Key.Equals("HED_Tang", StringComparison.OrdinalIgnoreCase));
             Add("human-scalp", scalp, "HED_Scalp_Diff", "HED_Scalp_Norm");
         }
+        else if (TryGetSpeciesTexturePrefix(profileKey, out var species, out var prefix))
+        {
+            Add($"{species}-face", textures.Where(value =>
+                    value.Key.StartsWith($"{prefix}_HED_", StringComparison.OrdinalIgnoreCase) &&
+                    !value.Key.Contains("EYE", StringComparison.OrdinalIgnoreCase) &&
+                    !value.Key.Contains("Addn", StringComparison.OrdinalIgnoreCase) &&
+                    !value.Key.Contains("Tatt", StringComparison.OrdinalIgnoreCase)),
+                $"{prefix}_HED_Diff", $"{prefix}_HED_Norm");
+            Add($"{species}-eyes", textures.Where(value =>
+                value.Key.Contains("EYE", StringComparison.OrdinalIgnoreCase)));
+        }
         return result;
+    }
+
+    private static bool TryGetSpeciesTexturePrefix(
+        string profileKey,
+        out string species,
+        out string prefix)
+    {
+        (species, prefix) = profileKey.ToLowerInvariant() switch
+        {
+            var key when key.EndsWith("asari", StringComparison.Ordinal) => ("asari", "ASA"),
+            var key when key.EndsWith("salarian", StringComparison.Ordinal) => ("salarian", "SAL"),
+            var key when key.EndsWith("turian", StringComparison.Ordinal) => ("turian", "TUR"),
+            var key when key.EndsWith("krogan", StringComparison.Ordinal) => ("krogan", "KRO"),
+            var key when key.EndsWith("batarian", StringComparison.Ordinal) => ("batarian", "BAT"),
+            _ => (string.Empty, string.Empty)
+        };
+        return prefix.Length > 0;
     }
 
     private static IReadOnlyDictionary<string, MaterialRandomisationProfile> BuildMaterialProfiles(

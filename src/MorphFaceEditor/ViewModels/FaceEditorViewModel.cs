@@ -3,6 +3,7 @@ using MorphFaceEditor.Core.Deformation;
 using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.Services;
 using MorphFaceEditor.Core.Randomisation;
+using MorphFaceEditor.Core.Materials;
 
 namespace MorphFaceEditor.ViewModels;
 
@@ -16,6 +17,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     private readonly EditorUndoCoordinator _history;
     private readonly RelayCommand _undoCommand;
     private readonly RelayCommand _redoCommand;
+    private readonly RelayCommand _setToDefaultsCommand;
     private readonly RelayCommand _randomiseCommand;
     private readonly List<RelayCommand> _subcategoryRandomiseCommands = [];
     private readonly MorphRandomisationCatalog _randomisationCatalog;
@@ -52,7 +54,10 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         string profileKey = "le1-human-male",
         MorphRandomisationCatalog? randomisationCatalog = null,
         Func<int>? randomSeedFactory = null,
-        RandomisationInclusionState? randomisationInclusionState = null)
+        RandomisationInclusionState? randomisationInclusionState = null,
+        IReadOnlyList<TextureCatalogCandidate>? registryTextureCandidates = null,
+        TextureCatalogProfile? textureCatalogProfile = null,
+        bool isTextureRegistryAvailable = false)
     {
         _session = session;
         _profileKey = profileKey;
@@ -95,9 +100,10 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             [session, materialSession, hairSession, .. otherMeshSessions]);
         _undoCommand = new RelayCommand(_history.Undo, () => _history.CanUndo);
         _redoCommand = new RelayCommand(_history.Redo, () => _history.CanRedo);
+        _setToDefaultsCommand = new RelayCommand(SetToDefaults, () => CanEdit);
         _randomiseCommand = new RelayCommand(
-            () => Randomise(GlobalRandomisationScope(), includeCursedBones: true),
-            () => CanRandomiseScope(GlobalRandomisationScope()));
+            () => Randomise(GlobalRandomisationScope(CursedMode), includeCursedBones: true),
+            () => CanRandomiseScope(GlobalRandomisationScope(CursedMode)));
         HairMesh = new HairMeshEditorViewModel(hairSession, meshCandidates, "m_oHairMesh", 0);
         OtherMeshes = otherMeshSessions
             .Select((otherSession, index) => new HairMeshEditorViewModel(
@@ -108,7 +114,8 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             .ToArray();
         AttachmentMeshes = [HairMesh, .. OtherMeshes];
         Material = new MaterialEditorViewModel(
-            materialSession, colorDialog, references, packagePath, textureCandidates, reportError, metadataCatalog);
+            materialSession, colorDialog, references, packagePath, textureCandidates, reportError, metadataCatalog,
+            registryTextureCandidates, textureCatalogProfile, isTextureRegistryAvailable);
         Categories = metadataCatalog.Categories
             .Select(category => new EditorFeatureCategoryViewModel(
                 category,
@@ -165,14 +172,20 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     }
     public IReadOnlyList<BoneAxisEditorViewModel> Bones { get; }
     public MaterialEditorViewModel Material { get; }
+    public void UpdateRegistryTextureCandidates(
+        IReadOnlyList<TextureCatalogCandidate> candidates,
+        TextureCatalogProfile profile,
+        bool isRegistryAvailable) =>
+        Material.UpdateRegistryCandidates(candidates, profile, isRegistryAvailable);
     public HairMeshEditorViewModel HairMesh { get; }
     public IReadOnlyList<HairMeshEditorViewModel> OtherMeshes { get; }
     public IReadOnlyList<HairMeshEditorViewModel> AttachmentMeshes { get; }
     public System.Windows.Input.ICommand UndoCommand => _undoCommand;
     public System.Windows.Input.ICommand RedoCommand => _redoCommand;
+    public System.Windows.Input.ICommand SetToDefaultsCommand => _setToDefaultsCommand;
     public System.Windows.Input.ICommand RandomiseCommand => _randomiseCommand;
     public bool CanEdit => _session.CanEdit;
-    public bool CanRandomise => CanRandomiseScope(GlobalRandomisationScope());
+    public bool CanRandomise => CanRandomiseScope(GlobalRandomisationScope(CursedMode));
     public bool CursedMode
     {
         get => _cursedMode;
@@ -272,6 +285,15 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         _session.ApplyMorphData(data);
         RefreshDirtyState();
     }
+    private void SetToDefaults()
+    {
+        using var aggregate = _history.BeginAggregate();
+        _session.ResetToDefaults();
+        Material.ResetToDefaults();
+        aggregate.Commit();
+        _cursedBaseline = null;
+        _cursedBoneOffsets.Clear();
+    }
     private async void Randomise(EditorRandomisationScope requested, bool includeCursedBones)
     {
         try
@@ -301,48 +323,94 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             var hasMaterial = scalarScope.Count + vectorScope.Count + requestedTextureNames.Count > 0;
             if (morphScope.Count == 0 && !hasMaterial) return;
 
-            var seed = _randomSeedFactory();
-            var donor = _randomisationCatalog.SelectDonor(_profileKey, seed, hasMaterial);
+            int? morphSeed = morphScope.Count > 0 ? _randomSeedFactory() : null;
+            int? materialSeed = hasMaterial ? NextDistinctSeed(morphSeed) : null;
+            MorphRandomisationDonor? morphDonor = morphSeed is not null
+                ? _randomisationCatalog.SelectDonor(_profileKey, morphSeed.Value, requireMaterial: false)
+                : null;
             MorphRandomisationProposal? morphProposal = null;
-            if (morphScope.Count > 0)
+            if (morphDonor is not null && morphSeed is not null)
             {
                 morphProposal = _randomisationCatalog.CreateMorphProposal(
-                    donor,
+                    morphDonor,
                     Features.ToDictionary(value => value.Name, value => value.Value, StringComparer.OrdinalIgnoreCase),
                     Features.Select(value => new MorphRandomisationFeatureBounds(
                         value.Name, value.Metadata.Minimum, value.Metadata.Maximum)).ToArray(),
-                    morphScope, MorphRandomisationStrength, seed);
+                    morphScope, MorphRandomisationStrength, morphSeed.Value);
             }
 
             PreparedMaterialRandomisation? preparedMaterial = null;
             var materialValueCount = 0;
             if (hasMaterial && materialProfile is not null)
             {
-                var compatibleMaterialDonors = _randomisationCatalog.CompatibleMaterialDonors(_profileKey);
+                var materialDonor = _randomisationCatalog.SelectMaterialDonor(
+                    _profileKey, materialSeed!.Value, morphDonor?.Id);
+                var installedMaterialDonors = _randomisationCatalog.ProjectInstalledMaterialDonors(
+                    _profileKey, Material.CanResolveTexturePath);
+                var donorsFromOtherHeads = morphDonor is null
+                    ? installedMaterialDonors
+                    : installedMaterialDonors.Where(value =>
+                        !value.Id.Equals(morphDonor.Id, StringComparison.OrdinalIgnoreCase)).ToArray();
+                var compatibleMaterialDonors = donorsFromOtherHeads.Count > 0
+                    ? donorsFromOtherHeads
+                    : installedMaterialDonors;
+                var availableTextureNames = Material.Textures.Select(value => value.Name)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
                 var textureFamilies = compatibleMaterialDonors
                     .SelectMany(value => value.MaterialTextureFamilies)
-                    .Where(family => family.Value.Keys.Any(requestedTextureNames.Contains))
+                    .Where(family => IsTextureFamilyInScope(
+                        family.Value,
+                        requestedTextureNames,
+                        availableTextureNames))
                     .Select(value => value.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
-                var materialProposal = MaterialRandomiser.CreateProposal(
-                    donor, compatibleMaterialDonors, materialProfile,
-                    Material.Scalars.ToDictionary(value => value.Name, value => value.Value, StringComparer.OrdinalIgnoreCase),
-                    Material.Vectors.ToDictionary(value => value.Name, value => value.Value, StringComparer.OrdinalIgnoreCase),
-                    Material.Scalars.Select(value => new MaterialRandomisationScalarBounds(
-                        value.Name, value.Minimum, value.Maximum)).ToArray(),
-                    scalarScope, vectorScope, textureFamilies, MaterialRandomisationStrength, seed,
-                    Material.Textures.ToDictionary(value => value.Name, value => value.SourceName,
-                        StringComparer.OrdinalIgnoreCase));
-                var dependentVectors = MaterialRandomiser.DependentVectorNames(
-                    materialProfile.ProfileKey, materialProposal.TextureFamilies,
-                    Material.Textures.ToDictionary(value => value.Name, value => value.SourceName,
-                        StringComparer.OrdinalIgnoreCase));
-                preparedMaterial = await Material.PrepareRandomisationAsync(
-                    materialProposal.Scalars.Where(value => scalarScope.Contains(value.Key))
-                        .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase),
-                    materialProposal.Vectors.Where(value => vectorScope.Contains(value.Key) ||
-                                                             dependentVectors.Contains(value.Key))
-                        .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase),
-                    materialProposal.TextureFamilies);
+                var currentScalars = Material.Scalars.ToDictionary(
+                    value => value.Name, value => value.Value, StringComparer.OrdinalIgnoreCase);
+                var currentVectors = Material.Vectors.ToDictionary(
+                    value => value.Name, value => value.Value, StringComparer.OrdinalIgnoreCase);
+                var currentTextures = Material.Textures.ToDictionary(
+                    value => value.Name, value => value.SourceName, StringComparer.OrdinalIgnoreCase);
+                var scalarBounds = Material.Scalars.Select(value => new MaterialRandomisationScalarBounds(
+                    value.Name, value.Minimum, value.Maximum)).ToArray();
+                var eligibleSignatureCount = compatibleMaterialDonors
+                    .SelectMany(value => value.MaterialTextureFamilies
+                        .Where(family => textureFamilies.Contains(family.Key))
+                        .Select(family => family.Value))
+                    .Select(MaterialRandomiser.TextureFamilySignature)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Count();
+                var excludedSignatures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                for (var attempt = 0; attempt <= eligibleSignatureCount; attempt++)
+                {
+                    var materialProposal = MaterialRandomiser.CreateProposal(
+                        materialDonor, compatibleMaterialDonors, materialProfile,
+                        currentScalars, currentVectors, scalarBounds,
+                        scalarScope, vectorScope, textureFamilies, MaterialRandomisationStrength, materialSeed.Value,
+                        currentTextures, excludedSignatures);
+                    var dependentVectors = MaterialRandomiser.DependentVectorNames(
+                        materialProfile.ProfileKey, materialProposal.TextureFamilies, currentTextures);
+                    preparedMaterial = await Material.PrepareRandomisationAsync(
+                        materialProposal.Scalars.Where(value => scalarScope.Contains(value.Key))
+                            .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase),
+                        materialProposal.Vectors.Where(value => vectorScope.Contains(value.Key) ||
+                                                                 dependentVectors.Contains(value.Key))
+                            .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase),
+                        materialProposal.TextureFamilies);
+                    if (preparedMaterial.FailedTextureFamilySignatures.Count == 0) break;
+                    var added = false;
+                    foreach (var failedSignature in preparedMaterial.FailedTextureFamilySignatures)
+                        added |= excludedSignatures.Add(failedSignature);
+                    if (!added) break;
+                }
+                if (WereAllTextureFamiliesRejected(
+                        eligibleSignatureCount,
+                        excludedSignatures.Count,
+                        preparedMaterial?.AppliedTextureFamilies ?? 0))
+                {
+                    const string warning =
+                        "No readable texture family was available; numeric material values were still randomised.";
+                    AppLog.Warning(warning);
+                    _reportError(warning);
+                }
                 materialValueCount = scalarScope.Count + vectorScope.Count;
             }
 
@@ -354,8 +422,8 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             }
             AppLog.Information(
                 $"Randomised {morphScope.Count} morph and {materialValueCount} material values " +
-                $"from donor '{donor.Id}' at morph/material strengths " +
-                $"{MorphRandomisationStrength}%/{MaterialRandomisationStrength}% with RNG seed {seed}.");
+                $"at morph/material strengths {MorphRandomisationStrength}%/{MaterialRandomisationStrength}% " +
+                $"with RNG seeds {morphSeed?.ToString() ?? "n/a"}/{materialSeed?.ToString() ?? "n/a"}.");
         }
         catch (Exception exception)
         {
@@ -383,7 +451,9 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         var featureValues = CursedMorphRandomiser.CreateFeatureValues(
             features, MorphRandomisationStrength, seed);
         var materialValues = CursedMorphRandomiser.CreateExtrasProposal(
-            [], scalars, vectors, MaterialRandomisationStrength, seed);
+            [], scalars, vectors, MaterialRandomisationStrength, seed,
+            requested.Scalars.Select(value => new MaterialRandomisationScalarBounds(
+                value.Name, value.Minimum, value.Maximum)).ToArray());
         var cursedTextureFamilies = new Dictionary<string, IReadOnlyDictionary<string, string>>(
             StringComparer.OrdinalIgnoreCase);
         if (RandomiseMaterials && requested.Textures.Count > 0 &&
@@ -392,8 +462,13 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             var donor = _randomisationCatalog.SelectDonor(_profileKey, seed, requireMaterial: true);
             var requestedNames = requested.Textures.Select(value => value.Name)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var availableTextureNames = Material.Textures.Select(value => value.Name)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
             cursedTextureFamilies = donor.MaterialTextureFamilies
-                .Where(family => family.Value.Keys.Any(requestedNames.Contains))
+                .Where(family => IsTextureFamilyInScope(
+                    family.Value,
+                    requestedNames,
+                    availableTextureNames))
                 .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase);
         }
         var preparedMaterial = await Material.PrepareRandomisationAsync(
@@ -447,18 +522,41 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             $"{MorphRandomisationStrength}%/{MaterialRandomisationStrength}% with RNG seed {seed}.");
     }
 
-    private EditorRandomisationScope GlobalRandomisationScope() => new(
+    private int NextDistinctSeed(int? otherSeed)
+    {
+        var seed = _randomSeedFactory();
+        return otherSeed is not null && seed == otherSeed.Value ? unchecked(seed + 1) : seed;
+    }
+
+    private EditorRandomisationScope GlobalRandomisationScope(bool includeExcluded) => new(
         Categories.SelectMany(category => category.SliderGroups)
-            .Where(group => group.Inclusion?.IsIncluded != false)
+            .Where(group => includeExcluded || group.Inclusion?.IsIncluded != false)
             .SelectMany(group => group.MorphFeatures).Distinct().ToArray(),
         Categories.SelectMany(category => category.SliderGroups)
-            .Where(group => group.Inclusion?.IsIncluded != false)
+            .Where(group => includeExcluded || group.Inclusion?.IsIncluded != false)
             .SelectMany(group => group.Scalars).Distinct().ToArray(),
         Categories.SelectMany(category => category.ColourGroups)
-            .Where(group => group.Inclusion?.IsIncluded != false)
+            .Where(group => includeExcluded || group.Inclusion?.IsIncluded != false)
             .SelectMany(group => group.Values).Distinct().ToArray(),
-        Categories.Where(category => category.TextureInclusion?.IsIncluded != false)
+        Categories.Where(category => includeExcluded || category.TextureInclusion?.IsIncluded != false)
             .SelectMany(category => category.Textures).Distinct().ToArray());
+
+    internal static bool IsTextureFamilyInScope(
+        IReadOnlyDictionary<string, string> family,
+        IReadOnlySet<string> requestedTextureNames,
+        IReadOnlySet<string> availableTextureNames)
+    {
+        var applicableMembers = family.Keys.Where(availableTextureNames.Contains).ToArray();
+        return applicableMembers.Length > 0 && applicableMembers.All(requestedTextureNames.Contains);
+    }
+
+    internal static bool WereAllTextureFamiliesRejected(
+        int eligibleSignatureCount,
+        int excludedSignatureCount,
+        int appliedTextureFamilies) =>
+        eligibleSignatureCount > 0 &&
+        excludedSignatureCount >= eligibleSignatureCount &&
+        appliedTextureFamilies == 0;
 
     private bool CanRandomiseScope(EditorRandomisationScope scope)
     {

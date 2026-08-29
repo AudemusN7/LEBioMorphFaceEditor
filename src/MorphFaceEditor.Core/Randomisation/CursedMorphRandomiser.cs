@@ -27,11 +27,12 @@ public static class CursedMorphRandomiser
         IReadOnlyDictionary<string, float> currentScalars,
         IReadOnlyDictionary<string, Vector4> currentVectors,
         int strengthPercent,
-        int randomSeed)
+        int randomSeed,
+        IReadOnlyList<MaterialRandomisationScalarBounds>? scalarBounds = null)
     {
         var features = CreateFeatureValues(currentFeatures, strengthPercent, randomSeed);
         var extras = CreateExtrasProposal(
-            currentBones, currentScalars, currentVectors, strengthPercent, randomSeed);
+            currentBones, currentScalars, currentVectors, strengthPercent, randomSeed, scalarBounds);
         return new CursedMorphRandomisationProposal(
             randomSeed, features, extras.BoneValues, extras.ScalarValues, extras.VectorValues);
     }
@@ -63,7 +64,8 @@ public static class CursedMorphRandomiser
         IReadOnlyDictionary<string, float> currentScalars,
         IReadOnlyDictionary<string, Vector4> currentVectors,
         int strengthPercent,
-        int randomSeed)
+        int randomSeed,
+        IReadOnlyList<MaterialRandomisationScalarBounds>? scalarBounds = null)
     {
         ArgumentNullException.ThrowIfNull(currentBones);
         ArgumentNullException.ThrowIfNull(currentScalars);
@@ -79,18 +81,28 @@ public static class CursedMorphRandomiser
         {
             throw new ArgumentException("Material vectors must have names and finite components.", nameof(currentVectors));
         }
+        var bounds = (scalarBounds ?? []).ToDictionary(value => value.Name, StringComparer.OrdinalIgnoreCase);
+        if (bounds.Count != (scalarBounds?.Count ?? 0) || bounds.Values.Any(value =>
+                string.IsNullOrWhiteSpace(value.Name) || !float.IsFinite(value.Minimum) ||
+                !float.IsFinite(value.Maximum) || value.Minimum > value.Maximum))
+        {
+            throw new ArgumentException("Material scalar bounds must have unique names and finite ordered ranges.",
+                nameof(scalarBounds));
+        }
 
         var random = CreateRandom(randomSeed, 0xE7037ED1A0B428DBUL);
         var strength = strengthPercent / 100f;
         var bones = currentBones.Select(value => IsFacialBone(value.BoneName)
-                ? value with { Translation = Multiply(value.Translation, strength, random) }
+                ? value with { Translation = Randomise(value.Translation, strength, random) }
                 : value)
             .ToArray();
         var scalars = currentScalars.OrderBy(value => value.Key, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(value => value.Key, value => Multiply(value.Value, strength, random),
+            .ToDictionary(value => value.Key, value => bounds.TryGetValue(value.Key, out var range)
+                    ? SampleRange(value.Value, range.Minimum, range.Maximum, strength, random)
+                    : Randomise(value.Value, strength, random),
                 StringComparer.OrdinalIgnoreCase);
         var vectors = currentVectors.OrderBy(value => value.Key, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(value => value.Key, value => Multiply(value.Value, strength, random),
+            .ToDictionary(value => value.Key, value => Randomise(value.Value, strength, random),
                 StringComparer.OrdinalIgnoreCase);
 
         return new CursedMorphRandomisationExtras(bones, scalars, vectors);
@@ -156,16 +168,38 @@ public static class CursedMorphRandomiser
     private static float Multiply(float value, float strength, StableRandom random) =>
         ToFiniteFloat((double)value * random.NextFloat(1 - (strength / 2), 1 + strength));
 
-    private static Vector3 Multiply(Vector3 value, float strength, StableRandom random) => new(
-        Multiply(value.X, strength, random),
-        Multiply(value.Y, strength, random),
-        Multiply(value.Z, strength, random));
+    private static float Randomise(float value, float strength, StableRandom random)
+    {
+        if (strength == 0) return value;
+        if (value != 0) return Multiply(value, strength, random);
+        var target = random.NextFloat(-1, 1);
+        if (target == 0) target = 1;
+        return ToFiniteFloat(target * strength);
+    }
 
-    private static Vector4 Multiply(Vector4 value, float strength, StableRandom random) => new(
-        Multiply(value.X, strength, random),
-        Multiply(value.Y, strength, random),
-        Multiply(value.Z, strength, random),
-        Multiply(value.W, strength, random));
+    private static float SampleRange(
+        float value,
+        float minimum,
+        float maximum,
+        float strength,
+        StableRandom random)
+    {
+        if (strength == 0 || minimum == maximum) return value;
+        var target = random.NextFloat(minimum, maximum);
+        if (target == value) target = value == minimum ? maximum : minimum;
+        return Lerp(value, target, strength);
+    }
+
+    private static Vector3 Randomise(Vector3 value, float strength, StableRandom random) => new(
+        Randomise(value.X, strength, random),
+        Randomise(value.Y, strength, random),
+        Randomise(value.Z, strength, random));
+
+    private static Vector4 Randomise(Vector4 value, float strength, StableRandom random) => new(
+        Randomise(value.X, strength, random),
+        Randomise(value.Y, strength, random),
+        Randomise(value.Z, strength, random),
+        Randomise(value.W, strength, random));
 
     private static float Lerp(float from, float to, float amount) =>
         ToFiniteFloat(from + (((double)to - from) * amount));

@@ -1,4 +1,6 @@
 using System.Numerics;
+using LegendaryExplorerCore.Packages;
+using LegendaryExplorerCore.Packages.CloningImportingAndRelinking;
 using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.LegendaryExplorer;
@@ -24,6 +26,12 @@ public static class HairMaterialTests
         new("opaque hair strand cores occlude rear cards", HairDepthPrepassOccludesRearCards),
         new("partial hair shells accumulate behind translucent fronts", PartialHairShellsAccumulate),
         new("hair executes UE3 lit-translucency pass structure", HairUsesLitTranslucencyPasses),
+        new("PROShort01 opacity uses only red at the 0.15 clip", MaskedHairOpacityUsesRedClip),
+        new("PROShort01 diffuse tangent and specular maps are live", MaskedHairMapsDriveCustomLighting),
+        new("PROShort01 ignores the unbound normal texture", MaskedHairNormalAssetIsNotSampled),
+        new("PROShort01 is a single opaque-masked draw", MaskedHairUsesSingleMaskedPass),
+        new("PROShort01 LE1 and LE2 shader paths remain equivalent", MaskedHairLe1AndLe2RemainEquivalent),
+        new("installed PROShort01 masters resolve all four fixed samplers", InstalledMaskedHairMastersResolve),
         new("lashes use texture red as unlit opacity", LashesUseRedAsUnlitOpacity)
     ];
 
@@ -294,6 +302,136 @@ public static class HairMaterialTests
         {
             var frame = renderer.Render(camera, new HeadPreviewOptions());
             TestAssert.Equal(4, frame.DrawCalls);
+        }
+    }
+
+    private static void MaskedHairOpacityUsesRedClip()
+    {
+        var below = CreateMaskedHairMaterial(
+            "short01", [38, 255, 255, 255], [180, 100, 40, 255],
+            [255, 128, 255, 255], [0, 0, 0, 255]);
+        var above = CreateMaskedHairMaterial(
+            "short01", [39, 0, 0, 0], [180, 100, 40, 255],
+            [255, 128, 255, 255], [0, 0, 0, 255]);
+        var (renderer, camera) = CreateTriangleRenderer(below);
+        using (renderer)
+        {
+            var clipped = renderer.Render(camera, new HeadPreviewOptions()).BgraPixels.ToArray();
+            renderer.UpdateMaterials(new Dictionary<string, HeadPreviewMaterial> { [above.Key] = above });
+            var visible = renderer.Render(camera, new HeadPreviewOptions()).BgraPixels;
+            TestAssert.Equal(0, CountNonBackgroundPixels(clipped));
+            TestAssert.True(CountNonBackgroundPixels(visible) > 0,
+                "Opacity red immediately above 0.15 did not retain the hair section.");
+        }
+    }
+
+    private static void MaskedHairMapsDriveCustomLighting()
+    {
+        var baseline = CreateMaskedHairMaterial(
+            "short01", [255, 0, 0, 0], [200, 30, 10, 255],
+            [255, 128, 0, 255], [0, 0, 0, 255]);
+        var changedDiffuse = CreateMaskedHairMaterial(
+            "short01", [255, 0, 0, 0], [10, 30, 200, 255],
+            [255, 128, 0, 255], [0, 0, 0, 255]);
+        var changedTangent = CreateMaskedHairMaterial(
+            "short01", [255, 0, 0, 0], [200, 30, 10, 255],
+            [128, 128, 0, 255], [0, 0, 0, 255]);
+        var changedSpecular = CreateMaskedHairMaterial(
+            "short01", [255, 0, 0, 0], [200, 30, 10, 255],
+            [255, 128, 0, 255], [255, 255, 255, 255]);
+
+        AssertMaterialsRenderDifferently(baseline, changedDiffuse,
+            "The fixed PROShort01 diffuse sampler did not affect output.");
+        AssertMaterialsRenderDifferently(baseline, changedTangent,
+            "The fixed PROShort01 tangent sampler did not rotate the anisotropic response.");
+        AssertMaterialsRenderDifferently(baseline, changedSpecular,
+            "The fixed PROShort01 specular sampler did not affect its exponent-500 lobe.");
+    }
+
+    private static void MaskedHairNormalAssetIsNotSampled()
+    {
+        var baseline = CreateMaskedHairMaterial(
+            "short01", [255, 0, 0, 0], [180, 100, 40, 255],
+            [255, 128, 0, 255], [255, 255, 255, 255]);
+        var textures = new Dictionary<string, HeadPreviewTexture>(baseline.Textures, StringComparer.OrdinalIgnoreCase)
+        {
+            ["__PROShort01_Normal"] = CreateTexture(
+                "__PROShort01_Normal", [255, 0, 0, 255], TextureRole.Normal)
+        };
+        var withNormal = baseline with { Textures = textures };
+        AssertMaterialsRenderEqually(baseline, withNormal,
+            "The renderer sampled the _Norm asset absent from both compiled uniform tables.");
+    }
+
+    private static void MaskedHairUsesSingleMaskedPass()
+    {
+        var material = CreateMaskedHairMaterial(
+            "short01", [255, 0, 0, 0], [180, 100, 40, 255],
+            [255, 128, 0, 255], [255, 255, 255, 255]);
+        var (renderer, camera) = CreateTriangleRenderer(material);
+        using (renderer)
+        {
+            TestAssert.Equal(1, renderer.Render(camera, new HeadPreviewOptions()).DrawCalls);
+        }
+    }
+
+    private static void MaskedHairLe1AndLe2RemainEquivalent()
+    {
+        var le1 = CreateMaskedHairMaterial(
+            "short01", [255, 0, 0, 0], [180, 100, 40, 255],
+            [255, 128, 0, 255], [255, 255, 255, 255]);
+        var le2 = CreateMaskedHairMaterial(
+            "short01", [255, 0, 0, 0], [180, 100, 40, 255],
+            [255, 128, 0, 255], [255, 255, 255, 255], isLe2: true);
+        AssertMaterialsRenderEqually(le1, le2,
+            "A renderer-side game branch diverged despite the independently matching LE1/LE2 instruction streams.");
+    }
+
+    private static void InstalledMaskedHairMastersResolve()
+    {
+        var cookedRoot = @"D:\EA Games\Mass Effect Legendary Edition\Game";
+        var cases = new[]
+        {
+            (Path: Path.Combine(cookedRoot, @"ME1\BioGame\CookedPCConsole\BIOG_HMM_HIR_PRO_R.pcc"),
+                Material: "HMM_HIR_PROShort01_MAT_1a"),
+            (Path: Path.Combine(cookedRoot, @"ME2\BioGame\CookedPCConsole\BIOG_HMM_HIR_PRO_R.pcc"),
+                Material: "HMM_HIR_PROShort01_MAT_1b")
+        };
+        if (cases.Any(value => !File.Exists(value.Path)))
+        {
+            return;
+        }
+
+        LegendaryExplorerCoreRuntime.Initialize();
+        string[] expectedTextures =
+        [
+            "__PROShort01_Opacity",
+            "__PROShort01_Diffuse",
+            "__PROShort01_Tangent",
+            "__PROShort01_Specular"
+        ];
+        foreach (var item in cases)
+        {
+            using var package = MEPackageHandler.OpenMEPackage(item.Path, forceLoadFromDisk: true);
+            var source = package.Exports.Single(export =>
+                export.ObjectNameString.Equals(item.Material, StringComparison.OrdinalIgnoreCase));
+            using var cache = new PackageCache();
+            var reader = new MorphFaceMaterialReader(cache, new GamePackageReferenceResolver(cache));
+            var result = reader.Read(source, [], [source], applyFaceOverrides: false);
+            var material = result.Materials.Find(MorphFacePackageReader.ToIdentity(source)!);
+            TestAssert.True(material is not null,
+                $"{package.Game} did not resolve {item.Material}.");
+            TestAssert.Equal(HeadMaterialFamily.MaskedHair, material!.Family);
+            TestAssert.Equal(HeadMaterialBlendMode.Masked, material.BlendMode);
+            TestAssert.True(!material.TwoSided,
+                $"{package.Game} incorrectly made PROShort01 two-sided.");
+            foreach (var texture in expectedTextures)
+            {
+                TestAssert.True(material.Textures.ContainsKey(texture),
+                    $"{package.Game} lost fixed sampler {texture}.");
+            }
+            TestAssert.True(!material.Textures.ContainsKey("__PROShort01_Normal"),
+                $"{package.Game} incorrectly bound the compiled-out _Norm texture.");
         }
     }
 

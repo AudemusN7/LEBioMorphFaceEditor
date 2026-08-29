@@ -37,6 +37,7 @@ public static class RandomisationTests
         new("texture family scope honours disabled texture categories", TextureFamilyScopeHonoursDisabledCategories),
         new("material randomisation excludes an unreadable texture family signature", MaterialRandomisationExcludesFailedSignature),
         new("cursed randomisation wakes zero morphs within Mgamerz ranges", CursedRandomisationWakesZeroMorphs),
+        new("cursed randomisation wakes zero material and facial-bone channels", CursedRandomisationWakesZeroExtraChannels),
         new("cursed randomisation fuzzes only Mgamerz facial bones and numeric materials", CursedRandomisationFuzzesBonesAndMaterials),
         new("zero-strength cursed randomisation is an exact no-op", ZeroStrengthCursedRandomisationIsNoOp),
         new("cursed randomisation keeps extreme finite inputs finite", CursedRandomisationKeepsExtremeInputsFinite),
@@ -942,6 +943,38 @@ public static class RandomisationTests
             donor.MaterialTextureFamilies["human-face-mask"]["HED_Mask"]);
         TestAssert.Equal("HMM_Beard_Diff",
             donor.MaterialTextureFamilies["addition:HED_Addn"]["HED_Addn"]);
+    }
+
+    private static void CursedRandomisationWakesZeroExtraChannels()
+    {
+        var result = CursedMorphRandomiser.CreateExtrasProposal(
+            [new BoneTranslation("eye_left", Vector3.Zero)],
+            Values(("Emis_Scalar", 0), ("HED_EYE_FX_Scalar", 0), ("ZeroCentred", 0)),
+            new Dictionary<string, Vector4>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Emis_Color"] = Vector4.Zero,
+                ["HED_EYE_FX_Vector"] = Vector4.Zero
+            },
+            100,
+            321,
+            [
+                new MaterialRandomisationScalarBounds("Emis_Scalar", 0, 10),
+                new MaterialRandomisationScalarBounds("HED_EYE_FX_Scalar", -1, 1),
+                new MaterialRandomisationScalarBounds("ZeroCentred", -4, 4)
+            ]);
+
+        TestAssert.True(result.ScalarValues["Emis_Scalar"] is > 0 and <= 10,
+            "Zero eye emissive remained asleep in cursed mode.");
+        TestAssert.True(result.ScalarValues["HED_EYE_FX_Scalar"] is >= -1 and <= 1 and not 0,
+            "Zero eye FX strength remained asleep in cursed mode.");
+        TestAssert.True(result.ScalarValues["ZeroCentred"] is >= -4 and <= 4 and not 0,
+            "A generic zero-centred scalar remained asleep in cursed mode.");
+        TestAssert.True(result.VectorValues.Values.All(value =>
+                value.X != 0 && value.Y != 0 && value.Z != 0 && value.W != 0),
+            "A zero material-vector component remained asleep in cursed mode.");
+        var eye = result.BoneValues.Single().Translation;
+        TestAssert.True(eye.X != 0 && eye.Y != 0 && eye.Z != 0,
+            "A zero facial-bone axis remained asleep in cursed mode.");
     }
 
     private static void CompilationGroupsFaceAndEyeTextures()

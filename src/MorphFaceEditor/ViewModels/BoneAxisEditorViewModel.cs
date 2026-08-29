@@ -11,6 +11,7 @@ public sealed class BoneAxisEditorViewModel : ObservableObject, IContinuousEditV
     private float _defaultMinimum;
     private float _defaultMaximum;
     private float _extendedExtent;
+    private bool _isAvailable = true;
 
     public BoneAxisEditorViewModel(MorphFaceEditingSession session, string boneName, int axis)
     {
@@ -29,6 +30,11 @@ public sealed class BoneAxisEditorViewModel : ObservableObject, IContinuousEditV
     public float Minimum => _extendedSliders ? -_extendedExtent : _defaultMinimum;
     public float Maximum => _extendedSliders ? _extendedExtent : _defaultMaximum;
     public float Step => 0.01f;
+    public bool IsAvailable
+    {
+        get => _isAvailable;
+        private set => SetProperty(ref _isAvailable, value);
+    }
 
     public float Value
     {
@@ -43,10 +49,26 @@ public sealed class BoneAxisEditorViewModel : ObservableObject, IContinuousEditV
         }
     }
 
-    public void BeginEdit() => _session.BeginBoneEdit(BoneName, Axis);
-    public void EndEdit() => _session.EndBoneEdit(BoneName, Axis);
+    public void BeginEdit()
+    {
+        if (IsAvailable) _session.BeginBoneEdit(BoneName, Axis);
+    }
+    public void EndEdit()
+    {
+        if (IsAvailable) _session.EndBoneEdit(BoneName, Axis);
+    }
 
-    public void Refresh() => SetProperty(ref _value, _session.GetBoneAxis(BoneName, Axis), nameof(Value));
+    public void Refresh()
+    {
+        if (!_session.TryGetBoneAxis(BoneName, Axis, out var value))
+        {
+            IsAvailable = false;
+            return;
+        }
+        IsAvailable = true;
+        EnsureRangesInclude(value);
+        SetProperty(ref _value, value, nameof(Value));
+    }
 
     public void SetExtendedSliders(bool enabled)
     {

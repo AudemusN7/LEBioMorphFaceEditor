@@ -16,6 +16,17 @@ internal readonly record struct HeadPreviewMaterialBindings(
 {
     public static HeadPreviewMaterialBindings Create(HeadPreviewMaterial material)
     {
+        if (material.Family == HeadMaterialFamily.MaskedHair)
+        {
+            return new HeadPreviewMaterialBindings(
+                SelectByName(material, "__PROShort01_Diffuse"),
+                null,
+                SelectByName(material, "__PROShort01_Opacity"),
+                SelectByName(material, "__PROShort01_Tangent"),
+                SelectByName(material, "__PROShort01_Specular"),
+                null, null, null);
+        }
+
         if (material.Family is HeadMaterialFamily.Hair or HeadMaterialFamily.Lashes)
         {
             // The supplied LE1 hair and lash pixel permutations compile to one
@@ -679,6 +690,7 @@ internal struct HeadPreviewMaterialConstants
         HeadMaterialFamily.Eyes => 3,
         HeadMaterialFamily.Lashes => 4,
         HeadMaterialFamily.Hair => 5,
+        HeadMaterialFamily.MaskedHair => 14,
         _ => 0
     };
 
@@ -687,7 +699,7 @@ internal struct HeadPreviewMaterialConstants
         HeadMaterialFamily.Eyes or HeadMaterialFamily.SalarianEyes or HeadMaterialFamily.TurianEyes or HeadMaterialFamily.KroganEyes => 0.18f,
         HeadMaterialFamily.Teeth => 0.28f,
         HeadMaterialFamily.Lashes => 0.8f,
-        HeadMaterialFamily.Hair => 0.65f,
+        HeadMaterialFamily.Hair or HeadMaterialFamily.MaskedHair => 0.65f,
         _ => 0.48f
     };
 
@@ -757,6 +769,7 @@ internal struct HeadPreviewMaterialConstants
         HeadMaterialFamily.Teeth => new Vector3(0.92f, 0.92f, 0.7f),
         HeadMaterialFamily.Lashes => new Vector3(0.72f, 0.25f, 0.9f),
         HeadMaterialFamily.Hair => new Vector3(0.2f, 0.75f, 0.35f),
+        HeadMaterialFamily.MaskedHair => new Vector3(0.1f, 0.9f, 0.55f),
         HeadMaterialFamily.Accessory => new Vector3(0.22f, 0.45f, 0.95f),
         _ => new Vector3(0.65f, 0.68f, 0.72f)
     };

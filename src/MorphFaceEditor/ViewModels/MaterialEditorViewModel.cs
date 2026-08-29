@@ -178,6 +178,7 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
         ArgumentNullException.ThrowIfNull(values);
         _session.SetValues(values.Scalars, values.Vectors, values.Textures);
     }
+    public void ResetToDefaults() => _session.ResetToDefaults();
     public void ReplaceAttachmentMaterials(
         ResolvedHeadMaterialSet materials,
         ResolvedHeadMaterialSet? replacementTextureMaterials = null) =>

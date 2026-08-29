@@ -14,13 +14,17 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
         PropertyNameCaseInsensitive = false
     };
 
-    public TextureRegistryStatus GetStatus(MorphFaceGame game)
+    public TextureRegistryStatus GetStatus(MorphFaceGame game) => ReadWithStatus(game).Status;
+
+    internal TextureRegistryReadResult ReadWithStatus(MorphFaceGame game)
     {
         var path = paths.GetPath(game);
         if (!File.Exists(path))
         {
-            return new TextureRegistryStatus(game, TextureRegistryState.Missing,
-                null, null, null, null, null);
+            return new TextureRegistryReadResult(
+                new TextureRegistryStatus(game, TextureRegistryState.Missing,
+                    null, null, null, null, null),
+                null);
         }
 
         try
@@ -36,23 +40,29 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
                 if (version != TextureRegistrySnapshot.CurrentSchemaVersion)
                 {
                     var outdatedFile = new FileInfo(path);
-                    return new TextureRegistryStatus(game, TextureRegistryState.Outdated, path,
-                        outdatedFile.Length, outdatedFile.LastWriteTimeUtc, null,
-                        $"Registry schema v{version} is not supported by this editor version.");
+                    return new TextureRegistryReadResult(
+                        new TextureRegistryStatus(game, TextureRegistryState.Outdated, path,
+                            outdatedFile.Length, outdatedFile.LastWriteTimeUtc, null,
+                            $"Registry schema v{version} is not supported by this editor version."),
+                        null);
                 }
             }
 
             var snapshot = ReadFile(path, game);
             var file = new FileInfo(path);
-            return new TextureRegistryStatus(game, TextureRegistryState.Ready, path,
-                file.Length, snapshot.BuiltAtUtc, snapshot.Candidates.Count, null);
+            return new TextureRegistryReadResult(
+                new TextureRegistryStatus(game, TextureRegistryState.Ready, path,
+                    file.Length, snapshot.BuiltAtUtc, snapshot.Candidates.Count, null),
+                snapshot);
         }
         catch (Exception exception)
         {
             var file = new FileInfo(path);
-            return new TextureRegistryStatus(game, TextureRegistryState.Failed, path,
-                file.Exists ? file.Length : null, file.Exists ? file.LastWriteTimeUtc : null,
-                null, exception.Message);
+            return new TextureRegistryReadResult(
+                new TextureRegistryStatus(game, TextureRegistryState.Failed, path,
+                    file.Exists ? file.Length : null, file.Exists ? file.LastWriteTimeUtc : null,
+                    null, exception.Message),
+                null);
         }
     }
 
@@ -80,7 +90,7 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
         var game = ToMorphFaceGame(snapshot.Game);
         Validate(snapshot, game);
         var targetPath = paths.GetPath(game);
-        var temporaryPath = $"{targetPath}.tmp";
+        var temporaryPath = $"{targetPath}.{Guid.NewGuid():N}.tmp";
         Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
 
         try
@@ -202,3 +212,7 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
 
     private const int HeaderSize = sizeof(uint) + sizeof(int) + sizeof(int) + sizeof(long);
 }
+
+internal sealed record TextureRegistryReadResult(
+    TextureRegistryStatus Status,
+    TextureRegistrySnapshot? Snapshot);

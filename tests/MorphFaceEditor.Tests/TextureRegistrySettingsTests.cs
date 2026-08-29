@@ -10,6 +10,7 @@ public static class TextureRegistrySettingsTests
     [
         new("texture registry settings: row exposes user-facing state", RowExposesUserFacingState),
         new("texture registry settings: traffic lights distinguish outdated and failed", TrafficLightsDistinguishStates),
+        new("texture registry settings: payload validation is deferred", PayloadValidationIsDeferred),
         new("texture registry settings: progress labels expose every phase", ProgressLabelsExposeEveryPhase),
         new("texture registry settings: individual build hides unrelated actions", IndividualBuildHidesUnrelatedActions)
     ];
@@ -37,6 +38,31 @@ public static class TextureRegistrySettingsTests
         TestAssert.Equal("#E36D6D", failed.StatusColour);
     }
 
+    private static void PayloadValidationIsDeferred()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"MFE-RegistrySettings-{Guid.NewGuid():N}");
+        try
+        {
+            var paths = new TextureRegistryPaths(root);
+            Directory.CreateDirectory(root);
+            File.WriteAllBytes(paths.GetPath(MorphFaceGame.LE1), [0x01, 0x02, 0x03]);
+            var settings = new TextureRegistrySettingsViewModel(
+                new TextureRegistryStore(paths), new FakeBuilder());
+
+            TestAssert.Equal(TextureRegistryState.Checking,
+                settings.Rows.Single(value => value.Game == MorphFaceGame.LE1).Status.State);
+
+            settings.RefreshAsync().GetAwaiter().GetResult();
+
+            TestAssert.Equal(TextureRegistryState.Failed,
+                settings.Rows.Single(value => value.Game == MorphFaceGame.LE1).Status.State);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static void ProgressLabelsExposeEveryPhase()
     {
         var settings = CreateSettings(new FakeBuilder());
@@ -62,6 +88,8 @@ public static class TextureRegistrySettingsTests
 
         var build = settings.RebuildAsync(MorphFaceGame.LE1);
         TestAssert.True(settings.IsBuilding, "The settings view did not enter building state.");
+        TestAssert.True(!settings.CanClose,
+            "The settings view allowed its only progress authority to close during a build.");
         TestAssert.True(!settings.IsRebuildAllActionVisible, "Rebuild All remained visible during an individual build.");
         TestAssert.True(settings.Rows.Single(row => row.Game == MorphFaceGame.LE1).IsBuildActionVisible,
             "The active game's Cancel action was hidden.");
@@ -72,6 +100,7 @@ public static class TextureRegistrySettingsTests
         settings.CancelBuild();
         builder.Release();
         try { build.GetAwaiter().GetResult(); } catch (OperationCanceledException) { }
+        TestAssert.True(settings.CanClose, "The settings view remained locked after its build ended.");
     }
 
     private static TextureRegistrySettingsRowViewModel Row(TextureRegistryState state) => new(

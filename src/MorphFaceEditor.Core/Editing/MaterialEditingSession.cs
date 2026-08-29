@@ -445,6 +445,10 @@ public sealed class MaterialEditingSession : IUndoableEditSource
             data.Textures.ToArray());
         _editedScalars.Clear();
         _editedVectors.Clear();
+        _scalars.Clear();
+        foreach (var value in _defaultScalars) _scalars[value.Key] = value.Value;
+        _vectors.Clear();
+        foreach (var value in _defaultVectors) _vectors[value.Key] = value.Value;
         foreach (var value in data.Scalars)
         {
             _scalars[value.Name] = value.Value;

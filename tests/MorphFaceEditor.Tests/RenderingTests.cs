@@ -337,6 +337,8 @@ public static class RenderingTests
         TestAssert.Equal(HeadMaterialFamily.SalarianEyes, HeadMaterialClassifier.Classify("SAL_HED_EYE_MAT"));
         TestAssert.Equal(HeadMaterialFamily.BatarianSkin, HeadMaterialClassifier.Classify("BAT_HED_PRO_MASTER_MAT"));
         TestAssert.Equal(HeadMaterialFamily.Hair, HeadMaterialClassifier.Classify("HMM_HIR_SHORT_MAT", attachment: true));
+        TestAssert.Equal(HeadMaterialFamily.MaskedHair, HeadMaterialClassifier.Classify("HMM_HIR_PROShort01_MAT_1b", attachment: true));
+        TestAssert.Equal(HeadMaterialFamily.Hair, HeadMaterialClassifier.Classify("HMM_HIR_PROShort02_MAT", attachment: true));
         TestAssert.Equal(HeadMaterialFamily.Accessory, HeadMaterialClassifier.Classify("Visor_MAT", attachment: true));
     }
 

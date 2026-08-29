@@ -2,11 +2,16 @@ using System.IO;
 using Microsoft.Win32;
 using System.Windows;
 using MorphFaceEditor.Views;
+using MorphFaceEditor.ViewModels;
 
 namespace MorphFaceEditor.Services;
 
 public sealed class WpfEditorDialogService : IEditorDialogService
 {
+    private readonly TextureRegistrySettingsViewModel _textureRegistrySettings;
+
+    public WpfEditorDialogService(TextureRegistrySettingsViewModel textureRegistrySettings) =>
+        _textureRegistrySettings = textureRegistrySettings;
     public string? ChoosePackage(string? initialDirectory = null)
     {
         var dialog = new OpenFileDialog
@@ -114,6 +119,12 @@ public sealed class WpfEditorDialogService : IEditorDialogService
 
     public void ShowInformation(string title, string message) =>
         _ = new EditorMessageWindow(title, message)
+        {
+            Owner = Application.Current.MainWindow
+        }.ShowDialog();
+
+    public void ShowTextureRegistrySettings() =>
+        _ = new TextureRegistrySettingsWindow(_textureRegistrySettings)
         {
             Owner = Application.Current.MainWindow
         }.ShowDialog();

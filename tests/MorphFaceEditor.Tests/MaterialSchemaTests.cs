@@ -40,6 +40,7 @@ public static class MaterialSchemaTests
         TestAssert.Equal(HeadMaterialFamily.Eyes, HumanMaterialProfiles.ClassifyMaster("HMF_EYE_MASTER_OVRD_MAT"));
         TestAssert.Equal(HeadMaterialFamily.Skin, HumanMaterialProfiles.ClassifyMaster("HMF_HED_PRO_MASTER_FACE_MAT"));
         TestAssert.Equal(HeadMaterialFamily.Hair, HumanMaterialProfiles.ClassifyMaster("HMN_HED_PRO_MASTER_ADDN_HAIR_MAT"));
+        TestAssert.Equal(HeadMaterialFamily.MaskedHair, HumanMaterialProfiles.ClassifyMaster("HMM_HIR_PROShort01_MAT_1a"));
         TestAssert.Equal(HeadMaterialFamily.SalarianSkin, HumanMaterialProfiles.ClassifyMaster("SAL_HED_PRO_MASTER_MAT"));
         TestAssert.Equal(HeadMaterialFamily.SalarianEyes, HumanMaterialProfiles.ClassifyMaster("SAL_HED_EYE_MASTER_MAT"));
         TestAssert.Equal(HeadMaterialFamily.BatarianSkin, HumanMaterialProfiles.ClassifyMaster("BAT_HED_PRO_MASTER_MAT"));
@@ -51,6 +52,9 @@ public static class MaterialSchemaTests
         TestAssert.Equal(TextureRole.Diffuse, additionalHair.TextureRole);
         TestAssert.Equal(TextureColorSpace.Srgb, additionalHair.ColorSpace);
         TestAssert.Equal(HeadMaterialBlendMode.Translucent, HumanMaterialProfiles.BlendMode(HeadMaterialFamily.Hair));
+        TestAssert.Equal(HeadMaterialBlendMode.Masked, HumanMaterialProfiles.BlendMode(HeadMaterialFamily.MaskedHair));
+        TestAssert.True(!HumanMaterialProfiles.IsTwoSided(HeadMaterialFamily.MaskedHair),
+            "PROShort01 was incorrectly classified as two-sided translucent-card hair.");
     }
 }
 

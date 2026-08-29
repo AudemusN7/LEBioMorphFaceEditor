@@ -27,21 +27,27 @@ public static class UiSmokeTests
         new("texture thumbnails discard alpha", TextureThumbnailsDiscardAlpha),
         new("numeric wheel increments are finite and crash-safe", NumericWheelIncrementsAreSafe),
         new("extended sliders are optional and preserve edited values", ExtendedSlidersAreOptional),
+        new("bone controls tolerate bones removed by zeroed morphs", BoneControlsTolerateRemovedMorphBones),
         new("attachment editor exposes two slots and preserves extras", AttachmentEditorUsesTwoSlots),
         new("morph clipboard codec round-trips typed versioned data", MorphClipboardCodecRoundTrips),
         new("pasted morph and material data remain live unsaved edits", PastedDataRemainsLiveAndDirty),
         new("face editor category selection can be restored by key", FaceEditorCategoryRestoresByKey),
         new("randomisation commands honour global and subcategory morph scopes", RandomisationCommandsHonorScopes),
+        new("Set to Defaults restores stock morph and material values atomically", SetToDefaultsRestoresStockState),
+        new("global morph and material randomisation uses separate donors", GlobalRandomisationUsesSeparateDonors),
         new("subcategory inclusion toggles filter only global randomisation and persist in-session", SubcategoryInclusionsFilterGlobalScope),
         new("normal material randomisation obeys its independent toggle and undo", MaterialRandomisationObeysToggle),
         new("material vector subcategories expose independent randomise commands", MaterialVectorSubcategoriesRandomiseIndependently),
+        new("exhausted texture randomisation is reported without discarding numeric values", ExhaustedTextureRandomisationIsReported),
         new("LE3 HMM scalp randomisation preserves its required texture pair", Le3HmmScalpRandomisationAppliesCorePair),
         new("cursed mode randomises morph bones and materials as one undo step", CursedModeRandomisesOneUndoStep),
+        new("cursed mode ignores global randomisation exclusions", CursedModeIgnoresGlobalExclusions),
         new("cursed mode can be enabled without a donor corpus", CursedModeBypassesDonorAvailability),
         new("failed cursed randomisation rolls back its partial edit", FailedCursedRandomisationRollsBack),
         new("repeated cursed randomisation does not compound", RepeatedCursedRandomisationDoesNotCompound),
         new("embedded randomisation corpus loads all pools and excludes Broke", EmbeddedRandomisationCorpusLoads),
         new("editor error banners can be dismissed", ErrorBannerCanBeDismissed),
+        new("texture registry settings command opens the settings dialog", TextureRegistrySettingsCommandOpensDialog),
         new("WPF resources construct and nested menus expose their popup", HdrPickerConstructs),
         new("Human Male UI profile orders, groups, and filters features", HumanMaleProfileOrganizesFeatures),
         new("LE3 Human Male UI hides inert eye metadata and marks vestigial pupils", Le3HumanMaleProfileOrganizesFeatures),
@@ -80,6 +86,18 @@ public static class UiSmokeTests
         viewModel.DismissErrorCommand.Execute(null);
         TestAssert.True(!viewModel.HasError, "Dismissing the error left the banner visible.");
         TestAssert.Equal<string?>(null, viewModel.ErrorMessage);
+    }
+
+    private static void TextureRegistrySettingsCommandOpensDialog()
+    {
+        using var reader = new MorphFacePackageReader();
+        var dialogs = new StubEditorDialogs();
+        using var viewModel = CreateMainWindowViewModel(reader, dialogs);
+
+        viewModel.TextureRegistrySettingsCommand.Execute(null);
+
+        TestAssert.True(dialogs.TextureRegistrySettingsWasShown,
+            "The Texture Registry Settings command did not open the settings dialog.");
     }
 
     private static void ComboModelsDisplayLabels()
@@ -233,6 +251,78 @@ public static class UiSmokeTests
             "Material randomisation was not restored by one Undo.");
     }
 
+    private static void SetToDefaultsRestoresStockState()
+    {
+        using var reader = new MorphFacePackageReader();
+        using var editor = CreateRandomisationEditor(reader);
+        editor.RandomiseMorphs = true;
+        editor.RandomiseMaterials = true;
+        editor.MorphRandomisationStrength = 0;
+        editor.MaterialRandomisationStrength = 0;
+        editor.RandomiseCommand.Execute(null);
+        var editedBone = editor.Bones.Single(value =>
+            value.BoneName == "nose_tip" && value.Axis == 0);
+        var stockBoneValue = editedBone.Value;
+        editedBone.Value = stockBoneValue + 1.25f;
+        var randomised = editor.CreateDraft();
+
+        editor.SetToDefaultsCommand.Execute(null);
+
+        var defaults = editor.CreateDraft();
+        TestAssert.True(defaults.MorphFeatures.All(value => value.Offset == 0),
+            "Set to Defaults retained a non-zero morph slider.");
+        TestAssert.True(defaults.MaterialOverrides.Scalars.Count == 0 &&
+                        defaults.MaterialOverrides.Vectors.Count == 0 &&
+                        defaults.MaterialOverrides.Textures.Count == 0,
+            "Set to Defaults retained authored material overrides.");
+        TestAssert.Near(stockBoneValue, defaults.FinalSkeleton
+            .Single(value => value.BoneName == "nose_tip").Translation.X, 0);
+        TestAssert.Near(2, editor.Material.Scalars.Single(value => value.Name == "HED_Norm_Blend").Value, 0);
+        TestAssert.Equal(Vector4.One, editor.Material.Vectors.Single(value => value.Name == "SkinTone").Value);
+
+        editor.UndoCommand.Execute(null);
+        TestAssert.True(editor.CreateDraft().MorphFeatures.SequenceEqual(randomised.MorphFeatures),
+            "Undo did not restore the randomised morph values.");
+        TestAssert.True(editor.CreateDraft().MaterialOverrides.Scalars.SequenceEqual(randomised.MaterialOverrides.Scalars) &&
+                        editor.CreateDraft().MaterialOverrides.Vectors.SequenceEqual(randomised.MaterialOverrides.Vectors),
+            "Undo did not restore the randomised material values.");
+        TestAssert.Near(stockBoneValue + 1.25f, editor.CreateDraft().FinalSkeleton
+            .Single(value => value.BoneName == "nose_tip").Translation.X, 0);
+
+        editor.RedoCommand.Execute(null);
+        TestAssert.True(editor.CreateDraft().MorphFeatures.All(value => value.Offset == 0) &&
+                        editor.CreateDraft().MaterialOverrides.Scalars.Count == 0 &&
+                        editor.CreateDraft().MaterialOverrides.Vectors.Count == 0,
+            "Redo did not restore the stock state.");
+        TestAssert.Near(stockBoneValue, editor.CreateDraft().FinalSkeleton
+            .Single(value => value.BoneName == "nose_tip").Translation.X, 0);
+    }
+
+    private static void GlobalRandomisationUsesSeparateDonors()
+    {
+        using var reader = new MorphFacePackageReader();
+        var seeds = new Queue<int>([101, 202]);
+        using var editor = CreateRandomisationEditor(
+            reader,
+            randomSeedFactory: () => seeds.Dequeue(),
+            includeSecondDonor: true);
+        editor.RandomiseMorphs = true;
+        editor.RandomiseMaterials = true;
+        editor.MorphRandomisationStrength = 0;
+        editor.MaterialRandomisationStrength = 0;
+
+        editor.RandomiseCommand.Execute(null);
+
+        TestAssert.Equal(0, seeds.Count);
+        var draft = editor.CreateDraft();
+        var morphDonorValues = new[] { draft.GetFeatureOffset("nose_BridgeIn"), draft.GetFeatureOffset("eyes_Big") };
+        var materialScalar = draft.MaterialOverrides.Scalars.Single(value => value.Name == "HED_Norm_Blend").Value;
+        TestAssert.True(
+            (morphDonorValues.SequenceEqual([0.6f, 0.7f]) && materialScalar == 5) ||
+            (morphDonorValues.SequenceEqual([0.2f, 0.3f]) && materialScalar == 4),
+            "Morphs and materials were not sourced from two different heads.");
+    }
+
     private static void SubcategoryInclusionsFilterGlobalScope()
     {
         using var reader = new MorphFacePackageReader();
@@ -317,8 +407,19 @@ public static class UiSmokeTests
         TestAssert.Near(cursed.GetFeatureOffset("nose_BridgeIn"), redone.GetFeatureOffset("nose_BridgeIn"), 0);
         TestAssert.Equal(cursed.FinalSkeleton.Single(value => value.BoneName == "nose_tip").Translation,
             redone.FinalSkeleton.Single(value => value.BoneName == "nose_tip").Translation);
-        TestAssert.Equal(cursed.MaterialOverrides.Scalars.Single(), redone.MaterialOverrides.Scalars.Single());
-        TestAssert.Equal(cursed.MaterialOverrides.Vectors.Single(), redone.MaterialOverrides.Vectors.Single());
+        TestAssert.True(cursed.MaterialOverrides.Scalars.SequenceEqual(redone.MaterialOverrides.Scalars),
+            "Redo did not restore every cursed material scalar.");
+        TestAssert.True(cursed.MaterialOverrides.Vectors.SequenceEqual(redone.MaterialOverrides.Vectors),
+            "Redo did not restore every cursed material vector.");
+
+        editor.SetToDefaultsCommand.Execute(null);
+        var defaults = editor.CreateDraft();
+        TestAssert.Equal(new Vector3(2, 4, 6),
+            defaults.FinalSkeleton.Single(value => value.BoneName == "nose_tip").Translation);
+        TestAssert.True(defaults.MorphFeatures.All(value => value.Offset == 0) &&
+                        defaults.MaterialOverrides.Scalars.Count == 0 &&
+                        defaults.MaterialOverrides.Vectors.Count == 0,
+            "Set to Defaults did not remove the complete cursed state.");
     }
 
     private static void CursedModeBypassesDonorAvailability()
@@ -338,6 +439,34 @@ public static class UiSmokeTests
             "Cursed mode remained unavailable without donors.");
         TestAssert.True(groupCommand.CanExecute(null) && notifications >= 1,
             "Subcategory commands were not notified when cursed mode became available.");
+    }
+
+    private static void CursedModeIgnoresGlobalExclusions()
+    {
+        using var reader = new MorphFacePackageReader();
+        using var editor = CreateRandomisationEditor(reader);
+        foreach (var inclusion in editor.Categories.SelectMany(category =>
+                     category.SliderGroups.Select(group => group.Inclusion)
+                         .Concat(category.ColourGroups.Select(group => group.Inclusion))
+                         .Append(category.TextureInclusion))
+                     .Where(value => value is not null))
+        {
+            inclusion!.IsIncluded = false;
+        }
+        editor.CursedMode = true;
+        editor.MorphRandomisationStrength = 100;
+        editor.MaterialRandomisationStrength = 100;
+
+        editor.RandomiseCommand.Execute(null);
+
+        var cursed = editor.CreateDraft();
+        TestAssert.True(cursed.MorphFeatures.All(value => value.Offset != 0),
+            "Cursed Mode respected an excluded morph category.");
+        TestAssert.True(cursed.MaterialOverrides.Scalars.Count > 0 && cursed.MaterialOverrides.Vectors.Count > 0,
+            "Cursed Mode respected an excluded material category.");
+        TestAssert.True(cursed.MaterialOverrides.Scalars.Any(value => value.Name == "Emis_Scalar") &&
+                        cursed.MaterialOverrides.Vectors.Any(value => value.Name == "Emis_Color"),
+            "Cursed Mode retained the normal randomiser's visual-safety exclusions.");
     }
 
     private static void FailedCursedRandomisationRollsBack()
@@ -391,7 +520,9 @@ public static class UiSmokeTests
             "The known broken LE3 HMM donor remained in the embedded corpus.");
     }
 
-    private static MainWindowViewModel CreateMainWindowViewModel(MorphFacePackageReader reader)
+    private static MainWindowViewModel CreateMainWindowViewModel(
+        MorphFacePackageReader reader,
+        StubEditorDialogs? dialogs = null)
     {
         var sceneFactory = new HeadPreviewSceneFactory();
         var profiles = MorphFaceProfileRegistry.CreateDefault();
@@ -399,7 +530,7 @@ public static class UiSmokeTests
         var writer = new MorphFacePackageWriter();
         var context = new MorphFacePackageContextService();
         return new MainWindowViewModel(
-            new StubEditorDialogs(),
+            dialogs ?? new StubEditorDialogs(),
             new MorphFaceCatalogService(profiles),
             new MorphFacePreviewLoadService(sceneFactory, targets, profiles, reader),
             sceneFactory,
@@ -450,7 +581,9 @@ public static class UiSmokeTests
         MorphFacePackageReader reader,
         bool includeDonor = true,
         bool extremeBoneOffset = false,
-        RandomisationInclusionState? randomisationInclusionState = null)
+        RandomisationInclusionState? randomisationInclusionState = null,
+        Func<int>? randomSeedFactory = null,
+        bool includeSecondDonor = false)
     {
         var sourceMesh = TestFixtures.CreateMesh();
         var mesh = sourceMesh with
@@ -491,8 +624,8 @@ public static class UiSmokeTests
         var resolvedMaterial = new ResolvedHeadMaterial(
             MaterialIdentityKey.Create(materialIdentity), materialIdentity, "BIOG_HMM_HED_PROMorph",
             HeadMaterialFamily.Skin, HeadMaterialBlendMode.Opaque, false,
-            new Dictionary<string, float> { ["HED_Norm_Blend"] = 2 },
-            new Dictionary<string, Vector4> { ["SkinTone"] = Vector4.One },
+            new Dictionary<string, float> { ["HED_Norm_Blend"] = 2, ["Emis_Scalar"] = 1 },
+            new Dictionary<string, Vector4> { ["SkinTone"] = Vector4.One, ["Emis_Color"] = Vector4.One },
             new Dictionary<string, MaterialTextureBinding>());
         var materials = new MorphFaceEditor.Core.Editing.MaterialEditingSession(
             MorphFaceMaterialOverrides.Empty,
@@ -511,18 +644,42 @@ public static class UiSmokeTests
         {
             MaterialScalars = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase)
             {
-                ["HED_Norm_Blend"] = 4
+                ["HED_Norm_Blend"] = 4,
+                ["Emis_Scalar"] = 2
             },
             MaterialVectors = new Dictionary<string, Vector4>(StringComparer.OrdinalIgnoreCase)
             {
-                ["SkinTone"] = new(0.4f, 0.2f, 0.1f, 1)
+                ["SkinTone"] = new(0.4f, 0.2f, 0.1f, 1),
+                ["Emis_Color"] = new(0.4f, 0.3f, 0.2f, 1)
+            }
+        };
+        var secondDonor = new MorphRandomisationDonor(
+            "LE1:SecondSeed", "le1-human-male",
+            new HashSet<string>(["nose_BridgeIn", "eyes_Big"], StringComparer.OrdinalIgnoreCase),
+            new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["nose_BridgeIn"] = 0.2f,
+                ["eyes_Big"] = 0.3f
+            })
+        {
+            MaterialScalars = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["HED_Norm_Blend"] = 5,
+                ["Emis_Scalar"] = 3
+            },
+            MaterialVectors = new Dictionary<string, Vector4>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["SkinTone"] = new(0.2f, 0.3f, 0.4f, 1),
+                ["Emis_Color"] = new(0.2f, 0.3f, 0.4f, 1)
             }
         };
         var corpus = new MorphRandomisationCorpus(
             MorphRandomisationCorpus.CurrentFormatVersion,
             new Dictionary<MorphRandomisationPoolKey, IReadOnlyList<MorphRandomisationDonor>>
             {
-                [MorphRandomisationPoolKey.HumanMaleLe12] = includeDonor ? [donor] : []
+                [MorphRandomisationPoolKey.HumanMaleLe12] = includeDonor
+                    ? includeSecondDonor ? [donor, secondDonor] : [donor]
+                    : []
             })
         {
             MaterialProfiles = includeDonor
@@ -532,12 +689,15 @@ public static class UiSmokeTests
                         "le1-human-male",
                         new Dictionary<string, MaterialScalarStatistics>(StringComparer.OrdinalIgnoreCase)
                         {
-                            ["HED_Norm_Blend"] = new("HED_Norm_Blend", 1, 6, 2, 5)
+                            ["HED_Norm_Blend"] = new("HED_Norm_Blend", 1, 6, 2, 5),
+                            ["Emis_Scalar"] = new("Emis_Scalar", 0, 4, 1, 3)
                         },
                         new Dictionary<string, MaterialVectorStatistics>(StringComparer.OrdinalIgnoreCase)
                         {
                             ["SkinTone"] = new("SkinTone", MaterialVectorRandomisationKind.PerceptualColour,
-                                new Vector4(0.1f, 0.05f, 0.02f, 1), new Vector4(0.8f, 0.6f, 0.4f, 1), [])
+                                new Vector4(0.1f, 0.05f, 0.02f, 1), new Vector4(0.8f, 0.6f, 0.4f, 1), []),
+                            ["Emis_Color"] = new("Emis_Color", MaterialVectorRandomisationKind.PerceptualColour,
+                                Vector4.Zero, new Vector4(4), [])
                         },
                         new HashSet<string>())
                 }
@@ -553,7 +713,7 @@ public static class UiSmokeTests
             [], [], null, [], _ => { },
             "le1-human-male",
             new MorphRandomisationCatalog(corpus),
-            () => 123,
+            randomSeedFactory ?? (() => 123),
             randomisationInclusionState);
     }
 
@@ -647,6 +807,54 @@ public static class UiSmokeTests
         TestAssert.Near(-0.5f, feature.Minimum, 0);
     }
 
+    private static void BoneControlsTolerateRemovedMorphBones()
+    {
+        var source = TestFixtures.CreateMesh();
+        var mesh = source with
+        {
+            Topology = source.Topology with
+            {
+                ReferenceSkeleton =
+                [
+                    new ReferenceBone("root", 0, Vector3.Zero, Quaternion.Identity),
+                    new ReferenceBone("eye_transient", 0, new Vector3(1, 2, 3), Quaternion.Identity)
+                ],
+                ActiveBones = [0, 1],
+                RequiredBones = [0, 1]
+            }
+        };
+        var target = new MorphTargetAsset(
+            TestFixtures.CreateIdentity("Set.eyes_wide", "MorphTarget"),
+            [new MorphTargetLod(0, mesh.Positions.Length, [])],
+            [new MorphTargetBoneOffset("eye_transient", Vector3.One)]);
+        var face = new MorphFaceDocument(
+            TestFixtures.CreateIdentity("SalarianFace", "BioMorphFace"),
+            new PackageFingerprint(1, DateTime.UnixEpoch, new string('0', 64)),
+            mesh.Source,
+            null,
+            [new MorphFeatureValue("eyes_wide", 1)],
+            [new BoneTranslation("root", Vector3.Zero)],
+            MorphFaceMaterialOverrides.Empty,
+            [mesh.Positions.ToArray()],
+            []);
+        var session = new MorphFaceEditor.Core.Editing.MorphFaceEditingSession(
+            face, mesh, [target], profileName: "Salarian");
+        var control = new BoneAxisEditorViewModel(session, "eye_transient", 0);
+
+        session.SetFeatures(new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["eyes_wide"] = 0
+        });
+        control.Refresh();
+
+        TestAssert.True(!control.IsAvailable,
+            "A bone control remained active after its morph-introduced bone left the evaluated skeleton.");
+        session.Undo();
+        control.Refresh();
+        TestAssert.True(control.IsAvailable,
+            "Undo did not reactivate a bone control when its morph-introduced bone returned.");
+    }
+
     private sealed class StubColorDialog : IHdrColorDialogService
     {
         public bool ExtendedSliders { get; set; }
@@ -663,6 +871,7 @@ public static class UiSmokeTests
 
     private sealed class StubEditorDialogs : IEditorDialogService
     {
+        public bool TextureRegistrySettingsWasShown { get; private set; }
         public string? ChoosePackage(string? initialDirectory = null) => null;
         public MorphPackageSaveRequest? ChooseMorphPackageDestination(string suggestedFileName, string sourcePackagePath) => null;
         public MorphConversionSaveRequest? ChooseMorphConversionDestination(MorphFaceGame sourceGame, string suggestedFileName, string sourcePackagePath) => null;
@@ -673,6 +882,7 @@ public static class UiSmokeTests
         public bool ConfirmDeleteMorph(string facePath) => false;
         public UnsavedChangesChoice ConfirmUnsavedChanges(string assetPath, UnsavedChangesScope scope = UnsavedChangesScope.Package) => UnsavedChangesChoice.Cancel;
         public void ShowInformation(string title, string message) { }
+        public void ShowTextureRegistrySettings() => TextureRegistrySettingsWasShown = true;
     }
 
     private static void LodSpecificMorphControlsAreMarked()
@@ -783,6 +993,7 @@ public static class UiSmokeTests
                 mainWindow.Opacity = 0;
                 mainWindow.Show();
                 var randomise = mainWindow.FindName("GlobalRandomiseButton") as Button;
+                var setToDefaults = mainWindow.FindName("SetToDefaultsButton") as Button;
                 var morphStrength = mainWindow.FindName("MorphRandomisationStrengthSlider") as Slider;
                 var materialStrength = mainWindow.FindName("MaterialRandomisationStrengthSlider") as Slider;
                 var morphToggle = mainWindow.FindName("RandomiseMorphsCheckBox") as CheckBox;
@@ -805,6 +1016,8 @@ public static class UiSmokeTests
                     "The main editor header has no named global Randomise button.");
                 TestAssert.True(randomise!.GetBindingExpression(Button.CommandProperty) is not null,
                     "The global Randomise button has no command binding.");
+                TestAssert.True(setToDefaults?.GetBindingExpression(Button.CommandProperty) is not null,
+                    "The main editor header has no bound Set to Defaults button.");
                 TestAssert.True(morphStrength is not null && materialStrength is not null,
                     "The main editor header is missing a split randomisation-strength slider.");
                 TestAssert.Near(0, (float)morphStrength!.Minimum, 0);
@@ -982,31 +1195,38 @@ public static class UiSmokeTests
 
     private static void Le3HmmScalpRandomisationAppliesCorePair()
     {
-        var packagePath = Path.GetFullPath("tests/LE3 GlobalMorphs.pcc");
-        using var reader = new MorphFacePackageReader();
-        var sceneFactory = new HeadPreviewSceneFactory();
-        var profiles = MorphFaceProfileRegistry.CreateDefault();
-        using var loader = new MorphFacePreviewLoadService(
-            sceneFactory, new MorphTargetCatalog(), profiles, reader);
-        var loaded = loader.LoadAsync(
-                packagePath,
-                "Human Male.LE3_HMM_Morphs.BioFace_End001_CommRoomTech")
-            .GetAwaiter().GetResult();
-        var references = new PackageReferenceService(reader);
-        var candidates = references.ReadCatalogAsync(packagePath).GetAwaiter().GetResult().Textures;
-        using var editor = new MaterialEditorViewModel(
-            loaded.MaterialEditingSession,
-            new StubColorDialog(),
-            references,
-            packagePath,
-            candidates,
-            message => throw new Exception(message),
-            loaded.Profile.UiProfile);
         var family = MorphRandomisationCatalog.LoadEmbedded()
             .CompatibleMaterialDonors("le3-human-male")
             .Select(value => value.MaterialTextureFamilies.GetValueOrDefault("human-scalp"))
             .First(value => value is not null && value.TryGetValue("HED_Scalp_Spec", out var spec) &&
                             spec.Contains("GBL_ARM_ALL_Black", StringComparison.OrdinalIgnoreCase))!;
+        const string packagePath = "working.pcc";
+        var currentTextures = family.Keys.ToDictionary(
+            name => name,
+            name => new MaterialTextureBinding(name, CreateTestTexture(packagePath, $"Current.{name}", name)),
+            StringComparer.OrdinalIgnoreCase);
+        var materialIdentity = new AssetIdentity(packagePath, "Working.ScalpMaterial", 1, "MaterialInstanceConstant");
+        var material = new ResolvedHeadMaterial(
+            MaterialIdentityKey.Create(materialIdentity), materialIdentity, "HMM_HED_PRONPC_MASTER_FACE_MAT",
+            HeadMaterialFamily.Skin, HeadMaterialBlendMode.Opaque, false,
+            new Dictionary<string, float>(), new Dictionary<string, Vector4>(), currentTextures)
+        {
+            SupportedTextures = family.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase)
+        };
+        var session = new MorphFaceEditor.Core.Editing.MaterialEditingSession(
+            MorphFaceMaterialOverrides.Empty,
+            new ResolvedHeadMaterialSet(new Dictionary<string, ResolvedHeadMaterial> { [material.Key] = material }));
+        var candidates = family.Values.Select(path =>
+        {
+            var occurrence = new TextureCatalogOccurrence(
+                "installed.pcc", 42, 0, TextureCatalogOrigin.BaseGame, 1, 1,
+                "PF_B8G8R8A8", "TEXTUREGROUP_Character", false, null);
+            return new TextureCatalogCandidate(TextureCatalogGame.LE3, path, occurrence, [occurrence]);
+        }).ToArray();
+        using var editor = new MaterialEditorViewModel(
+            session, new StubColorDialog(), new ImmediateTextureLoader(), packagePath, [],
+            message => throw new Exception(message), new HumanMaleFeatureMetadataCatalog(),
+            candidates, TextureCatalogProfile.Empty, true);
 
         var prepared = editor.PrepareRandomisationAsync(
                 new Dictionary<string, float>(),
@@ -1019,6 +1239,36 @@ public static class UiSmokeTests
         TestAssert.True(prepared.Textures.ContainsKey("HED_Scalp_Diff") &&
                         prepared.Textures.ContainsKey("HED_Scalp_Norm"),
             "LE3 HMM scalp randomisation discarded its required Diff/Norm pair.");
+    }
+
+    private static void ExhaustedTextureRandomisationIsReported()
+    {
+        TestAssert.True(FaceEditorViewModel.WereAllTextureFamiliesRejected(
+                eligibleSignatureCount: 2,
+                excludedSignatureCount: 2,
+                appliedTextureFamilies: 0),
+            "Exhausting every eligible texture family was silently treated as a complete randomisation.");
+        TestAssert.True(!FaceEditorViewModel.WereAllTextureFamiliesRejected(2, 1, 1),
+            "A successful fallback texture family was incorrectly reported as exhausted.");
+        TestAssert.True(!FaceEditorViewModel.WereAllTextureFamiliesRejected(0, 0, 0),
+            "A numeric-only material randomisation was incorrectly reported as a texture failure.");
+    }
+
+    private static DecodedTextureAsset CreateTestTexture(string packagePath, string path, string parameterName) =>
+        new(new AssetIdentity(packagePath, path, 42, "Texture2D"), 1, 1, [128, 128, 128, 255],
+            "PF_B8G8R8A8", parameterName.EndsWith("_Diff", StringComparison.OrdinalIgnoreCase)
+                ? TextureRole.Diffuse
+                : TextureRole.Normal,
+            TextureColorSpace.Linear, TextureAlphaPolicy.Ignore, false, path);
+
+    private sealed class ImmediateTextureLoader : ITextureReferenceLoader
+    {
+        public Task<DecodedTextureAsset> LoadTextureAsync(
+            string packagePath,
+            string texturePath,
+            MaterialParameterDefinition definition,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(CreateTestTexture(packagePath, texturePath, definition.Name));
     }
 
     private static void HumanMaleProfileOrganizesFeatures()
@@ -1071,6 +1321,8 @@ public static class UiSmokeTests
             "HED_Mask_Vector", MaterialParameterKind.Vector));
         TestAssert.True(!profile.IsMaterialVisible("Diffuseuse", MaterialParameterKind.Texture),
             "The HMM Diffuseuse texture remained visible.");
+        TestAssert.True(!profile.IsMaterialVisible("__PROShort01_Diffuse", MaterialParameterKind.Texture),
+            "A fixed compiled PROShort01 sampler leaked into the editable material controls.");
 
         foreach (var hiddenName in new[] { "Formal", "Sarge", "Slick", "lashes" })
         {

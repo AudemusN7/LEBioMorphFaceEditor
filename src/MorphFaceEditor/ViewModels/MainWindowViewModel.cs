@@ -39,6 +39,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly AsyncRelayCommand _saveMorphToPccCommand;
     private readonly RelayCommand _editBackgroundColorCommand;
     private readonly RelayCommand _dismissErrorCommand;
+    private readonly RelayCommand _textureRegistrySettingsCommand;
     private readonly AsyncRelayCommand _cloneMorphCommand;
     private readonly AsyncRelayCommand _deleteMorphCommand;
     private readonly AsyncRelayCommand _convertMorphCommand;
@@ -123,6 +124,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             () => !IsBusy && Editor is not null && _loadedFace is not null && _packageWorkspace is not null);
         _editBackgroundColorCommand = new RelayCommand(EditBackgroundColor);
         _dismissErrorCommand = new RelayCommand(() => ErrorMessage = null);
+        _textureRegistrySettingsCommand = new RelayCommand(_dialogs.ShowTextureRegistrySettings);
         _cloneMorphCommand = new AsyncRelayCommand(CloneMorphAsync, CanUseFaceContextMenu);
         _deleteMorphCommand = new AsyncRelayCommand(DeleteMorphAsync, CanUseFaceContextMenu);
         _convertMorphCommand = new AsyncRelayCommand(ConvertMorphAsync, CanUseFaceContextMenu);
@@ -165,6 +167,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public ICommand SaveMorphToPccCommand => _saveMorphToPccCommand;
     public ICommand EditBackgroundColorCommand => _editBackgroundColorCommand;
     public ICommand DismissErrorCommand => _dismissErrorCommand;
+    public ICommand TextureRegistrySettingsCommand => _textureRegistrySettingsCommand;
     public ICommand CloneMorphCommand => _cloneMorphCommand;
     public ICommand DeleteMorphCommand => _deleteMorphCommand;
     public ICommand ConvertMorphCommand => _convertMorphCommand;
@@ -651,6 +654,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             {
                 AppLog.Warning(warning);
             }
+            var textureCatalogProfile = TextureCatalogProfiles.For(result.Profile);
             var topology = result.Loaded.BaseHead.Topology;
             var oracle = result.EditingSession.Evaluation.OriginalOracleReport;
             var materialOverrides = result.Loaded.Document.MaterialOverrides;
@@ -675,7 +679,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 SetEditorError,
                 result.Profile.Key,
                 _randomisationCatalog,
-                randomisationInclusionState: _randomisationInclusionState);
+                randomisationInclusionState: _randomisationInclusionState,
+                registryTextureCandidates: [],
+                textureCatalogProfile: textureCatalogProfile,
+                isTextureRegistryAvailable: false);
             var speciesKey = PreviewCameraGrouping.SpeciesForProfile(result.Profile.Key);
             if (string.Equals(_loadedSpeciesKey, speciesKey, StringComparison.OrdinalIgnoreCase))
             {
@@ -700,6 +707,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             AppLog.Information(
                 $"Face loaded: '{LoadedFacePath}', editable={result.EditingSession.CanEdit}, " +
                 $"vertices={topology.VertexCount}, targets={result.EditingSession.Evaluation.Resolution.WeightedTargets.Count}.");
+            _ = LoadTextureRegistryAsync(
+                editor,
+                result.Loaded.Game,
+                result.Profile,
+                textureCatalogProfile,
+                cancellationToken);
             return true;
         }
         catch (OperationCanceledException)
@@ -719,6 +732,41 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         finally
         {
             IsBusy = false;
+        }
+    }
+
+    private async Task LoadTextureRegistryAsync(
+        FaceEditorViewModel editor,
+        MorphFaceGame game,
+        MorphFaceProfile profile,
+        TextureCatalogProfile catalogProfile,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            AppLog.Information($"Texture registry load started for {profile.DisplayName} ({game}).");
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+            var catalog = await _referenceService.ReadTextureCatalogAsync(game, cancellationToken);
+            if (cancellationToken.IsCancellationRequested || Editor != editor)
+            {
+                return;
+            }
+
+            editor.UpdateRegistryTextureCandidates(
+                catalog.Candidates,
+                catalogProfile,
+                catalog.IsAvailable);
+            AppLog.Information(catalog.IsAvailable
+                ? $"Texture registry loaded for {profile.DisplayName}: {catalog.Candidates.Count:N0} verified candidates in {System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalSeconds:F1}s."
+                : $"Texture registry is unavailable for {profile.DisplayName}; build the {game} registry in Texture Databases.");
+        }
+        catch (OperationCanceledException)
+        {
+            AppLog.Information($"Texture registry load cancelled for {profile.DisplayName} ({game}).");
+        }
+        catch (Exception exception)
+        {
+            AppLog.Warning($"Texture registry load failed for {profile.DisplayName} ({game}): {exception.Message}");
         }
     }
 
@@ -981,6 +1029,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             return false;
         }
+        if (Editor.Material.HasExternalRegistrySelections)
+        {
+            ErrorMessage = "This face uses an installed texture-registry selection. Saving it will be enabled once the path-preserving texture materialisation stage is complete.";
+            Status = "External texture selection is preview-only for now.";
+            return false;
+        }
         if (!Editor.IsDirty)
         {
             return true;
@@ -1022,6 +1076,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         if (_packageWorkspace is null || PackagePath is null)
         {
+            return false;
+        }
+        if (Editor?.Material.HasExternalRegistrySelections == true)
+        {
+            ErrorMessage = "This face uses an installed texture-registry selection. Saving it will be enabled once the path-preserving texture materialisation stage is complete.";
+            Status = "External texture selection is preview-only for now.";
             return false;
         }
         if (Editor?.IsDirty == true && !await FlushEditorToWorkspaceAsync())
@@ -1112,6 +1172,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         if (Editor is null || _loadedFace is null || PackagePath is null || WorkspacePackagePath is null)
         {
+            return;
+        }
+        if (Editor.Material.HasExternalRegistrySelections)
+        {
+            ErrorMessage = "This face uses an installed texture-registry selection. Export is disabled until path-preserving texture materialisation is complete.";
+            Status = "External texture selection is preview-only for now.";
             return;
         }
         var sourceName = SelectedFace?.DisplayName ?? _loadedFace.Document.Source.InstancedPath.Split('.').Last();

@@ -389,12 +389,13 @@ public static class HairMaterialTests
 
     private static void InstalledMaskedHairMastersResolve()
     {
-        var cookedRoot = @"D:\EA Games\Mass Effect Legendary Edition\Game";
         var cases = new[]
         {
-            (Path: Path.Combine(cookedRoot, @"ME1\BioGame\CookedPCConsole\BIOG_HMM_HIR_PRO_R.pcc"),
+            (Path: Path.Combine(LegendaryExplorerCoreRuntime.DefaultLe1CookedPath ?? string.Empty,
+                    "BIOG_HMM_HIR_PRO_R.pcc"),
                 Material: "HMM_HIR_PROShort01_MAT_1a"),
-            (Path: Path.Combine(cookedRoot, @"ME2\BioGame\CookedPCConsole\BIOG_HMM_HIR_PRO_R.pcc"),
+            (Path: Path.Combine(LegendaryExplorerCoreRuntime.DefaultLe2CookedPath ?? string.Empty,
+                    "BIOG_HMM_HIR_PRO_R.pcc"),
                 Material: "HMM_HIR_PROShort01_MAT_1b")
         };
         if (cases.Any(value => !File.Exists(value.Path)))

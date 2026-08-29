@@ -38,6 +38,7 @@ public static class UiSmokeTests
         new("subcategory inclusion toggles filter only global randomisation and persist in-session", SubcategoryInclusionsFilterGlobalScope),
         new("normal material randomisation obeys its independent toggle and undo", MaterialRandomisationObeysToggle),
         new("material vector subcategories expose independent randomise commands", MaterialVectorSubcategoriesRandomiseIndependently),
+        new("exhausted texture randomisation is reported without discarding numeric values", ExhaustedTextureRandomisationIsReported),
         new("LE3 HMM scalp randomisation preserves its required texture pair", Le3HmmScalpRandomisationAppliesCorePair),
         new("cursed mode randomises morph bones and materials as one undo step", CursedModeRandomisesOneUndoStep),
         new("cursed mode ignores global randomisation exclusions", CursedModeIgnoresGlobalExclusions),
@@ -1194,31 +1195,38 @@ public static class UiSmokeTests
 
     private static void Le3HmmScalpRandomisationAppliesCorePair()
     {
-        var packagePath = Path.GetFullPath("tests/LE3 GlobalMorphs.pcc");
-        using var reader = new MorphFacePackageReader();
-        var sceneFactory = new HeadPreviewSceneFactory();
-        var profiles = MorphFaceProfileRegistry.CreateDefault();
-        using var loader = new MorphFacePreviewLoadService(
-            sceneFactory, new MorphTargetCatalog(), profiles, reader);
-        var loaded = loader.LoadAsync(
-                packagePath,
-                "Human Male.LE3_HMM_Morphs.BioFace_End001_CommRoomTech")
-            .GetAwaiter().GetResult();
-        var references = new PackageReferenceService(reader);
-        var candidates = references.ReadCatalogAsync(packagePath).GetAwaiter().GetResult().Textures;
-        using var editor = new MaterialEditorViewModel(
-            loaded.MaterialEditingSession,
-            new StubColorDialog(),
-            references,
-            packagePath,
-            candidates,
-            message => throw new Exception(message),
-            loaded.Profile.UiProfile);
         var family = MorphRandomisationCatalog.LoadEmbedded()
             .CompatibleMaterialDonors("le3-human-male")
             .Select(value => value.MaterialTextureFamilies.GetValueOrDefault("human-scalp"))
             .First(value => value is not null && value.TryGetValue("HED_Scalp_Spec", out var spec) &&
                             spec.Contains("GBL_ARM_ALL_Black", StringComparison.OrdinalIgnoreCase))!;
+        const string packagePath = "working.pcc";
+        var currentTextures = family.Keys.ToDictionary(
+            name => name,
+            name => new MaterialTextureBinding(name, CreateTestTexture(packagePath, $"Current.{name}", name)),
+            StringComparer.OrdinalIgnoreCase);
+        var materialIdentity = new AssetIdentity(packagePath, "Working.ScalpMaterial", 1, "MaterialInstanceConstant");
+        var material = new ResolvedHeadMaterial(
+            MaterialIdentityKey.Create(materialIdentity), materialIdentity, "HMM_HED_PRONPC_MASTER_FACE_MAT",
+            HeadMaterialFamily.Skin, HeadMaterialBlendMode.Opaque, false,
+            new Dictionary<string, float>(), new Dictionary<string, Vector4>(), currentTextures)
+        {
+            SupportedTextures = family.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase)
+        };
+        var session = new MorphFaceEditor.Core.Editing.MaterialEditingSession(
+            MorphFaceMaterialOverrides.Empty,
+            new ResolvedHeadMaterialSet(new Dictionary<string, ResolvedHeadMaterial> { [material.Key] = material }));
+        var candidates = family.Values.Select(path =>
+        {
+            var occurrence = new TextureCatalogOccurrence(
+                "installed.pcc", 42, 0, TextureCatalogOrigin.BaseGame, 1, 1,
+                "PF_B8G8R8A8", "TEXTUREGROUP_Character", false, null);
+            return new TextureCatalogCandidate(TextureCatalogGame.LE3, path, occurrence, [occurrence]);
+        }).ToArray();
+        using var editor = new MaterialEditorViewModel(
+            session, new StubColorDialog(), new ImmediateTextureLoader(), packagePath, [],
+            message => throw new Exception(message), new HumanMaleFeatureMetadataCatalog(),
+            candidates, TextureCatalogProfile.Empty, true);
 
         var prepared = editor.PrepareRandomisationAsync(
                 new Dictionary<string, float>(),
@@ -1231,6 +1239,36 @@ public static class UiSmokeTests
         TestAssert.True(prepared.Textures.ContainsKey("HED_Scalp_Diff") &&
                         prepared.Textures.ContainsKey("HED_Scalp_Norm"),
             "LE3 HMM scalp randomisation discarded its required Diff/Norm pair.");
+    }
+
+    private static void ExhaustedTextureRandomisationIsReported()
+    {
+        TestAssert.True(FaceEditorViewModel.WereAllTextureFamiliesRejected(
+                eligibleSignatureCount: 2,
+                excludedSignatureCount: 2,
+                appliedTextureFamilies: 0),
+            "Exhausting every eligible texture family was silently treated as a complete randomisation.");
+        TestAssert.True(!FaceEditorViewModel.WereAllTextureFamiliesRejected(2, 1, 1),
+            "A successful fallback texture family was incorrectly reported as exhausted.");
+        TestAssert.True(!FaceEditorViewModel.WereAllTextureFamiliesRejected(0, 0, 0),
+            "A numeric-only material randomisation was incorrectly reported as a texture failure.");
+    }
+
+    private static DecodedTextureAsset CreateTestTexture(string packagePath, string path, string parameterName) =>
+        new(new AssetIdentity(packagePath, path, 42, "Texture2D"), 1, 1, [128, 128, 128, 255],
+            "PF_B8G8R8A8", parameterName.EndsWith("_Diff", StringComparison.OrdinalIgnoreCase)
+                ? TextureRole.Diffuse
+                : TextureRole.Normal,
+            TextureColorSpace.Linear, TextureAlphaPolicy.Ignore, false, path);
+
+    private sealed class ImmediateTextureLoader : ITextureReferenceLoader
+    {
+        public Task<DecodedTextureAsset> LoadTextureAsync(
+            string packagePath,
+            string texturePath,
+            MaterialParameterDefinition definition,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(CreateTestTexture(packagePath, texturePath, definition.Name));
     }
 
     private static void HumanMaleProfileOrganizesFeatures()

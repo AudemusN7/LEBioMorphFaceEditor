@@ -372,7 +372,9 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                 var scalarBounds = Material.Scalars.Select(value => new MaterialRandomisationScalarBounds(
                     value.Name, value.Minimum, value.Maximum)).ToArray();
                 var eligibleSignatureCount = compatibleMaterialDonors
-                    .SelectMany(value => value.MaterialTextureFamilies.Values)
+                    .SelectMany(value => value.MaterialTextureFamilies
+                        .Where(family => textureFamilies.Contains(family.Key))
+                        .Select(family => family.Value))
                     .Select(MaterialRandomiser.TextureFamilySignature)
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .Count();
@@ -398,6 +400,16 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                     foreach (var failedSignature in preparedMaterial.FailedTextureFamilySignatures)
                         added |= excludedSignatures.Add(failedSignature);
                     if (!added) break;
+                }
+                if (WereAllTextureFamiliesRejected(
+                        eligibleSignatureCount,
+                        excludedSignatures.Count,
+                        preparedMaterial?.AppliedTextureFamilies ?? 0))
+                {
+                    const string warning =
+                        "No readable texture family was available; numeric material values were still randomised.";
+                    AppLog.Warning(warning);
+                    _reportError(warning);
                 }
                 materialValueCount = scalarScope.Count + vectorScope.Count;
             }
@@ -537,6 +549,14 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         var applicableMembers = family.Keys.Where(availableTextureNames.Contains).ToArray();
         return applicableMembers.Length > 0 && applicableMembers.All(requestedTextureNames.Contains);
     }
+
+    internal static bool WereAllTextureFamiliesRejected(
+        int eligibleSignatureCount,
+        int excludedSignatureCount,
+        int appliedTextureFamilies) =>
+        eligibleSignatureCount > 0 &&
+        excludedSignatureCount >= eligibleSignatureCount &&
+        appliedTextureFamilies == 0;
 
     private bool CanRandomiseScope(EditorRandomisationScope scope)
     {

@@ -21,7 +21,7 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
     public MaterialEditorViewModel(
         MaterialEditingSession session,
         IHdrColorDialogService colorDialog,
-        PackageReferenceService references,
+        ITextureReferenceLoader references,
         string packagePath,
         IReadOnlyList<MorphFaceEditor.Models.PackageAssetListItem> textureCandidates,
         Action<string> reportError,

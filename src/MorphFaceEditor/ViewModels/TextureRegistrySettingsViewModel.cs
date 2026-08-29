@@ -27,9 +27,9 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
         _catalogInvalidator = catalogInvalidator;
         Rows =
         [
-            new TextureRegistrySettingsRowViewModel(MorphFaceGame.LE1, store.GetStatus(MorphFaceGame.LE1)),
-            new TextureRegistrySettingsRowViewModel(MorphFaceGame.LE2, store.GetStatus(MorphFaceGame.LE2)),
-            new TextureRegistrySettingsRowViewModel(MorphFaceGame.LE3, store.GetStatus(MorphFaceGame.LE3))
+            CreateCheckingRow(MorphFaceGame.LE1),
+            CreateCheckingRow(MorphFaceGame.LE2),
+            CreateCheckingRow(MorphFaceGame.LE3)
         ];
     }
 
@@ -44,20 +44,26 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
             OnPropertyChanged(nameof(ActionLabel));
             OnPropertyChanged(nameof(RebuildAllActionLabel));
             OnPropertyChanged(nameof(IsRebuildAllActionVisible));
+            OnPropertyChanged(nameof(CanClose));
         }
     }
 
     public string ActionLabel => IsBuilding ? "Cancel" : "Rebuild";
     public string RebuildAllActionLabel => IsBuilding ? "Cancel" : "Rebuild All";
     public bool IsRebuildAllActionVisible => !IsBuilding || _isRebuildingAll;
+    public bool CanClose => !IsBuilding;
     public int PackagesProcessed { get => _packagesProcessed; private set => SetProperty(ref _packagesProcessed, value); }
     public int TotalPackages { get => _totalPackages; private set => SetProperty(ref _totalPackages, value); }
     public double ProgressPercent => TotalPackages == 0 ? 0 : 100d * PackagesProcessed / TotalPackages;
     public string ProgressLabel { get => _progressLabel; private set => SetProperty(ref _progressLabel, value); }
 
-    public void Refresh()
+    public async Task RefreshAsync(CancellationToken cancellationToken = default)
     {
-        foreach (var row in Rows) row.Update(_store.GetStatus(row.Game));
+        var statuses = await Task.WhenAll(Rows.Select(row =>
+            Task.Run(() => _store.GetStatus(row.Game), cancellationToken)));
+        cancellationToken.ThrowIfCancellationRequested();
+        foreach (var status in statuses)
+            Rows.Single(row => row.Game == status.Game).Update(status);
     }
 
     public async Task RebuildAsync(MorphFaceGame game, CancellationToken cancellationToken = default)
@@ -186,6 +192,11 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
 
     private IProgress<TextureRegistryBuildProgress> CreateProgress() =>
         new Progress<TextureRegistryBuildProgress>(UpdateProgress);
+
+    private static TextureRegistrySettingsRowViewModel CreateCheckingRow(MorphFaceGame game) => new(
+        game,
+        new TextureRegistryStatus(game, TextureRegistryState.Checking,
+            null, null, null, null, null));
 }
 
 public sealed class TextureRegistrySettingsRowViewModel : ObservableObject
@@ -210,6 +221,7 @@ public sealed class TextureRegistrySettingsRowViewModel : ObservableObject
     }
     public string StatusLabel => _status.State switch
     {
+        TextureRegistryState.Checking => "Checking",
         TextureRegistryState.Ready => "Ready",
         TextureRegistryState.Building => "Building",
         TextureRegistryState.Outdated => "Outdated",
@@ -220,7 +232,8 @@ public sealed class TextureRegistrySettingsRowViewModel : ObservableObject
     public string StatusColour => _status.State switch
     {
         TextureRegistryState.Ready => "#63C174",
-        TextureRegistryState.Building or TextureRegistryState.Outdated or TextureRegistryState.Cancelled => "#F0B657",
+        TextureRegistryState.Checking or TextureRegistryState.Building or
+            TextureRegistryState.Outdated or TextureRegistryState.Cancelled => "#F0B657",
         _ => "#E36D6D"
     };
     public string LastBuiltLabel => _status.LastBuilt is { } timestamp

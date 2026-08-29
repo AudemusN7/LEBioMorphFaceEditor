@@ -9,6 +9,13 @@ public partial class TextureRegistrySettingsWindow : Window
     {
         InitializeComponent();
         DataContext = viewModel;
+        Closing += OnClosing;
+        Loaded += async (_, _) => await viewModel.RefreshAsync();
+    }
+
+    private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        if (DataContext is TextureRegistrySettingsViewModel { CanClose: false }) e.Cancel = true;
     }
 
     private void OnCloseClick(object sender, RoutedEventArgs e) => Close();

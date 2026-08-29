@@ -318,7 +318,7 @@ public static class PackageContextTests
             var source = ReadFaces(le2Source).First(face => face.ProfileKey == "le2-human-male");
             var sourceMorph = context.CaptureMorphData(le2Source, source.InstancedPath);
             var sourceMaterial = context.CaptureMaterialData(le2Source, source.InstancedPath);
-            var le3Template = Path.GetFullPath(Path.Combine("tests", "LE3 GlobalMorphs.pcc"));
+            var le3Template = FixturePath("LE3 GlobalMorphs.pcc");
             var destination = Path.Combine(Path.GetTempPath(), $"MFE-LE2-to-LE3-{Guid.NewGuid():N}.pcc");
             try
             {
@@ -507,7 +507,8 @@ public static class PackageContextTests
             value.Parameter,
             new AssetIdentity(string.Empty, value.Path, 0, "Texture2D"))).ToArray());
 
-    private static string FixturePath(string fileName) => Path.GetFullPath(Path.Combine("tests", fileName));
+    private static string FixturePath(string fileName) =>
+        Path.GetFullPath(Path.Combine("tests", "Global Morphs", fileName));
 
     private static void AssertConvertedFaceIsEditable(
         string packagePath,
@@ -895,7 +896,7 @@ public static class PackageContextTests
 
     private static void WithPackageCopy(string fileName, Action<string> action)
     {
-        var source = Path.GetFullPath(Path.Combine("tests", fileName));
+        var source = FixturePath(fileName);
         if (!File.Exists(source))
         {
             throw new FileNotFoundException($"Package fixture '{fileName}' was not found.", source);

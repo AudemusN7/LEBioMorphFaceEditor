@@ -16,6 +16,7 @@ public static class MaterialEditingTests
         new("material overrides are effective before the first edit", MaterialOverridesAreInitiallyEffective),
         new("material history tolerates redundant and reordered pointer completion", MaterialHistoryToleratesPointerCompletion),
         new("material randomisation batch is atomic and reversible", MaterialRandomisationBatchIsAtomic),
+        new("material defaults clear loaded overrides and undo", MaterialDefaultsClearLoadedOverrides),
         new("HDR picker previews live and commits once on Apply", HdrPreviewCommitsOnce),
         new("package texture reference updates detached bindings and undoes", PackageTextureReferenceUpdatesBindings),
         new("package texture reference supports None and undo", PackageTextureReferenceSupportsNone),
@@ -161,6 +162,61 @@ public static class MaterialEditingTests
         {
             TestAssert.Near(0.2f, session.GetScalar("HED_Norm_Blend"), 1e-6f);
         }
+    }
+
+    private static void MaterialDefaultsClearLoadedOverrides()
+    {
+        var identity = TestFixtures.CreateIdentity("DefaultableHead", "MaterialInstanceConstant");
+        var defaultTexture = new DecodedTextureAsset(
+            TestFixtures.CreateIdentity("DefaultDiffuse", "Texture2D"),
+            1, 1, [32, 64, 96, 255], "PF_B8G8R8A8", TextureRole.Diffuse,
+            TextureColorSpace.Srgb, TextureAlphaPolicy.Ignore, false, "default-diffuse");
+        var overrideTexture = new DecodedTextureAsset(
+            TestFixtures.CreateIdentity("OverrideDiffuse", "Texture2D"),
+            1, 1, [96, 64, 32, 255], "PF_B8G8R8A8", TextureRole.Diffuse,
+            TextureColorSpace.Srgb, TextureAlphaPolicy.Ignore, false, "override-diffuse");
+        var material = new ResolvedHeadMaterial(
+            MaterialIdentityKey.Create(identity), identity, "BIOG_HMM_HED_PROMorph",
+            HeadMaterialFamily.Skin, HeadMaterialBlendMode.Opaque, false,
+            new Dictionary<string, float> { ["HED_Norm_Blend"] = 0.9f },
+            new Dictionary<string, Vector4> { ["SkinTone"] = new(0.2f, 0.3f, 0.4f, 1) },
+            new Dictionary<string, MaterialTextureBinding>
+            {
+                ["HED_Diff"] = new("HED_Diff", overrideTexture)
+            })
+        {
+            DefaultScalars = new Dictionary<string, float> { ["HED_Norm_Blend"] = 0.5f },
+            DefaultVectors = new Dictionary<string, Vector4> { ["SkinTone"] = Vector4.One },
+            DefaultTextures = new Dictionary<string, MaterialTextureBinding>
+            {
+                ["HED_Diff"] = new("HED_Diff", defaultTexture)
+            }
+        };
+        var overrides = new MorphFaceMaterialOverrides(
+            TestFixtures.CreateIdentity("Overrides", "BioMaterialOverride"),
+            [new ScalarMaterialOverride("HED_Norm_Blend", 0.9f)],
+            [new VectorMaterialOverride("SkinTone", new Vector4(0.2f, 0.3f, 0.4f, 1))],
+            [new TextureMaterialOverride("HED_Diff", overrideTexture.Source)]);
+        var session = new MaterialEditingSession(overrides, new ResolvedHeadMaterialSet(
+            new Dictionary<string, ResolvedHeadMaterial> { [material.Key] = material }));
+
+        session.ResetToDefaults();
+
+        TestAssert.Near(0.5f, session.GetScalar("HED_Norm_Blend"), 0);
+        TestAssert.Equal(Vector4.One, session.GetVector("SkinTone"));
+        TestAssert.Equal("default-diffuse", session.GetPreviewTexture("HED_Diff")?.CacheKey);
+        TestAssert.True(session.GetSelectedTexture("HED_Diff") is null,
+            "Reset did not select the texture control's material-default option.");
+        TestAssert.True(session.CreateOverrides().Scalars.Count == 0 && session.CreateOverrides().Vectors.Count == 0 &&
+                        session.CreateOverrides().Textures.Count == 0,
+            "Loaded material overrides survived ResetToDefaults.");
+        session.Undo();
+        TestAssert.Near(0.9f, session.GetScalar("HED_Norm_Blend"), 0);
+        TestAssert.Equal(new Vector4(0.2f, 0.3f, 0.4f, 1), session.GetVector("SkinTone"));
+        TestAssert.Equal("override-diffuse", session.GetPreviewTexture("HED_Diff")?.CacheKey);
+        TestAssert.True(session.CreateOverrides().Scalars.Count == 1 && session.CreateOverrides().Vectors.Count == 1 &&
+                        session.CreateOverrides().Textures.Count == 1,
+            "Undo did not restore the loaded material overrides.");
     }
 
     private static void PackageTextureReferenceUpdatesBindings()

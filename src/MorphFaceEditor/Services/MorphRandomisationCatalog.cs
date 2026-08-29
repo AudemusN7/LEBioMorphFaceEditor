@@ -59,6 +59,24 @@ public sealed class MorphRandomisationCatalog
                 : null);
     }
 
+    public MorphRandomisationDonor SelectMaterialDonor(
+        string profileKey,
+        int randomSeed,
+        string? excludedDonorId = null)
+    {
+        var pool = MorphRandomisationPoolRouter.Resolve(profileKey);
+        bool IsCompatible(MorphRandomisationDonor donor) =>
+            IsCompatibleMaterialDonorProfile(profileKey, donor.SourceProfileKey) && donor.HasMaterialEvidence;
+        var candidates = Corpus.Pools.GetValueOrDefault(pool)?.Where(IsCompatible).ToArray() ?? [];
+        var hasDistinctCandidate = excludedDonorId is not null && candidates.Any(donor =>
+            !donor.Id.Equals(excludedDonorId, StringComparison.OrdinalIgnoreCase));
+        return MorphRandomiser.SelectDonor(
+            Corpus, pool, randomSeed,
+            donor => IsCompatible(donor) &&
+                     (!hasDistinctCandidate ||
+                      !donor.Id.Equals(excludedDonorId, StringComparison.OrdinalIgnoreCase)));
+    }
+
     public IReadOnlyList<MorphRandomisationDonor> CompatibleMaterialDonors(string profileKey)
     {
         try

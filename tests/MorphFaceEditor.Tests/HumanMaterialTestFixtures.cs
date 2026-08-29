@@ -300,6 +300,37 @@ public static class HumanMaterialTestFixtures
         };
     }
 
+    internal static HeadPreviewMaterial CreateMaskedHairMaterial(
+        string key,
+        byte[] opacityRgba,
+        byte[] diffuseRgba,
+        byte[] tangentRgba,
+        byte[] specularRgba,
+        bool isLe2 = false,
+        bool isLe3 = false)
+    {
+        var textures = new Dictionary<string, HeadPreviewTexture>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["__PROShort01_Opacity"] = CreateTexture(
+                "__PROShort01_Opacity", opacityRgba, TextureRole.Mask),
+            ["__PROShort01_Diffuse"] = CreateTexture(
+                "__PROShort01_Diffuse", diffuseRgba, TextureRole.Diffuse),
+            ["__PROShort01_Tangent"] = CreateTexture(
+                "__PROShort01_Tangent", tangentRgba, TextureRole.Tangent),
+            ["__PROShort01_Specular"] = CreateTexture(
+                "__PROShort01_Specular", specularRgba, TextureRole.Specular)
+        };
+        return new HeadPreviewMaterial(
+            key, key, HeadMaterialFamily.MaskedHair, HeadMaterialBlendMode.Masked, false,
+            new Dictionary<string, float>(),
+            new Dictionary<string, Vector4>(),
+            textures)
+        {
+            IsLe2 = isLe2,
+            IsLe3 = isLe3
+        };
+    }
+
     internal static HeadPreviewMaterial AddHairAuxiliaryMaps(
         HeadPreviewMaterial material,
         byte[] rgba)

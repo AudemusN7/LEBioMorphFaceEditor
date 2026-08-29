@@ -246,6 +246,7 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
         }
         _session.MaterialsChanged -= OnMaterialsChanged;
         _session.HistoryChanged -= OnHistoryChanged;
+        foreach (var texture in Textures) texture.Dispose();
         _disposed = true;
     }
 }

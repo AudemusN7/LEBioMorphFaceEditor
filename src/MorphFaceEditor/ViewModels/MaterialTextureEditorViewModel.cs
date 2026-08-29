@@ -10,11 +10,11 @@ using System.Windows.Media;
 namespace MorphFaceEditor.ViewModels;
 
 /// <summary>Manages one texture parameter's candidates, inherited default, preview and async selection.</summary>
-public sealed class MaterialTextureEditorViewModel : ObservableObject
+public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposable
 {
     private readonly MaterialEditingSession _session;
     private readonly MaterialParameterDefinition _definition;
-    private readonly PackageReferenceService _references;
+    private readonly ITextureReferenceLoader _references;
     private readonly string _packagePath;
     private readonly Action<string> _reportError;
     private readonly IReadOnlyList<PackageAssetListItem> _localCandidates;
@@ -26,12 +26,15 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject
     private ImageSource? _previewThumbnail;
     private bool _isBusy;
     private bool _initializing;
+    private long _selectionGeneration;
+    private CancellationTokenSource? _selectionCancellation;
+    private bool _disposed;
     private string _searchText = string.Empty;
 
     public MaterialTextureEditorViewModel(
         MaterialEditingSession session,
         MaterialParameterDefinition definition,
-        PackageReferenceService references,
+        ITextureReferenceLoader references,
         string packagePath,
         IReadOnlyList<PackageAssetListItem> candidates,
         Action<string> reportError,
@@ -111,13 +114,16 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject
         {
             if (SetProperty(ref _selectedTexture, value) && !_initializing && value is not null)
             {
+                CancelPendingSelection();
                 if (value.IsNone)
                 {
                     _session.SetTextureReference(Name, null);
                 }
                 else
                 {
-                    _ = SelectAsync(value);
+                    var cancellation = new CancellationTokenSource();
+                    _selectionCancellation = cancellation;
+                    _ = SelectAsync(value, _selectionGeneration, cancellation);
                 }
             }
         }
@@ -194,6 +200,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject
         _registryCandidates = candidates;
         _registryProfile = profile;
         _isRegistryAvailable = isRegistryAvailable;
+        CancelPendingSelection();
         var currentTexture = _session.GetSelectedTexture(Name);
         var defaultTextureName = _session.GetDefaultTexture(Name)?.Source.InstancedPath.Split('.').Last();
         var noneLabel = defaultTextureName is null
@@ -221,38 +228,70 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject
         }
     }
 
-    private async Task SelectAsync(MaterialTextureOption selected)
+    private async Task SelectAsync(
+        MaterialTextureOption selected,
+        long generation,
+        CancellationTokenSource cancellation)
     {
-        if (selected.ResolvedTexture is not null)
-        {
-            _session.SetTextureReference(Name, selected.ResolvedTexture);
-            return;
-        }
         IsBusy = true;
         try
         {
+            if (selected.ResolvedTexture is not null)
+            {
+                if (generation == _selectionGeneration)
+                    _session.SetTextureReference(Name, selected.ResolvedTexture);
+                return;
+            }
             var sourcePackage = selected.RegistryCandidate?.EffectiveOccurrence.PackagePath ?? selected.Asset?.Identity.PackagePath
                 ?? throw new ArgumentException("None does not identify a package texture.", nameof(selected));
             var instancedPath = selected.InstancedPath;
             var texture = await _references.LoadTextureAsync(
                 sourcePackage,
                 instancedPath,
-                _definition);
+                _definition,
+                cancellation.Token);
             selected.Asset?.SetThumbnail(texture);
-            if (ReferenceEquals(selected, SelectedTexture))
+            if (generation == _selectionGeneration && ReferenceEquals(selected, SelectedTexture))
             {
                 _session.SetTextureReference(Name, texture);
             }
         }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+        }
         catch (Exception exception)
         {
-            _reportError($"Texture reference could not be changed: {exception.Message}");
-            Refresh();
+            if (generation == _selectionGeneration)
+            {
+                _reportError($"Texture reference could not be changed: {exception.Message}");
+                Refresh();
+            }
         }
         finally
         {
-            IsBusy = false;
+            cancellation.Dispose();
+            if (generation == _selectionGeneration)
+            {
+                _selectionCancellation = null;
+                IsBusy = false;
+            }
         }
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        CancelPendingSelection();
+        _disposed = true;
+    }
+
+    private void CancelPendingSelection()
+    {
+        _selectionGeneration++;
+        var cancellation = _selectionCancellation;
+        _selectionCancellation = null;
+        cancellation?.Cancel();
+        IsBusy = false;
     }
 
     private void ApplySearch()

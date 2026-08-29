@@ -10,9 +10,18 @@ public sealed record PackageReferenceCatalog(
     IReadOnlyList<PackageAssetListItem> Textures,
     IReadOnlyList<PackageAssetListItem> SkeletalMeshes);
 
+public interface ITextureReferenceLoader
+{
+    Task<DecodedTextureAsset> LoadTextureAsync(
+        string packagePath,
+        string texturePath,
+        MaterialParameterDefinition definition,
+        CancellationToken cancellationToken = default);
+}
+
 public sealed class PackageReferenceService(
     MorphFacePackageReader reader,
-    TextureCatalogService? textureCatalogService = null)
+    TextureCatalogService? textureCatalogService = null) : ITextureReferenceLoader
 {
     private readonly SemaphoreSlim _readerGate = new(1, 1);
     private static readonly MaterialParameterDefinition ThumbnailDefinition = new(

@@ -21,6 +21,7 @@ public static class TextureCatalogTests
         new("texture catalogue: duplicate paths keep the highest mounted occurrence", DuplicatePathsKeepEffectiveOccurrence),
         new("texture catalogue: current local texture remains local when its path is indexed", CurrentLocalTextureRemainsLocal),
         new("texture catalogue: picker accepts registry candidates after the editor is already open", PickerAcceptsRegistryCandidatesAfterOpen),
+        new("texture catalogue: stale failed selection cannot discard a newer choice", StaleFailureCannotDiscardNewSelection),
         new("texture catalogue: selected display text does not become a search filter", SelectedDisplayTextDoesNotFilterPicker),
         new("texture catalogue: missing registry preserves every package texture", MissingRegistryPreservesEveryPackageTexture),
         new("texture catalogue: local path suppresses installed duplicate", LocalPathSuppressesInstalledDuplicate),
@@ -345,6 +346,42 @@ public static class TextureCatalogTests
             "Populating registry candidates replaced the current local texture selection.");
     }
 
+    private static void StaleFailureCannotDiscardNewSelection()
+    {
+        var session = MaterialTestFixtures.CreateSession();
+        var current = session.GetSelectedTexture("HED_Diff")!;
+        var first = new PackageAssetListItem(new AssetIdentity(
+            current.Source.PackagePath, "WorkingPackage.Textures.First_Diff", 101, "Texture2D"));
+        var second = new PackageAssetListItem(new AssetIdentity(
+            current.Source.PackagePath, "WorkingPackage.Textures.Second_Diff", 102, "Texture2D"));
+        var loader = new ControlledTextureLoader();
+        var errors = new List<string>();
+        var editor = new MaterialTextureEditorViewModel(
+            session,
+            new MaterialParameterDefinition("HED_Diff", "Diffuse", "skin", MaterialParameterKind.Texture,
+                HeadMaterialFamily.Skin, TextureRole: TextureRole.Diffuse,
+                ColorSpace: TextureColorSpace.Srgb, AlphaPolicy: TextureAlphaPolicy.Ignore),
+            loader,
+            current.Source.PackagePath,
+            [new PackageAssetListItem(current.Source), first, second],
+            errors.Add);
+        var firstOption = editor.Candidates.Single(value => value.Asset == first);
+        var secondOption = editor.Candidates.Single(value => value.Asset == second);
+
+        editor.SelectedTexture = firstOption;
+        editor.SelectedTexture = secondOption;
+        loader.Fail(first.Identity.InstancedPath, new InvalidDataException("first failed late"));
+        loader.Complete(second.Identity.InstancedPath, CreateDecoded(second.Identity));
+
+        TestAssert.True(SpinWait.SpinUntil(() =>
+                session.GetSelectedTexture("HED_Diff")?.Source == second.Identity && !editor.IsBusy,
+                TimeSpan.FromSeconds(2)),
+            "The newer texture selection was discarded after an older request failed.");
+        TestAssert.Equal(0, errors.Count);
+        TestAssert.True(ReferenceEquals(secondOption, editor.SelectedTexture),
+            "The picker reverted to stale session state while the newer selection was loading.");
+    }
+
     private static void SelectedDisplayTextDoesNotFilterPicker()
     {
         var session = MaterialTestFixtures.CreateSession();
@@ -403,5 +440,35 @@ public static class TextureCatalogTests
         TextureGroup: "TEXTUREGROUP_Character",
         HasExternalMips: false,
         TextureFileCacheName: null);
+
+    private static DecodedTextureAsset CreateDecoded(AssetIdentity identity) => new(
+        identity, 1, 1, [128, 128, 128, 255], "PF_B8G8R8A8",
+        TextureRole.Diffuse, TextureColorSpace.Srgb, TextureAlphaPolicy.Ignore,
+        false, identity.InstancedPath);
+
+    private sealed class ControlledTextureLoader : ITextureReferenceLoader
+    {
+        private readonly Dictionary<string, TaskCompletionSource<DecodedTextureAsset>> _requests =
+            new(StringComparer.OrdinalIgnoreCase);
+
+        public Task<DecodedTextureAsset> LoadTextureAsync(
+            string packagePath,
+            string texturePath,
+            MaterialParameterDefinition definition,
+            CancellationToken cancellationToken = default)
+        {
+            var request = new TaskCompletionSource<DecodedTextureAsset>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            _requests.Add(texturePath, request);
+            cancellationToken.Register(() => request.TrySetCanceled(cancellationToken));
+            return request.Task;
+        }
+
+        public void Complete(string texturePath, DecodedTextureAsset texture) =>
+            _requests[texturePath].TrySetResult(texture);
+
+        public void Fail(string texturePath, Exception exception) =>
+            _requests[texturePath].TrySetException(exception);
+    }
 
 }

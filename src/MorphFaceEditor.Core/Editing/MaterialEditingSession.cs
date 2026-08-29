@@ -10,6 +10,8 @@ public sealed class MaterialEditingSession : IUndoableEditSource
     private MorphFaceMaterialOverrides _originalOverrides;
     private readonly ResolvedHeadMaterialSet _baseMaterials;
     private ResolvedHeadMaterialSet _originalMaterials;
+    private readonly IReadOnlyDictionary<string, float> _defaultScalars;
+    private readonly IReadOnlyDictionary<string, Vector4> _defaultVectors;
     private readonly Dictionary<string, float> _scalars;
     private readonly Dictionary<string, Vector4> _vectors;
     private readonly Dictionary<string, DecodedTextureAsset?> _textureReferences = new(StringComparer.OrdinalIgnoreCase);
@@ -31,15 +33,23 @@ public sealed class MaterialEditingSession : IUndoableEditSource
             : new ResolvedHeadMaterialSet(materials.Materials
                 .Where(pair => baseMaterialKeys.Contains(pair.Key, StringComparer.OrdinalIgnoreCase))
                 .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase));
-        _scalars = materials.Materials.Values
-            .SelectMany(material => material.Scalars.Select(value => new ScalarMaterialOverride(value.Key, value.Value)))
-            .Concat(overrides.Scalars)
+        _defaultScalars = materials.Materials.Values
+            .SelectMany(material => (material.DefaultScalars.Count == 0 ? material.Scalars : material.DefaultScalars)
+                .Select(value => new ScalarMaterialOverride(value.Key, value.Value)))
             .GroupBy(value => value.Name, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.Last().Value, StringComparer.OrdinalIgnoreCase);
-        _vectors = materials.Materials.Values
-            .SelectMany(material => material.Vectors.Select(value => new VectorMaterialOverride(value.Key, value.Value)))
-            .Concat(overrides.Vectors)
+        _defaultVectors = materials.Materials.Values
+            .SelectMany(material => (material.DefaultVectors.Count == 0 ? material.Vectors : material.DefaultVectors)
+                .Select(value => new VectorMaterialOverride(value.Key, value.Value)))
             .GroupBy(value => value.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.Last().Value, StringComparer.OrdinalIgnoreCase);
+        _scalars = _defaultScalars
+            .Concat(overrides.Scalars.Select(value => new KeyValuePair<string, float>(value.Name, value.Value)))
+            .GroupBy(value => value.Key, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.Last().Value, StringComparer.OrdinalIgnoreCase);
+        _vectors = _defaultVectors
+            .Concat(overrides.Vectors.Select(value => new KeyValuePair<string, Vector4>(value.Name, value.Value)))
+            .GroupBy(value => value.Key, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.Last().Value, StringComparer.OrdinalIgnoreCase);
         TextureParameters = materials.Materials.Values
             .SelectMany(material => material.Textures.Values.Select(value => new TextureMaterialOverride(value.ParameterName, value.Texture.Source)))
@@ -375,6 +385,37 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         Refresh(MaterialChangeKind.Full);
     }
 
+    /// <summary>Clears every authored override and restores inherited material values as one undoable edit.</summary>
+    public void ResetToDefaults()
+    {
+        if (_originalOverrides.Scalars.Count == 0 && _originalOverrides.Vectors.Count == 0 &&
+            _originalOverrides.Textures.Count == 0 && _editedScalars.Count == 0 &&
+            _editedVectors.Count == 0 &&
+            TextureParameters.All(value => _textureReferences.GetValueOrDefault(value.Name) is null) &&
+            _defaultScalars.All(value => _scalars.GetValueOrDefault(value.Key) == value.Value) &&
+            _defaultVectors.All(value => _vectors.GetValueOrDefault(value.Key) == value.Value))
+        {
+            return;
+        }
+
+        var before = CaptureResetState();
+        _originalOverrides = new MorphFaceMaterialOverrides(_originalOverrides.Source, [], [], []);
+        _scalars.Clear();
+        foreach (var value in _defaultScalars) _scalars[value.Key] = value.Value;
+        _vectors.Clear();
+        foreach (var value in _defaultVectors) _vectors[value.Key] = value.Value;
+        _textureReferences.Clear();
+        foreach (var parameter in TextureParameters) _textureReferences[parameter.Name] = null;
+        _editedScalars.Clear();
+        _editedVectors.Clear();
+        var after = CaptureResetState();
+        if (!_replaying)
+        {
+            CommitHistory(_history.Record(new MaterialSemanticEdit("defaults", before, after)));
+        }
+        Refresh(MaterialChangeKind.Full);
+    }
+
     /// <summary>
     /// Replaces the authored BioMaterialOverride values in the live session.
     /// Unsupported parameters remain in the detached save payload while the
@@ -498,6 +539,10 @@ public sealed class MaterialEditingSession : IUndoableEditSource
                     RestoreBatchState((MaterialBatchState)value!);
                     Refresh(MaterialChangeKind.Full);
                     break;
+                case "defaults":
+                    RestoreResetState((MaterialResetState)value!);
+                    Refresh(MaterialChangeKind.Full);
+                    break;
                 case "scalar":
                     var scalar = (MaterialNumericState)value!;
                     SetScalar(parts[1], scalar.Value);
@@ -568,6 +613,29 @@ public sealed class MaterialEditingSession : IUndoableEditSource
             var explicitValue = _textureReferences.TryGetValue(name, out var value);
             return new MaterialTextureState(explicitValue ? value : GetSelectedTexture(name), explicitValue);
         }, StringComparer.OrdinalIgnoreCase));
+
+    private MaterialResetState CaptureResetState() => new(
+        _originalOverrides,
+        new Dictionary<string, float>(_scalars, StringComparer.OrdinalIgnoreCase),
+        new Dictionary<string, Vector4>(_vectors, StringComparer.OrdinalIgnoreCase),
+        new Dictionary<string, DecodedTextureAsset?>(_textureReferences, StringComparer.OrdinalIgnoreCase),
+        new HashSet<string>(_editedScalars, StringComparer.OrdinalIgnoreCase),
+        new HashSet<string>(_editedVectors, StringComparer.OrdinalIgnoreCase));
+
+    private void RestoreResetState(MaterialResetState state)
+    {
+        _originalOverrides = state.OriginalOverrides;
+        _scalars.Clear();
+        foreach (var value in state.Scalars) _scalars[value.Key] = value.Value;
+        _vectors.Clear();
+        foreach (var value in state.Vectors) _vectors[value.Key] = value.Value;
+        _textureReferences.Clear();
+        foreach (var value in state.Textures) _textureReferences[value.Key] = value.Value;
+        _editedScalars.Clear();
+        foreach (var value in state.EditedScalars) _editedScalars.Add(value);
+        _editedVectors.Clear();
+        foreach (var value in state.EditedVectors) _editedVectors.Add(value);
+    }
 
     private void RestoreBatchState(MaterialBatchState state)
     {
@@ -658,6 +726,13 @@ internal sealed record MaterialBatchState(
     IReadOnlyDictionary<string, MaterialNumericState> Scalars,
     IReadOnlyDictionary<string, MaterialVectorState> Vectors,
     IReadOnlyDictionary<string, MaterialTextureState> Textures);
+internal sealed record MaterialResetState(
+    MorphFaceMaterialOverrides OriginalOverrides,
+    IReadOnlyDictionary<string, float> Scalars,
+    IReadOnlyDictionary<string, Vector4> Vectors,
+    IReadOnlyDictionary<string, DecodedTextureAsset?> Textures,
+    IReadOnlySet<string> EditedScalars,
+    IReadOnlySet<string> EditedVectors);
 
 internal sealed class MaterialEditHistory
 {

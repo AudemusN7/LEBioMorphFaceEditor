@@ -377,6 +377,9 @@
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                             <Button Content="Undo" Command="{Binding Editor.UndoCommand}" MinWidth="66" Padding="9,5" Margin="0,0,6,0" />
                             <Button Content="Redo" Command="{Binding Editor.RedoCommand}" MinWidth="66" Padding="9,5" Margin="0,0,6,0" />
+                            <Button x:Name="SetToDefaultsButton" Content="Set to Defaults"
+                                    Command="{Binding Editor.SetToDefaultsCommand}"
+                                    MinWidth="104" Padding="9,5" Margin="0,0,6,0" />
                             <Button x:Name="GlobalRandomiseButton" Content="Randomise"
                                     Command="{Binding Editor.RandomiseCommand}"
                                     MinWidth="78" Padding="9,5" />
@@ -603,7 +606,8 @@
                                     </ListBox.ItemContainerStyle>
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
-                                            <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="7,7">
+                                            <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="7,7"
+                                                    Visibility="{Binding IsAvailable, Converter={StaticResource BooleanToVisibilityConverter}}">
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="112" />

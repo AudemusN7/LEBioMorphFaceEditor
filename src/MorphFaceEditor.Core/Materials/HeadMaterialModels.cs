@@ -20,6 +20,7 @@ public enum HeadMaterialFamily
     Teeth,
     Lashes,
     Hair,
+    MaskedHair,
     Accessory,
     Unknown
 }
@@ -119,6 +120,10 @@ public sealed record ResolvedHeadMaterial(
     IReadOnlyDictionary<string, Vector4> Vectors,
     IReadOnlyDictionary<string, MaterialTextureBinding> Textures)
 {
+    public IReadOnlyDictionary<string, float> DefaultScalars { get; init; } =
+        new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
+    public IReadOnlyDictionary<string, Vector4> DefaultVectors { get; init; } =
+        new Dictionary<string, Vector4>(StringComparer.OrdinalIgnoreCase);
     public IReadOnlyDictionary<string, MaterialTextureBinding> DefaultTextures { get; init; } =
         new Dictionary<string, MaterialTextureBinding>(StringComparer.OrdinalIgnoreCase);
     public IReadOnlySet<string> SupportedScalars { get; init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

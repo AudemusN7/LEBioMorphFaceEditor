@@ -8,6 +8,10 @@ public sealed record SemanticFeatureBatchEdit(
     IReadOnlyDictionary<string, float> Before,
     IReadOnlyDictionary<string, float> After) : SemanticEdit;
 
+internal sealed record SemanticMorphStateEdit(
+    MorphFaceAuthoringState Before,
+    MorphFaceAuthoringState After) : SemanticEdit;
+
 public sealed class SemanticEditHistory
 {
     private readonly Stack<SemanticEdit> _undo = new();
@@ -50,7 +54,7 @@ public sealed class SemanticEditHistory
         return Push(new SemanticValueEdit(key, before, after));
     }
 
-    public bool Record(SemanticFeatureBatchEdit edit)
+    public bool Record(SemanticEdit edit)
     {
         ArgumentNullException.ThrowIfNull(edit);
         var committed = CommitActive();

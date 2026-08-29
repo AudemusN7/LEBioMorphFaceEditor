@@ -21,6 +21,7 @@ public static class HumanMaterialProfiles
             ["KRO_HED_PRO_MASTER_MAT"] = HeadMaterialFamily.KroganSkin,
             ["KRO_HED_EYE_MASTER_MAT"] = HeadMaterialFamily.KroganEyes,
             ["HMM_HED_PRO_MASTER_SCALP_MAT"] = HeadMaterialFamily.Scalp,
+            ["HMM_HIR_PROShort01_MAT_1a"] = HeadMaterialFamily.MaskedHair,
             ["HMN_HED_PRO_MASTER_HAIR_MAT"] = HeadMaterialFamily.Hair,
             ["HMN_HED_PRO_MASTER_ADDN_HAIR_MAT"] = HeadMaterialFamily.Hair
         };
@@ -34,7 +35,7 @@ public static class HumanMaterialProfiles
 
     public static HeadMaterialBlendMode BlendMode(HeadMaterialFamily family) => family switch
     {
-        HeadMaterialFamily.Scalp => HeadMaterialBlendMode.Masked,
+        HeadMaterialFamily.Scalp or HeadMaterialFamily.MaskedHair => HeadMaterialBlendMode.Masked,
         HeadMaterialFamily.Lashes or HeadMaterialFamily.Hair => HeadMaterialBlendMode.Translucent,
         _ => HeadMaterialBlendMode.Opaque
     };

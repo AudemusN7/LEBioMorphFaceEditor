@@ -49,21 +49,28 @@ public sealed class MorphFacePreviewLoadService : IDisposable
                 $"{loaded.Game} BioMorphFace '{loaded.Document.Source.InstancedPath}' uses unsupported base head " +
                 $"'{loaded.Document.BaseHeadReference?.InstancedPath ?? "<unresolved>"}'.");
         var profile = profileResolution.Profile;
-        loaded = loaded with { UsesCustomBaseMesh = profileResolution.UsesCustomMesh };
+        loaded = loaded with
+        {
+            UsesCustomBaseMesh = profileResolution.UsesCustomMesh,
+            IgnoresAuthoredGeometry = profile.IgnoresAuthoredGeometry,
+            HairMesh = profile.IgnoresAuthoredGeometry ? null : loaded.HairMesh,
+            OtherMeshes = profile.IgnoresAuthoredGeometry ? [] : loaded.OtherMeshes
+        };
         var geometryEditBlockReason = profileResolution.UsesCustomMesh
             ? "This BioMorphFace uses a custom base mesh; morph and bone controls are disabled. Material editing remains available."
             : profile.GeometryEditBlockReason(loaded.BaseHead.Source.InstancedPath);
         var session = new MorphFaceEditingSession(
             loaded.Document,
             loaded.BaseHead,
-            profileResolution.UsesCustomMesh
+            profileResolution.UsesCustomMesh || profile.IgnoresAuthoredGeometry
                 ? []
                 : _targetCatalog.Load(profile, loaded.Game, packagePath),
             profile.MetadataOnlyFeatures,
             profile.DisplayName,
             profile.FeatureAliases,
             profile.RecognizesBaseVariant,
-            geometryEditBlockReason);
+            geometryEditBlockReason,
+            profile.IgnoresAuthoredGeometry);
         var baseMaterialKeys = loaded.BaseHead.RenderData?.MaterialSlots
             .Where(identity => identity is not null)
             .Select(identity => MaterialIdentityKey.Create(identity!))

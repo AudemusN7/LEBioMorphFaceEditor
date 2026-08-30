@@ -58,8 +58,39 @@ public static class UiSmokeTests
         new("Turian UI profile exposes mandibles, head spikes, and species material controls", TurianProfileOrganizesFeatures),
         new("Batarian UI profile groups racial structure and species material controls", BatarianProfileOrganizesFeatures),
         new("Krogan UI profile separates head plates and Wrex character controls", KroganProfileOrganizesFeatures),
-        new("Vorcha UI keeps reconstructed morphs hidden and bones editable", VorchaProfileIsMaterialAndBoneOnly)
+        new("Vorcha UI keeps reconstructed morphs hidden and bones editable", VorchaProfileIsMaterialAndBoneOnly),
+        new("Female Turian UI exposes Turian materials without inherited geometry controls", FemaleTurianProfileIsMaterialOnly)
     ];
+
+    private static void FemaleTurianProfileIsMaterialOnly()
+    {
+        using var reader = new MorphFacePackageReader();
+        using var editor = CreateEditor(
+            reader,
+            new FemaleTurianFeatureMetadataCatalog(),
+            "le2-female-turian",
+            ignoresAuthoredGeometry: true);
+
+        TestAssert.Equal(0, editor.Features.Count);
+        TestAssert.Equal(0, editor.Bones.Count);
+        TestAssert.True(!editor.CanEdit,
+            "Female Turian test session did not reproduce its geometry-edit block.");
+        TestAssert.True(!editor.AllowsMorphRandomisation && !editor.RandomiseMorphs,
+            "Female Turian exposed inherited TUR geometry randomisation.");
+        TestAssert.True(editor.AllowsMaterialRandomisation && editor.AllowsCursedRandomisation,
+            "Female Turian material-only mode disabled its randomisation controls.");
+        editor.RandomiseMaterials = true;
+        TestAssert.True(editor.RandomiseMaterials && editor.CanRandomise,
+            "Female Turian material randomisation was disabled with geometry randomisation.");
+        editor.CursedMode = true;
+        TestAssert.True(editor.CursedMode && editor.RandomiseMaterials && !editor.RandomiseMorphs && editor.CanRandomise,
+            "Female Turian Cursed mode did not remain available as material-only randomisation.");
+        var textures = TextureCatalogProfiles.For(MorphFaceProfileRegistry.CreateDefault().Profiles.Single(value =>
+            value.Key == "le2-female-turian"));
+        TestAssert.True(textures.PreferredPathFragments.Contains("TUF_HED") &&
+                        textures.SharedPathFragments.Contains("TUF_EYE"),
+            "Female Turian texture discovery did not receive TUF path signals.");
+    }
 
     private static void VorchaProfileIsMaterialAndBoneOnly()
     {
@@ -532,7 +563,7 @@ public static class UiSmokeTests
     {
         var catalog = MorphRandomisationCatalog.LoadEmbedded();
         TestAssert.Equal(10, catalog.Corpus.Pools.Count(value => value.Value.Count > 0));
-        TestAssert.Equal(1410, catalog.Corpus.Pools.Sum(value => value.Value.Count));
+        TestAssert.Equal(1570, catalog.Corpus.Pools.Sum(value => value.Value.Count));
         TestAssert.True(catalog.Corpus.Pools.Values.SelectMany(value => value).All(donor =>
                 !donor.Id.EndsWith("Human Male.LE3_HMM_Morphs.Broke", StringComparison.OrdinalIgnoreCase)),
             "The known broken LE3 HMM donor remained in the embedded corpus.");
@@ -564,7 +595,8 @@ public static class UiSmokeTests
     private static FaceEditorViewModel CreateEditor(
         MorphFacePackageReader reader,
         IHeadEditorUiProfile? metadataCatalog = null,
-        string profileKey = "le1-human-male")
+        string profileKey = "le1-human-male",
+        bool ignoresAuthoredGeometry = false)
     {
         var mesh = TestFixtures.CreateMesh();
         var document = new MorphFaceDocument(
@@ -580,10 +612,31 @@ public static class UiSmokeTests
         var morphSession = new MorphFaceEditor.Core.Editing.MorphFaceEditingSession(
             document,
             mesh,
-            [TestFixtures.CreateTarget()]);
+            ignoresAuthoredGeometry ? [] : [TestFixtures.CreateTarget()],
+            metadataOnlyFeatures: ignoresAuthoredGeometry
+                ? FemaleTurianFeatureMetadataCatalog.MetadataOnlyFeatures
+                : null,
+            geometryEditBlockReason: ignoresAuthoredGeometry ? "Material-only test profile." : null,
+            ignoreAuthoredGeometry: ignoresAuthoredGeometry);
+        var materialIdentity = TestFixtures.CreateIdentity("TurianHeadMaterial", "MaterialInstanceConstant");
+        var resolvedMaterials = ignoresAuthoredGeometry
+            ? new ResolvedHeadMaterialSet(new Dictionary<string, ResolvedHeadMaterial>
+            {
+                [MaterialIdentityKey.Create(materialIdentity)] = new ResolvedHeadMaterial(
+                    MaterialIdentityKey.Create(materialIdentity),
+                    materialIdentity,
+                    "ALN_HED_PRO_MASTER_MAT",
+                    HeadMaterialFamily.TurianSkin,
+                    HeadMaterialBlendMode.Opaque,
+                    false,
+                    new Dictionary<string, float> { ["TUR_HED_Diffuse02_Scalar"] = 0.5f },
+                    new Dictionary<string, Vector4> { ["SkinTone"] = Vector4.One },
+                    new Dictionary<string, MaterialTextureBinding>())
+            })
+            : ResolvedHeadMaterialSet.Empty;
         var materialSession = new MorphFaceEditor.Core.Editing.MaterialEditingSession(
             MorphFaceMaterialOverrides.Empty,
-            ResolvedHeadMaterialSet.Empty);
+            resolvedMaterials);
         return new FaceEditorViewModel(
             morphSession,
             metadataCatalog ?? new HumanMaleFeatureMetadataCatalog(),
@@ -596,7 +649,9 @@ public static class UiSmokeTests
             null,
             [],
             _ => { },
-            profileKey);
+            profileKey,
+            randomisationCatalog: ignoresAuthoredGeometry ? MorphRandomisationCatalog.LoadEmbedded() : null,
+            ignoresAuthoredGeometry: ignoresAuthoredGeometry);
     }
 
     private static FaceEditorViewModel CreateRandomisationEditor(

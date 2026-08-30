@@ -25,12 +25,13 @@ public sealed class HeadPreviewSceneFactory
     {
         Validate(loaded);
         var baseLod = RequireLod(loaded.BaseHead, lodIndex);
-        var positions = !loaded.UsesCustomBaseMesh &&
+        var usesBaseHeadGeometry = loaded.UsesCustomBaseMesh || loaded.IgnoresAuthoredGeometry;
+        var positions = !usesBaseHeadGeometry &&
                         loaded.Document.BakedLods.Count > lodIndex &&
                         loaded.Document.BakedLods[lodIndex].Length == baseLod.Topology.VertexCount
             ? loaded.Document.BakedLods[lodIndex]
             : baseLod.Positions;
-        var finalSkeleton = loaded.UsesCustomBaseMesh
+        var finalSkeleton = usesBaseHeadGeometry
             ? []
             : loaded.Document.FinalSkeleton;
         var pose = SkeletalPoseComposer.Compose(
@@ -42,7 +43,7 @@ public sealed class HeadPreviewSceneFactory
             baseLod.Normals,
             finalSkeleton,
             ConvertPalette(pose.SkinningMatrices),
-            applySkinning: !loaded.UsesCustomBaseMesh,
+            applySkinning: !usesBaseHeadGeometry,
             lodIndex);
     }
 
@@ -210,9 +211,13 @@ public sealed class HeadPreviewSceneFactory
     private static void Validate(LoadedMorphFace loaded)
     {
         ArgumentNullException.ThrowIfNull(loaded);
-        if (!loaded.TopologyDiagnostics.IsValid)
+        if (!loaded.IgnoresAuthoredGeometry && !loaded.TopologyDiagnostics.IsValid)
         {
             throw new InvalidDataException("The face cannot be previewed because topology validation failed.");
+        }
+        if (loaded.IgnoresAuthoredGeometry && !TopologyDiagnostics.Analyze(loaded.BaseHead).IsValid)
+        {
+            throw new InvalidDataException("The material-only base head cannot be previewed because topology validation failed.");
         }
         if (loaded.HairMesh is not null && !TopologyDiagnostics.Analyze(loaded.HairMesh).IsValid)
         {

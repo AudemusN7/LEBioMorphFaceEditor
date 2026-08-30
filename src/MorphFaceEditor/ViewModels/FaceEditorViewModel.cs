@@ -58,11 +58,13 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         RandomisationInclusionState? randomisationInclusionState = null,
         IReadOnlyList<TextureCatalogCandidate>? registryTextureCandidates = null,
         TextureCatalogProfile? textureCatalogProfile = null,
-        bool isTextureRegistryAvailable = false)
+        bool isTextureRegistryAvailable = false,
+        bool ignoresAuthoredGeometry = false)
     {
         _session = session;
         _profileKey = profileKey;
-        _allowsMorphRandomisation = !profileKey.EndsWith("-vorcha", StringComparison.OrdinalIgnoreCase);
+        _allowsMorphRandomisation = !ignoresAuthoredGeometry &&
+                                    !profileKey.EndsWith("-vorcha", StringComparison.OrdinalIgnoreCase);
         if (!_allowsMorphRandomisation)
         {
             _randomiseMorphs = false;
@@ -93,10 +95,12 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                 reportError))
             .Where(feature => feature.IsVisible)
             .ToArray();
-        Bones = session.FinalSkeleton
-            .SelectMany(bone => Enumerable.Range(0, 3)
-                .Select(axis => new BoneAxisEditorViewModel(session, bone.BoneName, axis)))
-            .ToArray();
+        Bones = ignoresAuthoredGeometry
+            ? []
+            : session.FinalSkeleton
+                .SelectMany(bone => Enumerable.Range(0, 3)
+                    .Select(axis => new BoneAxisEditorViewModel(session, bone.BoneName, axis)))
+                .ToArray();
         var hairSession = new AssetReferenceEditingSession(hairMeshReference);
         var otherMeshSessions = Enumerable.Range(0, 1)
             .Select(index => new AssetReferenceEditingSession(otherMeshReferences.ElementAtOrDefault(index)))
@@ -106,7 +110,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             [session, materialSession, hairSession, .. otherMeshSessions]);
         _undoCommand = new RelayCommand(_history.Undo, () => _history.CanUndo);
         _redoCommand = new RelayCommand(_history.Redo, () => _history.CanRedo);
-        _setToDefaultsCommand = new RelayCommand(SetToDefaults, () => CanEdit);
+        _setToDefaultsCommand = new RelayCommand(SetToDefaults, CanSetToDefaults);
         _randomiseCommand = new RelayCommand(
             () => Randomise(GlobalRandomisationScope(CursedMode), includeCursedBones: true),
             () => CanRandomiseScope(GlobalRandomisationScope(CursedMode)));
@@ -193,6 +197,9 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     public bool CanEdit => _session.CanEdit;
     public bool CanRandomise => CanRandomiseScope(GlobalRandomisationScope(CursedMode));
     public bool AllowsMorphRandomisation => CanEdit && _allowsMorphRandomisation;
+    public bool AllowsMaterialRandomisation =>
+        Material.Scalars.Count + Material.Vectors.Count + Material.Textures.Count > 0;
+    public bool AllowsCursedRandomisation => CanEdit || AllowsMaterialRandomisation;
     public bool CursedMode
     {
         get => _cursedMode;
@@ -296,12 +303,15 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     private void SetToDefaults()
     {
         using var aggregate = _history.BeginAggregate();
-        _session.ResetToDefaults();
+        if (CanEdit) _session.ResetToDefaults();
         Material.ResetToDefaults();
         aggregate.Commit();
         _cursedBaseline = null;
         _cursedBoneOffsets.Clear();
     }
+
+    private bool CanSetToDefaults() => CanEdit || AllowsMaterialRandomisation;
+
     private async void Randomise(EditorRandomisationScope requested, bool includeCursedBones)
     {
         try
@@ -568,8 +578,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
 
     private bool CanRandomiseScope(EditorRandomisationScope scope)
     {
-        if (!CanEdit) return false;
-        var hasMorph = RandomiseMorphs && scope.MorphFeatures.Any(value => value.IsEditable);
+        var hasMorph = CanEdit && RandomiseMorphs && scope.MorphFeatures.Any(value => value.IsEditable);
         var hasRawNumericMaterial = RandomiseMaterials &&
                                     (scope.Scalars.Count + scope.Vectors.Count > 0);
         var eligibleTextures = _randomisationCatalog.EligibleTextureParameters(_profileKey);

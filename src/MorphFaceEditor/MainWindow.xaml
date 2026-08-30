@@ -431,12 +431,12 @@
                                        HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,3,0,0" />
                             <CheckBox x:Name="RandomiseMaterialsCheckBox" Grid.Row="1" Grid.Column="3" Content="Randomise Materials"
                                       IsChecked="{Binding RandomiseMaterials, Mode=TwoWay}"
-                                      IsEnabled="{Binding Editor.CanEdit}"
+                                      IsEnabled="{Binding Editor.AllowsMaterialRandomisation}"
                                       Margin="14,3,0,0" VerticalAlignment="Center" />
 
                             <CheckBox x:Name="CursedModeCheckBox" Grid.Row="2" Grid.Column="3" Content="Cursed Mode"
                                       IsChecked="{Binding CursedMode, Mode=TwoWay}"
-                                      IsEnabled="{Binding Editor.CanEdit}"
+                                      IsEnabled="{Binding Editor.AllowsCursedRandomisation}"
                                       Margin="14,3,0,0" VerticalAlignment="Center"
                                       ToolTip="Enable this only if you are mentally disturbed and/or are Mgamerz" />
                         </Grid>

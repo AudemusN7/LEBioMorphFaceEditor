@@ -25,6 +25,7 @@ public static class DeformationTests
         new("zero skin weights use influence zero", ZeroSkinWeightsUseInfluenceZero),
         new("invalid dormant targets disable editing before slider use", InvalidDormantTargetDisablesEditing),
         new("slider drag history coalesces into one semantic edit", SliderHistoryCoalesces),
+        new("bone puck drag coalesces all axes into one semantic edit", BonePuckHistoryCoalesces),
         new("editing session exposes available targets but saves them sparsely", AvailableTargetsRemainSparse),
         new("baked mesh inversion recovers exact morph slider weights", MeshInversionRecoversWeights),
         new("mesh sidecar prior selects the original multi-LOD slider branch", MeshPriorPreservesLowerLod)
@@ -316,6 +317,46 @@ public static class DeformationTests
         TestAssert.Near(0, session.GetBoneAxis("root", 0), 0);
         session.Undo();
         TestAssert.Near(0.5f, session.GetFeature("Target"), 0);
+    }
+
+    private static void BonePuckHistoryCoalesces()
+    {
+        var mesh = TestFixtures.CreateMesh();
+        var target = TestFixtures.CreateTarget(new MorphVertexDelta(1, Vector3.UnitX, Vector3.Zero));
+        var face = new MorphFaceDocument(
+            TestFixtures.CreateIdentity("Face", "BioMorphFace"),
+            new PackageFingerprint(1, DateTime.UnixEpoch, new string('0', 64)),
+            null,
+            null,
+            [new MorphFeatureValue("Target", 0)],
+            [new BoneTranslation("root", Vector3.Zero)],
+            MorphFaceMaterialOverrides.Empty,
+            [mesh.Positions.ToArray()],
+            []);
+        var session = new MorphFaceEditingSession(face, mesh, [target]);
+
+        session.BeginBoneTranslationEdit("root");
+        session.SetBoneAxis("root", 1, -0.5f);
+        session.SetBoneAxis("root", 2, 0.75f);
+        session.BeginBoneTranslationEdit("root");
+        session.SetBoneAxis("root", 0, 0.25f);
+        session.SetBoneAxis("root", 1, -1.25f);
+        TestAssert.True(!session.CanUndo, "A puck drag was committed before release.");
+        session.EndBoneTranslationEdit("root");
+
+        TestAssert.True(session.CanUndo, "A completed puck drag did not create history.");
+        session.Undo();
+        TestAssert.Near(Vector3.Zero, new Vector3(
+            session.GetBoneAxis("root", 0),
+            session.GetBoneAxis("root", 1),
+            session.GetBoneAxis("root", 2)), 0);
+        TestAssert.True(!session.CanUndo && session.CanRedo,
+            "One puck drag created more than one undo entry.");
+        session.Redo();
+        TestAssert.Near(new Vector3(0.25f, -1.25f, 0.75f), new Vector3(
+            session.GetBoneAxis("root", 0),
+            session.GetBoneAxis("root", 1),
+            session.GetBoneAxis("root", 2)), 0);
     }
 
     private static void AvailableTargetsRemainSparse()

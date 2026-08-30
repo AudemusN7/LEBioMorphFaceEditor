@@ -8,6 +8,11 @@ public sealed record SemanticFeatureBatchEdit(
     IReadOnlyDictionary<string, float> Before,
     IReadOnlyDictionary<string, float> After) : SemanticEdit;
 
+public sealed record SemanticBoneTranslationEdit(
+    string BoneName,
+    System.Numerics.Vector3 Before,
+    System.Numerics.Vector3 After) : SemanticEdit;
+
 internal sealed record SemanticMorphStateEdit(
     MorphFaceAuthoringState Before,
     MorphFaceAuthoringState After) : SemanticEdit;
@@ -101,6 +106,10 @@ public sealed class SemanticEditHistory
             batchEdit.Before.Count == batchEdit.After.Count &&
             batchEdit.Before.All(value =>
                 batchEdit.After.TryGetValue(value.Key, out var after) && value.Value == after))
+        {
+            return false;
+        }
+        if (edit is SemanticBoneTranslationEdit boneEdit && boneEdit.Before == boneEdit.After)
         {
             return false;
         }

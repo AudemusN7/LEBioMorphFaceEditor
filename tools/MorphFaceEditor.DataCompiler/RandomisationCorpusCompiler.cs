@@ -143,11 +143,17 @@ public static class RandomisationCorpusCompiler
             {
                 exclusionReason = reviewed.Reason;
             }
+            var materialOnlyProfile = profile.PoolKey == MorphRandomisationPoolKey.Vorcha;
             if (exclusionReason is null && canonicalValues.Values.All(value => value == 0))
             {
-                exclusionReason = "The face has no non-zero visible editable morph sliders.";
+                exclusionReason = materialOnlyProfile
+                    ? "Vorcha morph sliders are intentionally unavailable; this face is a material donor only."
+                    : "The face has no non-zero visible editable morph sliders.";
             }
             var eligible = exclusionReason is null;
+            var materialEligible = materialOnlyProfile
+                ? string.IsNullOrWhiteSpace(raw.MaterialEvidenceError)
+                : eligible;
             var sourceFile = Path.GetFileName(raw.PackagePath);
             faces.Add(new RandomisationAuditFace(
                 raw.Game, sourceFile, raw.FacePath, profile.ProfileKey, profile.PoolKey,
@@ -156,7 +162,7 @@ public static class RandomisationCorpusCompiler
             var nonZero = canonicalValues
                 .Where(value => value.Value != 0)
                 .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase);
-            if (eligible)
+            if (eligible || materialEligible)
             {
                 var textureFamilies = BuildTextureFamilies(profile.ProfileKey, raw.MaterialTextures);
                 donors[profile.PoolKey].Add(new MorphRandomisationDonor(
@@ -176,14 +182,14 @@ public static class RandomisationCorpusCompiler
                 materialRows.Add(new RandomisationMaterialAuditRow(
                     profile.PoolKey, raw.Game, profile.ProfileKey, sourceFile, raw.FacePath,
                     MaterialParameterKind.Scalar, value.Key, value.Value, null, null, null,
-                    eligible, raw.MaterialEvidenceError));
+                    materialEligible, raw.MaterialEvidenceError));
             }
             foreach (var value in raw.MaterialVectors.OrderBy(value => value.Key, StringComparer.OrdinalIgnoreCase))
             {
                 materialRows.Add(new RandomisationMaterialAuditRow(
                     profile.PoolKey, raw.Game, profile.ProfileKey, sourceFile, raw.FacePath,
                     MaterialParameterKind.Vector, value.Key, null, value.Value, null, null,
-                    eligible, raw.MaterialEvidenceError));
+                    materialEligible, raw.MaterialEvidenceError));
             }
             var familyLookup = BuildTextureFamilies(profile.ProfileKey, raw.MaterialTextures)
                 .SelectMany(family => family.Value.Keys.Select(parameter => (parameter, family.Key)))
@@ -193,7 +199,7 @@ public static class RandomisationCorpusCompiler
                 materialRows.Add(new RandomisationMaterialAuditRow(
                     profile.PoolKey, raw.Game, profile.ProfileKey, sourceFile, raw.FacePath,
                     MaterialParameterKind.Texture, value.Key, null, null, value.Value,
-                    familyLookup.GetValueOrDefault(value.Key), eligible, raw.MaterialEvidenceError));
+                    familyLookup.GetValueOrDefault(value.Key), materialEligible, raw.MaterialEvidenceError));
             }
 
             foreach (var featureName in unionByPool[profile.PoolKey])
@@ -472,6 +478,16 @@ public static class RandomisationCorpusCompiler
                 value.Key.Contains("scalp", StringComparison.OrdinalIgnoreCase) ||
                 value.Key.Equals("HED_Tang", StringComparison.OrdinalIgnoreCase));
             Add("human-scalp", scalp, "HED_Scalp_Diff", "HED_Scalp_Norm");
+        }
+        else if (profileKey.EndsWith("-vorcha", StringComparison.OrdinalIgnoreCase))
+        {
+            Add("vorcha-face", textures.Where(value => value.Key is
+                    "TUR_HED_Diff" or "ALN_HED_Norm" or "ALN_HED_Tint"),
+                "TUR_HED_Diff", "ALN_HED_Norm");
+            Add("vorcha-eyes", textures.Where(value => value.Key is "ALN_HED_Diff" or "Eye_Norm"),
+                "ALN_HED_Diff", "Eye_Norm");
+            Add("vorcha-eyes", textures.Where(value => value.Key is "EYE_Diff" or "Eye_Norm"),
+                "EYE_Diff", "Eye_Norm");
         }
         else if (TryGetSpeciesTexturePrefix(profileKey, out var species, out var prefix))
         {

@@ -254,7 +254,7 @@ public sealed class MorphFacePackageReader : IDisposable
                 var resolved = _referenceResolver.Require(
                     reference,
                     $"SkeletalMesh '{export.InstancedFullPath}' material slot");
-                var material = RecoverKroganCorpusMaterialSlot(export, slot, resolved);
+                var material = RecoverCorpusMaterialSlot(export, slot, resolved);
                 materialExports.Add(material);
                 return ToIdentity(material);
             })
@@ -401,36 +401,48 @@ public sealed class MorphFacePackageReader : IDisposable
         return result;
     }
 
-    private static ExportEntry RecoverKroganCorpusMaterialSlot(
+    private static ExportEntry RecoverCorpusMaterialSlot(
         ExportEntry mesh,
         int slot,
         ExportEntry resolved)
     {
-        if (!mesh.InstancedFullPath.EndsWith(
+        if (mesh.InstancedFullPath.EndsWith(
                 "BIOG_KRO_HED_PROMorph.KRO_HED_PROBase_MDL",
-                StringComparison.OrdinalIgnoreCase) ||
-            !resolved.ClassName.StartsWith("MaterialExpression", StringComparison.OrdinalIgnoreCase))
+                StringComparison.OrdinalIgnoreCase) &&
+            resolved.ClassName.StartsWith("MaterialExpression", StringComparison.OrdinalIgnoreCase))
         {
-            return resolved;
+            // The consolidated LE2 research corpus contains the correct local
+            // Krogan MICs but retained two pre-port expression UIndices.
+            var expectedPath = slot switch
+            {
+                0 => "BIOG_KRO_HED_PROMorph.KRO_HED_PROBASE_MAT_1a",
+                1 => "BIOG_KRO_HED_PROMorph._Eye.KRO_EYE_PROBASE_MAT_1a",
+                _ => null
+            };
+            return FindLocalMic(mesh, expectedPath) ?? resolved;
         }
-
-        // The consolidated LE2 research corpus contains the correct local
-        // Krogan MICs but retained two pre-port expression UIndices on the
-        // embedded base mesh. Recover only this exact mesh/slot corruption;
-        // ordinary game packages and all other material references retain the
-        // normal resolver path.
-        var expectedPath = slot switch
+        if (mesh.InstancedFullPath.EndsWith(
+                "BIOG_ALN_HED_PROMorph_R.ALN_HED_PROBase_MDL",
+                StringComparison.OrdinalIgnoreCase) &&
+            resolved.ClassName.StartsWith("MaterialExpression", StringComparison.OrdinalIgnoreCase))
         {
-            0 => "BIOG_KRO_HED_PROMorph.KRO_HED_PROBASE_MAT_1a",
-            1 => "BIOG_KRO_HED_PROMorph._Eye.KRO_EYE_PROBASE_MAT_1a",
-            _ => null
-        };
-        return expectedPath is null
-            ? resolved
-            : mesh.FileRef.Exports.FirstOrDefault(export =>
-                export.InstancedFullPath.Equals(expectedPath, StringComparison.OrdinalIgnoreCase) &&
-                export.ClassName.Equals("MaterialInstanceConstant", StringComparison.OrdinalIgnoreCase)) ?? resolved;
+            // The LE3 Vorcha corpus retains pre-port material-array UIndices;
+            // the matching local MICs are authoritative in both games.
+            var expectedPath = slot switch
+            {
+                0 => "BIOG_ALN_HED_PROMorph_R.PROBase.ALN_HED_PROBASE_MAT_1a",
+                1 => "BIOG_ALN_HED_PROMorph_R.ALN_EYE_MAT_1a",
+                _ => null
+            };
+            return FindLocalMic(mesh, expectedPath) ?? resolved;
+        }
+        return resolved;
     }
+
+    private static ExportEntry? FindLocalMic(ExportEntry mesh, string? expectedPath) => expectedPath is null ? null :
+        mesh.FileRef.Exports.FirstOrDefault(export =>
+            export.InstancedFullPath.Equals(expectedPath, StringComparison.OrdinalIgnoreCase) &&
+            export.ClassName.Equals("MaterialInstanceConstant", StringComparison.OrdinalIgnoreCase));
 
     private SkeletalMeshAsset GetSkeletalMesh(ExportEntry export, ICollection<ExportEntry> materialExports)
     {

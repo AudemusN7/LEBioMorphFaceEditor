@@ -17,5 +17,6 @@ public static class MaterialTests
             .Concat(TurianMaterialTests.All)
             .Concat(BatarianMaterialTests.All)
             .Concat(KroganMaterialTests.All)
+            .Concat(VorchaMaterialTests.All)
             .ToArray();
 }

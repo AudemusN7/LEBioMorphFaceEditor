@@ -15,6 +15,8 @@ public enum HeadMaterialFamily
     BatarianSkin,
     KroganSkin,
     KroganEyes,
+    VorchaSkin,
+    VorchaEyes,
     Scalp,
     Eyes,
     Teeth,

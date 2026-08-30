@@ -4,9 +4,14 @@
     <TargetFramework>net10.0-windows</TargetFramework>
     <AssemblyName>MorphFaceEditor.DataCompiler</AssemblyName>
     <RootNamespace>MorphFaceEditor.DataCompiler</RootNamespace>
+    <LecDirectory>$(MSBuildThisFileDirectory)..\..\lib\LegendaryExplorerCore</LecDirectory>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\MorphFaceEditor\MorphFaceEditor.csproj" />
     <ProjectReference Include="..\..\src\MorphFaceEditor.LegendaryExplorer\MorphFaceEditor.LegendaryExplorer.csproj" />
+    <Reference Include="LegendaryExplorerCore">
+      <HintPath>$(LecDirectory)\LegendaryExplorerCore.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
   </ItemGroup>
 </Project>

@@ -954,6 +954,13 @@ internal sealed class MorphFaceMaterialReader(
 
     private static HeadMaterialFamily InferFamily(string value)
     {
+        if (value.Contains("ALN_HED", StringComparison.OrdinalIgnoreCase) ||
+            value.Contains("ALN_EYE", StringComparison.OrdinalIgnoreCase))
+        {
+            return value.Contains("EYE", StringComparison.OrdinalIgnoreCase)
+                ? HeadMaterialFamily.VorchaEyes
+                : HeadMaterialFamily.VorchaSkin;
+        }
         if (value.Contains("BAT_HED", StringComparison.OrdinalIgnoreCase) ||
             value.Contains("Batarian", StringComparison.OrdinalIgnoreCase))
         {

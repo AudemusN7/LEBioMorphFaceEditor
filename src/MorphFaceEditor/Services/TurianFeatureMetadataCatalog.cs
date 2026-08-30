@@ -74,6 +74,11 @@ public sealed partial class TurianFeatureMetadataCatalog : IHeadEditorUiProfile
             ["mouth_Wide"] = 85
         };
 
+    public static IReadOnlySet<string> AllFeatureNames { get; } =
+        FeatureSortOrders.Keys
+            .Concat(MetadataOnlyFeatures)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
     public IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
     [
         new(FacialStructure, "Facial Structure", "Turian mandible and head-spike proportions.",

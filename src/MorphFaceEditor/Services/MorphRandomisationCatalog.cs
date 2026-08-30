@@ -56,7 +56,7 @@ public sealed class MorphRandomisationCatalog
             requireMaterial
                 ? donor => IsCompatibleMaterialDonorProfile(profileKey, donor.SourceProfileKey) &&
                            donor.HasMaterialEvidence
-                : null);
+                : donor => donor.AvailableFeatures.Count > 0);
     }
 
     public MorphRandomisationDonor SelectMaterialDonor(
@@ -159,6 +159,16 @@ public sealed class MorphRandomisationCatalog
             // LE3 uses TUR_HED_EYE_MASTER_MAT. Keep their atomic eye families
             // and numeric eye parameters inside the matching game profile.
             return donor == target;
+        }
+        if (target.EndsWith("-female-turian", StringComparison.Ordinal))
+        {
+            // TUF shares the Turian material population, but uses TUF-equivalent
+            // texture objects for that population.
+            return donor.EndsWith("-female-turian", StringComparison.Ordinal);
+        }
+        if (target.EndsWith("-turian", StringComparison.Ordinal))
+        {
+            return !donor.EndsWith("-female-turian", StringComparison.Ordinal);
         }
         if (!target.Contains("human-", StringComparison.Ordinal))
         {

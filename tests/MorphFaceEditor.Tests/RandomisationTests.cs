@@ -77,6 +77,7 @@ public static class RandomisationTests
         var human = catalog.EligibleTextureParameters("le1-human-male");
         var salarian = catalog.EligibleTextureParameters("le1-salarian");
         var turian = catalog.EligibleTextureParameters("le3-turian");
+        var femaleTurian = catalog.EligibleTextureParameters("le3-female-turian");
         var vorchaLe2 = catalog.EligibleTextureParameters("le2-vorcha");
         var vorchaLe3 = catalog.EligibleTextureParameters("le3-vorcha");
 
@@ -87,6 +88,25 @@ public static class RandomisationTests
         TestAssert.True(turian.Contains("TUR_HED_Diff") &&
                         (turian.Contains("TUR_EYE_Diff") || turian.Contains("EYE_Diff")),
             "The embedded Turian pool omitted face or eye textures.");
+        TestAssert.True(femaleTurian.Contains("TUR_HED_Diff") &&
+                        (femaleTurian.Contains("TUR_EYE_Diff") || femaleTurian.Contains("EYE_Diff")),
+            "The embedded Female Turian pool omitted face or eye textures.");
+        TestAssert.True(catalog.CompatibleMaterialDonors("le3-female-turian").All(value =>
+                value.SourceProfileKey.EndsWith("-female-turian", StringComparison.OrdinalIgnoreCase)),
+            "Female Turian material randomisation crossed into the male Turian donor pool.");
+        TestAssert.True(catalog.CompatibleMaterialDonors("le3-turian").All(value =>
+                !value.SourceProfileKey.EndsWith("-female-turian", StringComparison.OrdinalIgnoreCase)),
+            "Male Turian material randomisation crossed into TUF-equivalent texture donors.");
+        TestAssert.True(catalog.CompatibleMaterialDonors("le3-female-turian")
+                .SelectMany(value => value.MaterialTextureFamilies.Values)
+                .Where(family => family.ContainsKey("TUR_HED_Addn"))
+                .Select(family => family["TUR_HED_Addn"])
+                .Where(path => path.Contains("_PRO_Add", StringComparison.OrdinalIgnoreCase))
+                .All(path => path.Contains("TUF_HED_PRO_Add", StringComparison.OrdinalIgnoreCase)),
+            "Female Turian complexion donors did not retain their TUF-equivalent texture paths.");
+        TestAssert.True(Enumerable.Range(0, 64).All(seed =>
+                catalog.SelectDonor("le3-turian", seed, requireMaterial: false).AvailableFeatures.Count > 0),
+            "TUF material-only donors leaked into male Turian morph randomisation.");
         TestAssert.True(vorchaLe2.Contains("TUR_HED_Diff") && vorchaLe2.Contains("ALN_HED_Diff"),
             "The embedded LE2 Vorcha pool omitted face or eye textures.");
         TestAssert.True(vorchaLe3.Contains("TUR_HED_Diff") && vorchaLe3.Contains("EYE_Diff"),
@@ -230,6 +250,8 @@ public static class RandomisationTests
             MorphRandomisationPoolRouter.Resolve("le2-salarian"));
         TestAssert.Equal(MorphRandomisationPoolKey.Turian,
             MorphRandomisationPoolRouter.Resolve("le3-turian"));
+        TestAssert.Equal(MorphRandomisationPoolKey.Turian,
+            MorphRandomisationPoolRouter.Resolve("le3-female-turian"));
         TestAssert.Equal(MorphRandomisationPoolKey.Krogan,
             MorphRandomisationPoolRouter.Resolve("le1-krogan"));
         TestAssert.Equal(MorphRandomisationPoolKey.Batarian,
@@ -1042,20 +1064,25 @@ public static class RandomisationTests
         var definitions = RandomisationProfileDefinitionFactory.CreateDefault(
             MorphFaceProfileRegistry.CreateDefault(), new MorphTargetCatalog());
 
-        TestAssert.Equal(23, definitions.Count);
+        TestAssert.Equal(26, definitions.Count);
         TestAssert.Equal(10, definitions.Select(value => value.PoolKey).Distinct().Count());
-        TestAssert.True(definitions.Where(value => value.PoolKey != MorphRandomisationPoolKey.Vorcha)
+        TestAssert.True(definitions.Where(value => !value.IsMaterialOnly &&
+                                                   value.PoolKey != MorphRandomisationPoolKey.Vorcha)
                 .All(value => value.AvailableFeatures.Count > 0),
             "A geometry-randomisable profile exposed no morph targets.");
-        TestAssert.True(definitions.Where(value => value.PoolKey == MorphRandomisationPoolKey.Vorcha)
+        TestAssert.True(definitions.Where(value => value.IsMaterialOnly ||
+                                                   value.PoolKey == MorphRandomisationPoolKey.Vorcha)
                 .All(value => value.AvailableFeatures.Count == 0),
-            "Vorcha unexpectedly exposed reconstructed morph controls to randomisation.");
+            "A material-only profile unexpectedly exposed morph controls to randomisation.");
         TestAssert.Equal(MorphRandomisationPoolKey.HumanMaleLe12,
             definitions.Single(value => value.ProfileKey == "le1-human-male").PoolKey);
         TestAssert.Equal(MorphRandomisationPoolKey.HumanMaleLe12,
             definitions.Single(value => value.ProfileKey == "le2-human-male").PoolKey);
         TestAssert.Equal(MorphRandomisationPoolKey.HumanMaleLe3,
             definitions.Single(value => value.ProfileKey == "le3-human-male").PoolKey);
+        TestAssert.True(definitions.Where(value => value.ProfileKey.EndsWith("-female-turian"))
+                .All(value => value.IsMaterialOnly && value.PoolKey == MorphRandomisationPoolKey.Turian),
+            "Female Turian profiles did not join the shared Turian material pool.");
     }
 
     private static void CompilationRetainsVorchaMaterialDonors()

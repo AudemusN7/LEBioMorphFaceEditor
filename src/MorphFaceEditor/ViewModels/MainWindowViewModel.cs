@@ -1029,12 +1029,6 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             return false;
         }
-        if (Editor.Material.HasExternalRegistrySelections)
-        {
-            ErrorMessage = "This face uses an installed texture-registry selection. Saving it will be enabled once the path-preserving texture materialisation stage is complete.";
-            Status = "External texture selection is preview-only for now.";
-            return false;
-        }
         if (!Editor.IsDirty)
         {
             return true;
@@ -1076,12 +1070,6 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         if (_packageWorkspace is null || PackagePath is null)
         {
-            return false;
-        }
-        if (Editor?.Material.HasExternalRegistrySelections == true)
-        {
-            ErrorMessage = "This face uses an installed texture-registry selection. Saving it will be enabled once the path-preserving texture materialisation stage is complete.";
-            Status = "External texture selection is preview-only for now.";
             return false;
         }
         if (Editor?.IsDirty == true && !await FlushEditorToWorkspaceAsync())
@@ -1172,12 +1160,6 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         if (Editor is null || _loadedFace is null || PackagePath is null || WorkspacePackagePath is null)
         {
-            return;
-        }
-        if (Editor.Material.HasExternalRegistrySelections)
-        {
-            ErrorMessage = "This face uses an installed texture-registry selection. Export is disabled until path-preserving texture materialisation is complete.";
-            Status = "External texture selection is preview-only for now.";
             return;
         }
         var sourceName = SelectedFace?.DisplayName ?? _loadedFace.Document.Source.InstancedPath.Split('.').Last();

@@ -260,7 +260,11 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
 
     public void BeginFeatureEdit(string name) => BeginEdit(FeatureKey(name), GetFeature(name));
     public void EndFeatureEdit(string name) => EndEdit(FeatureKey(name), GetFeature(name));
-    public void BeginBoneEdit(string boneName, int axis) => BeginEdit(BoneKey(boneName, axis), GetBoneAxis(boneName, axis));
+    public void BeginBoneEdit(string boneName, int axis)
+    {
+        EndActiveBoneTranslationEdit();
+        BeginEdit(BoneKey(boneName, axis), GetBoneAxis(boneName, axis));
+    }
     public void EndBoneEdit(string boneName, int axis) => EndEdit(BoneKey(boneName, axis), GetBoneAxis(boneName, axis));
 
     public void BeginBoneTranslationEdit(string boneName)
@@ -535,8 +539,17 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
         Refresh();
     }
 
-    public void Undo() => Replay(_history.PopUndo(), useAfter: false);
-    public void Redo() => Replay(_history.PopRedo(), useAfter: true);
+    public void Undo()
+    {
+        EndActiveBoneTranslationEdit();
+        Replay(_history.PopUndo(), useAfter: false);
+    }
+
+    public void Redo()
+    {
+        EndActiveBoneTranslationEdit();
+        Replay(_history.PopRedo(), useAfter: true);
+    }
     public void ClearRedo() => _history.ClearRedo();
 
     private MorphTargetResolution Resolve() => new MorphFeatureTargetResolver().Resolve(

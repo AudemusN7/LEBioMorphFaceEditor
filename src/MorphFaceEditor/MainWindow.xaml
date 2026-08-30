@@ -412,7 +412,7 @@
                                        HorizontalAlignment="Right" VerticalAlignment="Center" />
                             <CheckBox x:Name="RandomiseMorphsCheckBox" Grid.Column="3" Content="Randomise Morphs"
                                       IsChecked="{Binding RandomiseMorphs, Mode=TwoWay}"
-                                      IsEnabled="{Binding Editor.CanEdit}"
+                                      IsEnabled="{Binding Editor.AllowsMorphRandomisation}"
                                       Margin="14,0,0,0" VerticalAlignment="Center" />
 
                             <TextBlock x:Name="MaterialRandomisationStrengthLabel" Grid.Row="1"

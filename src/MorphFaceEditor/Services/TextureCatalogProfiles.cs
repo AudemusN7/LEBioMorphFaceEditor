@@ -24,6 +24,8 @@ public static class TextureCatalogProfiles
                 new TextureCatalogProfile(key, ["KRO_HED"], ["KRO_EYE"]),
             var key when key.EndsWith("batarian", StringComparison.OrdinalIgnoreCase) =>
                 new TextureCatalogProfile(key, ["BAT_HED"], ["BAT_EYE"]),
+            var key when key.EndsWith("vorcha", StringComparison.OrdinalIgnoreCase) =>
+                new TextureCatalogProfile(key, ["ALN_HED", "TUR_HED_Diff"], ["ALN_EYE", "Eye_Norm"]),
             _ => TextureCatalogProfile.Empty
         };
     }

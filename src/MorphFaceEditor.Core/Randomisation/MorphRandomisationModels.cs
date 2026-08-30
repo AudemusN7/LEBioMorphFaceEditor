@@ -12,7 +12,8 @@ public enum MorphRandomisationPoolKey
     Salarian,
     Turian,
     Krogan,
-    Batarian
+    Batarian,
+    Vorcha
 }
 
 public sealed record MorphRandomisationDonor(
@@ -108,6 +109,7 @@ public static class MorphRandomisationPoolRouter
             var value when value.EndsWith("-turian", StringComparison.Ordinal) => MorphRandomisationPoolKey.Turian,
             var value when value.EndsWith("-krogan", StringComparison.Ordinal) => MorphRandomisationPoolKey.Krogan,
             var value when value.EndsWith("-batarian", StringComparison.Ordinal) => MorphRandomisationPoolKey.Batarian,
+            var value when value.EndsWith("-vorcha", StringComparison.Ordinal) => MorphRandomisationPoolKey.Vorcha,
             _ => throw new NotSupportedException($"Profile '{profileKey}' has no morph-randomisation pool.")
         };
     }

@@ -146,6 +146,7 @@ public sealed class MorphFaceProfileRegistry
         CreateTurianProfile(MorphFaceGame.LE2),
         CreateBatarianProfile(MorphFaceGame.LE2),
         CreateKroganProfile(MorphFaceGame.LE2),
+        CreateVorchaProfile(MorphFaceGame.LE2),
         new MorphFaceProfile(
             "le3-human-male",
             "LE3 Human Male",
@@ -178,7 +179,8 @@ public sealed class MorphFaceProfileRegistry
         CreateSalarianProfile(MorphFaceGame.LE3, "BIOG_SAL_HED_PROMorph_R.pcc"),
         CreateTurianProfile(MorphFaceGame.LE3),
         CreateBatarianProfile(MorphFaceGame.LE3),
-        CreateKroganProfile(MorphFaceGame.LE3)
+        CreateKroganProfile(MorphFaceGame.LE3),
+        CreateVorchaProfile(MorphFaceGame.LE3)
     ]);
 
     private static string? InferProfileSuffix(
@@ -188,6 +190,8 @@ public sealed class MorphFaceProfileRegistry
         var families = materials.Materials.Values
             .Select(material => material.Family)
             .ToHashSet();
+        if (families.Contains(Core.Materials.HeadMaterialFamily.VorchaSkin) ||
+            families.Contains(Core.Materials.HeadMaterialFamily.VorchaEyes)) return "-vorcha";
         if (families.Contains(Core.Materials.HeadMaterialFamily.BatarianSkin)) return "-batarian";
         if (families.Contains(Core.Materials.HeadMaterialFamily.KroganSkin) ||
             families.Contains(Core.Materials.HeadMaterialFamily.KroganEyes)) return "-krogan";
@@ -206,6 +210,7 @@ public sealed class MorphFaceProfileRegistry
             .Concat(materialOverrides.Scalars.Select(value => value.Name))
             .Concat(materialOverrides.Vectors.Select(value => value.Name))
             .Concat(materialOverrides.Textures.Select(value => value.Name)));
+        if (ContainsMarker(evidence, "ALN_", "Vorcha")) return "-vorcha";
         if (ContainsMarker(evidence, "BAT_", "Batarian")) return "-batarian";
         if (ContainsMarker(evidence, "KRO_", "Krogan")) return "-krogan";
         if (ContainsMarker(evidence, "TUR_", "Turian")) return "-turian";
@@ -354,6 +359,28 @@ public sealed class MorphFaceProfileRegistry
         }
         return facePath.StartsWith("Batarian.", StringComparison.OrdinalIgnoreCase);
     }
+
+    private static MorphFaceProfile CreateVorchaProfile(MorphFaceGame game) =>
+        new(
+            $"{game.ToString().ToLowerInvariant()}-vorcha",
+            $"{game} Vorcha",
+            game,
+            "BIOG_ALN_HED_PROMorph_R.pcc",
+            VorchaFeatureMetadataCatalog.MetadataOnlyFeatures,
+            VorchaFeatureMetadataCatalog.FeatureAliases,
+            new VorchaFeatureMetadataCatalog(),
+            "[ALN]",
+            "#909110",
+            _ => false,
+            MatchesVorcha)
+        {
+            TargetSetName = "ALN_ReconstructedMorphSet"
+        };
+
+    private static bool MatchesVorcha(string facePath, string? baseHeadPath) =>
+        !string.IsNullOrWhiteSpace(baseHeadPath)
+            ? baseHeadPath.Contains("ALN_HED_PROBase_MDL", StringComparison.OrdinalIgnoreCase)
+            : facePath.StartsWith("Vorcha.", StringComparison.OrdinalIgnoreCase);
 
     private static bool MatchesHuman(
         string facePath,

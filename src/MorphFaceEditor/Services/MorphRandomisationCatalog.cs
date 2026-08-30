@@ -153,6 +153,13 @@ public sealed class MorphRandomisationCatalog
     {
         var target = targetProfileKey.ToLowerInvariant();
         var donor = donorProfileKey.ToLowerInvariant();
+        if (target.EndsWith("-vorcha", StringComparison.Ordinal))
+        {
+            // The head schema is shared, but LE2 uses ALN_EYE_MASTER_MAT while
+            // LE3 uses TUR_HED_EYE_MASTER_MAT. Keep their atomic eye families
+            // and numeric eye parameters inside the matching game profile.
+            return donor == target;
+        }
         if (!target.Contains("human-", StringComparison.Ordinal))
         {
             // Alien pools are already species-isolated and their material schemas are intentionally

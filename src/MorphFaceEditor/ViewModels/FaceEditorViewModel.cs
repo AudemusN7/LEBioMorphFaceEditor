@@ -22,6 +22,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     private readonly List<RelayCommand> _subcategoryRandomiseCommands = [];
     private readonly MorphRandomisationCatalog _randomisationCatalog;
     private readonly string _profileKey;
+    private readonly bool _allowsMorphRandomisation;
     private readonly Func<int> _randomSeedFactory;
     private readonly Action<string> _reportError;
     private MorphFaceEditor.Core.Domain.MorphFaceDocument _cleanState;
@@ -61,6 +62,11 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     {
         _session = session;
         _profileKey = profileKey;
+        _allowsMorphRandomisation = !profileKey.EndsWith("-vorcha", StringComparison.OrdinalIgnoreCase);
+        if (!_allowsMorphRandomisation)
+        {
+            _randomiseMorphs = false;
+        }
         _randomisationCatalog = randomisationCatalog ?? MorphRandomisationCatalog.Empty;
         _randomSeedFactory = randomSeedFactory ?? Random.Shared.Next;
         _reportError = reportError;
@@ -186,6 +192,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     public System.Windows.Input.ICommand RandomiseCommand => _randomiseCommand;
     public bool CanEdit => _session.CanEdit;
     public bool CanRandomise => CanRandomiseScope(GlobalRandomisationScope(CursedMode));
+    public bool AllowsMorphRandomisation => CanEdit && _allowsMorphRandomisation;
     public bool CursedMode
     {
         get => _cursedMode;
@@ -212,7 +219,8 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         get => _randomiseMorphs;
         set
         {
-            if (SetProperty(ref _randomiseMorphs, value)) RaiseRandomisationCanExecuteChanged();
+            var allowedValue = _allowsMorphRandomisation && value;
+            if (SetProperty(ref _randomiseMorphs, allowedValue)) RaiseRandomisationCanExecuteChanged();
         }
     }
     public bool RandomiseMaterials

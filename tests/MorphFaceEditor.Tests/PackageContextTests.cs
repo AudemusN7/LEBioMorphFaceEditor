@@ -27,6 +27,7 @@ public static class PackageContextTests
         new("cross-game conversion rebakes LE2 to LE3 and LE3 to LE1 packages", ConvertMorphsAcrossGameBoundary),
         new("reviewed cross-game texture policy aliases donors and omits inert overrides", ApplyReviewedTextureTransferPolicy),
         new("later-game alien textures embed package-stored when LE1 has no stock equivalent", EmbedMissingAlienTextureIntoLe1),
+        new("external texture selections materialise package-stored at their original path", ExternalTextureSelectionsMaterialiseOnSave),
         new("LE2 context morph paste round-trips matching-profile topology", PasteLe2MorphData),
         new("LE3 context material paste round-trips every override kind", PasteLe3MaterialData),
         new("bundled human and Asari eyes recover both fixed reflection cubes", HumanAndAsariEyeCubesResolve),
@@ -482,6 +483,47 @@ public static class PackageContextTests
             TestAssert.Equal(3, embedded.Length);
             TestAssert.True(embedded.All(entry => new LecTexture2D(entry).GetTopMip().IsPackageStored),
                 "At least one embedded alien texture was not serialized as package-stored.");
+        });
+    }
+
+    private static void ExternalTextureSelectionsMaterialiseOnSave()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        WithPackageCopy("LE3 GlobalMorphs.pcc", destinationPath =>
+        {
+            AssetIdentity identity;
+            using (var source = MEPackageHandler.OpenMEPackage(
+                       FixturePath("LE3 VorchaMorphs.pcc"), forceLoadFromDisk: true))
+            using (var destination = MEPackageHandler.OpenMEPackage(destinationPath, forceLoadFromDisk: true))
+            {
+                var texture = source.Exports.FirstOrDefault(export =>
+                                  export.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase) &&
+                                  destination.FindEntry(export.InstancedFullPath, "Texture2D") is null)
+                              ?? throw new InvalidDataException(
+                                  "The LE3 Vorcha fixture has no texture absent from GlobalMorphs.");
+                identity = MorphFacePackageReader.ToIdentity(texture)!;
+            }
+
+            var selectedFace = ReadFaces(destinationPath).First();
+            using var reader = new MorphFacePackageReader();
+            var loaded = reader.Load(destinationPath, selectedFace.UIndex.ToString());
+            var parameterName = loaded.Document.MaterialOverrides.Textures.FirstOrDefault()?.Name ?? "HED_Diff";
+            var textures = loaded.Document.MaterialOverrides.Textures
+                .Where(value => !value.Name.Equals(parameterName, StringComparison.OrdinalIgnoreCase))
+                .Append(new TextureMaterialOverride(parameterName, identity))
+                .ToArray();
+            var draft = loaded.Document with
+            {
+                MaterialOverrides = loaded.Document.MaterialOverrides with { Textures = textures }
+            };
+            _ = new MorphFacePackageWriter().SaveExisting(draft);
+
+            using var reopened = MEPackageHandler.OpenMEPackage(destinationPath, forceLoadFromDisk: true);
+            var saved = reopened.FindExport(identity.InstancedPath, "Texture2D")
+                        ?? throw new InvalidDataException("The materialised texture was not saved.");
+            TestAssert.Equal(identity.InstancedPath, saved.InstancedFullPath);
+            TestAssert.True(new LecTexture2D(saved).GetTopMip().IsPackageStored,
+                "The materialised texture retained an external TFC dependency.");
         });
     }
 

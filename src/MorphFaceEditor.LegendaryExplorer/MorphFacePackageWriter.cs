@@ -58,7 +58,7 @@ public sealed class MorphFacePackageWriter
         {
             string facePath;
             string overridePath;
-            IReadOnlyList<string> warnings;
+            List<string> warnings;
             var sourceBytes = File.ReadAllBytes(sourcePath);
             using (var sourceStream = new MemoryStream(sourceBytes, writable: false))
             using (var sourcePackage = MEPackageHandler.OpenMEPackageFromStream(sourceStream, logicalSourcePath))
@@ -81,7 +81,7 @@ public sealed class MorphFacePackageWriter
                 }
 
                 var issues = EntryExporter.ExportExportToPackage(sourceFace, destinationPackage, out var portedEntry);
-                warnings = issues.Select(issue => issue.Message).ToArray();
+                warnings = issues.Select(issue => issue.Message).ToList();
                 if (portedEntry is not ExportEntry portedFace ||
                     !string.Equals(portedFace.ClassName, "BioMorphFace", StringComparison.OrdinalIgnoreCase))
                 {
@@ -99,7 +99,7 @@ public sealed class MorphFacePackageWriter
 
                 WriteFace(destinationPackage, portedFace, draft);
                 var materialOverride = ResolveMaterialOverride(portedFace);
-                WriteMaterialOverride(destinationPackage, materialOverride, draft.MaterialOverrides);
+                WriteMaterialOverride(destinationPackage, materialOverride, draft.MaterialOverrides, warnings);
                 facePath = portedFace.InstancedFullPath;
                 overridePath = materialOverride.InstancedFullPath;
                 destinationPackage.Save(temporaryPath);
@@ -155,13 +155,14 @@ public sealed class MorphFacePackageWriter
         {
             File.Copy(packagePath, temporaryPath, overwrite: false);
             string overridePath;
+            var warnings = new List<string>();
             using (var package = MEPackageHandler.OpenMEPackage(temporaryPath, forceLoadFromDisk: true))
             {
                 EnsureSupportedGame(package);
                 var face = FindExport(package, draft.Source.InstancedPath, "BioMorphFace");
                 WriteFace(package, face, draft);
                 var materialOverride = ResolveMaterialOverride(face);
-                WriteMaterialOverride(package, materialOverride, draft.MaterialOverrides);
+                WriteMaterialOverride(package, materialOverride, draft.MaterialOverrides, warnings);
                 overridePath = materialOverride.InstancedFullPath;
                 package.Save(temporaryPath);
             }
@@ -178,7 +179,10 @@ public sealed class MorphFacePackageWriter
                 draft.Source.InstancedPath,
                 overridePath,
                 draft.BakedLods.Count,
-                draft.MaterialOverrides.Textures.Count);
+                draft.MaterialOverrides.Textures.Count)
+            {
+                Warnings = warnings
+            };
         }
         finally
         {
@@ -222,7 +226,8 @@ public sealed class MorphFacePackageWriter
     private static void WriteMaterialOverride(
         IMEPackage package,
         ExportEntry materialOverride,
-        MorphFaceMaterialOverrides overrides)
+        MorphFaceMaterialOverrides overrides,
+        ICollection<string> warnings)
     {
         var properties = materialOverride.GetProperties();
         properties.AddOrReplaceProp(new ArrayProperty<StructProperty>(
@@ -245,7 +250,7 @@ public sealed class MorphFacePackageWriter
                 [
                     new NameProperty(value.Name, "nName"),
                     new ObjectProperty(
-                        ResolveDraftEntry(package, value.TextureReference, "Texture2D", required: false),
+                        ResolveTextureDraftEntry(package, value.TextureReference, warnings),
                         "m_pTexture")
                 ])),
             "m_aTextureOverrides"));
@@ -440,6 +445,24 @@ public sealed class MorphFacePackageWriter
         var entry = package.FindEntry(identity.InstancedPath, expectedClass);
         return entry ?? throw new InvalidDataException(
             $"Referenced {expectedClass} '{identity.InstancedPath}' is not inside the destination PCC.");
+    }
+
+    private static IEntry ResolveTextureDraftEntry(
+        IMEPackage package,
+        AssetIdentity? identity,
+        ICollection<string> warnings)
+    {
+        if (identity is null)
+        {
+            return null!;
+        }
+        if (identity.IsImport &&
+            package.FindEntry(identity.InstancedPath, "Texture2D") is { } preservedImport)
+        {
+            return preservedImport;
+        }
+        return package.FindExport(identity.InstancedPath, "Texture2D")
+               ?? ExternalTextureMaterializer.Materialize(package, identity, warnings);
     }
 
     private static ExportEntry FindExport(IMEPackage package, string path, string expectedClass)

@@ -70,7 +70,6 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
     public IReadOnlyList<MaterialScalarEditorViewModel> Scalars { get; }
     public IReadOnlyList<MaterialVectorEditorViewModel> Vectors { get; }
     public IReadOnlyList<MaterialTextureEditorViewModel> Textures { get; }
-    public bool HasExternalRegistrySelections => Textures.Any(texture => texture.HasExternalRegistrySelection);
     public bool CanResolveTexturePath(string parameterName, string instancedPath) =>
         Textures.FirstOrDefault(texture => texture.Name.Equals(parameterName, StringComparison.OrdinalIgnoreCase))
             ?.CanResolveInstancedPath(instancedPath) == true;

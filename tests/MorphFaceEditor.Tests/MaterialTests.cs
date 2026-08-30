@@ -19,4 +19,3 @@ public static class MaterialTests
             .Concat(KroganMaterialTests.All)
             .ToArray();
 }
-

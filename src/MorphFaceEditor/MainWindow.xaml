@@ -595,39 +595,94 @@
                                 <Border Background="#1C242C" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="10,8">
                                     <TextBlock Text="Raw final-skeleton translation editing. Feature controls are usually the safer authoring surface." Foreground="{StaticResource SecondaryText}" FontSize="10" TextWrapping="Wrap" />
                                 </Border>
-                                <ListBox Grid.Row="1" ItemsSource="{Binding Editor.Bones}" BorderThickness="0" Background="#151A20" Foreground="{StaticResource PrimaryText}" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                <ListBox x:Name="BoneList" Grid.Row="1" ItemsSource="{Binding Editor.BoneTransforms}"
+                                         SelectedItem="{Binding Editor.SelectedBoneTransform, Mode=TwoWay}"
+                                         BorderThickness="0" Background="#151A20" Foreground="{StaticResource PrimaryText}"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                                     <ListBox.ItemContainerStyle>
                                         <Style TargetType="ListBoxItem">
                                             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                                             <Setter Property="Background" Value="Transparent" />
                                             <Setter Property="Foreground" Value="{StaticResource PrimaryText}" />
                                             <Setter Property="Padding" Value="0" />
+                                            <Style.Triggers>
+                                                <Trigger Property="IsSelected" Value="True">
+                                                    <Setter Property="Background" Value="Transparent" />
+                                                </Trigger>
+                                            </Style.Triggers>
                                         </Style>
                                     </ListBox.ItemContainerStyle>
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
-                                            <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="7,7"
+                                            <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1"
                                                     Visibility="{Binding IsAvailable, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                                <Grid>
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="112" />
-                                                        <ColumnDefinition Width="18" />
-                                                        <ColumnDefinition Width="*" />
-                                                        <ColumnDefinition Width="72" />
-                                                    </Grid.ColumnDefinitions>
-                                                    <TextBlock Text="{Binding BoneName}" Foreground="{StaticResource PrimaryText}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" FontSize="11" />
-                                                    <TextBlock Grid.Column="1" Text="{Binding AxisName}" Foreground="{StaticResource Accent}" VerticalAlignment="Center" />
-                                                    <Slider Grid.Column="2" Minimum="{Binding Minimum}" Maximum="{Binding Maximum}" TickFrequency="0.01"
-                                                            Value="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                            PreviewMouseLeftButtonDown="OnEditorSliderStarted"
-                                                            PreviewMouseLeftButtonUp="OnEditorSliderCompleted" />
-                                                    <TextBox Grid.Column="3" Margin="7,0,0,0" Padding="5,3"
-                                                             Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=LostFocus, StringFormat={}{0:G6}}"
-                                                             PreviewKeyDown="OnNumericValueKeyDown"
-                                                             GotKeyboardFocus="OnNumericValueGotFocus"
-                                                             LostKeyboardFocus="OnNumericValueLostFocus"
-                                                             PreviewMouseWheel="OnNumericValueMouseWheel" />
-                                                </Grid>
+                                                <StackPanel>
+                                                    <Border Padding="9,8" Cursor="Hand" PreviewMouseLeftButtonDown="OnBoneHeaderMouseLeftButtonDown">
+                                                        <Border.Style>
+                                                            <Style TargetType="Border">
+                                                                <Setter Property="Background" Value="Transparent" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                                                                        <Setter Property="Background" Value="{StaticResource HoverBackground}" />
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                                                                        <Setter Property="Background" Value="#202B34" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Border.Style>
+                                                        <Grid>
+                                                            <TextBlock Text="{Binding BoneName}" Foreground="{StaticResource PrimaryText}" FontSize="11" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                                            <Path Data="M 0 0 L 4 4 L 8 0" Stroke="{StaticResource SecondaryText}" StrokeThickness="1.2"
+                                                                  HorizontalAlignment="Right" VerticalAlignment="Center">
+                                                                <Path.Style>
+                                                                    <Style TargetType="Path">
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                                                                                <Setter Property="RenderTransform"><Setter.Value><RotateTransform Angle="180" CenterX="4" CenterY="2" /></Setter.Value></Setter>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </Path.Style>
+                                                            </Path>
+                                                        </Grid>
+                                                    </Border>
+
+                                                    <StackPanel Margin="9,0,9,10"
+                                                                Visibility="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                        <controls:BoneTransformControl HorizontalAlignment="Stretch" />
+                                                        <Grid Margin="0,8,0,0" HorizontalAlignment="Stretch">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="5" />
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="5" />
+                                                                <ColumnDefinition Width="*" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <Grid>
+                                                                <TextBox DataContext="{Binding X}" Padding="18,3,4,3" FontSize="10"
+                                                                         Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=LostFocus, StringFormat={}{0:G6}}"
+                                                                         PreviewKeyDown="OnNumericValueKeyDown" GotKeyboardFocus="OnNumericValueGotFocus"
+                                                                         LostKeyboardFocus="OnNumericValueLostFocus" PreviewMouseWheel="OnNumericValueMouseWheel" />
+                                                                <TextBlock Text="X" Foreground="{StaticResource Accent}" FontSize="10" Margin="5,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False" />
+                                                            </Grid>
+                                                            <Grid Grid.Column="2">
+                                                                <TextBox DataContext="{Binding Y}" Padding="18,3,4,3" FontSize="10"
+                                                                         Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=LostFocus, StringFormat={}{0:G6}}"
+                                                                         PreviewKeyDown="OnNumericValueKeyDown" GotKeyboardFocus="OnNumericValueGotFocus"
+                                                                         LostKeyboardFocus="OnNumericValueLostFocus" PreviewMouseWheel="OnNumericValueMouseWheel" />
+                                                                <TextBlock Text="Y" Foreground="{StaticResource Accent}" FontSize="10" Margin="5,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False" />
+                                                            </Grid>
+                                                            <Grid Grid.Column="4">
+                                                                <TextBox DataContext="{Binding Z}" Padding="18,3,4,3" FontSize="10"
+                                                                         Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=LostFocus, StringFormat={}{0:G6}}"
+                                                                         PreviewKeyDown="OnNumericValueKeyDown" GotKeyboardFocus="OnNumericValueGotFocus"
+                                                                         LostKeyboardFocus="OnNumericValueLostFocus" PreviewMouseWheel="OnNumericValueMouseWheel" />
+                                                                <TextBlock Text="Z" Foreground="{StaticResource Accent}" FontSize="10" Margin="5,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False" />
+                                                            </Grid>
+                                                        </Grid>
+                                                    </StackPanel>
+                                                </StackPanel>
                                             </Border>
                                         </DataTemplate>
                                     </ListBox.ItemTemplate>

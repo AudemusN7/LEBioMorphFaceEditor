@@ -27,6 +27,7 @@ public static class UiSmokeTests
         new("texture thumbnails discard alpha", TextureThumbnailsDiscardAlpha),
         new("numeric wheel increments are finite and crash-safe", NumericWheelIncrementsAreSafe),
         new("extended sliders are optional and preserve edited values", ExtendedSlidersAreOptional),
+        new("each face editor owns a valid selected bone transform", BoneTransformSelectionIsPerEditor),
         new("bone controls tolerate bones removed by zeroed morphs", BoneControlsTolerateRemovedMorphBones),
         new("attachment editor exposes two slots and preserves extras", AttachmentEditorUsesTwoSlots),
         new("morph clipboard codec round-trips typed versioned data", MorphClipboardCodecRoundTrips),
@@ -882,6 +883,22 @@ public static class UiSmokeTests
         feature.SetExtendedSliders(false);
         TestAssert.Near(-0.5f, feature.Value, 0);
         TestAssert.Near(-0.5f, feature.Minimum, 0);
+    }
+
+    private static void BoneTransformSelectionIsPerEditor()
+    {
+        using var reader = new MorphFacePackageReader();
+        using var first = CreateRandomisationEditor(reader);
+        TestAssert.True(first.BoneTransforms.Count > 1 && first.SelectedBoneTransform is not null,
+            "The first face editor did not select an available bone transform.");
+
+        first.SelectedBoneTransform = first.BoneTransforms[1];
+        TestAssert.Equal(first.BoneTransforms[1], first.SelectedBoneTransform);
+
+        using var second = CreateRandomisationEditor(reader);
+        TestAssert.True(second.SelectedBoneTransform is not null,
+            "A replacement face editor did not establish its own selected bone transform.");
+        TestAssert.Equal(second.BoneTransforms[0], second.SelectedBoneTransform);
     }
 
     private static void BoneControlsTolerateRemovedMorphBones()

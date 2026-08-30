@@ -101,6 +101,16 @@ public partial class MainWindow : Window
         }
     }
 
+    private void OnBoneHeaderMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is DependencyObject source &&
+            ItemsControl.ContainerFromElement(BoneList, source) is ListBoxItem item)
+        {
+            item.IsSelected = true;
+            e.Handled = true;
+        }
+    }
+
     private void OnFaceContextMenuOpened(object sender, RoutedEventArgs e) =>
         _viewModel.RefreshClipboardCommandAvailability();
 
@@ -161,7 +171,7 @@ public partial class MainWindow : Window
 
     private void OnNumericValueMouseWheel(object sender, MouseWheelEventArgs e)
     {
-        if (sender is not TextBox { IsKeyboardFocusWithin: true, DataContext: IContinuousEditViewModel edit } ||
+        if (sender is not TextBox { DataContext: IContinuousEditViewModel edit } ||
             e.Delta == 0)
         {
             return;

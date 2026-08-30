@@ -27,6 +27,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     private readonly Action<string> _reportError;
     private MorphFaceEditor.Core.Domain.MorphFaceDocument _cleanState;
     private EditorFeatureCategoryViewModel? _selectedCategory;
+    private BoneTransformEditorViewModel? _selectedBoneTransform;
     private bool _isDirty;
     private bool _disposed;
     private int _morphRandomisationStrength = 50;
@@ -101,6 +102,15 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                 .SelectMany(bone => Enumerable.Range(0, 3)
                     .Select(axis => new BoneAxisEditorViewModel(session, bone.BoneName, axis)))
                 .ToArray();
+        BoneTransforms = Bones
+            .GroupBy(axis => axis.BoneName, StringComparer.OrdinalIgnoreCase)
+            .Select(group =>
+            {
+                var axes = group.OrderBy(axis => axis.Axis).ToArray();
+                return new BoneTransformEditorViewModel(session, axes[0], axes[1], axes[2]);
+            })
+            .ToArray();
+        _selectedBoneTransform = BoneTransforms.FirstOrDefault(transform => transform.IsAvailable);
         var hairSession = new AssetReferenceEditingSession(hairMeshReference);
         var otherMeshSessions = Enumerable.Range(0, 1)
             .Select(index => new AssetReferenceEditingSession(otherMeshReferences.ElementAtOrDefault(index)))
@@ -181,6 +191,12 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                            ?? SelectedCategory;
     }
     public IReadOnlyList<BoneAxisEditorViewModel> Bones { get; }
+    public IReadOnlyList<BoneTransformEditorViewModel> BoneTransforms { get; }
+    public BoneTransformEditorViewModel? SelectedBoneTransform
+    {
+        get => _selectedBoneTransform;
+        set => SetProperty(ref _selectedBoneTransform, value);
+    }
     public MaterialEditorViewModel Material { get; }
     public void UpdateRegistryTextureCandidates(
         IReadOnlyList<TextureCatalogCandidate> candidates,
@@ -625,6 +641,14 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         foreach (var bone in Bones)
         {
             bone.Refresh();
+        }
+        foreach (var transform in BoneTransforms)
+        {
+            transform.RefreshAvailability();
+        }
+        if (SelectedBoneTransform is null || !SelectedBoneTransform.IsAvailable)
+        {
+            SelectedBoneTransform = BoneTransforms.FirstOrDefault(transform => transform.IsAvailable);
         }
         PreviewChanged?.Invoke(this, EventArgs.Empty);
     }

@@ -34,6 +34,7 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
     private IReadOnlyList<BoneTranslation> _templateBones;
     private HashSet<string>? _pastedBoneNames;
     private readonly SemanticEditHistory _history = new();
+    private ActiveBoneTranslationEdit? _activeBoneTranslationEdit;
     private bool _replayingHistory;
 
     public MorphFaceEditingSession(
@@ -262,6 +263,28 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
     public void BeginBoneEdit(string boneName, int axis) => BeginEdit(BoneKey(boneName, axis), GetBoneAxis(boneName, axis));
     public void EndBoneEdit(string boneName, int axis) => EndEdit(BoneKey(boneName, axis), GetBoneAxis(boneName, axis));
 
+    public void BeginBoneTranslationEdit(string boneName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(boneName);
+        if (_activeBoneTranslationEdit is { } active &&
+            string.Equals(active.BoneName, boneName, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+        EndActiveBoneTranslationEdit();
+        _activeBoneTranslationEdit = new ActiveBoneTranslationEdit(boneName, GetBoneTranslation(boneName));
+    }
+
+    public void EndBoneTranslationEdit(string boneName)
+    {
+        if (_activeBoneTranslationEdit is not { } active ||
+            !string.Equals(active.BoneName, boneName, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+        EndActiveBoneTranslationEdit();
+    }
+
     public void SetFeature(string name, float value)
     {
         EnsureEditable();
@@ -356,7 +379,9 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
         };
         _boneOverrides[boneName] = overrideValue;
         _pastedBoneNames?.Add(boneName);
-        if (!_replayingHistory)
+        if (!_replayingHistory &&
+            (_activeBoneTranslationEdit is null ||
+             !string.Equals(_activeBoneTranslationEdit.BoneName, boneName, StringComparison.OrdinalIgnoreCase)))
         {
             if (_history.Record(BoneKey(boneName, axis), before, value))
             {
@@ -703,6 +728,13 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
                 RestoreAuthoringState(useAfter ? stateEdit.After : stateEdit.Before);
                 Refresh();
             }
+            else if (edit is SemanticBoneTranslationEdit boneEdit)
+            {
+                var value = useAfter ? boneEdit.After : boneEdit.Before;
+                SetBoneAxis(boneEdit.BoneName, 0, value.X);
+                SetBoneAxis(boneEdit.BoneName, 1, value.Y);
+                SetBoneAxis(boneEdit.BoneName, 2, value.Z);
+            }
             else if (edit is SemanticValueEdit valueEdit)
             {
                 var value = useAfter ? valueEdit.After : valueEdit.Before;
@@ -732,6 +764,27 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
             throw new InvalidOperationException(
                 "Live editing is disabled because the original face did not pass the deformation oracle.");
         }
+    }
+
+    private Vector3 GetBoneTranslation(string boneName) => new(
+        GetBoneAxis(boneName, 0),
+        GetBoneAxis(boneName, 1),
+        GetBoneAxis(boneName, 2));
+
+    private void EndActiveBoneTranslationEdit()
+    {
+        if (_activeBoneTranslationEdit is not { } active)
+        {
+            return;
+        }
+        _activeBoneTranslationEdit = null;
+        var after = GetBoneTranslation(active.BoneName);
+        if (!_replayingHistory &&
+            _history.Record(new SemanticBoneTranslationEdit(active.BoneName, active.Before, after)))
+        {
+            EditCommitted?.Invoke(this, EventArgs.Empty);
+        }
+        HistoryChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private MorphFaceAuthoringState CaptureAuthoringState() => new(
@@ -767,6 +820,8 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
 
     private static string FeatureKey(string name) => $"feature:{name}";
     private static string BoneKey(string name, int axis) => $"bone:{name}:{axis}";
+
+    private sealed record ActiveBoneTranslationEdit(string BoneName, Vector3 Before);
 
     private static string GetObjectName(string instancedPath)
     {

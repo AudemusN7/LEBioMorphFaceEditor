@@ -106,6 +106,7 @@ public static class MorphRandomisationPoolRouter
             "le3-human-female" => MorphRandomisationPoolKey.HumanFemaleLe3,
             var value when value.EndsWith("-asari", StringComparison.Ordinal) => MorphRandomisationPoolKey.Asari,
             var value when value.EndsWith("-salarian", StringComparison.Ordinal) => MorphRandomisationPoolKey.Salarian,
+            var value when value.EndsWith("-female-turian", StringComparison.Ordinal) => MorphRandomisationPoolKey.Turian,
             var value when value.EndsWith("-turian", StringComparison.Ordinal) => MorphRandomisationPoolKey.Turian,
             var value when value.EndsWith("-krogan", StringComparison.Ordinal) => MorphRandomisationPoolKey.Krogan,
             var value when value.EndsWith("-batarian", StringComparison.Ordinal) => MorphRandomisationPoolKey.Batarian,

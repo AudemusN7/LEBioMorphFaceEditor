@@ -21,6 +21,7 @@ public sealed record LoadedMorphFace(
 {
     public MorphFaceGame Game { get; init; } = MorphFaceGame.LE1;
     public bool UsesCustomBaseMesh { get; init; }
+    public bool IgnoresAuthoredGeometry { get; init; }
     public IReadOnlyList<SkeletalMeshAsset> OtherMeshes { get; init; } = [];
     public IReadOnlyList<string> Warnings { get; init; } = [];
 }

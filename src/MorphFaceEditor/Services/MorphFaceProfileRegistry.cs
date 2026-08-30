@@ -17,6 +17,7 @@ public sealed record MorphFaceProfile(
     Func<string, string?, bool> Matches)
 {
     public string? TargetSetName { get; init; }
+    public bool IgnoresAuthoredGeometry { get; init; }
     public Func<string?, string?> GeometryEditBlockReason { get; init; } = _ => null;
 }
 
@@ -111,6 +112,7 @@ public sealed class MorphFaceProfileRegistry
         CreateAsariProfile(MorphFaceGame.LE1, null),
         CreateSalarianProfile(MorphFaceGame.LE1, null),
         CreateTurianProfile(MorphFaceGame.LE1),
+        CreateFemaleTurianProfile(MorphFaceGame.LE1),
         CreateBatarianProfile(MorphFaceGame.LE1),
         CreateKroganProfile(MorphFaceGame.LE1),
         new MorphFaceProfile(
@@ -144,6 +146,7 @@ public sealed class MorphFaceProfileRegistry
         CreateAsariProfile(MorphFaceGame.LE2, "BioP_TwrHub.pcc"),
         CreateSalarianProfile(MorphFaceGame.LE2, "BioP_TwrHub.pcc"),
         CreateTurianProfile(MorphFaceGame.LE2),
+        CreateFemaleTurianProfile(MorphFaceGame.LE2),
         CreateBatarianProfile(MorphFaceGame.LE2),
         CreateKroganProfile(MorphFaceGame.LE2),
         CreateVorchaProfile(MorphFaceGame.LE2),
@@ -178,6 +181,7 @@ public sealed class MorphFaceProfileRegistry
         CreateAsariProfile(MorphFaceGame.LE3, "BIOG_ASA_HED_PROMorph_R.pcc"),
         CreateSalarianProfile(MorphFaceGame.LE3, "BIOG_SAL_HED_PROMorph_R.pcc"),
         CreateTurianProfile(MorphFaceGame.LE3),
+        CreateFemaleTurianProfile(MorphFaceGame.LE3),
         CreateBatarianProfile(MorphFaceGame.LE3),
         CreateKroganProfile(MorphFaceGame.LE3),
         CreateVorchaProfile(MorphFaceGame.LE3)
@@ -300,6 +304,35 @@ public sealed class MorphFaceProfileRegistry
             return baseHeadPath.Contains("TUR_HED_PROBASE_MDL", StringComparison.OrdinalIgnoreCase);
         }
         return facePath.StartsWith("Turian.", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static MorphFaceProfile CreateFemaleTurianProfile(MorphFaceGame game) =>
+        new(
+            $"{game.ToString().ToLowerInvariant()}-female-turian",
+            $"{game} Female Turian",
+            game,
+            string.Empty,
+            FemaleTurianFeatureMetadataCatalog.MetadataOnlyFeatures,
+            TurianFeatureMetadataCatalog.FeatureAliases,
+            new FemaleTurianFeatureMetadataCatalog(),
+            "[TUF]",
+            "#99597D",
+            _ => false,
+            MatchesFemaleTurian)
+        {
+            IgnoresAuthoredGeometry = true,
+            GeometryEditBlockReason = _ =>
+                "Female Turian morph, bone, and baked LOD data currently contains inherited male Turian payloads and is intentionally ignored. Material editing remains available."
+        };
+
+    private static bool MatchesFemaleTurian(string facePath, string? baseHeadPath)
+    {
+        if (!string.IsNullOrWhiteSpace(baseHeadPath))
+        {
+            return baseHeadPath.Contains("TUF_HED_PROBase_MDL", StringComparison.OrdinalIgnoreCase);
+        }
+        return facePath.StartsWith("Female Turian.", StringComparison.OrdinalIgnoreCase) ||
+               facePath.Contains(".TUF_", StringComparison.OrdinalIgnoreCase);
     }
 
     private static MorphFaceProfile CreateKroganProfile(MorphFaceGame game) =>

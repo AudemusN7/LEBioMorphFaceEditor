@@ -658,11 +658,16 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             var topology = result.Loaded.BaseHead.Topology;
             var oracle = result.EditingSession.Evaluation.OriginalOracleReport;
             var materialOverrides = result.Loaded.Document.MaterialOverrides;
+            var displayedFinalBoneCount = result.Profile.IgnoresAuthoredGeometry
+                ? 0
+                : result.Loaded.Document.FinalSkeleton.Count;
             FaceDetails = $"{topology.VertexCount:N0} vertices · {topology.IndexCount / 3:N0} triangles · " +
-                          $"{topology.Sections.Count} sections · {result.Loaded.Document.FinalSkeleton.Count} final bones · " +
+                          $"{topology.Sections.Count} sections · {displayedFinalBoneCount} final bones · " +
                           $"{materialOverrides.Scalars.Count}/{materialOverrides.Vectors.Count}/{materialOverrides.Textures.Count} material S/V/T · " +
                           (result.EditingSession.CanEdit
                               ? $"oracle {oracle!.MaximumError:G4} max"
+                              : result.Profile.IgnoresAuthoredGeometry
+                                  ? "base-head material-only preview"
                               : $"baked fallback · {result.EditingSession.EditBlockReason}");
             LoadedFacePath = result.Loaded.Document.Source.InstancedPath;
             var editor = new FaceEditorViewModel(
@@ -682,7 +687,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 randomisationInclusionState: _randomisationInclusionState,
                 registryTextureCandidates: [],
                 textureCatalogProfile: textureCatalogProfile,
-                isTextureRegistryAvailable: false);
+                isTextureRegistryAvailable: false,
+                ignoresAuthoredGeometry: result.Profile.IgnoresAuthoredGeometry);
             var speciesKey = PreviewCameraGrouping.SpeciesForProfile(result.Profile.Key);
             if (string.Equals(_loadedSpeciesKey, speciesKey, StringComparison.OrdinalIgnoreCase))
             {
@@ -702,6 +708,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             PreviewSceneReady?.Invoke(result.Scene, resetCameraPosition);
             Status = result.EditingSession.CanEdit
                 ? $"Loaded {SelectedFace.DisplayName} ({result.Profile.DisplayName}); live geometry and material editing ready."
+                : result.Profile.IgnoresAuthoredGeometry
+                    ? $"Loaded {SelectedFace.DisplayName} ({result.Profile.DisplayName}); material editing ready with base-head preview. " +
+                      result.EditingSession.EditBlockReason
                 : $"Loaded {SelectedFace.DisplayName} ({result.Profile.DisplayName}); material editing ready with baked geometry fallback. " +
                   result.EditingSession.EditBlockReason;
             AppLog.Information(

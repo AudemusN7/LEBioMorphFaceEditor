@@ -18,6 +18,8 @@ public static class TextureCatalogProfiles
                 new TextureCatalogProfile(key, ["ASA_HED"], ["ASA_EYE"]),
             var key when key.EndsWith("salarian", StringComparison.OrdinalIgnoreCase) =>
                 new TextureCatalogProfile(key, ["SAL_HED"], ["SAL_EYE"]),
+            var key when key.EndsWith("female-turian", StringComparison.OrdinalIgnoreCase) =>
+                new TextureCatalogProfile(key, ["TUF_HED"], ["TUF_EYE", "TUR_EYE", "HED_EYE"]),
             var key when key.EndsWith("turian", StringComparison.OrdinalIgnoreCase) =>
                 new TextureCatalogProfile(key, ["TUR_HED"], ["TUR_EYE"]),
             var key when key.EndsWith("krogan", StringComparison.OrdinalIgnoreCase) =>

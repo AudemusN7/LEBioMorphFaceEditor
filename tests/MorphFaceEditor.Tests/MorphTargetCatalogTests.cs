@@ -32,7 +32,8 @@ public static class MorphTargetCatalogTests
     private static void BundledProfilesExposeAuthoredLodCoverage()
     {
         var catalog = new MorphTargetCatalog();
-        foreach (var profile in MorphFaceProfileRegistry.CreateDefault().Profiles)
+        foreach (var profile in MorphFaceProfileRegistry.CreateDefault().Profiles
+                     .Where(profile => !profile.IgnoresAuthoredGeometry))
         {
             var targets = catalog.Load(profile, profile.Game, @"Z:\definitely-not-a-package.pcc");
             TestAssert.True(targets.SelectMany(target => target.Lods)
@@ -89,7 +90,8 @@ public static class MorphTargetCatalogTests
         };
         var catalog = new MorphTargetCatalog();
 
-        foreach (var profile in MorphFaceProfileRegistry.CreateDefault().Profiles)
+        foreach (var profile in MorphFaceProfileRegistry.CreateDefault().Profiles
+                     .Where(profile => !profile.IgnoresAuthoredGeometry))
         {
             var targets = catalog.Load(profile, profile.Game, @"Z:\definitely-not-a-package.pcc");
             var expected = gameSpecificCounts.GetValueOrDefault(

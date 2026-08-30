@@ -16,7 +16,9 @@ public static class RandomisationProfileDefinitionFactory
         ArgumentNullException.ThrowIfNull(targetCatalog);
         return registry.Profiles.Select(profile =>
         {
-            var targets = targetCatalog.Load(profile, profile.Game);
+            var targets = profile.IgnoresAuthoredGeometry
+                ? []
+                : targetCatalog.Load(profile, profile.Game);
             var available = targets.Select(target =>
                 {
                     var name = ObjectName(target.Source.InstancedPath);
@@ -34,7 +36,10 @@ public static class RandomisationProfileDefinitionFactory
                 MorphRandomisationPoolRouter.Resolve(profile.Key),
                 profile.Matches,
                 available,
-                profile.FeatureAliases);
+                profile.FeatureAliases)
+            {
+                IsMaterialOnly = profile.IgnoresAuthoredGeometry
+            };
         }).ToArray();
     }
 

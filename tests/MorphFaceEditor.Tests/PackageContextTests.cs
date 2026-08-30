@@ -34,9 +34,67 @@ public static class PackageContextTests
         new("TSE RON export and import round-trip a real BioMorphFace", RonRoundTripsMorph),
         new("legacy Gibbed ME2 and ME3 head morphs import through the context pipeline", GibbedHeadMorphsImport),
         new("broken attachment materials fall back without blocking face authoring", BrokenAttachmentMaterialFallsBack),
+        new("Female Turian corpora load base heads and materials while preserving inherited TUR payloads", FemaleTurianLoadsMaterialOnly),
         new("UModel staging package contains only baked mesh geometry", MeshExportStagingIsGeometryOnly),
         new("real baked mesh projects back into its profile target span", RealBakedMeshInverts)
     ];
+
+    private static void FemaleTurianLoadsMaterialOnly()
+    {
+        foreach (var (fileName, gamePrefix) in new[]
+                 {
+                     ("LE1 TUF.pcc", "le1"),
+                     ("LE2 TUF.pcc", "le2"),
+                     ("LE3 TUF.pcc", "le3")
+                 })
+        {
+            var packagePath = FixturePath(fileName);
+            var face = ReadFaces(packagePath).First(value =>
+                value.ProfileKey.Equals($"{gamePrefix}-female-turian", StringComparison.OrdinalIgnoreCase));
+            var profiles = MorphFaceProfileRegistry.CreateDefault();
+            using var service = new MorphFacePreviewLoadService(
+                new HeadPreviewSceneFactory(),
+                new MorphTargetCatalog(),
+                profiles,
+                new MorphFacePackageReader());
+            var result = service.LoadAsync(packagePath, face.UIndex.ToString()).GetAwaiter().GetResult();
+
+            TestAssert.Equal($"{gamePrefix}-female-turian", result.Profile.Key);
+            TestAssert.Equal("[TUF]", result.Profile.ExportTag);
+            TestAssert.Equal("#99597D", result.Profile.ExportTagColor);
+            TestAssert.True(result.Profile.IgnoresAuthoredGeometry && result.Loaded.IgnoresAuthoredGeometry,
+                $"{fileName} did not enter the explicit material-only TUF path.");
+            TestAssert.True(!result.EditingSession.CanEdit,
+                $"{fileName} exposed inherited TUR geometry for editing.");
+            TestAssert.Equal(0, result.EditingSession.Evaluation.FinalSkeleton.Count);
+            TestAssert.Equal(result.Loaded.BaseHead.Positions.Length,
+                result.EditingSession.Evaluation.Geometry.Positions.Length);
+            TestAssert.Equal(result.Loaded.BaseHead.Positions.Length,
+                result.Scene.Meshes[0].Vertices.Count);
+            TestAssert.True(!result.Scene.Meshes[0].ApplySkinning,
+                $"{fileName} applied inherited final-skeleton offsets to the TUF preview.");
+            TestAssert.True(result.Loaded.Document.MorphFeatures.Count > 0 &&
+                            result.Loaded.Document.FinalSkeleton.Count > 0 &&
+                            result.Loaded.Document.BakedLods.Count > 0,
+                $"{fileName} fixture no longer contains the inherited TUR payload needed by this regression.");
+            TestAssert.True(result.Loaded.Materials.Materials.Values.Any(material =>
+                                material.Family == HeadMaterialFamily.TurianSkin) &&
+                            result.Loaded.Materials.Materials.Values.Any(material =>
+                                material.Family == HeadMaterialFamily.TurianEyes),
+                $"{fileName} did not reuse the Turian skin and eye material pipeline.");
+
+            var source = result.Loaded.Document;
+            var draft = result.EditingSession.CreateDraft(
+                source.HairMeshReference,
+                source.OtherMeshReferences,
+                source.MaterialOverrides);
+            TestAssert.True(source.MorphFeatures.SequenceEqual(draft.MorphFeatures) &&
+                            source.FinalSkeleton.SequenceEqual(draft.FinalSkeleton) &&
+                            source.BakedLods.Zip(draft.BakedLods).All(pair =>
+                                pair.First.SequenceEqual(pair.Second)),
+                $"{fileName} material-only draft rewrote inherited TUR geometry data.");
+        }
+    }
 
     private static void Le2BioDWorkspaceRetainsPostLoadResolution()
     {

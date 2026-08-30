@@ -44,7 +44,8 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
         string profileName = "Human Male",
         IReadOnlyDictionary<string, string>? aliases = null,
         Func<DeformationComparisonReport, bool>? recognizesBaseVariant = null,
-        string? geometryEditBlockReason = null)
+        string? geometryEditBlockReason = null,
+        bool ignoreAuthoredGeometry = false)
     {
         _document = document ?? throw new ArgumentNullException(nameof(document));
         _baseHead = baseHead ?? throw new ArgumentNullException(nameof(baseHead));
@@ -56,11 +57,12 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
         _geometryEditBlockReason = string.IsNullOrWhiteSpace(geometryEditBlockReason)
             ? null
             : geometryEditBlockReason;
-        _features = document.MorphFeatures.ToDictionary(
+        var authoredFeatures = ignoreAuthoredGeometry ? [] : document.MorphFeatures;
+        _features = authoredFeatures.ToDictionary(
             feature => feature.Name,
             feature => feature.Offset,
             StringComparer.OrdinalIgnoreCase);
-        _originalFeatureNames = document.MorphFeatures
+        _originalFeatureNames = authoredFeatures
             .Select(feature => feature.Name)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
@@ -71,7 +73,7 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
             .Select(target => GetObjectName(target.Source.InstancedPath))
             .Concat(_aliases.Keys)
             .Concat(_metadataOnlyFeatures)
-            .Concat(document.MorphFeatures.Select(feature => feature.Name))
+            .Concat(authoredFeatures.Select(feature => feature.Name))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -81,7 +83,7 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
         }
         _featureOrder = availableNames;
 
-        _templateBones = document.FinalSkeleton.ToArray();
+        _templateBones = ignoreAuthoredGeometry ? [] : document.FinalSkeleton.ToArray();
         var resolution = Resolve();
         var composed = MorphBoneOffsetComposer.Compose(
             baseHead.Topology.ReferenceSkeleton,
@@ -90,7 +92,7 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
         var composedByName = composed.ToDictionary(
             bone => bone.BoneName,
             StringComparer.OrdinalIgnoreCase);
-        _boneOverrides = document.FinalSkeleton
+        _boneOverrides = _templateBones
             .ToDictionary(
                 bone => bone.BoneName,
                 bone => bone.Translation - composedByName[bone.BoneName].Translation,
@@ -98,8 +100,8 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
         _defaultTemplateBones = _templateBones.ToArray();
         _defaultBoneOverrides = new Dictionary<string, Vector3>(
             _boneOverrides, StringComparer.OrdinalIgnoreCase);
-        _positionCorrections = DetectPositionCorrections(resolution);
-        Evaluation = Evaluate(includeOracle: true);
+        _positionCorrections = ignoreAuthoredGeometry ? [] : DetectPositionCorrections(resolution);
+        Evaluation = Evaluate(includeOracle: !ignoreAuthoredGeometry);
         ValidationErrors = ValidateEditableTargets(Evaluation.Resolution);
         CanEdit = _geometryEditBlockReason is null &&
                   Evaluation.Resolution.UnresolvedFeatureNames.Count == 0 &&

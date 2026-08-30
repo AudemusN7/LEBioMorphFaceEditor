@@ -21,7 +21,10 @@ public sealed record RandomisationProfileDefinition(
     MorphRandomisationPoolKey PoolKey,
     Func<string, string?, bool> Matches,
     IReadOnlySet<string> AvailableFeatures,
-    IReadOnlyDictionary<string, string> Aliases);
+    IReadOnlyDictionary<string, string> Aliases)
+{
+    public bool IsMaterialOnly { get; init; }
+}
 
 public sealed record RandomisationDonorExclusion(
     MorphFaceGame Game,
@@ -143,11 +146,12 @@ public static class RandomisationCorpusCompiler
             {
                 exclusionReason = reviewed.Reason;
             }
-            var materialOnlyProfile = profile.PoolKey == MorphRandomisationPoolKey.Vorcha;
+            var materialOnlyProfile = profile.IsMaterialOnly ||
+                                      profile.PoolKey == MorphRandomisationPoolKey.Vorcha;
             if (exclusionReason is null && canonicalValues.Values.All(value => value == 0))
             {
                 exclusionReason = materialOnlyProfile
-                    ? "Vorcha morph sliders are intentionally unavailable; this face is a material donor only."
+                    ? "Morph sliders are intentionally unavailable for this profile; this face is a material donor only."
                     : "The face has no non-zero visible editable morph sliders.";
             }
             var eligible = exclusionReason is null;
@@ -512,6 +516,7 @@ public static class RandomisationCorpusCompiler
         {
             var key when key.EndsWith("asari", StringComparison.Ordinal) => ("asari", "ASA"),
             var key when key.EndsWith("salarian", StringComparison.Ordinal) => ("salarian", "SAL"),
+            var key when key.EndsWith("female-turian", StringComparison.Ordinal) => ("female-turian", "TUR"),
             var key when key.EndsWith("turian", StringComparison.Ordinal) => ("turian", "TUR"),
             var key when key.EndsWith("krogan", StringComparison.Ordinal) => ("krogan", "KRO"),
             var key when key.EndsWith("batarian", StringComparison.Ordinal) => ("batarian", "BAT"),

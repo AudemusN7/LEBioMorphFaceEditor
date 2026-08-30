@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Collections.Concurrent;
+using System.Numerics;
 using LegendaryExplorerCore.Packages;
 using LegendaryExplorerCore.Packages.CloningImportingAndRelinking;
 using LegendaryExplorerCore.Shaders;
@@ -51,6 +52,71 @@ if (args.Length == 3 && args[0].Equals("locate-export", StringComparison.Ordinal
     return matches.IsEmpty ? 1 : 0;
 }
 
+if (args.Length == 3 && args[0].Equals("inventory-faces", StringComparison.OrdinalIgnoreCase))
+{
+    LegendaryExplorerCoreRuntime.Initialize();
+    var facePackagePath = Path.GetFullPath(args[1]);
+    var baseHeadFragment = args[2];
+    using var facePackage = MEPackageHandler.OpenMEPackage(facePackagePath, forceLoadFromDisk: true);
+    var faces = facePackage.Exports
+        .Where(export => !export.IsDefaultObject &&
+                         export.ClassName.Equals("BioMorphFace", StringComparison.OrdinalIgnoreCase))
+        .Select(export =>
+        {
+            var properties = export.GetProperties();
+            var baseHead = properties.GetProp<ObjectProperty>("m_oBaseHead")?.ResolveToEntry(facePackage);
+            var hair = properties.GetProp<ObjectProperty>("m_oHairMesh")?.ResolveToEntry(facePackage);
+            var otherMeshes = properties.GetProp<ArrayProperty<ObjectProperty>>("m_oOtherMeshes")?
+                .Select(value => value.ResolveToEntry(facePackage)?.InstancedFullPath ?? "<unresolved>")
+                .ToArray() ?? [];
+            var features = properties.GetProp<ArrayProperty<StructProperty>>("m_aMorphFeatures")?
+                .Select(value => (
+                    Name: value.GetProp<NameProperty>("sFeatureName")?.Value.Instanced ?? "<unnamed>",
+                    Offset: value.GetProp<FloatProperty>("Offset")?.Value ?? 0f))
+                .ToArray() ?? [];
+            var binary = export.GetBinaryData<BioMorphFace>();
+            var lods = binary.LODs?.Select(value => value?.ToArray() ?? []).ToArray() ?? [];
+            var basePositions = baseHead is ExportEntry baseHeadExport
+                ? ReadLod0Positions(baseHeadExport)
+                : [];
+            return new
+            {
+                export,
+                BaseHead = baseHead?.InstancedFullPath ?? "<unresolved>",
+                Hair = hair?.InstancedFullPath ?? "<none>",
+                OtherMeshes = otherMeshes,
+                Features = features,
+                LodVertexCounts = lods.Select(lod => lod.Length).ToArray(),
+                Lod0Hash = lods.Length == 0 ? "<none>" : HashPositions(lods[0]),
+                BaseVertexCount = basePositions.Length,
+                BaseLod0MaximumDifference = lods.Length == 0
+                    ? float.NaN
+                    : MaximumDifference(basePositions, lods[0]),
+                FinalSkeletonCount = properties.GetProp<ArrayProperty<StructProperty>>("m_aFinalSkeleton")?.Count ?? 0
+            };
+        })
+        .Where(face => face.BaseHead.Contains(baseHeadFragment, StringComparison.OrdinalIgnoreCase))
+        .OrderBy(face => face.export.InstancedFullPath, StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+
+    Console.WriteLine($"Game: {facePackage.Game}; package: {facePackagePath}; matching faces: {faces.Length}");
+    foreach (var face in faces)
+    {
+        var nonZero = face.Features
+            .Where(feature => Math.Abs(feature.Offset) >= 0.000001f)
+            .Select(feature => $"{feature.Name}={feature.Offset:G9}");
+        var allFeatures = face.Features
+            .Select(feature => $"{feature.Name}={feature.Offset:G9}");
+        Console.WriteLine($"#{face.export.UIndex}\t{face.export.InstancedFullPath}");
+        Console.WriteLine($"  base={face.BaseHead}");
+        Console.WriteLine($"  baked-lods=[{string.Join(", ", face.LodVertexCounts)}] lod0={face.Lod0Hash} base-vertices={face.BaseVertexCount} max-base-delta={face.BaseLod0MaximumDifference:G9}");
+        Console.WriteLine($"  features-nonzero=[{string.Join(", ", nonZero)}]");
+        Console.WriteLine($"  features-all=[{string.Join(", ", allFeatures)}]");
+        Console.WriteLine($"  final-skeleton={face.FinalSkeletonCount} hair={face.Hair} other-meshes=[{string.Join(", ", face.OtherMeshes)}]");
+    }
+    return faces.Length == 0 ? 1 : 0;
+}
+
 if (args.Length == 6 && args[0].Equals("dump-shaders", StringComparison.OrdinalIgnoreCase))
 {
     LegendaryExplorerCoreRuntime.Initialize();
@@ -71,6 +137,23 @@ if (args.Length == 6 && args[0].Equals("dump-shaders", StringComparison.OrdinalI
     using var sourceCache = new PackageCache();
     var sourceMaterial = Resolve(sourcePackage.GetEntry(sourceMesh.Materials[materialSlot]), sourceCache)
         ?? throw new InvalidDataException("The selected material slot could not be resolved.");
+    if (sourceMeshExport.InstancedFullPath.EndsWith(
+            "BIOG_ALN_HED_PROMorph_R.ALN_HED_PROBase_MDL", StringComparison.OrdinalIgnoreCase) &&
+        sourceMaterial.ClassName.StartsWith("MaterialExpression", StringComparison.OrdinalIgnoreCase))
+    {
+        var expectedPath = materialSlot switch
+        {
+            0 => "BIOG_ALN_HED_PROMorph_R.PROBase.ALN_HED_PROBASE_MAT_1a",
+            1 => "BIOG_ALN_HED_PROMorph_R.ALN_EYE_MAT_1a",
+            _ => null
+        };
+        sourceMaterial = expectedPath is null
+            ? sourceMaterial
+            : sourcePackage.Exports.FirstOrDefault(export =>
+                export.InstancedFullPath.Equals(expectedPath, StringComparison.OrdinalIgnoreCase) &&
+                export.ClassName.Equals("MaterialInstanceConstant", StringComparison.OrdinalIgnoreCase))
+              ?? sourceMaterial;
+    }
     var sourceChain = ReadMaterialChain(sourceMaterial, sourceCache);
     var shaderOwner = sourceChain.Select(value => value.Entry).First(entry =>
         entry.ClassName.Equals("Material", StringComparison.OrdinalIgnoreCase));
@@ -130,6 +213,7 @@ if (args.Length == 6 && args[0].Equals("dump-shaders", StringComparison.OrdinalI
 if (args.Length is not 4 || !args[0].Equals("trace-material", StringComparison.OrdinalIgnoreCase))
 {
     Console.Error.WriteLine("Usage: locate-export <game-root> <export-name>");
+    Console.Error.WriteLine("   or: inventory-faces <package.pcc> <base-head-name-fragment>");
     Console.Error.WriteLine("   or: trace-material <package.pcc> <skeletal-mesh-name> <report.md>");
     Console.Error.WriteLine("   or: dump-shaders <package.pcc> <skeletal-mesh-name> <slot> <vertex-factory> <output-directory>");
     return 2;
@@ -401,3 +485,35 @@ static string Describe(IEntry? entry) => entry is null
     : $"{entry.FileRef.FilePath} | #{entry.UIndex} {entry.ClassName} {entry.InstancedFullPath}";
 
 static string Escape(string? value) => (value ?? string.Empty).Replace("`", "'").Replace("\r", " ").Replace("\n", " ");
+
+static string HashPositions(IReadOnlyList<Vector3> positions)
+{
+    var bytes = new byte[positions.Count * sizeof(float) * 3];
+    for (var index = 0; index < positions.Count; index++)
+    {
+        var offset = index * sizeof(float) * 3;
+        BitConverter.TryWriteBytes(bytes.AsSpan(offset), positions[index].X);
+        BitConverter.TryWriteBytes(bytes.AsSpan(offset + sizeof(float)), positions[index].Y);
+        BitConverter.TryWriteBytes(bytes.AsSpan(offset + sizeof(float) * 2), positions[index].Z);
+    }
+    return Convert.ToHexString(SHA256.HashData(bytes));
+}
+
+static Vector3[] ReadLod0Positions(ExportEntry meshExport) =>
+    meshExport.GetBinaryData<SkeletalMesh>().LODModels?[0].VertexBufferGPUSkin?.VertexData?
+        .Select(vertex => vertex.Position)
+        .ToArray() ?? [];
+
+static float MaximumDifference(IReadOnlyList<Vector3> left, IReadOnlyList<Vector3> right)
+{
+    if (left.Count != right.Count)
+    {
+        return float.PositiveInfinity;
+    }
+    var maximum = 0f;
+    for (var index = 0; index < left.Count; index++)
+    {
+        maximum = Math.Max(maximum, Vector3.Distance(left[index], right[index]));
+    }
+    return maximum;
+}

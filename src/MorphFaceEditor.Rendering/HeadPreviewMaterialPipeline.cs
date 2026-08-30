@@ -73,6 +73,8 @@ internal readonly record struct HeadPreviewMaterialBindings(
 
     private static string? PrimaryDiffuseName(HeadPreviewMaterial material) => material.Family switch
     {
+        HeadMaterialFamily.VorchaSkin => "TUR_HED_Diff",
+        HeadMaterialFamily.VorchaEyes => "ALN_HED_Diff",
         HeadMaterialFamily.Skin => "HED_Diff",
         HeadMaterialFamily.AsariSkin => "ASA_HED_Diff",
         HeadMaterialFamily.SalarianSkin => "SAL_HED_Diff",
@@ -93,6 +95,8 @@ internal readonly record struct HeadPreviewMaterialBindings(
 
     private static string? PrimaryNormalName(HeadPreviewMaterial material) => material.Family switch
     {
+        HeadMaterialFamily.VorchaSkin => "ALN_HED_Norm",
+        HeadMaterialFamily.VorchaEyes => "Eye_Norm",
         HeadMaterialFamily.Skin => "HED_Norm",
         HeadMaterialFamily.AsariSkin => "ASA_HED_Norm",
         HeadMaterialFamily.SalarianSkin => "SAL_HED_Norm",
@@ -119,6 +123,7 @@ internal readonly record struct HeadPreviewMaterialBindings(
         HeadMaterialFamily.BatarianSkin => "BAT_HED_Mask",
         HeadMaterialFamily.KroganSkin => "KRO_HED_Mask",
         HeadMaterialFamily.KroganEyes => "KRO_Eye_Mask",
+        HeadMaterialFamily.VorchaSkin => "ALN_HED_Tint",
         HeadMaterialFamily.Scalp => "HED_Scalp_Spec",
         HeadMaterialFamily.Eyes => "EYE_Mask",
         _ => null
@@ -134,6 +139,7 @@ internal readonly record struct HeadPreviewMaterialBindings(
         HeadMaterialFamily.BatarianSkin => "BAT_HED_Addn",
         HeadMaterialFamily.KroganSkin => "KRO_HED_Addn",
         HeadMaterialFamily.KroganEyes => "KRO_Eye_Spec",
+        HeadMaterialFamily.VorchaSkin => "ALN_HED_Tatt",
         HeadMaterialFamily.Scalp => "HED_Tang",
         _ => null
     };
@@ -255,6 +261,14 @@ internal struct HeadPreviewMaterialConstants
         if (material.Family == HeadMaterialFamily.KroganEyes)
         {
             return CreateKroganEyes(material, diagnostic, family, bindings);
+        }
+        if (material.Family == HeadMaterialFamily.VorchaSkin)
+        {
+            return CreateVorchaSkin(material, diagnostic, family, bindings);
+        }
+        if (material.Family == HeadMaterialFamily.VorchaEyes)
+        {
+            return CreateVorchaEyes(material, diagnostic, family, bindings);
         }
         return new HeadPreviewMaterialConstants
         {
@@ -675,6 +689,50 @@ internal struct HeadPreviewMaterialConstants
         EyeParameters2 = new Vector4(0, 0, 0, material.IsLe3 ? 1 : 0)
     };
 
+    private static HeadPreviewMaterialConstants CreateVorchaSkin(
+        HeadPreviewMaterial material,
+        bool diagnostic,
+        float family,
+        HeadPreviewMaterialBindings bindings) => new()
+    {
+        BaseColor = diagnostic ? new Vector4(DiagnosticColor(material.Family), 1)
+            : GetVector(material, "SkinTone", Vector4.One),
+        SecondaryColor = GetVector(material, "ALN_HED_Diff_Tint_Muzzle2", Vector4.One),
+        TertiaryColor = GetVector(material, "ALN_HED_Diff_Tint_Teeth", Vector4.One),
+        QuaternaryColor = GetVector(material, "ALN_HED_Diff_Tint_Muzzle", Vector4.One),
+        SpecularColor = GetVector(material, "ALN_HED_Spec_Colour", new Vector4(0.2f, 0.2f, 0.2f, 1)),
+        ScatterColor = GetVector(material, "SkinLightScattering", new Vector4(0.45f, 0.15f, 0.03f, 1)),
+        FreckleRedColor = GetVector(material, "Tattoo_Chooser", new Vector4(1, 0, 0, 0)),
+        FreckleGreenColor = GetVector(material, "Tattoo_Color", Vector4.One),
+        TransmissionColor = GetVector(material, "Tmissive", Vector4.Zero),
+        SurfaceParameters = new Vector4(0.42f, diagnostic ? 1 : 0, family, 0),
+        TextureFlags0 = new Vector4(bindings.Diffuse is null ? 0 : 1, bindings.Normal is null ? 0 : 1,
+            bindings.Mask is null ? 0 : 1, bindings.Detail is null ? 0 : 1),
+        GeneralParameters = new Vector4(
+            GetScalar(material, "ALN_HED_Spwr_Skin_Scalar", 0.2f),
+            GetScalar(material, "ALN_HED_Spwr_Muzzle_Scalar", 0.5f), 0, 0),
+        EyeParameters2 = new Vector4(0, 0, 0, material.IsLe3 ? 1 : 0)
+    };
+
+    private static HeadPreviewMaterialConstants CreateVorchaEyes(
+        HeadPreviewMaterial material,
+        bool diagnostic,
+        float family,
+        HeadPreviewMaterialBindings bindings) => new()
+    {
+        BaseColor = diagnostic ? new Vector4(DiagnosticColor(material.Family), 1)
+            : GetVector(material, "EYE_Tint_Iris", Vector4.One),
+        SecondaryColor = GetVector(material, "EYE_Glow", Vector4.Zero),
+        SpecularColor = Vector4.One,
+        SurfaceParameters = new Vector4(0.12f, diagnostic ? 1 : 0, family, 0),
+        TextureFlags0 = new Vector4(bindings.Diffuse is null ? 0 : 1, bindings.Normal is null ? 0 : 1, 0, 0),
+        GeneralParameters = new Vector4(
+            GetScalar(material, "EYE_Spec", 2),
+            GetScalar(material, "EYE_Spec_Power", 4),
+            GetScalar(material, "EYE_Glow_Intensity", 1.5f), 0),
+        EyeParameters2 = new Vector4(0, 0, 0, material.IsLe3 ? 1 : 0)
+    };
+
     private static float FamilyIndex(HeadMaterialFamily family) => family switch
     {
         HeadMaterialFamily.Skin => 1,
@@ -691,12 +749,14 @@ internal struct HeadPreviewMaterialConstants
         HeadMaterialFamily.Lashes => 4,
         HeadMaterialFamily.Hair => 5,
         HeadMaterialFamily.MaskedHair => 14,
+        HeadMaterialFamily.VorchaSkin => 15,
+        HeadMaterialFamily.VorchaEyes => 16,
         _ => 0
     };
 
     private static float DefaultRoughness(HeadMaterialFamily family) => family switch
     {
-        HeadMaterialFamily.Eyes or HeadMaterialFamily.SalarianEyes or HeadMaterialFamily.TurianEyes or HeadMaterialFamily.KroganEyes => 0.18f,
+        HeadMaterialFamily.Eyes or HeadMaterialFamily.SalarianEyes or HeadMaterialFamily.TurianEyes or HeadMaterialFamily.KroganEyes or HeadMaterialFamily.VorchaEyes => 0.18f,
         HeadMaterialFamily.Teeth => 0.28f,
         HeadMaterialFamily.Lashes => 0.8f,
         HeadMaterialFamily.Hair or HeadMaterialFamily.MaskedHair => 0.65f,

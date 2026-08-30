@@ -78,7 +78,8 @@ public static class MorphTargetCatalogTests
             ["SAL_BaseMorphSet"] = 35,
             ["TUR_BaseMorphSet"] = 37,
             ["KRO_baseMorphSet"] = 25,
-            ["BAT_BaseMorphSet"] = 43
+            ["BAT_BaseMorphSet"] = 43,
+            ["ALN_ReconstructedMorphSet"] = 17
         };
         var gameSpecificCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
         {

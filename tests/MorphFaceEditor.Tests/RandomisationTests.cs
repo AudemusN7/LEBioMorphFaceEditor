@@ -77,6 +77,8 @@ public static class RandomisationTests
         var human = catalog.EligibleTextureParameters("le1-human-male");
         var salarian = catalog.EligibleTextureParameters("le1-salarian");
         var turian = catalog.EligibleTextureParameters("le3-turian");
+        var vorchaLe2 = catalog.EligibleTextureParameters("le2-vorcha");
+        var vorchaLe3 = catalog.EligibleTextureParameters("le3-vorcha");
 
         TestAssert.True(human.Contains("HED_Diff") && human.Contains("EYE_Diff"),
             "The embedded human pool omitted face or eye textures.");
@@ -85,6 +87,15 @@ public static class RandomisationTests
         TestAssert.True(turian.Contains("TUR_HED_Diff") &&
                         (turian.Contains("TUR_EYE_Diff") || turian.Contains("EYE_Diff")),
             "The embedded Turian pool omitted face or eye textures.");
+        TestAssert.True(vorchaLe2.Contains("TUR_HED_Diff") && vorchaLe2.Contains("ALN_HED_Diff"),
+            "The embedded LE2 Vorcha pool omitted face or eye textures.");
+        TestAssert.True(vorchaLe3.Contains("TUR_HED_Diff") && vorchaLe3.Contains("EYE_Diff"),
+            "The embedded LE3 Vorcha pool did not retain its Turian eye textures.");
+        TestAssert.True(catalog.CompatibleMaterialDonors("le2-vorcha").All(value =>
+                            value.SourceProfileKey.Equals("le2-vorcha", StringComparison.OrdinalIgnoreCase)) &&
+                        catalog.CompatibleMaterialDonors("le3-vorcha").All(value =>
+                            value.SourceProfileKey.Equals("le3-vorcha", StringComparison.OrdinalIgnoreCase)),
+            "Vorcha material donors crossed the incompatible LE2 ALN / LE3 Turian eye boundary.");
     }
 
     private static void EmbeddedFamiliesMatchRegistryDiscovery()
@@ -195,6 +206,7 @@ public static class RandomisationTests
         new("corpus compilation reports and excludes empty and reviewed donors", CompilationReportsExclusions),
         new("corpus compilation classifies material vectors and atomic texture families", CompilationClassifiesMaterials),
         new("corpus compilation groups face and eye textures for every species", CompilationGroupsFaceAndEyeTextures),
+        new("Vorcha compilation retains material-only donors", CompilationRetainsVorchaMaterialDonors),
         new("default compiler profiles expose all approved donor pools", DefaultDefinitionsExposeApprovedPools)
     ];
 
@@ -222,6 +234,8 @@ public static class RandomisationTests
             MorphRandomisationPoolRouter.Resolve("le1-krogan"));
         TestAssert.Equal(MorphRandomisationPoolKey.Batarian,
             MorphRandomisationPoolRouter.Resolve("le3-batarian"));
+        TestAssert.Equal(MorphRandomisationPoolKey.Vorcha,
+            MorphRandomisationPoolRouter.Resolve("le2-vorcha"));
     }
 
     private static void ZeroStrengthReproducesDonor()
@@ -1028,16 +1042,53 @@ public static class RandomisationTests
         var definitions = RandomisationProfileDefinitionFactory.CreateDefault(
             MorphFaceProfileRegistry.CreateDefault(), new MorphTargetCatalog());
 
-        TestAssert.Equal(21, definitions.Count);
-        TestAssert.Equal(9, definitions.Select(value => value.PoolKey).Distinct().Count());
-        TestAssert.True(definitions.All(value => value.AvailableFeatures.Count > 0),
-            "A supported profile exposed no randomisable morph targets.");
+        TestAssert.Equal(23, definitions.Count);
+        TestAssert.Equal(10, definitions.Select(value => value.PoolKey).Distinct().Count());
+        TestAssert.True(definitions.Where(value => value.PoolKey != MorphRandomisationPoolKey.Vorcha)
+                .All(value => value.AvailableFeatures.Count > 0),
+            "A geometry-randomisable profile exposed no morph targets.");
+        TestAssert.True(definitions.Where(value => value.PoolKey == MorphRandomisationPoolKey.Vorcha)
+                .All(value => value.AvailableFeatures.Count == 0),
+            "Vorcha unexpectedly exposed reconstructed morph controls to randomisation.");
         TestAssert.Equal(MorphRandomisationPoolKey.HumanMaleLe12,
             definitions.Single(value => value.ProfileKey == "le1-human-male").PoolKey);
         TestAssert.Equal(MorphRandomisationPoolKey.HumanMaleLe12,
             definitions.Single(value => value.ProfileKey == "le2-human-male").PoolKey);
         TestAssert.Equal(MorphRandomisationPoolKey.HumanMaleLe3,
             definitions.Single(value => value.ProfileKey == "le3-human-male").PoolKey);
+    }
+
+    private static void CompilationRetainsVorchaMaterialDonors()
+    {
+        var profile = new RandomisationProfileDefinition(
+            "le2-vorcha", MorphFaceGame.LE2, MorphRandomisationPoolKey.Vorcha,
+            (_, _) => true, new HashSet<string>(),
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+        var face = RawFace(MorphFaceGame.LE2, "Vorcha.Material") with
+        {
+            MaterialScalars = Values(("ALN_HED_Spwr_Skin_Scalar", 0.2f)),
+            MaterialTextures = new Dictionary<string, string>
+            {
+                ["TUR_HED_Diff"] = "ALN_Diff",
+                ["ALN_HED_Norm"] = "ALN_Norm",
+                ["ALN_HED_Tint"] = "ALN_Tint",
+                ["ALN_HED_Diff"] = "ALN_Eye_Diff",
+                ["Eye_Norm"] = "ALN_Eye_Norm"
+            }
+        };
+
+        var result = RandomisationCorpusCompiler.Compile([face], [profile], []);
+        var donor = result.Corpus.Pools[MorphRandomisationPoolKey.Vorcha].Single();
+
+        TestAssert.True(!result.Faces.Single().DonorEligible,
+            "Vorcha was incorrectly marked as a morph donor.");
+        TestAssert.True(donor.AvailableFeatures.Count == 0 && donor.NonZeroValues.Count == 0,
+            "Vorcha material donor unexpectedly acquired morph values.");
+        TestAssert.True(donor.MaterialTextureFamilies.ContainsKey("vorcha-face") &&
+                        donor.MaterialTextureFamilies.ContainsKey("vorcha-eyes"),
+            "Vorcha face and eye textures were not compiled as atomic material families.");
+        TestAssert.True(result.MaterialRows.All(value => value.DonorEligible),
+            "Vorcha material evidence was excluded with its intentionally unavailable morphs.");
     }
 
     private static RandomisationProfileDefinition Definition(

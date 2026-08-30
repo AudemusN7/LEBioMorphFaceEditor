@@ -795,6 +795,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             Editor.RandomiseMorphs = RandomiseMorphs;
             Editor.RandomiseMaterials = RandomiseMaterials;
             Editor.CursedMode = CursedMode;
+            if (_randomiseMorphs != Editor.RandomiseMorphs)
+            {
+                _randomiseMorphs = Editor.RandomiseMorphs;
+                OnPropertyChanged(nameof(RandomiseMorphs));
+            }
         }
         Editor?.SetExtendedSliders(ExtendedSliders);
         PreviewLods.Clear();

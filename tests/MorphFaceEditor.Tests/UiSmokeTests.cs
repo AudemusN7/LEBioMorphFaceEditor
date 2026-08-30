@@ -57,8 +57,26 @@ public static class UiSmokeTests
         new("Salarian UI profile exposes cranial-ring and species material controls", SalarianProfileOrganizesFeatures),
         new("Turian UI profile exposes mandibles, head spikes, and species material controls", TurianProfileOrganizesFeatures),
         new("Batarian UI profile groups racial structure and species material controls", BatarianProfileOrganizesFeatures),
-        new("Krogan UI profile separates head plates and Wrex character controls", KroganProfileOrganizesFeatures)
+        new("Krogan UI profile separates head plates and Wrex character controls", KroganProfileOrganizesFeatures),
+        new("Vorcha UI keeps reconstructed morphs hidden and bones editable", VorchaProfileIsMaterialAndBoneOnly)
     ];
+
+    private static void VorchaProfileIsMaterialAndBoneOnly()
+    {
+        using var reader = new MorphFacePackageReader();
+        using var editor = CreateEditor(reader, new VorchaFeatureMetadataCatalog(), "le2-vorcha");
+
+        TestAssert.Equal(0, editor.Features.Count);
+        TestAssert.True(editor.Bones.Count > 0, "Vorcha bone controls were hidden with morph controls.");
+        TestAssert.True(!editor.AllowsMorphRandomisation && !editor.RandomiseMorphs,
+            "Vorcha exposed global morph randomisation.");
+        editor.RandomiseMorphs = true;
+        TestAssert.True(!editor.RandomiseMorphs,
+            "Vorcha accepted an attempted programmatic morph-randomisation enable.");
+        editor.RandomiseMaterials = true;
+        TestAssert.True(editor.RandomiseMaterials,
+            "Vorcha material randomisation was disabled with morph randomisation.");
+    }
 
     private static void ErrorBannerCanBeDismissed()
     {
@@ -513,8 +531,8 @@ public static class UiSmokeTests
     private static void EmbeddedRandomisationCorpusLoads()
     {
         var catalog = MorphRandomisationCatalog.LoadEmbedded();
-        TestAssert.Equal(9, catalog.Corpus.Pools.Count(value => value.Value.Count > 0));
-        TestAssert.Equal(1387, catalog.Corpus.Pools.Sum(value => value.Value.Count));
+        TestAssert.Equal(10, catalog.Corpus.Pools.Count(value => value.Value.Count > 0));
+        TestAssert.Equal(1410, catalog.Corpus.Pools.Sum(value => value.Value.Count));
         TestAssert.True(catalog.Corpus.Pools.Values.SelectMany(value => value).All(donor =>
                 !donor.Id.EndsWith("Human Male.LE3_HMM_Morphs.Broke", StringComparison.OrdinalIgnoreCase)),
             "The known broken LE3 HMM donor remained in the embedded corpus.");
@@ -543,7 +561,10 @@ public static class UiSmokeTests
             new StubClipboard());
     }
 
-    private static FaceEditorViewModel CreateEditor(MorphFacePackageReader reader)
+    private static FaceEditorViewModel CreateEditor(
+        MorphFacePackageReader reader,
+        IHeadEditorUiProfile? metadataCatalog = null,
+        string profileKey = "le1-human-male")
     {
         var mesh = TestFixtures.CreateMesh();
         var document = new MorphFaceDocument(
@@ -565,7 +586,7 @@ public static class UiSmokeTests
             ResolvedHeadMaterialSet.Empty);
         return new FaceEditorViewModel(
             morphSession,
-            new HumanMaleFeatureMetadataCatalog(),
+            metadataCatalog ?? new HumanMaleFeatureMetadataCatalog(),
             materialSession,
             new StubColorDialog(),
             new PackageReferenceService(reader),
@@ -574,7 +595,8 @@ public static class UiSmokeTests
             [],
             null,
             [],
-            _ => { });
+            _ => { },
+            profileKey);
     }
 
     private static FaceEditorViewModel CreateRandomisationEditor(

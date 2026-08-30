@@ -20,6 +20,8 @@ public static class HumanMaterialProfiles
             ["BAT_HED_PRO_MASTER_MAT"] = HeadMaterialFamily.BatarianSkin,
             ["KRO_HED_PRO_MASTER_MAT"] = HeadMaterialFamily.KroganSkin,
             ["KRO_HED_EYE_MASTER_MAT"] = HeadMaterialFamily.KroganEyes,
+            ["ALN_HED_PRO_MASTER_MAT"] = HeadMaterialFamily.VorchaSkin,
+            ["ALN_EYE_MASTER_MAT"] = HeadMaterialFamily.VorchaEyes,
             ["HMM_HED_PRO_MASTER_SCALP_MAT"] = HeadMaterialFamily.Scalp,
             ["HMM_HIR_PROShort01_MAT_1a"] = HeadMaterialFamily.MaskedHair,
             ["HMN_HED_PRO_MASTER_HAIR_MAT"] = HeadMaterialFamily.Hair,
@@ -336,6 +338,38 @@ public static class HumanMaterialProfiles
         AddTexture(result, HeadMaterialFamily.KroganEyes, "KRO_EYE_Lens_Norm", "Krogan lens normal", "Krogan eyes",
             TextureRole.Normal, TextureColorSpace.Linear);
         AddVector(result, HeadMaterialFamily.KroganEyes, "EYE_Tint", "Eye tint", "Krogan eyes");
+
+        AddScalar(result, HeadMaterialFamily.VorchaSkin, "ALN_HED_Spwr_Skin_Scalar", "Vorcha face", 0, 4, 0.01f,
+            "Skin-region specular exponent multiplier. The compiled shader multiplies this by 100.");
+        AddScalar(result, HeadMaterialFamily.VorchaSkin, "ALN_HED_Spwr_Muzzle_Scalar", "Vorcha face", 0, 4, 0.01f,
+            "Muzzle-region specular exponent multiplier. The compiled shader multiplies this by 100.");
+        AddTexture(result, HeadMaterialFamily.VorchaSkin, "TUR_HED_Diff", "Vorcha diffuse", "Vorcha face",
+            TextureRole.Diffuse, TextureColorSpace.Srgb, TextureAlphaPolicy.Mask,
+            "RGB stores surface colour and alpha controls the coloured specular response.");
+        AddTexture(result, HeadMaterialFamily.VorchaSkin, "ALN_HED_Norm", "Vorcha normal", "Vorcha face",
+            TextureRole.Normal, TextureColorSpace.Linear);
+        AddTexture(result, HeadMaterialFamily.VorchaSkin, "ALN_HED_Tint", "Vorcha region mask", "Vorcha face",
+            TextureRole.Mask, TextureColorSpace.Linear,
+            description: "RGB selects the skin, muzzle and teeth colour branches and the regional specular power.");
+        AddTexture(result, HeadMaterialFamily.VorchaSkin, "ALN_HED_Tatt", "Vorcha tattoo selector", "Vorcha face",
+            TextureRole.Mask, TextureColorSpace.Linear,
+            description: "RGB is dotted with Tattoo_Chooser to select Tattoo_Color.");
+        AddVectors(result, HeadMaterialFamily.VorchaSkin, "Vorcha face",
+            "ALN_HED_Diff_Tint_Muzzle2", "ALN_HED_Diff_Tint_Teeth", "ALN_HED_Diff_Tint_Muzzle",
+            "SkinTone", "Tattoo_Chooser", "Tattoo_Color", "ALN_HED_Spec_Colour", "Tmissive",
+            "SkinLightScattering");
+
+        AddScalar(result, HeadMaterialFamily.VorchaEyes, "EYE_Spec", "Vorcha eyes", 0, 8, 0.02f,
+            "Direct-light eye specular strength.");
+        AddScalar(result, HeadMaterialFamily.VorchaEyes, "EYE_Spec_Power", "Vorcha eyes", 0.1f, 32, 0.05f,
+            "Eye specular exponent input used by the compiled material.");
+        AddScalar(result, HeadMaterialFamily.VorchaEyes, "EYE_Glow_Intensity", "Vorcha eyes", 0, 10, 0.05f,
+            "Emissive strength multiplied by diffuse alpha.");
+        AddTexture(result, HeadMaterialFamily.VorchaEyes, "ALN_HED_Diff", "Vorcha eye diffuse", "Vorcha eyes",
+            TextureRole.Diffuse, TextureColorSpace.Srgb, TextureAlphaPolicy.Mask);
+        AddTexture(result, HeadMaterialFamily.VorchaEyes, "Eye_Norm", "Vorcha eye normal", "Vorcha eyes",
+            TextureRole.Normal, TextureColorSpace.Linear);
+        AddVectors(result, HeadMaterialFamily.VorchaEyes, "Vorcha eyes", "EYE_Tint_Iris", "EYE_Glow");
 
         AddScalars(result, HeadMaterialFamily.Scalp, "Scalp / mouth", 0, 1,
             "HED_Scalp_Mask_OverlayKill_Scalar", "HAIR_Mask_Alpha_Scalar",

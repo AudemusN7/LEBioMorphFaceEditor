@@ -186,6 +186,26 @@ float3 EvaluateSpecular(
     float specular = 0;
     float3 specularTint = max(SpecularColor.rgb, 0);
 
+    if (family == 15)
+    {
+        // ALN_HED_PRO_MASTER_MAT directional-light FXC. Tint.R selects the
+        // skin exponent and its inverse selects the muzzle exponent; diffuse
+        // alpha supplies the spatial coloured-specular mask.
+        float materialPower = 100 * max(
+            lerp(GeneralParameters.y, GeneralParameters.x, saturate(maskSample.r)),
+            0.001);
+        return pow(max(reflectedViewLight, 0.0001), materialPower)
+            * saturate(diffuseSample.a)
+            * max(SpecularColor.rgb, 0);
+    }
+    if (family == 16)
+    {
+        // The ALN eye graph folds EYE_Spec_Power through a x100 expression
+        // before the reflection-vector Phong operation.
+        float materialPower = max(GeneralParameters.y * 100, 0.1);
+        return pow(max(reflectedViewLight, 0.0001), materialPower)
+            * max(GeneralParameters.x, 0);
+    }
     if (family == 1)
     {
         float femaleFace = SkinParameters3.w;
@@ -636,7 +656,7 @@ float3 EvaluateSubsurfaceLight(
     float4 surfaceSelector,
     float transmissionFactor)
 {
-    if (family != 1 && family != 2 && family != 3 && family != 6 && family != 7 && family != 9 && family != 11 && family != 13)
+    if (family != 1 && family != 2 && family != 3 && family != 6 && family != 7 && family != 9 && family != 11 && family != 13 && family != 15)
     {
         return 0;
     }
@@ -661,6 +681,12 @@ float3 EvaluateSubsurfaceLight(
         // permutation then blends wrapped N.L toward a diffuse-green/TMis
         // albedo response using the diffuse texture RGB per output channel.
         thickness *= saturate(surfaceSelector.r);
+    }
+    if (family == 15)
+    {
+        // Vorcha localises scattering to inverse Tint.B in the compiled
+        // direct-light permutation.
+        thickness *= saturate(1 - surfaceSelector.b);
     }
     if (family == 11)
     {
@@ -738,7 +764,7 @@ float3 EvaluateSubsurfaceLight(
         // signed correction needed to reproduce the compiled Turian factor.
         return albedo * (compiledLighting - directDiffuse);
     }
-    if (family == 1 || family == 2 || family == 6 || family == 7)
+    if (family == 1 || family == 2 || family == 6 || family == 7 || family == 15)
     {
         transmission = diffuseSample.rgb
             * max(TransmissionColor.rgb, 0)
@@ -831,7 +857,7 @@ float4 PSMain(
         // normalises only the combined vector below. Normalising this sample
         // first collapses its authored Z magnitude, so the subsequent -1
         // makes tiny scale detail dominate the lighting.
-        tangentNormal = (family == 6 || family == 7 || family == 8 || family == 9 || family == 10 || family == 11 || family == 12 || family == 13) && le3
+        tangentNormal = (family == 6 || family == 7 || family == 8 || family == 9 || family == 10 || family == 11 || family == 12 || family == 13 || family == 15 || family == 16) && le3
             ? packedNormal.rgb * 2 - 1
             : DecodeNormal(packedNormal);
         if (family == 1 && TextureFlags1.y > 0.5)
@@ -1000,6 +1026,30 @@ float4 PSMain(
         // and remaining colour channels are not part of coverage.
         clip(maskSample.r - 0.15);
         albedo = diffuseSample.rgb;
+    }
+    else if (family == 15)
+    {
+        // Literal ALN colour graph recovered from the base and direct-light
+        // permutations. ALN_HED_Tint selects nested muzzle/teeth/skin colours;
+        // ALN_HED_Tatt is dotted with Tattoo_Chooser for a discrete marking.
+        float3 tint = saturate(maskSample.rgb);
+        float3 inverseTint = 1 - tint.xzy;
+        float3 regionColour = inverseTint.x * SecondaryColor.rgb;
+        regionColour = inverseTint.y * regionColour + tint.b * TertiaryColor.rgb;
+        regionColour = inverseTint.z * regionColour + tint.g * QuaternaryColor.rgb;
+        regionColour = tint.r * BaseColor.rgb + regionColour;
+        float tattooSelector = TextureFlags0.w > 0.5
+            ? saturate(dot(detailSample.rgb, FreckleRedColor.rgb))
+            : 0;
+        regionColour = lerp(regionColour, FreckleGreenColor.rgb, tattooSelector);
+        albedo = diffuseSample.rgb * max(regionColour, 0);
+        scatteringAlbedo = albedo;
+        surfaceSelector = float4(tint, tattooSelector);
+        transmissionFactor = 1;
+    }
+    else if (family == 16)
+    {
+        albedo = diffuseSample.rgb * max(BaseColor.rgb, 0);
     }
     else if (family == 1)
     {
@@ -1720,6 +1770,14 @@ float4 PSMain(
     if (family == 8 && diagnostic < 0.5)
     {
         lit += max(GeneralParameters.x, 0) * saturate(maskSample.r);
+    }
+
+    if (family == 16 && diagnostic < 0.5)
+    {
+        // ALN_HED_Diff alpha is the eye emissive mask in the LE2 FXC.
+        lit += max(SecondaryColor.rgb, 0)
+            * max(GeneralParameters.z, 0)
+            * saturate(diffuseSample.a);
     }
 
     if (family == 4 && diagnostic < 0.5)

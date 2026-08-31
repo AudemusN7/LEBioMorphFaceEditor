@@ -369,6 +369,10 @@ public static class RenderingTests
         TestAssert.Equal(HeadMaterialFamily.MaskedHair, HeadMaterialClassifier.Classify("HMM_HIR_PROShort01_MAT_1b", attachment: true));
         TestAssert.Equal(HeadMaterialFamily.Hair, HeadMaterialClassifier.Classify("HMM_HIR_PROShort02_MAT", attachment: true));
         TestAssert.Equal(HeadMaterialFamily.Accessory, HeadMaterialClassifier.Classify("Visor_MAT", attachment: true));
+        TestAssert.Equal(HeadMaterialFamily.TurianSkin,
+            HeadMaterialClassifier.ClassifyChain(["TUR_HED_PRO_MAT", "Generic_Head_Master"]));
+        TestAssert.Equal(HeadMaterialFamily.Unknown,
+            HeadMaterialClassifier.ClassifyChain(["HMM_HED_PRO_MAT", "HMM_EYE_MASTER_MAT"]));
     }
 
     private static void BioMorphFaceSearchMatchesNamesAndPaths()

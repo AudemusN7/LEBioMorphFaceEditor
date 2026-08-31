@@ -1,4 +1,5 @@
 using MorphFaceEditor.Core.Deformation;
+using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.LegendaryExplorer;
 
 namespace MorphFaceEditor.Services;
@@ -249,7 +250,8 @@ public sealed class MorphFaceProfileRegistry
     {
         if (!string.IsNullOrWhiteSpace(baseHeadPath))
         {
-            return baseHeadPath.Contains("ASA_HED_PROBASE_MDL", StringComparison.OrdinalIgnoreCase);
+            return HeadProfileIdentity.InferSuffix(baseHeadPath) == "asari" &&
+                   baseHeadPath.Contains("ASA_HED_PROBASE_MDL", StringComparison.OrdinalIgnoreCase);
         }
         return facePath.StartsWith("Asari.", StringComparison.OrdinalIgnoreCase);
     }
@@ -275,7 +277,8 @@ public sealed class MorphFaceProfileRegistry
     {
         if (!string.IsNullOrWhiteSpace(baseHeadPath))
         {
-            return baseHeadPath.Contains("SAL_HED_PROBASE_MDL", StringComparison.OrdinalIgnoreCase);
+            return HeadProfileIdentity.InferSuffix(baseHeadPath) == "salarian" &&
+                   baseHeadPath.Contains("SAL_HED_PROBASE_MDL", StringComparison.OrdinalIgnoreCase);
         }
         return facePath.StartsWith("Salarian.", StringComparison.OrdinalIgnoreCase);
     }
@@ -301,7 +304,8 @@ public sealed class MorphFaceProfileRegistry
     {
         if (!string.IsNullOrWhiteSpace(baseHeadPath))
         {
-            return baseHeadPath.Contains("TUR_HED_PROBASE_MDL", StringComparison.OrdinalIgnoreCase);
+            return HeadProfileIdentity.InferSuffix(baseHeadPath) == "turian" &&
+                   baseHeadPath.Contains("TUR_HED_PROBASE_MDL", StringComparison.OrdinalIgnoreCase);
         }
         return facePath.StartsWith("Turian.", StringComparison.OrdinalIgnoreCase);
     }
@@ -329,7 +333,8 @@ public sealed class MorphFaceProfileRegistry
     {
         if (!string.IsNullOrWhiteSpace(baseHeadPath))
         {
-            return baseHeadPath.Contains("TUF_HED_PROBase_MDL", StringComparison.OrdinalIgnoreCase);
+            return HeadProfileIdentity.InferSuffix(baseHeadPath) == "female-turian" &&
+                   baseHeadPath.Contains("TUF_HED_PROBase_MDL", StringComparison.OrdinalIgnoreCase);
         }
         return facePath.StartsWith("Female Turian.", StringComparison.OrdinalIgnoreCase) ||
                facePath.Contains(".TUF_", StringComparison.OrdinalIgnoreCase);
@@ -356,7 +361,8 @@ public sealed class MorphFaceProfileRegistry
     {
         if (!string.IsNullOrWhiteSpace(baseHeadPath))
         {
-            return baseHeadPath.Contains("KRO_HED_PROBase_MDL", StringComparison.OrdinalIgnoreCase);
+            return HeadProfileIdentity.InferSuffix(baseHeadPath) == "krogan" &&
+                   baseHeadPath.Contains("KRO_HED_PROBase_MDL", StringComparison.OrdinalIgnoreCase);
         }
         return facePath.StartsWith("Krogan.", StringComparison.OrdinalIgnoreCase);
     }
@@ -388,7 +394,8 @@ public sealed class MorphFaceProfileRegistry
     {
         if (!string.IsNullOrWhiteSpace(baseHeadPath))
         {
-            return baseHeadPath.Contains("BAT_HED_PROBase_MDL", StringComparison.OrdinalIgnoreCase);
+            return HeadProfileIdentity.InferSuffix(baseHeadPath) == "batarian" &&
+                   baseHeadPath.Contains("BAT_HED_PROBase_MDL", StringComparison.OrdinalIgnoreCase);
         }
         return facePath.StartsWith("Batarian.", StringComparison.OrdinalIgnoreCase);
     }
@@ -412,7 +419,8 @@ public sealed class MorphFaceProfileRegistry
 
     private static bool MatchesVorcha(string facePath, string? baseHeadPath) =>
         !string.IsNullOrWhiteSpace(baseHeadPath)
-            ? baseHeadPath.Contains("ALN_HED_PROBase_MDL", StringComparison.OrdinalIgnoreCase)
+            ? HeadProfileIdentity.InferSuffix(baseHeadPath) == "vorcha" &&
+              baseHeadPath.Contains("ALN_HED_PROBase_MDL", StringComparison.OrdinalIgnoreCase)
             : facePath.StartsWith("Vorcha.", StringComparison.OrdinalIgnoreCase);
 
     private static bool MatchesHuman(
@@ -424,7 +432,11 @@ public sealed class MorphFaceProfileRegistry
     {
         if (!string.IsNullOrWhiteSpace(baseHeadPath))
         {
-            return morphMeshNames.Any(name =>
+            var expectedSuffix = pathSegment.Equals("HMF", StringComparison.OrdinalIgnoreCase)
+                ? "human-female"
+                : "human-male";
+            return HeadProfileIdentity.InferSuffix(baseHeadPath) == expectedSuffix &&
+                   morphMeshNames.Any(name =>
                        baseHeadPath.Contains(name, StringComparison.OrdinalIgnoreCase)) &&
                    !baseHeadPath.Contains("TUR_", StringComparison.OrdinalIgnoreCase);
         }

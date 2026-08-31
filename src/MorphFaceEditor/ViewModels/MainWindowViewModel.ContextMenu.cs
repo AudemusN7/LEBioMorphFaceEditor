@@ -36,6 +36,8 @@ public sealed partial class MainWindowViewModel
         _exportMorphGltfCommand.RaiseCanExecuteChanged();
         _exportMorphMd5Command.RaiseCanExecuteChanged();
         _exportMorphRonCommand.RaiseCanExecuteChanged();
+        _assignMorphToActorCommand.RaiseCanExecuteChanged();
+        _assignMaterialsToActorCommand.RaiseCanExecuteChanged();
     }
 
     private async Task DeleteMorphAsync()

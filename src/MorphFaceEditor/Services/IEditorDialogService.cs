@@ -14,6 +14,9 @@ public interface IEditorDialogService
     string? ChooseMorphImportFile(string? initialDirectory = null);
     string? ChooseRonExportFile(string suggestedFileName, string? initialDirectory = null);
     string? ChooseMeshExportDirectory(string? initialDirectory = null);
+    ActorAssignmentCandidate? ChooseActorAssignment(
+        ActorAssignmentInventory inventory,
+        ActorAssignmentMode mode);
     bool ConfirmDeleteMorph(string facePath);
     UnsavedChangesChoice ConfirmUnsavedChanges(
         string assetPath,

@@ -232,6 +232,9 @@
                                 </MenuItem>
                                 <MenuItem Header="Export Morph as RON" Command="{Binding ExportMorphRonCommand}" />
                                 <Separator />
+                                <MenuItem Header="Assign Morph to Actor…" Command="{Binding AssignMorphToActorCommand}" />
+                                <MenuItem Header="Assign Materials to Actor…" Command="{Binding AssignMaterialsToActorCommand}" />
+                                <Separator />
                                 <MenuItem Header="Copy Morph Data" Command="{Binding CopyMorphDataCommand}" />
                                 <MenuItem Header="Paste Morph Data" Command="{Binding PasteMorphDataCommand}" />
                                 <MenuItem Header="Copy Material Data" Command="{Binding CopyMaterialDataCommand}" />

@@ -50,6 +50,7 @@ public static class UiSmokeTests
         new("embedded randomisation corpus loads all pools and excludes Broke", EmbeddedRandomisationCorpusLoads),
         new("editor error banners can be dismissed", ErrorBannerCanBeDismissed),
         new("texture registry settings command opens the settings dialog", TextureRegistrySettingsCommandOpensDialog),
+        new("actor assignment chooser filters evidence and scopes eligibility by operation", ActorChooserFiltersAndScopesEligibility),
         new("WPF resources construct and nested menus expose their popup", HdrPickerConstructs),
         new("Human Male UI profile orders, groups, and filters features", HumanMaleProfileOrganizesFeatures),
         new("LE3 Human Male UI hides inert eye metadata and marks vestigial pupils", Le3HumanMaleProfileOrganizesFeatures),
@@ -149,6 +150,52 @@ public static class UiSmokeTests
 
         TestAssert.True(dialogs.TextureRegistrySettingsWasShown,
             "The Texture Registry Settings command did not open the settings dialog.");
+    }
+
+    private static void ActorChooserFiltersAndScopesEligibility()
+    {
+        var morphReady = ActorChoiceFixture(
+            10, "NormandyGarrus", "BioPawn_10", canMorph: true, canMaterials: false);
+        var materialReady = ActorChoiceFixture(
+            20, "CitadelKeeper", "BioPawn_20", canMorph: false, canMaterials: true);
+        var inventory = new ActorAssignmentInventory(
+            MorphFaceGame.LE2, 1, "SelectedFace", "le2-human-male", [morphReady, materialReady]);
+
+        var morphChooser = new ActorAssignmentChooserViewModel(inventory, ActorAssignmentMode.Morph);
+        TestAssert.Equal(morphReady.UIndex, morphChooser.SelectedChoice!.Candidate.UIndex);
+        TestAssert.True(morphChooser.CanConfirm, "Morph chooser did not select its first eligible actor.");
+        morphChooser.SearchText = "CitadelKeeper";
+        TestAssert.Equal(1, morphChooser.FilteredChoices.Cast<ActorAssignmentChoice>().Count());
+        TestAssert.True(!morphChooser.CanConfirm,
+            "Operation-specific morph confirmation remained enabled for a material-only candidate.");
+
+        var materialChooser = new ActorAssignmentChooserViewModel(inventory, ActorAssignmentMode.Materials);
+        TestAssert.Equal(materialReady.UIndex, materialChooser.SelectedChoice!.Candidate.UIndex);
+        TestAssert.True(materialChooser.CanConfirm,
+            "Material chooser did not select its first actor with a safe MIC target.");
+    }
+
+    private static ActorAssignmentCandidate ActorChoiceFixture(
+        int uIndex,
+        string tag,
+        string objectName,
+        bool canMorph,
+        bool canMaterials)
+    {
+        var material = new ActorAssignmentMaterialTarget(
+            30, "HMM_HED_PRO_Face_Mat", "HMM_HED_PRO_Face_Mat",
+            ActorComponentRole.Head, "HeadComponent", 0, HeadMaterialFamily.Skin,
+            "le2-human-male", [], false);
+        return new ActorAssignmentCandidate(
+            uIndex, "BioPawn", objectName, $"PersistentLevel.{objectName}",
+            ActorAssignmentTargetKind.PlacedActor, tag,
+            [new ActorIdentityEvidence(ActorIdentityEvidenceKind.LocalTag, "Local tag", tag, $"PersistentLevel.{objectName}")],
+            $"{tag}\n{objectName}\nBioPawn\n#{uIndex}",
+            "le2-human-male", "HMM_HED_PROBase_MDL", "le2-human-male",
+            canMorph, canMorph ? null : "No safe morph owner.",
+            canMorph ? new ActorAssignmentMorphTarget(uIndex, "BioPawn", $"PersistentLevel.{objectName}", "MorphHead", 0, null, null) : null,
+            canMaterials, canMaterials ? null : "No safe local MICs.",
+            [], canMaterials ? [material] : [], [], [], []);
     }
 
     private static void ComboModelsDisplayLabels()
@@ -974,6 +1021,9 @@ public static class UiSmokeTests
         public string? ChooseMorphImportFile(string? initialDirectory = null) => null;
         public string? ChooseRonExportFile(string suggestedFileName, string? initialDirectory = null) => null;
         public string? ChooseMeshExportDirectory(string? initialDirectory = null) => null;
+        public ActorAssignmentCandidate? ChooseActorAssignment(
+            ActorAssignmentInventory inventory,
+            ActorAssignmentMode mode) => null;
         public bool ConfirmDeleteMorph(string facePath) => false;
         public UnsavedChangesChoice ConfirmUnsavedChanges(string assetPath, UnsavedChangesScope scope = UnsavedChangesScope.Package) => UnsavedChangesChoice.Cancel;
         public void ShowInformation(string title, string message) { }
@@ -1339,6 +1389,11 @@ public static class UiSmokeTests
                     "Face_Converted.pcc",
                     Path.GetFullPath("fixture.pcc"));
                 le2Conversion.Close();
+                var actorInventory = new ActorAssignmentInventory(
+                    MorphFaceGame.LE2, 1, "SelectedFace", "le2-human-male",
+                    [ActorChoiceFixture(10, "NormandyGarrus", "BioPawn_10", true, true)]);
+                var actorChooser = new ActorAssignmentWindow(actorInventory, ActorAssignmentMode.Morph);
+                actorChooser.Close();
             }
             catch (Exception exception)
             {

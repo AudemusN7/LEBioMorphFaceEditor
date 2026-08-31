@@ -1,6 +1,7 @@
 using System.IO;
 using Microsoft.Win32;
 using System.Windows;
+using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.Views;
 using MorphFaceEditor.ViewModels;
 
@@ -92,6 +93,17 @@ public sealed class WpfEditorDialogService : IEditorDialogService
             Multiselect = false
         };
         return dialog.ShowDialog() == true ? dialog.FolderName : null;
+    }
+
+    public ActorAssignmentCandidate? ChooseActorAssignment(
+        ActorAssignmentInventory inventory,
+        ActorAssignmentMode mode)
+    {
+        var window = new ActorAssignmentWindow(inventory, mode)
+        {
+            Owner = Application.Current.MainWindow
+        };
+        return window.ShowDialog() == true ? window.SelectedCandidate : null;
     }
 
     public bool ConfirmDeleteMorph(string facePath) =>

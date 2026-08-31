@@ -8,6 +8,12 @@ public enum ActorAssignmentTargetKind
     SpawnTemplate
 }
 
+public enum ActorAssignmentMode
+{
+    Morph,
+    Materials
+}
+
 public enum ActorComponentRole
 {
     Head,
@@ -135,3 +141,27 @@ public sealed record ActorAssignmentInventory(
     string SelectedFacePath,
     string SelectedProfileKey,
     IReadOnlyList<ActorAssignmentCandidate> Candidates);
+
+/// <summary>The verified result of changing one actor's authored morph reference.</summary>
+public sealed record ActorMorphAssignmentResult(
+    int ActorUIndex,
+    string ActorPath,
+    ActorAssignmentTargetKind TargetKind,
+    int OwnerUIndex,
+    string OwnerPath,
+    string PropertyName,
+    int PreviousMorphUIndex,
+    string? PreviousMorphPath,
+    int NewMorphUIndex,
+    string NewMorphPath);
+
+/// <summary>The verified result of applying one face's BMO values to an actor's safe local MICs.</summary>
+public sealed record ActorMaterialAssignmentResult(
+    int ActorUIndex,
+    string ActorPath,
+    string SourceMaterialOverridePath,
+    IReadOnlyList<ActorAssignmentMaterialTarget> ChangedMaterials,
+    IReadOnlyList<ActorAssignmentSkippedMaterial> SkippedMaterials,
+    bool ReplacedTextures,
+    bool ReplacedVectors,
+    bool ReplacedScalars);

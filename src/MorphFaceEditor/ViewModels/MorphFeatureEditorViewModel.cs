@@ -9,8 +9,12 @@ public sealed class MorphFeatureEditorViewModel : ObservableObject, IContinuousE
     private readonly MorphFaceEditingSession _session;
     private readonly Action<string> _reportError;
     private readonly IReadOnlySet<int>? _geometryLods;
+    private readonly bool _profileAllowsEditing;
     private float _value;
     private bool _isEditable;
+    private bool _sessionCanEdit;
+    private bool _lodHasMorphGeometry = true;
+    private bool _targetWorksAtLod = true;
     private bool _extendedSliders;
     private float _defaultMinimum;
     private float _defaultMaximum;
@@ -21,17 +25,20 @@ public sealed class MorphFeatureEditorViewModel : ObservableObject, IContinuousE
         MorphFaceEditingSession session,
         MorphFeatureMetadata metadata,
         IReadOnlySet<int>? geometryLods,
-        Action<string> reportError)
+        Action<string> reportError,
+        bool sessionCanEdit = true)
     {
         _session = session;
         _reportError = reportError;
         _geometryLods = geometryLods;
         Metadata = metadata;
+        _profileAllowsEditing = metadata.IsEditable;
+        _sessionCanEdit = sessionCanEdit;
         _value = session.GetFeature(metadata.Name);
         _defaultMinimum = Math.Min(metadata.Minimum, _value);
         _defaultMaximum = Math.Max(metadata.Maximum, _value);
         _extendedExtent = Math.Max(Math.Abs(_defaultMinimum), Math.Abs(_defaultMaximum));
-        _isEditable = metadata.IsEditable;
+        _isEditable = _profileAllowsEditing && _sessionCanEdit;
     }
 
     public MorphFeatureMetadata Metadata { get; }
@@ -137,7 +144,17 @@ public sealed class MorphFeatureEditorViewModel : ObservableObject, IContinuousE
 
     public void SetPreviewLod(int lodIndex, bool lodHasMorphGeometry)
     {
-        var targetWorksAtLod = _geometryLods is null || _geometryLods.Contains(lodIndex);
-        IsEditable = Metadata.IsEditable && lodHasMorphGeometry && targetWorksAtLod;
+        _lodHasMorphGeometry = lodHasMorphGeometry;
+        _targetWorksAtLod = _geometryLods is null || _geometryLods.Contains(lodIndex);
+        RefreshEditability();
     }
+
+    public void SetSessionCanEdit(bool canEdit)
+    {
+        _sessionCanEdit = canEdit;
+        RefreshEditability();
+    }
+
+    private void RefreshEditability() =>
+        IsEditable = _profileAllowsEditing && _sessionCanEdit && _lodHasMorphGeometry && _targetWorksAtLod;
 }

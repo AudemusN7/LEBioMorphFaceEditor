@@ -24,6 +24,7 @@ public static class UiSmokeTests
         new("combo-box models display their labels", ComboModelsDisplayLabels),
         new("LOD-specific morph controls are explicitly marked", LodSpecificMorphControlsAreMarked),
         new("morph controls disable when the selected LOD has no target geometry", MorphControlsDisableForTargetlessLod),
+        new("Fix Morph undo restores baked preview and UI state", FixMorphUndoRestoresBakedPreview),
         new("texture thumbnails discard alpha", TextureThumbnailsDiscardAlpha),
         new("numeric wheel increments are finite and crash-safe", NumericWheelIncrementsAreSafe),
         new("extended sliders are optional and preserve edited values", ExtendedSlidersAreOptional),
@@ -1045,6 +1046,113 @@ public static class UiSmokeTests
         TestAssert.True(control.IsEditable, "A supported LOD disabled its morph control.");
         control.SetPreviewLod(2, lodHasMorphGeometry: false);
         TestAssert.True(!control.IsEditable, "A targetless LOD left its morph control enabled.");
+    }
+
+    private static void FixMorphUndoRestoresBakedPreview()
+    {
+        var mesh = TestFixtures.CreateRenderableTwoLodMesh(lowerLodIndex: 2);
+        var target = new MorphTargetAsset(
+            TestFixtures.CreateIdentity("Set.Shape", "MorphTarget"),
+            [
+                new MorphTargetLod(0, 3, [new MorphVertexDelta(1, new Vector3(2, 0, 0), Vector3.Zero)]),
+                new MorphTargetLod(2, 3, [new MorphVertexDelta(1, new Vector3(0, 0, 2), Vector3.Zero)])
+            ],
+            []);
+        var document = new MorphFaceDocument(
+            TestFixtures.CreateIdentity("Face", "BioMorphFace"),
+            new PackageFingerprint(1, DateTime.UnixEpoch, new string('0', 64)),
+            mesh.Source,
+            null,
+            [new MorphFeatureValue("Shape", 0.5f)],
+            [],
+            MorphFaceMaterialOverrides.Empty,
+            [
+                [Vector3.Zero, new Vector3(3, 0, 0), Vector3.UnitY],
+                [new Vector3(10, 0, 0), new Vector3(12.5f, 0, 0), new Vector3(10, 2, 0)]
+            ],
+            []);
+        var session = new MorphFaceEditor.Core.Editing.MorphFaceEditingSession(document, mesh, [target]);
+        var loaded = new LoadedMorphFace(
+            document,
+            mesh,
+            null,
+            ResolvedHeadMaterialSet.Empty,
+            MorphFaceEditor.Core.Diagnostics.TopologyDiagnostics.Analyze(mesh, document));
+        using var reader = new MorphFacePackageReader();
+        var editor = new FaceEditorViewModel(
+            session,
+            new HumanMaleFeatureMetadataCatalog(),
+            new MorphFaceEditor.Core.Editing.MaterialEditingSession(
+                MorphFaceMaterialOverrides.Empty,
+                ResolvedHeadMaterialSet.Empty),
+            new StubColorDialog(),
+            new PackageReferenceService(reader),
+            "fixture.pcc",
+            [],
+            [],
+            null,
+            [],
+            _ => { });
+        using var viewModel = CreateMainWindowViewModel(reader);
+        var setEditor = typeof(MainWindowViewModel).GetMethod(
+            "SetEditor",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new Exception("MainWindowViewModel.SetEditor was not found.");
+        setEditor.Invoke(viewModel, [editor, loaded]);
+        viewModel.PreviewLod = 2;
+        var feature = editor.Features.Single(value => value.Name == "Shape");
+
+        TestAssert.True(viewModel.FixMorphCommand.CanExecute(null),
+            "The repairable face did not expose the Fix Morph command.");
+        TestAssert.True(!feature.IsEditable, "The blocked face exposed an editable slider before repair.");
+
+        viewModel.FixMorphCommand.Execute(null);
+
+        TestAssert.True(editor.IsDirty, "Repair did not mark the face dirty.");
+        TestAssert.True(feature.IsEditable, "Repair did not enable the morph slider.");
+        TestAssert.True(!viewModel.FixMorphCommand.CanExecute(null),
+            "Fix Morph remained available after repair.");
+        TestAssert.True(viewModel.FaceDetails?.Contains("oracle repaired", StringComparison.Ordinal) == true,
+            "Repair did not update the face details.");
+
+        MorphFaceEditor.Rendering.HeadPreviewScene? undoScene = null;
+        var undoDeformationCount = 0;
+        viewModel.PreviewSceneReady += (scene, _) => undoScene = scene;
+        viewModel.PreviewDeformationReady += _ => undoDeformationCount++;
+        editor.UndoCommand.Execute(null);
+
+        TestAssert.True(undoScene is not null, "Undo did not rebuild the fallback preview scene.");
+        TestAssert.Equal(0, undoDeformationCount);
+        TestAssert.Near(new Vector3(0, 0, 12.5f), undoScene!.Meshes[0].Vertices[1].Position, 0.0001f);
+        TestAssert.True(!editor.IsDirty, "Undo left the repaired face dirty.");
+        TestAssert.True(!feature.IsEditable, "Undo left the morph slider enabled.");
+        TestAssert.True(viewModel.FixMorphCommand.CanExecute(null),
+            "Undo did not restore Fix Morph availability.");
+        TestAssert.True(viewModel.FaceDetails?.Contains("oracle repaired", StringComparison.Ordinal) == false &&
+                        viewModel.Status.Contains("undone", StringComparison.OrdinalIgnoreCase),
+            "Undo left stale repair messaging in the status pane.");
+
+        MorphFaceEditor.Rendering.HeadPreviewDeformationUpdate? redoUpdate = null;
+        viewModel.PreviewDeformationReady += update => redoUpdate = update;
+        editor.RedoCommand.Execute(null);
+
+        TestAssert.True(redoUpdate is not null, "Redo did not restore the editable deformation preview.");
+        TestAssert.Near(new Vector3(0, 1, 12), redoUpdate!.Vertices[1].Position, 0.0001f);
+        TestAssert.True(editor.IsDirty && feature.IsEditable,
+            "Redo did not restore the repaired editor state.");
+        TestAssert.True(viewModel.FaceDetails?.Contains("oracle repaired", StringComparison.Ordinal) == true,
+            "Redo did not restore the repair messaging.");
+
+        editor.UndoCommand.Execute(null);
+        viewModel.PreviewDeformationReady += _ => throw new InvalidOperationException("preview callback failed");
+        viewModel.FixMorphCommand.Execute(null);
+
+        TestAssert.True(editor.IsDirty && feature.IsEditable &&
+                        !viewModel.FixMorphCommand.CanExecute(null),
+            "A throwing preview subscriber rolled back the committed repair state.");
+        TestAssert.True(viewModel.ErrorMessage?.Contains("preview", StringComparison.OrdinalIgnoreCase) == true &&
+                        viewModel.Status.Contains("retained", StringComparison.OrdinalIgnoreCase),
+            "A post-repair preview failure was reported as an uncommitted repair failure.");
     }
 
     private static void TextureThumbnailsDiscardAlpha()

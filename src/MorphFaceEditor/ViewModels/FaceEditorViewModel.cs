@@ -84,7 +84,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             .Select(feature => new MorphFeatureEditorViewModel(
                 session,
                 MorphFeatureLodMetadata.MarkLodCoverage(
-                    metadataCatalog.Describe(feature, session.CanEdit),
+                    metadataCatalog.Describe(feature, sessionCanEdit: true),
                     feature,
                     session.AvailableLodIndices),
                 feature.Target is null || feature.Target.BoneOffsets.Count > 0
@@ -93,7 +93,8 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                         .Where(lod => lod.Vertices.Count > 0)
                         .Select(lod => lod.LodIndex)
                         .ToHashSet(),
-                reportError))
+                reportError,
+                session.CanEdit))
             .Where(feature => feature.IsVisible)
             .ToArray();
         Bones = ignoresAuthoredGeometry
@@ -211,6 +212,9 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     public System.Windows.Input.ICommand SetToDefaultsCommand => _setToDefaultsCommand;
     public System.Windows.Input.ICommand RandomiseCommand => _randomiseCommand;
     public bool CanEdit => _session.CanEdit;
+    public bool CanFixMorph => _session.CanFixMorph;
+    public bool HasPendingRepair => _session.HasPendingRepair;
+    public string? EditBlockReason => _session.EditBlockReason;
     public bool CanRandomise => CanRandomiseScope(GlobalRandomisationScope(CursedMode));
     public bool AllowsMorphRandomisation => CanEdit && _allowsMorphRandomisation;
     public bool AllowsMaterialRandomisation =>
@@ -311,6 +315,11 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                 .Concat(_preservedOtherMeshes)
                 .ToArray(),
             Material.CreateOverrides());
+    public void FixMorph()
+    {
+        _session.FixMorph();
+        RefreshDirtyState();
+    }
     public void ApplyMorphData(MorphFaceEditor.Core.Domain.MorphFaceMorphData data)
     {
         _session.ApplyMorphData(data);
@@ -636,6 +645,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     {
         foreach (var feature in Features)
         {
+            feature.SetSessionCanEdit(CanEdit);
             feature.Refresh();
         }
         foreach (var bone in Bones)
@@ -650,6 +660,13 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         {
             SelectedBoneTransform = BoneTransforms.FirstOrDefault(transform => transform.IsAvailable);
         }
+        OnPropertyChanged(nameof(CanEdit));
+        OnPropertyChanged(nameof(CanFixMorph));
+        OnPropertyChanged(nameof(HasPendingRepair));
+        OnPropertyChanged(nameof(AllowsMorphRandomisation));
+        OnPropertyChanged(nameof(AllowsCursedRandomisation));
+        _setToDefaultsCommand.RaiseCanExecuteChanged();
+        RaiseRandomisationCanExecuteChanged();
         PreviewChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -661,7 +678,8 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     }
 
     private void RefreshDirtyState() =>
-        IsDirty = !MorphFaceEditorStateComparer.Equals(_cleanState, CreateDraft());
+        IsDirty = _session.HasPendingRepair ||
+                  !MorphFaceEditorStateComparer.Equals(_cleanState, CreateDraft());
 
     private void OnMaterialPreviewChanged(object? sender, EventArgs e) =>
         MaterialPreviewChanged?.Invoke(this, EventArgs.Empty);

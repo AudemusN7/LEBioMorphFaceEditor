@@ -15,9 +15,15 @@ public sealed record MorphFaceEvaluation(
 
 public sealed class MorphFaceEditingSession : IUndoableEditSource
 {
-    private const float OracleTolerance = 0.0001f;
-    private readonly MorphFaceDocument _document;
+    /// <summary>
+    /// Maximum per-vertex drift treated as visually insignificant when deciding
+    /// whether a face is safe to edit. Exact repair verification remains stricter.
+    /// </summary>
+    public const float OracleMismatchThreshold = 0.01f;
+    private const float OracleVerificationTolerance = 0.0001f;
+    private MorphFaceDocument _document;
     private readonly SkeletalMeshAsset _baseHead;
+    private readonly IReadOnlyList<(int LodIndex, Vector3[] Positions)> _orderedBaseLods;
     private readonly IReadOnlyList<MorphTargetAsset> _targets;
     private readonly IReadOnlySet<string> _metadataOnlyFeatures;
     private readonly string _profileName;
@@ -50,6 +56,7 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
     {
         _document = document ?? throw new ArgumentNullException(nameof(document));
         _baseHead = baseHead ?? throw new ArgumentNullException(nameof(baseHead));
+        _orderedBaseLods = CreateOrderedBaseLods(baseHead);
         _targets = targets ?? throw new ArgumentNullException(nameof(targets));
         _metadataOnlyFeatures = metadataOnlyFeatures ?? MorphFeatureTargetResolver.HumanMaleMetadataOnlyFeatures;
         _profileName = profileName;
@@ -104,10 +111,7 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
         _positionCorrections = ignoreAuthoredGeometry ? [] : DetectPositionCorrections(resolution);
         Evaluation = Evaluate(includeOracle: !ignoreAuthoredGeometry);
         ValidationErrors = ValidateEditableTargets(Evaluation.Resolution);
-        CanEdit = _geometryEditBlockReason is null &&
-                  Evaluation.Resolution.UnresolvedFeatureNames.Count == 0 &&
-                  Evaluation.OriginalOracleReport is { IsWithinTolerance: true } &&
-                  ValidationErrors.Count == 0;
+        CanEdit = IsEditableByOracle(Evaluation);
     }
 
     public event EventHandler? EvaluationChanged;
@@ -115,7 +119,15 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
     public event EventHandler? EditCommitted;
 
     public MorphFaceEvaluation Evaluation { get; private set; }
-    public bool CanEdit { get; }
+    public bool CanEdit { get; private set; }
+    public bool CanFixMorph => !CanEdit &&
+                               _geometryEditBlockReason is null &&
+                               Evaluation.Resolution.UnresolvedFeatureNames.Count == 0 &&
+                               ValidationErrors.Count == 0 &&
+                               Evaluation.OriginalOracleReport is { IsWithinTolerance: false } &&
+                               _positionCorrections.Count == 0 &&
+                               HasCompatibleBakedLods;
+    public bool HasPendingRepair { get; private set; }
     public IReadOnlyList<string> ValidationErrors { get; }
     public string? EditBlockReason
     {
@@ -150,8 +162,8 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
         .Select(name => new MorphFeatureValue(name, _features[name]))
         .ToArray();
     public IReadOnlyList<BoneTranslation> FinalSkeleton => Evaluation.FinalSkeleton;
-    public IReadOnlyList<int> AvailableLodIndices => _baseHead.AvailableLodPositions
-        .Select((_, index) => index)
+    public IReadOnlyList<int> AvailableLodIndices => _orderedBaseLods
+        .Select(lod => lod.LodIndex)
         .ToArray();
 
     public MorphMeshFitResult FitMeshPositions(IReadOnlyList<MorphMeshPositionCandidate> candidates)
@@ -193,22 +205,28 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
             lods[0] = Evaluation.Geometry.Positions.ToArray();
         }
         var weightedTargets = Evaluation.Resolution.WeightedTargets;
-        var baseLods = _baseHead.AvailableLodPositions;
-        for (var lodIndex = 1; lodIndex < Math.Min(lods.Length, baseLods.Count); lodIndex++)
+        for (var lodOrdinal = 1; lodOrdinal < Math.Min(lods.Length, _orderedBaseLods.Count); lodOrdinal++)
         {
-            var basePositions = baseLods[lodIndex];
+            var baseLod = _orderedBaseLods[lodOrdinal];
+            var lodIndex = baseLod.LodIndex;
+            var basePositions = baseLod.Positions;
+            var profileTargets = Evaluation.Resolution.Features
+                .Where(feature => feature.Target?.Lods.Any(lod => lod.LodIndex == lodIndex) == true)
+                .Select(feature => feature.Target!)
+                .Distinct()
+                .ToArray();
             var lodTargets = weightedTargets
                 .Where(weighted => weighted.Target.Lods.Any(lod => lod.LodIndex == lodIndex))
                 .ToArray();
-            var canBake = lodTargets.Length > 0 &&
-                          basePositions.Length == lods[lodIndex].Length &&
-                          lodTargets.All(weighted =>
-                              weighted.Target.Lods.First(lod => lod.LodIndex == lodIndex).BaseMeshVertexCount ==
+            var canBake = profileTargets.Length > 0 &&
+                          basePositions.Length == lods[lodOrdinal].Length &&
+                          profileTargets.All(target =>
+                              target.Lods.First(lod => lod.LodIndex == lodIndex).BaseMeshVertexCount ==
                               basePositions.Length);
             if (canBake)
             {
-                lods[lodIndex] = SparseMorphEvaluator.EvaluatePositions(basePositions, lodTargets, lodIndex);
-                ApplyCorrection(lods[lodIndex], lodIndex);
+                lods[lodOrdinal] = SparseMorphEvaluator.EvaluatePositions(basePositions, lodTargets, lodIndex);
+                ApplyCorrection(lods[lodOrdinal], lodIndex);
             }
         }
         return _document with
@@ -232,6 +250,62 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
         CreateDraft(hairMeshReference, _document.OtherMeshReferences, materialOverrides);
 
     public float GetFeature(string name) => _features[name];
+
+    /// <summary>
+    /// Rebuilds the authored baked geometry from the profile's canonical base
+    /// head and the current feature state. The operation stays in the editing
+    /// session until the normal Save workflow flushes it to the workspace.
+    /// </summary>
+    public void FixMorph()
+    {
+        if (!CanFixMorph)
+        {
+            throw new InvalidOperationException(
+                "This face does not have a repairable oracle mismatch.");
+        }
+
+        var beforeLods = CloneLods(_document.BakedLods);
+        var beforeEvaluation = Evaluation;
+        var beforeCanEdit = CanEdit;
+        var beforePendingRepair = HasPendingRepair;
+        var canonicalEvaluation = Evaluate(includeOracle: false, applyPositionCorrections: false);
+        var repairedLods = RebuildBakedLods(canonicalEvaluation);
+        _document = _document with { BakedLods = repairedLods };
+
+        try
+        {
+            Evaluation = Evaluate(includeOracle: true, applyPositionCorrections: false);
+            var verification = DeformationComparison.Compare(
+                Evaluation.Geometry,
+                _document.BakedLods[0],
+                OracleVerificationTolerance,
+                10);
+            if (!verification.IsWithinTolerance)
+            {
+                throw new InvalidDataException(
+                    $"The rebuilt morph still differs from its evaluated LOD0 by {verification.MaximumError:G9}.");
+            }
+
+            CanEdit = IsEditableByOracle(Evaluation);
+            HasPendingRepair = true;
+        }
+        catch
+        {
+            _document = _document with { BakedLods = beforeLods };
+            Evaluation = beforeEvaluation;
+            CanEdit = beforeCanEdit;
+            HasPendingRepair = beforePendingRepair;
+            throw;
+        }
+
+        if (!_replayingHistory &&
+            _history.Record(new SemanticMorphRepairEdit(beforeLods, CloneLods(repairedLods))))
+        {
+            EditCommitted?.Invoke(this, EventArgs.Empty);
+        }
+        EvaluationChanged?.Invoke(this, EventArgs.Empty);
+        HistoryChanged?.Invoke(this, EventArgs.Empty);
+    }
 
     public float GetBoneAxis(string boneName, int axis)
     {
@@ -555,16 +629,22 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
     private MorphTargetResolution Resolve() => new MorphFeatureTargetResolver().Resolve(
         Features, _targets, _metadataOnlyFeatures, _profileName, _aliases);
 
-    private MorphFaceEvaluation Evaluate(bool includeOracle)
+    private MorphFaceEvaluation Evaluate(bool includeOracle, bool applyPositionCorrections = true)
     {
         var resolution = Resolve();
         var geometry = SparseMorphEvaluator.Evaluate(_baseHead, resolution.WeightedTargets);
-        ApplyCorrection(geometry.Positions, 0);
+        if (applyPositionCorrections)
+        {
+            ApplyCorrection(geometry.Positions, 0);
+        }
         var lodGeometry = new Dictionary<int, DeformationResult> { [0] = geometry };
         foreach (var lod in _baseHead.AvailableLods.Where(value => value.LodIndex > 0))
         {
             var evaluated = SparseMorphEvaluator.Evaluate(_baseHead, resolution.WeightedTargets, lod.LodIndex);
-            ApplyCorrection(evaluated.Positions, lod.LodIndex);
+            if (applyPositionCorrections)
+            {
+                ApplyCorrection(evaluated.Positions, lod.LodIndex);
+            }
             lodGeometry[lod.LodIndex] = evaluated;
         }
         var finalSkeleton = MorphBoneOffsetComposer.Compose(
@@ -574,10 +654,54 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
             _boneOverrides);
         var pose = SkeletalPoseComposer.Compose(_baseHead.Topology.ReferenceSkeleton, finalSkeleton);
         var report = includeOracle && _document.BakedLods.Count > 0
-            ? DeformationComparison.Compare(geometry, _document.BakedLods[0], OracleTolerance, 10)
+            ? DeformationComparison.Compare(geometry, _document.BakedLods[0], OracleMismatchThreshold, 10)
             : null;
         return new MorphFaceEvaluation(geometry, lodGeometry, finalSkeleton, pose, resolution, report);
     }
+
+    private bool IsEditableByOracle(MorphFaceEvaluation evaluation) =>
+        _geometryEditBlockReason is null &&
+        evaluation.Resolution.UnresolvedFeatureNames.Count == 0 &&
+        evaluation.OriginalOracleReport is { IsWithinTolerance: true } &&
+        ValidationErrors.Count == 0;
+
+    private bool HasCompatibleBakedLods =>
+        _document.BakedLods.Count > 0 &&
+        _document.BakedLods.Count <= _orderedBaseLods.Count &&
+        _document.BakedLods.Select((lod, index) =>
+                lod.Length == _orderedBaseLods[index].Positions.Length &&
+                Evaluation.LodGeometry.ContainsKey(_orderedBaseLods[index].LodIndex))
+            .All(value => value);
+
+    private IReadOnlyList<Vector3[]> RebuildBakedLods(MorphFaceEvaluation canonicalEvaluation)
+    {
+        if (!HasCompatibleBakedLods)
+        {
+            throw new InvalidDataException(
+                "The face's stored baked LOD topology does not match the selected profile base head.");
+        }
+
+        return _document.BakedLods
+            .Select((_, index) => canonicalEvaluation.LodGeometry.TryGetValue(_orderedBaseLods[index].LodIndex, out var evaluated)
+                ? evaluated.Positions.ToArray()
+                : throw new InvalidDataException(
+                    $"The selected profile could not evaluate stored LOD {_orderedBaseLods[index].LodIndex}."))
+            .ToArray();
+    }
+
+    private static IReadOnlyList<(int LodIndex, Vector3[] Positions)> CreateOrderedBaseLods(
+        SkeletalMeshAsset baseHead) =>
+        baseHead.AvailableLods.Count > 0
+            ? baseHead.AvailableLods
+                .OrderBy(lod => lod.LodIndex)
+                .Select(lod => (lod.LodIndex, lod.Positions))
+                .ToArray()
+            : baseHead.AvailableLodPositions
+                .Select((positions, index) => (index, positions))
+                .ToArray();
+
+    private static IReadOnlyList<Vector3[]> CloneLods(IReadOnlyList<Vector3[]> lods) =>
+        lods.Select(lod => lod.ToArray()).ToArray();
 
     private IReadOnlyList<Vector3[]> DetectPositionCorrections(MorphTargetResolution resolution)
     {
@@ -586,7 +710,7 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
             return [];
         }
         var raw = SparseMorphEvaluator.Evaluate(_baseHead, resolution.WeightedTargets);
-        var report = DeformationComparison.Compare(raw, _document.BakedLods[0], OracleTolerance, 10);
+        var report = DeformationComparison.Compare(raw, _document.BakedLods[0], OracleMismatchThreshold, 10);
         var correctLod0 = !report.IsWithinTolerance &&
                           _recognizesBaseVariant is not null &&
                           _recognizesBaseVariant(report);
@@ -596,11 +720,13 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
         }
 
         var corrections = new List<Vector3[]>();
-        var lodCount = Math.Min(_document.BakedLods.Count, _baseHead.AvailableLodPositions.Count);
-        for (var lodIndex = 0; lodIndex < lodCount; lodIndex++)
+        var lodCount = Math.Min(_document.BakedLods.Count, _orderedBaseLods.Count);
+        for (var lodOrdinal = 0; lodOrdinal < lodCount; lodOrdinal++)
         {
-            var basePositions = _baseHead.AvailableLodPositions[lodIndex];
-            var baked = _document.BakedLods[lodIndex];
+            var baseLod = _orderedBaseLods[lodOrdinal];
+            var lodIndex = baseLod.LodIndex;
+            var basePositions = baseLod.Positions;
+            var baked = _document.BakedLods[lodOrdinal];
             var canEvaluate = basePositions.Length == baked.Length &&
                               resolution.WeightedTargets.All(weighted =>
                                   weighted.Target.Lods.FirstOrDefault(lod => lod.LodIndex == lodIndex) is not
@@ -631,12 +757,14 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
             .Select(feature => feature.Target!)
             .DistinctBy(target => $"{target.Source.PackagePath}|{target.Source.InstancedPath}", StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        var commonLodCount = Math.Min(_document.BakedLods.Count, _baseHead.AvailableLodPositions.Count);
+        var commonLodCount = Math.Min(_document.BakedLods.Count, _orderedBaseLods.Count);
 
-        for (var lodIndex = 0; lodIndex < commonLodCount; lodIndex++)
+        for (var lodOrdinal = 0; lodOrdinal < commonLodCount; lodOrdinal++)
         {
-            var basePositions = _baseHead.AvailableLodPositions[lodIndex];
-            var bakedPositions = _document.BakedLods[lodIndex];
+            var baseLod = _orderedBaseLods[lodOrdinal];
+            var lodIndex = baseLod.LodIndex;
+            var basePositions = baseLod.Positions;
+            var bakedPositions = _document.BakedLods[lodOrdinal];
             var lodTargets = targets
                 .Where(target => target.Lods.Any(lod => lod.LodIndex == lodIndex))
                 .ToArray();
@@ -691,20 +819,33 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
 
     private void ApplyCorrection(Vector3[] positions, int lodIndex)
     {
-        if (lodIndex >= _positionCorrections.Count)
+        var lodOrdinal = -1;
+        for (var index = 0; index < _orderedBaseLods.Count; index++)
+        {
+            if (_orderedBaseLods[index].LodIndex == lodIndex)
+            {
+                lodOrdinal = index;
+                break;
+            }
+        }
+        if (lodOrdinal < 0 || lodOrdinal >= _positionCorrections.Count)
         {
             return;
         }
-        var correction = _positionCorrections[lodIndex];
+        var correction = _positionCorrections[lodOrdinal];
         for (var index = 0; index < positions.Length; index++)
         {
             positions[index] += correction[index];
         }
     }
 
-    private void Refresh()
+    private void Refresh(bool includeOracle = false)
     {
-        Evaluation = Evaluate(includeOracle: false);
+        Evaluation = Evaluate(includeOracle);
+        if (includeOracle)
+        {
+            CanEdit = IsEditableByOracle(Evaluation);
+        }
         EvaluationChanged?.Invoke(this, EventArgs.Empty);
         HistoryChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -740,6 +881,15 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
             {
                 RestoreAuthoringState(useAfter ? stateEdit.After : stateEdit.Before);
                 Refresh();
+            }
+            else if (edit is SemanticMorphRepairEdit repairEdit)
+            {
+                _document = _document with
+                {
+                    BakedLods = CloneLods(useAfter ? repairEdit.AfterBakedLods : repairEdit.BeforeBakedLods)
+                };
+                HasPendingRepair = useAfter;
+                Refresh(includeOracle: true);
             }
             else if (edit is SemanticBoneTranslationEdit boneEdit)
             {

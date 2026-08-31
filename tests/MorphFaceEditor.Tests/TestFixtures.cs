@@ -31,7 +31,7 @@ public static class TestFixtures
             [new MorphTargetLod(0, 3, deltas)],
             []);
 
-    public static SkeletalMeshAsset CreateRenderableTwoLodMesh()
+    public static SkeletalMeshAsset CreateRenderableTwoLodMesh(int lowerLodIndex = 1)
     {
         var skeleton = new[] { new ReferenceBone("root", 0, Vector3.Zero, Quaternion.Identity) };
         SkeletalMeshLod CreateLod(int index, Vector3[] positions)
@@ -59,7 +59,7 @@ public static class TestFixtures
         var lods = new[]
         {
             CreateLod(0, [Vector3.Zero, Vector3.UnitX, Vector3.UnitY]),
-            CreateLod(1, [new Vector3(10, 0, 0), new Vector3(12, 0, 0), new Vector3(10, 2, 0)])
+            CreateLod(lowerLodIndex, [new Vector3(10, 0, 0), new Vector3(12, 0, 0), new Vector3(10, 2, 0)])
         };
         return new SkeletalMeshAsset(
             CreateIdentity("BaseHead", "SkeletalMesh"),

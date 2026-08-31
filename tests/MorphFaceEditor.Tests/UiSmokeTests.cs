@@ -1393,6 +1393,10 @@ public static class UiSmokeTests
                     MorphFaceGame.LE2, 1, "SelectedFace", "le2-human-male",
                     [ActorChoiceFixture(10, "NormandyGarrus", "BioPawn_10", true, true)]);
                 var actorChooser = new ActorAssignmentWindow(actorInventory, ActorAssignmentMode.Morph);
+                actorChooser.ShowInTaskbar = false;
+                actorChooser.Opacity = 0;
+                actorChooser.Show();
+                actorChooser.UpdateLayout();
                 actorChooser.Close();
             }
             catch (Exception exception)

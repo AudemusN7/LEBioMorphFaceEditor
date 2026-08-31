@@ -32,6 +32,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly MorphFaceConversionService _conversionService;
     private readonly MorphFaceInterchangeService _interchangeService;
     private readonly IMorphFaceClipboardService _clipboard;
+    private readonly ActorAssignmentService _actorAssignmentService;
     private readonly MorphRandomisationCatalog _randomisationCatalog;
     private readonly AsyncRelayCommand _openPackageCommand;
     private readonly AsyncRelayCommand _loadSelectedFaceCommand;
@@ -53,6 +54,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly AsyncRelayCommand _exportMorphGltfCommand;
     private readonly AsyncRelayCommand _exportMorphMd5Command;
     private readonly AsyncRelayCommand _exportMorphRonCommand;
+    private readonly AsyncRelayCommand _assignMorphToActorCommand;
+    private readonly AsyncRelayCommand _assignMaterialsToActorCommand;
     private MorphFacePackageWorkspace? _packageWorkspace;
     private bool _hasWorkspaceChanges;
     private CancellationTokenSource? _loadCancellation;
@@ -99,7 +102,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         MorphFaceConversionService conversionService,
         MorphFaceInterchangeService interchangeService,
         IMorphFaceClipboardService clipboard,
-        MorphRandomisationCatalog? randomisationCatalog = null)
+        MorphRandomisationCatalog? randomisationCatalog = null,
+        ActorAssignmentService? actorAssignmentService = null)
     {
         _dialogs = dialogs;
         _catalogService = catalogService;
@@ -112,6 +116,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _conversionService = conversionService;
         _interchangeService = interchangeService;
         _clipboard = clipboard;
+        _actorAssignmentService = actorAssignmentService ?? new ActorAssignmentService();
         _randomisationCatalog = randomisationCatalog ?? MorphRandomisationCatalog.Empty;
         _openPackageCommand = new AsyncRelayCommand(OpenPackageAsync, () => !IsBusy);
         _loadSelectedFaceCommand = new AsyncRelayCommand(
@@ -142,6 +147,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _exportMorphMd5Command = new AsyncRelayCommand(
             () => ExportMorphMeshAsync(MorphMeshFormat.Md5), CanUseFaceContextMenu);
         _exportMorphRonCommand = new AsyncRelayCommand(ExportMorphRonAsync, CanUseFaceContextMenu);
+        _assignMorphToActorCommand = new AsyncRelayCommand(AssignMorphToActorAsync, CanUseFaceContextMenu);
+        _assignMaterialsToActorCommand = new AsyncRelayCommand(AssignMaterialsToActorAsync, CanUseFaceContextMenu);
         FilteredFaces = CollectionViewSource.GetDefaultView(Faces);
         FilteredFaces.Filter = item =>
             item is BioMorphFaceListItem face && BioMorphFaceSearch.Matches(face, FaceSearchText);
@@ -183,6 +190,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public ICommand ExportMorphGltfCommand => _exportMorphGltfCommand;
     public ICommand ExportMorphMd5Command => _exportMorphMd5Command;
     public ICommand ExportMorphRonCommand => _exportMorphRonCommand;
+    public ICommand AssignMorphToActorCommand => _assignMorphToActorCommand;
+    public ICommand AssignMaterialsToActorCommand => _assignMaterialsToActorCommand;
     public string ConvertMorphHeader => SelectedFace?.ProfileKey.StartsWith("le3-", StringComparison.OrdinalIgnoreCase) == true
         ? "Convert to LE1/LE2 Morph…"
         : "Convert to LE3 Morph…";

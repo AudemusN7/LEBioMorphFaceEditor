@@ -8,7 +8,8 @@ var suites = new Dictionary<string, IReadOnlyList<TestCase>>(StringComparer.Ordi
     ["rendering"] = RenderingTests.All,
     ["ui"] = UiSmokeTests.All.Concat(TextureRegistrySettingsTests.All)
         .Concat(MorphTargetCatalogTests.All).Concat(CustomMeshTests.All).ToArray(),
-    ["package"] = PackageContextTests.All.Concat(ActorAssignmentInventoryTests.All).ToArray(),
+    ["package"] = PackageContextTests.All.Concat(ActorAssignmentInventoryTests.All)
+        .Concat(ActorAssignmentTransactionTests.All).ToArray(),
     ["tooling"] = RandomisationTests.Tooling
 };
 

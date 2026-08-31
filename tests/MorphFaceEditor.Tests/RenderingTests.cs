@@ -34,6 +34,7 @@ public static class RenderingTests
         new("renderer draws, reads back, and retains its device on resize", RendererDrawsAndRetainsDevice),
         new("renderer can hide attachment meshes", RendererCanHideAttachments),
         new("scene factory builds the selected mesh LOD", SceneFactoryBuildsSelectedLod),
+        new("scene factory maps non-contiguous LOD IDs to baked ordinals", SceneFactoryMapsNonContiguousLodIds),
         new("scene factory falls back to base geometry for an unmatched baked LOD", SceneFactoryHandlesUnmatchedBakedLod),
         new("lower LOD sections use their authored material remap", LowerLodSectionsUseMaterialRemap),
         new("custom mesh sections use the mesh material-slot order", CustomMeshUsesAuthoredMaterialOrder),
@@ -78,6 +79,34 @@ public static class RenderingTests
 
         TestAssert.Equal(new Vector3(0, 0, 10), scene.Meshes[0].Vertices[0].Position);
         TestAssert.Equal(3, scene.Meshes[0].Indices.Count);
+    }
+
+    private static void SceneFactoryMapsNonContiguousLodIds()
+    {
+        var mesh = TestFixtures.CreateRenderableTwoLodMesh(lowerLodIndex: 2);
+        var bakedLod2 = mesh.AvailableLodPositions[1]
+            .Select(position => position + new Vector3(5, 0, 0))
+            .ToArray();
+        var document = new MorphFaceDocument(
+            TestFixtures.CreateIdentity("Face", "BioMorphFace"),
+            new PackageFingerprint(1, DateTime.UnixEpoch, new string('0', 64)),
+            mesh.Source,
+            null,
+            [],
+            [],
+            MorphFaceMaterialOverrides.Empty,
+            [mesh.AvailableLodPositions[0], bakedLod2],
+            []);
+        var loaded = new LoadedMorphFace(
+            document,
+            mesh,
+            null,
+            ResolvedHeadMaterialSet.Empty,
+            MorphFaceEditor.Core.Diagnostics.TopologyDiagnostics.Analyze(mesh, document));
+
+        var scene = new HeadPreviewSceneFactory().Create(loaded, 2);
+
+        TestAssert.Equal(new Vector3(0, 0, 15), scene.Meshes[0].Vertices[0].Position);
     }
 
     private static void LowerLodSectionsUseMaterialRemap()

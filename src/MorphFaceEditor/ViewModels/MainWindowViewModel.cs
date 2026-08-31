@@ -37,6 +37,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly AsyncRelayCommand _loadSelectedFaceCommand;
     private readonly AsyncRelayCommand _saveCommand;
     private readonly AsyncRelayCommand _saveMorphToPccCommand;
+    private readonly RelayCommand _fixMorphCommand;
     private readonly RelayCommand _editBackgroundColorCommand;
     private readonly RelayCommand _dismissErrorCommand;
     private readonly RelayCommand _textureRegistrySettingsCommand;
@@ -122,6 +123,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _saveMorphToPccCommand = new AsyncRelayCommand(
             SaveMorphToPccAsync,
             () => !IsBusy && Editor is not null && _loadedFace is not null && _packageWorkspace is not null);
+        _fixMorphCommand = new RelayCommand(FixMorph, () => !IsBusy && Editor?.CanFixMorph == true);
         _editBackgroundColorCommand = new RelayCommand(EditBackgroundColor);
         _dismissErrorCommand = new RelayCommand(() => ErrorMessage = null);
         _textureRegistrySettingsCommand = new RelayCommand(_dialogs.ShowTextureRegistrySettings);
@@ -165,6 +167,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public ICommand LoadSelectedFaceCommand => _loadSelectedFaceCommand;
     public ICommand SaveCommand => _saveCommand;
     public ICommand SaveMorphToPccCommand => _saveMorphToPccCommand;
+    public ICommand FixMorphCommand => _fixMorphCommand;
     public ICommand EditBackgroundColorCommand => _editBackgroundColorCommand;
     public ICommand DismissErrorCommand => _dismissErrorCommand;
     public ICommand TextureRegistrySettingsCommand => _textureRegistrySettingsCommand;
@@ -200,6 +203,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public string PackageName => PackagePath is null ? "No package open" : Path.GetFileName(PackagePath);
     public string PackageDisplayName => IsDirty ? $"{PackageName} *" : PackageName;
     public bool IsDirty => _hasWorkspaceChanges || Editor?.IsDirty == true;
+    public bool CanFixMorph => Editor?.CanFixMorph == true;
     private string? WorkspacePackagePath => _packageWorkspace?.WorkingPath;
 
     public string FaceSearchText
@@ -348,6 +352,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 _loadSelectedFaceCommand.RaiseCanExecuteChanged();
                 _saveCommand.RaiseCanExecuteChanged();
                 _saveMorphToPccCommand.RaiseCanExecuteChanged();
+                _fixMorphCommand.RaiseCanExecuteChanged();
                 RaiseFaceContextCanExecuteChanged();
             }
         }
@@ -839,6 +844,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
         OnDirtyStateChanged();
         _saveMorphToPccCommand.RaiseCanExecuteChanged();
+        OnPropertyChanged(nameof(CanFixMorph));
+        _fixMorphCommand.RaiseCanExecuteChanged();
     }
 
     private void OnEditorDirtyStateChanged(object? sender, EventArgs e) => OnDirtyStateChanged();
@@ -863,6 +870,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             case nameof(FaceEditorViewModel.CursedMode):
                 CursedMode = editor.CursedMode;
                 break;
+            case nameof(FaceEditorViewModel.CanEdit):
+            case nameof(FaceEditorViewModel.CanFixMorph):
+                OnPropertyChanged(nameof(CanFixMorph));
+                _fixMorphCommand.RaiseCanExecuteChanged();
+                break;
         }
     }
 
@@ -870,7 +882,63 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         OnPropertyChanged(nameof(IsDirty));
         OnPropertyChanged(nameof(PackageDisplayName));
+        OnPropertyChanged(nameof(CanFixMorph));
         _saveCommand.RaiseCanExecuteChanged();
+        _fixMorphCommand.RaiseCanExecuteChanged();
+    }
+
+    private void FixMorph()
+    {
+        if (Editor is not { CanFixMorph: true } editor || _loadedFace is null)
+        {
+            return;
+        }
+
+        ErrorMessage = null;
+        try
+        {
+            AppLog.Information($"Repairing baked morph geometry for '{LoadedFacePath}'.");
+            editor.FixMorph();
+        }
+        catch (Exception exception)
+        {
+            if (editor.HasPendingRepair)
+            {
+                ReportPostRepairPreviewFailure(editor, exception);
+                return;
+            }
+            AppLog.Error($"Morph repair failed for '{LoadedFacePath}'.", exception);
+            ErrorMessage = $"The morph could not be repaired: {exception.Message}";
+            Status = "Morph repair failed; the face was not changed.";
+            return;
+        }
+
+        var report = editor.Evaluation.OriginalOracleReport;
+        SetGeometryDetails($"oracle repaired · {report?.MaximumError ?? 0:G4} max · unsaved");
+        try
+        {
+            PreviewSceneReady?.Invoke(CreateCurrentPreviewScene(), false);
+        }
+        catch (Exception exception)
+        {
+            ReportPostRepairPreviewFailure(editor, exception);
+            return;
+        }
+        Status = $"Fixed {SelectedFace?.DisplayName ?? "morph"}; canonical geometry restored. Save to commit the repair.";
+        AppLog.Information(
+            $"Baked morph geometry repaired for '{LoadedFacePath}'; " +
+            $"post-repair oracle maximum {report?.MaximumError ?? 0:G9}.");
+    }
+
+    private void ReportPostRepairPreviewFailure(FaceEditorViewModel editor, Exception exception)
+    {
+        var report = editor.Evaluation.OriginalOracleReport;
+        SetGeometryDetails($"oracle repaired · {report?.MaximumError ?? 0:G4} max · unsaved");
+        AppLog.Error(
+            $"Baked morph geometry was repaired for '{LoadedFacePath}', but the preview refresh failed.",
+            exception);
+        ErrorMessage = $"The morph was repaired, but the preview could not be refreshed: {exception.Message}";
+        Status = "Morph repaired; unsaved changes retained, but preview refresh failed.";
     }
 
     private void MarkWorkspaceChanged()
@@ -883,8 +951,52 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         if (Editor is not null && _loadedFace is not null)
         {
-            PreviewDeformationReady?.Invoke(_sceneFactory.CreateUpdate(_loadedFace, Editor.Evaluation, PreviewLod));
+            if (Editor.CanEdit)
+            {
+                if (FaceDetails?.Contains("baked fallback", StringComparison.Ordinal) == true)
+                {
+                    var report = Editor.Evaluation.OriginalOracleReport;
+                    SetGeometryDetails($"oracle repaired · {report?.MaximumError ?? 0:G4} max · unsaved");
+                    Status = "Morph repair restored; save to commit the repaired geometry.";
+                }
+                PreviewDeformationReady?.Invoke(
+                    _sceneFactory.CreateUpdate(_loadedFace, Editor.Evaluation, PreviewLod));
+            }
+            else
+            {
+                PreviewSceneReady?.Invoke(CreateCurrentPreviewScene(), false);
+                if (Editor.CanFixMorph)
+                {
+                    SetGeometryDetails($"baked fallback · {Editor.EditBlockReason}");
+                    Status = "Morph repair undone; original baked geometry restored.";
+                }
+            }
         }
+    }
+
+    private void SetGeometryDetails(string geometryDetails)
+    {
+        var prefix = FaceDetails;
+        if (!string.IsNullOrEmpty(prefix))
+        {
+            var marker = new[] { " · baked fallback", " · oracle repaired", " · oracle " }
+                .Select(value => prefix.IndexOf(value, StringComparison.Ordinal))
+                .Where(index => index >= 0)
+                .DefaultIfEmpty(-1)
+                .Min();
+            if (marker >= 0)
+            {
+                prefix = prefix[..marker];
+            }
+            else if (prefix.StartsWith("baked fallback", StringComparison.Ordinal) ||
+                     prefix.StartsWith("oracle ", StringComparison.Ordinal))
+            {
+                prefix = null;
+            }
+        }
+        FaceDetails = string.IsNullOrEmpty(prefix)
+            ? geometryDetails
+            : $"{prefix} · {geometryDetails}";
     }
 
     private void OnMaterialPreviewChanged(object? sender, EventArgs e)

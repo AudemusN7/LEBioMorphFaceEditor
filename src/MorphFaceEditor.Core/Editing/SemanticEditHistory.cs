@@ -17,6 +17,10 @@ internal sealed record SemanticMorphStateEdit(
     MorphFaceAuthoringState Before,
     MorphFaceAuthoringState After) : SemanticEdit;
 
+internal sealed record SemanticMorphRepairEdit(
+    IReadOnlyList<System.Numerics.Vector3[]> BeforeBakedLods,
+    IReadOnlyList<System.Numerics.Vector3[]> AfterBakedLods) : SemanticEdit;
+
 public sealed class SemanticEditHistory
 {
     private readonly Stack<SemanticEdit> _undo = new();

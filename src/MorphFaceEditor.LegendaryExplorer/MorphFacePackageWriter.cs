@@ -97,7 +97,7 @@ public sealed class MorphFacePackageWriter
                         $"The exported morph path changed from '{destinationFacePath}' to '{portedFace.InstancedFullPath}'.");
                 }
 
-                WriteFace(destinationPackage, portedFace, draft);
+                WriteFace(destinationPackage, portedFace, draft, warnings);
                 var materialOverride = ResolveMaterialOverride(portedFace);
                 WriteMaterialOverride(destinationPackage, materialOverride, draft.MaterialOverrides, warnings);
                 facePath = portedFace.InstancedFullPath;
@@ -160,7 +160,7 @@ public sealed class MorphFacePackageWriter
             {
                 EnsureSupportedGame(package);
                 var face = FindExport(package, draft.Source.InstancedPath, "BioMorphFace");
-                WriteFace(package, face, draft);
+                WriteFace(package, face, draft, warnings);
                 var materialOverride = ResolveMaterialOverride(face);
                 WriteMaterialOverride(package, materialOverride, draft.MaterialOverrides, warnings);
                 overridePath = materialOverride.InstancedFullPath;
@@ -193,7 +193,11 @@ public sealed class MorphFacePackageWriter
         }
     }
 
-    private static void WriteFace(IMEPackage package, ExportEntry face, MorphFaceDocument draft)
+    private static void WriteFace(
+        IMEPackage package,
+        ExportEntry face,
+        MorphFaceDocument draft,
+        ICollection<string> warnings)
     {
         var properties = face.GetProperties();
         properties.AddOrReplaceProp(new ArrayProperty<StructProperty>(
@@ -214,7 +218,7 @@ public sealed class MorphFacePackageWriter
         properties.AddOrReplaceProp(new ObjectProperty(
             ResolveDraftEntry(package, draft.BaseHeadReference, "SkeletalMesh", required: true),
             "m_oBaseHead"));
-        WriteAttachmentReferences(package, properties, draft);
+        WriteAttachmentReferences(package, properties, draft, warnings);
 
         var binary = new BinaryMorphFace
         {
@@ -317,7 +321,8 @@ public sealed class MorphFacePackageWriter
     private static void WriteAttachmentReferences(
         IMEPackage package,
         PropertyCollection properties,
-        MorphFaceDocument draft)
+        MorphFaceDocument draft,
+        ICollection<string> warnings)
     {
         if (draft.HairMeshReference is null)
         {
@@ -326,14 +331,14 @@ public sealed class MorphFacePackageWriter
         else
         {
             properties.AddOrReplaceProp(new ObjectProperty(
-                ResolveDraftEntry(package, draft.HairMeshReference, "SkeletalMesh", required: true),
+                ResolveAttachmentDraftEntry(package, draft.HairMeshReference, warnings),
                 "m_oHairMesh"));
         }
 
         var otherMeshes = draft.OtherMeshReferences
             .Where(reference => reference is not null)
             .Select(reference => new ObjectProperty(
-                ResolveDraftEntry(package, reference, "SkeletalMesh", required: true)))
+                ResolveAttachmentDraftEntry(package, reference, warnings)))
             .ToArray();
         if (otherMeshes.Length == 0)
         {
@@ -463,6 +468,27 @@ public sealed class MorphFacePackageWriter
         }
         return package.FindExport(identity.InstancedPath, "Texture2D")
                ?? ExternalTextureMaterializer.Materialize(package, identity, warnings);
+    }
+
+    private static IEntry ResolveAttachmentDraftEntry(
+        IMEPackage package,
+        AssetIdentity? identity,
+        ICollection<string> warnings)
+    {
+        if (identity is null)
+        {
+            throw new InvalidDataException("A SkeletalMesh reference is required.");
+        }
+        if (package.FindEntry(identity.InstancedPath, "SkeletalMesh") is { } existing)
+        {
+            return existing;
+        }
+        if (identity.IsImport)
+        {
+            throw new InvalidDataException(
+                $"Referenced imported SkeletalMesh '{identity.InstancedPath}' was not preserved in the destination PCC.");
+        }
+        return ExternalSkeletalMeshMaterializer.Materialize(package, identity, warnings);
     }
 
     private static ExportEntry FindExport(IMEPackage package, string path, string expectedClass)

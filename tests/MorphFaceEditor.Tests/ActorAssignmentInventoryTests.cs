@@ -17,7 +17,8 @@ public static class ActorAssignmentInventoryTests
         new("LE1 actor inventory separates local appearance owners from spawn templates", SeparatesLe1Owners),
         new("actor inventory scopes morph and material profile compatibility independently", ScopesOperationCompatibility),
         new("actor inventory discovers inherited components and safe MICs deterministically", DiscoversMaterialsDeterministically),
-        new("actor inventory honors approved shared alien material schemas", HonorsSharedAlienMaterialSchemas)
+        new("actor inventory honors approved shared alien material schemas", HonorsSharedAlienMaterialSchemas),
+        new("actor inventory follows effective roots for shared eyes lashes scalp and hair", FollowsEffectiveRootsForSharedFamilies)
     ];
 
     private static void FiltersSupportedClassFamilies()
@@ -299,6 +300,53 @@ public static class ActorAssignmentInventoryTests
                 "Female Turian local MIC backed by the approved Turian schema was rejected.");
             TestAssert.True(vorcha.CanAssignMaterials && vorcha.MaterialTargets.Single().UIndex == vorchaEye.UIndex,
                 "LE3 Vorcha eye MIC backed by the approved Turian eye schema was rejected.");
+        });
+    }
+
+    private static void FollowsEffectiveRootsForSharedFamilies()
+    {
+        WithPackage(MEGame.LE3, (path, package) =>
+        {
+            var selected = package.CreateExport("SelectedFace", "BioMorphFace", indexed: false);
+            var head = CreateHeadComponent(package, "ASA_HED_PROBase_MDL", "HeadMesh0");
+            var eyeRoot = CreateMic(package, "HMM_EYE_SharedParent", "HMF_EYE_MASTER_MAT");
+            var eye = package.CreateExport("ASA_EYE_LocalChild", "MaterialInstanceConstant", indexed: false);
+            eye.WriteProperty(new ObjectProperty(eyeRoot, "Parent"));
+            var lashes = CreateMic(package, "HMM_Lash_Local", "HMF_HED_PRO_MASTER_LASH_MAT");
+            var scalp = CreateMic(package, "HMM_Scalp_Local", "HMF_HED_Scalp_MASTER_MAT");
+            head.WriteProperty(new ArrayProperty<ObjectProperty>(
+                [new ObjectProperty(eye), new ObjectProperty(lashes), new ObjectProperty(scalp)], "Materials"));
+
+            var hairComponent = CreateHeadComponent(package, "HMF_HIR_Long_MDL", "HairMesh0");
+            var hair = CreateMic(package, "BioMaterialInstanceConstant_123", "BIOG_HAIR_HMF_HAIR_MASTER_MAT");
+            hairComponent.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(hair)], "Materials"));
+            var actor = package.CreateExport("AsariWithSharedMaterials", "BioPawn", indexed: false);
+            actor.WriteProperty(new ObjectProperty(head, "HeadMesh"));
+            actor.WriteProperty(new ObjectProperty(hairComponent, "HairMesh"));
+            package.Save();
+
+            var candidate = new ActorAssignmentInventoryService((_, _) => null)
+                .Read(path, selected.UIndex.ToString(), "le3-asari")
+                .Candidates.Single(value => value.ObjectName == "AsariWithSharedMaterials");
+
+            TestAssert.True(candidate.CanAssignMaterials,
+                "Approved shared material roots did not leave the actor material-eligible.");
+            foreach (var (target, family) in new[]
+                     {
+                         (eye, HeadMaterialFamily.Eyes),
+                         (lashes, HeadMaterialFamily.Lashes),
+                         (scalp, HeadMaterialFamily.Scalp),
+                         (hair, HeadMaterialFamily.Hair)
+                     })
+            {
+                var discovered = candidate.MaterialTargets.SingleOrDefault(value => value.UIndex == target.UIndex);
+                TestAssert.True(discovered is not null && discovered.Family == family,
+                    $"Shared {family} root '{target.ObjectNameString}' was skipped or misclassified. " +
+                    $"Reasons: {string.Join("; ", candidate.SkippedMaterials.Select(value => value.Reason))}");
+            }
+            TestAssert.True(candidate.SkippedMaterials.All(value =>
+                    !value.Reason.Contains("conflicting profile", StringComparison.OrdinalIgnoreCase)),
+                "Legacy whole-chain profile conflict logic still rejected a root-compatible material.");
         });
     }
 

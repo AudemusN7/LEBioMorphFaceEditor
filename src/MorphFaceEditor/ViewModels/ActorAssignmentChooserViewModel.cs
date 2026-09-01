@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Text;
 using System.Windows.Data;
 using MorphFaceEditor.Infrastructure;
@@ -23,7 +24,16 @@ public sealed class ActorAssignmentChooserViewModel : ObservableObject
                                             choice.Candidate.SearchText.Contains(
                                                 SearchText, StringComparison.OrdinalIgnoreCase));
         FilteredChoices.GroupDescriptions.Add(new PropertyGroupDescription(nameof(ActorAssignmentChoice.GroupName)));
-        SelectedChoice = Choices.FirstOrDefault(choice => choice.IsEligible) ?? Choices.FirstOrDefault();
+        FilteredChoices.SortDescriptions.Add(new SortDescription(
+            nameof(ActorAssignmentChoice.GroupSortOrder), ListSortDirection.Ascending));
+        FilteredChoices.SortDescriptions.Add(new SortDescription(
+            nameof(ActorAssignmentChoice.ProfileSortOrder), ListSortDirection.Ascending));
+        FilteredChoices.SortDescriptions.Add(new SortDescription(
+            nameof(ActorAssignmentChoice.DisplayName), ListSortDirection.Ascending));
+        FilteredChoices.SortDescriptions.Add(new SortDescription(
+            nameof(ActorAssignmentChoice.TechnicalIdentity), ListSortDirection.Ascending));
+        SelectedChoice = FilteredChoices.Cast<ActorAssignmentChoice>().FirstOrDefault(choice => choice.IsEligible)
+                         ?? FilteredChoices.Cast<ActorAssignmentChoice>().FirstOrDefault();
     }
 
     public ActorAssignmentInventory Inventory { get; }
@@ -82,6 +92,11 @@ public sealed class ActorAssignmentChoice
     public string GroupName => Candidate.TargetKind == ActorAssignmentTargetKind.SpawnTemplate
         ? "SPAWN TEMPLATES / ACTOR TYPES"
         : "PLACED ACTORS";
+    public int GroupSortOrder => (int)Candidate.TargetKind;
+    public int ProfileSortOrder => string.Equals(
+        Candidate.SelectedProfileKey,
+        Candidate.HeadMeshProfileKey,
+        StringComparison.OrdinalIgnoreCase) ? 0 : 1;
     public string DisplayName => Candidate.DisplayName;
     public string TechnicalIdentity =>
         $"#{Candidate.UIndex}  {Candidate.ClassName}  ·  {ShortLevelPath(Candidate.InstancedPath)}";
@@ -129,22 +144,26 @@ public sealed class ActorAssignmentChoice
         {
             text.AppendLine();
             text.AppendLine("SAFE MATERIAL TARGETS");
-            if (candidate.MaterialTargets.Count == 0) text.AppendLine("• None");
-            foreach (var target in candidate.MaterialTargets)
+            if (candidate.MaterialTargets.Count == 0)
             {
-                text.AppendLine($"• {target.ComponentRole} slot {target.SlotIndex} · {target.Family}");
-                text.AppendLine($"  {ShortLevelPath(target.ComponentPath)}");
-                text.AppendLine($"  {ShortChain(target.ParentChain)}");
+                text.AppendLine("• None");
+            }
+            else
+            {
+                text.AppendLine();
+                AppendMaterialTargets(text, candidate.MaterialTargets);
             }
 
             text.AppendLine();
             text.AppendLine("SKIPPED MATERIALS");
-            if (candidate.SkippedMaterials.Count == 0) text.AppendLine("• None");
-            foreach (var skipped in candidate.SkippedMaterials)
+            if (candidate.SkippedMaterials.Count == 0)
             {
-                text.AppendLine($"• {skipped.ComponentRole} slot {skipped.SlotIndex} · {skipped.Reason}");
-                text.AppendLine($"  {ShortLevelPath(skipped.ComponentPath)}");
-                text.AppendLine($"  {ShortChain(skipped.ParentChain)}");
+                text.AppendLine("• None");
+            }
+            else
+            {
+                text.AppendLine();
+                AppendSkippedMaterials(text, candidate.SkippedMaterials);
             }
         }
 
@@ -187,8 +206,70 @@ public sealed class ActorAssignmentChoice
         return separator >= 0 ? shortened[(separator + 1)..] : shortened;
     }
 
-    private static string ShortChain(IEnumerable<ActorMaterialChainEntry> chain) =>
-        string.Join(" → ", chain.Select(value => ShortObjectName(value.InstancedPath)));
+    private static void AppendMaterialTargets(
+        StringBuilder text,
+        IEnumerable<ActorAssignmentMaterialTarget> targets)
+    {
+        var roles = targets.GroupBy(value => value.ComponentRole).OrderBy(value => value.Key).ToArray();
+        for (var roleIndex = 0; roleIndex < roles.Length; roleIndex++)
+        {
+            if (roleIndex > 0) text.AppendLine();
+            text.AppendLine(roles[roleIndex].Key.ToString());
+            var roleTargets = roles[roleIndex].OrderBy(value => value.SlotIndex).ToArray();
+            for (var targetIndex = 0; targetIndex < roleTargets.Length; targetIndex++)
+            {
+                if (targetIndex > 0) text.AppendLine();
+                var target = roleTargets[targetIndex];
+                text.AppendLine($"Slot {target.SlotIndex} · {target.Family}");
+                AppendCompactChain(text, target.ObjectName, target.ParentChain);
+            }
+        }
+    }
+
+    private static void AppendSkippedMaterials(
+        StringBuilder text,
+        IEnumerable<ActorAssignmentSkippedMaterial> skippedMaterials)
+    {
+        var roles = skippedMaterials.GroupBy(value => value.ComponentRole).OrderBy(value => value.Key).ToArray();
+        for (var roleIndex = 0; roleIndex < roles.Length; roleIndex++)
+        {
+            if (roleIndex > 0) text.AppendLine();
+            text.AppendLine(roles[roleIndex].Key.ToString());
+            var roleTargets = roles[roleIndex].OrderBy(value => value.SlotIndex).ToArray();
+            for (var targetIndex = 0; targetIndex < roleTargets.Length; targetIndex++)
+            {
+                if (targetIndex > 0) text.AppendLine();
+                var skipped = roleTargets[targetIndex];
+                text.AppendLine($"Slot {skipped.SlotIndex} · {skipped.Family}");
+                AppendCompactChain(text, skipped.ObjectName, skipped.ParentChain);
+                text.AppendLine($"Skipped: {skipped.Reason}");
+            }
+        }
+    }
+
+    private static void AppendCompactChain(
+        StringBuilder text,
+        string fallbackObjectName,
+        IReadOnlyList<ActorMaterialChainEntry> chain)
+    {
+        var localName = chain.Count == 0
+            ? fallbackObjectName
+            : ShortObjectName(chain[0].InstancedPath) ?? fallbackObjectName;
+        text.AppendLine(localName);
+        var parents = chain.Skip(1)
+            .Where(value => !IsTransientMaterialUser(value))
+            .Select(value => ShortObjectName(value.InstancedPath))
+            .Where(value => !string.IsNullOrWhiteSpace(value));
+        var parentChain = string.Join(" → ", parents);
+        if (!string.IsNullOrWhiteSpace(parentChain)) text.AppendLine(parentChain);
+    }
+
+    private static bool IsTransientMaterialUser(ActorMaterialChainEntry value)
+    {
+        var name = ShortObjectName(value.InstancedPath);
+        return value.ClassName.Equals("RvrEffectsMaterialUser", StringComparison.OrdinalIgnoreCase) ||
+               name?.EndsWith("_USER", StringComparison.OrdinalIgnoreCase) == true;
+    }
 
     private static string CompactMorphReason(ActorAssignmentCandidate candidate)
     {

@@ -158,14 +158,39 @@ public static class UiSmokeTests
             10, "NormandyGarrus", "BioPawn_10", canMorph: true, canMaterials: false);
         var materialReady = ActorChoiceFixture(
             20, "CitadelKeeper", "BioPawn_20", canMorph: false, canMaterials: true);
+        var mismatchedPlaced = ActorChoiceFixture(
+            5, "AardvarkMismatch", "BioPawn_5", canMorph: true, canMaterials: true) with
+        {
+            HeadMeshPath = "ASA_HED_PROBase_MDL",
+            HeadMeshProfileKey = "le2-asari"
+        };
+        var matchingSpawn = ActorChoiceFixture(
+            30, "ZuluMatchingSpawn", "SpawnType_30", canMorph: true, canMaterials: true) with
+        {
+            TargetKind = ActorAssignmentTargetKind.SpawnTemplate
+        };
+        var mismatchedSpawn = ActorChoiceFixture(
+            40, "AlphaMismatchedSpawn", "SpawnType_40", canMorph: true, canMaterials: true) with
+        {
+            TargetKind = ActorAssignmentTargetKind.SpawnTemplate,
+            HeadMeshPath = "ASA_HED_PROBase_MDL",
+            HeadMeshProfileKey = "le2-asari"
+        };
         var inventory = new ActorAssignmentInventory(
-            MorphFaceGame.LE2, 1, "SelectedFace", "le2-human-male", [morphReady, materialReady]);
+            MorphFaceGame.LE2, 1, "SelectedFace", "le2-human-male",
+            [mismatchedPlaced, mismatchedSpawn, morphReady, matchingSpawn, materialReady]);
 
         var morphChooser = new ActorAssignmentChooserViewModel(inventory, ActorAssignmentMode.Morph);
         TestAssert.Equal(morphReady.UIndex, morphChooser.SelectedChoice!.Candidate.UIndex);
         TestAssert.True(morphChooser.CanConfirm, "Morph chooser did not select its first eligible actor.");
         TestAssert.True(!morphChooser.SelectedChoice.Details.Contains("SAFE MATERIAL TARGETS", StringComparison.Ordinal),
             "Morph chooser retained unrelated material-debug sections.");
+        var sorted = morphChooser.FilteredChoices.Cast<ActorAssignmentChoice>().ToArray();
+        TestAssert.True(Array.IndexOf(sorted, sorted.Single(value => value.Candidate == morphReady)) <
+                        Array.IndexOf(sorted, sorted.Single(value => value.Candidate == mismatchedPlaced)) &&
+                        Array.IndexOf(sorted, sorted.Single(value => value.Candidate == matchingSpawn)) <
+                        Array.IndexOf(sorted, sorted.Single(value => value.Candidate == mismatchedSpawn)),
+            "Exact head-profile matches were not promoted within both actor groups.");
         morphChooser.SearchText = "CitadelKeeper";
         TestAssert.Equal(1, morphChooser.FilteredChoices.Cast<ActorAssignmentChoice>().Count());
         TestAssert.True(!morphChooser.CanConfirm,
@@ -176,15 +201,18 @@ public static class UiSmokeTests
         TestAssert.True(materialChooser.CanConfirm,
             "Material chooser did not select its first actor with a safe MIC target.");
         var choice = materialChooser.SelectedChoice;
+        var normalizedDetails = choice.Details.Replace("\r\n", "\n", StringComparison.Ordinal);
         TestAssert.True(!choice.TechnicalIdentity.Contains("TheWorld.PersistentLevel", StringComparison.Ordinal) &&
-                        !choice.Details.Contains("TheWorld.PersistentLevel", StringComparison.Ordinal),
+                        !normalizedDetails.Contains("TheWorld.PersistentLevel", StringComparison.Ordinal),
             "Chooser retained the redundant persistent-level prefix.");
-        TestAssert.True(!choice.Details.Contains("IDENTITY EVIDENCE", StringComparison.Ordinal) &&
-                        !choice.Details.Contains("EXACT MORPH OWNER", StringComparison.Ordinal) &&
-                        choice.Details.Contains(
-                            "BioMaterialInstanceConstant_2540 → HMF_HED_PRO_Face_Mat_1a",
+        TestAssert.True(!normalizedDetails.Contains("IDENTITY EVIDENCE", StringComparison.Ordinal) &&
+                        !normalizedDetails.Contains("EXACT MORPH OWNER", StringComparison.Ordinal) &&
+                        !normalizedDetails.Contains("SkeletalMeshComponent_937", StringComparison.Ordinal) &&
+                        !normalizedDetails.Contains("MASTER_FACE_MAT_USER", StringComparison.Ordinal) &&
+                        normalizedDetails.Contains("Head\nSlot 0 · Skin\nBioMaterialInstanceConstant_2540\n" +
+                                                   "HMF_HED_PRO_Face_Mat_1a → HMF_HED_PRO_MASTER_FACE_MAT",
                             StringComparison.Ordinal),
-            "Chooser details did not reduce identity noise and material chains to authoring shorthand.");
+            $"Chooser details did not reduce identity noise and material chains to authoring shorthand.\n{normalizedDetails}");
     }
 
     private static ActorAssignmentCandidate ActorChoiceFixture(
@@ -202,7 +230,11 @@ public static class UiSmokeTests
                 new ActorMaterialChainEntry(30, "MaterialInstanceConstant",
                     $"TheWorld.PersistentLevel.{objectName}.BioMaterialInstanceConstant_2540", true, true),
                 new ActorMaterialChainEntry(-1, "MaterialInstanceConstant",
-                    "BIOG_HMF_HED_PROMorph_R.Average.HMF_HED_PRO_Face_Mat_1a", false, true)
+                    "BIOG_HMF_HED_PROMorph_R.Average.HMF_HED_PRO_Face_Mat_1a", false, true),
+                new ActorMaterialChainEntry(-2, "RvrEffectsMaterialUser",
+                    "EffectsMaterials.Users.HMF_HED_PRO_MASTER_FACE_MAT_USER", false, true),
+                new ActorMaterialChainEntry(-3, "Material",
+                    "BIOG_Humanoid_MASTER_MTR_R.Human.HMF_HED_PRO_MASTER_FACE_MAT", false, true)
             ], false);
         return new ActorAssignmentCandidate(
             uIndex, "BioPawn", objectName, $"TheWorld.PersistentLevel.{objectName}",

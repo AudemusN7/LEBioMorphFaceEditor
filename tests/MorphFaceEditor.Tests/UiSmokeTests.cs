@@ -164,6 +164,8 @@ public static class UiSmokeTests
         var morphChooser = new ActorAssignmentChooserViewModel(inventory, ActorAssignmentMode.Morph);
         TestAssert.Equal(morphReady.UIndex, morphChooser.SelectedChoice!.Candidate.UIndex);
         TestAssert.True(morphChooser.CanConfirm, "Morph chooser did not select its first eligible actor.");
+        TestAssert.True(!morphChooser.SelectedChoice.Details.Contains("SAFE MATERIAL TARGETS", StringComparison.Ordinal),
+            "Morph chooser retained unrelated material-debug sections.");
         morphChooser.SearchText = "CitadelKeeper";
         TestAssert.Equal(1, morphChooser.FilteredChoices.Cast<ActorAssignmentChoice>().Count());
         TestAssert.True(!morphChooser.CanConfirm,
@@ -173,6 +175,16 @@ public static class UiSmokeTests
         TestAssert.Equal(materialReady.UIndex, materialChooser.SelectedChoice!.Candidate.UIndex);
         TestAssert.True(materialChooser.CanConfirm,
             "Material chooser did not select its first actor with a safe MIC target.");
+        var choice = materialChooser.SelectedChoice;
+        TestAssert.True(!choice.TechnicalIdentity.Contains("TheWorld.PersistentLevel", StringComparison.Ordinal) &&
+                        !choice.Details.Contains("TheWorld.PersistentLevel", StringComparison.Ordinal),
+            "Chooser retained the redundant persistent-level prefix.");
+        TestAssert.True(!choice.Details.Contains("IDENTITY EVIDENCE", StringComparison.Ordinal) &&
+                        !choice.Details.Contains("EXACT MORPH OWNER", StringComparison.Ordinal) &&
+                        choice.Details.Contains(
+                            "BioMaterialInstanceConstant_2540 → HMF_HED_PRO_Face_Mat_1a",
+                            StringComparison.Ordinal),
+            "Chooser details did not reduce identity noise and material chains to authoring shorthand.");
     }
 
     private static ActorAssignmentCandidate ActorChoiceFixture(
@@ -184,16 +196,22 @@ public static class UiSmokeTests
     {
         var material = new ActorAssignmentMaterialTarget(
             30, "HMM_HED_PRO_Face_Mat", "HMM_HED_PRO_Face_Mat",
-            ActorComponentRole.Head, "HeadComponent", 0, HeadMaterialFamily.Skin,
-            "le2-human-male", [], false);
+            ActorComponentRole.Head, $"TheWorld.PersistentLevel.{objectName}.SkeletalMeshComponent_937",
+            0, HeadMaterialFamily.Skin, "le2-human-male",
+            [
+                new ActorMaterialChainEntry(30, "MaterialInstanceConstant",
+                    $"TheWorld.PersistentLevel.{objectName}.BioMaterialInstanceConstant_2540", true, true),
+                new ActorMaterialChainEntry(-1, "MaterialInstanceConstant",
+                    "BIOG_HMF_HED_PROMorph_R.Average.HMF_HED_PRO_Face_Mat_1a", false, true)
+            ], false);
         return new ActorAssignmentCandidate(
-            uIndex, "BioPawn", objectName, $"PersistentLevel.{objectName}",
+            uIndex, "BioPawn", objectName, $"TheWorld.PersistentLevel.{objectName}",
             ActorAssignmentTargetKind.PlacedActor, tag,
-            [new ActorIdentityEvidence(ActorIdentityEvidenceKind.LocalTag, "Local tag", tag, $"PersistentLevel.{objectName}")],
+            [new ActorIdentityEvidence(ActorIdentityEvidenceKind.LocalTag, "Local tag", tag, $"TheWorld.PersistentLevel.{objectName}")],
             $"{tag}\n{objectName}\nBioPawn\n#{uIndex}",
             "le2-human-male", "HMM_HED_PROBase_MDL", "le2-human-male",
             canMorph, canMorph ? null : "No safe morph owner.",
-            canMorph ? new ActorAssignmentMorphTarget(uIndex, "BioPawn", $"PersistentLevel.{objectName}", "MorphHead", 0, null, null) : null,
+            canMorph ? new ActorAssignmentMorphTarget(uIndex, "BioPawn", $"TheWorld.PersistentLevel.{objectName}", "MorphHead", 0, null, null) : null,
             canMaterials, canMaterials ? null : "No safe local MICs.",
             [], canMaterials ? [material] : [], [], [], []);
     }

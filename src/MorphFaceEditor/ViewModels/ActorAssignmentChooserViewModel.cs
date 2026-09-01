@@ -83,9 +83,12 @@ public sealed class ActorAssignmentChoice
         ? "SPAWN TEMPLATES / ACTOR TYPES"
         : "PLACED ACTORS";
     public string DisplayName => Candidate.DisplayName;
-    public string TechnicalIdentity => $"#{Candidate.UIndex}  {Candidate.ClassName}  ·  {Candidate.InstancedPath}";
+    public string TechnicalIdentity =>
+        $"#{Candidate.UIndex}  {Candidate.ClassName}  ·  {ShortLevelPath(Candidate.InstancedPath)}";
     public string EvidenceSummary =>
-        $"Head: {Candidate.HeadMeshProfileKey ?? "unresolved"}  ·  Current morph: {Candidate.MorphTarget?.CurrentMorphPath ?? "none"}  ·  Safe MICs: {Candidate.SafeMaterialCount}";
+        $"Head: {Candidate.HeadMeshProfileKey ?? "unresolved"}  ·  " +
+        $"Morph: {ShortObjectName(Candidate.MorphTarget?.CurrentMorphPath) ?? "none"}  ·  " +
+        $"Safe MICs: {Candidate.SafeMaterialCount}";
     public bool IsEligible => Mode == ActorAssignmentMode.Morph
         ? Candidate.CanAssignMorph
         : Candidate.CanAssignMaterials;
@@ -98,50 +101,51 @@ public sealed class ActorAssignmentChoice
     {
         var text = new StringBuilder();
         text.AppendLine($"{candidate.DisplayName}");
-        text.AppendLine($"#{candidate.UIndex} {candidate.ClassName}");
-        text.AppendLine(candidate.InstancedPath);
+        text.AppendLine($"#{candidate.UIndex} {candidate.ClassName} · {ShortLevelPath(candidate.InstancedPath)}");
         text.AppendLine();
-        text.AppendLine("IDENTITY EVIDENCE");
-        foreach (var evidence in candidate.IdentityEvidence)
-        {
-            text.AppendLine($"• {evidence.Label}: {evidence.Value}");
-            text.AppendLine($"  from {evidence.SourcePath}");
-        }
-        text.AppendLine();
-        text.AppendLine("COMPATIBILITY");
+        text.AppendLine("ASSIGNMENT SUMMARY");
         text.AppendLine($"• Selected profile: {candidate.SelectedProfileKey}");
-        text.AppendLine($"• Head mesh: {candidate.HeadMeshPath ?? "unresolved"}");
+        text.AppendLine($"• Head mesh: {ShortObjectName(candidate.HeadMeshPath) ?? "unresolved"}");
         text.AppendLine($"• Head profile: {candidate.HeadMeshProfileKey ?? "unresolved"}");
-        text.AppendLine($"• Morph: {(candidate.CanAssignMorph ? "eligible" : candidate.MorphIneligibilityReason)}");
-        text.AppendLine($"• Materials: {(candidate.CanAssignMaterials ? $"{candidate.SafeMaterialCount} safe local MIC(s)" : candidate.MaterialIneligibilityReason)}");
+        if (mode == ActorAssignmentMode.Morph)
+        {
+            text.AppendLine($"• Morph: {(candidate.CanAssignMorph ? "eligible" : CompactMorphReason(candidate))}");
+        }
+        else
+        {
+            text.AppendLine($"• Materials: {(candidate.CanAssignMaterials ? $"{candidate.SafeMaterialCount} safe local MIC(s)" : candidate.MaterialIneligibilityReason)}");
+        }
 
-        if (candidate.MorphTarget is not null)
+        if (mode == ActorAssignmentMode.Morph && candidate.MorphTarget is not null)
         {
             text.AppendLine();
             text.AppendLine("EXACT MORPH OWNER");
-            text.AppendLine($"• #{candidate.MorphTarget.OwnerUIndex} {candidate.MorphTarget.OwnerClass}");
-            text.AppendLine($"• {candidate.MorphTarget.OwnerPath}.{candidate.MorphTarget.PropertyName}");
-            text.AppendLine($"• Current: {candidate.MorphTarget.CurrentMorphPath ?? "none"}");
+            text.AppendLine($"• #{candidate.MorphTarget.OwnerUIndex} {candidate.MorphTarget.OwnerClass} · " +
+                            $"{ShortLevelPath(candidate.MorphTarget.OwnerPath)}.{candidate.MorphTarget.PropertyName}");
+            text.AppendLine($"• Current: {ShortObjectName(candidate.MorphTarget.CurrentMorphPath) ?? "none"}");
         }
 
-        text.AppendLine();
-        text.AppendLine("SAFE MATERIAL TARGETS");
-        if (candidate.MaterialTargets.Count == 0) text.AppendLine("• None");
-        foreach (var target in candidate.MaterialTargets)
+        if (mode == ActorAssignmentMode.Materials)
         {
-            text.AppendLine($"• #{target.UIndex} {target.InstancedPath}");
-            text.AppendLine($"  {target.ComponentRole} slot {target.SlotIndex} · {target.Family} · {target.ComponentPath}");
-            text.AppendLine($"  chain: {string.Join(" → ", target.ParentChain.Select(value => value.InstancedPath))}");
-        }
+            text.AppendLine();
+            text.AppendLine("SAFE MATERIAL TARGETS");
+            if (candidate.MaterialTargets.Count == 0) text.AppendLine("• None");
+            foreach (var target in candidate.MaterialTargets)
+            {
+                text.AppendLine($"• {target.ComponentRole} slot {target.SlotIndex} · {target.Family}");
+                text.AppendLine($"  {ShortLevelPath(target.ComponentPath)}");
+                text.AppendLine($"  {ShortChain(target.ParentChain)}");
+            }
 
-        text.AppendLine();
-        text.AppendLine("SKIPPED MATERIALS");
-        if (candidate.SkippedMaterials.Count == 0) text.AppendLine("• None");
-        foreach (var skipped in candidate.SkippedMaterials)
-        {
-            text.AppendLine($"• #{skipped.UIndex} {skipped.InstancedPath}");
-            text.AppendLine($"  {skipped.ComponentRole} slot {skipped.SlotIndex} · {skipped.Reason}");
-            text.AppendLine($"  chain: {string.Join(" → ", skipped.ParentChain.Select(value => value.InstancedPath))}");
+            text.AppendLine();
+            text.AppendLine("SKIPPED MATERIALS");
+            if (candidate.SkippedMaterials.Count == 0) text.AppendLine("• None");
+            foreach (var skipped in candidate.SkippedMaterials)
+            {
+                text.AppendLine($"• {skipped.ComponentRole} slot {skipped.SlotIndex} · {skipped.Reason}");
+                text.AppendLine($"  {ShortLevelPath(skipped.ComponentPath)}");
+                text.AppendLine($"  {ShortChain(skipped.ParentChain)}");
+            }
         }
 
         if (candidate.ReferencedBy.Count > 0)
@@ -150,7 +154,7 @@ public sealed class ActorAssignmentChoice
             text.AppendLine("LOCAL REFERRERS");
             foreach (var reference in candidate.ReferencedBy)
             {
-                text.AppendLine($"• #{reference.UIndex} {reference.InstancedPath} · {reference.PropertyPath}");
+                text.AppendLine($"• #{reference.UIndex} {ShortLevelPath(reference.InstancedPath)} · {reference.PropertyPath}");
             }
         }
         if (candidate.Warnings.Count > 0)
@@ -165,5 +169,35 @@ public sealed class ActorAssignmentChoice
             text.AppendLine("This row cannot be confirmed for the current operation.");
         }
         return text.ToString().TrimEnd();
+    }
+
+    internal static string ShortLevelPath(string path)
+    {
+        const string prefix = "TheWorld.PersistentLevel.";
+        return path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+            ? path[prefix.Length..]
+            : path;
+    }
+
+    internal static string? ShortObjectName(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return null;
+        var shortened = ShortLevelPath(path);
+        var separator = shortened.LastIndexOf('.');
+        return separator >= 0 ? shortened[(separator + 1)..] : shortened;
+    }
+
+    private static string ShortChain(IEnumerable<ActorMaterialChainEntry> chain) =>
+        string.Join(" → ", chain.Select(value => ShortObjectName(value.InstancedPath)));
+
+    private static string CompactMorphReason(ActorAssignmentCandidate candidate)
+    {
+        var reason = candidate.MorphIneligibilityReason ?? "not eligible";
+        return string.IsNullOrWhiteSpace(candidate.HeadMeshPath)
+            ? reason
+            : reason.Replace(
+                candidate.HeadMeshPath,
+                ShortObjectName(candidate.HeadMeshPath),
+                StringComparison.OrdinalIgnoreCase);
     }
 }

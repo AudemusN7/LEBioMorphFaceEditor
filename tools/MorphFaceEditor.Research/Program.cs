@@ -11,6 +11,39 @@ using LegendaryExplorerCore.Unreal.BinaryConverters.Shaders;
 using LegendaryExplorerCore.Unreal.ObjectInfo;
 using MorphFaceEditor.LegendaryExplorer;
 
+if (args.Length == 4 && args[0].Equals("actor-inventory", StringComparison.OrdinalIgnoreCase))
+{
+    var inventory = new ActorAssignmentInventoryService().Read(
+        Path.GetFullPath(args[1]), args[2], args[3]);
+    Console.WriteLine($"{inventory.Game} {inventory.SelectedFacePath} ({inventory.SelectedProfileKey})");
+    Console.WriteLine($"Candidates: {inventory.Candidates.Count}; morph-ready: {inventory.Candidates.Count(value => value.CanAssignMorph)}; material-ready: {inventory.Candidates.Count(value => value.CanAssignMaterials)}");
+    Console.WriteLine("Eligible material families:");
+    foreach (var group in inventory.Candidates.SelectMany(value => value.MaterialTargets)
+                 .GroupBy(value => value.Family).OrderBy(value => value.Key))
+    {
+        Console.WriteLine($"  {group.Key}: {group.Count()} slots / {group.Select(value => value.UIndex).Distinct().Count()} MICs");
+    }
+    Console.WriteLine("Skip reasons:");
+    foreach (var group in inventory.Candidates.SelectMany(value => value.SkippedMaterials)
+                 .GroupBy(value => value.Reason).OrderByDescending(value => value.Count()))
+    {
+        Console.WriteLine($"  {group.Count()}x {group.Key}");
+    }
+    Console.WriteLine("Unresolved/shared candidates:");
+    foreach (var candidate in inventory.Candidates)
+    {
+        foreach (var skipped in candidate.SkippedMaterials.Where(value =>
+                     value.ComponentRole == ActorComponentRole.Hair ||
+                     value.Reason.Contains("not a recognized", StringComparison.OrdinalIgnoreCase) ||
+                     value.Reason.Contains("not safe to infer", StringComparison.OrdinalIgnoreCase)))
+        {
+            Console.WriteLine($"  {candidate.ObjectName} | {skipped.ComponentRole} {skipped.SlotIndex} | {skipped.Reason}");
+            Console.WriteLine($"    {string.Join(" -> ", skipped.ParentChain.Select(value => value.InstancedPath))}");
+        }
+    }
+    return 0;
+}
+
 if (args.Length == 3 && args[0].Equals("locate-export", StringComparison.OrdinalIgnoreCase))
 {
     LegendaryExplorerCoreRuntime.Initialize();
@@ -214,6 +247,7 @@ if (args.Length is not 4 || !args[0].Equals("trace-material", StringComparison.O
 {
     Console.Error.WriteLine("Usage: locate-export <game-root> <export-name>");
     Console.Error.WriteLine("   or: inventory-faces <package.pcc> <base-head-name-fragment>");
+    Console.Error.WriteLine("   or: actor-inventory <package.pcc> <face-selector> <profile-key>");
     Console.Error.WriteLine("   or: trace-material <package.pcc> <skeletal-mesh-name> <report.md>");
     Console.Error.WriteLine("   or: dump-shaders <package.pcc> <skeletal-mesh-name> <slot> <vertex-factory> <output-directory>");
     return 2;

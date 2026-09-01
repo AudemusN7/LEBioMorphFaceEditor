@@ -81,38 +81,26 @@ public static class HeadMaterialClassifier
     }
 
     /// <summary>
-    /// Classifies a complete MIC-to-master chain. Conflicting identities are unsafe rather
-    /// than being resolved from whichever export happens to be visited first.
+    /// Classifies a MIC-to-master chain from its effective root. Child MIC names are useful
+    /// labels, but the final recognized parent determines which compiled material family runs.
+    /// Unknown intermediate nodes do not turn a valid hair chain into an accessory.
     /// </summary>
     public static HeadMaterialFamily ClassifyChain(IEnumerable<string> identities, bool attachment = false)
     {
         ArgumentNullException.ThrowIfNull(identities);
-        var families = identities
-            .Select(identity => Classify(identity, attachment))
-            .Where(family => family != HeadMaterialFamily.Unknown)
-            .Distinct()
-            .ToArray();
-        if (families.Contains(HeadMaterialFamily.Accessory))
-        {
-            return HeadMaterialFamily.Accessory;
-        }
-        if (families.Length == 0)
-        {
-            return attachment ? HeadMaterialFamily.Accessory : HeadMaterialFamily.Unknown;
-        }
+        var recognizedRoot = identities
+            .Reverse()
+            .Select(identity => (Identity: identity, Family: Classify(identity)))
+            .FirstOrDefault(value => value.Family != HeadMaterialFamily.Unknown);
+        return recognizedRoot.Identity is not null
+            ? recognizedRoot.Family
+            : attachment ? HeadMaterialFamily.Accessory : HeadMaterialFamily.Unknown;
+    }
 
-        var concrete = families.Where(family => !IsGenericFamily(family)).Distinct().ToArray();
-        if (concrete.Length > 1)
-        {
-            return HeadMaterialFamily.Unknown;
-        }
-        if (concrete.Length == 1)
-        {
-            return families.Where(IsGenericFamily).All(generic => IsCompatibleGeneric(concrete[0], generic))
-                ? concrete[0]
-                : HeadMaterialFamily.Unknown;
-        }
-        return families.Length == 1 ? families[0] : HeadMaterialFamily.Unknown;
+    public static string? EffectiveRootIdentity(IEnumerable<string> identities)
+    {
+        ArgumentNullException.ThrowIfNull(identities);
+        return identities.Reverse().FirstOrDefault(identity => Classify(identity) != HeadMaterialFamily.Unknown);
     }
 
     public static bool IsAssignableHeadFamily(HeadMaterialFamily family) => family is
@@ -133,18 +121,6 @@ public static class HeadMaterialClassifier
         HeadMaterialFamily.Lashes or
         HeadMaterialFamily.Hair or
         HeadMaterialFamily.MaskedHair;
-
-    private static bool IsGenericFamily(HeadMaterialFamily family) => family is
-        HeadMaterialFamily.Skin or HeadMaterialFamily.Scalp or HeadMaterialFamily.Eyes or
-        HeadMaterialFamily.Teeth or HeadMaterialFamily.Lashes or HeadMaterialFamily.Hair or
-        HeadMaterialFamily.MaskedHair;
-
-    private static bool IsCompatibleGeneric(HeadMaterialFamily concrete, HeadMaterialFamily generic) => concrete switch
-    {
-        HeadMaterialFamily.SalarianEyes or HeadMaterialFamily.TurianEyes or
-            HeadMaterialFamily.KroganEyes or HeadMaterialFamily.VorchaEyes => generic == HeadMaterialFamily.Eyes,
-        _ => generic == HeadMaterialFamily.Skin
-    };
 
     private static bool ContainsAny(string value, params string[] fragments) =>
         fragments.Any(fragment => value.Contains(fragment, StringComparison.OrdinalIgnoreCase));

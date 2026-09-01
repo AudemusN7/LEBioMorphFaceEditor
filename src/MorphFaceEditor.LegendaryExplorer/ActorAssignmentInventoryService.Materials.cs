@@ -43,38 +43,10 @@ public sealed partial class ActorAssignmentInventoryService
             var chainIdentities = chain.Select(node => node.InstancedPath).ToArray();
             var family = HeadMaterialClassifier.ClassifyChain(
                 chainIdentities, component.Role == ActorComponentRole.Hair);
-            var chainFamilies = chainIdentities
-                .Select(identity => HeadMaterialClassifier.Classify(
-                    identity, component.Role == ActorComponentRole.Hair))
-                .Where(value => value != HeadMaterialFamily.Unknown)
-                .ToArray();
-            var approvedLe3VorchaEyeChain = selectedProfileKey.Equals(
-                                                "le3-vorcha", StringComparison.OrdinalIgnoreCase) &&
-                                            chainFamilies.Length > 0 &&
-                                            chainFamilies.All(value => value is HeadMaterialFamily.VorchaEyes or
-                                                HeadMaterialFamily.TurianEyes or HeadMaterialFamily.Eyes) &&
-                                            chainFamilies.Any(value => value is HeadMaterialFamily.VorchaEyes or
-                                                HeadMaterialFamily.TurianEyes);
-            if (approvedLe3VorchaEyeChain)
-            {
-                family = HeadMaterialFamily.TurianEyes;
-            }
-            var suffixes = chainIdentities
-                .Select(identity => HeadProfileIdentity.InferSuffix(identity))
-                .Where(suffix => suffix is not null && suffix != "human")
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-            var sharedTurianSchema =
-                (selectedProfileKey.EndsWith("-female-turian", StringComparison.OrdinalIgnoreCase) &&
-                 suffixes.All(suffix => suffix is "female-turian" or "turian")) ||
-                (approvedLe3VorchaEyeChain &&
-                 suffixes.All(suffix => suffix is "vorcha" or "turian"));
-            var normalizedSuffixes = sharedTurianSchema
-                ? suffixes.Select(_ => "turian").Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
-                : suffixes;
-            var conflictingProfiles = normalizedSuffixes.Length > 1;
-            var materialProfileKey = normalizedSuffixes.Length == 1
-                ? HeadProfileIdentity.WithGame(gamePrefix, normalizedSuffixes[0]!)
+            var rootIdentity = HeadMaterialClassifier.EffectiveRootIdentity(chainIdentities);
+            var rootSuffix = HeadProfileIdentity.InferSuffix(rootIdentity);
+            var materialProfileKey = rootSuffix is not null && rootSuffix != "human"
+                ? HeadProfileIdentity.WithGame(gamePrefix, rootSuffix)
                 : null;
 
             string? reason = null;
@@ -87,10 +59,6 @@ public sealed partial class ActorAssignmentInventoryService
                     ? "Imported materials are read-only and are never assignment targets."
                     : $"{rawEntry.ClassName} is not a local MIC export.";
             }
-            else if (conflictingProfiles)
-            {
-                reason = $"The parent chain contains conflicting profile identities: {string.Join(", ", suffixes)}.";
-            }
             else if (!HeadMaterialClassifier.IsAssignableHeadFamily(family))
             {
                 reason = family == HeadMaterialFamily.Accessory
@@ -99,14 +67,10 @@ public sealed partial class ActorAssignmentInventoryService
             }
             else
             {
-                var compatible = HeadProfileIdentity.IsMaterialCompatible(selectedProfileKey, materialProfileKey, family);
-                if (!compatible && suffixes.Length == 0 &&
-                    IsKnownSharedSchema(family, chainIdentities) &&
-                    HeadProfileIdentity.IsGeometryCompatible(selectedProfileKey, headProfileKey))
-                {
-                    compatible = true;
-                    materialProfileKey = headProfileKey;
-                }
+                var compatible = (IsApprovedSharedRoot(family, rootIdentity) &&
+                                  HeadProfileIdentity.IsGeometryCompatible(selectedProfileKey, headProfileKey)) ||
+                                 HeadProfileIdentity.IsMaterialCompatible(
+                                     selectedProfileKey, materialProfileKey, family);
                 if (!compatible)
                 {
                     reason = materialProfileKey is null
@@ -163,17 +127,18 @@ public sealed partial class ActorAssignmentInventoryService
         return result;
     }
 
-    private static bool IsKnownSharedSchema(HeadMaterialFamily family, IReadOnlyList<string> chain)
+    private static bool IsApprovedSharedRoot(HeadMaterialFamily family, string? rootIdentity)
     {
-        if (family is not (HeadMaterialFamily.Eyes or HeadMaterialFamily.Lashes or HeadMaterialFamily.Scalp or
-            HeadMaterialFamily.Teeth or HeadMaterialFamily.Hair or HeadMaterialFamily.MaskedHair))
+        if (family is not (HeadMaterialFamily.Eyes or HeadMaterialFamily.Lashes or
+            HeadMaterialFamily.Scalp or HeadMaterialFamily.Teeth or
+            HeadMaterialFamily.Hair or HeadMaterialFamily.MaskedHair) ||
+            string.IsNullOrWhiteSpace(rootIdentity))
         {
             return false;
         }
-        var text = string.Join('|', chain);
         return new[]
         {
-            "HMM_", "HMF_", "HMN_", "BIOG_HAIR", "BIO_EYE", "PROShort", "HED_Scalp"
-        }.Any(marker => text.Contains(marker, StringComparison.OrdinalIgnoreCase));
+            "HMM_", "HMF_", "HMN_", "ASA_", "BIOG_HAIR", "BIO_EYE", "PROShort", "HED_Scalp"
+        }.Any(marker => rootIdentity.Contains(marker, StringComparison.OrdinalIgnoreCase));
     }
 }

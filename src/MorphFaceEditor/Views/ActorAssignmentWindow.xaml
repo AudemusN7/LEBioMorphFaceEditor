@@ -28,6 +28,7 @@
             <Border Background="{StaticResource PanelBackground}" CornerRadius="5" Padding="8">
                 <ListBox ItemsSource="{Binding FilteredChoices}" SelectedItem="{Binding SelectedChoice}"
                          BorderThickness="0" Background="Transparent"
+                         HorizontalContentAlignment="Stretch"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                     <ListBox.GroupStyle>
                         <GroupStyle>
@@ -41,7 +42,7 @@
                     </ListBox.GroupStyle>
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <Grid Margin="5,6" Width="{Binding RelativeSource={RelativeSource AncestorType=ListBox}, Path=ActualWidth}">
+                            <Grid Margin="5,6">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
@@ -52,14 +53,27 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" FontSize="14" />
-                                <Border Grid.Column="1" Background="#2A3C5069" CornerRadius="3" Padding="5,2" Margin="8,0,18,0">
-                                    <TextBlock Text="{Binding EligibilityLabel}" FontSize="9" FontWeight="Bold" />
+                                <Border Grid.Column="1" CornerRadius="3" Padding="7,3" Margin="8,0,2,0"
+                                        MinWidth="92" HorizontalAlignment="Right">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Background" Value="#FF285340" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsEligible}" Value="False">
+                                                    <Setter Property="Background" Value="#FF67383D" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <TextBlock Text="{Binding EligibilityLabel}" FontSize="9" FontWeight="Bold"
+                                               Foreground="White" TextAlignment="Center" />
                                 </Border>
                                 <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="{Binding TechnicalIdentity}"
                                            Foreground="{StaticResource SecondaryText}" FontSize="11"
                                            TextTrimming="CharacterEllipsis" Margin="0,3,18,0" />
                                 <TextBlock Grid.Row="2" Grid.ColumnSpan="2" Text="{Binding EvidenceSummary}"
-                                           Foreground="{StaticResource MutedText}" FontSize="11" Margin="0,2,18,0" />
+                                           Foreground="{StaticResource MutedText}" FontSize="11" Margin="0,2,2,0"
+                                           TextWrapping="Wrap" />
                             </Grid>
                         </DataTemplate>
                     </ListBox.ItemTemplate>

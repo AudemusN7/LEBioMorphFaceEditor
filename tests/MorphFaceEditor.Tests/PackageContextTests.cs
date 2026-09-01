@@ -23,6 +23,7 @@ public static class PackageContextTests
         new("LE1 context clone creates an independently named face and material child", CloneLe1Morph),
         new("LE1 context delete trashes a face only in its package workspace", DeleteLe1Morph),
         new("LE1 morph export creates and extends a dependency-only PCC without changing paths", ExportLe1MorphPackage),
+        new("external hair and attachment meshes port their material chains on morph export", ExternalAttachmentsPortOnMorphExport),
         new("morph package export preserves paths across LE1, LE2, and LE3", ExportMorphPackagesAcrossGames),
         new("cross-game conversion rebakes LE2 to LE3 and LE3 to LE1 packages", ConvertMorphsAcrossGameBoundary),
         new("reviewed cross-game texture policy aliases donors and omits inert overrides", ApplyReviewedTextureTransferPolicy),
@@ -310,6 +311,117 @@ public static class PackageContextTests
                 if (File.Exists(destination))
                 {
                     File.Delete(destination);
+                }
+            }
+        });
+    }
+
+    private static void ExternalAttachmentsPortOnMorphExport()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        const string meshName = "HMM_HIR_PROShort02_MDL";
+        WithPackageCopy("LE3 GlobalMorphs.pcc", sourcePath =>
+        {
+            string sourceFacePath;
+            AssetIdentity meshIdentity;
+            using (var sourcePackage = MEPackageHandler.OpenMEPackage(sourcePath, forceLoadFromDisk: true))
+            {
+                var mesh = sourcePackage.Exports.Single(export =>
+                    export.ClassName.Equals("SkeletalMesh", StringComparison.OrdinalIgnoreCase) &&
+                    export.ObjectName.Instanced.Equals(meshName, StringComparison.OrdinalIgnoreCase));
+                meshIdentity = MorphFacePackageReader.ToIdentity(mesh)!;
+                sourceFacePath = sourcePackage.Exports.First(export =>
+                {
+                    if (!export.ClassName.Equals("BioMorphFace", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return false;
+                    }
+                    var baseHead = export.GetProperty<ObjectProperty>("m_oBaseHead")?.ResolveToEntry(sourcePackage);
+                    var hair = export.GetProperty<ObjectProperty>("m_oHairMesh")?.ResolveToEntry(sourcePackage);
+                    var others = export.GetProperty<ArrayProperty<ObjectProperty>>("m_oOtherMeshes");
+                    return baseHead?.ObjectName.Instanced.StartsWith("HMM_", StringComparison.OrdinalIgnoreCase) == true &&
+                           !string.Equals(hair?.InstancedFullPath, mesh.InstancedFullPath, StringComparison.OrdinalIgnoreCase) &&
+                           (others is null || others.All(reference => !string.Equals(
+                               reference.ResolveToEntry(sourcePackage)?.InstancedFullPath,
+                               mesh.InstancedFullPath,
+                               StringComparison.OrdinalIgnoreCase)));
+                }).InstancedFullPath;
+            }
+
+            var clone = new MorphFacePackageContextService().CloneMorph(
+                sourcePath,
+                sourceFacePath,
+                "MFE_AttachmentPort_Test");
+            using var reader = new MorphFacePackageReader();
+            var loaded = reader.Load(sourcePath, clone.FaceInstancedPath);
+            var draft = loaded.Document with
+            {
+                HairMeshReference = meshIdentity,
+                OtherMeshReferences = [meshIdentity]
+            };
+            var destinationPath = Path.Combine(
+                Path.GetTempPath(),
+                $"MFE-AttachmentExport-{Guid.NewGuid():N}.pcc");
+            try
+            {
+                var result = new MorphFacePackageWriter().SaveMorphToPackage(
+                    draft,
+                    sourcePath,
+                    destinationPath,
+                    createNewPackage: true);
+
+                using var sourcePackage = MEPackageHandler.OpenMEPackage(sourcePath, forceLoadFromDisk: true);
+                using var destinationPackage = MEPackageHandler.OpenMEPackage(destinationPath, forceLoadFromDisk: true);
+                var sourceMesh = sourcePackage.FindExport(meshIdentity.InstancedPath, "SkeletalMesh")
+                                 ?? throw new InvalidDataException("The source attachment mesh disappeared.");
+                var destinationMesh = destinationPackage.FindExport(meshIdentity.InstancedPath, "SkeletalMesh")
+                                      ?? throw new InvalidDataException("The attachment mesh was not ported as an export.");
+                var savedFace = destinationPackage.FindExport(result.FaceInstancedPath, "BioMorphFace")
+                                ?? throw new InvalidDataException("The exported morph was not saved.");
+                TestAssert.Equal(
+                    destinationMesh.UIndex,
+                    savedFace.GetProperty<ObjectProperty>("m_oHairMesh")?.Value ?? 0);
+                var savedOthers = savedFace.GetProperty<ArrayProperty<ObjectProperty>>("m_oOtherMeshes")?.ToArray() ?? [];
+                TestAssert.Equal(1, savedOthers.Length);
+                TestAssert.Equal(destinationMesh.UIndex, savedOthers[0].Value);
+
+                var sourceMaterials = sourceMesh.GetBinaryData<SkeletalMesh>().Materials ?? [];
+                var destinationMaterials = destinationMesh.GetBinaryData<SkeletalMesh>().Materials ?? [];
+                TestAssert.Equal(sourceMaterials.Length, destinationMaterials.Length);
+                var micCount = 0;
+                for (var slot = 0; slot < sourceMaterials.Length; slot++)
+                {
+                    var sourceMaterial = sourcePackage.GetEntry(sourceMaterials[slot])
+                                         ?? throw new InvalidDataException($"Source material slot {slot} is invalid.");
+                    var destinationMaterial = destinationPackage.GetEntry(destinationMaterials[slot])
+                                              ?? throw new InvalidDataException($"Destination material slot {slot} is invalid.");
+                    TestAssert.Equal(sourceMaterial.InstancedFullPath, destinationMaterial.InstancedFullPath);
+                    TestAssert.Equal(sourceMaterial.ClassName, destinationMaterial.ClassName);
+                    if (sourceMaterial is not ExportEntry sourceMic ||
+                        !sourceMic.ClassName.Equals("MaterialInstanceConstant", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    micCount++;
+                    var sourceParent = sourceMic.GetProperty<ObjectProperty>("Parent")?.ResolveToEntry(sourcePackage)
+                                       ?? throw new InvalidDataException($"Source MIC '{sourceMic.InstancedFullPath}' has no parent.");
+                    var destinationMic = destinationMaterial as ExportEntry
+                                         ?? throw new InvalidDataException($"MIC '{sourceMic.InstancedFullPath}' was not ported as an export.");
+                    var destinationParent = destinationMic.GetProperty<ObjectProperty>("Parent")
+                        ?.ResolveToEntry(destinationPackage);
+                    TestAssert.True(destinationParent is not null,
+                        $"Ported MIC '{destinationMic.InstancedFullPath}' lost its parent.");
+                    TestAssert.Equal(sourceParent.InstancedFullPath, destinationParent!.InstancedFullPath);
+                    TestAssert.Equal(sourceParent.ClassName, destinationParent.ClassName);
+                }
+                TestAssert.True(micCount > 0, $"{meshName} exposed no MIC material slots to verify.");
+            }
+            finally
+            {
+                if (File.Exists(destinationPath))
+                {
+                    File.Delete(destinationPath);
                 }
             }
         });

@@ -4,6 +4,7 @@ using System.Windows;
 using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.Views;
 using MorphFaceEditor.ViewModels;
+using MorphFaceEditor.Infrastructure;
 
 namespace MorphFaceEditor.Services;
 
@@ -61,7 +62,7 @@ public sealed class WpfEditorDialogService : IEditorDialogService
         var dialog = new OpenFileDialog
         {
             Title = "Import a BioMorphFace or baked mesh",
-            Filter = "Supported morph files|*.ron;*.psk;*.pskx;*.gltf;*.glb;*.md5;*.md5mesh;*.me2headmorph;*.me3headmorph|RON head morph (*.ron)|*.ron|Mesh files (*.psk;*.pskx;*.gltf;*.glb;*.md5;*.md5mesh)|*.psk;*.pskx;*.gltf;*.glb;*.md5;*.md5mesh|All files (*.*)|*.*",
+            Filter = EditorFileDrop.MorphImportFilter,
             CheckFileExists = true,
             Multiselect = false,
             InitialDirectory = Directory.Exists(initialDirectory) ? initialDirectory : null

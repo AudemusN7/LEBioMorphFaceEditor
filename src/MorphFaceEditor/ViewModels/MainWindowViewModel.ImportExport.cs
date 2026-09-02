@@ -87,13 +87,18 @@ public sealed partial class MainWindowViewModel
 
     private async Task ImportMorphAsync()
     {
-        if (SelectedFace is not { } template || WorkspacePackagePath is not { } workspacePath)
-        {
-            return;
-        }
         var sourcePath = _dialogs.ChooseMorphImportFile(
             PackagePath is null ? null : Path.GetDirectoryName(PackagePath));
         if (sourcePath is null)
+        {
+            return;
+        }
+        await ImportMorphAsync(sourcePath);
+    }
+
+    private async Task ImportMorphAsync(string sourcePath)
+    {
+        if (SelectedFace is not { } template || WorkspacePackagePath is not { } workspacePath)
         {
             return;
         }

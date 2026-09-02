@@ -10,6 +10,9 @@
         Icon="icon.ico"
         Background="{StaticResource WindowBackground}"
         Foreground="{StaticResource PrimaryText}"
+        AllowDrop="True"
+        PreviewDragOver="OnFileDragOver"
+        Drop="OnFileDrop"
         WindowStartupLocation="CenterScreen">
     <!-- Window resources keep editor-specific templates local; shared primitives live in EditorTheme.xaml. -->
     <Window.Resources>

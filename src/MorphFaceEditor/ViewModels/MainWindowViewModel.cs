@@ -527,6 +527,33 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
+    internal bool CanOpenDroppedFile(string path) =>
+        !IsBusy && EditorFileDrop.Classify(path) switch
+        {
+            EditorFileDropKind.Package => true,
+            EditorFileDropKind.MorphImport => CanUseFaceContextMenu(),
+            _ => false
+        };
+
+    internal async Task OpenDroppedFileAsync(string path)
+    {
+        if (!CanOpenDroppedFile(path))
+        {
+            return;
+        }
+
+        if (EditorFileDrop.Classify(path) == EditorFileDropKind.Package)
+        {
+            if (await EnsureCanAbandonWorkspaceAsync())
+            {
+                await OpenSourcePackagePathAsync(path);
+            }
+            return;
+        }
+
+        await ImportMorphAsync(path);
+    }
+
     private async Task<bool> OpenSourcePackagePathAsync(string selectedPath, string? preferredFacePath = null)
     {
         AppLog.Information($"Creating temporary workspace for '{selectedPath}'.");

@@ -217,12 +217,15 @@
                              Margin="0,0,0,9"
                              ToolTip="Search by export name or full instanced path"
                              AutomationProperties.Name="Search BioMorphFace exports" />
-                    <ListBox Grid.Row="2"
+                    <ListBox x:Name="FaceList" Grid.Row="2"
                              ItemsSource="{Binding FilteredFaces}"
                              SelectedItem="{Binding SelectedFace}"
                              MouseDoubleClick="OnFaceListDoubleClick"
                              PreviewMouseRightButtonDown="OnFaceListRightButtonDown"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.InputBindings>
+                            <KeyBinding Key="Enter" Command="{Binding LoadSelectedFaceCommand}" />
+                        </ListBox.InputBindings>
                         <ListBox.ContextMenu>
                             <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}"
                                          Opened="OnFaceContextMenuOpened">

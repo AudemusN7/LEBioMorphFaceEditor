@@ -1310,6 +1310,7 @@ public static class UiSmokeTests
                 mainWindow.ShowInTaskbar = false;
                 mainWindow.Opacity = 0;
                 mainWindow.Show();
+                var faceList = mainWindow.FindName("FaceList") as ListBox;
                 var randomise = mainWindow.FindName("GlobalRandomiseButton") as Button;
                 var setToDefaults = mainWindow.FindName("SetToDefaultsButton") as Button;
                 var morphStrength = mainWindow.FindName("MorphRandomisationStrengthSlider") as Slider;
@@ -1323,6 +1324,11 @@ public static class UiSmokeTests
                 var materialStrengthValue = mainWindow.FindName("MaterialRandomisationStrengthValue") as TextBlock;
                 var hairLabel = mainWindow.FindName("HairAccessoryMeshesLabel") as TextBlock;
                 var inclusionStyle = application.TryFindResource("RandomisationIncludeToggle") as Style;
+                var enterBinding = faceList?.InputBindings
+                    .OfType<System.Windows.Input.KeyBinding>()
+                    .SingleOrDefault(binding => binding.Key == System.Windows.Input.Key.Enter);
+                TestAssert.True(enterBinding?.Command is not null,
+                    "The BioMorphFace export list does not load its selection when Enter is pressed.");
                 TestAssert.True(inclusionStyle is not null && inclusionStyle.TargetType == typeof(CheckBox),
                     "The filled subcategory-inclusion checkbox style is missing.");
                 TestAssert.True(inclusionStyle!.Setters.OfType<Setter>().Any(value =>

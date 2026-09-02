@@ -8,6 +8,7 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Threading;
+using System.IO;
 
 namespace MorphFaceEditor;
 
@@ -79,6 +80,39 @@ public partial class MainWindow : Window
     private void OnFrontClick(object sender, RoutedEventArgs e) => _previewHost.ResetFront();
 
     private void OnThreeQuarterClick(object sender, RoutedEventArgs e) => _previewHost.ResetThreeQuarter();
+
+    private void OnFileDragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = TryGetSingleDroppedFile(e.Data, out var path) &&
+                    _viewModel.CanOpenDroppedFile(path)
+            ? DragDropEffects.Copy
+            : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private async void OnFileDrop(object sender, DragEventArgs e)
+    {
+        e.Handled = true;
+        if (TryGetSingleDroppedFile(e.Data, out var path) &&
+            _viewModel.CanOpenDroppedFile(path))
+        {
+            await _viewModel.OpenDroppedFileAsync(path);
+        }
+    }
+
+    private static bool TryGetSingleDroppedFile(IDataObject data, out string path)
+    {
+        path = string.Empty;
+        if (!data.GetDataPresent(DataFormats.FileDrop) ||
+            data.GetData(DataFormats.FileDrop) is not string[] { Length: 1 } files ||
+            !File.Exists(files[0]))
+        {
+            return false;
+        }
+
+        path = files[0];
+        return true;
+    }
 
     private void OnFaceListDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {

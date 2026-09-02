@@ -26,6 +26,7 @@ public static class UiSmokeTests
         new("morph controls disable when the selected LOD has no target geometry", MorphControlsDisableForTargetlessLod),
         new("Fix Morph undo restores baked preview and UI state", FixMorphUndoRestoresBakedPreview),
         new("texture thumbnails discard alpha", TextureThumbnailsDiscardAlpha),
+        new("editor file drops recognise every supported format", EditorFileDropsRecogniseSupportedFormats),
         new("numeric wheel increments are finite and crash-safe", NumericWheelIncrementsAreSafe),
         new("extended sliders are optional and preserve edited values", ExtendedSlidersAreOptional),
         new("each face editor owns a valid selected bone transform", BoneTransformSelectionIsPerEditor),
@@ -64,6 +65,21 @@ public static class UiSmokeTests
         new("Vorcha UI keeps reconstructed morphs hidden and bones editable", VorchaProfileIsMaterialAndBoneOnly),
         new("Female Turian UI exposes Turian materials without inherited geometry controls", FemaleTurianProfileIsMaterialOnly)
     ];
+
+    private static void EditorFileDropsRecogniseSupportedFormats()
+    {
+        TestAssert.Equal(EditorFileDropKind.Package, EditorFileDrop.Classify("BioD_Test.PCC"));
+        foreach (var extension in new[]
+                 {
+                     ".ron", ".psk", ".pskx", ".gltf", ".glb", ".md5", ".md5mesh",
+                     ".me2headmorph", ".me3headmorph"
+                 })
+        {
+            TestAssert.Equal(EditorFileDropKind.MorphImport, EditorFileDrop.Classify($"face{extension}"));
+        }
+        TestAssert.Equal(EditorFileDropKind.Unsupported, EditorFileDrop.Classify("notes.txt"));
+        TestAssert.Equal(EditorFileDropKind.Unsupported, EditorFileDrop.Classify("folder.with.pcc\\face.txt"));
+    }
 
     private static void FemaleTurianProfileIsMaterialOnly()
     {

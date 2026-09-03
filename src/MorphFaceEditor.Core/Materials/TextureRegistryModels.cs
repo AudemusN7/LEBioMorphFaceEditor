@@ -19,7 +19,7 @@ public sealed record TextureRegistrySnapshot(
     int InstalledPackageCount,
     IReadOnlyList<TextureCatalogCandidate> Candidates)
 {
-    public const int CurrentSchemaVersion = 2;
+    public const int CurrentSchemaVersion = 3;
 }
 
 /// <summary>Shared, non-exclusive discovery rules used by the one-pass installed-package scanner.</summary>

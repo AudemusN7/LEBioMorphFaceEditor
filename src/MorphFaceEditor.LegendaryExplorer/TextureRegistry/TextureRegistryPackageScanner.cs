@@ -36,7 +36,8 @@ internal sealed class LecTextureRegistryPackageScanner : ITextureRegistryPackage
             cancellationToken.ThrowIfCancellationRequested();
             if (export.IsDefaultObject ||
                 !export.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase) ||
-                !TextureRegistryDiscovery.IsRelevantPath(export.InstancedFullPath))
+                (!TextureRegistryDiscovery.IsRelevantPath(export.InstancedFullPath) &&
+                 !CrossGameAssetReconciliationCatalog.IsReviewedTexturePath(export.InstancedFullPath)))
             {
                 continue;
             }

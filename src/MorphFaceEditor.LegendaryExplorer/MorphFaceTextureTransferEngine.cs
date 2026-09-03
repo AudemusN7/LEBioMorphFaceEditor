@@ -1,4 +1,3 @@
-using LegendaryExplorerCore.GameFilesystem;
 using LegendaryExplorerCore.Packages;
 using LegendaryExplorerCore.Packages.CloningImportingAndRelinking;
 using LegendaryExplorerCore.Textures;
@@ -19,18 +18,13 @@ internal sealed record TextureTransferResult(
 /// </summary>
 internal static class MorphFaceTextureTransferEngine
 {
-    private static readonly string[] HumanDonorPackages =
-    [
-        "BIOG_HMM_HIR_PRO_R.pcc",
-        "BIOG_HMF_HIR_PRO.pcc",
-        "BIOG_HMM_HED_PROMorph.pcc",
-        "BIOG_HMF_HED_PROMorph_R.pcc"
-    ];
-
     private static readonly HashSet<string> EmbedIntoLe1 = new(StringComparer.OrdinalIgnoreCase)
     {
+        "ASA_HED_PRO_Add2",
+        "ASA_HED_PRO_Add3",
         "ASA_HED_PRO_Tat2",
         "BAT_HED_PROMorph_Add4",
+        "SAL_HED_PRO_Add6",
         "TUR_HED_PRO_Add2"
     };
 
@@ -43,7 +37,9 @@ internal static class MorphFaceTextureTransferEngine
         MEGame sourceGame,
         string sourceProfileKey,
         string sourcePackagePath,
-        string? targetTemplatePackagePath)
+        string? targetTemplatePackagePath,
+        IReadOnlyList<TextureCatalogCandidate> sourceTextureCatalog,
+        IReadOnlyList<TextureCatalogCandidate> targetTextureCatalog)
     {
         var warnings = new List<string>();
         var textures = new List<TextureMaterialOverride>();
@@ -61,25 +57,39 @@ internal static class MorphFaceTextureTransferEngine
             IEntry? targetEntry;
             if (decision.Kind == TransferKind.EmbedSource)
             {
-                targetEntry = EmbedPackageStoredSourceTexture(
-                    destination,
-                    sourceGame,
-                    sourcePackagePath,
-                    sourcePath,
-                    donors,
-                    warnings);
+                var existingTargetPath = ResolveTargetPath(
+                    destination, sourcePath, targetTemplatePackagePath, donors, targetTextureCatalog);
+                targetEntry = existingTargetPath is not null
+                    ? MaterializeTargetTexture(
+                        destination, existingTargetPath, targetTemplatePackagePath, donors,
+                        targetTextureCatalog, warnings)
+                    : EmbedPackageStoredSourceTexture(
+                        destination,
+                        sourceGame,
+                        sourcePackagePath,
+                        sourcePath,
+                        sourceTextureCatalog,
+                        donors,
+                        warnings);
             }
             else
             {
-                var requestedPath = decision.TargetPath ?? sourcePath;
-                var resolvedPath = ResolveTargetPath(
-                    destination,
-                    requestedPath,
-                    targetTemplatePackagePath,
-                    donors);
+                var requestedPath = CrossGameAssetReconciliationCatalog.NormalizeTargetPath(
+                    destination.Game,
+                    decision.TargetPath ?? sourcePath)!;
+                var resolvedPath = decision.Kind == TransferKind.Alias
+                    ? requestedPath
+                    : ResolveTargetPath(
+                        destination,
+                        requestedPath,
+                        targetTemplatePackagePath,
+                        donors,
+                        targetTextureCatalog);
                 targetEntry = resolvedPath is null
                     ? null
-                    : EnsureTextureImport(destination, resolvedPath);
+                    : MaterializeTargetTexture(
+                        destination, resolvedPath, targetTemplatePackagePath, donors,
+                        targetTextureCatalog, warnings);
             }
 
             if (targetEntry is null)
@@ -108,6 +118,29 @@ internal static class MorphFaceTextureTransferEngine
         string sourcePath)
     {
         var objectName = ObjectName(sourcePath);
+        if (string.Equals(objectName, "HMF_HED_PROLash_Opac_M01", StringComparison.OrdinalIgnoreCase) &&
+            (targetGame is MEGame.LE1 or MEGame.LE2 ||
+             sourceGame == MEGame.LE1 && targetGame == MEGame.LE3))
+        {
+            return new TransferDecision(
+                TransferKind.Alias,
+                "BIOG_Humanoid_MASTER_MTR_R.Human.HMF_HED_PROLash_Opac_M01");
+        }
+        if (sourceGame == MEGame.LE2 && targetGame == MEGame.LE3 &&
+            string.Equals(parameter, "HED_Scalp_Spec", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(objectName, "GBL_ARM_ALL_White", StringComparison.OrdinalIgnoreCase))
+        {
+            return new TransferDecision(
+                TransferKind.Alias,
+                "BIOG_Humanoid_MASTER_MTR_R.GBL_ARM_ALL_Black");
+        }
+        if (CrossGameAssetReconciliationCatalog.TryResolve(
+                sourceGame, targetGame, "Texture", parameter, sourcePath, out var reviewedPath))
+        {
+            return reviewedPath is null
+                ? new TransferDecision(TransferKind.Ignore)
+                : new TransferDecision(TransferKind.Alias, reviewedPath);
+        }
         if (targetGame == MEGame.LE1 && EmbedIntoLe1.Contains(objectName))
         {
             return new TransferDecision(TransferKind.EmbedSource);
@@ -176,15 +209,24 @@ internal static class MorphFaceTextureTransferEngine
         IMEPackage destination,
         string requestedPath,
         string? targetTemplatePackagePath,
-        DonorPackages donors)
+        DonorPackages donors,
+        IReadOnlyList<TextureCatalogCandidate> targetTextureCatalog)
     {
         if (FindEntryByCanonicalPath(destination, requestedPath, "Texture2D") is not null)
         {
             return requestedPath;
         }
 
+        var availability = new TextureCatalogAvailability(
+            [],
+            targetTextureCatalog);
+        if (availability.TryResolve(requestedPath, out var installedPath))
+        {
+            return installedPath;
+        }
+
         var candidates = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
-        foreach (var path in TargetDonorPaths(destination.Game, requestedPath, targetTemplatePackagePath))
+        foreach (var path in TargetDonorPaths(targetTemplatePackagePath))
         {
             if (!File.Exists(path) || SamePath(path, destination.FilePath))
             {
@@ -216,56 +258,118 @@ internal static class MorphFaceTextureTransferEngine
         return matches.Length == 1 ? matches[0] : null;
     }
 
-    private static IEnumerable<string> TargetDonorPaths(
-        MEGame game,
-        string requestedPath,
-        string? targetTemplatePackagePath)
+    private static IEnumerable<string> TargetDonorPaths(string? targetTemplatePackagePath)
     {
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (!string.IsNullOrWhiteSpace(targetTemplatePackagePath))
         {
-            var fullPath = Path.GetFullPath(targetTemplatePackagePath);
-            if (seen.Add(fullPath))
-            {
-                yield return fullPath;
-            }
-        }
-
-        var loadedFiles = MELoadedFiles.GetFilesLoadedInGame(game, forceUseCached: true);
-        var rootPackage = requestedPath.Split('.').FirstOrDefault();
-        if (!string.IsNullOrWhiteSpace(rootPackage) &&
-            loadedFiles.TryGetValue($"{rootPackage}.pcc", out var rootPath) && seen.Add(rootPath))
-        {
-            yield return rootPath;
-        }
-        foreach (var fileName in HumanDonorPackages)
-        {
-            if (loadedFiles.TryGetValue(fileName, out var path) && seen.Add(path))
-            {
-                yield return path;
-            }
+            yield return Path.GetFullPath(targetTemplatePackagePath);
         }
     }
 
-    private static IEntry EnsureTextureImport(IMEPackage destination, string canonicalPath)
+    private static IEntry? MaterializeTargetTexture(
+        IMEPackage destination,
+        string canonicalPath,
+        string? targetTemplatePackagePath,
+        DonorPackages donors,
+        IReadOnlyList<TextureCatalogCandidate> targetTextureCatalog,
+        ICollection<string> warnings)
     {
         if (FindEntryByCanonicalPath(destination, canonicalPath, "Texture2D") is { } existing)
         {
             return existing;
         }
+        var installed = FindCatalogCandidate(targetTextureCatalog, canonicalPath);
+        if (installed is not null)
+        {
+            if (HasImportedPackageAncestor(destination, canonicalPath))
+            {
+                return EnsureVerifiedTextureImport(destination, canonicalPath);
+            }
+            var occurrence = installed.EffectiveOccurrence;
+            return ExternalSkeletalMeshMaterializer.Materialize(
+                destination,
+                occurrence.PackagePath,
+                canonicalPath,
+                "Texture2D",
+                occurrence.ExportUIndex,
+                warnings);
+        }
+        foreach (var path in TargetDonorPaths(targetTemplatePackagePath))
+        {
+            if (!File.Exists(path) || SamePath(path, destination.FilePath)) continue;
+            var donor = donors.Open(path);
+            if (donor.Game != destination.Game)
+            {
+                continue;
+            }
+            var export = FindExportByCanonicalPath(donor, canonicalPath, "Texture2D")
+                         ?? FindUniqueExportByObjectName(donor, canonicalPath, "Texture2D");
+            if (export is null) continue;
+            return ExternalSkeletalMeshMaterializer.Materialize(
+                destination,
+                path,
+                canonicalPath,
+                "Texture2D",
+                export.UIndex,
+                warnings);
+        }
+        return null;
+    }
+
+    private static bool HasImportedPackageAncestor(IMEPackage destination, string canonicalPath)
+    {
         var segments = canonicalPath.Split('.');
+        var path = string.Empty;
+        foreach (var segment in segments.SkipLast(1))
+        {
+            path = path.Length == 0 ? segment : $"{path}.{segment}";
+            if (destination.FindEntry(path, "Package") is ImportEntry) return true;
+        }
+        return false;
+    }
+
+    private static IEntry EnsureVerifiedTextureImport(IMEPackage destination, string canonicalPath)
+    {
         IEntry? parent = null;
-        var currentPath = string.Empty;
+        var segments = canonicalPath.Split('.');
+        var path = string.Empty;
         for (var index = 0; index < segments.Length; index++)
         {
-            currentPath = index == 0 ? segments[index] : $"{currentPath}.{segments[index]}";
+            path = path.Length == 0 ? segments[index] : $"{path}.{segments[index]}";
             var className = index == segments.Length - 1 ? "Texture2D" : "Package";
-            parent = destination.FindEntry(currentPath, className) ?? destination.CreateImport(
-                className,
-                NameReference.FromInstancedString(segments[index]),
-                parent);
+            parent = destination.FindEntry(path, className) ?? (index == 0
+                ? destination.CreatePackageImport(NameReference.FromInstancedString(segments[index]))
+                : destination.CreateImport(
+                    className,
+                    NameReference.FromInstancedString(segments[index]),
+                    parent));
         }
         return parent!;
+    }
+
+    private static TextureCatalogCandidate? FindCatalogCandidate(
+        IReadOnlyList<TextureCatalogCandidate> candidates,
+        string requestedPath)
+    {
+        var exact = candidates.FirstOrDefault(candidate =>
+            candidate.InstancedPath.Equals(requestedPath, StringComparison.OrdinalIgnoreCase));
+        if (exact is not null) return exact;
+        var objectName = ObjectName(requestedPath);
+        var matches = candidates.Where(candidate =>
+            candidate.ObjectName.Equals(objectName, StringComparison.OrdinalIgnoreCase)).Take(2).ToArray();
+        return matches.Length == 1 ? matches[0] : null;
+    }
+
+    private static ExportEntry? FindUniqueExportByObjectName(
+        IMEPackage package,
+        string canonicalPath,
+        string className)
+    {
+        var objectName = ObjectName(canonicalPath);
+        var matches = package.Exports.Where(export =>
+            export.ClassName.Equals(className, StringComparison.OrdinalIgnoreCase) &&
+            export.ObjectName.Instanced.Equals(objectName, StringComparison.OrdinalIgnoreCase)).Take(2).ToArray();
+        return matches.Length == 1 ? matches[0] : null;
     }
 
     private static IEntry EmbedPackageStoredSourceTexture(
@@ -273,31 +377,32 @@ internal static class MorphFaceTextureTransferEngine
         MEGame sourceGame,
         string sourcePackagePath,
         string sourcePath,
+        IReadOnlyList<TextureCatalogCandidate> sourceTextureCatalog,
         DonorPackages donors,
         List<string> warnings)
     {
-        var sourceExport = ResolveSourceExport(sourceGame, sourcePackagePath, sourcePath, donors)
+        var sourceExport = ResolveSourceExport(
+                               sourceGame, sourcePackagePath, sourcePath, sourceTextureCatalog, donors)
                            ?? throw new InvalidDataException(
                                $"Source texture '{sourcePath}' could not be resolved from the installed {sourceGame} packages.");
         var sourceTexture = new Texture2D(sourceExport);
         var pixelFormat = Image.getPixelFormatType(sourceTexture.TextureFormat);
         var image = sourceTexture.ToImage(pixelFormat);
-        var parent = destination.FindExport("MFE_EmbeddedTextures", "Package")
-                     ?? destination.CreatePackageExport("MFE_EmbeddedTextures");
+        var parent = EnsureExportPackagePath(destination, sourcePath);
         var rop = new RelinkerOptionsPackage { ImportExportDependencies = true };
-        var issues = EntryImporter.ImportAndRelinkEntries(
-            EntryImporter.PortingOption.CloneAllDependencies,
-            sourceExport,
-            destination,
-            parent,
-            shouldRelink: true,
-            rop,
-            out var importedEntry);
-        warnings.AddRange(issues.Select(issue => issue.Message));
+        var importedEntry = EntryImporter.ImportExport(
+            destination, sourceExport, parent?.UIndex ?? 0, rop);
+        Relinker.RelinkAll(rop);
+        warnings.AddRange(rop.RelinkReport.Select(issue => issue.Message));
         if (importedEntry is not ExportEntry importedTexture ||
             !string.Equals(importedTexture.ClassName, "Texture2D", StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidDataException($"LEC did not embed source Texture2D '{sourcePath}'.");
+        }
+        if (!importedTexture.InstancedFullPath.Equals(sourcePath, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidDataException(
+                $"Embedded texture path changed from '{sourcePath}' to '{importedTexture.InstancedFullPath}'.");
         }
         var replacement = new Texture2D(importedTexture);
         warnings.AddRange(replacement.Replace(
@@ -310,10 +415,24 @@ internal static class MorphFaceTextureTransferEngine
         return importedTexture;
     }
 
+    private static ExportEntry? EnsureExportPackagePath(IMEPackage destination, string assetPath)
+    {
+        ExportEntry? parent = null;
+        var currentPath = string.Empty;
+        foreach (var segment in assetPath.Split('.').SkipLast(1))
+        {
+            currentPath = currentPath.Length == 0 ? segment : $"{currentPath}.{segment}";
+            parent = destination.FindExport(currentPath, "Package")
+                     ?? destination.CreatePackageExport(NameReference.FromInstancedString(segment), parent);
+        }
+        return parent;
+    }
+
     private static ExportEntry? ResolveSourceExport(
         MEGame sourceGame,
         string sourcePackagePath,
         string sourcePath,
+        IReadOnlyList<TextureCatalogCandidate> sourceTextureCatalog,
         DonorPackages donors)
     {
         if (File.Exists(sourcePackagePath))
@@ -325,12 +444,17 @@ internal static class MorphFaceTextureTransferEngine
                 return local;
             }
         }
-        var rootPackage = sourcePath.Split('.').FirstOrDefault();
-        var loadedFiles = MELoadedFiles.GetFilesLoadedInGame(sourceGame, forceUseCached: true);
-        if (!string.IsNullOrWhiteSpace(rootPackage) &&
-            loadedFiles.TryGetValue($"{rootPackage}.pcc", out var path))
+        var installed = FindCatalogCandidate(sourceTextureCatalog, sourcePath);
+        if (installed is not null && File.Exists(installed.EffectiveOccurrence.PackagePath))
         {
-            return FindExportByCanonicalPath(donors.Open(path), sourcePath, "Texture2D");
+            var package = donors.Open(installed.EffectiveOccurrence.PackagePath);
+            if (package.Game == sourceGame &&
+                package.IsUExport(installed.EffectiveOccurrence.ExportUIndex) &&
+                package.GetUExport(installed.EffectiveOccurrence.ExportUIndex) is { } indexed &&
+                indexed.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase))
+            {
+                return indexed;
+            }
         }
         return null;
     }

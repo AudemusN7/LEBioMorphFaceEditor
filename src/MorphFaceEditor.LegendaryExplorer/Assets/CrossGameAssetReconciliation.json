@@ -1,0 +1,5879 @@
+[
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Kaidan.HMM_HIR_Kaidan_MDL",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "EYE_Diff",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Eye.EYE_Diff",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Eye.EYE_Diff",
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "EYE_Iris_Norm",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Eye.EYE_Iris_Norm",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Eye.EYE_Iris_Norm",
+    "EvidenceCount": 5
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "EYE_Lens_Norm",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Eye.EYE_Lens_Norm",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Eye.EYE_Lens_Norm",
+    "EvidenceCount": 5
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "EYE_Mask",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Eye.EYE_Spec",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Eye.EYE_Spec",
+    "EvidenceCount": 5
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Afro.HMF_HIR_Afr_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 6
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Ashley.HMF_HED_PROAshley_Hair_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Classy.HMF_HIR_Cls_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cute.HMF_HIR_Cte_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 24
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cyberbabe.HMF_HIR_Cyb_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.HighBun.HMF_HIR_Hbn_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 15
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.LowBun.HMF_HIR_Lbn_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.MidBun.HMF_HIR_Mbn_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Mom.HMF_HIR_Mom_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 15
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Sexy.HMF_HIR_Sxy_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 6
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Short02.HMF_HIR_PROShort_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Mask",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Afro.HMF_HIR_Afr_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Mask",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Classy.HMF_HIR_Cls_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Mask",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cute.HMF_HIR_Cte_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 5
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Mask",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cyberbabe.HMF_HIR_Cyb_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Mask",
+    "SourcePath": "BIOG_HMF_HIR_PRO.HighBun.HMF_HIR_Hbn_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 14
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Mask",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Mom.HMF_HIR_Mom_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Mask",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Sexy.HMF_HIR_Sxy_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Mask",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Short02.HMF_HIR_PROShort_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Afro.HMF_HIR_Afr_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 6
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Ashley.HMF_HED_PROAshley_Hair_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Classy.HMF_HIR_Cls_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cute.HMF_HIR_Cte_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 24
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cyberbabe.HMF_HIR_Cyb_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.HighBun.HMF_HIR_Hbn_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 14
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.LowBun.HMF_HIR_Lbn_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.MidBun.HMF_HIR_Mbn_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Mom.HMF_HIR_Mom_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 15
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Sexy.HMF_HIR_Sxy_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 6
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Short02.HMF_HIR_PROShort_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "Hair_Spec",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Afro.HMF_HIR_Afr_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "Hair_Spec",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Classy.HMF_HIR_Cls_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "Hair_Spec",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cute.HMF_HIR_Cte_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 6
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "Hair_Spec",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cyberbabe.HMF_HIR_Cyb_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "Hair_Spec",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Mom.HMF_HIR_Mom_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "Hair_Spec",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Sexy.HMF_HIR_Sxy_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "Hair_Spec",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Short02.HMF_HIR_PROShort_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_SpecShift",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Afro.HMF_HIR_Afr_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_SpecShift",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Classy.HMF_HIR_Cls_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_SpecShift",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cute.HMF_HIR_Cte_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 16
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_SpecShift",
+    "SourcePath": "BIOG_HMF_HIR_PRO.HighBun.HMF_HIR_Hbn_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_SpecShift",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Human.HMF_HIR_PROAll_SpecShift",
+    "TargetPath": null,
+    "EvidenceCount": 24
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_SpecShift",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Mom.HMF_HIR_Mom_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 12
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_SpecShift",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Sexy.HMF_HIR_Sxy_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_SpecShift",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Short02.HMF_HIR_PROShort_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_SpecShift",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Human.HMM_HIR_PROAll_SpecShift",
+    "TargetPath": null,
+    "EvidenceCount": 61
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_SpecShift2",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cute.HMF_HIR_Cte_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_SpecShift2",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Human.HMF_HIR_PROAll_SpecShift",
+    "TargetPath": null,
+    "EvidenceCount": 25
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_SpecShift2",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Mom.HMF_HIR_Mom_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_SpecShift2",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Human.HMM_HIR_PROAll_SpecShift",
+    "TargetPath": null,
+    "EvidenceCount": 35
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Afro.HMF_HIR_Afr_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 6
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Classy.HMF_HIR_Cls_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cute.HMF_HIR_Cte_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 23
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cyberbabe.HMF_HIR_Cyb_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.HighBun.HMF_HIR_Hbn_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 14
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.LowBun.HMF_HIR_Lbn_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.MidBun.HMF_HIR_Mbn_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Mom.HMF_HIR_Mom_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 14
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Sexy.HMF_HIR_Sxy_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 6
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Short02.HMF_HIR_PROShort_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Addn",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Beard.HMM_HED_PRO_Add1",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Beard.HMM_HED_PRO_Add1",
+    "EvidenceCount": 49
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Addn",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Beard.HMM_HED_PRO_Add2",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Beard.HMM_HED_PRO_Add2",
+    "EvidenceCount": 17
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Addn",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Beard.HMM_HED_PRO_Add3",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Beard.HMM_HED_PRO_Add3",
+    "EvidenceCount": 80
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Addn",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Beard.HMM_HED_PRO_Add4",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Beard.HMM_HED_PRO_Add4",
+    "EvidenceCount": 26
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Addn",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Scars.HMM_HED_PRO_Scr1",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Scars.HMM_HED_PRO_Scr1",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Addn",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Scars.HMM_HED_PRO_Scr2",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Scars.HMM_HED_PRO_Scr2",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Addn",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Scars.HMM_HED_PRO_Scr3",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Scars.HMM_HED_PRO_Scr3",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Diff",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Diffuse.HMM_HED_PROBase_Face_Diff_Stack",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Diffuse.HMM_HED_PROBase_Face_Diff_Stack",
+    "EvidenceCount": 55
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Diff",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Diffuse.HMM_HED_PROOld1_Face_Diff_Stack",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Diffuse.HMM_HED_PROOld1_Face_Diff_Stack",
+    "EvidenceCount": 44
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Diff",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Diffuse.HMM_HED_PROOld2_Face_Diff_Stack",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Diffuse.HMM_HED_PROOld2_Face_Diff_Stack",
+    "EvidenceCount": 43
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Diff",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Joker.HMM_HED_PROJoker_Face_Diff_Stack",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Joker.HMM_HED_PROJoker_Face_Diff_Stack",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Diff",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Kaiden.HMM_HED_PROKaiden_Face_Diff_Stack",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Kaiden.HMM_HED_PROKaiden_Face_Diff_Stack",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Frek",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Freckles.HMM_HED_PROBase_Face_Frk1",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Freckles.HMM_HED_PROBase_Face_Frk1",
+    "EvidenceCount": 80
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Frek",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Freckles.HMM_HED_PROBase_Face_Frk2",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Freckles.HMM_HED_PROBase_Face_Frk2",
+    "EvidenceCount": 36
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Frek",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Freckles.HMM_HED_PROBase_Face_Frk3",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Freckles.HMM_HED_PROBase_Face_Frk3",
+    "EvidenceCount": 21
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Frek",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Freckles.HMM_HED_PROBase_Face_Frk4",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Freckles.HMM_HED_PROBase_Face_Frk4",
+    "EvidenceCount": 22
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Frek",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Freckles.HMM_HED_PROBase_Face_Frk5",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Freckles.HMM_HED_PROBase_Face_Frk5",
+    "EvidenceCount": 17
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Mask",
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.Masks.HMF_HED_PRO_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 41
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Mask",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Masks.HED_PRO_MASK1",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Masks.HED_PRO_MASK1",
+    "EvidenceCount": 133
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Mask",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Masks.HED_PRO_Mask2",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Masks.HED_PRO_Mask2",
+    "EvidenceCount": 42
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Mask",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Masks.HED_PRO_Mask3",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Masks.HED_PRO_Mask3",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Norm",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Joker.HMM_HED_PROJoker_Face_Norm_Stack",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Joker.HMM_HED_PROJoker_Face_Norm_Stack",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Norm",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Kaiden.HMM_HED_PROKaiden_Face_Norm_Stack",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Kaiden.HMM_HED_PROKaiden_Face_Norm_Stack",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Norm",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Normal.HMM_HED_PROBase_Face_Norm_Stack",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Normal.HMM_HED_PROBase_Face_Norm_Stack",
+    "EvidenceCount": 150
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Norm_02",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Normal.HMM_HED_PROAsnOld_Face_Norm_Stack",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Normal.HMM_HED_PROAsnOld_Face_Norm_Stack",
+    "EvidenceCount": 61
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Norm_02",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Normal.HMM_HED_PROCauOld_Face_Norm_Stack",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Normal.HMM_HED_PROCauOld_Face_Norm_Stack",
+    "EvidenceCount": 78
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Diffuse.HMM_HED_PROBald_Scalp_Diff_Stack",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Diffuse.HMM_HED_PROBald_Scalp_Diff_Stack",
+    "EvidenceCount": 15
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Diffuse.HMM_HED_PROBase_Scalp_Diff_Stack",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Diffuse.HMM_HED_PROBase_Scalp_Diff_Stack",
+    "EvidenceCount": 50
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Joker.HMM_HED_PROJoker_Scalp_Diff_Stack",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Joker.HMM_HED_PROJoker_Scalp_Diff_Stack",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Kaiden.HMM_HED_PROKaiden_Scalp_Diff_Stack",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Kaiden.HMM_HED_PROKaiden_Scalp_Diff_Stack",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.TheSlick.HMM_HIR_Slk_Diff",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.TheSlick_0.HMM_HIR_Slk_Diff",
+    "EvidenceCount": 5
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Joker.HMM_HED_PROJoker_Scalp_Norm_Stack",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Joker.HMM_HED_PROJoker_Scalp_Norm_Stack",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Kaiden.HMM_HED_PROKaiden_Scalp_Norm_Stack",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Kaiden.HMM_HED_PROKaiden_Scalp_Norm_Stack",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Normal.HMM_HED_PROBald_Scalp_Norm_Stack",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Normal.HMM_HED_PROBald_Scalp_Norm_Stack",
+    "EvidenceCount": 15
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Normal.HMM_HED_PROBase_Scalp_Norm_Stack",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Normal.HMM_HED_PROBase_Scalp_Norm_Stack",
+    "EvidenceCount": 82
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.TheSlick.HMM_HIR_Slk_Norm",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.TheSlick_0.HMM_HIR_Slk_Norm",
+    "EvidenceCount": 5
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Kaiden.HMM_HED_PROKaiden_Scalp_Mask",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Kaiden.HMM_HED_PROKaiden_Scalp_Mask",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.TheSlick.HMM_HIR_Slk_Mask",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.TheSlick_0.HMM_HIR_Slk_Mask",
+    "EvidenceCount": 5
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_SpecShift",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Human.HMM_HIR_PROAll_SpecShift",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Human_0.HMM_HIR_PROAll_SpecShift",
+    "EvidenceCount": 35
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_SpecShift2",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Human.HMM_HIR_PROAll_SpecShift",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Human_0.HMM_HIR_PROAll_SpecShift",
+    "EvidenceCount": 35
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Kaiden.HMM_HED_PROKaiden_Scalp_Tang_Stack",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Kaiden.HMM_HED_PROKaiden_Scalp_Tang_Stack",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.TheSlick.HMM_HIR_Slk_Tang",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.TheSlick_0.HMM_HIR_Slk_Tang",
+    "EvidenceCount": 5
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "KRO_EYE_Lens_Norm",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Eye.EYE_Lens_Norm",
+    "TargetPath": "BIOG_HMM_HED_PROMorph_R.Eye.EYE_Lens_Norm",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "nA",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Short02.HMM_HIR_PROShort02_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "nA",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Short03.HMM_HIR_PROShort03_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "None",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Human.HMF_HIR_PROAll_SpecShift",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "None",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Human.HMM_HIR_PROAll_SpecShift",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HIR_PRO.Afro.HMF_HIR_Afr_MDL",
+    "TargetPath": "biog_hmf_hir_pro.Hair_Afro.HMF_HIR_Afr_MDL",
+    "EvidenceCount": 6
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HIR_PRO.Ashley.HMF_HIR_PROAshley_MDL",
+    "TargetPath": "biog_hmf_hir_pro.Hair_PROAshley.HMF_HIR_PROAshley_MDL",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cap.HMF_HAT_Cap_MDL",
+    "TargetPath": "biog_hmf_hir_pro.Hat_Cap.HMF_HAT_Cap_MDL",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HIR_PRO.Classy.HMF_HIR_Cls_MDL",
+    "TargetPath": "biog_hmf_hir_pro.Hair_Classy.HMF_HIR_Cls_MDL",
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cosmo.HMF_HAT_Cos_MDL",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cute.HMF_HIR_Cte_MDL",
+    "TargetPath": "biog_hmf_hir_pro.Hair_Cute.HMF_HIR_Cte_MDL",
+    "EvidenceCount": 24
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cyberbabe.HMF_HIR_Cyb_MDL",
+    "TargetPath": "biog_hmf_hir_pro.Hair_Cyberbabe.HMF_HIR_Cyb_MDL",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HIR_PRO.HighBun.HMF_HIR_Hbn_MDL",
+    "TargetPath": "biog_hmf_hir_pro.Hair_HighBun.HMF_HIR_Hbn_MDL",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HIR_PRO.Mom.HMF_HIR_Mom_MDL",
+    "TargetPath": "biog_hmf_hir_pro.Hair_Mom.HMF_HIR_Mom_MDL",
+    "EvidenceCount": 15
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HIR_PRO.PROCustomSexy.HMF_HIR_PROCustom_Sexy_MDL",
+    "TargetPath": "biog_hmf_hir_pro.Hair_PROCustomSexy.HMF_HIR_PROCustom_Sexy_MDL",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HIR_PRO.Sexy.HMF_HIR_Sxy_MDL",
+    "TargetPath": "biog_hmf_hir_pro.Hair_Sexy.HMF_HIR_Sxy_MDL",
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HIR_PRO.Short02.HMF_HIR_PROShort_MDL",
+    "TargetPath": "biog_hmf_hir_pro.Hair_Short02.HMF_HIR_PROShort_MDL",
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Beanie01.HMM_HAT_Bn1_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hat_Beanie01.HMM_HAT_Bn1_MDL",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Beret.HMM_HAT_Brt_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hat_Beret.HMM_HAT_Brt_MDL",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.GlassesHalf.HMM_HAT_GLH_MDL",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Kaidan.HMM_HIR_Kaidan_MDL",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Moto.HMM_HAT_MTR_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hat_Moto.HMM_HAT_MTR_MDL",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Officer.HMM_HAT_Off_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hat_Officer.HMM_HAT_Off_MDL",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.RollinsSpike.HMM_HIR_Rsk_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_RollinsSpike.HMM_HIR_Rsk_MDL",
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Short01.HMM_HIR_PROShort01_MDL",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Short02.HMM_HIR_PROShort02_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Short02.HMM_HIR_PROShort02_MDL",
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Other",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HIR_PRO.Beanie.HMF_HAT_Bn1_MDL",
+    "TargetPath": "biog_hmf_hir_pro.Hat_Beanie.HMF_HAT_Bn1_MDL",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Other",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cap.HMF_HAT_Cap_MDL",
+    "TargetPath": "biog_hmf_hir_pro.Hat_Cap.HMF_HAT_Cap_MDL",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Other",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HIR_PRO.HighBun.HMF_HIR_Hbn_MDL",
+    "TargetPath": "biog_hmf_hir_pro.Hair_HighBun.HMF_HIR_Hbn_MDL",
+    "EvidenceCount": 14
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Other",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HIR_PRO.LowBun.HMF_HIR_Lbn_MDL",
+    "TargetPath": "biog_hmf_hir_pro.Hair_LowBun.HMF_HIR_Lbn_MDL",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Other",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HIR_PRO.MidBun.HMF_HIR_Mbn_MDL",
+    "TargetPath": "biog_hmf_hir_pro.Hair_MidBun.HMF_HIR_Mbn_MDL",
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Other",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HIR_PRO.Moto.HMF_HAT_MTR_MDL",
+    "TargetPath": "biog_hmf_hir_pro.Hat_Moto.HMF_HAT_MTR_MDL",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Other",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Beret.HMM_HAT_Brt_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hat_Beret.HMM_HAT_Brt_MDL",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Other",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Cap.HMM_HAT_Cap_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hat_Cap.HMM_HAT_Cap_MDL",
+    "EvidenceCount": 7
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Other",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Cuban.HMM_HAT_Cub_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hat_Cuban.HMM_HAT_Cub_MDL",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Other",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.GlassesFull.HMM_HAT_Glf_MDL",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Other",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Moto.HMM_HAT_MTR_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hat_Moto.HMM_HAT_MTR_MDL",
+    "EvidenceCount": 8
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Other",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.MotoGlasses.HMM_HAT_MTG_MDL",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Other",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Officer.HMM_HAT_Off_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hat_Officer.HMM_HAT_Off_MDL",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Other",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Visor.HMM_HAT_VSR_MDL",
+    "TargetPath": null,
+    "EvidenceCount": 7
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "ASA_HED_Diff",
+    "SourcePath": "BIOG_ASA_HED_PROMorph_R.Liara.ASA_HED_PROLiara_Diff_Stack",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "ASA_HED_Norm",
+    "SourcePath": "BIOG_ASA_HED_PROMorph_R.NORM.ASA_HED_PRO_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Afro.HMF_HIR_Afr_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 6
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Ashley.HMF_HED_PROAshley_Hair_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Classy.HMF_HIR_Cls_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cute.HMF_HIR_Cte_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 24
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cyberbabe.HMF_HIR_Cyb_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.HighBun.HMF_HIR_Hbn_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 15
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.LowBun.HMF_HIR_Lbn_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.MidBun.HMF_HIR_Mbn_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Mom.HMF_HIR_Mom_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 15
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Sexy.HMF_HIR_Sxy_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 6
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Short02.HMF_HIR_PROShort_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Mask",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Afro.HMF_HIR_Afr_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Mask",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Classy.HMF_HIR_Cls_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Mask",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cute.HMF_HIR_Cte_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 5
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Mask",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cyberbabe.HMF_HIR_Cyb_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Mask",
+    "SourcePath": "BIOG_HMF_HIR_PRO.HighBun.HMF_HIR_Hbn_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 14
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Mask",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Mom.HMF_HIR_Mom_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Mask",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Sexy.HMF_HIR_Sxy_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Mask",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Short02.HMF_HIR_PROShort_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Afro.HMF_HIR_Afr_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 6
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Ashley.HMF_HED_PROAshley_Hair_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Classy.HMF_HIR_Cls_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cute.HMF_HIR_Cte_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 24
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cyberbabe.HMF_HIR_Cyb_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.HighBun.HMF_HIR_Hbn_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 14
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.LowBun.HMF_HIR_Lbn_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.MidBun.HMF_HIR_Mbn_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Mom.HMF_HIR_Mom_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 15
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Sexy.HMF_HIR_Sxy_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 6
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Short02.HMF_HIR_PROShort_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "Hair_Spec",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Afro.HMF_HIR_Afr_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "Hair_Spec",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Classy.HMF_HIR_Cls_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "Hair_Spec",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cute.HMF_HIR_Cte_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 6
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "Hair_Spec",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cyberbabe.HMF_HIR_Cyb_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "Hair_Spec",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Mom.HMF_HIR_Mom_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "Hair_Spec",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Sexy.HMF_HIR_Sxy_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "Hair_Spec",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Short02.HMF_HIR_PROShort_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_SpecShift",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Afro.HMF_HIR_Afr_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_SpecShift",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Classy.HMF_HIR_Cls_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_SpecShift",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cute.HMF_HIR_Cte_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 16
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_SpecShift",
+    "SourcePath": "BIOG_HMF_HIR_PRO.HighBun.HMF_HIR_Hbn_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_SpecShift",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Human.HMF_HIR_PROAll_SpecShift",
+    "TargetPath": null,
+    "EvidenceCount": 24
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_SpecShift",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Mom.HMF_HIR_Mom_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 12
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_SpecShift",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Sexy.HMF_HIR_Sxy_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_SpecShift",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Short02.HMF_HIR_PROShort_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_SpecShift",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Human.HMM_HIR_PROAll_SpecShift",
+    "TargetPath": null,
+    "EvidenceCount": 61
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_SpecShift2",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cute.HMF_HIR_Cte_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_SpecShift2",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Human.HMF_HIR_PROAll_SpecShift",
+    "TargetPath": null,
+    "EvidenceCount": 25
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_SpecShift2",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Mom.HMF_HIR_Mom_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_SpecShift2",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Human.HMM_HIR_PROAll_SpecShift",
+    "TargetPath": null,
+    "EvidenceCount": 35
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Afro.HMF_HIR_Afr_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 6
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Classy.HMF_HIR_Cls_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cute.HMF_HIR_Cte_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 23
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cyberbabe.HMF_HIR_Cyb_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.HighBun.HMF_HIR_Hbn_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 14
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.LowBun.HMF_HIR_Lbn_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.MidBun.HMF_HIR_Mbn_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Mom.HMF_HIR_Mom_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 14
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Sexy.HMF_HIR_Sxy_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 6
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Short02.HMF_HIR_PROShort_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Diff",
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.PROAshley.HMF_HED_PROAshley_Face_Diff_Stack",
+    "TargetPath": "BIOG_HMF_HED_PROMorph_R.PROAshley.Textures.HMF_HED_PROAshley_Face_Diff",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Diff",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Kaiden.HMM_HED_PROKaiden_Face_Diff_Stack",
+    "TargetPath": "BIOG_HMM_HED_PROMorph.Kaiden.HMM_HED_PROKaiden_Face_Diff",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Mask",
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.Masks.HMF_HED_PRO_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 41
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Norm",
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.PROAshley.HMF_HED_PROAshley_Face_Norm_Stack",
+    "TargetPath": "BIOG_HMF_HED_PROMorph_R.PROAshley.Textures.HMF_HED_PROAshley_Face_Norm",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Norm",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Kaiden.HMM_HED_PROKaiden_Face_Norm_Stack",
+    "TargetPath": "BIOG_HMM_HED_PROMorph.Kaiden.HMM_HED_PROKaiden_Face_Norm",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Norm_02",
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.PROSheppard.HMF_HED_PROSheppard_Face_Norm_Stack",
+    "TargetPath": "BIOG_HMF_HED_PROMorph_R.PROShepard.HMF_HED_PROSheppard_Face_Norm_Stack",
+    "EvidenceCount": 6
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Pulled.HMF_HIR_SCP_Pll_Diff",
+    "TargetPath": "biog_hmf_hir_pro.Hair_Pulled.HMF_HIR_SCP_Pll_Diff",
+    "EvidenceCount": 10
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Sarge.HMF_HIR_Sar_Diff",
+    "TargetPath": "biog_hmf_hir_pro.Hair_Sarge.HMF_HIR_Sar_Diff",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Kaiden.HMM_HED_PROKaiden_Scalp_Diff_Stack",
+    "TargetPath": "BIOG_HMM_HED_PROMorph.Kaiden.HMM_HED_PROKaiden_Scalp_Diff",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.BaldWillis.HMM_HIR_Wls_Diff",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_BaldWillis.HMM_HIR_Wls_Diff",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.CrewCut.HMM_HIR_Cru_Diff",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_CrewCut.HMM_HIR_Cru_Diff",
+    "EvidenceCount": 32
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Formal.HMM_HIR_For_Diff",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Formal.HMM_HIR_For_Diff",
+    "EvidenceCount": 7
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Geezer.HMM_HIR_Gez_Diff",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Geezer.HMM_HIR_Gez_Diff",
+    "EvidenceCount": 12
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Sarge.HMM_HIR_Sar_Diff",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Sarge.HMM_HIR_Sar_Diff",
+    "EvidenceCount": 14
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.TheAfro.HMM_HIR_Afr_Diff",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Afro.HMM_HIR_Afr_Diff",
+    "EvidenceCount": 12
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.TheRollins.HMM_HIR_Rol_Diff",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Willis.HMM_HIR_Wil_Diff",
+    "EvidenceCount": 20
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.TheSlick.HMM_HIR_Slk_Diff",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Slick.HMM_HIR_Slk_Diff",
+    "EvidenceCount": 5
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.TheWillis.HMM_HIR_Wil_Diff",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Willis.HMM_HIR_Wil_Diff",
+    "EvidenceCount": 9
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.PROAshley.HMF_HED_PROAshley_Scalp_Norm_Stack",
+    "TargetPath": "biog_hmf_hir_pro.Hair_CrewCut.HMF_HIR_Cru_Norm",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Pulled.HMF_HIR_SCP_Pll_Norm",
+    "TargetPath": "biog_hmf_hir_pro.Hair_Pulled.HMF_HIR_SCP_Pll_Norm",
+    "EvidenceCount": 10
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Sarge.HMF_HIR_Sar_Norm",
+    "TargetPath": "biog_hmf_hir_pro.Hair_Sarge.HMF_HIR_Sar_Norm",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Kaiden.HMM_HED_PROKaiden_Scalp_Norm_Stack",
+    "TargetPath": "BIOG_HMM_HED_PROMorph.Kaiden.HMM_HED_PROKaiden_Scalp_Norm",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.BaldWillis.HMM_HIR_Wls_Norm",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_BaldWillis.HMM_HIR_Wls_Norm",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Formal.HMM_HIR_For_Norm",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Formal.HMM_HIR_For_Norm",
+    "EvidenceCount": 7
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Geezer.HMM_HIR_Gez_Norm",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Geezer.HMM_HIR_Gez_Norm",
+    "EvidenceCount": 12
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Sarge.HMM_HIR_Sar_Norm",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Sarge.HMM_HIR_Sar_Norm",
+    "EvidenceCount": 14
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.TheAfro.HMM_HIR_Afr_Norm",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Afro.HMM_HIR_Afr_Norm",
+    "EvidenceCount": 12
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.TheRollins.HMM_HIR_Rol_Norm",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Rollins.HMM_HIR_Rol_Norm",
+    "EvidenceCount": 20
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.TheSlick.HMM_HIR_Slk_Norm",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Slick.HMM_HIR_Slk_Norm",
+    "EvidenceCount": 5
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.TheWillis.HMM_HIR_Wil_Norm",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Willis.HMM_HIR_Wil_Norm",
+    "EvidenceCount": 9
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Pulled.HMF_HIR_SCP_Pll_Mask",
+    "TargetPath": "biog_hmf_hir_pro.Hair_Pulled.HMF_HIR_SCP_Pll_Mask",
+    "EvidenceCount": 10
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Kaiden.HMM_HED_PROKaiden_Scalp_Mask",
+    "TargetPath": "BIOG_Humanoid_MASTER_MTR_R.GBL_ARM_ALL_Black",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.BaldWillis.HMM_HIR_Wls_Mask",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_BaldWillis.HMM_HIR_Wls_Mask",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.CrewCut.HMM_HIR_Cru_Mask",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_CrewCut.HMM_HIR_Cru_Mask",
+    "EvidenceCount": 32
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Formal.HMM_HIR_For_Mask",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Formal.HMM_HIR_For_Mask",
+    "EvidenceCount": 7
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Geezer.HMM_HIR_Gez_Mask",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Geezer.HMM_HIR_Gez_Mask",
+    "EvidenceCount": 12
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Sarge.HMM_HIR_Sar_Mask",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Sarge.HMM_HIR_Sar_Mask",
+    "EvidenceCount": 14
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.TheAfro.HMM_HIR_Afr_Mask",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Afro.HMM_HIR_Afr_Mask",
+    "EvidenceCount": 12
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.TheRollins.HMM_HIR_Rol_Mask",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Rollins.HMM_HIR_Rol_Mask",
+    "EvidenceCount": 20
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.TheSlick.HMM_HIR_Slk_Mask",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Slick.HMM_HIR_Slk_Mask",
+    "EvidenceCount": 5
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.TheWillis.HMM_HIR_Wil_Mask",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Willis.HMM_HIR_Wil_Mask",
+    "EvidenceCount": 8
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_Humanoid_MASTER_MTR_R.GBL_ARM_ALL_White",
+    "TargetPath": "BIOG_Humanoid_MASTER_MTR_R.GBL_ARM_ALL_Black",
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_SpecShift",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Human.HMF_HIR_PROAll_SpecShift",
+    "TargetPath": null,
+    "EvidenceCount": 25
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_SpecShift",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Human.HMM_HIR_PROAll_SpecShift",
+    "TargetPath": null,
+    "EvidenceCount": 35
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_SpecShift",
+    "SourcePath": "BIOG_Humanoid_MASTER_MTR_R.GBL_ARM_ALL_White",
+    "TargetPath": null,
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_SpecShift2",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Human.HMF_HIR_PROAll_SpecShift",
+    "TargetPath": null,
+    "EvidenceCount": 25
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_SpecShift2",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Human.HMM_HIR_PROAll_SpecShift",
+    "TargetPath": null,
+    "EvidenceCount": 35
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Pulled.HMF_HIR_SCP_Pll_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 10
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Kaiden.HMM_HED_PROKaiden_Scalp_Tang_Stack",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Formal.HMM_HIR_For_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 7
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Geezer.HMM_HIR_Gez_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 12
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Sarge.HMM_HIR_Sar_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 14
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.TheAfro.HMM_HIR_Afr_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 12
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.TheRollins.HMM_HIR_Rol_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 20
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.TheSlick.HMM_HIR_Slk_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 5
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.TheWillis.HMM_HIR_Wil_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 7
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "BIOG_Humanoid_MASTER_MTR_R.GBL_ARM_ALL_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "KRO_EYE_Diff",
+    "SourcePath": "BIOG_KRO_HED_PROMorph._Eye.KRO_HED_PRO_Eye_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "KRO_EYE_Iris_Norm",
+    "SourcePath": "BIOG_KRO_HED_PROMorph._Eye.KRO_HED_PRO_Eye_Iris_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "KRO_Eye_Mask",
+    "SourcePath": "BIOG_KRO_HED_PROMorph._Eye.KRO_HED_PRO_Eye_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "KRO_Eye_Spec",
+    "SourcePath": "BIOG_KRO_HED_PROMorph._Eye.KRO_HED_PRO_Eye_Spec",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "KRO_HED_Addn",
+    "SourcePath": "BIOG_KRO_HED_PROMorph.Base.KRO_HED_ALL_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "KRO_HED_Diff",
+    "SourcePath": "BIOG_KRO_HED_PROMorph.Wrex.KRO_HED_PROWrex_Diff",
+    "TargetPath": "BIOG_KRO_HED_PROMorph.PROWrex.Textures.KRO_HED_PROWrex_Diff",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "KRO_HED_Mask",
+    "SourcePath": "BIOG_KRO_HED_PROMorph.Base.KRO_HED_ALL_Black",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "KRO_HED_Norm",
+    "SourcePath": "BIOG_KRO_HED_PROMorph.Wrex.KRO_HED_PROWrex_Norm",
+    "TargetPath": "BIOG_KRO_HED_PROMorph.PROWrex.Textures.KRO_HED_PROWrex_Norm",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "KRO_HED_Tint",
+    "SourcePath": "BIOG_KRO_HED_PROMorph.Wrex.KRO_HED_PROWrex_Spec",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "KRO_HED_Tnt2",
+    "SourcePath": "BIOG_KRO_HED_PROMorph.Base.KRO_HED_ALL_Black",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "nA",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Short02.HMM_HIR_PROShort02_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "nA",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Short03.HMM_HIR_PROShort03_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "None",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Human.HMF_HIR_PROAll_SpecShift",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "None",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Human.HMM_HIR_PROAll_SpecShift",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "EYE_Lens_Norm",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Eye.EYE_Lens_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 8
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Afro.HMF_HIR_Afr_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 9
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Ashley.HMF_HED_PROAshley_Hair_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Classy.HMF_HIR_Cls_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 12
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cute.HMF_HIR_Cte_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 17
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cyberbabe.HMF_HIR_Cyb_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.HighBun.HMF_HIR_Hbn_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 10
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.LowBun.HMF_HIR_Lbn_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.MidBun.HMF_HIR_Mbn_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Mom.HMF_HIR_Mom_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 10
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.PonyTail.HMF_HIR_Ptl_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Sexy.HMF_HIR_Sxy_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Short02.HMF_HIR_PROShort_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Mask",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Classy.HMF_HIR_Cls_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Mask",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cute.HMF_HIR_Cte_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 8
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Mask",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cyberbabe.HMF_HIR_Cyb_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Mask",
+    "SourcePath": "BIOG_HMF_HIR_PRO.GBL_HMF_HIR_White",
+    "TargetPath": null,
+    "EvidenceCount": 34
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Mask",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Mom.HMF_HIR_Mom_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Mask",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Sexy.HMF_HIR_Sxy_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Mask",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Short02.HMF_HIR_PROShort_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Afro.HMF_HIR_Afr_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 9
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Ashley.HMF_HED_PROAshley_Hair_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Classy.HMF_HIR_Cls_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 12
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cute.HMF_HIR_Cte_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 16
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cyberbabe.HMF_HIR_Cyb_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.HighBun.HMF_HIR_Hbn_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 10
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.LowBun.HMF_HIR_Lbn_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.MidBun.HMF_HIR_Mbn_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Mom.HMF_HIR_Mom_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 10
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.PonyTail.HMF_HIR_Ptl_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Sexy.HMF_HIR_Sxy_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Short02.HMF_HIR_PROShort_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_SpecShift",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Human.HMF_HIR_PROAll_SpecShift",
+    "TargetPath": null,
+    "EvidenceCount": 13
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_SpecShift",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Human.HMM_HIR_PROAll_SpecShift",
+    "TargetPath": null,
+    "EvidenceCount": 80
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_SpecShift2",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Human.HMF_HIR_PROAll_SpecShift",
+    "TargetPath": null,
+    "EvidenceCount": 6
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_SpecShift2",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Human.HMM_HIR_PROAll_SpecShift",
+    "TargetPath": null,
+    "EvidenceCount": 22
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Afro.HMF_HIR_Afr_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 9
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Classy.HMF_HIR_Cls_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 12
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cute.HMF_HIR_Cte_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 16
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cyberbabe.HMF_HIR_Cyb_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.HighBun.HMF_HIR_Hbn_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 10
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.LowBun.HMF_HIR_Lbn_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.MidBun.HMF_HIR_Mbn_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Mom.HMF_HIR_Mom_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 10
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.PonyTail.HMF_HIR_Ptl_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Sexy.HMF_HIR_Sxy_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Short02.HMF_HIR_PROShort_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Diff",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Jacob.HMM_HED_PROJacob_Face_Diff_Stack",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Frek",
+    "SourcePath": "bioapl_veh_hovercar01.GBL_ARM_ALL_White",
+    "TargetPath": "BIOG_Humanoid_MASTER_MTR_R.GBL_ARM_ALL_White",
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Mask",
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.Masks.HMF_HED_PRO_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 6
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Mask",
+    "SourcePath": "BIOG_Humanoid_MASTER_MTR_R.GBL_ARM_ALL_Black",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Norm",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Jacob.HMM_HED_PROJacob_Face_Norm_Stack",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Norm_02",
+    "SourcePath": "bioapl_veh_hovercar01.GBL_ARM_ALL_Norm",
+    "TargetPath": "BIOG_Humanoid_MASTER_MTR_R.GBL_ARM_ALL_Norm",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Jacob.HMM_HED_PROJacob_Scalp_Diff_Stack",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Jacob.HMM_HED_PROJacob_Scalp_Norm_Stack",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scar",
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.Scars.HMF_HED_PROCustom_Scr10",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "bioapl_veh_hovercar01.GBL_ARM_ALL_Norm",
+    "TargetPath": "BIOG_Humanoid_MASTER_MTR_R.GBL_ARM_ALL_Norm",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "nA",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Short02.HMM_HIR_PROShort02_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 6
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "nA",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Short03.HMM_HIR_PROShort03_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HIR_PRO.Afro.HMF_HIR_Afr_MDL",
+    "TargetPath": "biog_hmf_hir_pro.Hair_Afro.HMF_HIR_Afr_MDL",
+    "EvidenceCount": 10
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HIR_PRO.Ashley.HMF_HIR_PROAshley_MDL",
+    "TargetPath": "biog_hmf_hir_pro.Hair_PROAshley.HMF_HIR_PROAshley_MDL",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HIR_PRO.Classy.HMF_HIR_Cls_MDL",
+    "TargetPath": "biog_hmf_hir_pro.Hair_Classy.HMF_HIR_Cls_MDL",
+    "EvidenceCount": 14
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cute.HMF_HIR_Cte_MDL",
+    "TargetPath": "biog_hmf_hir_pro.Hair_Cute.HMF_HIR_Cte_MDL",
+    "EvidenceCount": 20
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cyberbabe.HMF_HIR_Cyb_MDL",
+    "TargetPath": "biog_hmf_hir_pro.Hair_Cyberbabe.HMF_HIR_Cyb_MDL",
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HIR_PRO.HighBun.HMF_HIR_Hbn_MDL",
+    "TargetPath": "biog_hmf_hir_pro.Hair_HighBun.HMF_HIR_Hbn_MDL",
+    "EvidenceCount": 5
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HIR_PRO.LowBun.HMF_HIR_Lbn_MDL",
+    "TargetPath": "biog_hmf_hir_pro.Hair_LowBun.HMF_HIR_Lbn_MDL",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HIR_PRO.MidBun.HMF_HIR_Mbn_MDL",
+    "TargetPath": "biog_hmf_hir_pro.Hair_MidBun.HMF_HIR_Mbn_MDL",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HIR_PRO.Mom.HMF_HIR_Mom_MDL",
+    "TargetPath": "biog_hmf_hir_pro.Hair_Mom.HMF_HIR_Mom_MDL",
+    "EvidenceCount": 13
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HIR_PRO.PROCustomSexy.HMF_HIR_PROCustom_Sexy_MDL",
+    "TargetPath": "biog_hmf_hir_pro.Hair_PROCustomSexy.HMF_HIR_PROCustom_Sexy_MDL",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HIR_PRO.Sexy.HMF_HIR_Sxy_MDL",
+    "TargetPath": "biog_hmf_hir_pro.Hair_Sexy.HMF_HIR_Sxy_MDL",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HIR_PRO.Short02.HMF_HIR_PROShort_MDL",
+    "TargetPath": "biog_hmf_hir_pro.Hair_Short02.HMF_HIR_PROShort_MDL",
+    "EvidenceCount": 5
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Beanie01.HMM_HAT_Bn1_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hat_Beanie01.HMM_HAT_Bn1_MDL",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Cap.HMM_HAT_Cap_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hat_Cap.HMM_HAT_Cap_MDL",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Kaiden.HMM_HIR_Kai_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Kaiden.HMM_HIR_Kai_MDL",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Moto.HMM_HAT_MTR_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hat_Moto.HMM_HAT_MTR_MDL",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Officer.HMM_HAT_Off_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hat_Officer.HMM_HAT_Off_MDL",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Short01.HMM_HIR_PROShort01_MDL",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Short02.HMM_HIR_PROShort02_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Short02.HMM_HIR_PROShort02_MDL",
+    "EvidenceCount": 24
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Short03.HMM_HIR_PROShort03_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Short03.HMM_HIR_PROShort03_MDL",
+    "EvidenceCount": 11
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Other",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HIR_PRO.HairClip.HMF_HAT_Hcp_MDL",
+    "TargetPath": "biog_hmf_hir_pro.Hat_HairClip.HMF_HAT_Hcp_MDL",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Other",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HIR_PRO.HighBun.HMF_HIR_Hbn_MDL",
+    "TargetPath": "biog_hmf_hir_pro.Hair_HighBun.HMF_HIR_Hbn_MDL",
+    "EvidenceCount": 5
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Other",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HIR_PRO.LowBun.HMF_HIR_Lbn_MDL",
+    "TargetPath": "biog_hmf_hir_pro.Hair_LowBun.HMF_HIR_Lbn_MDL",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Other",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HIR_PRO.MidBun.HMF_HIR_Mbn_MDL",
+    "TargetPath": "biog_hmf_hir_pro.Hair_MidBun.HMF_HIR_Mbn_MDL",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Other",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HIR_PRO.Moto.HMF_HAT_MTR_MDL",
+    "TargetPath": "biog_hmf_hir_pro.Hat_Moto.HMF_HAT_MTR_MDL",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Other",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HIR_PRO.MotoGlasses.HMF_HAT_MTG_MDL",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Other",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HIR_PRO.PonyTail.HMF_HIR_Ptl_MDL",
+    "TargetPath": "biog_hmf_hir_pro.Hair_PonyTail.HMF_HIR_Ptl_MDL",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Other",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Beanie02.HMM_HAT_Bn2_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hat_Beanie02.HMM_HAT_Bn2_MDL",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Other",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Cap.HMM_HAT_Cap_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hat_Cap.HMM_HAT_Cap_MDL",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Other",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Moto.HMM_HAT_MTR_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hat_Moto.HMM_HAT_MTR_MDL",
+    "EvidenceCount": 8
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Other",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.MotoGlasses.HMM_HAT_MTG_MDL",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Other",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Visor.HMM_HAT_VSR_MDL",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "ASA_HED_Diff",
+    "SourcePath": "BIOG_ASA_HED_PROMorph_R.Liara.ASA_HED_PROLiara_Diff_Stack",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "ASA_HED_Norm",
+    "SourcePath": "BIOG_ASA_HED_PROMorph_R.NORM.ASA_HED_PRO_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Afro.HMF_HIR_Afr_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 9
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Ashley.HMF_HED_PROAshley_Hair_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Classy.HMF_HIR_Cls_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 12
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cute.HMF_HIR_Cte_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 17
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cyberbabe.HMF_HIR_Cyb_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.HighBun.HMF_HIR_Hbn_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 10
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.LowBun.HMF_HIR_Lbn_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.MidBun.HMF_HIR_Mbn_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Mom.HMF_HIR_Mom_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 10
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.PonyTail.HMF_HIR_Ptl_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Sexy.HMF_HIR_Sxy_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Short02.HMF_HIR_PROShort_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Mask",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Classy.HMF_HIR_Cls_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Mask",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cute.HMF_HIR_Cte_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 8
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Mask",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cyberbabe.HMF_HIR_Cyb_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Mask",
+    "SourcePath": "BIOG_HMF_HIR_PRO.GBL_HMF_HIR_White",
+    "TargetPath": null,
+    "EvidenceCount": 34
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Mask",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Mom.HMF_HIR_Mom_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Mask",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Sexy.HMF_HIR_Sxy_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Mask",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Short02.HMF_HIR_PROShort_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Afro.HMF_HIR_Afr_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 9
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Ashley.HMF_HED_PROAshley_Hair_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Classy.HMF_HIR_Cls_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 12
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cute.HMF_HIR_Cte_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 16
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cyberbabe.HMF_HIR_Cyb_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.HighBun.HMF_HIR_Hbn_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 10
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.LowBun.HMF_HIR_Lbn_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.MidBun.HMF_HIR_Mbn_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Mom.HMF_HIR_Mom_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 10
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.PonyTail.HMF_HIR_Ptl_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Sexy.HMF_HIR_Sxy_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Short02.HMF_HIR_PROShort_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_SpecShift",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Human.HMF_HIR_PROAll_SpecShift",
+    "TargetPath": null,
+    "EvidenceCount": 13
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_SpecShift",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Human.HMM_HIR_PROAll_SpecShift",
+    "TargetPath": null,
+    "EvidenceCount": 80
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_SpecShift2",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Human.HMF_HIR_PROAll_SpecShift",
+    "TargetPath": null,
+    "EvidenceCount": 6
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_SpecShift2",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Human.HMM_HIR_PROAll_SpecShift",
+    "TargetPath": null,
+    "EvidenceCount": 22
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Afro.HMF_HIR_Afr_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 9
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Classy.HMF_HIR_Cls_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 12
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cute.HMF_HIR_Cte_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 16
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Cyberbabe.HMF_HIR_Cyb_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.HighBun.HMF_HIR_Hbn_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 10
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.LowBun.HMF_HIR_Lbn_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.MidBun.HMF_HIR_Mbn_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Mom.HMF_HIR_Mom_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 10
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.PonyTail.HMF_HIR_Ptl_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Sexy.HMF_HIR_Sxy_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Short02.HMF_HIR_PROShort_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Diff",
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.PROAshley.HMF_HED_PROAshley_Face_Diff_Stack",
+    "TargetPath": "BIOG_HMF_HED_PROMorph_R.PROAshley.Textures.HMF_HED_PROAshley_Face_Diff",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Diff",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Kaiden.HMM_HED_PROKaiden_Face_Diff_Stack",
+    "TargetPath": "BIOG_HMM_HED_PROMorph.Kaiden.HMM_HED_PROKaiden_Face_Diff",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Frek",
+    "SourcePath": "bioapl_veh_hovercar01.GBL_ARM_ALL_White",
+    "TargetPath": "BIOG_Humanoid_MASTER_MTR_R.GBL_ARM_ALL_White",
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Mask",
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.Masks.HMF_HED_PRO_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 6
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Mask",
+    "SourcePath": "BIOG_Humanoid_MASTER_MTR_R.GBL_ARM_ALL_Black",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Norm",
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.PROAshley.HMF_HED_PROAshley_Face_Norm_Stack",
+    "TargetPath": "BIOG_HMF_HED_PROMorph_R.PROAshley.Textures.HMF_HED_PROAshley_Face_Norm",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Norm",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Kaiden.HMM_HED_PROKaiden_Face_Norm_Stack",
+    "TargetPath": "BIOG_HMM_HED_PROMorph.Kaiden.HMM_HED_PROKaiden_Face_Norm",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Norm_02",
+    "SourcePath": "bioapl_veh_hovercar01.GBL_ARM_ALL_Norm",
+    "TargetPath": "BIOG_Humanoid_MASTER_MTR_R.GBL_ARM_ALL_Norm",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Norm_02",
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.PROSheppard.HMF_HED_PROSheppard_Face_Norm_Stack",
+    "TargetPath": "BIOG_HMF_HED_PROMorph_R.PROShepard.HMF_HED_PROSheppard_Face_Norm_Stack",
+    "EvidenceCount": 41
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Pulled.HMF_HIR_SCP_Pll_Diff",
+    "TargetPath": "biog_hmf_hir_pro.Hair_Pulled.HMF_HIR_SCP_Pll_Diff",
+    "EvidenceCount": 5
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Kaiden.HMM_HED_PROKaiden_Scalp_Diff_Stack",
+    "TargetPath": "BIOG_HMM_HED_PROMorph.Kaiden.HMM_HED_PROKaiden_Scalp_Diff",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.BaldWillis.HMM_HIR_Wls_Diff",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_BaldWillis.HMM_HIR_Wls_Diff",
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.CrewCut.HMM_HIR_Cru_Diff",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_CrewCut.HMM_HIR_Cru_Diff",
+    "EvidenceCount": 20
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Formal.HMM_HIR_For_Diff",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Formal.HMM_HIR_For_Diff",
+    "EvidenceCount": 16
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Geezer.HMM_HIR_Gez_Diff",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Geezer.HMM_HIR_Gez_Diff",
+    "EvidenceCount": 12
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Sarge.HMM_HIR_Sar_Diff",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Sarge.HMM_HIR_Sar_Diff",
+    "EvidenceCount": 12
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.TheAfro.HMM_HIR_Afr_Diff",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Afro.HMM_HIR_Afr_Diff",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.TheRollins.HMM_HIR_Rol_Diff",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Rollins.HMM_HIR_Rol_Diff",
+    "EvidenceCount": 16
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.TheSlick.HMM_HIR_Slk_Diff",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Slick.HMM_HIR_Slk_Diff",
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.TheWillis.HMM_HIR_Wil_Diff",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Willis.HMM_HIR_Wil_Diff",
+    "EvidenceCount": 15
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.PROAshley.HMF_HED_PROAshley_Scalp_Norm_Stack",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Pulled.HMF_HIR_SCP_Pll_Norm",
+    "TargetPath": "biog_hmf_hir_pro.Hair_Pulled.HMF_HIR_SCP_Pll_Norm",
+    "EvidenceCount": 5
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Kaiden.HMM_HED_PROKaiden_Scalp_Norm_Stack",
+    "TargetPath": "BIOG_HMM_HED_PROMorph.Kaiden.HMM_HED_PROKaiden_Scalp_Norm",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.BaldWillis.HMM_HIR_Wls_Norm",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_BaldWillis.HMM_HIR_Wls_Norm",
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Formal.HMM_HIR_For_Norm",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Formal.HMM_HIR_For_Norm",
+    "EvidenceCount": 16
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Geezer.HMM_HIR_Gez_Norm",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Geezer.HMM_HIR_Gez_Norm",
+    "EvidenceCount": 12
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Sarge.HMM_HIR_Sar_Norm",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Sarge.HMM_HIR_Sar_Norm",
+    "EvidenceCount": 12
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.TheAfro.HMM_HIR_Afr_Norm",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Afro.HMM_HIR_Afr_Norm",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.TheRollins.HMM_HIR_Rol_Norm",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Rollins.HMM_HIR_Rol_Norm",
+    "EvidenceCount": 16
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.TheSlick.HMM_HIR_Slk_Norm",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Slick.HMM_HIR_Slk_Norm",
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.TheWillis.HMM_HIR_Wil_Norm",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Willis.HMM_HIR_Wil_Norm",
+    "EvidenceCount": 15
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Pulled.HMF_HIR_SCP_Pll_Mask",
+    "TargetPath": "biog_hmf_hir_pro.Hair_Pulled.HMF_HIR_SCP_Pll_Mask",
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Kaiden.HMM_HED_PROKaiden_Scalp_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.BaldWillis.HMM_HIR_Wls_Mask",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_BaldWillis.HMM_HIR_Wls_Mask",
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.CrewCut.HMM_HIR_Cru_Mask",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_CrewCut.HMM_HIR_Cru_Mask",
+    "EvidenceCount": 21
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Formal.HMM_HIR_For_Mask",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Formal.HMM_HIR_For_Mask",
+    "EvidenceCount": 16
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Geezer.HMM_HIR_Gez_Mask",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Geezer.HMM_HIR_Gez_Mask",
+    "EvidenceCount": 12
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Sarge.HMM_HIR_Sar_Mask",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Sarge.HMM_HIR_Sar_Mask",
+    "EvidenceCount": 12
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.TheAfro.HMM_HIR_Afr_Mask",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Afro.HMM_HIR_Afr_Mask",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.TheRollins.HMM_HIR_Rol_Mask",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Rollins.HMM_HIR_Rol_Mask",
+    "EvidenceCount": 16
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.TheSlick.HMM_HIR_Slk_Mask",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Slick.HMM_HIR_Slk_Mask",
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.TheWillis.HMM_HIR_Wil_Mask",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Hair_Willis.HMM_HIR_Wil_Mask",
+    "EvidenceCount": 14
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_SpecShift",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Human.HMF_HIR_PROAll_SpecShift",
+    "TargetPath": null,
+    "EvidenceCount": 34
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_SpecShift",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Human.HMM_HIR_PROAll_SpecShift",
+    "TargetPath": null,
+    "EvidenceCount": 88
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_SpecShift",
+    "SourcePath": "BIOG_Humanoid_MASTER_MTR_R.GBL_ARM_ALL_White",
+    "TargetPath": null,
+    "EvidenceCount": 7
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_SpecShift2",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Human.HMF_HIR_PROAll_SpecShift",
+    "TargetPath": null,
+    "EvidenceCount": 6
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_SpecShift2",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Human.HMM_HIR_PROAll_SpecShift",
+    "TargetPath": null,
+    "EvidenceCount": 22
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Scar",
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.Scars.HMF_HED_PROCustom_Scr10",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "bioapl_veh_hovercar01.GBL_ARM_ALL_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "BIOG_HMF_HIR_PRO.Pulled.HMF_HIR_SCP_Pll_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Kaiden.HMM_HED_PROKaiden_Scalp_Tang_Stack",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Formal.HMM_HIR_For_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 16
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Geezer.HMM_HIR_Gez_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 12
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Sarge.HMM_HIR_Sar_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 12
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.TheAfro.HMM_HIR_Afr_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.TheRollins.HMM_HIR_Rol_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 16
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.TheSlick.HMM_HIR_Slk_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.TheWillis.HMM_HIR_Wil_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 14
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "BIOG_Humanoid_MASTER_MTR_R.GBL_ARM_ALL_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 8
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "KRO_EYE_Diff",
+    "SourcePath": "BIOG_KRO_HED_PROMorph._Eye.KRO_HED_PRO_Eye_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "KRO_EYE_Iris_Norm",
+    "SourcePath": "BIOG_KRO_HED_PROMorph._Eye.KRO_HED_PRO_Eye_Iris_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "KRO_Eye_Mask",
+    "SourcePath": "BIOG_KRO_HED_PROMorph._Eye.KRO_HED_PRO_Eye_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "KRO_Eye_Spec",
+    "SourcePath": "BIOG_KRO_HED_PROMorph._Eye.KRO_HED_PRO_Eye_Spec",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "KRO_HED_Addn",
+    "SourcePath": "BIOG_KRO_HED_PROMorph.Base.KRO_HED_ALL_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "KRO_HED_Diff",
+    "SourcePath": "BIOG_KRO_HED_PROMorph.Wrex.KRO_HED_PROWrex_Diff",
+    "TargetPath": "BIOG_KRO_HED_PROMorph.PROWrex.Textures.KRO_HED_PROWrex_Diff",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "KRO_HED_Mask",
+    "SourcePath": "BIOG_KRO_HED_PROMorph.Base.KRO_HED_ALL_Black",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "KRO_HED_Norm",
+    "SourcePath": "BIOG_KRO_HED_PROMorph.Wrex.KRO_HED_PROWrex_Norm",
+    "TargetPath": "BIOG_KRO_HED_PROMorph.PROWrex.Textures.KRO_HED_PROWrex_Norm",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "KRO_HED_Tint",
+    "SourcePath": "BIOG_KRO_HED_PROMorph.Wrex.KRO_HED_PROWrex_Spec",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "KRO_HED_Tnt2",
+    "SourcePath": "BIOG_KRO_HED_PROMorph.Base.KRO_HED_ALL_Black",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "nA",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Short02.HMM_HIR_PROShort02_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 6
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": "nA",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Short03.HMM_HIR_PROShort03_Tang",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "biog_hmf_hir_pro.Hair_Afro.HMF_HIR_Afr_MDL",
+    "TargetPath": "BIOG_HMF_HIR_PRO.Afro.HMF_HIR_Afr_MDL",
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "biog_hmf_hir_pro.Hair_Classy.HMF_HIR_Cls_MDL",
+    "TargetPath": "BIOG_HMF_HIR_PRO.Classy.HMF_HIR_Cls_MDL",
+    "EvidenceCount": 15
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "biog_hmf_hir_pro.Hair_Cute.HMF_HIR_Cte_MDL",
+    "TargetPath": "BIOG_HMF_HIR_PRO.Cute.HMF_HIR_Cte_MDL",
+    "EvidenceCount": 12
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "biog_hmf_hir_pro.Hair_Cyberbabe.HMF_HIR_Cyb_MDL",
+    "TargetPath": "BIOG_HMF_HIR_PRO.Cyberbabe.HMF_HIR_Cyb_MDL",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "biog_hmf_hir_pro.Hair_HighBun.HMF_HIR_Hbn_MDL",
+    "TargetPath": "BIOG_HMF_HIR_PRO.HighBun.HMF_HIR_Hbn_MDL",
+    "EvidenceCount": 15
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "biog_hmf_hir_pro.Hair_Iconbun.HMF_HIR_IBun_MDL",
+    "TargetPath": "BIOG_HMF_HIR_PRO.Iconbun.HMF_HIR_IBun_MDL",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "biog_hmf_hir_pro.Hair_LowBun.HMF_HIR_Lbn_MDL",
+    "TargetPath": "BIOG_HMF_HIR_PRO.LowBun.HMF_HIR_Lbn_MDL",
+    "EvidenceCount": 16
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "biog_hmf_hir_pro.Hair_MidBun.HMF_HIR_Mbn_MDL",
+    "TargetPath": "BIOG_HMF_HIR_PRO.MidBun.HMF_HIR_Mbn_MDL",
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "biog_hmf_hir_pro.Hair_Mom.HMF_HIR_Mom_MDL",
+    "TargetPath": "BIOG_HMF_HIR_PRO.PonyTail.Mom.HMF_HIR_Mom_MDL",
+    "EvidenceCount": 7
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "biog_hmf_hir_pro.Hair_PonyTail.HMF_HIR_Ptl_MDL",
+    "TargetPath": "BIOG_HMF_HIR_PRO.PonyTail.HMF_HIR_Ptl_MDL",
+    "EvidenceCount": 7
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "biog_hmf_hir_pro.Hair_Sexy.HMF_HIR_Sxy_MDL",
+    "TargetPath": "BIOG_HMF_HIR_PRO.Sexy.HMF_HIR_Sxy_MDL",
+    "EvidenceCount": 16
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "biog_hmf_hir_pro.Hat_Beret.HMF_HAT_Brt_MDL",
+    "TargetPath": "BIOG_HMF_HIR_PRO.Beret.HMF_HAT_Brt_MDL",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_FormalSpikes.HMM_HIR_Fsk_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.FormalSpikes.HMM_HIR_Fsk_MDL",
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_RollinsSpike.HMM_HIR_Rsk_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.RollinsSpike.HMM_HIR_Rsk_MDL",
+    "EvidenceCount": 14
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_SargeSpike.HMM_HIR_Ssk_01_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.SargeSpike.HMM_HIR_Ssk_01_MDL",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Short02.HMM_HIR_PROShort02_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Short02.HMM_HIR_PROShort02_MDL",
+    "EvidenceCount": 25
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Short03.HMM_HIR_PROShort03_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Short03.HMM_HIR_PROShort03_MDL",
+    "EvidenceCount": 15
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hat_Beanie01.HMM_HAT_Bn1_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Beanie01.HMM_HAT_Bn1_MDL",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hat_Beret.HMM_HAT_Brt_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Beret.HMM_HAT_Brt_MDL",
+    "EvidenceCount": 11
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hat_Cap.HMM_HAT_Cap_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Cap.HMM_HAT_Cap_MDL",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hat_Moto.HMM_HAT_MTR_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Moto.HMM_HAT_MTR_MDL",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Other",
+    "Parameter": null,
+    "SourcePath": "biog_hmf_hir_pro.Hat_Moto.HMF_HAT_MTR_MDL",
+    "TargetPath": "BIOG_HMF_HIR_PRO.Moto.HMF_HAT_MTR_MDL",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Other",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hat_Beret.HMM_HAT_Brt_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Beret.HMM_HAT_Brt_MDL",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Other",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hat_Moto.HMM_HAT_MTR_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Moto.HMM_HAT_MTR_MDL",
+    "EvidenceCount": 8
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "EYE_Lens_Norm",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Eye.EYE_Lens_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "biog_hmf_hir_pro.Global.HAIR_Long_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 48
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "biog_hmf_hir_pro.Hair_Afro.HMF_HIR_Afr_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "biog_hmf_hir_pro.Hair_Cute.HMF_HIR_Cte_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 12
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "biog_hmf_hir_pro.Hair_HighBun.HMF_HIR_Hbn_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 5
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "biog_hmf_hir_pro.Hair_Iconbun.HMF_HIR_IBun_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "biog_hmf_hir_pro.Hair_MidBun.HMF_HIR_Mbn_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "biog_hmf_hir_pro.Hair_Mom.HMF_HIR_Mom_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 7
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "biog_hmf_hir_pro.Hair_PonyTail.HMF_HIR_Ptl_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "biog_hmf_hir_pro.Hair_Sexy.HMF_HIR_Sxy_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 16
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Diff",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Joker.HMM_HED_PROJoker_FaceSD_Diff",
+    "TargetPath": "BIOG_HMM_HED_PROMorph.Joker.HMM_HED_PROJoker_Face_Diff_Stack",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Mask",
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.Masks.HMF_HED_PRO_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 9
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Norm_02",
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.PROShepard.HMF_HED_PROSheppard_Face_Norm_Stack",
+    "TargetPath": "BIOG_HMF_HED_PROMorph_R.PROSheppard.HMF_HED_PROSheppard_Face_Norm_Stack",
+    "EvidenceCount": 41
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "biog_hmf_hir_pro.Hair_PROCustomCute.HMF_HIR_SCP_CUSTOM_Cte_Diff",
+    "TargetPath": "BIOG_HMF_HIR_PRO.PROCustomCute.HMF_HIR_SCP_CUSTOM_Cte_Diff",
+    "EvidenceCount": 39
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "biog_hmf_hir_pro.Hair_Pulled.HMF_HIR_SCP_Pll_Diff",
+    "TargetPath": "BIOG_HMF_HIR_PRO.Pulled.HMF_HIR_SCP_Pll_Diff",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "biog_hmf_hir_pro.Hair_Sarge.HMF_HIR_Sar_Diff",
+    "TargetPath": "BIOG_HMF_HIR_PRO.Sarge.HMF_HIR_Sar_Diff",
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Joker.HMM_HED_PROJoker_ScalpSD_Diff",
+    "TargetPath": "BIOG_HMM_HED_PROMorph.Joker.HMM_HED_PROJoker_Scalp_Diff_Stack",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Afro.HMM_HIR_Afr_Diff",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.TheAfro.HMM_HIR_Afr_Diff",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_BaldWillis.HMM_HIR_Wls_Diff",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.BaldWillis.HMM_HIR_Wls_Diff",
+    "EvidenceCount": 5
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_CrewCut.HMM_HIR_Cru_Diff",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.CrewCut.HMM_HIR_Cru_Diff",
+    "EvidenceCount": 58
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Formal.HMM_HIR_For_Diff",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Formal.HMM_HIR_For_Diff",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Geezer.HMM_HIR_Gez_Diff",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Geezer.HMM_HIR_Gez_Diff",
+    "EvidenceCount": 14
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Rollins.HMM_HIR_Rol_Diff",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.TheRollins.HMM_HIR_Rol_Diff",
+    "EvidenceCount": 7
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Sarge.HMM_HIR_Sar_Diff",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Sarge.HMM_HIR_Sar_Diff",
+    "EvidenceCount": 8
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Slick.HMM_HIR_Slk_Diff",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.TheSlick.HMM_HIR_Slk_Diff",
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Willis.HMM_HIR_Wil_Diff",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.TheWillis.HMM_HIR_Wil_Diff",
+    "EvidenceCount": 6
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.Normal.HMF_HED_PROBase_Scalp_Bald_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 25
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "biog_hmf_hir_pro.Hair_CrewCut.HMF_HIR_Cru_Norm",
+    "TargetPath": "BIOG_HMF_HIR_PRO.CrewCut.HMF_HIR_Cru_Norm",
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "biog_hmf_hir_pro.Hair_Pulled.HMF_HIR_SCP_Pll_Norm",
+    "TargetPath": "BIOG_HMF_HIR_PRO.Pulled.HMF_HIR_SCP_Pll_Norm",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "biog_hmf_hir_pro.Hair_Sarge.HMF_HIR_Sar_Norm",
+    "TargetPath": "BIOG_HMF_HIR_PRO.Sarge.HMF_HIR_Sar_Norm",
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Afro.HMM_HIR_Afr_Norm",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.TheAfro.HMM_HIR_Afr_Norm",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_BaldWillis.HMM_HIR_Wls_Norm",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.BaldWillis.HMM_HIR_Wls_Norm",
+    "EvidenceCount": 5
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Formal.HMM_HIR_For_Norm",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Formal.HMM_HIR_For_Norm",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Geezer.HMM_HIR_Gez_Norm",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Geezer.HMM_HIR_Gez_Norm",
+    "EvidenceCount": 14
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Rollins.HMM_HIR_Rol_Norm",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.TheRollins.HMM_HIR_Rol_Norm",
+    "EvidenceCount": 7
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Sarge.HMM_HIR_Sar_Norm",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Sarge.HMM_HIR_Sar_Norm",
+    "EvidenceCount": 8
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Slick.HMM_HIR_Slk_Norm",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.TheSlick.HMM_HIR_Slk_Norm",
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Willis.HMM_HIR_Wil_Norm",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.TheWillis.HMM_HIR_Wil_Norm",
+    "EvidenceCount": 6
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "biog_hmf_hir_pro.Hair_CrewCut.HMF_HIR_Cru_Mask",
+    "TargetPath": "BIOG_HMF_HIR_PRO.CrewCut.HMF_HIR_Cru_Mask",
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "biog_hmf_hir_pro.Hair_Pulled.HMF_HIR_SCP_Pll_Mask",
+    "TargetPath": "BIOG_HMF_HIR_PRO.Pulled.HMF_HIR_SCP_Pll_Mask",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Afro.HMM_HIR_Afr_Mask",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.TheAfro.HMM_HIR_Afr_Mask",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_BaldWillis.HMM_HIR_Wls_Mask",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.BaldWillis.HMM_HIR_Wls_Mask",
+    "EvidenceCount": 5
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_CrewCut.HMM_HIR_Cru_Mask",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.CrewCut.HMM_HIR_Cru_Mask",
+    "EvidenceCount": 11
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Formal.HMM_HIR_For_Mask",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Formal.HMM_HIR_For_Mask",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Geezer.HMM_HIR_Gez_Mask",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Geezer.HMM_HIR_Gez_Mask",
+    "EvidenceCount": 14
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Rollins.HMM_HIR_Rol_Mask",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.TheRollins.HMM_HIR_Rol_Mask",
+    "EvidenceCount": 7
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Sarge.HMM_HIR_Sar_Mask",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Sarge.HMM_HIR_Sar_Mask",
+    "EvidenceCount": 8
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Slick.HMM_HIR_Slk_Mask",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.TheSlick.HMM_HIR_Slk_Mask",
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Willis.HMM_HIR_Wil_Mask",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.TheWillis.HMM_HIR_Wil_Mask",
+    "EvidenceCount": 5
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_SpecShift",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Global.HMM_HIR_PROAll_SpecShift",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Human.HMM_HIR_PROAll_SpecShift",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "biog_hmf_hir_pro.Hair_Pulled.HMF_HIR_SCP_Pll_Tang",
+    "TargetPath": "BIOG_HMF_HIR_PRO.Pulled.HMF_HIR_SCP_Pll_Tang",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Afro.HMM_HIR_Afr_Tang",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.TheAfro.HMM_HIR_Afr_Tang",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Formal.HMM_HIR_For_Tang",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Formal.HMM_HIR_For_Tang",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Geezer.HMM_HIR_Gez_Tang",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Geezer.HMM_HIR_Gez_Tang",
+    "EvidenceCount": 14
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Rollins.HMM_HIR_Rol_Tang",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.TheRollins.HMM_HIR_Rol_Tang",
+    "EvidenceCount": 7
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Sarge.HMM_HIR_Sar_Tang",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Sarge.HMM_HIR_Sar_Tang",
+    "EvidenceCount": 8
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Slick.HMM_HIR_Slk_Tang",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.TheSlick.HMM_HIR_Slk_Tang",
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Willis.HMM_HIR_Wil_Tang",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.TheWillis.HMM_HIR_Wil_Tang",
+    "EvidenceCount": 5
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "biog_hmf_hir_pro.Hair_Afro.HMF_HIR_Afr_MDL",
+    "TargetPath": "BIOG_HMF_HIR_PRO.Afro.HMF_HIR_Afr_MDL",
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "biog_hmf_hir_pro.Hair_Classy.HMF_HIR_Cls_MDL",
+    "TargetPath": "BIOG_HMF_HIR_PRO.Classy.HMF_HIR_Cls_MDL",
+    "EvidenceCount": 15
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "biog_hmf_hir_pro.Hair_Cute.HMF_HIR_Cte_MDL",
+    "TargetPath": "BIOG_HMF_HIR_PRO.Cute.HMF_HIR_Cte_MDL",
+    "EvidenceCount": 12
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "biog_hmf_hir_pro.Hair_Cyberbabe.HMF_HIR_Cyb_MDL",
+    "TargetPath": "BIOG_HMF_HIR_PRO.Cyberbabe.HMF_HIR_Cyb_MDL",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "biog_hmf_hir_pro.Hair_HighBun.HMF_HIR_Hbn_MDL",
+    "TargetPath": "BIOG_HMF_HIR_PRO.HighBun.HMF_HIR_Hbn_MDL",
+    "EvidenceCount": 15
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "biog_hmf_hir_pro.Hair_Iconbun.HMF_HIR_IBun_MDL",
+    "TargetPath": "BIOG_HMF_HIR_PRO.Iconbun.HMF_HIR_IBun_MDL",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "biog_hmf_hir_pro.Hair_LowBun.HMF_HIR_Lbn_MDL",
+    "TargetPath": "BIOG_HMF_HIR_PRO.LowBun.HMF_HIR_Lbn_MDL",
+    "EvidenceCount": 16
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "biog_hmf_hir_pro.Hair_MidBun.HMF_HIR_Mbn_MDL",
+    "TargetPath": "BIOG_HMF_HIR_PRO.MidBun.HMF_HIR_Mbn_MDL",
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "biog_hmf_hir_pro.Hair_Mom.HMF_HIR_Mom_MDL",
+    "TargetPath": "BIOG_HMF_HIR_PRO.Mom.HMF_HIR_Mom_MDL",
+    "EvidenceCount": 7
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "biog_hmf_hir_pro.Hair_PonyTail.HMF_HIR_Ptl_MDL",
+    "TargetPath": "BIOG_HMF_HIR_PRO.PonyTail.HMF_HIR_Ptl_MDL",
+    "EvidenceCount": 7
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "biog_hmf_hir_pro.Hair_Sexy.HMF_HIR_Sxy_MDL",
+    "TargetPath": "BIOG_HMF_HIR_PRO.Sexy.HMF_HIR_Sxy_MDL",
+    "EvidenceCount": 16
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "biog_hmf_hir_pro.Hat_Beret.HMF_HAT_Brt_MDL",
+    "TargetPath": "BIOG_HMF_HIR_PRO.Beret.HMF_HAT_Brt_MDL",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_FormalSpikes.HMM_HIR_Fsk_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.FormalSpikes.HMM_HIR_Fsk_MDL",
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_RollinsSpike.HMM_HIR_Rsk_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.RollinsSpike.HMM_HIR_Rsk_MDL",
+    "EvidenceCount": 14
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_SargeSpike.HMM_HIR_Ssk_01_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.SargeSpike.HMM_HIR_Ssk_01_MDL",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Short02.HMM_HIR_PROShort02_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Short02.HMM_HIR_PROShort02_MDL",
+    "EvidenceCount": 25
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Short03.HMM_HIR_PROShort03_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Short03.HMM_HIR_PROShort03_MDL",
+    "EvidenceCount": 15
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hat_Beanie01.HMM_HAT_Bn1_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Beanie01.HMM_HAT_Bn1_MDL",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hat_Beret.HMM_HAT_Brt_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Beret.HMM_HAT_Brt_MDL",
+    "EvidenceCount": 11
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hat_Cap.HMM_HAT_Cap_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Cap.HMM_HAT_Cap_MDL",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Hair",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hat_Moto.HMM_HAT_MTR_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Moto.HMM_HAT_MTR_MDL",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Other",
+    "Parameter": null,
+    "SourcePath": "biog_hmf_hir_pro.Hat_Moto.HMF_HAT_MTR_MDL",
+    "TargetPath": "BIOG_HMF_HIR_PRO.Moto.HMF_HAT_MTR_MDL",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Other",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hat_Beret.HMM_HAT_Brt_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Beret.HMM_HAT_Brt_MDL",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Other",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hat_Moto.HMM_HAT_MTR_MDL",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Moto.HMM_HAT_MTR_MDL",
+    "EvidenceCount": 8
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "biog_hmf_hir_pro.Global.HAIR_Long_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 48
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "biog_hmf_hir_pro.Hair_Afro.HMF_HIR_Afr_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "biog_hmf_hir_pro.Hair_Cute.HMF_HIR_Cte_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 12
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "biog_hmf_hir_pro.Hair_HighBun.HMF_HIR_Hbn_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 5
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "biog_hmf_hir_pro.Hair_Iconbun.HMF_HIR_IBun_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "biog_hmf_hir_pro.Hair_MidBun.HMF_HIR_Mbn_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "biog_hmf_hir_pro.Hair_Mom.HMF_HIR_Mom_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 7
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "biog_hmf_hir_pro.Hair_PonyTail.HMF_HIR_Ptl_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HAIR_Diff",
+    "SourcePath": "biog_hmf_hir_pro.Hair_Sexy.HMF_HIR_Sxy_Diff",
+    "TargetPath": null,
+    "EvidenceCount": 16
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Diff",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Joker.HMM_HED_PROJoker_FaceSD_Diff",
+    "TargetPath": "BIOG_HMM_HED_PROMorph.Joker.HMM_HED_PROJoker_Face_Diff_Stack",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Mask",
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.Masks.HMF_HED_PRO_Mask",
+    "TargetPath": null,
+    "EvidenceCount": 9
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Norm_02",
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.PROShepard.HMF_HED_PROSheppard_Face_Norm_Stack",
+    "TargetPath": "BIOG_HMF_HED_PROMorph_R.PROSheppard.HMF_HED_PROSheppard_Face_Norm_Stack",
+    "EvidenceCount": 41
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "biog_hmf_hir_pro.Hair_PROCustomCute.HMF_HIR_SCP_CUSTOM_Cte_Diff",
+    "TargetPath": "BIOG_HMF_HIR_PRO.PROCustomCute.HMF_HIR_SCP_CUSTOM_Cte_Diff",
+    "EvidenceCount": 39
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "biog_hmf_hir_pro.Hair_Pulled.HMF_HIR_SCP_Pll_Diff",
+    "TargetPath": "BIOG_HMF_HIR_PRO.Pulled.HMF_HIR_SCP_Pll_Diff",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "biog_hmf_hir_pro.Hair_Sarge.HMF_HIR_Sar_Diff",
+    "TargetPath": "BIOG_HMF_HIR_PRO.Sarge.HMF_HIR_Sar_Diff",
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HED_PROMorph.Joker.HMM_HED_PROJoker_ScalpSD_Diff",
+    "TargetPath": "BIOG_HMM_HED_PROMorph.Joker.HMM_HED_PROJoker_Scalp_Diff_Stack",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Afro.HMM_HIR_Afr_Diff",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.TheAfro.HMM_HIR_Afr_Diff",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_BaldWillis.HMM_HIR_Wls_Diff",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.BaldWillis.HMM_HIR_Wls_Diff",
+    "EvidenceCount": 5
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_CrewCut.HMM_HIR_Cru_Diff",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.CrewCut.HMM_HIR_Cru_Diff",
+    "EvidenceCount": 58
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Formal.HMM_HIR_For_Diff",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Formal.HMM_HIR_For_Diff",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Geezer.HMM_HIR_Gez_Diff",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Geezer.HMM_HIR_Gez_Diff",
+    "EvidenceCount": 14
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Rollins.HMM_HIR_Rol_Diff",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.TheRollins.HMM_HIR_Rol_Diff",
+    "EvidenceCount": 7
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Sarge.HMM_HIR_Sar_Diff",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Sarge.HMM_HIR_Sar_Diff",
+    "EvidenceCount": 8
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Slick.HMM_HIR_Slk_Diff",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.TheSlick.HMM_HIR_Slk_Diff",
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Diff",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Willis.HMM_HIR_Wil_Diff",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.TheWillis.HMM_HIR_Wil_Diff",
+    "EvidenceCount": 6
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.Normal.HMF_HED_PROBase_Scalp_Bald_Norm",
+    "TargetPath": null,
+    "EvidenceCount": 25
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "biog_hmf_hir_pro.Hair_CrewCut.HMF_HIR_Cru_Norm",
+    "TargetPath": "BIOG_HMF_HIR_PRO.CrewCut.HMF_HIR_Cru_Norm",
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "biog_hmf_hir_pro.Hair_Pulled.HMF_HIR_SCP_Pll_Norm",
+    "TargetPath": "BIOG_HMF_HIR_PRO.Pulled.HMF_HIR_SCP_Pll_Norm",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "biog_hmf_hir_pro.Hair_Sarge.HMF_HIR_Sar_Norm",
+    "TargetPath": "BIOG_HMF_HIR_PRO.Sarge.HMF_HIR_Sar_Norm",
+    "EvidenceCount": 4
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Afro.HMM_HIR_Afr_Norm",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.TheAfro.HMM_HIR_Afr_Norm",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_BaldWillis.HMM_HIR_Wls_Norm",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.BaldWillis.HMM_HIR_Wls_Norm",
+    "EvidenceCount": 5
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Formal.HMM_HIR_For_Norm",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Formal.HMM_HIR_For_Norm",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Geezer.HMM_HIR_Gez_Norm",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Geezer.HMM_HIR_Gez_Norm",
+    "EvidenceCount": 14
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Rollins.HMM_HIR_Rol_Norm",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.TheRollins.HMM_HIR_Rol_Norm",
+    "EvidenceCount": 7
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Sarge.HMM_HIR_Sar_Norm",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Sarge.HMM_HIR_Sar_Norm",
+    "EvidenceCount": 8
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Slick.HMM_HIR_Slk_Norm",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.TheSlick.HMM_HIR_Slk_Norm",
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Norm",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Willis.HMM_HIR_Wil_Norm",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.TheWillis.HMM_HIR_Wil_Norm",
+    "EvidenceCount": 6
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "biog_hmf_hir_pro.Hair_CrewCut.HMF_HIR_Cru_Mask",
+    "TargetPath": "BIOG_HMF_HIR_PRO.CrewCut.HMF_HIR_Cru_Mask",
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "biog_hmf_hir_pro.Hair_Pulled.HMF_HIR_SCP_Pll_Mask",
+    "TargetPath": "BIOG_HMF_HIR_PRO.Pulled.HMF_HIR_SCP_Pll_Mask",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Afro.HMM_HIR_Afr_Mask",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.TheAfro.HMM_HIR_Afr_Mask",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_BaldWillis.HMM_HIR_Wls_Mask",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.BaldWillis.HMM_HIR_Wls_Mask",
+    "EvidenceCount": 5
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_CrewCut.HMM_HIR_Cru_Mask",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.CrewCut.HMM_HIR_Cru_Mask",
+    "EvidenceCount": 11
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Formal.HMM_HIR_For_Mask",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Formal.HMM_HIR_For_Mask",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Geezer.HMM_HIR_Gez_Mask",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Geezer.HMM_HIR_Gez_Mask",
+    "EvidenceCount": 14
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Rollins.HMM_HIR_Rol_Mask",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.TheRollins.HMM_HIR_Rol_Mask",
+    "EvidenceCount": 7
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Sarge.HMM_HIR_Sar_Mask",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Sarge.HMM_HIR_Sar_Mask",
+    "EvidenceCount": 8
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Slick.HMM_HIR_Slk_Mask",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.TheSlick.HMM_HIR_Slk_Mask",
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_Spec",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Willis.HMM_HIR_Wil_Mask",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.TheWillis.HMM_HIR_Wil_Mask",
+    "EvidenceCount": 5
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Scalp_SpecShift",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Global.HMM_HIR_PROAll_SpecShift",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Human.HMM_HIR_PROAll_SpecShift",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "biog_hmf_hir_pro.Hair_Pulled.HMF_HIR_SCP_Pll_Tang",
+    "TargetPath": "BIOG_HMF_HIR_PRO.Pulled.HMF_HIR_SCP_Pll_Tang",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Afro.HMM_HIR_Afr_Tang",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.TheAfro.HMM_HIR_Afr_Tang",
+    "EvidenceCount": 2
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Formal.HMM_HIR_For_Tang",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Formal.HMM_HIR_For_Tang",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Geezer.HMM_HIR_Gez_Tang",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Geezer.HMM_HIR_Gez_Tang",
+    "EvidenceCount": 14
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Rollins.HMM_HIR_Rol_Tang",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.TheRollins.HMM_HIR_Rol_Tang",
+    "EvidenceCount": 7
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Sarge.HMM_HIR_Sar_Tang",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.Sarge.HMM_HIR_Sar_Tang",
+    "EvidenceCount": 8
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Slick.HMM_HIR_Slk_Tang",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.TheSlick.HMM_HIR_Slk_Tang",
+    "EvidenceCount": 3
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": "HED_Tang",
+    "SourcePath": "BIOG_HMM_HIR_PRO_R.Hair_Willis.HMM_HIR_Wil_Tang",
+    "TargetPath": "BIOG_HMM_HIR_PRO_R.TheWillis.HMM_HIR_Wil_Tang",
+    "EvidenceCount": 5
+  }
+]

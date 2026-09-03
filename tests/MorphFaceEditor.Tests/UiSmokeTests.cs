@@ -142,10 +142,11 @@ public static class UiSmokeTests
             new MorphFacePreviewLoadService(sceneFactory, targets, profiles, reader),
             sceneFactory,
             new StubColorDialog(),
-            new PackageReferenceService(reader),
+            new PackageReferenceService(reader, TestFixtures.CreateMissingTextureCatalogService()),
             writer,
             context,
-            new MorphFaceConversionService(profiles, targets, writer, context),
+            new MorphFaceConversionService(
+                profiles, targets, context, TestFixtures.CreateMissingTextureCatalogService()),
             new MorphFaceInterchangeService(),
             new StubClipboard());
 
@@ -699,10 +700,11 @@ public static class UiSmokeTests
             new MorphFacePreviewLoadService(sceneFactory, targets, profiles, reader),
             sceneFactory,
             new StubColorDialog(),
-            new PackageReferenceService(reader),
+            new PackageReferenceService(reader, TestFixtures.CreateMissingTextureCatalogService()),
             writer,
             context,
-            new MorphFaceConversionService(profiles, targets, writer, context),
+            new MorphFaceConversionService(
+                profiles, targets, context, TestFixtures.CreateMissingTextureCatalogService()),
             new MorphFaceInterchangeService(),
             new StubClipboard());
     }
@@ -757,7 +759,7 @@ public static class UiSmokeTests
             metadataCatalog ?? new HumanMaleFeatureMetadataCatalog(),
             materialSession,
             new StubColorDialog(),
-            new PackageReferenceService(reader),
+            new PackageReferenceService(reader, TestFixtures.CreateMissingTextureCatalogService()),
             "fixture.pcc",
             [],
             [],
@@ -900,7 +902,7 @@ public static class UiSmokeTests
             new HumanMaleFeatureMetadataCatalog(),
             materials,
             new StubColorDialog(),
-            new PackageReferenceService(reader),
+            new PackageReferenceService(reader, TestFixtures.CreateMissingTextureCatalogService()),
             "fixture.pcc",
             [], [], null, [], _ => { },
             "le1-human-male",
@@ -947,7 +949,7 @@ public static class UiSmokeTests
             new HumanMaleFeatureMetadataCatalog(),
             materials,
             new StubColorDialog(),
-            new PackageReferenceService(reader),
+            new PackageReferenceService(reader, TestFixtures.CreateMissingTextureCatalogService()),
             "fixture.pcc",
             [],
             [],
@@ -1202,7 +1204,7 @@ public static class UiSmokeTests
                 MorphFaceMaterialOverrides.Empty,
                 ResolvedHeadMaterialSet.Empty),
             new StubColorDialog(),
-            new PackageReferenceService(reader),
+            new PackageReferenceService(reader, TestFixtures.CreateMissingTextureCatalogService()),
             "fixture.pcc",
             [],
             [],

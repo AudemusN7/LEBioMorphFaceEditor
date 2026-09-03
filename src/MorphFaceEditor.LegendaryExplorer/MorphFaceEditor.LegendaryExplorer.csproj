@@ -25,6 +25,8 @@
     <Content Include="$(LecDirectory)\ISACTTools.dll"
              Link="ISACTTools.dll"
              CopyToOutputDirectory="PreserveNewest" />
+    <EmbeddedResource Include="Assets\CrossGameAssetReconciliation.json"
+                      LogicalName="MorphFaceEditor.CrossGameAssetReconciliation.json" />
   </ItemGroup>
 
   <ItemGroup>

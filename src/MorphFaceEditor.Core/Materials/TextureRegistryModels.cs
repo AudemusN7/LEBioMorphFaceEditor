@@ -19,8 +19,19 @@ public sealed record TextureRegistrySnapshot(
     int InstalledPackageCount,
     IReadOnlyList<TextureCatalogCandidate> Candidates)
 {
-    public const int CurrentSchemaVersion = 3;
+    public const int CurrentSchemaVersion = 4;
+
+    public IReadOnlyList<MorphFaceTemplateCandidate> MorphFaceTemplates { get; init; } = [];
 }
+
+/// <summary>A lightweight pointer to a target-game face discovered during the registry scan.</summary>
+public sealed record MorphFaceTemplateCandidate(
+    string PackagePath,
+    int ExportUIndex,
+    string FacePath,
+    string? BaseHeadPath,
+    int MountPriority,
+    TextureCatalogOrigin Origin);
 
 /// <summary>Shared, non-exclusive discovery rules used by the one-pass installed-package scanner.</summary>
 public static class TextureRegistryDiscovery

@@ -501,7 +501,6 @@ public static class PackageContextTests
             var source = ReadFaces(le2Source).First(face => face.ProfileKey == "le2-human-male");
             var sourceMorph = context.CaptureMorphData(le2Source, source.InstancedPath);
             var sourceMaterial = context.CaptureMaterialData(le2Source, source.InstancedPath);
-            var le3Template = FixturePath("LE3 GlobalMorphs.pcc");
             var destination = Path.Combine(Path.GetTempPath(), $"MFE-LE2-to-LE3-{Guid.NewGuid():N}.pcc");
             try
             {
@@ -511,7 +510,7 @@ public static class PackageContextTests
                     MorphFaceGame.LE3,
                     destination,
                     CreateNewPackage: true,
-                    le3Template));
+                    TemplatePackagePath: null));
                 TestAssert.Equal(MorphFaceGame.LE3, new MorphFacePackageReader()
                     .Load(destination, result.SaveResult.FaceInstancedPath).Game);
                 TestAssert.Equal(sourceFingerprint, PackageFingerprint.Capture(le2Source));

@@ -131,6 +131,8 @@ public static class TextureRegistryStoreTests
         TestAssert.Equal(TextureCatalogGame.LE1, reopened.Game);
         TestAssert.Equal(37, reopened.InstalledPackageCount);
         TestAssert.Equal(1, reopened.Candidates.Count);
+        TestAssert.Equal(1, reopened.MorphFaceTemplates.Count);
+        TestAssert.Equal("HMF.BioFace_Test", reopened.MorphFaceTemplates.Single().FacePath);
         var occurrence = reopened.Candidates.Single().EffectiveOccurrence;
         TestAssert.Equal(9021, occurrence.MountPriority);
         TestAssert.Equal("Textures_DLC_MOD", occurrence.TextureFileCacheName);
@@ -250,7 +252,16 @@ public static class TextureRegistryStoreTests
             game,
             new DateTimeOffset(2026, 8, 28, 3, 19, 0, TimeSpan.Zero),
             37,
-            [new TextureCatalogCandidate(game, "BIOG_SAL_HED_PROMorph_R.Add.SAL_HED_PRO_Add1", occurrence, [occurrence])]);
+            [new TextureCatalogCandidate(game, "BIOG_SAL_HED_PROMorph_R.Add.SAL_HED_PRO_Add1", occurrence, [occurrence])])
+        {
+            MorphFaceTemplates =
+            [
+                new MorphFaceTemplateCandidate(
+                    "BioA_Test.pcc", 7, "HMF.BioFace_Test",
+                    "BIOG_HMF_HED_PROMorph_R.PROBase.HMF_HED_PROBase_MDL",
+                    0, TextureCatalogOrigin.BaseGame)
+            ]
+        };
     }
 
     private static TextureCatalogOccurrence Occurrence(
@@ -313,7 +324,7 @@ public static class TextureRegistryStoreTests
         public List<string> Paths { get; } = [];
         public List<MorphFaceGame> Games { get; } = [];
 
-        public IReadOnlyList<TextureRegistryScannedTexture> Scan(
+        public TextureRegistryPackageScan Scan(
             MorphFaceGame game,
             string packagePath,
             CancellationToken cancellationToken)
@@ -321,7 +332,7 @@ public static class TextureRegistryStoreTests
             Games.Add(game);
             Paths.Add(packagePath);
             onScan?.Invoke();
-            return _results.GetValueOrDefault(packagePath) ?? [];
+            return new TextureRegistryPackageScan(_results.GetValueOrDefault(packagePath) ?? [], []);
         }
     }
 

@@ -122,7 +122,8 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
             if (verified.SchemaVersion != snapshot.SchemaVersion ||
                 verified.Game != snapshot.Game ||
                 verified.InstalledPackageCount != snapshot.InstalledPackageCount ||
-                verified.Candidates.Count != snapshot.Candidates.Count)
+                verified.Candidates.Count != snapshot.Candidates.Count ||
+                verified.MorphFaceTemplates.Count != snapshot.MorphFaceTemplates.Count)
             {
                 throw new InvalidDataException("The written texture registry failed verification.");
             }
@@ -187,7 +188,8 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
         {
             throw new InvalidDataException("The registry header and payload games do not match.");
         }
-        if (snapshot.InstalledPackageCount < 0 || snapshot.Candidates is null)
+        if (snapshot.InstalledPackageCount < 0 || snapshot.Candidates is null ||
+            snapshot.MorphFaceTemplates is null)
         {
             throw new InvalidDataException("The texture registry payload is incomplete.");
         }
@@ -198,6 +200,14 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
                 candidate.Occurrences.Count == 0)
             {
                 throw new InvalidDataException("The texture registry contains an incomplete candidate.");
+            }
+        }
+        foreach (var template in snapshot.MorphFaceTemplates)
+        {
+            if (template is null || string.IsNullOrWhiteSpace(template.PackagePath) ||
+                template.ExportUIndex <= 0 || string.IsNullOrWhiteSpace(template.FacePath))
+            {
+                throw new InvalidDataException("The texture registry contains an incomplete morph-face template.");
             }
         }
     }

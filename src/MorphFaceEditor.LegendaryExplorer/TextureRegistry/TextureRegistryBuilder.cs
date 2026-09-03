@@ -81,6 +81,7 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
         var files = _loadedFiles(game);
         var occurrencesByPath = new Dictionary<string, List<TextureCatalogOccurrence>>(
             StringComparer.OrdinalIgnoreCase);
+        var morphFaceTemplates = new List<MorphFaceTemplateCandidate>();
         progress?.Report(new TextureRegistryBuildProgress(
             game, TextureRegistryBuildPhase.ScanningPackages, 0, files.Count, null, 0));
 
@@ -88,9 +89,9 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
         {
             cancellationToken.ThrowIfCancellationRequested();
             var packagePath = files[index];
-            var textures = _scanner.Scan(game, packagePath, cancellationToken);
+            var scan = _scanner.Scan(game, packagePath, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
-            foreach (var texture in textures)
+            foreach (var texture in scan.Textures)
             {
                 if (!occurrencesByPath.TryGetValue(texture.InstancedPath, out var occurrences))
                 {
@@ -98,6 +99,7 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
                 }
                 occurrences.Add(texture.Occurrence);
             }
+            morphFaceTemplates.AddRange(scan.MorphFaceTemplates);
             progress?.Report(new TextureRegistryBuildProgress(
                 game, TextureRegistryBuildPhase.ScanningPackages, index + 1, files.Count,
                 Path.GetFileName(packagePath), occurrencesByPath.Count));
@@ -121,7 +123,15 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
             catalogGame,
             DateTimeOffset.UtcNow,
             files.Count,
-            candidates);
+            candidates)
+        {
+            MorphFaceTemplates = morphFaceTemplates
+                .OrderBy(value => value.Origin)
+                .ThenByDescending(value => value.MountPriority)
+                .ThenBy(value => value.PackagePath, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(value => value.FacePath, StringComparer.OrdinalIgnoreCase)
+                .ToArray()
+        };
 
         cancellationToken.ThrowIfCancellationRequested();
         progress?.Report(new TextureRegistryBuildProgress(

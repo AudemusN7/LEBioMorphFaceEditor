@@ -69,12 +69,6 @@ public partial class ConvertMorphWindow : Window
             return;
         }
 
-        var templateDialog = CreatePackageOpenDialog(
-            $"Choose a {target.Label} template PCC containing a matching BioMorphFace");
-        if (templateDialog.ShowDialog(this) != true)
-        {
-            return;
-        }
         var outputDialog = new SaveFileDialog
         {
             Title = $"Create a converted {target.Label} morph PCC",
@@ -94,20 +88,16 @@ public partial class ConvertMorphWindow : Window
             ValidationText.Text = "That output PCC already exists. Choose a new filename.";
             return;
         }
-        if (IsSource(outputDialog.FileName) ||
-            string.Equals(
-                Path.GetFullPath(templateDialog.FileName),
-                Path.GetFullPath(outputDialog.FileName),
-                StringComparison.OrdinalIgnoreCase))
+        if (IsSource(outputDialog.FileName))
         {
-            ValidationText.Text = "The source, template, and output PCCs must be different files.";
+            ValidationText.Text = "The source and output PCCs must be different files.";
             return;
         }
         Request = new MorphConversionSaveRequest(
             target.Game,
             Path.GetFullPath(outputDialog.FileName),
             CreateNewPackage: true,
-            Path.GetFullPath(templateDialog.FileName));
+            TemplatePackagePath: null);
         DialogResult = true;
     }
 

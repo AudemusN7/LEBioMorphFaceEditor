@@ -10,9 +10,13 @@ internal sealed record TextureRegistryScannedTexture(
     string InstancedPath,
     TextureCatalogOccurrence Occurrence);
 
+internal sealed record TextureRegistryPackageScan(
+    IReadOnlyList<TextureRegistryScannedTexture> Textures,
+    IReadOnlyList<MorphFaceTemplateCandidate> MorphFaceTemplates);
+
 internal interface ITextureRegistryPackageScanner
 {
-    IReadOnlyList<TextureRegistryScannedTexture> Scan(
+    TextureRegistryPackageScan Scan(
         MorphFaceGame game,
         string packagePath,
         CancellationToken cancellationToken);
@@ -21,7 +25,7 @@ internal interface ITextureRegistryPackageScanner
 /// <summary>Opens one installed package once and detaches only relevant Texture2D metadata.</summary>
 internal sealed class LecTextureRegistryPackageScanner : ITextureRegistryPackageScanner
 {
-    public IReadOnlyList<TextureRegistryScannedTexture> Scan(
+    public TextureRegistryPackageScan Scan(
         MorphFaceGame game,
         string packagePath,
         CancellationToken cancellationToken)
@@ -31,9 +35,24 @@ internal sealed class LecTextureRegistryPackageScanner : ITextureRegistryPackage
         var meGame = ToMeGame(game);
         using var package = MEPackageHandler.OpenMEPackage(packagePath, forceLoadFromDisk: true);
         var results = new List<TextureRegistryScannedTexture>();
+        var templates = new List<MorphFaceTemplateCandidate>();
+        var origin = GetOrigin(packagePath, meGame);
+        var mountPriority = GetMountPriority(packagePath, meGame);
         foreach (var export in package.Exports)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (!export.IsDefaultObject &&
+                export.ClassName.Equals("BioMorphFace", StringComparison.OrdinalIgnoreCase))
+            {
+                var baseHead = export.GetProperty<ObjectProperty>("m_oBaseHead")?.ResolveToEntry(package);
+                templates.Add(new MorphFaceTemplateCandidate(
+                    Path.GetFullPath(packagePath),
+                    export.UIndex,
+                    export.InstancedFullPath,
+                    baseHead?.InstancedFullPath,
+                    mountPriority,
+                    origin));
+            }
             if (export.IsDefaultObject ||
                 !export.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase) ||
                 (!TextureRegistryDiscovery.IsRelevantPath(export.InstancedFullPath) &&
@@ -62,8 +81,8 @@ internal sealed class LecTextureRegistryPackageScanner : ITextureRegistryPackage
             var occurrence = new TextureCatalogOccurrence(
                 Path.GetFullPath(packagePath),
                 export.UIndex,
-                GetMountPriority(packagePath, meGame),
-                GetOrigin(packagePath, meGame),
+                mountPriority,
+                origin,
                 topMip?.width ?? 0,
                 topMip?.height ?? 0,
                 export.GetProperty<EnumProperty>("Format")?.Value.Name ?? texture.TextureFormat ?? "Unknown",
@@ -76,7 +95,7 @@ internal sealed class LecTextureRegistryPackageScanner : ITextureRegistryPackage
             results.Add(new TextureRegistryScannedTexture(export.InstancedFullPath, occurrence));
         }
 
-        return results;
+        return new TextureRegistryPackageScan(results, templates);
     }
 
     private static TextureCatalogOrigin GetOrigin(string packagePath, MEGame game)

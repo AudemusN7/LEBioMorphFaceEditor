@@ -44,9 +44,6 @@ public sealed class MorphFaceConversionService(
         ArgumentNullException.ThrowIfNull(request);
         var sourcePath = RequirePackage(request.SourcePackagePath, "source");
         var destinationPath = Path.GetFullPath(request.DestinationPackagePath);
-        var templatePath = request.CreateNewPackage
-            ? RequirePackage(request.TemplatePackagePath, "template")
-            : RequirePackage(destinationPath, "destination");
         if (request.CreateNewPackage && File.Exists(destinationPath))
         {
             throw new IOException("The new conversion destination already exists.");
@@ -59,14 +56,20 @@ public sealed class MorphFaceConversionService(
             source.Document.Source.InstancedPath,
             source.Document.BaseHeadReference?.InstancedPath);
         EnsureSupportedDirection(source.Game, request.TargetGame);
-        var sourceTextureCatalog = ReadTextureCatalog(source.Game);
-        var targetTextureCatalog = ReadTextureCatalog(request.TargetGame);
+        var sourceCatalog = ReadTextureCatalog(source.Game);
+        var targetCatalog = ReadTextureCatalog(request.TargetGame);
         var species = SpeciesForProfile(sourceProfile.Key);
         var targetProfile = profiles.Profiles.SingleOrDefault(profile =>
                                 profile.Game == request.TargetGame &&
                                 string.Equals(SpeciesForProfile(profile.Key), species, StringComparison.OrdinalIgnoreCase))
                             ?? throw new NotSupportedException(
                                 $"No {request.TargetGame} conversion profile exists for {sourceProfile.DisplayName}.");
+
+        var templatePath = request.CreateNewPackage
+            ? string.IsNullOrWhiteSpace(request.TemplatePackagePath)
+                ? FindAutomaticTemplatePath(targetProfile, targetCatalog.MorphFaceTemplates)
+                : RequirePackage(request.TemplatePackagePath, "template")
+            : RequirePackage(destinationPath, "destination");
 
         var (templateReference, template) = FindEditableTemplate(reader, templatePath, targetProfile);
         var sourceSession = CreateSession(source, sourceProfile, sourcePath);
@@ -114,8 +117,8 @@ public sealed class MorphFaceConversionService(
                 sourcePath,
                 source.Document.HairMeshReference,
                 source.Document.OtherMeshReferences,
-                sourceTextureCatalog,
-                targetTextureCatalog);
+                sourceCatalog.Candidates,
+                targetCatalog.Candidates);
         }
         else
         {
@@ -134,8 +137,8 @@ public sealed class MorphFaceConversionService(
                 templatePath,
                 source.Document.HairMeshReference,
                 source.Document.OtherMeshReferences,
-                sourceTextureCatalog,
-                targetTextureCatalog);
+                sourceCatalog.Candidates,
+                targetCatalog.Candidates);
             saveResult = transferred.SaveResult;
             mappedMaterial = transferred.MaterialData;
         }
@@ -194,7 +197,7 @@ public sealed class MorphFaceConversionService(
         return (transferred.SaveResult, transferred.MaterialData);
     }
 
-    private IReadOnlyList<TextureCatalogCandidate> ReadTextureCatalog(MorphFaceGame game)
+    private TextureCatalogReadResult ReadTextureCatalog(MorphFaceGame game)
     {
         var result = _textureCatalogService.ReadAsync(game).GetAwaiter().GetResult();
         if (!result.IsAvailable)
@@ -202,7 +205,24 @@ public sealed class MorphFaceConversionService(
             throw new InvalidOperationException(
                 $"The {game} texture database is unavailable. Build it in Texture Databases before converting across games.");
         }
-        return result.Candidates;
+        return result;
+    }
+
+    private string FindAutomaticTemplatePath(
+        MorphFaceProfile profile,
+        IReadOnlyList<MorphFaceTemplateCandidate> candidates)
+    {
+        var match = candidates.FirstOrDefault(candidate =>
+            candidate.Origin != TextureCatalogOrigin.Mod &&
+            profiles.Find(profile.Game, candidate.FacePath, candidate.BaseHeadPath)?.Key == profile.Key &&
+            profile.GeometryEditBlockReason(candidate.BaseHeadPath) is null &&
+            File.Exists(candidate.PackagePath));
+        if (match is null)
+        {
+            throw new InvalidOperationException(
+                $"The {profile.Game} texture database contains no installed {profile.DisplayName} face to use as a conversion template. Rebuild that database and try again.");
+        }
+        return Path.GetFullPath(match.PackagePath);
     }
 
     private static MorphFaceMaterialData ApplyFaceSpecificMaterialPolicy(

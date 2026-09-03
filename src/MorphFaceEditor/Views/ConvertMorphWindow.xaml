@@ -14,7 +14,7 @@
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
-        <TextBlock Text="Convert slider values, final-skeleton residuals, and compatible material overrides onto a destination-game face template. Choose an existing PCC containing a matching face, or leave it blank to create a new minimal PCC from a template you select."
+        <TextBlock Text="Convert slider values, final-skeleton residuals, and compatible material overrides onto a destination-game face template. Choose an existing PCC containing a matching face, or leave it blank to create a new minimal PCC."
                    TextWrapping="Wrap" Foreground="{StaticResource SecondaryText}" Margin="0,0,0,15" />
         <StackPanel Grid.Row="1" Margin="0,0,0,13">
             <TextBlock Text="TARGET GAME" Style="{StaticResource FieldLabel}" />

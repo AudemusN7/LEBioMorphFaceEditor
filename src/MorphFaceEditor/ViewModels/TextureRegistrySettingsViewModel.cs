@@ -212,7 +212,6 @@ public sealed class TextureRegistrySettingsRowViewModel : ObservableObject
 
     public MorphFaceGame Game { get; }
     public string GameLabel => Game.ToString();
-    public string SourceLabel => "MorphFace Editor";
     public TextureRegistryStatus Status => _status;
     public bool IsBuildActionVisible
     {

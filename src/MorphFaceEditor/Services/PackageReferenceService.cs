@@ -21,9 +21,11 @@ public interface ITextureReferenceLoader
 
 public sealed class PackageReferenceService(
     MorphFacePackageReader reader,
-    TextureCatalogService? textureCatalogService = null) : ITextureReferenceLoader
+    TextureCatalogService textureCatalogService) : ITextureReferenceLoader
 {
     private readonly SemaphoreSlim _readerGate = new(1, 1);
+    private readonly TextureCatalogService _textureCatalogService =
+        textureCatalogService ?? throw new ArgumentNullException(nameof(textureCatalogService));
     private static readonly MaterialParameterDefinition ThumbnailDefinition = new(
         "Preview",
         "Preview",
@@ -87,10 +89,8 @@ public sealed class PackageReferenceService(
 
     public Task<TextureCatalogReadResult> ReadTextureCatalogAsync(
         MorphFaceGame game,
-        CancellationToken cancellationToken = default) => textureCatalogService is null
-        ? Task.FromResult(new TextureCatalogReadResult(
-            new TextureRegistryStatus(game, TextureRegistryState.Missing, null, null, null, null, null), []))
-        : textureCatalogService.ReadAsync(game, cancellationToken);
+        CancellationToken cancellationToken = default) =>
+        _textureCatalogService.ReadAsync(game, cancellationToken);
 
     public Task<LoadedAttachment> LoadAttachmentAsync(
         string packagePath,

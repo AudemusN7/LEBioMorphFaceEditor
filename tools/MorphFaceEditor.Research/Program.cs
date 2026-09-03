@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Collections.Concurrent;
 using System.Numerics;
+using System.Text.Json;
 using LegendaryExplorerCore.Packages;
 using LegendaryExplorerCore.Packages.CloningImportingAndRelinking;
 using LegendaryExplorerCore.Shaders;
@@ -10,6 +11,73 @@ using LegendaryExplorerCore.Unreal.BinaryConverters;
 using LegendaryExplorerCore.Unreal.BinaryConverters.Shaders;
 using LegendaryExplorerCore.Unreal.ObjectInfo;
 using MorphFaceEditor.LegendaryExplorer;
+
+if (args.Length == 3 && args[0].Equals("corpus-audit", StringComparison.OrdinalIgnoreCase))
+{
+    LegendaryExplorerCoreRuntime.Initialize();
+    var corpusDirectory = Path.GetFullPath(args[1]);
+    var outputPath = Path.GetFullPath(args[2]);
+    var packagePaths = Directory.EnumerateFiles(corpusDirectory, "*.pcc", SearchOption.TopDirectoryOnly)
+        .Where(path => Path.GetFileName(path).Contains("GlobalMorphs", StringComparison.OrdinalIgnoreCase))
+        .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+    if (packagePaths.Length != 9)
+    {
+        throw new InvalidDataException(
+            $"Expected the nine canonical GlobalMorphs packages in '{corpusDirectory}', but found {packagePaths.Length}.");
+    }
+
+    var audit = packagePaths.Select(AuditCorpusPackage).ToArray();
+    Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+    File.WriteAllText(outputPath, JsonSerializer.Serialize(audit, new JsonSerializerOptions
+    {
+        WriteIndented = true
+    }), new UTF8Encoding(false));
+    foreach (var auditedPackage in audit)
+    {
+        Console.WriteLine(
+            $"{auditedPackage.FileName}: {auditedPackage.Game}; {auditedPackage.Faces.Count} faces; " +
+            $"{auditedPackage.ReferencedAssets.Count} referenced assets; {auditedPackage.PackageStoredTextures.Count} package-stored textures");
+    }
+    Console.WriteLine($"Wrote {outputPath}");
+    return 0;
+}
+
+if (args.Length == 3 && args[0].Equals("corpus-reconciliation", StringComparison.OrdinalIgnoreCase))
+{
+    LegendaryExplorerCoreRuntime.Initialize();
+    var corpusDirectory = Path.GetFullPath(args[1]);
+    var outputPath = Path.GetFullPath(args[2]);
+    var audits = Directory.EnumerateFiles(corpusDirectory, "*.pcc", SearchOption.TopDirectoryOnly)
+        .Where(path => Path.GetFileName(path).Contains("GlobalMorphs", StringComparison.OrdinalIgnoreCase))
+        .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+        .Select(AuditCorpusPackage)
+        .ToDictionary(value => value.FileName, StringComparer.OrdinalIgnoreCase);
+    var pairs = new[]
+    {
+        ("LE1", "LE2"), ("LE1", "LE3"),
+        ("LE2", "LE1"), ("LE2", "LE3"),
+        ("LE3", "LE1"), ("LE3", "LE2")
+    };
+    var results = pairs.SelectMany(pair => BuildReconciliation(
+            audits[$"{pair.Item1} GlobalMorphs.pcc"],
+            audits[$"{pair.Item1} to {pair.Item2} GlobalMorphs.pcc"],
+            pair.Item1,
+            pair.Item2))
+        .OrderBy(value => value.SourceGame, StringComparer.Ordinal)
+        .ThenBy(value => value.TargetGame, StringComparer.Ordinal)
+        .ThenBy(value => value.Kind, StringComparer.Ordinal)
+        .ThenBy(value => value.Parameter, StringComparer.OrdinalIgnoreCase)
+        .ThenBy(value => value.SourcePath, StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+    Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+    File.WriteAllText(outputPath, JsonSerializer.Serialize(results, new JsonSerializerOptions
+    {
+        WriteIndented = true
+    }), new UTF8Encoding(false));
+    Console.WriteLine($"Wrote {results.Length} unambiguous changed/omitted asset decisions to {outputPath}");
+    return 0;
+}
 
 if (args.Length == 4 && args[0].Equals("actor-inventory", StringComparison.OrdinalIgnoreCase))
 {
@@ -245,7 +313,9 @@ if (args.Length == 6 && args[0].Equals("dump-shaders", StringComparison.OrdinalI
 
 if (args.Length is not 4 || !args[0].Equals("trace-material", StringComparison.OrdinalIgnoreCase))
 {
-    Console.Error.WriteLine("Usage: locate-export <game-root> <export-name>");
+    Console.Error.WriteLine("Usage: corpus-audit <corpus-directory> <output.json>");
+    Console.Error.WriteLine("   or: corpus-reconciliation <corpus-directory> <output.json>");
+    Console.Error.WriteLine("   or: locate-export <game-root> <export-name>");
     Console.Error.WriteLine("   or: inventory-faces <package.pcc> <base-head-name-fragment>");
     Console.Error.WriteLine("   or: actor-inventory <package.pcc> <face-selector> <profile-key>");
     Console.Error.WriteLine("   or: trace-material <package.pcc> <skeletal-mesh-name> <report.md>");
@@ -551,3 +621,166 @@ static float MaximumDifference(IReadOnlyList<Vector3> left, IReadOnlyList<Vector
     }
     return maximum;
 }
+
+static CorpusPackageAudit AuditCorpusPackage(string packagePath)
+{
+    using var package = MEPackageHandler.OpenMEPackage(packagePath, forceLoadFromDisk: true);
+    var faces = package.Exports
+        .Where(export => !export.IsDefaultObject &&
+                         export.ClassName.Equals("BioMorphFace", StringComparison.OrdinalIgnoreCase))
+        .OrderBy(export => export.InstancedFullPath, StringComparer.OrdinalIgnoreCase)
+        .Select(face =>
+        {
+            var properties = face.GetProperties();
+            var materialOverride = properties.GetProp<ObjectProperty>("m_oMaterialOverrides")?.ResolveToEntry(package)
+                                   as ExportEntry;
+            var textureOverrides = materialOverride?.GetProperty<ArrayProperty<StructProperty>>(
+                    "m_aTextureOverrides")?
+                .Select(value => new CorpusTextureOverride(
+                    value.GetProp<NameProperty>("nName")?.Value.Instanced ?? "<unnamed>",
+                    DescribeCorpusEntry(value.GetProp<ObjectProperty>("m_pTexture")?.ResolveToEntry(package))))
+                .OrderBy(value => value.Parameter, StringComparer.OrdinalIgnoreCase)
+                .ToArray() ?? [];
+            return new CorpusFaceAudit(
+                face.InstancedFullPath,
+                DescribeCorpusEntry(properties.GetProp<ObjectProperty>("m_oBaseHead")?.ResolveToEntry(package)),
+                DescribeCorpusEntry(properties.GetProp<ObjectProperty>("m_oHairMesh")?.ResolveToEntry(package)),
+                properties.GetProp<ArrayProperty<ObjectProperty>>("m_oOtherMeshes")?
+                    .Select(value => DescribeCorpusEntry(value.ResolveToEntry(package)))
+                    .ToArray() ?? [],
+                materialOverride?.InstancedFullPath,
+                textureOverrides);
+        })
+        .ToArray();
+    var referencedAssets = faces
+        .SelectMany(face => new[] { face.BaseHead, face.Hair }
+            .Concat(face.OtherMeshes)
+            .Concat(face.TextureOverrides.Select(value => value.Texture)))
+        .Where(value => value is not null)
+        .Cast<CorpusEntryAudit>()
+        .DistinctBy(value => $"{value.Kind}|{value.ClassName}|{value.Path}", StringComparer.OrdinalIgnoreCase)
+        .OrderBy(value => value.ClassName, StringComparer.OrdinalIgnoreCase)
+        .ThenBy(value => value.Path, StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+    var storedTextures = package.Exports
+        .Where(export => export.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase))
+        .Select(export =>
+        {
+            var texture = new LegendaryExplorerCore.Unreal.Classes.Texture2D(export);
+            return new CorpusStoredTexture(
+                export.InstancedFullPath,
+                texture.GetTopMip().IsPackageStored,
+                DescribeCorpusEntry(export.Parent));
+        })
+        .Where(value => value.IsPackageStored)
+        .OrderBy(value => value.Path, StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+    return new CorpusPackageAudit(
+        Path.GetFileName(packagePath),
+        package.Game.ToString(),
+        faces,
+        referencedAssets,
+        storedTextures);
+}
+
+static CorpusEntryAudit? DescribeCorpusEntry(IEntry? entry) => entry is null
+    ? null
+    : new CorpusEntryAudit(
+        entry is ExportEntry ? "Export" : "Import",
+        entry.ClassName,
+        entry.InstancedFullPath,
+        entry.UIndex,
+        entry.Parent is null ? null : $"{(entry.Parent is ExportEntry ? "Export" : "Import")}:{entry.Parent.InstancedFullPath}");
+
+static IEnumerable<CorpusReconciliationDecision> BuildReconciliation(
+    CorpusPackageAudit source,
+    CorpusPackageAudit target,
+    string sourceGame,
+    string targetGame)
+{
+    var targetFaces = target.Faces.ToDictionary(value => value.Path, StringComparer.OrdinalIgnoreCase);
+    var evidence = new List<(string Kind, string? Parameter, string SourcePath, string? TargetPath)>();
+    foreach (var sourceFace in source.Faces)
+    {
+        if (!targetFaces.TryGetValue(sourceFace.Path, out var targetFace))
+        {
+            continue;
+        }
+        if (sourceFace.Hair is not null)
+        {
+            evidence.Add(("Hair", null, sourceFace.Hair.Path, targetFace.Hair?.Path));
+        }
+        for (var index = 0; index < sourceFace.OtherMeshes.Count; index++)
+        {
+            if (sourceFace.OtherMeshes[index] is { } other)
+            {
+                evidence.Add(("Other", null, other.Path,
+                    index < targetFace.OtherMeshes.Count ? targetFace.OtherMeshes[index]?.Path : null));
+            }
+        }
+        var targetTextures = targetFace.TextureOverrides
+            .GroupBy(value => value.Parameter, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First().Texture?.Path, StringComparer.OrdinalIgnoreCase);
+        foreach (var texture in sourceFace.TextureOverrides.Where(value => value.Texture is not null))
+        {
+            targetTextures.TryGetValue(texture.Parameter, out var targetPath);
+            evidence.Add(("Texture", texture.Parameter, texture.Texture!.Path, targetPath));
+        }
+    }
+
+    foreach (var group in evidence.GroupBy(value =>
+                 $"{value.Kind}\u001f{value.Parameter}\u001f{value.SourcePath}", StringComparer.OrdinalIgnoreCase))
+    {
+        var targets = group.Select(value => value.TargetPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (targets.Length != 1)
+        {
+            Console.Error.WriteLine(
+                $"Skipped ambiguous {sourceGame}->{targetGame} reconciliation for {group.Key}: " +
+                string.Join(", ", targets.Select(value => value ?? "<omitted>")));
+            continue;
+        }
+        var sample = group.First();
+        if (targets[0] is not null &&
+            targets[0]!.Equals(sample.SourcePath, StringComparison.OrdinalIgnoreCase))
+        {
+            continue;
+        }
+        yield return new CorpusReconciliationDecision(
+            sourceGame,
+            targetGame,
+            sample.Kind,
+            sample.Parameter,
+            sample.SourcePath,
+            targets[0],
+            group.Count());
+    }
+}
+
+sealed record CorpusPackageAudit(
+    string FileName,
+    string Game,
+    IReadOnlyList<CorpusFaceAudit> Faces,
+    IReadOnlyList<CorpusEntryAudit> ReferencedAssets,
+    IReadOnlyList<CorpusStoredTexture> PackageStoredTextures);
+
+sealed record CorpusFaceAudit(
+    string Path,
+    CorpusEntryAudit? BaseHead,
+    CorpusEntryAudit? Hair,
+    IReadOnlyList<CorpusEntryAudit?> OtherMeshes,
+    string? MaterialOverride,
+    IReadOnlyList<CorpusTextureOverride> TextureOverrides);
+
+sealed record CorpusTextureOverride(string Parameter, CorpusEntryAudit? Texture);
+sealed record CorpusEntryAudit(string Kind, string ClassName, string Path, int UIndex, string? Parent);
+sealed record CorpusStoredTexture(string Path, bool IsPackageStored, CorpusEntryAudit? Parent);
+sealed record CorpusReconciliationDecision(
+    string SourceGame,
+    string TargetGame,
+    string Kind,
+    string? Parameter,
+    string SourcePath,
+    string? TargetPath,
+    int EvidenceCount);

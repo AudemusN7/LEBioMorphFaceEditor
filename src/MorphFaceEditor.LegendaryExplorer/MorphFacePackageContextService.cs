@@ -35,6 +35,146 @@ public sealed class MorphFacePackageContextService
         return ReadMaterialData(ResolveMaterialOverride(FindFace(package, facePath)));
     }
 
+    public TransferredMaterialSaveResult CreateConvertedMorphPackage(
+        string destinationPath,
+        MorphFaceDocument draft,
+        string objectName,
+        string targetTemplatePackagePath,
+        string targetTemplateFacePath,
+        MorphFaceMaterialData sourceMaterialData,
+        IReadOnlySet<string> supportedScalars,
+        IReadOnlySet<string> supportedVectors,
+        IReadOnlySet<string> supportedTextures,
+        MorphFaceGame sourceGame,
+        string sourceProfileKey,
+        string sourcePackagePath,
+        AssetIdentity? sourceHair,
+        IReadOnlyList<AssetIdentity?> sourceOtherMeshes,
+        IReadOnlyList<TextureCatalogCandidate> sourceTextureCatalog,
+        IReadOnlyList<TextureCatalogCandidate> targetTextureCatalog)
+    {
+        ValidateObjectName(objectName);
+        ValidateMaterialData(sourceMaterialData);
+        var destination = Path.GetFullPath(destinationPath);
+        var templatePath = Path.GetFullPath(targetTemplatePackagePath);
+        if (File.Exists(destination))
+        {
+            throw new IOException("The new conversion destination already exists.");
+        }
+        if (!File.Exists(templatePath))
+        {
+            throw new FileNotFoundException("The target template PCC was not found.", templatePath);
+        }
+        var directory = Path.GetDirectoryName(destination)
+                        ?? throw new InvalidOperationException("The conversion destination has no parent directory.");
+        Directory.CreateDirectory(directory);
+        var temporaryPath = Path.Combine(
+            directory, $".{Path.GetFileName(destination)}.{Guid.NewGuid():N}.conversion.tmp.pcc");
+        try
+        {
+            TextureTransferResult transfer;
+            AttachmentTransferResult attachments;
+            IReadOnlyList<string> stagingWarnings;
+            string facePath;
+            string materialPath;
+            using (var template = OpenPackage(templatePath))
+            using (var package = MEPackageHandler.CreateMemoryEmptyPackage(temporaryPath, template.Game))
+            {
+                var templateFace = FindFace(template, targetTemplateFacePath);
+                NormalizeInvalidHmmMorphPackageAliases(template);
+                ExternalSkeletalMeshMaterializer.PrepareReferencedPackagePaths(package, templateFace);
+                var stagingIssues = EntryExporter.ExportExportToPackage(
+                    templateFace,
+                    package,
+                    out var stagedEntry,
+                    customROP: new RelinkerOptionsPackage
+                    {
+                        ImportExportDependencies = true,
+                        GenerateImportsForGlobalFiles = false,
+                        CheckImportsWhenExportingToPackage = false
+                    });
+                stagingWarnings = stagingIssues.Select(issue => issue.Message).ToArray();
+                if (stagedEntry is not ExportEntry face ||
+                    !face.ClassName.Equals("BioMorphFace", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidDataException("LEC did not stage the target BioMorphFace template.");
+                }
+                EnsureNoExportParentsAreImports(package, "target-template staging");
+                face.ObjectName = new NameReference(objectName);
+                var materialOverride = ResolveMaterialOverride(face);
+
+                // Stage the authored material and attachment assets first. The base-head
+                // dependency walk can then bind to those exports instead of pre-creating
+                // fragile imports for the same canonical paths.
+                transfer = MorphFaceTextureTransferEngine.Transfer(
+                    package,
+                    sourceMaterialData,
+                    supportedScalars,
+                    supportedVectors,
+                    supportedTextures,
+                    ToMeGame(sourceGame),
+                    sourceProfileKey,
+                    sourcePackagePath,
+                    templatePath,
+                    sourceTextureCatalog,
+                    targetTextureCatalog);
+                EnsureNoExportParentsAreImports(package, "texture staging");
+                WriteMaterialData(package, materialOverride, transfer.MaterialData);
+                attachments = MorphFaceAttachmentTransferEngine.Transfer(
+                    package,
+                    sourceHair,
+                    sourceOtherMeshes,
+                    ToMeGame(sourceGame),
+                    templatePath);
+                EnsureNoExportParentsAreImports(package, "attachment staging");
+
+                var baseHead = draft.BaseHeadReference
+                               ?? throw new InvalidDataException("The converted face has no target-game base head.");
+                var stagedBaseHead = package.FindEntry(baseHead.InstancedPath, "SkeletalMesh")
+                                     ?? ExternalSkeletalMeshMaterializer.Materialize(
+                                         package,
+                                         baseHead,
+                                         warnings: null);
+                EnsureNoExportParentsAreImports(package, "base-head staging");
+                var properties = face.GetProperties();
+                properties.AddOrReplaceProp(new ObjectProperty(stagedBaseHead, "m_oBaseHead"));
+                properties.AddOrReplaceProp(new ObjectProperty(materialOverride, "m_oMaterialOverrides"));
+                face.WriteProperties(properties);
+                WriteMorphData(face, new MorphFaceMorphData(
+                    draft.MorphFeatures, draft.FinalSkeleton, draft.BakedLods));
+                WriteAttachments(face, attachments);
+                facePath = face.InstancedFullPath;
+                materialPath = materialOverride.InstancedFullPath;
+                package.Save(temporaryPath);
+            }
+
+            VerifyMinimalConvertedPackage(temporaryPath, facePath, materialPath);
+            if (File.Exists(destination))
+            {
+                throw new IOException("The new conversion destination was created by another process.");
+            }
+            File.Move(temporaryPath, destination);
+            return new TransferredMaterialSaveResult(
+                new MorphFaceSaveResult(
+                    destination,
+                    facePath,
+                    materialPath,
+                    draft.BakedLods.Count,
+                    transfer.MaterialData.Textures.Count)
+                {
+                    Warnings = stagingWarnings
+                        .Concat(transfer.Warnings)
+                        .Concat(attachments.Warnings)
+                        .ToArray()
+                },
+                transfer.MaterialData);
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
+        }
+    }
+
     public MorphFaceSaveResult CloneMorph(string packagePath, string facePath, string objectName)
     {
         ValidateObjectName(objectName);
@@ -152,7 +292,10 @@ public sealed class MorphFacePackageContextService
         string sourceProfileKey,
         string sourcePackagePath,
         string? targetTemplatePackagePath,
-        bool clearAttachmentReferences)
+        AssetIdentity? sourceHair,
+        IReadOnlyList<AssetIdentity?> sourceOtherMeshes,
+        IReadOnlyList<TextureCatalogCandidate>? sourceTextureCatalog = null,
+        IReadOnlyList<TextureCatalogCandidate>? targetTextureCatalog = null)
     {
         ValidateObjectName(objectName);
         ValidateMorphData(morphData);
@@ -169,7 +312,9 @@ public sealed class MorphFacePackageContextService
                 ToMeGame(sourceGame),
                 sourceProfileKey,
                 sourcePackagePath,
-                targetTemplatePackagePath);
+                targetTemplatePackagePath,
+                sourceTextureCatalog ?? [],
+                targetTextureCatalog ?? []);
             var source = FindFace(package, facePath);
             EnsureNameAvailable(package, source.Parent, objectName);
             EnsureCompatibleLods(ReadMorphData(source), morphData);
@@ -182,19 +327,19 @@ public sealed class MorphFacePackageContextService
                 materialOverride.ObjectName.Number + 1);
             WriteMorphData(clone, morphData);
             WriteMaterialData(package, materialOverride, transfer.MaterialData);
-            if (clearAttachmentReferences)
-            {
-                var properties = clone.GetProperties();
-                properties.RemoveNamedProperty("m_oHairMesh");
-                properties.RemoveNamedProperty("m_oOtherMeshes");
-                clone.WriteProperties(properties);
-            }
+            var attachments = MorphFaceAttachmentTransferEngine.Transfer(
+                package,
+                sourceHair,
+                sourceOtherMeshes,
+                ToMeGame(sourceGame),
+                targetTemplatePackagePath);
+            WriteAttachments(clone, attachments);
             return new PendingResult(
                 clone.InstancedFullPath,
                 materialOverride.InstancedFullPath,
                 morphData,
                 transfer.MaterialData,
-                transfer.Warnings);
+                transfer.Warnings.Concat(attachments.Warnings).ToArray());
         });
         return new TransferredMaterialSaveResult(saveResult, transfer!.MaterialData);
     }
@@ -443,7 +588,11 @@ public sealed class MorphFacePackageContextService
         MorphFaceGame sourceGame,
         string sourceProfileKey,
         string sourcePackagePath,
-        string? targetTemplatePackagePath)
+        string? targetTemplatePackagePath,
+        AssetIdentity? sourceHair,
+        IReadOnlyList<AssetIdentity?> sourceOtherMeshes,
+        IReadOnlyList<TextureCatalogCandidate>? sourceTextureCatalog = null,
+        IReadOnlyList<TextureCatalogCandidate>? targetTextureCatalog = null)
     {
         ValidateMaterialData(source);
         TextureTransferResult? transfer = null;
@@ -458,19 +607,148 @@ public sealed class MorphFacePackageContextService
                 ToMeGame(sourceGame),
                 sourceProfileKey,
                 sourcePackagePath,
-                targetTemplatePackagePath);
+                targetTemplatePackagePath,
+                sourceTextureCatalog ?? [],
+                targetTextureCatalog ?? []);
             var face = FindFace(package, facePath);
             var materialOverride = ResolveMaterialOverride(face);
             WriteMaterialData(package, materialOverride, transfer.MaterialData);
+            var attachments = MorphFaceAttachmentTransferEngine.Transfer(
+                package,
+                sourceHair,
+                sourceOtherMeshes,
+                ToMeGame(sourceGame),
+                targetTemplatePackagePath);
+            WriteAttachments(face, attachments);
             return new PendingResult(
                 face.InstancedFullPath,
                 materialOverride.InstancedFullPath,
                 ReadMorphData(face),
                 transfer.MaterialData,
-                transfer.Warnings);
+                transfer.Warnings.Concat(attachments.Warnings).ToArray());
         });
         return new TransferredMaterialSaveResult(saveResult, transfer!.MaterialData);
     }
+
+    private static void WriteAttachments(ExportEntry face, AttachmentTransferResult attachments)
+    {
+        var properties = face.GetProperties();
+        if (attachments.Hair is null)
+        {
+            properties.RemoveNamedProperty("m_oHairMesh");
+        }
+        else
+        {
+            properties.AddOrReplaceProp(new ObjectProperty(attachments.Hair, "m_oHairMesh"));
+        }
+        if (attachments.OtherMeshes.Count == 0)
+        {
+            properties.RemoveNamedProperty("m_oOtherMeshes");
+        }
+        else
+        {
+            properties.AddOrReplaceProp(new ArrayProperty<ObjectProperty>(
+                attachments.OtherMeshes.Select(value => new ObjectProperty(value)),
+                "m_oOtherMeshes"));
+        }
+        face.WriteProperties(properties);
+    }
+
+    private static ExportEntry? EnsureExportPackagePath(IMEPackage package, string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return null;
+        ExportEntry? parent = null;
+        var currentPath = string.Empty;
+        foreach (var segment in path.Split('.'))
+        {
+            currentPath = currentPath.Length == 0 ? segment : $"{currentPath}.{segment}";
+            parent = package.FindExport(currentPath, "Package")
+                     ?? package.CreatePackageExport(NameReference.FromInstancedString(segment), parent);
+        }
+        return parent;
+    }
+
+    private static void VerifyMinimalConvertedPackage(
+        string packagePath,
+        string facePath,
+        string materialPath)
+    {
+        using var package = OpenPackage(packagePath);
+        _ = FindFace(package, facePath);
+        _ = package.FindExport(materialPath, "BioMaterialOverride")
+            ?? throw new InvalidDataException("The converted material override was not saved.");
+        var malformed = package.Exports
+            .Where(export => export.GetProperties().Any(ContainsUnknownProperty))
+            .Select(export => export.InstancedFullPath)
+            .ToArray();
+        if (malformed.Length > 0)
+        {
+            throw new InvalidDataException(
+                $"Converted package contains UnknownProperty data in: {string.Join(", ", malformed)}.");
+        }
+        var mixedParents = package.Exports
+            .Where(export => export.Parent is ImportEntry)
+            .Select(export => export.InstancedFullPath)
+            .ToArray();
+        if (mixedParents.Length > 0)
+        {
+            throw new InvalidDataException(
+                $"Converted package contains exports beneath imports: {string.Join(", ", mixedParents)}.");
+        }
+        EnsureNoInvalidHmmMorphPackageAliases(package, "final verification");
+    }
+
+    private static void EnsureNoExportParentsAreImports(IMEPackage package, string stage)
+    {
+        var malformed = package.Exports.FirstOrDefault(export => export.Parent is ImportEntry);
+        if (malformed is not null)
+        {
+            throw new InvalidDataException(
+                $"{stage} created export '{malformed.InstancedFullPath}' beneath import " +
+                $"'{malformed.Parent?.InstancedFullPath}'.");
+        }
+        var duplicates = EntryChecker.CheckForDuplicateIndices(package);
+        if (duplicates.Count > 0)
+        {
+            throw new InvalidDataException(
+                $"{stage} created duplicate entry identities: " +
+                string.Join("; ", duplicates.Select(value => value.Message)));
+        }
+        EnsureNoInvalidHmmMorphPackageAliases(package, stage);
+    }
+
+    private static void NormalizeInvalidHmmMorphPackageAliases(IMEPackage package)
+    {
+        const string invalidName = "BIOG_HMM_HED_PROMorph_R";
+        const string canonicalName = "BIOG_HMM_HED_PROMorph";
+        foreach (var entry in package.Exports.Cast<IEntry>().Concat(package.Imports).Where(entry =>
+                     entry.ClassName.Equals("Package", StringComparison.OrdinalIgnoreCase) &&
+                     entry.ObjectName.Instanced.Equals(invalidName, StringComparison.OrdinalIgnoreCase)))
+        {
+            entry.ObjectName = NameReference.FromInstancedString(canonicalName);
+        }
+    }
+
+    private static void EnsureNoInvalidHmmMorphPackageAliases(IMEPackage package, string stage)
+    {
+        var invalid = package.Exports.Cast<IEntry>().Concat(package.Imports).FirstOrDefault(entry =>
+            entry.InstancedFullPath.Equals("BIOG_HMM_HED_PROMorph_R", StringComparison.OrdinalIgnoreCase) ||
+            entry.InstancedFullPath.StartsWith("BIOG_HMM_HED_PROMorph_R.", StringComparison.OrdinalIgnoreCase));
+        if (invalid is not null)
+        {
+            throw new InvalidDataException(
+                $"{stage} retained invalid HMM morph package path '{invalid.InstancedFullPath}'.");
+        }
+    }
+
+    private static bool ContainsUnknownProperty(Property property) => property switch
+    {
+        UnknownProperty => true,
+        StructProperty structure => structure.Properties.Any(ContainsUnknownProperty),
+        ArrayProperty<StructProperty> array => array.Any(value =>
+            value.Properties.Any(ContainsUnknownProperty)),
+        _ => false
+    };
 
     private static MorphFaceSaveResult Mutate(
         string packagePath,

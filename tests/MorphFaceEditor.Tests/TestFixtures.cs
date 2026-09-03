@@ -1,10 +1,21 @@
 using System.Numerics;
 using MorphFaceEditor.Core.Domain;
+using MorphFaceEditor.LegendaryExplorer;
+using MorphFaceEditor.LegendaryExplorer.TextureRegistry;
 
 namespace MorphFaceEditor.Tests;
 
 public static class TestFixtures
 {
+    private static readonly Lazy<TextureCatalogService> CorpusTextureCatalog =
+        new(BuildCorpusTextureCatalog);
+
+    public static TextureCatalogService CreateMissingTextureCatalogService() => new(
+        new TextureRegistryStore(new TextureRegistryPaths(Path.Combine(
+            Path.GetTempPath(), "MFE-Tests-Missing-Texture-Registries"))));
+
+    public static TextureCatalogService GetCorpusTextureCatalogService() => CorpusTextureCatalog.Value;
+
     public static SkeletalMeshAsset CreateMesh()
     {
         var topology = new SkeletalMeshTopology(
@@ -73,4 +84,33 @@ public static class TestFixtures
 
     public static AssetIdentity CreateIdentity(string path, string className) =>
         new("fixture.pcc", path, 1, className);
+
+    private static TextureCatalogService BuildCorpusTextureCatalog()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        var directory = Path.Combine(Path.GetTempPath(), $"MFE-Tests-Corpus-Registries-{Guid.NewGuid():N}");
+        var store = new TextureRegistryStore(new TextureRegistryPaths(directory));
+        var builder = new TextureRegistryBuilder(
+            store,
+            new LecTextureRegistryPackageScanner(),
+            game => game switch
+            {
+                MorphFaceGame.LE1 => CorpusPackages("LE1", "LE2 to LE1", "LE3 to LE1"),
+                MorphFaceGame.LE2 => CorpusPackages("LE2", "LE1 to LE2", "LE3 to LE2"),
+                MorphFaceGame.LE3 => CorpusPackages("LE3", "LE1 to LE3", "LE2 to LE3"),
+                _ => []
+            });
+        foreach (var game in new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 })
+        {
+            var status = builder.RebuildAsync(game).GetAwaiter().GetResult();
+            if (status.State != TextureRegistryState.Ready)
+            {
+                throw new InvalidDataException($"Test texture database build failed for {game}: {status.ErrorMessage}");
+            }
+        }
+        return new TextureCatalogService(store);
+    }
+
+    private static string[] CorpusPackages(params string[] names) => names.Select(name =>
+        Path.GetFullPath(Path.Combine("tests", "Global Morphs", $"{name} GlobalMorphs.pcc"))).ToArray();
 }

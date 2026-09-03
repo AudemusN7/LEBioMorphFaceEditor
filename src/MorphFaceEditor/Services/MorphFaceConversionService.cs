@@ -3,6 +3,7 @@ using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.LegendaryExplorer;
+using MorphFaceEditor.LegendaryExplorer.TextureRegistry;
 
 namespace MorphFaceEditor.Services;
 
@@ -32,9 +33,12 @@ public sealed record MorphFaceConversionResult(
 public sealed class MorphFaceConversionService(
     MorphFaceProfileRegistry profiles,
     MorphTargetCatalog targets,
-    MorphFacePackageWriter writer,
-    MorphFacePackageContextService packageContext)
+    MorphFacePackageContextService packageContext,
+    TextureCatalogService textureCatalogService)
 {
+    private readonly TextureCatalogService _textureCatalogService =
+        textureCatalogService ?? throw new ArgumentNullException(nameof(textureCatalogService));
+
     public MorphFaceConversionResult Convert(MorphFaceConversionRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -55,6 +59,8 @@ public sealed class MorphFaceConversionService(
             source.Document.Source.InstancedPath,
             source.Document.BaseHeadReference?.InstancedPath);
         EnsureSupportedDirection(source.Game, request.TargetGame);
+        var sourceTextureCatalog = ReadTextureCatalog(source.Game);
+        var targetTextureCatalog = ReadTextureCatalog(request.TargetGame);
         var species = SpeciesForProfile(sourceProfile.Key);
         var targetProfile = profiles.Profiles.SingleOrDefault(profile =>
                                 profile.Game == request.TargetGame &&
@@ -79,6 +85,11 @@ public sealed class MorphFaceConversionService(
             source.Document.MaterialOverrides.Scalars,
             source.Document.MaterialOverrides.Vectors,
             source.Document.MaterialOverrides.Textures);
+        sourceMaterial = ApplyFaceSpecificMaterialPolicy(
+            source.Game,
+            request.TargetGame,
+            source.Document.Source.InstancedPath,
+            sourceMaterial);
         var support = GetBaseMaterialSupport(template);
         var objectName = ChooseObjectName(
             source.Document.Source.InstancedPath.Split('.').Last(),
@@ -93,13 +104,18 @@ public sealed class MorphFaceConversionService(
             (saveResult, mappedMaterial) = CreateNewPackage(
                 convertedDraft,
                 templatePath,
+                templateReference.FacePath,
                 destinationPath,
                 objectName,
                 sourceMaterial,
                 support,
                 source.Game,
                 sourceProfile.Key,
-                sourcePath);
+                sourcePath,
+                source.Document.HairMeshReference,
+                source.Document.OtherMeshReferences,
+                sourceTextureCatalog,
+                targetTextureCatalog);
         }
         else
         {
@@ -116,7 +132,10 @@ public sealed class MorphFaceConversionService(
                 sourceProfile.Key,
                 sourcePath,
                 templatePath,
-                clearAttachmentReferences: true);
+                source.Document.HairMeshReference,
+                source.Document.OtherMeshReferences,
+                sourceTextureCatalog,
+                targetTextureCatalog);
             saveResult = transferred.SaveResult;
             mappedMaterial = transferred.MaterialData;
         }
@@ -142,57 +161,74 @@ public sealed class MorphFaceConversionService(
     private (MorphFaceSaveResult SaveResult, MorphFaceMaterialData Material) CreateNewPackage(
         MorphFaceDocument draft,
         string templatePath,
+        string templateFacePath,
         string destinationPath,
         string objectName,
         MorphFaceMaterialData sourceMaterial,
         MaterialSupport support,
         MorphFaceGame sourceGame,
         string sourceProfileKey,
-        string sourcePackagePath)
+        string sourcePackagePath,
+        AssetIdentity? sourceHair,
+        IReadOnlyList<AssetIdentity?> sourceOtherMeshes,
+        IReadOnlyList<TextureCatalogCandidate> sourceTextureCatalog,
+        IReadOnlyList<TextureCatalogCandidate> targetTextureCatalog)
     {
-        var destinationDirectory = Path.GetDirectoryName(destinationPath)
-                                   ?? throw new InvalidOperationException("The destination has no parent directory.");
-        Directory.CreateDirectory(destinationDirectory);
-        var temporaryPath = Path.Combine(
-            destinationDirectory,
-            $".{Path.GetFileName(destinationPath)}.{Guid.NewGuid():N}.conversion.tmp.pcc");
-        try
+        var transferred = packageContext.CreateConvertedMorphPackage(
+            destinationPath,
+            draft,
+            objectName,
+            templatePath,
+            templateFacePath,
+            sourceMaterial,
+            support.Scalars,
+            support.Vectors,
+            support.Textures,
+            sourceGame,
+            sourceProfileKey,
+            sourcePackagePath,
+            sourceHair,
+            sourceOtherMeshes,
+            sourceTextureCatalog,
+            targetTextureCatalog);
+        return (transferred.SaveResult, transferred.MaterialData);
+    }
+
+    private IReadOnlyList<TextureCatalogCandidate> ReadTextureCatalog(MorphFaceGame game)
+    {
+        var result = _textureCatalogService.ReadAsync(game).GetAwaiter().GetResult();
+        if (!result.IsAvailable)
         {
-            var exported = writer.SaveMorphToPackage(
-                draft,
-                templatePath,
-                temporaryPath,
-                createNewPackage: true,
-                destinationObjectName: objectName);
-            var transferred = packageContext.PasteTransferredMaterialData(
-                temporaryPath,
-                exported.FaceInstancedPath,
-                sourceMaterial,
-                support.Scalars,
-                support.Vectors,
-                support.Textures,
-                sourceGame,
-                sourceProfileKey,
-                sourcePackagePath,
-                templatePath);
-            if (File.Exists(destinationPath))
-            {
-                throw new IOException("The new conversion destination was created by another process.");
-            }
-            File.Move(temporaryPath, destinationPath);
-            return (transferred.SaveResult with
-            {
-                PackagePath = destinationPath,
-                Warnings = exported.Warnings.Concat(transferred.SaveResult.Warnings).ToArray()
-            }, transferred.MaterialData);
+            throw new InvalidOperationException(
+                $"The {game} texture database is unavailable. Build it in Texture Databases before converting across games.");
         }
-        finally
+        return result.Candidates;
+    }
+
+    private static MorphFaceMaterialData ApplyFaceSpecificMaterialPolicy(
+        MorphFaceGame sourceGame,
+        MorphFaceGame targetGame,
+        string sourceFacePath,
+        MorphFaceMaterialData source)
+    {
+        if (sourceGame != MorphFaceGame.LE2 || targetGame != MorphFaceGame.LE3 ||
+            !sourceFacePath.Equals("HMF.BioFace_HF1", StringComparison.OrdinalIgnoreCase))
         {
-            if (File.Exists(temporaryPath))
-            {
-                File.Delete(temporaryPath);
-            }
+            return source;
         }
+
+        const string canonicalLash =
+            "BIOG_HMF_HED_PROMorph_R.Average.HMF_HED_PROLash_Opac_M01";
+        var textures = source.Textures
+            .Where(value => !value.Name.Equals("HED_Scalp_Spec", StringComparison.OrdinalIgnoreCase))
+            .Select(value => value.Name.Equals("HED_Lash_Diff", StringComparison.OrdinalIgnoreCase)
+                ? value with
+                {
+                    TextureReference = new AssetIdentity(string.Empty, canonicalLash, 0, "Texture2D")
+                }
+                : value)
+            .ToArray();
+        return new MorphFaceMaterialData(source.Scalars, source.Vectors, textures);
     }
 
     private (MorphFaceMeshReferences Reference, LoadedMorphFace Loaded) FindEditableTemplate(
@@ -339,9 +375,9 @@ public sealed class MorphFaceConversionService(
 
     private static void EnsureSupportedDirection(MorphFaceGame source, MorphFaceGame target)
     {
-        var supported = source == MorphFaceGame.LE3
-            ? target is MorphFaceGame.LE1 or MorphFaceGame.LE2
-            : source is MorphFaceGame.LE1 or MorphFaceGame.LE2 && target == MorphFaceGame.LE3;
+        var supported = source is MorphFaceGame.LE1 or MorphFaceGame.LE2 or MorphFaceGame.LE3 &&
+                        target is MorphFaceGame.LE1 or MorphFaceGame.LE2 or MorphFaceGame.LE3 &&
+                        source != target;
         if (!supported)
         {
             throw new InvalidOperationException($"Conversion from {source} to {target} is not supported.");

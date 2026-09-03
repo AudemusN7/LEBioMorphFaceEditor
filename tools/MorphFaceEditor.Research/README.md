@@ -4,6 +4,20 @@ This console keeps reverse-engineering code out of the production reader and ren
 
 ## Pass-1 commands
 
+Audit the nine canonical native and cross-game `GlobalMorphs` corpora without
+including nested or unrelated fixture packages:
+
+```powershell
+dotnet run --project tools/MorphFaceEditor.Research -c Release -- corpus-audit "tests/Global Morphs" <output.json>
+```
+
+Generate the compact direction-specific asset reconciliation catalogue derived
+from those canonical source/port pairs:
+
+```powershell
+dotnet run --project tools/MorphFaceEditor.Research -c Release -- corpus-reconciliation "tests/Global Morphs" <output.json>
+```
+
 Locate exports by a case-insensitive name fragment:
 
 ```powershell

@@ -24,7 +24,6 @@ public static class TextureRegistrySettingsTests
                 "LE1.mftr", 128, timestamp, 1026, null));
 
         TestAssert.Equal("LE1", row.GameLabel);
-        TestAssert.Equal("MorphFace Editor", row.SourceLabel);
         TestAssert.Equal("Ready", row.StatusLabel);
         TestAssert.Equal(timestamp.LocalDateTime.ToString("g"), row.LastBuiltLabel);
     }

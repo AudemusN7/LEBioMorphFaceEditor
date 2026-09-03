@@ -26,7 +26,10 @@ public static class PackageContextTests
         new("external hair and attachment meshes port their material chains on morph export", ExternalAttachmentsPortOnMorphExport),
         new("morph package export preserves paths across LE1, LE2, and LE3", ExportMorphPackagesAcrossGames),
         new("cross-game conversion rebakes LE2 to LE3 and LE3 to LE1 packages", ConvertMorphsAcrossGameBoundary),
+        new("cross-game conversion requires current texture databases", ConversionRequiresTextureDatabases),
+        new("all six cross-game directions preserve canonical hair donors", PreserveCanonicalHairAcrossAllDirections),
         new("reviewed cross-game texture policy aliases donors and omits inert overrides", ApplyReviewedTextureTransferPolicy),
+        new("reviewed cross-game texture paths are admitted to the local registry", ReviewedTexturePathsAreRegistryEligible),
         new("later-game alien textures embed package-stored when LE1 has no stock equivalent", EmbedMissingAlienTextureIntoLe1),
         new("external texture selections materialise package-stored at their original path", ExternalTextureSelectionsMaterialiseOnSave),
         new("LE2 context morph paste round-trips matching-profile topology", PasteLe2MorphData),
@@ -39,6 +42,14 @@ public static class PackageContextTests
         new("UModel staging package contains only baked mesh geometry", MeshExportStagingIsGeometryOnly),
         new("real baked mesh projects back into its profile target span", RealBakedMeshInverts)
     ];
+
+    private static void ReviewedTexturePathsAreRegistryEligible()
+    {
+        TestAssert.True(
+            CrossGameAssetReconciliationCatalog.IsReviewedTexturePath(
+                "BIOG_Humanoid_MASTER_MTR_R.GBL_ARM_ALL_White"),
+            "A corpus-reviewed texture outside the generic PROMorph filters would be omitted from the registry.");
+    }
 
     private static void FemaleTurianLoadsMaterialOnly()
     {
@@ -481,7 +492,8 @@ public static class PackageContextTests
         var targets = new MorphTargetCatalog();
         var writer = new MorphFacePackageWriter();
         var context = new MorphFacePackageContextService();
-        var service = new MorphFaceConversionService(profiles, targets, writer, context);
+        var service = new MorphFaceConversionService(
+            profiles, targets, context, TestFixtures.GetCorpusTextureCatalogService());
 
         WithPackageCopy("LE2 GlobalMorphs.pcc", le2Source =>
         {
@@ -550,6 +562,14 @@ public static class PackageContextTests
     private static void ApplyReviewedTextureTransferPolicy()
     {
         LegendaryExplorerCoreRuntime.Initialize();
+        foreach (var targetGame in new[] { MEGame.LE1, MEGame.LE2, MEGame.LE3 })
+        {
+            TestAssert.Equal(
+                "BIOG_HMM_HED_PROMorph.Normal.HMM_HED_PROBase_Face_Norm_Stack",
+                CrossGameAssetReconciliationCatalog.NormalizeTargetPath(
+                    targetGame,
+                    "BIOG_HMM_HED_PROMorph_R.Normal.HMM_HED_PROBase_Face_Norm_Stack"));
+        }
         WithPackageCopy("LE3 GlobalMorphs.pcc", le3Destination =>
         {
             using var package = MEPackageHandler.OpenMEPackage(le3Destination, forceLoadFromDisk: true);
@@ -568,11 +588,37 @@ public static class PackageContextTests
                 FixturePath("LE1 GlobalMorphs.pcc"),
                 FixturePath("LE3 GlobalMorphs.pcc"));
 
-            TestAssert.Equal(1, result.MaterialData.Textures.Count);
-            TestAssert.Equal("HED_Scalp_SpecShift", result.MaterialData.Textures[0].Name);
+            TestAssert.Equal(0, result.MaterialData.Textures.Count);
+        });
+
+        WithPackageCopy("LE3 GlobalMorphs.pcc", le3Destination =>
+        {
+            using var package = MEPackageHandler.OpenMEPackage(le3Destination, forceLoadFromDisk: true);
+            var result = TransferTextures(
+                package,
+                MaterialWithTextures(
+                    ("HED_Lash_Diff", "BIOG_HMF_HED_PROMorph_R.Average.HMF_HED_PROLash_Opac_M01"),
+                    ("HED_Scalp_Spec", "BIOG_Humanoid_MASTER_MTR_R.GBL_ARM_ALL_White")),
+                MEGame.LE1,
+                "le1-human-female",
+                FixturePath("LE1 GlobalMorphs.pcc"),
+                FixturePath("LE3 GlobalMorphs.pcc"));
+
             TestAssert.Equal(
-                "BIOG_HMM_HIR_PRO_R.Global.HMM_HIR_PROAll_SpecShift",
-                result.MaterialData.Textures[0].TextureReference?.InstancedPath);
+                "BIOG_Humanoid_MASTER_MTR_R.Human.HMF_HED_PROLash_Opac_M01",
+                result.MaterialData.Textures.Single(value => value.Name == "HED_Lash_Diff")
+                    .TextureReference?.InstancedPath);
+
+            result = TransferTextures(
+                package,
+                MaterialWithTextures(("HED_Scalp_Spec", "BIOG_Humanoid_MASTER_MTR_R.GBL_ARM_ALL_White")),
+                MEGame.LE2,
+                "le2-human-female",
+                FixturePath("LE2 GlobalMorphs.pcc"),
+                FixturePath("LE3 GlobalMorphs.pcc"));
+            TestAssert.Equal(
+                "BIOG_Humanoid_MASTER_MTR_R.GBL_ARM_ALL_Black",
+                result.MaterialData.Textures.Single().TextureReference?.InstancedPath);
         });
 
         WithPackageCopy("LE1 GlobalMorphs.pcc", le1Destination =>
@@ -616,6 +662,83 @@ public static class PackageContextTests
         });
     }
 
+    private static void ConversionRequiresTextureDatabases()
+    {
+        var service = new MorphFaceConversionService(
+            MorphFaceProfileRegistry.CreateDefault(),
+            new MorphTargetCatalog(),
+            new MorphFacePackageContextService(),
+            TestFixtures.CreateMissingTextureCatalogService());
+        var destination = Path.Combine(Path.GetTempPath(), $"MFE-missing-registry-{Guid.NewGuid():N}.pcc");
+        try
+        {
+            service.Convert(new MorphFaceConversionRequest(
+                FixturePath("LE1 GlobalMorphs.pcc"),
+                "HMF.BIOA_PRC2_HMF_Guard01",
+                MorphFaceGame.LE2,
+                destination,
+                CreateNewPackage: true,
+                FixturePath("LE1 to LE2 GlobalMorphs.pcc")));
+            throw new Exception("Cross-game conversion proceeded without a texture database.");
+        }
+        catch (InvalidOperationException exception)
+        {
+            TestAssert.True(
+                exception.Message.Contains("texture database is unavailable", StringComparison.OrdinalIgnoreCase),
+                $"The missing-database failure was unclear: {exception.Message}");
+        }
+        finally
+        {
+            if (File.Exists(destination)) File.Delete(destination);
+        }
+    }
+
+    private static void PreserveCanonicalHairAcrossAllDirections()
+    {
+        var profiles = MorphFaceProfileRegistry.CreateDefault();
+        var service = new MorphFaceConversionService(
+            profiles,
+            new MorphTargetCatalog(),
+            new MorphFacePackageContextService(),
+            TestFixtures.GetCorpusTextureCatalogService());
+        var cases = new[]
+        {
+            ("LE1", MorphFaceGame.LE2, "HMF.BIOA_PRC2_HMF_Guard01", "BIOG_HMF_HIR_PRO.Cute.HMF_HIR_Cte_MDL"),
+            ("LE1", MorphFaceGame.LE3, "HMF.BIOA_PRC2_HMF_Guard01", "biog_hmf_hir_pro.Hair_Cute.HMF_HIR_Cte_MDL"),
+            ("LE2", MorphFaceGame.LE1, "HMF.arv_kenson", "BIOG_HMF_HIR_PRO.Mom.HMF_HIR_Mom_MDL"),
+            ("LE2", MorphFaceGame.LE3, "HMF.arv_kenson", "biog_hmf_hir_pro.Hair_Mom.HMF_HIR_Mom_MDL"),
+            ("LE3", MorphFaceGame.LE1, "HMF.cat004_cerb_scientist1_face", "BIOG_HMF_HIR_PRO.PonyTail.Mom.HMF_HIR_Mom_MDL"),
+            ("LE3", MorphFaceGame.LE2, "HMF.cat004_cerb_scientist1_face", "BIOG_HMF_HIR_PRO.Mom.HMF_HIR_Mom_MDL")
+        };
+        foreach (var (sourceGame, targetGame, facePath, expectedHair) in cases)
+        {
+            var sourcePath = FixturePath($"{sourceGame} GlobalMorphs.pcc");
+            var targetPath = FixturePath($"{targetGame} GlobalMorphs.pcc");
+            var destination = Path.Combine(
+                Path.GetTempPath(), $"MFE-{sourceGame}-to-{targetGame}-hair-{Guid.NewGuid():N}.pcc");
+            try
+            {
+                var result = service.Convert(new MorphFaceConversionRequest(
+                    sourcePath,
+                    facePath,
+                    targetGame,
+                    destination,
+                    CreateNewPackage: true,
+                    targetPath));
+                using var convertedPackage = MEPackageHandler.OpenMEPackage(destination, forceLoadFromDisk: true);
+                var convertedFace = convertedPackage.FindExport(result.SaveResult.FaceInstancedPath, "BioMorphFace")
+                                    ?? throw new InvalidDataException("The converted face was not saved.");
+                var hair = convertedFace.GetProperty<ObjectProperty>("m_oHairMesh")?
+                    .ResolveToEntry(convertedPackage);
+                TestAssert.Equal(expectedHair, hair?.InstancedFullPath);
+            }
+            finally
+            {
+                if (File.Exists(destination)) File.Delete(destination);
+            }
+        }
+    }
+
     private static void EmbedMissingAlienTextureIntoLe1()
     {
         LegendaryExplorerCoreRuntime.Initialize();
@@ -635,10 +758,16 @@ public static class PackageContextTests
                     FixturePath("LE1 GlobalMorphs.pcc"));
 
                 TestAssert.Equal(3, result.MaterialData.Textures.Count);
+                var expectedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    "BIOG_ASA_HED_PROMorph_R.Masks.ASA_HED_PRO_Tat2",
+                    "BIOG_BAT_HED_PROMorph_R.PROBase.BAT_HED_PROMorph_Add4",
+                    "BIOG_TUR_HED_PROMorph_R.Add.TUR_HED_PRO_Add2"
+                };
                 TestAssert.True(result.MaterialData.Textures.All(value =>
-                        value.TextureReference is { } reference &&
-                        reference.InstancedPath.StartsWith("MFE_EmbeddedTextures.", StringComparison.Ordinal)),
-                    "At least one missing LE1 alien texture was not embedded under the conversion package.");
+                        value.TextureReference is { } reference && expectedPaths.Remove(reference.InstancedPath)) &&
+                    expectedPaths.Count == 0,
+                    "At least one missing LE1 alien texture was not embedded at its canonical UE3 path.");
                 TestAssert.True(result.Warnings.Count(value =>
                         value.Contains("package-stored", StringComparison.OrdinalIgnoreCase) &&
                         value.Contains("mod's TFC", StringComparison.OrdinalIgnoreCase)) == 3,
@@ -648,11 +777,14 @@ public static class PackageContextTests
 
             using var reopened = MEPackageHandler.OpenMEPackage(le1Destination, forceLoadFromDisk: true);
             var embedded = reopened.Exports.Where(entry =>
-                entry.InstancedFullPath.StartsWith("MFE_EmbeddedTextures.", StringComparison.Ordinal) &&
+                new[] { "ASA_HED_PRO_Tat2", "BAT_HED_PROMorph_Add4", "TUR_HED_PRO_Add2" }
+                    .Contains(entry.ObjectNameString, StringComparer.OrdinalIgnoreCase) &&
                 string.Equals(entry.ClassName, "Texture2D", StringComparison.OrdinalIgnoreCase)).ToArray();
             TestAssert.Equal(3, embedded.Length);
             TestAssert.True(embedded.All(entry => new LecTexture2D(entry).GetTopMip().IsPackageStored),
                 "At least one embedded alien texture was not serialized as package-stored.");
+            TestAssert.True(embedded.All(entry => entry.Parent is ExportEntry),
+                "At least one embedded alien texture was parented beneath an import.");
         });
     }
 
@@ -712,7 +844,9 @@ public static class PackageContextTests
             sourceGame,
             sourceProfileKey,
             sourcePackagePath,
-            targetTemplatePackagePath);
+            targetTemplatePackagePath,
+            [],
+            []);
 
     private static MorphFaceMaterialData MaterialWithTextures(params (string Parameter, string Path)[] textures) =>
         new([], [], textures.Select(value => new TextureMaterialOverride(

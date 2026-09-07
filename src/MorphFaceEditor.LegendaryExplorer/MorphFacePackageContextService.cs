@@ -674,6 +674,7 @@ public sealed class MorphFacePackageContextService
         string materialPath)
     {
         using var package = OpenPackage(packagePath);
+        PackageIntegrity.Verify(package);
         _ = FindFace(package, facePath);
         _ = package.FindExport(materialPath, "BioMaterialOverride")
             ?? throw new InvalidDataException("The converted material override was not saved.");
@@ -686,34 +687,12 @@ public sealed class MorphFacePackageContextService
             throw new InvalidDataException(
                 $"Converted package contains UnknownProperty data in: {string.Join(", ", malformed)}.");
         }
-        var mixedParents = package.Exports
-            .Where(export => export.Parent is ImportEntry)
-            .Select(export => export.InstancedFullPath)
-            .ToArray();
-        if (mixedParents.Length > 0)
-        {
-            throw new InvalidDataException(
-                $"Converted package contains exports beneath imports: {string.Join(", ", mixedParents)}.");
-        }
         EnsureNoInvalidHmmMorphPackageAliases(package, "final verification");
     }
 
     private static void EnsureNoExportParentsAreImports(IMEPackage package, string stage)
     {
-        var malformed = package.Exports.FirstOrDefault(export => export.Parent is ImportEntry);
-        if (malformed is not null)
-        {
-            throw new InvalidDataException(
-                $"{stage} created export '{malformed.InstancedFullPath}' beneath import " +
-                $"'{malformed.Parent?.InstancedFullPath}'.");
-        }
-        var duplicates = EntryChecker.CheckForDuplicateIndices(package);
-        if (duplicates.Count > 0)
-        {
-            throw new InvalidDataException(
-                $"{stage} created duplicate entry identities: " +
-                string.Join("; ", duplicates.Select(value => value.Message)));
-        }
+        PackageIntegrity.Verify(package);
         EnsureNoInvalidHmmMorphPackageAliases(package, stage);
     }
 
@@ -763,6 +742,9 @@ public sealed class MorphFacePackageContextService
         }
 
         var originalFingerprint = PackageFingerprint.Capture(path);
+        IReadOnlySet<string> integrityBaseline;
+        using (var original = OpenPackage(path))
+            integrityBaseline = PackageIntegrity.CaptureIssues(original);
         var temporaryPath = Path.Combine(
             Path.GetDirectoryName(path)!,
             $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
@@ -777,7 +759,7 @@ public sealed class MorphFacePackageContextService
                 package.Save(temporaryPath);
             }
 
-            Verify(temporaryPath, pending);
+            Verify(temporaryPath, pending, integrityBaseline);
             if (PackageFingerprint.Capture(path) != originalFingerprint)
             {
                 throw new IOException("The open PCC changed while the operation was being written. Nothing was replaced.");
@@ -1067,9 +1049,13 @@ public sealed class MorphFacePackageContextService
         return created;
     }
 
-    private static void Verify(string packagePath, PendingResult expected)
+    private static void Verify(
+        string packagePath,
+        PendingResult expected,
+        IReadOnlySet<string> allowedExistingIntegrityIssues)
     {
         using var package = MEPackageHandler.OpenMEPackage(packagePath, forceLoadFromDisk: true);
+        PackageIntegrity.Verify(package, allowedExistingIntegrityIssues);
         var face = FindFace(package, expected.FacePath);
         var materialOverride = ResolveMaterialOverride(face);
         CompareMorphData(ReadMorphData(face), expected.MorphData);

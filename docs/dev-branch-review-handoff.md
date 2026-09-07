@@ -1,5 +1,37 @@
 # Dev Branch Review Handoff
 
+## Final review — 7 September 2026
+
+Implementation and final code review are complete in the root checkout on `dev` (the worktree layout described in PROJECT-CONTEXT is stale). Ryan authorised committing the reviewed changes. No main-branch integration or push is included.
+
+Implemented:
+
+- Shared `PackageIntegrity` ancestor preflight for skeletal meshes, external textures and cross-game texture embedding. Import collisions abort; no import promotion is attempted. Dependency package ancestors are reserved before relinking, including ordinary morph export.
+- Shared hierarchy, duplicate identity, property/binary/header/stack/component reference validation on reopened temporary packages in both writer services. Existing conversion-specific HMM alias and unknown-property checks remain.
+- `MaterialisationVerifier` compares retained property/binary slots against the source-to-destination relink map, including detection of valid-but-wrong destination UIndices. Required failures and unclassified relinker reports are fatal. The pinned LEC cross-game property-pruning notice is admitted only for a verified associated entry; pre-materialisation optional omissions remain unchanged.
+- Structured per-root diagnostics saved by the conversion stress runner to `materialisations.jsonl`, with final package verification status.
+- Eleven focused regressions in `PackageIntegrityTests.cs`. Collision/relink save failures assert byte-identical originals and successful reopening; other cases cover wrong references, retained binary failure reports, invalid hierarchies, preservation of pre-existing package issues, cyclic parent chains, ancestor reuse, same-game skeletal meshes, PROShort01/optional donors, and all twelve LE2/LE3-to-LE1 Add/Tat policy cases.
+
+Evidence and important corrections:
+
+- Completed verification: 293/293 release harness tests and 220/220 supported conversions passed, with no skipped conversions. All 350 recorded materialised roots passed reference verification.
+- Final review tightened issue identities to include table indices, preventing a new duplicate from inheriting an old baseline exemption. Parent cycles are rejected before path formatting or duplicate detection can recurse. The three integrity regressions and five context-operation regressions passed after these changes; the full harness/corpus results above precede these narrowly scoped review fixes.
+- The stress runner now returns a failing exit code when any conversion fails, matching the retest runner.
+- The reviewed catalogue deliberately omits LE1 PROShort01 in LE3; LE2 retains a donor. This was tested without changing the catalogue. Existing LE1 stock Add donors remain preferred over embedding.
+- The preliminary 230-port audit (`artifacts/integrity-audit-before`) completed with 220 passes and ten failures, all unsupported Vorcha-to-LE1 attempts (five from each later game). The stress runner now excludes those impossible routes, including retests, and expects 220 supported attempts.
+- Six apparent package-integrity failures came from import-parent structures already present in corpus PCCs. Existing-package transactions now capture a structural baseline and reject only newly introduced issues; new conversion/export packages remain strictly clean. A focused regression proves this boundary.
+- Two tests added for temporary files (`LE3 VorchaMorphs.pcc` and root-level TUF PCCs) were removed completely. The Gibbed regression now selects its LE2 human-female source by profile identity instead of the obsolete `Human Female.*` path convention.
+
+Completed verification logs:
+
+- Launcher: `artifacts/run-integrity-verification.ps1` (hidden PowerShell process; PID in `artifacts/integrity-verification-corrected/runner.pid`).
+- Status: `artifacts/integrity-verification-corrected/status.json` (`IsComplete` and per-stage exit codes).
+- Full release harness: `artifacts/integrity-verification-corrected/all-tests.log`.
+- Final 220-port supported-route stress run: `artifacts/integrity-verification-corrected/conversion-stress.log` and `corpus/{progress.json,results.jsonl,materialisations.jsonl}` in that directory.
+- Runner errors: `runner-error.log` / `runner.stderr.log` in that directory, if present.
+
+The user-owned untracked `docs/old_outdated/` directory was untouched. The original review below is retained as historical context; its absolute clean-package rule is superseded for existing packages by the verified baseline policy above. New packages and newly materialised assets still require clean hierarchies and coherent references.
+
 **Review range:** `d657491e6d9920767a978792373b03808302b450..c30f72f32f90c8c91c65f8f36c200ab59af7c005`
 
 **Purpose:** Preserve the timed review findings and the agreed implementation direction for a fresh agent.

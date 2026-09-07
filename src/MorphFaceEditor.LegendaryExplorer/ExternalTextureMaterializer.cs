@@ -40,10 +40,10 @@ internal static class ExternalTextureMaterializer
         }
         var sourceExport = ResolveSourceExport(source, identity);
         var parent = EnsurePackagePath(destination, identity.InstancedPath);
+        ExternalSkeletalMeshMaterializer.PrepareReferencedPackagePaths(destination, sourceExport);
         var relinker = new RelinkerOptionsPackage { ImportExportDependencies = true };
         var imported = EntryImporter.ImportExport(destination, sourceExport, parent?.UIndex ?? 0, relinker);
-        Relinker.RelinkAll(relinker);
-        AddWarnings(warnings, relinker.RelinkReport.Select(item => item.Message));
+        MaterialisationVerifier.Relink(relinker);
 
         if (imported is not ExportEntry textureExport ||
             !textureExport.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase))
@@ -66,6 +66,7 @@ internal static class ExternalTextureMaterializer
             image,
             textureExport.GetProperties(),
             isPackageStored: true));
+        MaterialisationVerifier.Verify(textureExport, source.Game, relinker, warnings);
         return textureExport;
     }
 
@@ -83,21 +84,8 @@ internal static class ExternalTextureMaterializer
                    $"Texture2D '{identity.InstancedPath}' was not found in '{identity.PackagePath}'.");
     }
 
-    private static ExportEntry? EnsurePackagePath(IMEPackage destination, string texturePath)
-    {
-        var segments = texturePath.Split('.');
-        ExportEntry? parent = null;
-        var currentPath = string.Empty;
-        foreach (var segment in segments.Take(segments.Length - 1))
-        {
-            currentPath = currentPath.Length == 0 ? segment : $"{currentPath}.{segment}";
-            parent = destination.FindExport(currentPath, "Package")
-                     ?? destination.CreatePackageExport(
-                         NameReference.FromInstancedString(segment),
-                         parent);
-        }
-        return parent;
-    }
+    private static ExportEntry? EnsurePackagePath(IMEPackage destination, string assetPath)
+        => PackageIntegrity.EnsurePackagePath(destination, assetPath, "Texture2D");
 
     private static void AddWarnings(ICollection<string>? target, IEnumerable<string> warnings)
     {

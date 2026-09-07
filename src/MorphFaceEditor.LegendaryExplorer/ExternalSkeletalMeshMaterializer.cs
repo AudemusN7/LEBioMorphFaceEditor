@@ -86,6 +86,9 @@ internal static class ExternalSkeletalMeshMaterializer
             throw new InvalidDataException($"Circular target-donor materialisation detected at '{instancedPath}'.");
         }
 
+        var parent = PackageIntegrity.EnsurePackagePath(destination, instancedPath, className);
+        PrepareReferencedPackagePaths(destination, sourceExport);
+
         foreach (var import in EntryImporter.GetAllReferencesOfExport(sourceExport).OfType<ImportEntry>()
                      .Where(import => import.ClassName is "Texture2D" or "SkeletalMesh"))
         {
@@ -112,15 +115,13 @@ internal static class ExternalSkeletalMeshMaterializer
             }
         }
 
-        var parent = EnsurePackagePath(destination, instancedPath);
         var relinker = new RelinkerOptionsPackage
         {
             ImportExportDependencies = true,
             GenerateImportsForGlobalFiles = false
         };
         var imported = EntryImporter.ImportExport(destination, sourceExport, parent?.UIndex ?? 0, relinker);
-        Relinker.RelinkAll(relinker);
-        AddWarnings(warnings, relinker.RelinkReport.Select(item => item.Message));
+        MaterialisationVerifier.Relink(relinker);
 
         if (imported is not ExportEntry materialized ||
             !materialized.ClassName.Equals(className, StringComparison.OrdinalIgnoreCase))
@@ -135,6 +136,7 @@ internal static class ExternalSkeletalMeshMaterializer
                 $"to '{materialized.InstancedFullPath}'.");
         }
         active.Remove(key);
+        MaterialisationVerifier.Verify(materialized, source.Game, relinker, warnings);
         return materialized;
     }
 
@@ -167,8 +169,7 @@ internal static class ExternalSkeletalMeshMaterializer
                 var path = parent is null
                     ? sourcePackage.ObjectName.Instanced
                     : $"{parent.InstancedFullPath}.{sourcePackage.ObjectName.Instanced}";
-                parent = destination.FindExport(path, "Package")
-                         ?? destination.CreatePackageExport(sourcePackage.ObjectName, parent);
+                parent = PackageIntegrity.EnsurePackagePath(destination, path + ".__reserved_asset");
             }
         }
     }
@@ -203,30 +204,5 @@ internal static class ExternalSkeletalMeshMaterializer
             return entry.InstancedFullPath;
         }
         return $"{Path.GetFileNameWithoutExtension(package.FilePath)}.{entry.InstancedFullPath}";
-    }
-
-    private static ExportEntry? EnsurePackagePath(IMEPackage destination, string meshPath)
-    {
-        var segments = meshPath.Split('.');
-        ExportEntry? parent = null;
-        var currentPath = string.Empty;
-        foreach (var segment in segments.Take(segments.Length - 1))
-        {
-            currentPath = currentPath.Length == 0 ? segment : $"{currentPath}.{segment}";
-            parent = destination.FindExport(currentPath, "Package")
-                     ?? destination.CreatePackageExport(
-                         NameReference.FromInstancedString(segment),
-                         parent);
-        }
-        return parent;
-    }
-
-    private static void AddWarnings(ICollection<string>? target, IEnumerable<string> warnings)
-    {
-        if (target is null) return;
-        foreach (var warning in warnings.Where(value => !string.IsNullOrWhiteSpace(value)))
-        {
-            target.Add(warning);
-        }
     }
 }

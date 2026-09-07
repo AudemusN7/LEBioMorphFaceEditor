@@ -388,12 +388,12 @@ internal static class MorphFaceTextureTransferEngine
         var sourceTexture = new Texture2D(sourceExport);
         var pixelFormat = Image.getPixelFormatType(sourceTexture.TextureFormat);
         var image = sourceTexture.ToImage(pixelFormat);
-        var parent = EnsureExportPackagePath(destination, sourcePath);
+        var parent = EnsurePackagePath(destination, sourcePath);
+        ExternalSkeletalMeshMaterializer.PrepareReferencedPackagePaths(destination, sourceExport);
         var rop = new RelinkerOptionsPackage { ImportExportDependencies = true };
         var importedEntry = EntryImporter.ImportExport(
             destination, sourceExport, parent?.UIndex ?? 0, rop);
-        Relinker.RelinkAll(rop);
-        warnings.AddRange(rop.RelinkReport.Select(issue => issue.Message));
+        MaterialisationVerifier.Relink(rop);
         if (importedEntry is not ExportEntry importedTexture ||
             !string.Equals(importedTexture.ClassName, "Texture2D", StringComparison.OrdinalIgnoreCase))
         {
@@ -412,21 +412,12 @@ internal static class MorphFaceTextureTransferEngine
         warnings.Add(
             $"Embedded '{sourcePath}' as package-stored because {destination.Game} has no stock equivalent. " +
             "You may wish to move this texture into your mod's TFC before release.");
+        MaterialisationVerifier.Verify(importedTexture, sourceGame, rop, warnings);
         return importedTexture;
     }
 
-    private static ExportEntry? EnsureExportPackagePath(IMEPackage destination, string assetPath)
-    {
-        ExportEntry? parent = null;
-        var currentPath = string.Empty;
-        foreach (var segment in assetPath.Split('.').SkipLast(1))
-        {
-            currentPath = currentPath.Length == 0 ? segment : $"{currentPath}.{segment}";
-            parent = destination.FindExport(currentPath, "Package")
-                     ?? destination.CreatePackageExport(NameReference.FromInstancedString(segment), parent);
-        }
-        return parent;
-    }
+    private static ExportEntry? EnsurePackagePath(IMEPackage destination, string assetPath)
+        => PackageIntegrity.EnsurePackagePath(destination, assetPath, "Texture2D");
 
     private static ExportEntry? ResolveSourceExport(
         MEGame sourceGame,

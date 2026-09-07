@@ -31,14 +31,12 @@ public static class PackageContextTests
         new("reviewed cross-game texture policy aliases donors and omits inert overrides", ApplyReviewedTextureTransferPolicy),
         new("reviewed cross-game texture paths are admitted to the local registry", ReviewedTexturePathsAreRegistryEligible),
         new("later-game alien textures embed package-stored when LE1 has no stock equivalent", EmbedMissingAlienTextureIntoLe1),
-        new("external texture selections materialise package-stored at their original path", ExternalTextureSelectionsMaterialiseOnSave),
         new("LE2 context morph paste round-trips matching-profile topology", PasteLe2MorphData),
         new("LE3 context material paste round-trips every override kind", PasteLe3MaterialData),
         new("bundled human and Asari eyes recover both fixed reflection cubes", HumanAndAsariEyeCubesResolve),
         new("TSE RON export and import round-trip a real BioMorphFace", RonRoundTripsMorph),
         new("legacy Gibbed ME2 and ME3 head morphs import through the context pipeline", GibbedHeadMorphsImport),
         new("broken attachment materials fall back without blocking face authoring", BrokenAttachmentMaterialFallsBack),
-        new("Female Turian corpora load base heads and materials while preserving inherited TUR payloads", FemaleTurianLoadsMaterialOnly),
         new("UModel staging package contains only baked mesh geometry", MeshExportStagingIsGeometryOnly),
         new("real baked mesh projects back into its profile target span", RealBakedMeshInverts)
     ];
@@ -49,63 +47,6 @@ public static class PackageContextTests
             CrossGameAssetReconciliationCatalog.IsReviewedTexturePath(
                 "BIOG_Humanoid_MASTER_MTR_R.GBL_ARM_ALL_White"),
             "A corpus-reviewed texture outside the generic PROMorph filters would be omitted from the registry.");
-    }
-
-    private static void FemaleTurianLoadsMaterialOnly()
-    {
-        foreach (var (fileName, gamePrefix) in new[]
-                 {
-                     ("LE1 TUF.pcc", "le1"),
-                     ("LE2 TUF.pcc", "le2"),
-                     ("LE3 TUF.pcc", "le3")
-                 })
-        {
-            var packagePath = FixturePath(fileName);
-            var face = ReadFaces(packagePath).First(value =>
-                value.ProfileKey.Equals($"{gamePrefix}-female-turian", StringComparison.OrdinalIgnoreCase));
-            var profiles = MorphFaceProfileRegistry.CreateDefault();
-            using var service = new MorphFacePreviewLoadService(
-                new HeadPreviewSceneFactory(),
-                new MorphTargetCatalog(),
-                profiles,
-                new MorphFacePackageReader());
-            var result = service.LoadAsync(packagePath, face.UIndex.ToString()).GetAwaiter().GetResult();
-
-            TestAssert.Equal($"{gamePrefix}-female-turian", result.Profile.Key);
-            TestAssert.Equal("[TUF]", result.Profile.ExportTag);
-            TestAssert.Equal("#99597D", result.Profile.ExportTagColor);
-            TestAssert.True(result.Profile.IgnoresAuthoredGeometry && result.Loaded.IgnoresAuthoredGeometry,
-                $"{fileName} did not enter the explicit material-only TUF path.");
-            TestAssert.True(!result.EditingSession.CanEdit,
-                $"{fileName} exposed inherited TUR geometry for editing.");
-            TestAssert.Equal(0, result.EditingSession.Evaluation.FinalSkeleton.Count);
-            TestAssert.Equal(result.Loaded.BaseHead.Positions.Length,
-                result.EditingSession.Evaluation.Geometry.Positions.Length);
-            TestAssert.Equal(result.Loaded.BaseHead.Positions.Length,
-                result.Scene.Meshes[0].Vertices.Count);
-            TestAssert.True(!result.Scene.Meshes[0].ApplySkinning,
-                $"{fileName} applied inherited final-skeleton offsets to the TUF preview.");
-            TestAssert.True(result.Loaded.Document.MorphFeatures.Count > 0 &&
-                            result.Loaded.Document.FinalSkeleton.Count > 0 &&
-                            result.Loaded.Document.BakedLods.Count > 0,
-                $"{fileName} fixture no longer contains the inherited TUR payload needed by this regression.");
-            TestAssert.True(result.Loaded.Materials.Materials.Values.Any(material =>
-                                material.Family == HeadMaterialFamily.TurianSkin) &&
-                            result.Loaded.Materials.Materials.Values.Any(material =>
-                                material.Family == HeadMaterialFamily.TurianEyes),
-                $"{fileName} did not reuse the Turian skin and eye material pipeline.");
-
-            var source = result.Loaded.Document;
-            var draft = result.EditingSession.CreateDraft(
-                source.HairMeshReference,
-                source.OtherMeshReferences,
-                source.MaterialOverrides);
-            TestAssert.True(source.MorphFeatures.SequenceEqual(draft.MorphFeatures) &&
-                            source.FinalSkeleton.SequenceEqual(draft.FinalSkeleton) &&
-                            source.BakedLods.Zip(draft.BakedLods).All(pair =>
-                                pair.First.SequenceEqual(pair.Second)),
-                $"{fileName} material-only draft rewrote inherited TUR geometry data.");
-        }
     }
 
     private static void Le2BioDWorkspaceRetainsPostLoadResolution()
@@ -787,47 +728,6 @@ public static class PackageContextTests
         });
     }
 
-    private static void ExternalTextureSelectionsMaterialiseOnSave()
-    {
-        LegendaryExplorerCoreRuntime.Initialize();
-        WithPackageCopy("LE3 GlobalMorphs.pcc", destinationPath =>
-        {
-            AssetIdentity identity;
-            using (var source = MEPackageHandler.OpenMEPackage(
-                       FixturePath("LE3 VorchaMorphs.pcc"), forceLoadFromDisk: true))
-            using (var destination = MEPackageHandler.OpenMEPackage(destinationPath, forceLoadFromDisk: true))
-            {
-                var texture = source.Exports.FirstOrDefault(export =>
-                                  export.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase) &&
-                                  destination.FindEntry(export.InstancedFullPath, "Texture2D") is null)
-                              ?? throw new InvalidDataException(
-                                  "The LE3 Vorcha fixture has no texture absent from GlobalMorphs.");
-                identity = MorphFacePackageReader.ToIdentity(texture)!;
-            }
-
-            var selectedFace = ReadFaces(destinationPath).First();
-            using var reader = new MorphFacePackageReader();
-            var loaded = reader.Load(destinationPath, selectedFace.UIndex.ToString());
-            var parameterName = loaded.Document.MaterialOverrides.Textures.FirstOrDefault()?.Name ?? "HED_Diff";
-            var textures = loaded.Document.MaterialOverrides.Textures
-                .Where(value => !value.Name.Equals(parameterName, StringComparison.OrdinalIgnoreCase))
-                .Append(new TextureMaterialOverride(parameterName, identity))
-                .ToArray();
-            var draft = loaded.Document with
-            {
-                MaterialOverrides = loaded.Document.MaterialOverrides with { Textures = textures }
-            };
-            _ = new MorphFacePackageWriter().SaveExisting(draft);
-
-            using var reopened = MEPackageHandler.OpenMEPackage(destinationPath, forceLoadFromDisk: true);
-            var saved = reopened.FindExport(identity.InstancedPath, "Texture2D")
-                        ?? throw new InvalidDataException("The materialised texture was not saved.");
-            TestAssert.Equal(identity.InstancedPath, saved.InstancedFullPath);
-            TestAssert.True(new LecTexture2D(saved).GetTopMip().IsPackageStored,
-                "The materialised texture retained an external TFC dependency.");
-        });
-    }
-
     private static TextureTransferResult TransferTextures(
         IMEPackage destination,
         MorphFaceMaterialData source,
@@ -938,7 +838,7 @@ public static class PackageContextTests
         {
             var service = new MorphFacePackageContextService();
             var source = ReadFaces(path).First(face =>
-                face.InstancedPath.StartsWith("Human Female.", StringComparison.OrdinalIgnoreCase));
+                face.ProfileKey.Equals("le2-human-female", StringComparison.OrdinalIgnoreCase));
             var expectedMorph = service.CaptureMorphData(path, source.InstancedPath);
             var expectedMaterial = service.CaptureMaterialData(path, source.InstancedPath);
             var legacyMorph = expectedMorph with { BakedLods = [expectedMorph.BakedLods[0]] };

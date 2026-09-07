@@ -48,6 +48,12 @@ public sealed class MorphFacePackageWriter
             : ReplaceObjectName(draft.Source.InstancedPath, destinationObjectName);
         ValidateMorphPackageDestination(draft, sourcePath, logicalSourcePath, destination, createNewPackage);
         var destinationFingerprint = createNewPackage ? null : PackageFingerprint.Capture(destination);
+        IReadOnlySet<string>? destinationIntegrityBaseline = null;
+        if (!createNewPackage)
+        {
+            using var existingDestination = MEPackageHandler.OpenMEPackage(destination, forceLoadFromDisk: true);
+            destinationIntegrityBaseline = PackageIntegrity.CaptureIssues(existingDestination);
+        }
 
         var temporaryPath = Path.Combine(
             Path.GetDirectoryName(destination)!,
@@ -80,6 +86,7 @@ public sealed class MorphFacePackageWriter
                         $"The destination already contains an entry named '{destinationFacePath}'.");
                 }
 
+                ExternalSkeletalMeshMaterializer.PrepareReferencedPackagePaths(destinationPackage, sourceFace);
                 var issues = EntryExporter.ExportExportToPackage(sourceFace, destinationPackage, out var portedEntry);
                 warnings = issues.Select(issue => issue.Message).ToList();
                 if (portedEntry is not ExportEntry portedFace ||
@@ -105,7 +112,7 @@ public sealed class MorphFacePackageWriter
                 destinationPackage.Save(temporaryPath);
             }
 
-            Verify(temporaryPath, facePath, draft);
+            Verify(temporaryPath, facePath, draft, destinationIntegrityBaseline);
             if (PackageFingerprint.Capture(sourcePath) != draft.SourceFingerprint)
             {
                 throw new IOException("The source PCC changed while the morph package was being written. Nothing was replaced.");
@@ -147,6 +154,9 @@ public sealed class MorphFacePackageWriter
         LegendaryExplorerCoreRuntime.Initialize();
         var packagePath = Path.GetFullPath(draft.Source.PackagePath);
         ValidateDraft(draft, packagePath);
+        IReadOnlySet<string> integrityBaseline;
+        using (var original = MEPackageHandler.OpenMEPackage(packagePath, forceLoadFromDisk: true))
+            integrityBaseline = PackageIntegrity.CaptureIssues(original);
         var temporaryPath = Path.Combine(
             Path.GetDirectoryName(packagePath)!,
             $".{Path.GetFileName(packagePath)}.{Guid.NewGuid():N}.tmp");
@@ -167,7 +177,7 @@ public sealed class MorphFacePackageWriter
                 package.Save(temporaryPath);
             }
 
-            Verify(temporaryPath, draft.Source.InstancedPath, draft);
+            Verify(temporaryPath, draft.Source.InstancedPath, draft, integrityBaseline);
             if (PackageFingerprint.Capture(packagePath) != draft.SourceFingerprint)
             {
                 throw new IOException("The open PCC changed while the face was being written. Nothing was replaced.");
@@ -261,9 +271,14 @@ public sealed class MorphFacePackageWriter
         materialOverride.WriteProperties(properties);
     }
 
-    private static void Verify(string packagePath, string facePath, MorphFaceDocument expected)
+    private static void Verify(
+        string packagePath,
+        string facePath,
+        MorphFaceDocument expected,
+        IReadOnlySet<string>? allowedExistingIntegrityIssues = null)
     {
         using var package = MEPackageHandler.OpenMEPackage(packagePath, forceLoadFromDisk: true);
+        PackageIntegrity.Verify(package, allowedExistingIntegrityIssues);
         var face = FindExport(package, facePath, "BioMorphFace");
         var properties = face.GetProperties();
         var binary = face.GetBinaryData<BinaryMorphFace>();

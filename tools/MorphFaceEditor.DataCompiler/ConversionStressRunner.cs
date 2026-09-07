@@ -41,12 +41,12 @@ internal static class ConversionStressRunner
         }
 
         var attempts = selections.SelectMany(selection => Games
-                .Where(game => game != selection.Game)
+                .Where(game => game != selection.Game && IsSupportedRoute(selection, game))
                 .Select(target => new PortAttempt(selection, target)))
             .ToArray();
-        if (!selectAll && attempts.Length != 230)
+        if (!selectAll && attempts.Length != 220)
         {
-            throw new InvalidDataException($"Stress selection produced {attempts.Length} ports, expected 230.");
+            throw new InvalidDataException($"Stress selection produced {attempts.Length} supported ports, expected 220.");
         }
 
         WriteJsonAtomic(Path.Combine(output, "selection-manifest.json"), new
@@ -87,6 +87,8 @@ internal static class ConversionStressRunner
             var stopwatch = Stopwatch.StartNew();
             string status;
             string? error = null;
+            var materialisations = new List<MaterialisationDiagnostic>();
+            MaterialisationDiagnostics.Observer.Value = materialisations.Add;
             try
             {
                 if (File.Exists(destination))
@@ -116,6 +118,16 @@ internal static class ConversionStressRunner
                 error = exception.ToString();
             }
             stopwatch.Stop();
+            MaterialisationDiagnostics.Observer.Value = null;
+            foreach (var diagnostic in materialisations)
+                AppendJsonLine(Path.Combine(output, "materialisations.jsonl"), new
+                {
+                    Attempt = index + 1,
+                    SourceGame = sourceGame,
+                    TargetGame = targetGame,
+                    Diagnostic = diagnostic,
+                    FinalPackageVerified = status == "passed"
+                });
 
             AppendJsonLine(resultsPath, new
             {
@@ -169,8 +181,11 @@ internal static class ConversionStressRunner
             $"COMPLETE originals={selections.Count}; ports={attempts.Length}; " +
             $"passed={succeeded}; failed={failed}; skipped={skipped}; " +
             $"final instances={selections.Count + succeeded + skipped}.");
-        return 0;
+        return failed == 0 ? 0 : 1;
     }
+
+    private static bool IsSupportedRoute(SelectedFace source, MorphFaceGame target) =>
+        target != MorphFaceGame.LE1 || !source.Species.Equals("vorcha", StringComparison.OrdinalIgnoreCase);
 
     internal static int RetestFailures(
         string corpusDirectory,

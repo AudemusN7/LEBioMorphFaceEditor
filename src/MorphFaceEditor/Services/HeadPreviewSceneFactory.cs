@@ -232,13 +232,14 @@ public sealed class HeadPreviewSceneFactory
     private static void Validate(LoadedMorphFace loaded)
     {
         ArgumentNullException.ThrowIfNull(loaded);
-        if (!loaded.IgnoresAuthoredGeometry && !loaded.TopologyDiagnostics.IsValid)
+        var usesBaseHeadGeometry = loaded.UsesCustomBaseMesh || loaded.IgnoresAuthoredGeometry;
+        if (!usesBaseHeadGeometry && !loaded.TopologyDiagnostics.IsValid)
         {
             throw new InvalidDataException("The face cannot be previewed because topology validation failed.");
         }
-        if (loaded.IgnoresAuthoredGeometry && !TopologyDiagnostics.Analyze(loaded.BaseHead).IsValid)
+        if (usesBaseHeadGeometry && !TopologyDiagnostics.Analyze(loaded.BaseHead).IsValid)
         {
-            throw new InvalidDataException("The material-only base head cannot be previewed because topology validation failed.");
+            throw new InvalidDataException("The selected base head cannot be previewed because topology validation failed.");
         }
         if (loaded.HairMesh is not null && !TopologyDiagnostics.Analyze(loaded.HairMesh).IsValid)
         {

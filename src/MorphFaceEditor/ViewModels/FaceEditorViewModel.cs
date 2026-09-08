@@ -94,7 +94,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                         .Select(lod => lod.LodIndex)
                         .ToHashSet(),
                 reportError,
-                session.CanEdit))
+                session.CanEditMorphFeatures))
             .Where(feature => feature.IsVisible)
             .ToArray();
         Bones = ignoresAuthoredGeometry
@@ -211,15 +211,18 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     public System.Windows.Input.ICommand RedoCommand => _redoCommand;
     public System.Windows.Input.ICommand SetToDefaultsCommand => _setToDefaultsCommand;
     public System.Windows.Input.ICommand RandomiseCommand => _randomiseCommand;
-    public bool CanEdit => _session.CanEdit;
+    public bool CanEdit => CanEditMorphFeatures;
+    public bool CanEditMorphFeatures => _session.CanEditMorphFeatures;
+    public bool CanEditBones => _session.CanEditBones;
+    public bool UsesLiveDeformationPreview => _session.UsesLiveDeformationPreview || CanEditBones;
     public bool CanFixMorph => _session.CanFixMorph;
     public bool HasPendingRepair => _session.HasPendingRepair;
     public string? EditBlockReason => _session.EditBlockReason;
     public bool CanRandomise => CanRandomiseScope(GlobalRandomisationScope(CursedMode));
-    public bool AllowsMorphRandomisation => CanEdit && _allowsMorphRandomisation;
+    public bool AllowsMorphRandomisation => CanEditMorphFeatures && _allowsMorphRandomisation;
     public bool AllowsMaterialRandomisation =>
         Material.Scalars.Count + Material.Vectors.Count + Material.Textures.Count > 0;
-    public bool AllowsCursedRandomisation => CanEdit || AllowsMaterialRandomisation;
+    public bool AllowsCursedRandomisation => CanEditMorphFeatures || AllowsMaterialRandomisation;
     public bool CursedMode
     {
         get => _cursedMode;
@@ -328,14 +331,14 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     private void SetToDefaults()
     {
         using var aggregate = _history.BeginAggregate();
-        if (CanEdit) _session.ResetToDefaults();
+        if (CanEditMorphFeatures || CanEditBones) _session.ResetToDefaults();
         Material.ResetToDefaults();
         aggregate.Commit();
         _cursedBaseline = null;
         _cursedBoneOffsets.Clear();
     }
 
-    private bool CanSetToDefaults() => CanEdit || AllowsMaterialRandomisation;
+    private bool CanSetToDefaults() => CanEditMorphFeatures || CanEditBones || AllowsMaterialRandomisation;
 
     private async void Randomise(EditorRandomisationScope requested, bool includeCursedBones)
     {
@@ -603,7 +606,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
 
     private bool CanRandomiseScope(EditorRandomisationScope scope)
     {
-        var hasMorph = CanEdit && RandomiseMorphs && scope.MorphFeatures.Any(value => value.IsEditable);
+        var hasMorph = CanEditMorphFeatures && RandomiseMorphs && scope.MorphFeatures.Any(value => value.IsEditable);
         var hasRawNumericMaterial = RandomiseMaterials &&
                                     (scope.Scalars.Count + scope.Vectors.Count > 0);
         var eligibleTextures = _randomisationCatalog.EligibleTextureParameters(_profileKey);
@@ -645,7 +648,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     {
         foreach (var feature in Features)
         {
-            feature.SetSessionCanEdit(CanEdit);
+            feature.SetSessionCanEdit(CanEditMorphFeatures);
             feature.Refresh();
         }
         foreach (var bone in Bones)
@@ -661,6 +664,9 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             SelectedBoneTransform = BoneTransforms.FirstOrDefault(transform => transform.IsAvailable);
         }
         OnPropertyChanged(nameof(CanEdit));
+        OnPropertyChanged(nameof(CanEditMorphFeatures));
+        OnPropertyChanged(nameof(CanEditBones));
+        OnPropertyChanged(nameof(UsesLiveDeformationPreview));
         OnPropertyChanged(nameof(CanFixMorph));
         OnPropertyChanged(nameof(HasPendingRepair));
         OnPropertyChanged(nameof(AllowsMorphRandomisation));

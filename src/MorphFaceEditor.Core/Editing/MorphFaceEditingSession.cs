@@ -1,5 +1,6 @@
 using System.Numerics;
 using MorphFaceEditor.Core.Deformation;
+using MorphFaceEditor.Core.Diagnostics;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
 
@@ -12,6 +13,19 @@ public sealed record MorphFaceEvaluation(
     SkeletalPose Pose,
     MorphTargetResolution Resolution,
     DeformationComparisonReport? OriginalOracleReport);
+
+/// <summary>
+/// Selects which authored geometry the editing session treats as authoritative.
+/// Morph-evaluated faces are reconstructed from profile targets; fixed-bake faces
+/// keep imported vertices and expose only a valid final-skeleton edit surface.
+/// Base-mesh-only faces are material/custom-mesh workspaces with no geometry edits.
+/// </summary>
+public enum MorphFaceGeometryMode
+{
+    MorphEvaluated,
+    FixedBake,
+    BaseMeshOnly
+}
 
 public sealed class MorphFaceEditingSession : IUndoableEditSource
 {
@@ -30,6 +44,7 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
     private readonly IReadOnlyDictionary<string, string> _aliases;
     private readonly Func<DeformationComparisonReport, bool>? _recognizesBaseVariant;
     private readonly string? _geometryEditBlockReason;
+    private readonly bool _hasValidBoneRig;
     private IReadOnlyList<Vector3[]> _positionCorrections = [];
     private readonly Dictionary<string, float> _features;
     private readonly HashSet<string> _originalFeatureNames;
@@ -52,7 +67,8 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
         IReadOnlyDictionary<string, string>? aliases = null,
         Func<DeformationComparisonReport, bool>? recognizesBaseVariant = null,
         string? geometryEditBlockReason = null,
-        bool ignoreAuthoredGeometry = false)
+        bool ignoreAuthoredGeometry = false,
+        MorphFaceGeometryMode geometryMode = MorphFaceGeometryMode.MorphEvaluated)
     {
         _document = document ?? throw new ArgumentNullException(nameof(document));
         _baseHead = baseHead ?? throw new ArgumentNullException(nameof(baseHead));
@@ -65,6 +81,16 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
         _geometryEditBlockReason = string.IsNullOrWhiteSpace(geometryEditBlockReason)
             ? null
             : geometryEditBlockReason;
+        GeometryMode = ignoreAuthoredGeometry
+            ? MorphFaceGeometryMode.BaseMeshOnly
+            : geometryMode;
+        if (GeometryMode == MorphFaceGeometryMode.FixedBake &&
+            (document.BakedLods.Count == 0 ||
+             document.BakedLods[0].Length != baseHead.Topology.VertexCount))
+        {
+            throw new InvalidDataException(
+                "A fixed-bake editing session requires an imported LOD 0 matching the recognised base topology.");
+        }
         var authoredFeatures = ignoreAuthoredGeometry ? [] : document.MorphFeatures;
         _features = authoredFeatures.ToDictionary(
             feature => feature.Name,
@@ -109,9 +135,13 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
         _defaultBoneOverrides = new Dictionary<string, Vector3>(
             _boneOverrides, StringComparer.OrdinalIgnoreCase);
         _positionCorrections = ignoreAuthoredGeometry ? [] : DetectPositionCorrections(resolution);
-        Evaluation = Evaluate(includeOracle: !ignoreAuthoredGeometry);
+        Evaluation = Evaluate(includeOracle: GeometryMode == MorphFaceGeometryMode.MorphEvaluated);
         ValidationErrors = ValidateEditableTargets(Evaluation.Resolution);
-        CanEdit = IsEditableByOracle(Evaluation);
+        _hasValidBoneRig = baseHead.RenderData is not null &&
+                           TopologyDiagnostics.Analyze(baseHead, document).IsValid &&
+                           baseHead.Topology.ReferenceSkeleton.Count > 0 &&
+                           Evaluation.FinalSkeleton.Count > 0;
+        UpdateCapabilities();
     }
 
     public event EventHandler? EvaluationChanged;
@@ -119,8 +149,19 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
     public event EventHandler? EditCommitted;
 
     public MorphFaceEvaluation Evaluation { get; private set; }
-    public bool CanEdit { get; private set; }
-    public bool CanFixMorph => !CanEdit &&
+    public MorphFaceGeometryMode GeometryMode { get; }
+    public bool CanEditMorphFeatures { get; private set; }
+    public bool CanEditBones { get; private set; }
+
+    /// <summary>Compatibility alias for the historical morph-slider capability.</summary>
+    public bool CanEdit => CanEditMorphFeatures;
+
+    /// <summary>Whether the preview may show live target deformation.</summary>
+    public bool UsesLiveDeformationPreview => GeometryMode == MorphFaceGeometryMode.MorphEvaluated &&
+                                              CanEditMorphFeatures;
+
+    public bool CanFixMorph => GeometryMode == MorphFaceGeometryMode.MorphEvaluated &&
+                               !CanEditMorphFeatures &&
                                _geometryEditBlockReason is null &&
                                Evaluation.Resolution.UnresolvedFeatureNames.Count == 0 &&
                                ValidationErrors.Count == 0 &&
@@ -133,7 +174,7 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
     {
         get
         {
-            if (CanEdit)
+            if (CanEditMorphFeatures)
             {
                 return null;
             }
@@ -168,7 +209,7 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
 
     public MorphMeshFitResult FitMeshPositions(IReadOnlyList<MorphMeshPositionCandidate> candidates)
     {
-        if (!CanEdit)
+        if (!CanEditMorphFeatures)
         {
             throw new InvalidOperationException(
                 "Mesh import requires a selected template whose profile passes live geometry validation.");
@@ -186,7 +227,7 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
         IReadOnlyList<AssetIdentity?> otherMeshReferences,
         MorphFaceMaterialOverrides materialOverrides)
     {
-        if (!CanEdit)
+        if (!CanEditMorphFeatures && !CanEditBones)
         {
             // Material-only fallback saves must never rewrite geometry from a
             // target set which failed validation or was explicitly blocked.
@@ -196,6 +237,22 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
                 HairMeshReference = hairMeshReference,
                 OtherMeshReferences = otherMeshReferences,
                 MaterialOverrides = materialOverrides
+            };
+        }
+
+        if (GeometryMode == MorphFaceGeometryMode.FixedBake)
+        {
+            // A fixed-bake import is deliberately not reconstructed from the
+            // canonical targets. Bone edits are the only authored geometry
+            // mutation allowed on this surface; retain every imported field.
+            return _document with
+            {
+                HairMeshReference = hairMeshReference,
+                OtherMeshReferences = otherMeshReferences,
+                FinalSkeleton = Evaluation.FinalSkeleton.ToArray(),
+                MaterialOverrides = materialOverrides,
+                MorphFeatures = _document.MorphFeatures.ToArray(),
+                BakedLods = CloneLods(_document.BakedLods)
             };
         }
 
@@ -266,7 +323,8 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
 
         var beforeLods = CloneLods(_document.BakedLods);
         var beforeEvaluation = Evaluation;
-        var beforeCanEdit = CanEdit;
+        var beforeCanEdit = CanEditMorphFeatures;
+        var beforeCanEditBones = CanEditBones;
         var beforePendingRepair = HasPendingRepair;
         var canonicalEvaluation = Evaluate(includeOracle: false, applyPositionCorrections: false);
         var repairedLods = RebuildBakedLods(canonicalEvaluation);
@@ -286,14 +344,15 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
                     $"The rebuilt morph still differs from its evaluated LOD0 by {verification.MaximumError:G9}.");
             }
 
-            CanEdit = IsEditableByOracle(Evaluation);
+            UpdateCapabilities();
             HasPendingRepair = true;
         }
         catch
         {
             _document = _document with { BakedLods = beforeLods };
             Evaluation = beforeEvaluation;
-            CanEdit = beforeCanEdit;
+            CanEditMorphFeatures = beforeCanEdit;
+            CanEditBones = beforeCanEditBones;
             HasPendingRepair = beforePendingRepair;
             throw;
         }
@@ -336,6 +395,7 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
     public void EndFeatureEdit(string name) => EndEdit(FeatureKey(name), GetFeature(name));
     public void BeginBoneEdit(string boneName, int axis)
     {
+        EnsureBoneEditable();
         EndActiveBoneTranslationEdit();
         BeginEdit(BoneKey(boneName, axis), GetBoneAxis(boneName, axis));
     }
@@ -343,6 +403,7 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
 
     public void BeginBoneTranslationEdit(string boneName)
     {
+        EnsureBoneEditable();
         ArgumentException.ThrowIfNullOrWhiteSpace(boneName);
         if (_activeBoneTranslationEdit is { } active &&
             string.Equals(active.BoneName, boneName, StringComparison.OrdinalIgnoreCase))
@@ -365,7 +426,7 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
 
     public void SetFeature(string name, float value)
     {
-        EnsureEditable();
+        EnsureMorphEditable();
         if (!float.IsFinite(value))
         {
             throw new ArgumentOutOfRangeException(nameof(value));
@@ -391,7 +452,7 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
     /// </summary>
     public void SetFeatures(IReadOnlyDictionary<string, float> values)
     {
-        EnsureEditable();
+        EnsureMorphEditable();
         ArgumentNullException.ThrowIfNull(values);
         var desired = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
         foreach (var (name, value) in values)
@@ -436,7 +497,7 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
 
     public void SetBoneAxis(string boneName, int axis, float value)
     {
-        EnsureEditable();
+        EnsureBoneEditable();
         if (!float.IsFinite(value))
         {
             throw new ArgumentOutOfRangeException(nameof(value));
@@ -472,7 +533,30 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
     /// <summary>Restores the construction-time morph and final-skeleton state as one undoable edit.</summary>
     public void ResetToDefaults()
     {
-        EnsureEditable();
+        if (GeometryMode == MorphFaceGeometryMode.FixedBake)
+        {
+            EnsureBoneEditable();
+            var beforeBones = CaptureAuthoringState();
+            var afterBones = new MorphFaceAuthoringState(
+                new Dictionary<string, float>(_features, StringComparer.OrdinalIgnoreCase),
+                _defaultTemplateBones.ToArray(),
+                new Dictionary<string, Vector3>(_defaultBoneOverrides, StringComparer.OrdinalIgnoreCase),
+                null);
+            if (AuthoringStatesEqual(beforeBones, afterBones))
+            {
+                return;
+            }
+
+            RestoreAuthoringState(afterBones);
+            if (!_replayingHistory && _history.Record(new SemanticMorphStateEdit(beforeBones, afterBones)))
+            {
+                EditCommitted?.Invoke(this, EventArgs.Empty);
+            }
+            Refresh();
+            return;
+        }
+
+        EnsureMorphEditable();
         var before = CaptureAuthoringState();
         var after = new MorphFaceAuthoringState(
             _featureOrder.ToDictionary(name => name, _ => 0f, StringComparer.OrdinalIgnoreCase),
@@ -499,7 +583,7 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
     /// </summary>
     public void ApplyMorphData(MorphFaceMorphData data)
     {
-        EnsureEditable();
+        EnsureMorphEditable();
         ArgumentNullException.ThrowIfNull(data);
         var desiredFeatures = data.MorphFeatures.ToDictionary(
             value => value.Name,
@@ -578,7 +662,7 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
     /// </summary>
     public void ApplySemanticTransferData(MorphFaceSemanticTransferData data)
     {
-        EnsureEditable();
+        EnsureMorphEditable();
         ArgumentNullException.ThrowIfNull(data);
         var desiredFeatures = data.MorphFeatures.ToDictionary(
             value => value.Name,
@@ -631,6 +715,15 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
 
     private MorphFaceEvaluation Evaluate(bool includeOracle, bool applyPositionCorrections = true)
     {
+        if (GeometryMode == MorphFaceGeometryMode.FixedBake)
+        {
+            return EvaluateFixedBake();
+        }
+        if (GeometryMode == MorphFaceGeometryMode.BaseMeshOnly)
+        {
+            return EvaluateBaseMeshOnly();
+        }
+
         var resolution = Resolve();
         var geometry = SparseMorphEvaluator.Evaluate(_baseHead, resolution.WeightedTargets);
         if (applyPositionCorrections)
@@ -659,7 +752,80 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
         return new MorphFaceEvaluation(geometry, lodGeometry, finalSkeleton, pose, resolution, report);
     }
 
+    private MorphFaceEvaluation EvaluateBaseMeshOnly()
+    {
+        var geometryLods = new Dictionary<int, DeformationResult>();
+        if (_baseHead.AvailableLods.Count == 0)
+        {
+            geometryLods[0] = new DeformationResult(
+                _baseHead.Positions.ToArray(),
+                _baseHead.Normals.ToArray(),
+                0,
+                ["Base-mesh-only geometry does not evaluate authored morph features."]);
+        }
+        else
+        {
+            foreach (var lod in _baseHead.AvailableLods)
+            {
+                geometryLods[lod.LodIndex] = new DeformationResult(
+                    lod.Positions.ToArray(),
+                    lod.Normals.ToArray(),
+                    0,
+                    ["Base-mesh-only geometry does not evaluate authored morph features."]);
+            }
+        }
+
+        var geometry = geometryLods.TryGetValue(0, out var lod0)
+            ? lod0
+            : new DeformationResult([], [], 0, ["Base mesh has no renderable LOD 0."]);
+        return new MorphFaceEvaluation(
+            geometry,
+            geometryLods,
+            [],
+            SkeletalPoseComposer.Compose(_baseHead.Topology.ReferenceSkeleton, []),
+            Resolve(),
+            null);
+    }
+
+    private MorphFaceEvaluation EvaluateFixedBake()
+    {
+        var resolution = Resolve();
+        var geometryLods = new Dictionary<int, DeformationResult>();
+        for (var ordinal = 0; ordinal < _document.BakedLods.Count; ordinal++)
+        {
+            var lodIndex = ordinal < _orderedBaseLods.Count
+                ? _orderedBaseLods[ordinal].LodIndex
+                : ordinal;
+            var positions = _document.BakedLods[ordinal].ToArray();
+            var sourceNormals = lodIndex == 0
+                ? _baseHead.Normals
+                : _baseHead.FindLod(lodIndex)?.Normals;
+            var normals = sourceNormals is { Length: var count } && count == positions.Length
+                ? sourceNormals.ToArray()
+                : Enumerable.Repeat(Vector3.UnitZ, positions.Length).ToArray();
+            geometryLods[lodIndex] = new DeformationResult(
+                positions,
+                normals,
+                0,
+                ["Imported fixed-bake geometry is preserved without target reconstruction."]);
+        }
+
+        // Fixed-bake sessions may have no stored LODs during an import error
+        // path; keep the evaluation object usable without inventing vertices.
+        var geometry = geometryLods.TryGetValue(0, out var lod0)
+            ? lod0
+            : new DeformationResult([], [], 0, ["No imported fixed-bake LOD 0 is available."]);
+        var finalSkeleton = MorphBoneOffsetComposer.Compose(
+            _baseHead.Topology.ReferenceSkeleton,
+            _templateBones,
+            resolution.WeightedTargets,
+            _boneOverrides);
+        var pose = SkeletalPoseComposer.Compose(_baseHead.Topology.ReferenceSkeleton, finalSkeleton);
+        return new MorphFaceEvaluation(geometry, geometryLods, finalSkeleton, pose, resolution, null);
+    }
+
     private bool IsEditableByOracle(MorphFaceEvaluation evaluation) =>
+        GeometryMode == MorphFaceGeometryMode.MorphEvaluated &&
         _geometryEditBlockReason is null &&
         evaluation.Resolution.UnresolvedFeatureNames.Count == 0 &&
         evaluation.OriginalOracleReport is { IsWithinTolerance: true } &&
@@ -842,12 +1008,26 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
     private void Refresh(bool includeOracle = false)
     {
         Evaluation = Evaluate(includeOracle);
-        if (includeOracle)
+        // Morph-evaluated edits intentionally omit the expensive stored-bake
+        // comparison. Their verified capability remains stable until a repair
+        // replay explicitly asks to re-run the oracle.
+        if (GeometryMode != MorphFaceGeometryMode.MorphEvaluated || includeOracle)
         {
-            CanEdit = IsEditableByOracle(Evaluation);
+            UpdateCapabilities();
         }
         EvaluationChanged?.Invoke(this, EventArgs.Empty);
         HistoryChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void UpdateCapabilities()
+    {
+        CanEditMorphFeatures = IsEditableByOracle(Evaluation);
+        CanEditBones = GeometryMode switch
+        {
+            MorphFaceGeometryMode.MorphEvaluated => CanEditMorphFeatures,
+            MorphFaceGeometryMode.FixedBake => _geometryEditBlockReason is null && _hasValidBoneRig,
+            _ => false
+        };
     }
 
     private void EndEdit(string key, float value)
@@ -920,12 +1100,21 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
         }
     }
 
-    private void EnsureEditable()
+    private void EnsureMorphEditable()
     {
-        if (!CanEdit)
+        if (!CanEditMorphFeatures)
         {
             throw new InvalidOperationException(
-                "Live editing is disabled because the original face did not pass the deformation oracle.");
+                "Morph feature editing is disabled because this face is not a safely reconstructed editable profile.");
+        }
+    }
+
+    private void EnsureBoneEditable()
+    {
+        if (!CanEditBones)
+        {
+            throw new InvalidOperationException(
+                "Bone editing is disabled because this workspace has no valid editable skeleton.");
         }
     }
 

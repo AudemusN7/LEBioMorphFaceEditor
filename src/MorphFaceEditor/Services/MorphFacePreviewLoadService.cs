@@ -70,7 +70,10 @@ public sealed class MorphFacePreviewLoadService : IDisposable
             profile.FeatureAliases,
             profile.RecognizesBaseVariant,
             geometryEditBlockReason,
-            profile.IgnoresAuthoredGeometry);
+            profile.IgnoresAuthoredGeometry,
+            profileResolution.UsesCustomMesh
+                ? MorphFaceGeometryMode.BaseMeshOnly
+                : MorphFaceGeometryMode.MorphEvaluated);
         var baseMaterialKeys = loaded.BaseHead.RenderData?.MaterialSlots
             .Where(identity => identity is not null)
             .Select(identity => MaterialIdentityKey.Create(identity!))
@@ -80,7 +83,7 @@ public sealed class MorphFacePreviewLoadService : IDisposable
             loaded.Materials,
             baseMaterialKeys);
         var previewLoaded = loaded with { Materials = materialSession.Materials };
-        var scene = session.CanEdit
+        var scene = session.UsesLiveDeformationPreview || session.CanEditBones
             ? _sceneFactory.CreateEditable(previewLoaded, session.Evaluation)
             : _sceneFactory.Create(previewLoaded);
         return new MorphFacePreviewLoadResult(loaded, scene, session, materialSession, profile);

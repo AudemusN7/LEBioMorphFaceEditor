@@ -1,5 +1,6 @@
 using System.Numerics;
 using MorphFaceEditor.Core.Domain;
+using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.Models;
@@ -39,6 +40,7 @@ public static class RenderingTests
         new("lower LOD sections use their authored material remap", LowerLodSectionsUseMaterialRemap),
         new("custom mesh sections use the mesh material-slot order", CustomMeshUsesAuthoredMaterialOrder),
         new("custom mesh preview ignores BioMorphFace geometry and skeleton", CustomMeshIgnoresMorphFaceGeometry),
+        new("fixed-bake preview skins preserved imported geometry", FixedBakePreviewSkinsPreservedGeometry),
         new("preview lifecycle blocks inactive window states", PreviewLifecycleBlocksInactiveStates),
         new("renderer rejects work after deterministic disposal", RendererRejectsWorkAfterDisposal)
     ];
@@ -197,6 +199,7 @@ public static class RenderingTests
         var mesh = TestFixtures.CreateRenderableTwoLodMesh();
         var exploded = mesh.Positions
             .Select(position => position + new Vector3(1000, 2000, 3000))
+            .Take(1)
             .ToArray();
         var document = new MorphFaceDocument(
             TestFixtures.CreateIdentity("Custom.ExplodedFace", "BioMorphFace"),
@@ -218,11 +221,50 @@ public static class RenderingTests
             UsesCustomBaseMesh = true
         };
 
+        TestAssert.True(!loaded.TopologyDiagnostics.IsValid,
+            "The custom-mesh regression did not reproduce incompatible BioMorphFace bake topology.");
+
         var previewMesh = new HeadPreviewSceneFactory().Create(loaded).Meshes[0];
 
         TestAssert.Equal(new Vector3(0, 0, 1), previewMesh.Vertices[1].Position);
         TestAssert.True(!previewMesh.ApplySkinning,
             "The custom base mesh was still being transformed by the BioMorphFace skeleton.");
+    }
+
+    private static void FixedBakePreviewSkinsPreservedGeometry()
+    {
+        var mesh = TestFixtures.CreateRenderableTwoLodMesh();
+        var baked = mesh.Positions.Select(position => position + new Vector3(25, 0, 0)).ToArray();
+        var document = new MorphFaceDocument(
+            TestFixtures.CreateIdentity("Imported.PlayerFace", "BioMorphFace"),
+            new PackageFingerprint(1, DateTime.UnixEpoch, new string('0', 64)),
+            mesh.Source,
+            null,
+            [],
+            [new BoneTranslation("root", Vector3.Zero)],
+            MorphFaceMaterialOverrides.Empty,
+            [baked],
+            []);
+        var loaded = new LoadedMorphFace(
+            document,
+            mesh,
+            null,
+            ResolvedHeadMaterialSet.Empty,
+            MorphFaceEditor.Core.Diagnostics.TopologyDiagnostics.Analyze(mesh, document));
+        var session = new MorphFaceEditingSession(
+            document,
+            mesh,
+            [],
+            geometryMode: MorphFaceGeometryMode.FixedBake);
+
+        session.SetBoneAxis("root", 0, 3);
+        var scene = new HeadPreviewSceneFactory().CreateEditable(loaded, session.Evaluation);
+
+        TestAssert.True(scene.Meshes[0].ApplySkinning,
+            "The fixed-bake preview disabled the imported mesh's verified skin weights.");
+        TestAssert.Equal(baked[0], session.Evaluation.Geometry.Positions[0]);
+        TestAssert.True(scene.SkinningPalette is { Count: > 0 } && scene.SkinningPalette[0] != Matrix4x4.Identity,
+            "The edited fixed-bake skeleton did not reach the preview palette.");
     }
 
     private static void SceneFactoryHandlesUnmatchedBakedLod()

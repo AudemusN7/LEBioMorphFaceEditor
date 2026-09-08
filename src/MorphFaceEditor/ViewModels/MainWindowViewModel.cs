@@ -907,6 +907,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 CursedMode = editor.CursedMode;
                 break;
             case nameof(FaceEditorViewModel.CanEdit):
+            case nameof(FaceEditorViewModel.CanEditMorphFeatures):
+            case nameof(FaceEditorViewModel.CanEditBones):
             case nameof(FaceEditorViewModel.CanFixMorph):
                 OnPropertyChanged(nameof(CanFixMorph));
                 _fixMorphCommand.RaiseCanExecuteChanged();
@@ -987,9 +989,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         if (Editor is not null && _loadedFace is not null)
         {
-            if (Editor.CanEdit)
+            if (Editor.UsesLiveDeformationPreview)
             {
-                if (FaceDetails?.Contains("baked fallback", StringComparison.Ordinal) == true)
+                if (Editor.CanEditMorphFeatures &&
+                    FaceDetails?.Contains("baked fallback", StringComparison.Ordinal) == true)
                 {
                     var report = Editor.Evaluation.OriginalOracleReport;
                     SetGeometryDetails($"oracle repaired · {report?.MaximumError ?? 0:G4} max · unsaved");
@@ -1107,7 +1110,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
             // Validate all mesh topology/skinning before touching the live material
             // session. A rejected attachment must leave the old preview intact.
-            _ = editor.CanEdit
+            _ = editor.UsesLiveDeformationPreview
                 ? _sceneFactory.CreateEditable(stagedLoadedFace, editor.Evaluation, PreviewLod)
                 : _sceneFactory.Create(stagedLoadedFace, PreviewLod);
 
@@ -1117,7 +1120,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 attachmentMaterials,
                 attachments.ElementAtOrDefault(changedSlot.SlotIndex)?.Materials);
             var committedLoadedFace = stagedLoadedFace with { Materials = editor.Material.Materials };
-            var committedScene = editor.CanEdit
+            var committedScene = editor.UsesLiveDeformationPreview
                 ? _sceneFactory.CreateEditable(committedLoadedFace, editor.Evaluation, PreviewLod)
                 : _sceneFactory.Create(committedLoadedFace, PreviewLod);
             _loadedFace = committedLoadedFace;
@@ -1149,7 +1152,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         var editor = Editor ?? throw new InvalidOperationException("No face is loaded.");
         var loaded = _loadedFace ?? throw new InvalidOperationException("No face is loaded.");
         var previewSource = loaded with { Materials = editor.Material.Materials };
-        return editor.CanEdit
+        return editor.UsesLiveDeformationPreview
             ? _sceneFactory.CreateEditable(previewSource, editor.Evaluation, PreviewLod)
             : _sceneFactory.Create(previewSource, PreviewLod);
     }

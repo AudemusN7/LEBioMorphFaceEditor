@@ -16,8 +16,118 @@ public static class EditingTests
         new("Fix Morph rejects unsafe repair candidates", FixMorphRejectsUnsafeCandidates),
         new("fix morph rebuilds all compatible LODs and re-enables editing", FixMorphRebuildsCompatibleLods),
         new("Fix Morph remains atomic when a notification callback fails", FixMorphSurvivesNotificationFailure),
-        new("semantic transfer rebakes destination geometry and preserves bone residuals", SemanticTransferRebakesDestinationProfile)
+        new("semantic transfer rebakes destination geometry and preserves bone residuals", SemanticTransferRebakesDestinationProfile),
+        new("fixed-bake mode preserves imported geometry and authored morphs while editing bones", FixedBakePreservesDraftAndEditsBones),
+        new("fixed-bake bone translation uses semantic undo and redo", FixedBakeBoneTranslationUndoRedo),
+        new("base-mesh-only and blocked profiles do not expose bone editing", BaseMeshOnlyDoesNotExposeBones)
     ];
+
+    private static void FixedBakePreservesDraftAndEditsBones()
+    {
+        var mesh = TestFixtures.CreateRenderableTwoLodMesh();
+        var baked = new[]
+        {
+            new Vector3(20, 0, 0),
+            new Vector3(21, 2, 3),
+            new Vector3(19, -2, -3)
+        };
+        var document = CreateFixedBakeDocument(mesh, baked, featureOffset: 0.75f, bone: new Vector3(3, 4, 5));
+        var session = new MorphFaceEditingSession(
+            document,
+            mesh,
+            [TestFixtures.CreateTarget(new MorphVertexDelta(1, new Vector3(100, 0, 0), Vector3.Zero))],
+            geometryMode: MorphFaceGeometryMode.FixedBake);
+
+        TestAssert.True(!session.CanEditMorphFeatures && !session.CanEdit,
+            "Fixed-bake mode exposed morph editing through the compatibility alias.");
+        TestAssert.True(session.CanEditBones, "A fixed-bake session with a valid skeleton hid bone editing.");
+        TestAssert.Near(baked[0], session.Evaluation.Geometry.Positions[0], 0.000001f);
+        session.SetBoneAxis("root", 0, 7);
+
+        var draft = session.CreateDraft(null, MorphFaceMaterialOverrides.Empty);
+        TestAssert.True(draft.MorphFeatures.SequenceEqual(document.MorphFeatures),
+            "Fixed-bake save changed authored morph features.");
+        TestAssert.True(draft.BakedLods.Count == 1 && draft.BakedLods[0].SequenceEqual(baked),
+            "Fixed-bake save changed imported baked geometry.");
+        TestAssert.Near(new Vector3(7, 4, 5), draft.FinalSkeleton.Single().Translation, 0.000001f);
+        TestAssert.Near(baked[0], session.Evaluation.LodGeometry[0].Positions[0], 0.000001f);
+    }
+
+    private static void FixedBakeBoneTranslationUndoRedo()
+    {
+        var mesh = TestFixtures.CreateRenderableTwoLodMesh();
+        var document = CreateFixedBakeDocument(mesh, mesh.Positions, featureOffset: 0.25f, bone: Vector3.Zero);
+        var session = new MorphFaceEditingSession(
+            document,
+            mesh,
+            [],
+            geometryMode: MorphFaceGeometryMode.FixedBake);
+
+        session.BeginBoneTranslationEdit("root");
+        session.SetBoneAxis("root", 0, 2);
+        session.SetBoneAxis("root", 1, 3);
+        session.EndBoneTranslationEdit("root");
+        TestAssert.True(session.CanUndo, "A complete bone gesture did not create history.");
+        TestAssert.Near(new Vector3(2, 3, 0), session.FinalSkeleton.Single().Translation, 0.000001f);
+        session.Undo();
+        TestAssert.Near(Vector3.Zero, session.FinalSkeleton.Single().Translation, 0.000001f);
+        session.Redo();
+        TestAssert.Near(new Vector3(2, 3, 0), session.FinalSkeleton.Single().Translation, 0.000001f);
+    }
+
+    private static void BaseMeshOnlyDoesNotExposeBones()
+    {
+        var mesh = TestFixtures.CreateMesh();
+        var document = CreateFixedBakeDocument(mesh, mesh.Positions, featureOffset: 1, bone: Vector3.Zero);
+        var session = new MorphFaceEditingSession(
+            document,
+            mesh,
+            [],
+            geometryMode: MorphFaceGeometryMode.BaseMeshOnly);
+        TestAssert.True(!session.CanEditMorphFeatures && !session.CanEditBones,
+            "Base-mesh-only mode exposed an editing capability.");
+        var threw = false;
+        try
+        {
+            session.SetBoneAxis("root", 0, 1);
+        }
+        catch (InvalidOperationException)
+        {
+            threw = true;
+        }
+        TestAssert.True(threw, "Base-mesh-only mode accepted a bone edit.");
+
+        var fixedWithoutWeights = new MorphFaceEditingSession(
+            document,
+            mesh,
+            [],
+            geometryMode: MorphFaceGeometryMode.FixedBake);
+        TestAssert.True(!fixedWithoutWeights.CanEditBones,
+            "A fixed-bake mesh without verified render weights exposed bone editing.");
+
+        var blocked = new MorphFaceEditingSession(
+            document,
+            mesh,
+            [],
+            geometryEditBlockReason: "Material-only profile.");
+        TestAssert.True(!blocked.CanEditBones,
+            "A geometry-blocked morph session accidentally exposed bone editing.");
+    }
+
+    private static MorphFaceDocument CreateFixedBakeDocument(
+        SkeletalMeshAsset mesh,
+        IReadOnlyList<Vector3> baked,
+        float featureOffset,
+        Vector3 bone) => new(
+        TestFixtures.CreateIdentity("Face", "BioMorphFace"),
+        new PackageFingerprint(1, DateTime.UnixEpoch, "fixed-bake"),
+        mesh.Source,
+        null,
+        [new MorphFeatureValue("Target", featureOffset)],
+        [new BoneTranslation("root", bone)],
+        MorphFaceMaterialOverrides.Empty,
+        [baked.ToArray()],
+        []);
 
     private static void OracleMismatchThresholdToleratesSmallDrift()
     {

@@ -455,7 +455,7 @@
                         </Grid>
                     </Grid>
 
-                    <StackPanel Grid.Row="1" Margin="0,0,0,10" IsEnabled="{Binding Editor.CanEdit}">
+                    <StackPanel Grid.Row="1" Margin="0,0,0,10" IsEnabled="{Binding Editor.CanEditMorphFeatures}">
                         <TextBlock x:Name="HairAccessoryMeshesLabel" Text="HAIR / ACCESSORY MESHES"
                                    Style="{StaticResource FieldLabel}" Margin="2,0,0,5" />
                         <ItemsControl ItemsSource="{Binding Editor.AttachmentMeshes}">
@@ -599,7 +599,7 @@
                             </TabControl>
                         </TabItem>
 
-                        <TabItem Header="Bones" IsEnabled="{Binding Editor.CanEdit}">
+                        <TabItem Header="Bones" IsEnabled="{Binding Editor.CanEditBones}">
                             <Grid Background="#151A20">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />

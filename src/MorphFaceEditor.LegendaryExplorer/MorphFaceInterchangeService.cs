@@ -8,6 +8,7 @@ using LegendaryExplorerCore.Packages;
 using LegendaryExplorerCore.Unreal;
 using MorphFaceEditor.Core.Deformation;
 using MorphFaceEditor.Core.Domain;
+using MorphFaceEditor.LegendaryExplorer.Interchange;
 using SharpGLTF.Schema2;
 using SharpGLTF.Validation;
 using BinaryMorphFace = LegendaryExplorerCore.Unreal.BinaryConverters.BioMorphFace;
@@ -166,6 +167,9 @@ public sealed class MorphFaceInterchangeService
         return ApplyVertexMapSidecar(path, candidates, expectedVertexCount);
     }
 
+    /// <summary>Reads complete detached render geometry, preserving optional rig data.</summary>
+    public ImportedMeshAsset ReadMesh(string path) => ImportedMeshDecoder.Read(path);
+
     internal static string CreateAppliedMeshPackage(
         string packagePath,
         string facePath,
@@ -253,14 +257,14 @@ public sealed class MorphFaceInterchangeService
         IReadOnlyList<Vector3> bakedPositions,
         MorphMeshFitPrior fitPrior)
     {
-        if (format == MorphMeshFormat.Psk)
-        {
-            return null;
-        }
         var baseHead = CreatePositionOnlyMesh(bakedPositions);
-        var candidates = format == MorphMeshFormat.Gltf
-            ? ReadGltf(meshPath, baseHead)
-            : ReadMd5(meshPath, baseHead);
+        var candidates = format switch
+        {
+            MorphMeshFormat.Psk => ReadPsk(meshPath, bakedPositions.Count),
+            MorphMeshFormat.Gltf => ReadGltf(meshPath, baseHead),
+            MorphMeshFormat.Md5 => ReadMd5(meshPath, baseHead),
+            _ => throw new ArgumentOutOfRangeException(nameof(format))
+        };
         foreach (var candidate in candidates.Where(value =>
                      value.CoordinateSystem.EndsWith("file order", StringComparison.Ordinal)))
         {
@@ -509,7 +513,7 @@ public sealed class MorphFaceInterchangeService
             : psk.Wedges.Count == expectedVertexCount
                 ? psk.Wedges.Select(wedge => points[wedge.PointIndex]).ToArray()
                 : points;
-        return [new MorphMeshPositionCandidate("PSK (Y handedness restored)", positions)];
+        return [new MorphMeshPositionCandidate("PSK (Y handedness restored), file order", positions)];
     }
 
     private static IReadOnlyList<MorphMeshPositionCandidate> ReadGltf(string path, SkeletalMeshAsset baseHead)

@@ -11,8 +11,12 @@ public readonly record struct PreviewActivityState(
 public static class PreviewRenderPolicy
 {
     public static bool CanRender(PreviewActivityState state) =>
+        CanRenderExplicitly(state) &&
+        state.IsActive;
+
+    /// <summary>Allows an explicit scene/material publication while inactive, but never while hidden, minimized, closed, or unrealized.</summary>
+    public static bool CanRenderExplicitly(PreviewActivityState state) =>
         state.IsVisible &&
-        state.IsActive &&
         !state.IsMinimized &&
         !state.IsClosed &&
         state.HostWidth > 0 &&

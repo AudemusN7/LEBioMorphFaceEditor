@@ -34,6 +34,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly IMorphFaceClipboardService _clipboard;
     private readonly ActorAssignmentService _actorAssignmentService;
     private readonly StandalonePlayerMorphImportService _standaloneImportService;
+    private readonly StandalonePlayerMeshImportService _standaloneMeshImportService;
     private readonly StandaloneLegacyHeadMorphImportService _standaloneLegacyImportService;
     private readonly MorphRandomisationCatalog _randomisationCatalog;
     private readonly AsyncRelayCommand _openPackageCommand;
@@ -110,6 +111,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         MorphRandomisationCatalog? randomisationCatalog = null,
         ActorAssignmentService? actorAssignmentService = null,
         StandalonePlayerMorphImportService? standaloneImportService = null,
+        StandalonePlayerMeshImportService? standaloneMeshImportService = null,
         StandaloneLegacyHeadMorphImportService? standaloneLegacyImportService = null)
     {
         _dialogs = dialogs;
@@ -125,6 +127,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _clipboard = clipboard;
         _actorAssignmentService = actorAssignmentService ?? new ActorAssignmentService();
         _standaloneImportService = standaloneImportService ?? new StandalonePlayerMorphImportService();
+        _standaloneMeshImportService = standaloneMeshImportService ??
+                                       new StandalonePlayerMeshImportService(interchangeService, packageContextService);
         _standaloneLegacyImportService = standaloneLegacyImportService ?? new StandaloneLegacyHeadMorphImportService();
         _randomisationCatalog = randomisationCatalog ?? MorphRandomisationCatalog.Empty;
         _openPackageCommand = new AsyncRelayCommand(OpenPackageAsync, () => !IsBusy);
@@ -146,7 +150,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _convertMorphCommand = new AsyncRelayCommand(ConvertMorphAsync, CanMutatePackageContext);
         _copyMorphDataCommand = new AsyncRelayCommand(CopyMorphDataAsync, CanUseFaceContextMenu);
         _pasteMorphDataCommand = new AsyncRelayCommand(PasteMorphDataAsync, CanPasteMorphData);
-        _copyMaterialDataCommand = new AsyncRelayCommand(CopyMaterialDataAsync, CanUseFaceContextMenu);
+        _copyMaterialDataCommand = new AsyncRelayCommand(CopyMaterialDataAsync, CanUseMaterialContextMenu);
         _pasteMaterialDataCommand = new AsyncRelayCommand(PasteMaterialDataAsync, CanPasteMaterialData);
         _importMorphCommand = new AsyncRelayCommand(ImportMorphAsync, () => !IsBusy);
         _exportMorphPskCommand = new AsyncRelayCommand(
@@ -878,6 +882,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         if (loaded is not null)
         {
             foreach (var lod in loaded.BaseHead.AvailableLods
+                         .Where(lod => editor is null || editor.AvailableLodIndices.Contains(lod.LodIndex))
                          .OrderBy(lod => lod.LodIndex))
             {
                 var staticSuffix = editor?.HasMorphGeometryAtLod(lod.LodIndex) == false

@@ -10,11 +10,14 @@ public sealed partial class MainWindowViewModel
     private bool CanUseFaceContextMenu() =>
         !IsBusy && SelectedFace is not null && WorkspacePackagePath is not null;
 
+    private bool CanMutatePackageContext() =>
+        CanUseFaceContextMenu() && _packageWorkspace?.CanCommit == true;
+
     private bool CanPasteMorphData() =>
-        CanUseFaceContextMenu() && _clipboard.Contains(MorphFaceClipboardKind.Morph);
+        CanMutatePackageContext() && _clipboard.Contains(MorphFaceClipboardKind.Morph);
 
     private bool CanPasteMaterialData() =>
-        CanUseFaceContextMenu() && _clipboard.Contains(MorphFaceClipboardKind.Material);
+        CanMutatePackageContext() && _clipboard.Contains(MorphFaceClipboardKind.Material);
 
     public void RefreshClipboardCommandAvailability()
     {

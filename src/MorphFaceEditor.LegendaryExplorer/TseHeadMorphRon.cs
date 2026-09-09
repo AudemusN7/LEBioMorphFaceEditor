@@ -199,11 +199,16 @@ internal static class TseHeadMorphRon
             IReadOnlyList<Core.Materials.ScalarMaterialOverride> scalars = [];
             IReadOnlyList<Core.Materials.VectorMaterialOverride> colours = [];
             IReadOnlyList<(string Name, string Path)> textures = [];
+            var fields = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             Expect('(');
             while (!TryConsume(')'))
             {
                 var field = ReadIdentifier();
+                if (!fields.Add(field))
+                {
+                    throw Error($"Duplicate HeadMorph field '{field}'.");
+                }
                 Expect(':');
                 switch (field)
                 {
@@ -265,6 +270,10 @@ internal static class TseHeadMorphRon
             {
                 var key = ReadString();
                 Expect(':');
+                if (values.Any(value => string.Equals(value.Key, key, StringComparison.OrdinalIgnoreCase)))
+                {
+                    throw Error($"Duplicate map key '{key}'.");
+                }
                 values.Add(new KeyValuePair<string, T>(key, readValue()));
                 _ = TryConsume(',');
             }
@@ -298,8 +307,17 @@ internal static class TseHeadMorphRon
                 {
                     var key = ReadIdentifier();
                     Expect(':');
+                    if (components.ContainsKey(key))
+                    {
+                        throw Error($"Duplicate vector component '{key}'.");
+                    }
                     components[key] = ReadNumber();
                     _ = TryConsume(',');
+                }
+                if (components.Keys.Any(key => key is not ("x" or "y" or "z")) ||
+                    components.Count != 3)
+                {
+                    throw Error("A vector must contain exactly x, y and z components.");
                 }
                 result = new Vector3(
                     components.GetValueOrDefault("x"),

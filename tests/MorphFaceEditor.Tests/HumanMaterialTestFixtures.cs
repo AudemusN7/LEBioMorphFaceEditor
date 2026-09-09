@@ -250,6 +250,49 @@ public static class HumanMaterialTestFixtures
         };
     }
 
+    internal static HeadPreviewMaterial CreateCustomPlayerSkinMaterial(
+        string key,
+        byte[] brow,
+        byte[] scar,
+        float scarNormalStrength = 1,
+        float scarColourStrength = 1)
+    {
+        var diffuse = CreateTexture("HED_Diff", [96, 72, 56, 255], TextureRole.Diffuse);
+        var normal = CreateTexture("HED_Norm", [128, 128, 255, 255], TextureRole.Normal);
+        var browTexture = CreateTexture("HED_Brow", brow, TextureRole.Other, true);
+        var scarTexture = CreateTexture("HED_Scar", scar, TextureRole.Other, true);
+        return new HeadPreviewMaterial(
+            key,
+            key,
+            HeadMaterialFamily.Skin,
+            HeadMaterialBlendMode.Opaque,
+            false,
+            new Dictionary<string, float>
+            {
+                ["HED_Addn_Blend_Scalar"] = 1,
+                ["HED_Addn_Blowout_Scalar"] = 1,
+                ["HED_Addn_Colour_02_Scalar"] = 1,
+                ["HED_Custom_Scar_Scalar"] = scarNormalStrength,
+                ["HED_Scar_Diffuse_Scalar"] = scarColourStrength,
+                ["HED_SPwr_Scalar"] = 5
+            },
+            new Dictionary<string, Vector4>
+            {
+                ["SkinTone"] = new Vector4(0.5f, 0.5f, 0.5f, 1),
+                ["HED_Addn_Colour_Vector"] = new Vector4(0.8f, 0.05f, 0.02f, 1),
+                ["blonde"] = new Vector4(0.05f, 0.8f, 0.02f, 1),
+                ["HED_Scar_Vector"] = new Vector4(0.02f, 0.04f, 0.8f, 1),
+                ["HED_Spec_Add_Vector"] = Vector4.Zero
+            },
+            new Dictionary<string, HeadPreviewTexture>
+            {
+                [diffuse.ParameterName] = diffuse,
+                [normal.ParameterName] = normal,
+                [browTexture.ParameterName] = browTexture,
+                [scarTexture.ParameterName] = scarTexture
+            });
+    }
+
     internal static HeadPreviewMaterial CreateLashMaterial(
         string key,
         byte[] diffuseRgba,

@@ -48,6 +48,22 @@ public static class MaterialSchemaTests
         TestAssert.Equal(HeadMaterialFamily.KroganEyes, HumanMaterialProfiles.ClassifyMaster("KRO_HED_EYE_MASTER_MAT"));
         TestAssert.Equal(TextureRole.Other, HumanMaterialProfiles.Describe(
             "HED_Makeup_Mask", MaterialParameterKind.Texture).TextureRole);
+        foreach (var customPlayerParameter in new[]
+                 {
+                     ("HED_Brow", MaterialParameterKind.Texture),
+                     ("HED_Scar", MaterialParameterKind.Texture),
+                     ("HED_Custom_Scar_Scalar", MaterialParameterKind.Scalar),
+                     ("HED_Scar_Diffuse_Scalar", MaterialParameterKind.Scalar),
+                     ("HED_Scar_Vector", MaterialParameterKind.Vector)
+                 })
+        {
+            var definition = HumanMaterialProfiles.Describe(
+                customPlayerParameter.Item1,
+                customPlayerParameter.Item2);
+            TestAssert.Equal(HeadMaterialFamily.Skin, definition.Family);
+            TestAssert.True(!definition.Description!.Contains("not in the recovered", StringComparison.OrdinalIgnoreCase),
+                $"{customPlayerParameter.Item1} still fell through to the unknown-parameter tooltip.");
+        }
         var additionalHair = HumanMaterialProfiles.Describe("HAIR_ADDN_Diff", MaterialParameterKind.Texture);
         TestAssert.Equal(TextureRole.Diffuse, additionalHair.TextureRole);
         TestAssert.Equal(TextureColorSpace.Srgb, additionalHair.ColorSpace);

@@ -480,6 +480,7 @@ internal sealed class MorphFaceMaterialReader(
                 .Where(name => !name.Equals("HED_Lash_Diff_Vector", StringComparison.OrdinalIgnoreCase))
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
         }
+        var editorDefaultScalars = GetEditorDefaultScalars(master.Game, family, scalarValues, decodedTextures);
         return new ResolvedHeadMaterial(
             materialKey,
             identity,
@@ -491,7 +492,7 @@ internal sealed class MorphFaceMaterialReader(
             vectorValues,
             decodedTextures)
         {
-            DefaultScalars = scalarValues,
+            DefaultScalars = editorDefaultScalars,
             DefaultVectors = vectorValues,
             DefaultTextures = decodedTextures,
             SupportedScalars = supportedScalars,
@@ -502,6 +503,40 @@ internal sealed class MorphFaceMaterialReader(
             FixedCubeTexture = fixedCubeTexture,
             SecondaryFixedCubeTexture = secondaryFixedCubeTexture
         };
+    }
+
+    /// <summary>
+    /// Provides neutral editor defaults for inherited player-material states
+    /// that rely on character-creation inputs. Source scalar values remain
+    /// available for provenance, and explicit face overrides take precedence.
+    /// </summary>
+    internal static IReadOnlyDictionary<string, float> GetEditorDefaultScalars(
+        MEGame game,
+        HeadMaterialFamily family,
+        IReadOnlyDictionary<string, float> materialScalars,
+        IReadOnlyDictionary<string, MaterialTextureBinding>? materialTextures = null)
+    {
+        ArgumentNullException.ThrowIfNull(materialScalars);
+        var defaults = new Dictionary<string, float>(materialScalars, StringComparer.OrdinalIgnoreCase);
+        // Shared LE2/LE3 human eyes inherit 1.5 for alignment emission. A new
+        // diffuse texture must not activate that red channel without authoring it.
+        if (game is MEGame.LE2 or MEGame.LE3 && family == HeadMaterialFamily.Eyes &&
+            defaults.ContainsKey("Emis_Scalar"))
+        {
+            defaults["Emis_Scalar"] = 0;
+        }
+        // LE1 HMF's blank inherited makeup mask is opaque black. Its compiled
+        // lip mask is (1 - B) * A, so the inherited strength of one paints lip
+        // colour over the entire face after a reset. Start that blank-mask
+        // editor state with lipstick off; keep source and explicit face values.
+        if (game == MEGame.LE1 && family == HeadMaterialFamily.Skin &&
+            defaults.ContainsKey("HED_Lips_Tint_Scalar") &&
+            materialTextures?.GetValueOrDefault("HED_Makeup_Mask")?.Texture.Source.InstancedPath
+                .Equals("BIOG_Humanoid_MASTER_MTR_R.GBL_ARM_ALL_Black", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            defaults["HED_Lips_Tint_Scalar"] = 0;
+        }
+        return defaults;
     }
 
     private DecodedTextureCubeAsset? ReadFixedCubeTexture(

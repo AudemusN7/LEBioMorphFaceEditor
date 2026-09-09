@@ -22,6 +22,7 @@ public static class HumanSkinMaterialTests
         new("Human Female blush uses makeup blue-alpha coverage", FemaleBlushUsesMakeupCoverage),
         new("Human Female addition power cannot alter unmasked face specular", FemaleAdditionPowerIsMaskBound),
         new("custom player brow and scar textures affect the live preview", CustomPlayerBrowAndScarAffectPreview),
+        new("LE1 female defaults retain visible skin tone editing", PlayerMaterialRegressionTests.Le1FemaleDefaultsRetainSkinTone),
         new("face transmission scalar does not disable skin tone", FaceTransmissionDoesNotDisableSkinTone),
         new("LE3 human face transmission uses diffuse blue rather than alpha", Le3FaceTransmissionUsesDiffuseBlue),
         new("skin scattering uses inverse diffuse alpha under directional lights", SkinScatteringUsesInverseDiffuseAlpha)

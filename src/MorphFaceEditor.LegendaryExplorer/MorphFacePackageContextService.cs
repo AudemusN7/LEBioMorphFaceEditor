@@ -254,7 +254,9 @@ public sealed class MorphFacePackageContextService
         string packagePath,
         string facePath,
         string objectName,
-        MorphFaceMorphData data)
+        MorphFaceMorphData data,
+        bool requireMatchingAllLods = true,
+        bool clearAttachmentReferences = false)
     {
         ValidateObjectName(objectName);
         ValidateMorphData(data);
@@ -262,7 +264,14 @@ public sealed class MorphFacePackageContextService
         {
             var source = FindFace(package, facePath);
             EnsureNameAvailable(package, source.Parent, objectName);
-            EnsureCompatibleLods(ReadMorphData(source), data);
+            if (requireMatchingAllLods)
+            {
+                EnsureCompatibleLods(ReadMorphData(source), data);
+            }
+            else
+            {
+                EnsureCompatibleLod0(ReadMorphData(source), data);
+            }
             package.FindNameOrAdd(objectName);
             var clone = EntryCloner.CloneTree(source);
             clone.ObjectName = new NameReference(objectName);
@@ -271,6 +280,13 @@ public sealed class MorphFacePackageContextService
                 materialOverride.ObjectName.Name,
                 materialOverride.ObjectName.Number + 1);
             WriteMorphData(clone, data);
+            if (clearAttachmentReferences)
+            {
+                var properties = clone.GetProperties();
+                properties.RemoveNamedProperty("m_oHairMesh");
+                properties.RemoveNamedProperty("m_oOtherMeshes");
+                clone.WriteProperties(properties);
+            }
             return new PendingResult(
                 clone.InstancedFullPath,
                 materialOverride.InstancedFullPath,

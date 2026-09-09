@@ -1,4 +1,5 @@
 using System.Numerics;
+using LegendaryExplorerCore.Packages;
 using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
@@ -18,6 +19,8 @@ public static class MaterialEditingTests
         new("material history tolerates redundant and reordered pointer completion", MaterialHistoryToleratesPointerCompletion),
         new("material randomisation batch is atomic and reversible", MaterialRandomisationBatchIsAtomic),
         new("material defaults clear loaded overrides and undo", MaterialDefaultsClearLoadedOverrides),
+        new("LE2 and LE3 inherited eye emissive defaults stay disabled until authored", InheritedEyeEmissiveDefaultsToZero),
+        new("installed LE2 LE3 player eye defaults cover HMM and HMF", PlayerMaterialRegressionTests.PlayerEyeDefaultsCoverBothSexes),
         new("material paste restores defaults for omitted values", MaterialPasteRestoresOmittedDefaults),
         new("HDR picker previews live and commits once on Apply", HdrPreviewCommitsOnce),
         new("package texture reference updates detached bindings and undoes", PackageTextureReferenceUpdatesBindings),
@@ -236,6 +239,63 @@ public static class MaterialEditingTests
         TestAssert.True(session.CreateOverrides().Scalars.Count == 0 &&
                         session.CreateOverrides().Vectors.Count == 0,
             "An empty material paste retained values that were omitted from its override payload.");
+    }
+
+    private static void InheritedEyeEmissiveDefaultsToZero()
+    {
+        foreach (var game in new[] { MEGame.LE2, MEGame.LE3 })
+        {
+            AssertInheritedEyeEmissiveDefaultsToZero(game);
+        }
+    }
+
+    private static void AssertInheritedEyeEmissiveDefaultsToZero(MEGame game)
+    {
+        var materialScalars = new Dictionary<string, float>
+        {
+            ["Emis_Scalar"] = 1.5f
+        };
+        var defaults = MorphFaceMaterialReader.GetEditorDefaultScalars(
+            game, HeadMaterialFamily.Eyes, materialScalars);
+
+        TestAssert.True(defaults["Emis_Scalar"] == 0,
+            "LE2 inherited eye emissive strength was exposed as an active editor default.");
+        TestAssert.True(materialScalars["Emis_Scalar"] == 1.5f,
+            "The LE2 material scalar was rewritten instead of preserving its authored graph value.");
+        TestAssert.True(MorphFaceMaterialReader.GetEditorDefaultScalars(
+                MEGame.LE1, HeadMaterialFamily.Eyes, materialScalars)["Emis_Scalar"] == 1.5f,
+            "The LE2/LE3 editor default policy changed LE1.");
+
+        var identity = TestFixtures.CreateIdentity("Le2Eye", "MaterialInstanceConstant");
+        var material = new ResolvedHeadMaterial(
+            MaterialIdentityKey.Create(identity), identity, "HMM_EYE_MASTER_OVRD_MAT",
+            HeadMaterialFamily.Eyes, HeadMaterialBlendMode.Opaque, false,
+            materialScalars,
+            new Dictionary<string, Vector4> { ["Emis_Color"] = Vector4.UnitX },
+            new Dictionary<string, MaterialTextureBinding>())
+        {
+            DefaultScalars = defaults
+        };
+        var session = new MaterialEditingSession(
+            MorphFaceMaterialOverrides.Empty,
+            new ResolvedHeadMaterialSet(new Dictionary<string, ResolvedHeadMaterial>
+            {
+                [material.Key] = material
+            }));
+
+        TestAssert.True(session.GetScalar("Emis_Scalar") == 0,
+            "The editor session did not consume the safe LE2 eye default.");
+        TestAssert.True(session.Materials.Materials.Single().Value.Scalars["Emis_Scalar"] == 0,
+            "The preview still received inherited LE2 eye emissive strength.");
+        TestAssert.True(session.CreateOverrides().Scalars.Count == 0,
+            "An inherited LE2 emissive default became an authored face override.");
+
+        session.SetScalar("Emis_Scalar", 1.5f);
+        TestAssert.True(session.Materials.Materials.Single().Value.Scalars["Emis_Scalar"] == 1.5f,
+            "An explicitly authored LE2 eye emissive value was not applied.");
+        TestAssert.True(
+            session.CreateOverrides().Scalars.Single(value => value.Name == "Emis_Scalar").Value == 1.5f,
+            "An explicitly authored LE2 eye emissive value was not retained for save.");
     }
 
     private static void PackageTextureReferenceUpdatesBindings()

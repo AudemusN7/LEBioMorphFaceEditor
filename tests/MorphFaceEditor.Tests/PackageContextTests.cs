@@ -40,7 +40,12 @@ public static class PackageContextTests
         new("unresolved RON assets fail atomically without same-name substitution", RonUnresolvedAssetsFailAtomically),
         new("standalone player RON sex detection uses per-game LOD0 topology", StandalonePlayerRonSexDetection),
         new("standalone player RON import creates a detached non-committable workspace", StandalonePlayerRonImport),
+        new("standalone player PSK import proves topology and preserves its fixed bake", StandalonePlayerPskImport),
+        new("standalone player glTF export-import preserves its exact fixed bake", StandalonePlayerGltfImport),
+        new("standalone RON mesh exports preserve the baked pose on PSK and glTF round trips", StandaloneRonMeshRoundTripPreservesPose),
         new("installed player RON matrix preserves all games sexes LODs materials and readback", StandalonePlayerRonInstalledMatrix),
+        new("LE1 player RON imports LE2 Scr10 from its installed package", StandaloneTextureImportTests.Le1RonImportsLe2Scar),
+        new("installed human texture donors resolve local and seekfree paths across games", StandaloneTextureImportTests.HumanTextureDonorMatrix),
         new("legacy Gibbed ME2 and ME3 head morphs import through the context pipeline", GibbedHeadMorphsImport),
         new("standalone legacy imports reject a destination-game mismatch", StandaloneLegacyImportRejectsMismatch),
         new("installed LE2 and LE3 legacy imports create detached workspaces", StandaloneLegacyImportsInstalledPlayers),
@@ -1008,6 +1013,297 @@ public static class PackageContextTests
                 commitThrew = true;
             }
             TestAssert.True(commitThrew, "A detached standalone workspace accepted Commit().");
+            TestAssert.Equal(before, PackageFingerprint.Capture(seedPath));
+        }
+        finally
+        {
+            if (File.Exists(ronPath))
+            {
+                File.Delete(ronPath);
+            }
+        }
+    }
+
+    private static void StandalonePlayerPskImport()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        var cooked = LegendaryExplorerCoreRuntime.DefaultLe1CookedPath;
+        var seedPath = cooked is null ? null : Path.Combine(cooked, "EntryMenu.pcc");
+        if (seedPath is null || !File.Exists(seedPath))
+        {
+            return;
+        }
+
+        const string templatePath = "BIOG_MORPH_FACE.Player_Base_Male";
+        var meshPath = Path.Combine(Path.GetTempPath(), $"MFE-StandalonePlayer-{Guid.NewGuid():N}.psk");
+        var before = PackageFingerprint.Capture(seedPath);
+        try
+        {
+            using var sourceReader = new MorphFacePackageReader();
+            var source = sourceReader.Load(seedPath, templatePath);
+            WriteRecognisablePsk(meshPath, source.BaseHead);
+            var sculpt = PSK.FromFile(meshPath);
+            sculpt.Points[0] += new Vector3(0.25f, 0, 0);
+            sculpt.ToFile(meshPath);
+            var expectedPositions = source.BaseHead.Positions.ToArray();
+            expectedPositions[0] += new Vector3(0.25f, 0, 0);
+
+            var service = new StandalonePlayerMeshImportService();
+            using var imported = service.Import(
+                MorphFaceGame.LE1,
+                meshPath,
+                "Ryan_PSK_Morph");
+            TestAssert.True(!imported.CanCommit && !imported.Workspace.CanCommit,
+                "A standalone player mesh exposed a commit-capable workspace.");
+            TestAssert.Equal(StandalonePlayerSex.Male, imported.Recognition.Sex);
+            TestAssert.Equal("BIOG_MORPH_FACE.Ryan_PSK_Morph", imported.ImportedFacePath);
+
+            var context = new MorphFacePackageContextService();
+            var authored = context.CaptureMorphData(
+                imported.Workspace.WorkingPath,
+                imported.ImportedFacePath);
+            TestAssert.Equal(0, authored.MorphFeatures.Count);
+            TestAssert.Equal(1, authored.BakedLods.Count);
+            TestAssert.True(authored.BakedLods[0].SequenceEqual(expectedPositions),
+                "The recognised off-target PSK sculpt did not survive as the authoritative LOD0 bake.");
+            TestAssert.Equal(source.BaseHead.Topology.ReferenceSkeleton.Count, authored.FinalSkeleton.Count);
+
+            var sceneFactory = new HeadPreviewSceneFactory();
+            var profiles = MorphFaceProfileRegistry.CreateDefault();
+            using var previewLoader = new MorphFacePreviewLoadService(
+                sceneFactory,
+                new MorphTargetCatalog(),
+                profiles,
+                new MorphFacePackageReader());
+            var preview = previewLoader.LoadAsync(
+                    imported.Workspace.WorkingPath,
+                    imported.ImportedFacePath,
+                    geometryMode: MorphFaceGeometryMode.FixedBake)
+                .GetAwaiter().GetResult();
+            TestAssert.True(!preview.EditingSession.CanEditMorphFeatures,
+                "A recognised PSK enabled morph sliders without a reconstruction proof.");
+            TestAssert.True(preview.EditingSession.CanEditBones,
+                "The verified canonical rig did not enable fixed-bake bone editing.");
+            TestAssert.True(preview.EditingSession.AvailableLodIndices.SequenceEqual([0]),
+                "A LOD0-only mesh import exposed unauthored template lower LODs.");
+            TestAssert.True(preview.EditingSession.CreateDraft(
+                        preview.Loaded.Document.HairMeshReference,
+                        preview.Loaded.Document.OtherMeshReferences,
+                        preview.Loaded.Document.MaterialOverrides).BakedLods[0]
+                    .SequenceEqual(expectedPositions),
+                "Fixed-bake draft creation changed the imported pre-skin vertices.");
+            TestAssert.Equal(before, PackageFingerprint.Capture(seedPath));
+        }
+        finally
+        {
+            if (File.Exists(meshPath)) File.Delete(meshPath);
+        }
+    }
+
+    private static void WriteRecognisablePsk(string path, SkeletalMeshAsset mesh)
+    {
+        var lod = mesh.FindLod(0) ?? throw new Exception("Player base has no LOD0 render data.");
+        var materialCount = Math.Max(
+            lod.Topology.MaterialCount,
+            lod.Topology.Sections.Select(section => section.MaterialIndex + 1).DefaultIfEmpty(0).Max());
+        var vertexMaterials = new byte[lod.Positions.Length];
+        foreach (var section in lod.Topology.Sections)
+        {
+            for (var index = section.BaseIndex;
+                 index < section.BaseIndex + section.TriangleCount * 3;
+                 index++)
+            {
+                vertexMaterials[lod.RenderData.Indices[index]] = checked((byte)section.MaterialIndex);
+            }
+        }
+
+        var faces = new List<PSK.PSKTriangle>();
+        foreach (var section in lod.Topology.Sections)
+        {
+            for (var triangle = 0; triangle < section.TriangleCount; triangle++)
+            {
+                var index = section.BaseIndex + triangle * 3;
+                var a = lod.RenderData.Indices[index];
+                var b = lod.RenderData.Indices[index + 1];
+                var c = lod.RenderData.Indices[index + 2];
+                faces.Add(new PSK.PSKTriangle
+                {
+                    // LEC's PSK writer swaps the first two corners; the detached
+                    // decoder restores handedness and reverses the triangle once.
+                    WedgeIdx0 = checked((ushort)b),
+                    WedgeIdx1 = checked((ushort)a),
+                    WedgeIdx2 = checked((ushort)c),
+                    MatIndex = checked((byte)section.MaterialIndex)
+                });
+            }
+        }
+
+        new PSK
+        {
+            Points = lod.Positions.Select(value => new Vector3(value.X, -value.Y, value.Z)).ToList(),
+            Wedges = lod.RenderData.TextureCoordinates.Select((uv, index) => new PSK.PSKWedge
+            {
+                PointIndex = checked((ushort)index),
+                U = uv.X,
+                V = uv.Y,
+                MatIndex = vertexMaterials[index]
+            }).ToList(),
+            Faces = faces,
+            Materials = Enumerable.Range(0, materialCount)
+                .Select(index => new PSK.PSKMaterial { Name = $"Material_{index}" })
+                .ToList(),
+            Bones = [],
+            Weights = [],
+            VertexNormals = []
+        }.ToFile(path);
+    }
+
+    private static void StandalonePlayerGltfImport()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        var cooked = LegendaryExplorerCoreRuntime.DefaultLe1CookedPath;
+        var seedPath = cooked is null ? null : Path.Combine(cooked, "EntryMenu.pcc");
+        var umodelPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "LegendaryExplorer", "staticexecutables", "umodel", "umodel.exe");
+        if (seedPath is null || !File.Exists(seedPath) || !File.Exists(umodelPath))
+        {
+            return;
+        }
+
+        const string templatePath = "BIOG_MORPH_FACE.Player_Base_Male";
+        var outputDirectory = Path.Combine(Path.GetTempPath(), $"MFE-PlayerGltf-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(outputDirectory);
+        var before = PackageFingerprint.Capture(seedPath);
+        try
+        {
+            var interchange = new MorphFaceInterchangeService();
+            var export = interchange.ExportMeshAsync(
+                    seedPath,
+                    templatePath,
+                    outputDirectory,
+                    MorphMeshFormat.Gltf)
+                .GetAwaiter().GetResult();
+            var gltfPath = export.ProducedFiles.Single(path =>
+                Path.GetExtension(path).Equals(".gltf", StringComparison.OrdinalIgnoreCase));
+            var expected = new MorphFacePackageContextService().CaptureMorphData(seedPath, templatePath);
+
+            using var imported = new StandalonePlayerMeshImportService(interchange).Import(
+                MorphFaceGame.LE1,
+                gltfPath,
+                "Ryan_GLTF_Morph");
+            var authored = new MorphFacePackageContextService().CaptureMorphData(
+                imported.Workspace.WorkingPath,
+                imported.ImportedFacePath);
+            TestAssert.Equal(StandalonePlayerSex.Male, imported.Recognition.Sex);
+            TestAssert.Equal(1, authored.BakedLods.Count);
+            var maximumError = authored.BakedLods[0]
+                .Zip(expected.BakedLods[0], Vector3.Distance)
+                .Max();
+            TestAssert.True(maximumError <= 0.0001f,
+                $"The app-exported glTF vertex-map sidecar missed its authoritative LOD0 by {maximumError:G9}.");
+            TestAssert.True(imported.Recognition.CoordinateSystem.EndsWith(
+                    "MFE vertex map", StringComparison.Ordinal),
+                "The glTF import ignored its exact vertex-map sidecar.");
+            TestAssert.Equal(before, PackageFingerprint.Capture(seedPath));
+        }
+        finally
+        {
+            if (Directory.Exists(outputDirectory)) Directory.Delete(outputDirectory, recursive: true);
+        }
+    }
+
+    private static void StandaloneRonMeshRoundTripPreservesPose()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        var cooked = LegendaryExplorerCoreRuntime.DefaultLe1CookedPath;
+        var seedPath = cooked is null ? null : Path.Combine(cooked, "EntryMenu.pcc");
+        var umodelPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "LegendaryExplorer", "staticexecutables", "umodel", "umodel.exe");
+        if (seedPath is null || !File.Exists(seedPath) || !File.Exists(umodelPath))
+        {
+            return;
+        }
+
+        const string templatePath = "BIOG_MORPH_FACE.Player_Base_Male";
+        var context = new MorphFacePackageContextService();
+        var ronPath = Path.Combine(Path.GetTempPath(), $"MFE-StandalonePose-{Guid.NewGuid():N}.ron");
+        var before = PackageFingerprint.Capture(seedPath);
+        try
+        {
+            context.ExportRon(seedPath, templatePath, ronPath);
+            var ron = TseHeadMorphRon.Read(ronPath);
+            var baked = ron.MorphData.BakedLods.Select(lod => lod.ToArray()).ToArray();
+            baked[0][0] += new Vector3(0.125f, -0.0625f, 0.25f);
+            var bones = ron.MorphData.FinalSkeleton.ToArray();
+            TestAssert.True(bones.Length > 0,
+                "The installed player template did not expose a final skeleton for the pose round trip.");
+            bones[0] = bones[0] with
+            {
+                Translation = bones[0].Translation + new Vector3(0.2f, 0.1f, -0.15f)
+            };
+            TseHeadMorphRon.Write(ronPath, ron with
+            {
+                MorphData = ron.MorphData with
+                {
+                    FinalSkeleton = bones,
+                    BakedLods = baked
+                }
+            });
+
+            using var source = new StandalonePlayerMorphImportService().ImportPlayerRon(
+                MorphFaceGame.LE1, ronPath, "Ryan_Pose_Source");
+            var expected = context.CaptureMorphData(
+                source.Workspace.WorkingPath, source.ImportedFacePath);
+            foreach (var format in new[] { MorphMeshFormat.Psk, MorphMeshFormat.Gltf })
+            {
+                var outputDirectory = Path.Combine(
+                    Path.GetTempPath(), $"MFE-StandalonePose-{format}-{Guid.NewGuid():N}");
+                Directory.CreateDirectory(outputDirectory);
+                try
+                {
+                    var interchange = new MorphFaceInterchangeService();
+                    var export = interchange.ExportMeshAsync(
+                            source.Workspace.WorkingPath,
+                            source.ImportedFacePath,
+                            outputDirectory,
+                            format)
+                        .GetAwaiter().GetResult();
+                    var meshPath = export.ProducedFiles.Single(path =>
+                        format == MorphMeshFormat.Psk
+                            ? Path.GetExtension(path).Equals(".psk", StringComparison.OrdinalIgnoreCase) ||
+                              Path.GetExtension(path).Equals(".pskx", StringComparison.OrdinalIgnoreCase)
+                            : Path.GetExtension(path).Equals(".gltf", StringComparison.OrdinalIgnoreCase));
+                    using var roundTripped = new StandalonePlayerMeshImportService(interchange).Import(
+                        MorphFaceGame.LE1, meshPath, $"Ryan_Pose_{format}");
+                    var actual = context.CaptureMorphData(
+                        roundTripped.Workspace.WorkingPath,
+                        roundTripped.ImportedFacePath);
+                    TestAssert.Equal(1, actual.BakedLods.Count);
+                    var maximumError = actual.BakedLods[0]
+                        .Zip(expected.BakedLods[0], Vector3.Distance)
+                        .Max();
+                    TestAssert.True(maximumError <= 0.0001f,
+                        $"The {format} round trip changed the source RON's baked LOD0 by {maximumError:G9}.");
+                    TestAssert.Equal(expected.FinalSkeleton.Count, actual.FinalSkeleton.Count);
+                    for (var bone = 0; bone < expected.FinalSkeleton.Count; bone++)
+                    {
+                        TestAssert.Equal(expected.FinalSkeleton[bone].BoneName, actual.FinalSkeleton[bone].BoneName);
+                        TestAssert.True(Vector3.Distance(
+                                expected.FinalSkeleton[bone].Translation,
+                                actual.FinalSkeleton[bone].Translation) <= 0.0001f,
+                            $"The {format} round trip changed final skeleton bone {bone}.");
+                    }
+                }
+                finally
+                {
+                    if (Directory.Exists(outputDirectory))
+                    {
+                        Directory.Delete(outputDirectory, recursive: true);
+                    }
+                }
+            }
             TestAssert.Equal(before, PackageFingerprint.Capture(seedPath));
         }
         finally

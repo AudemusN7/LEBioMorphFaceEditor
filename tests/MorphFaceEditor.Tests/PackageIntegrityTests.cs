@@ -23,6 +23,7 @@ internal static class PackageIntegrityTests
         new("package integrity rejects parent cycles before formatting entry paths", ParentCyclesRejected),
         new("import ancestor preflight reuses export ancestors and rejects nested imports", AncestorPreflight),
         new("same-game skeletal materialisation verifies retained references", MaterialiseValidMesh),
+        new("texture donor resolution qualifies local paths without trusting stale indices", TextureDonorResolution),
         new("relink preserves PROShort01 target donors and optional attachment omissions", HairDonorsAndOmissions),
         new("relink preserves every LE1 Add and Tat fallback policy", TextureFallbacks)
     ];
@@ -31,6 +32,23 @@ internal static class PackageIntegrityTests
     {
         LegendaryExplorerCoreRuntime.Initialize();
         return MEPackageHandler.CreateMemoryEmptyPackage(name + ".pcc", MEGame.LE1);
+    }
+
+    private static void TextureDonorResolution()
+    {
+        using var package = Empty("BIOG_Test");
+        var group = package.CreatePackageExport("Scars");
+        var expected = package.CreateExport("Scar", "Texture2D", group, indexed: false);
+        var otherGroup = package.CreatePackageExport("Other");
+        var other = package.CreateExport("Scar", "Texture2D", otherGroup, indexed: false);
+        var identity = new AssetIdentity(package.FilePath, "BIOG_Test.Scars.Scar", other.UIndex, "Texture2D");
+        TestAssert.Equal(expected, ExternalTextureMaterializer.ResolveSourceExport(package, identity));
+        TestAssert.Equal(expected, ExternalTextureMaterializer.ResolveSourceExport(package,
+            identity with { InstancedPath = "Scars.Scar" }));
+        Reject(() => ExternalTextureMaterializer.ResolveSourceExport(package,
+            identity with { InstancedPath = "WrongPackage.Scars.Scar", UIndex = expected.UIndex }), "not found");
+        Reject(() => ExternalTextureMaterializer.ResolveSourceExport(package,
+            identity with { InstancedPath = "BIOG_Test.Missing.Scar", UIndex = expected.UIndex }), "not found");
     }
 
     private static void AncestorPreflight()

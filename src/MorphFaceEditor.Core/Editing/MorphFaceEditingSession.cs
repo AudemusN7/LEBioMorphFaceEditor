@@ -203,9 +203,9 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
         .Select(name => new MorphFeatureValue(name, _features[name]))
         .ToArray();
     public IReadOnlyList<BoneTranslation> FinalSkeleton => Evaluation.FinalSkeleton;
-    public IReadOnlyList<int> AvailableLodIndices => _orderedBaseLods
-        .Select(lod => lod.LodIndex)
-        .ToArray();
+    public IReadOnlyList<int> AvailableLodIndices => GeometryMode == MorphFaceGeometryMode.FixedBake
+        ? Evaluation.LodGeometry.Keys.Order().ToArray()
+        : _orderedBaseLods.Select(lod => lod.LodIndex).ToArray();
 
     public MorphMeshFitResult FitMeshPositions(IReadOnlyList<MorphMeshPositionCandidate> candidates)
     {

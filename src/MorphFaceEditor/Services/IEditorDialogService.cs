@@ -13,6 +13,7 @@ public interface IEditorDialogService
     string? ChooseCloneName(string suggestedName, IReadOnlyCollection<string> existingObjectNames);
     string? ChooseMorphImportFile(string? initialDirectory = null);
     MorphFaceGame? ChooseStandaloneImportGame();
+    RonImportDestination? ChooseRonImportDestination(string selectedFaceDisplayName);
     string? ChooseStandaloneMorphName(string suggestedName, IReadOnlyCollection<string> existingObjectNames);
     string? ChooseRonExportFile(string suggestedFileName, string? initialDirectory = null);
     string? ChooseMeshExportDirectory(string? initialDirectory = null);
@@ -34,6 +35,12 @@ public sealed record MorphConversionSaveRequest(
     string DestinationPackagePath,
     bool CreateNewPackage,
     string? TemplatePackagePath);
+
+public enum RonImportDestination
+{
+    PlayerWorkspace,
+    SelectedPccFace
+}
 
 public enum UnsavedChangesChoice
 {

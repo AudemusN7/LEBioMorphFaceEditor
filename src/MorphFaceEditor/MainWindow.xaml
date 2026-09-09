@@ -159,7 +159,7 @@
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button Content="Open PCC" Command="{Binding OpenPackageCommand}" MinWidth="96" Height="30" Padding="10,3" />
                     <Button Content="Import Morph" Command="{Binding ImportMorphCommand}" MinWidth="108" Height="30" Padding="10,3" Margin="7,0,0,0"
-                            ToolTip="Choose the source LE game, then import a TSE RON or supported baked mesh. Same-game imports can target the selected PCC face." />
+                            ToolTip="Choose the Legendary Edition game, then import a TSE RON, Gibbed head morph, or supported baked mesh. Same-game imports can target the selected PCC face." />
                     <Button Content="Save PCC" Command="{Binding SaveCommand}" MinWidth="82" Height="30" Padding="10,3" Margin="7,0,0,0" />
                     <Button Content="Save Morph to PCC" Command="{Binding SaveMorphToPccCommand}" MinWidth="142" Height="30" Padding="10,3" Margin="7,0,0,0" />
                 </StackPanel>

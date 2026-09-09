@@ -65,9 +65,11 @@ public sealed class StandalonePlayerMorphImportService
     public StandalonePlayerMorphImportResult ImportPlayerRon(
         MorphFaceGame targetGame,
         string ronPath,
-        string objectName)
+        string objectName,
+        StandalonePlayerAssetCatalog? assetCatalog = null)
     {
         var (sourcePath, _, profile, sex) = ReadAndClassify(targetGame, ronPath);
+        ValidateAssetCatalog(targetGame, assetCatalog);
         var seedPath = ResolveInstalledSeed(targetGame, profile.Seed);
         var workspace = new MorphFacePackageWorkspace(seedPath, canCommit: false);
         try
@@ -79,7 +81,8 @@ public sealed class StandalonePlayerMorphImportService
                 workspace.WorkingPath,
                 templatePath,
                 objectName,
-                sourcePath);
+                sourcePath,
+                assetCatalog);
             return new StandalonePlayerMorphImportResult(workspace, saveResult, targetGame, sex);
         }
         catch
@@ -93,7 +96,8 @@ public sealed class StandalonePlayerMorphImportService
         MorphFaceGame targetGame,
         string ronPath,
         string objectName,
-        MorphFacePackageWorkspace workspace)
+        MorphFacePackageWorkspace workspace,
+        StandalonePlayerAssetCatalog? assetCatalog = null)
     {
         ArgumentNullException.ThrowIfNull(workspace);
         if (workspace.CanCommit)
@@ -101,6 +105,7 @@ public sealed class StandalonePlayerMorphImportService
             throw new InvalidOperationException("Player RONs can only be appended to a detached standalone workspace.");
         }
         var (sourcePath, _, profile, sex) = ReadAndClassify(targetGame, ronPath);
+        ValidateAssetCatalog(targetGame, assetCatalog);
         var expectedSeed = ResolveInstalledSeed(targetGame, profile.Seed);
         if (!string.Equals(workspace.SourcePath, expectedSeed, StringComparison.OrdinalIgnoreCase))
         {
@@ -114,7 +119,8 @@ public sealed class StandalonePlayerMorphImportService
             workspace.WorkingPath,
             templatePath,
             objectName,
-            sourcePath);
+            sourcePath,
+            assetCatalog);
     }
 
     public StandalonePlayerMorphImportResult ImportPlayerRon(
@@ -197,6 +203,17 @@ public sealed class StandalonePlayerMorphImportService
         }
 
         return ResolveInstalledSeed(game, profile.Seed);
+    }
+
+    private static void ValidateAssetCatalog(
+        MorphFaceGame targetGame,
+        StandalonePlayerAssetCatalog? assetCatalog)
+    {
+        if (assetCatalog is not null && assetCatalog.Game != targetGame)
+        {
+            throw new InvalidDataException(
+                $"The installed-asset catalogue is for {assetCatalog.Game}, not the selected {targetGame} game.");
+        }
     }
 
     private static string ResolveInstalledSeed(MorphFaceGame game, string fileName)

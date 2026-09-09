@@ -454,7 +454,8 @@ public sealed class MorphFacePackageContextService
         string packagePath,
         string templateFacePath,
         string objectName,
-        string sourcePath)
+        string sourcePath,
+        StandalonePlayerAssetCatalog? assetCatalog = null)
     {
         ValidateObjectName(objectName);
         var ron = TseHeadMorphRon.Read(sourcePath);
@@ -465,7 +466,9 @@ public sealed class MorphFacePackageContextService
             ron,
             ron.MorphData,
             mergeWithTemplate: false,
-            requireMatchingAllLods: false);
+            requireMatchingAllLods: false,
+            assetCatalog: assetCatalog,
+            strictAssetResolution: true);
     }
 
     public MorphFaceSaveResult ImportHeadMorph(
@@ -524,7 +527,9 @@ public sealed class MorphFacePackageContextService
         TseHeadMorph ron,
         MorphFaceMorphData morphData,
         bool mergeWithTemplate,
-        bool requireMatchingAllLods = true)
+        bool requireMatchingAllLods = true,
+        StandalonePlayerAssetCatalog? assetCatalog = null,
+        bool strictAssetResolution = false)
     {
         ValidateMorphData(ron.MorphData);
         ValidateMaterialData(ron.MaterialData);
@@ -550,24 +555,26 @@ public sealed class MorphFacePackageContextService
                 materialOverride.ObjectName.Number + 1);
 
             var templateMaterial = ReadMaterialData(ResolveMaterialOverride(source));
+            var warnings = new List<string>();
             var resolvedMaterial = mergeWithTemplate
-                ? MergeLegacyMaterials(package, templateMaterial, ron.MaterialData)
-                : ResolveRonMaterials(package, ron.MaterialData);
+                ? MergeLegacyMaterials(package, templateMaterial, ron.MaterialData, warnings)
+                : ResolveRonMaterials(package, ron.MaterialData, assetCatalog, strictAssetResolution);
             WriteMorphData(clone, morphData);
             WriteMaterialData(package, materialOverride, resolvedMaterial);
             if (mergeWithTemplate)
             {
-                WriteLegacyMeshReferences(package, clone, ron);
+                WriteLegacyMeshReferences(package, clone, ron, warnings);
             }
             else
             {
-                WriteRonMeshReferences(package, clone, ron);
+                WriteRonMeshReferences(package, clone, ron, assetCatalog, strictAssetResolution);
             }
             return new PendingResult(
                 clone.InstancedFullPath,
                 materialOverride.InstancedFullPath,
                 morphData,
-                resolvedMaterial);
+                resolvedMaterial,
+                warnings);
         });
     }
 
@@ -914,7 +921,9 @@ public sealed class MorphFacePackageContextService
 
     private static MorphFaceMaterialData ResolveRonMaterials(
         IMEPackage package,
-        MorphFaceMaterialData materialData)
+        MorphFaceMaterialData materialData,
+        StandalonePlayerAssetCatalog? assetCatalog,
+        bool strictAssetResolution)
     {
         var textures = materialData.Textures.Select(value =>
         {
@@ -922,9 +931,14 @@ public sealed class MorphFacePackageContextService
             {
                 return value;
             }
-            var entry = package.FindEntry(value.TextureReference.InstancedPath, "Texture2D")
-                        ?? throw new InvalidDataException(
-                            $"RON Texture2D '{value.TextureReference.InstancedPath}' is not present in the open PCC.");
+            var existing = package.FindEntry(value.TextureReference.InstancedPath, "Texture2D");
+            IEntry? entry = existing as ExportEntry
+                        ?? (!strictAssetResolution ? existing : null)
+                        ?? ResolveTextureCandidate(
+                            package,
+                            value.TextureReference.InstancedPath,
+                            assetCatalog,
+                            existing as ImportEntry);
             return value with { TextureReference = ToIdentity(entry) };
         }).ToArray();
         return materialData with { Textures = textures };
@@ -933,7 +947,8 @@ public sealed class MorphFacePackageContextService
     private static MorphFaceMaterialData MergeLegacyMaterials(
         IMEPackage package,
         MorphFaceMaterialData template,
-        MorphFaceMaterialData legacy)
+        MorphFaceMaterialData legacy,
+        ICollection<string> warnings)
     {
         var scalars = MergeByName(template.Scalars, legacy.Scalars, value => value.Name);
         var vectors = MergeByName(template.Vectors, legacy.Vectors, value => value.Name);
@@ -946,14 +961,29 @@ public sealed class MorphFacePackageContextService
                 convertedTextures.Add(value);
                 continue;
             }
-            var resolved = FindCompatibleEntry(package, value.TextureReference.InstancedPath, "Texture2D");
+            var exact = package.FindEntry(value.TextureReference.InstancedPath, "Texture2D");
+            var resolved = exact ?? FindCompatibleEntry(package, value.TextureReference.InstancedPath, "Texture2D");
             if (resolved is not null)
             {
                 convertedTextures.Add(value with { TextureReference = ToIdentity(resolved) });
+                if (exact is null)
+                {
+                    warnings.Add(
+                        $"Legacy texture '{value.Name}' at '{value.TextureReference.InstancedPath}' was not present exactly; " +
+                        $"retained the unique object-name match '{resolved.InstancedFullPath}'.");
+                }
             }
             else if (templateTextures.TryGetValue(value.Name, out var fallback))
             {
                 convertedTextures.Add(fallback);
+                warnings.Add(
+                    $"Legacy texture '{value.Name}' at '{value.TextureReference.InstancedPath}' was unresolved; " +
+                    $"retained the selected player template texture '{fallback.TextureReference?.InstancedPath ?? "None"}'.");
+            }
+            else
+            {
+                warnings.Add(
+                    $"Legacy texture '{value.Name}' at '{value.TextureReference.InstancedPath}' was unresolved and omitted.");
             }
         }
         var textures = MergeByName(template.Textures, convertedTextures, value => value.Name);
@@ -976,7 +1006,8 @@ public sealed class MorphFacePackageContextService
     private static void WriteLegacyMeshReferences(
         IMEPackage package,
         ExportEntry clone,
-        TseHeadMorph legacy)
+        TseHeadMorph legacy,
+        ICollection<string> warnings)
     {
         var properties = clone.GetProperties();
         if (string.IsNullOrWhiteSpace(legacy.HairMesh) ||
@@ -987,21 +1018,51 @@ public sealed class MorphFacePackageContextService
         else if (FindCompatibleEntry(package, legacy.HairMesh, "SkeletalMesh") is { } hair)
         {
             properties.AddOrReplaceProp(new ObjectProperty(hair, "m_oHairMesh"));
+            if (package.FindEntry(legacy.HairMesh, "SkeletalMesh") is null)
+            {
+                warnings.Add(
+                    $"Legacy hair mesh '{legacy.HairMesh}' was not present exactly; " +
+                    $"retained the unique object-name match '{hair.InstancedFullPath}'.");
+            }
+        }
+        else
+        {
+            warnings.Add($"Legacy hair mesh '{legacy.HairMesh}' was unresolved and omitted.");
+            properties.RemoveNamedProperty("m_oHairMesh");
         }
 
         var accessories = legacy.AccessoryMeshes
-            .Select(path => FindCompatibleEntry(package, path, "SkeletalMesh"))
-            .Where(entry => entry is not null)
-            .Cast<IEntry>()
-            .Select(entry => new ObjectProperty(entry))
+            .Select(path =>
+            {
+                var exact = package.FindEntry(path, "SkeletalMesh");
+                return (Path: path, Entry: FindCompatibleEntry(package, path, "SkeletalMesh"), Exact: exact is not null);
+            })
+            .ToArray();
+        foreach (var accessory in accessories.Where(value => value.Entry is null))
+        {
+            warnings.Add($"Legacy accessory mesh '{accessory.Path}' was unresolved and omitted.");
+        }
+        foreach (var accessory in accessories.Where(value => value.Entry is not null && !value.Exact))
+        {
+            warnings.Add(
+                $"Legacy accessory mesh '{accessory.Path}' was not present exactly; " +
+                $"retained the unique object-name match '{accessory.Entry!.InstancedFullPath}'.");
+        }
+        var resolvedAccessories = accessories
+            .Where(value => value.Entry is not null)
+            .Select(value => new ObjectProperty(value.Entry!))
             .ToArray();
         if (legacy.AccessoryMeshes.Count == 0)
         {
             properties.RemoveNamedProperty("m_oOtherMeshes");
         }
-        else if (accessories.Length > 0)
+        else if (resolvedAccessories.Length > 0)
         {
-            properties.AddOrReplaceProp(new ArrayProperty<ObjectProperty>(accessories, "m_oOtherMeshes"));
+            properties.AddOrReplaceProp(new ArrayProperty<ObjectProperty>(resolvedAccessories, "m_oOtherMeshes"));
+        }
+        else
+        {
+            properties.RemoveNamedProperty("m_oOtherMeshes");
         }
         clone.WriteProperties(properties);
     }
@@ -1027,7 +1088,63 @@ public sealed class MorphFacePackageContextService
         return matches.Length == 1 ? matches[0] : null;
     }
 
-    private static void WriteRonMeshReferences(IMEPackage package, ExportEntry face, TseHeadMorph ron)
+    private static IEntry ResolveTextureCandidate(
+        IMEPackage package,
+        string instancedPath,
+        StandalonePlayerAssetCatalog? assetCatalog,
+        ImportEntry? existingImport)
+    {
+        var candidate = assetCatalog?.Textures
+            .SingleOrDefault(value => value.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase) &&
+                                      value.InstancedPath.Equals(instancedPath, StringComparison.OrdinalIgnoreCase));
+        if (candidate is null)
+        {
+            throw new InvalidDataException(
+                $"RON Texture2D '{instancedPath}' is not present in the standalone seed and has no exact installed-game catalogue candidate.");
+        }
+
+        if (!File.Exists(candidate.PackagePath))
+        {
+            throw new FileNotFoundException(
+                $"The installed-game texture donor package is missing: {candidate.PackagePath}",
+                candidate.PackagePath);
+        }
+        if (existingImport is not null)
+        {
+            return existingImport;
+        }
+        return ExternalTextureMaterializer.Materialize(package, candidate);
+    }
+
+    private static IEntry ResolveMeshCandidate(
+        IMEPackage package,
+        string instancedPath,
+        StandalonePlayerAssetCatalog? assetCatalog,
+        ImportEntry? existingImport)
+    {
+        var candidates = assetCatalog?.SkeletalMeshes
+            .Where(value => value.ClassName.Equals("SkeletalMesh", StringComparison.OrdinalIgnoreCase) &&
+                            value.InstancedPath.Equals(instancedPath, StringComparison.OrdinalIgnoreCase) &&
+                            File.Exists(value.PackagePath))
+            .ToArray() ?? [];
+        if (candidates.Length != 1)
+        {
+            throw new InvalidDataException(
+                $"RON SkeletalMesh '{instancedPath}' is not present in the standalone seed and does not have exactly one exact installed-game donor candidate.");
+        }
+        if (existingImport is not null)
+        {
+            return existingImport;
+        }
+        return ExternalSkeletalMeshMaterializer.Materialize(package, candidates[0]);
+    }
+
+    private static void WriteRonMeshReferences(
+        IMEPackage package,
+        ExportEntry face,
+        TseHeadMorph ron,
+        StandalonePlayerAssetCatalog? assetCatalog,
+        bool strictAssetResolution)
     {
         var properties = face.GetProperties();
         if (string.IsNullOrWhiteSpace(ron.HairMesh) ||
@@ -1037,16 +1154,25 @@ public sealed class MorphFacePackageContextService
         }
         else
         {
-            var hair = package.FindEntry(ron.HairMesh, "SkeletalMesh")
-                       ?? throw new InvalidDataException(
-                           $"RON hair mesh '{ron.HairMesh}' is not present in the open PCC.");
+            var existing = package.FindEntry(ron.HairMesh, "SkeletalMesh");
+            IEntry? hair = existing as ExportEntry
+                       ?? (!strictAssetResolution ? existing : null)
+                       ?? ResolveMeshCandidate(
+                           package,
+                           ron.HairMesh,
+                           assetCatalog,
+                           existing as ImportEntry);
             properties.AddOrReplaceProp(new ObjectProperty(hair, "m_oHairMesh"));
         }
 
         var accessories = ron.AccessoryMeshes.Select(path =>
-            new ObjectProperty(package.FindEntry(path, "SkeletalMesh")
-                ?? throw new InvalidDataException(
-                    $"RON accessory mesh '{path}' is not present in the open PCC."))).ToArray();
+        {
+            var existing = package.FindEntry(path, "SkeletalMesh");
+            IEntry entry = existing as ExportEntry
+                           ?? (!strictAssetResolution ? existing : null)
+                           ?? ResolveMeshCandidate(package, path, assetCatalog, existing as ImportEntry);
+            return new ObjectProperty(entry);
+        }).ToArray();
         if (accessories.Length == 0)
         {
             properties.RemoveNamedProperty("m_oOtherMeshes");

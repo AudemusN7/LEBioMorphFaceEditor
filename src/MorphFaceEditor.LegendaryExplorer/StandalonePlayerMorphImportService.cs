@@ -146,7 +146,7 @@ public sealed class StandalonePlayerMorphImportService
         return (sourcePath, ron, profile, IdentifySex(targetGame, ron.MorphData.BakedLods[0].Length));
     }
 
-    internal static StandalonePlayerSex IdentifySex(MorphFaceGame targetGame, int lod0VertexCount)
+    public static StandalonePlayerSex IdentifySex(MorphFaceGame targetGame, int lod0VertexCount)
     {
         if (!Profiles.TryGetValue(targetGame, out var profile))
         {
@@ -175,6 +175,28 @@ public sealed class StandalonePlayerMorphImportService
             sanitized = "PlayerMorph";
         }
         return $"MFE_{sanitized}_{Guid.NewGuid():N}";
+    }
+
+    public static string ResolvePlayerTemplate(MorphFaceGame game, StandalonePlayerSex sex)
+    {
+        if (!Profiles.TryGetValue(game, out var profile))
+        {
+            throw new InvalidDataException($"Standalone player import does not support '{game}'.");
+        }
+
+        return sex == StandalonePlayerSex.Male
+            ? profile.MaleTemplate
+            : profile.FemaleTemplate;
+    }
+
+    public static string ResolveInstalledSeed(MorphFaceGame game)
+    {
+        if (!Profiles.TryGetValue(game, out var profile))
+        {
+            throw new InvalidDataException($"Standalone player import does not support '{game}'.");
+        }
+
+        return ResolveInstalledSeed(game, profile.Seed);
     }
 
     private static string ResolveInstalledSeed(MorphFaceGame game, string fileName)

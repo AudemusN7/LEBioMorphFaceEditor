@@ -13,7 +13,7 @@
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
-        <TextBlock Text="Choose the Legendary Edition game this RON or mesh was made for."
+        <TextBlock Text="Choose the Legendary Edition game to use for this import."
                    TextWrapping="Wrap" Foreground="{StaticResource SecondaryText}" Margin="0,0,0,16" />
         <StackPanel Grid.Row="1">
             <TextBlock Text="TARGET GAME" Style="{StaticResource FieldLabel}" />

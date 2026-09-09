@@ -34,6 +34,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly IMorphFaceClipboardService _clipboard;
     private readonly ActorAssignmentService _actorAssignmentService;
     private readonly StandalonePlayerMorphImportService _standaloneImportService;
+    private readonly StandaloneLegacyHeadMorphImportService _standaloneLegacyImportService;
     private readonly MorphRandomisationCatalog _randomisationCatalog;
     private readonly AsyncRelayCommand _openPackageCommand;
     private readonly AsyncRelayCommand _loadSelectedFaceCommand;
@@ -108,7 +109,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         IMorphFaceClipboardService clipboard,
         MorphRandomisationCatalog? randomisationCatalog = null,
         ActorAssignmentService? actorAssignmentService = null,
-        StandalonePlayerMorphImportService? standaloneImportService = null)
+        StandalonePlayerMorphImportService? standaloneImportService = null,
+        StandaloneLegacyHeadMorphImportService? standaloneLegacyImportService = null)
     {
         _dialogs = dialogs;
         _catalogService = catalogService;
@@ -123,6 +125,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _clipboard = clipboard;
         _actorAssignmentService = actorAssignmentService ?? new ActorAssignmentService();
         _standaloneImportService = standaloneImportService ?? new StandalonePlayerMorphImportService();
+        _standaloneLegacyImportService = standaloneLegacyImportService ?? new StandaloneLegacyHeadMorphImportService();
         _randomisationCatalog = randomisationCatalog ?? MorphRandomisationCatalog.Empty;
         _openPackageCommand = new AsyncRelayCommand(OpenPackageAsync, () => !IsBusy);
         _loadSelectedFaceCommand = new AsyncRelayCommand(
@@ -216,7 +219,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     public string PackageName => _standaloneGame is not null
-        ? $"{_standaloneGame} Standalone RON Workspace"
+        ? $"{_standaloneGame} Standalone Player Workspace"
         : PackagePath is null ? "No package open" : Path.GetFileName(PackagePath);
     public string PackageDisplayName => IsDirty ? $"{PackageName} *" : PackageName;
     public bool IsDirty => _hasWorkspaceChanges || Editor?.IsDirty == true;

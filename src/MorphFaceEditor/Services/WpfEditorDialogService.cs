@@ -79,6 +79,15 @@ public sealed class WpfEditorDialogService : IEditorDialogService
         return window.ShowDialog() == true ? window.SelectedGame : null;
     }
 
+    public RonImportDestination? ChooseRonImportDestination(string selectedFaceDisplayName)
+    {
+        var window = new RonImportDestinationWindow(selectedFaceDisplayName)
+        {
+            Owner = Application.Current.MainWindow
+        };
+        return window.ShowDialog() == true ? window.Destination : null;
+    }
+
     public string? ChooseStandaloneMorphName(
         string suggestedName,
         IReadOnlyCollection<string> existingObjectNames)

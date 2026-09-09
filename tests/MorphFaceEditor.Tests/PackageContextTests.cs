@@ -4,6 +4,7 @@ using MorphFaceEditor.Core.Deformation;
 using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.LegendaryExplorer;
+using MorphFaceEditor.LegendaryExplorer.TextureRegistry;
 using MorphFaceEditor.Models;
 using MorphFaceEditor.Rendering;
 using MorphFaceEditor.Services;
@@ -36,8 +37,10 @@ public static class PackageContextTests
         new("LE3 context material paste round-trips every override kind", PasteLe3MaterialData),
         new("bundled human and Asari eyes recover both fixed reflection cubes", HumanAndAsariEyeCubesResolve),
         new("TSE RON export and import round-trip a real BioMorphFace", RonRoundTripsMorph),
+        new("unresolved RON assets fail atomically without same-name substitution", RonUnresolvedAssetsFailAtomically),
         new("standalone player RON sex detection uses per-game LOD0 topology", StandalonePlayerRonSexDetection),
         new("standalone player RON import creates a detached non-committable workspace", StandalonePlayerRonImport),
+        new("installed player RON matrix preserves all games sexes LODs materials and readback", StandalonePlayerRonInstalledMatrix),
         new("legacy Gibbed ME2 and ME3 head morphs import through the context pipeline", GibbedHeadMorphsImport),
         new("standalone legacy imports reject a destination-game mismatch", StandaloneLegacyImportRejectsMismatch),
         new("installed LE2 and LE3 legacy imports create detached workspaces", StandaloneLegacyImportsInstalledPlayers),
@@ -837,6 +840,52 @@ public static class PackageContextTests
         });
     }
 
+    private static void RonUnresolvedAssetsFailAtomically()
+    {
+        WithPackageCopy("LE1 GlobalMorphs.pcc", path =>
+        {
+            var service = new MorphFacePackageContextService();
+            var source = ReadFaces(path).First(face =>
+                service.CaptureMaterialData(path, face.InstancedPath).Textures.Any(value => value.TextureReference is not null));
+            var ronPath = Path.Combine(Path.GetTempPath(), $"MFE-{Guid.NewGuid():N}.ron");
+            var sourceFingerprint = PackageFingerprint.Capture(path);
+            var sourceMaterial = service.CaptureMaterialData(path, source.InstancedPath);
+            var missingPath = "BIOG_MFE_Missing_Donor.MissingTexture";
+            try
+            {
+                service.ExportRon(path, source.InstancedPath, ronPath);
+                var original = File.ReadAllText(ronPath);
+                var originalPath = sourceMaterial.Textures.First(value => value.TextureReference is not null)
+                    .TextureReference!.InstancedPath;
+                File.WriteAllText(ronPath, original.Replace(
+                    $"\"{originalPath}\"", $"\"{missingPath}\"", StringComparison.Ordinal));
+
+                var threw = false;
+                try
+                {
+                    _ = service.ImportRon(path, source.InstancedPath, "MFE_UnresolvedRon", ronPath);
+                }
+                catch (InvalidDataException exception)
+                {
+                    threw = exception.Message.Contains(missingPath, StringComparison.Ordinal);
+                }
+
+                TestAssert.True(threw, "An unresolved RON texture did not fail with its exact missing path.");
+                TestAssert.Equal(sourceFingerprint, PackageFingerprint.Capture(path));
+                TestAssert.True(ReadFaces(path).All(face =>
+                    !face.ObjectName.Equals("MFE_UnresolvedRon", StringComparison.OrdinalIgnoreCase)),
+                    "An unresolved RON import left a partial BioMorphFace in the package.");
+            }
+            finally
+            {
+                if (File.Exists(ronPath))
+                {
+                    File.Delete(ronPath);
+                }
+            }
+        });
+    }
+
     private static void StandalonePlayerRonSexDetection()
     {
         foreach (var game in new[] { MorphFaceGame.LE1, MorphFaceGame.LE2 })
@@ -970,6 +1019,87 @@ public static class PackageContextTests
         }
     }
 
+    private static void StandalonePlayerRonInstalledMatrix()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        var cases = new[]
+        {
+            (MorphFaceGame.LE1, StandalonePlayerSex.Male, "BIOG_MORPH_FACE.Player_Base_Male"),
+            (MorphFaceGame.LE1, StandalonePlayerSex.Female, "BIOG_MORPH_FACE.Player_Base_Female"),
+            (MorphFaceGame.LE2, StandalonePlayerSex.Male, "BIOG_MORPH_FACE.CharacterCreation_Base_Male"),
+            (MorphFaceGame.LE2, StandalonePlayerSex.Female, "BIOG_MORPH_FACE.CharacterCreation_Base_Female"),
+            (MorphFaceGame.LE3, StandalonePlayerSex.Male, "biog_morph_face.CharacterCreation_Base_Male"),
+            (MorphFaceGame.LE3, StandalonePlayerSex.Female, "biog_morph_face.CharacterCreation_Base_Female")
+        };
+        var importService = new StandalonePlayerMorphImportService();
+        var context = new MorphFacePackageContextService();
+        var registry = new TextureCatalogService(new TextureRegistryStore(TextureRegistryPaths.CreateDefault()));
+
+        foreach (var (game, sex, templatePath) in cases)
+        {
+            var cooked = LegendaryExplorerCoreRuntime.GetCookedPath(game);
+            var seedName = game == MorphFaceGame.LE1 ? "EntryMenu.pcc" : "BioP_Char.pcc";
+            var seedPath = cooked is null ? null : Path.Combine(cooked, seedName);
+            if (seedPath is null || !File.Exists(seedPath))
+            {
+                continue;
+            }
+
+            var ronPath = Path.Combine(Path.GetTempPath(), $"MFE-{game}-{sex}-{Guid.NewGuid():N}.ron");
+            var readbackPath = Path.Combine(Path.GetTempPath(), $"MFE-{game}-{sex}-{Guid.NewGuid():N}-readback.ron");
+            var before = PackageFingerprint.Capture(seedPath);
+            try
+            {
+                context.ExportRon(seedPath, templatePath, ronPath);
+                var expected = TseHeadMorphRon.Read(ronPath);
+                TestAssert.True(expected.MorphData.BakedLods.Count > 1,
+                    $"{game} {sex} player source did not contain lower LODs.");
+                if (game == MorphFaceGame.LE2 && sex == StandalonePlayerSex.Male)
+                {
+                    TestAssert.Equal(2192, expected.MorphData.BakedLods[2].Length);
+                }
+
+                var textureCatalog = registry.ReadAsync(game).GetAwaiter().GetResult();
+                var assetCatalog = StandalonePlayerAssetCatalog.ForRon(
+                    game,
+                    ronPath,
+                    textureCatalog.Candidates);
+                using var imported = importService.ImportPlayerRon(
+                    game,
+                    ronPath,
+                    $"MFE_{game}_{sex}_Matrix",
+                    assetCatalog);
+
+                TestAssert.Equal(game, imported.Game);
+                TestAssert.Equal(sex, imported.Sex);
+                TestAssert.True(!imported.CanCommit && !imported.Workspace.CanCommit,
+                    $"{game} {sex} matrix import exposed a commit-capable workspace.");
+                AssertMorphEqual(
+                    expected.MorphData,
+                    context.CaptureMorphData(imported.Workspace.WorkingPath, imported.ImportedFacePath));
+                AssertMaterialEqual(
+                    expected.MaterialData,
+                    context.CaptureMaterialData(imported.Workspace.WorkingPath, imported.ImportedFacePath));
+
+                context.ExportRon(imported.Workspace.WorkingPath, imported.ImportedFacePath, readbackPath);
+                var readback = TseHeadMorphRon.Read(readbackPath);
+                AssertMorphEqual(expected.MorphData, readback.MorphData);
+                AssertMaterialEqual(expected.MaterialData, readback.MaterialData);
+                TestAssert.Equal(expected.HairMesh, readback.HairMesh);
+                TestAssert.True(expected.AccessoryMeshes.SequenceEqual(
+                        readback.AccessoryMeshes,
+                        StringComparer.OrdinalIgnoreCase),
+                    $"{game} {sex} accessory references changed during RON readback.");
+                TestAssert.Equal(before, PackageFingerprint.Capture(seedPath));
+            }
+            finally
+            {
+                if (File.Exists(ronPath)) File.Delete(ronPath);
+                if (File.Exists(readbackPath)) File.Delete(readbackPath);
+            }
+        }
+    }
+
     private static void GibbedHeadMorphsImport()
     {
         WithPackageCopy("LE2 GlobalMorphs.pcc", path =>
@@ -998,7 +1128,23 @@ public static class PackageContextTests
                         headMorphPath,
                         game,
                         legacyMorph,
-                        expectedMaterial,
+                        expectedMaterial with
+                        {
+                            Textures = expectedMaterial.Textures.Count == 0
+                                ? expectedMaterial.Textures
+                                : expectedMaterial.Textures
+                                    .Select((value, index) => index == 0
+                                        ? value with
+                                        {
+                                            TextureReference = new AssetIdentity(
+                                                string.Empty,
+                                                "BIOG_MFE_Missing_Donor.MissingTexture",
+                                                0,
+                                                "Texture2D")
+                                        }
+                                        : value)
+                                    .ToArray()
+                        },
                         formatVersion: game == 2 ? 1 : 0);
                     var legacy = service.ReadLegacyHeadMorph(headMorphPath);
                     TestAssert.Equal(1, legacy.MorphData.BakedLods.Count);
@@ -1032,6 +1178,10 @@ public static class PackageContextTests
                         $"MFE_GibbedME{game}_Test",
                         headMorphPath,
                         converted);
+                    TestAssert.True(result.Warnings.Any(value =>
+                            value.Contains("MissingTexture", StringComparison.OrdinalIgnoreCase) &&
+                            value.Contains("template", StringComparison.OrdinalIgnoreCase)),
+                        "Legacy texture substitution did not produce an explicit warning.");
                     AssertMorphEqual(converted, service.CaptureMorphData(path, result.FaceInstancedPath));
                     AssertMaterialEqual(expectedMaterial, service.CaptureMaterialData(path, result.FaceInstancedPath));
                 }
@@ -1084,7 +1234,9 @@ public static class PackageContextTests
         foreach (var (game, gameNumber, templatePath) in new[]
                  {
                      (MorphFaceGame.LE2, 2, "BIOG_MORPH_FACE.CharacterCreation_Base_Male"),
-                     (MorphFaceGame.LE3, 3, "biog_morph_face.CharacterCreation_Base_Male")
+                     (MorphFaceGame.LE2, 2, "BIOG_MORPH_FACE.CharacterCreation_Base_Female"),
+                     (MorphFaceGame.LE3, 3, "biog_morph_face.CharacterCreation_Base_Male"),
+                     (MorphFaceGame.LE3, 3, "biog_morph_face.CharacterCreation_Base_Female")
                  })
         {
             var cooked = LegendaryExplorerCoreRuntime.GetCookedPath(game);
@@ -1102,6 +1254,7 @@ public static class PackageContextTests
                 var context = new MorphFacePackageContextService();
                 context.ExportRon(seedPath, templatePath, ronPath);
                 var ron = TseHeadMorphRon.Read(ronPath);
+                var expectedMaterial = context.CaptureMaterialData(seedPath, templatePath);
                 WriteGibbedHeadMorph(
                     legacyPath,
                     gameNumber,
@@ -1116,7 +1269,11 @@ public static class PackageContextTests
                 TestAssert.True(!imported.CanCommit && !imported.Workspace.CanCommit,
                     $"LE{gameNumber} legacy import exposed a commit-capable workspace.");
                 TestAssert.Equal(game, imported.Game);
-                TestAssert.Equal(StandalonePlayerSex.Male, imported.Sex);
+                TestAssert.Equal(
+                    templatePath.EndsWith("Female", StringComparison.OrdinalIgnoreCase)
+                        ? StandalonePlayerSex.Female
+                        : StandalonePlayerSex.Male,
+                    imported.Sex);
 
                 var converted = context.CaptureMorphData(
                     imported.Workspace.WorkingPath,
@@ -1124,6 +1281,9 @@ public static class PackageContextTests
                 TestAssert.True(converted.BakedLods.Count > 1 &&
                                 converted.BakedLods.All(lod => lod.Length > 0),
                     $"LE{gameNumber} legacy import did not rebuild native player LODs.");
+                AssertMaterialEqual(
+                    expectedMaterial,
+                    context.CaptureMaterialData(imported.Workspace.WorkingPath, imported.ImportedFacePath));
 
                 var failedAppend = false;
                 try

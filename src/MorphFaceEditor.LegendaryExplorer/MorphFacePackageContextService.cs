@@ -444,6 +444,30 @@ public sealed class MorphFacePackageContextService
         string objectName,
         string sourcePath) => ImportHeadMorph(packagePath, templateFacePath, objectName, sourcePath);
 
+    /// <summary>
+    /// Imports a player RON after standalone identification has already matched
+    /// its LOD0 to the selected game's HMM/HMF topology. Player lower-LOD
+    /// coverage is preserved as authored instead of being forced to match the
+    /// seed BioMorphFace's stored arrays.
+    /// </summary>
+    public MorphFaceSaveResult ImportStandalonePlayerRon(
+        string packagePath,
+        string templateFacePath,
+        string objectName,
+        string sourcePath)
+    {
+        ValidateObjectName(objectName);
+        var ron = TseHeadMorphRon.Read(sourcePath);
+        return ImportHeadMorph(
+            packagePath,
+            templateFacePath,
+            objectName,
+            ron,
+            ron.MorphData,
+            mergeWithTemplate: false,
+            requireMatchingAllLods: false);
+    }
+
     public MorphFaceSaveResult ImportHeadMorph(
         string packagePath,
         string templateFacePath,
@@ -499,7 +523,8 @@ public sealed class MorphFacePackageContextService
         string objectName,
         TseHeadMorph ron,
         MorphFaceMorphData morphData,
-        bool mergeWithTemplate)
+        bool mergeWithTemplate,
+        bool requireMatchingAllLods = true)
     {
         ValidateMorphData(ron.MorphData);
         ValidateMaterialData(ron.MaterialData);
@@ -507,7 +532,15 @@ public sealed class MorphFacePackageContextService
         {
             var source = FindFace(package, templateFacePath);
             EnsureNameAvailable(package, source.Parent, objectName);
-            EnsureCompatibleLods(ReadMorphData(source), morphData);
+            var templateMorph = ReadMorphData(source);
+            if (requireMatchingAllLods)
+            {
+                EnsureCompatibleLods(templateMorph, morphData);
+            }
+            else
+            {
+                EnsureCompatibleLod0(templateMorph, morphData);
+            }
             package.FindNameOrAdd(objectName);
             var clone = EntryCloner.CloneTree(source);
             clone.ObjectName = new NameReference(objectName);
@@ -1189,6 +1222,16 @@ public sealed class MorphFacePackageContextService
         {
             throw new InvalidOperationException(
                 "The source and destination morphs do not have matching baked-LOD topology.");
+        }
+    }
+
+    private static void EnsureCompatibleLod0(MorphFaceMorphData target, MorphFaceMorphData source)
+    {
+        if (target.BakedLods.Count == 0 || source.BakedLods.Count == 0 ||
+            target.BakedLods[0].Length != source.BakedLods[0].Length)
+        {
+            throw new InvalidOperationException(
+                "The source player morph does not match the selected game's HMM or HMF LOD0 topology.");
         }
     }
 

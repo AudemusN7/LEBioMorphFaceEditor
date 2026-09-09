@@ -163,7 +163,8 @@ public sealed class MorphFaceProfileRegistry
             "#287CCB",
             _ => false,
             (facePath, baseHeadPath) => MatchesHuman(
-                facePath, baseHeadPath, HumanMaleMorphMeshes, "HMM", "Human Male"))
+                facePath, baseHeadPath, HumanMaleMorphMeshes, "HMM", "Human Male",
+                allowCharacterCreationVariant: true))
         { TargetSetName = "HMM_BaseMorphSet" },
         new MorphFaceProfile(
             "le3-human-female",
@@ -177,7 +178,8 @@ public sealed class MorphFaceProfileRegistry
             "#C02B9B",
             _ => false,
             (facePath, baseHeadPath) => MatchesHuman(
-                facePath, baseHeadPath, HumanFemaleMorphMeshes, "HMF", "Human Female"))
+                facePath, baseHeadPath, HumanFemaleMorphMeshes, "HMF", "Human Female",
+                allowCharacterCreationVariant: true))
         { TargetSetName = "HMF_BaseMorphSet" },
         CreateAsariProfile(MorphFaceGame.LE3, "BIOG_ASA_HED_PROMorph_R.pcc"),
         CreateSalarianProfile(MorphFaceGame.LE3, "BIOG_SAL_HED_PROMorph_R.pcc"),
@@ -428,7 +430,8 @@ public sealed class MorphFaceProfileRegistry
         string? baseHeadPath,
         IReadOnlyList<string> morphMeshNames,
         string pathSegment,
-        string displayPrefix)
+        string displayPrefix,
+        bool allowCharacterCreationVariant = false)
     {
         if (!string.IsNullOrWhiteSpace(baseHeadPath))
         {
@@ -436,6 +439,8 @@ public sealed class MorphFaceProfileRegistry
                 ? "human-female"
                 : "human-male";
             return HeadProfileIdentity.InferSuffix(baseHeadPath) == expectedSuffix &&
+                   (allowCharacterCreationVariant ||
+                    !baseHeadPath.Contains("PROCustom_MDL_CC", StringComparison.OrdinalIgnoreCase)) &&
                    morphMeshNames.Any(name =>
                        baseHeadPath.Contains(name, StringComparison.OrdinalIgnoreCase)) &&
                    !baseHeadPath.Contains("TUR_", StringComparison.OrdinalIgnoreCase);
@@ -449,13 +454,17 @@ public sealed class MorphFaceProfileRegistry
     private static readonly string[] HumanMaleMorphMeshes =
     [
         "HMM_HED_PROAverage_MDL",
-        "HMM_HED_PROBase_MDL"
+        "HMM_HED_PROBase_MDL",
+        "HMM_HED_PROCustom_MDL",
+        "HMM_HED_PROCustom_MDL_CC"
     ];
 
     private static readonly string[] HumanFemaleMorphMeshes =
     [
         "HMF_Blank_World_LOD0",
-        "HMF_HED_PROBase_MDL"
+        "HMF_HED_PROBase_MDL",
+        "HMF_HED_PROCustom_MDL",
+        "HMF_HED_PROCustom_MDL_CC"
     ];
 
     private static bool IsLe1HumanFemaleLegacyBaseVariant(DeformationComparisonReport report)

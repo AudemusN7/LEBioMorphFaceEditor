@@ -522,6 +522,10 @@ public sealed class HeadPreviewRenderer : IDisposable
             ToView(bindings.Auxiliary4),
             ToCubeView(material.FixedCubeTexture),
             ToCubeView(material.SecondaryFixedCubeTexture));
+        _context.PixelShader.SetShaderResources(
+            15,
+            ToView(bindings.Auxiliary5),
+            ToView(bindings.Auxiliary6));
     }
 
     private ShaderResourceView? ToCubeView(HeadPreviewCubeTexture? texture)

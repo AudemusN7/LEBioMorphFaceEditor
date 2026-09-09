@@ -214,6 +214,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     public bool CanEdit => CanEditMorphFeatures;
     public bool CanEditMorphFeatures => _session.CanEditMorphFeatures;
     public bool CanEditBones => _session.CanEditBones;
+    public bool CanEditAttachments => _session.GeometryMode != MorphFaceGeometryMode.BaseMeshOnly;
     public bool UsesLiveDeformationPreview => _session.UsesLiveDeformationPreview || CanEditBones;
     public bool CanFixMorph => _session.CanFixMorph;
     public bool HasPendingRepair => _session.HasPendingRepair;
@@ -222,7 +223,8 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     public bool AllowsMorphRandomisation => CanEditMorphFeatures && _allowsMorphRandomisation;
     public bool AllowsMaterialRandomisation =>
         Material.Scalars.Count + Material.Vectors.Count + Material.Textures.Count > 0;
-    public bool AllowsCursedRandomisation => CanEditMorphFeatures || AllowsMaterialRandomisation;
+    public bool AllowsCursedRandomisation =>
+        AllowsMorphRandomisation || CanEditBones || AllowsMaterialRandomisation;
     public bool CursedMode
     {
         get => _cursedMode;
@@ -232,7 +234,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             {
                 if (value)
                 {
-                    RandomiseMorphs = true;
+                    RandomiseMorphs = AllowsMorphRandomisation;
                     RandomiseMaterials = true;
                 }
                 if (!value)
@@ -249,7 +251,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         get => _randomiseMorphs;
         set
         {
-            var allowedValue = _allowsMorphRandomisation && value;
+            var allowedValue = AllowsMorphRandomisation && value;
             if (SetProperty(ref _randomiseMorphs, allowedValue)) RaiseRandomisationCanExecuteChanged();
         }
     }
@@ -527,7 +529,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         using (var aggregate = _history.BeginAggregate())
         {
             if (featureValues.Count > 0) _session.SetFeatures(featureValues);
-            if (includeBones && RandomiseMorphs)
+            if (includeBones && CanEditBones)
             {
                 var postMorphBones = _session.FinalSkeleton.Select(bone => bone with
                 {
@@ -613,7 +615,8 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         var hasEligibleTexture = RandomiseMaterials &&
                                  scope.Textures.Any(value => eligibleTextures.Contains(value.Name)) &&
                                  _randomisationCatalog.HasMaterialDonors(_profileKey);
-        if (CursedMode) return hasMorph || hasRawNumericMaterial || hasEligibleTexture;
+        var hasCursedBones = CursedMode && CanEditBones;
+        if (CursedMode) return hasMorph || hasCursedBones || hasRawNumericMaterial || hasEligibleTexture;
         var hasEligibleMorph = hasMorph && _randomisationCatalog.HasDonors(_profileKey);
         var profile = _randomisationCatalog.GetMaterialProfile(_profileKey);
         var hasEligibleMaterial = RandomiseMaterials && profile is not null &&

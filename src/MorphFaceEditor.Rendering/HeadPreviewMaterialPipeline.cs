@@ -12,7 +12,9 @@ internal readonly record struct HeadPreviewMaterialBindings(
     HeadPreviewTexture? Auxiliary1,
     HeadPreviewTexture? Auxiliary2,
     HeadPreviewTexture? Auxiliary3,
-    HeadPreviewTexture? Auxiliary4)
+    HeadPreviewTexture? Auxiliary4,
+    HeadPreviewTexture? Auxiliary5,
+    HeadPreviewTexture? Auxiliary6)
 {
     public static HeadPreviewMaterialBindings Create(HeadPreviewMaterial material)
     {
@@ -24,7 +26,7 @@ internal readonly record struct HeadPreviewMaterialBindings(
                 SelectByName(material, "__PROShort01_Opacity"),
                 SelectByName(material, "__PROShort01_Tangent"),
                 SelectByName(material, "__PROShort01_Specular"),
-                null, null, null);
+                null, null, null, null, null);
         }
 
         if (material.Family is HeadMaterialFamily.Hair or HeadMaterialFamily.Lashes)
@@ -34,7 +36,7 @@ internal readonly record struct HeadPreviewMaterialBindings(
             // package data for round-trip fidelity, but are dead in this master.
             return new HeadPreviewMaterialBindings(
                 Select(material, PrimaryDiffuseName(material), TextureRole.Diffuse),
-                null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null);
         }
 
         return new HeadPreviewMaterialBindings(
@@ -45,7 +47,9 @@ internal readonly record struct HeadPreviewMaterialBindings(
             SelectByName(material, Auxiliary1Name(material.Family)),
             SelectByName(material, Auxiliary2Name(material.Family)),
             SelectByName(material, Auxiliary3Name(material.Family)),
-            SelectByName(material, Auxiliary4Name(material.Family)));
+            SelectByName(material, Auxiliary4Name(material.Family)),
+            SelectByName(material, Auxiliary5Name(material.Family)),
+            SelectByName(material, Auxiliary6Name(material.Family)));
     }
 
     private static HeadPreviewTexture? Select(
@@ -185,6 +189,18 @@ internal readonly record struct HeadPreviewMaterialBindings(
         HeadMaterialFamily.AsariSkin => "__ASA_SpecMultiplierMask",
         _ => null
     };
+
+    private static string? Auxiliary5Name(HeadMaterialFamily family) => family switch
+    {
+        HeadMaterialFamily.Skin => "HED_Brow",
+        _ => null
+    };
+
+    private static string? Auxiliary6Name(HeadMaterialFamily family) => family switch
+    {
+        HeadMaterialFamily.Skin => "HED_Scar",
+        _ => null
+    };
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -204,6 +220,9 @@ internal struct HeadPreviewMaterialConstants
     public Vector4 SurfaceParameters;
     public Vector4 TextureFlags0;
     public Vector4 TextureFlags1;
+    public Vector4 TextureFlags2;
+    public Vector4 CustomSkinParameters;
+    public Vector4 CustomScarColor;
     public Vector4 GeneralParameters;
     public Vector4 SkinParameters0;
     public Vector4 SkinParameters1;
@@ -309,6 +328,17 @@ internal struct HeadPreviewMaterialConstants
                     ? material.SecondaryFixedCubeTexture is null ? 0 : 1
                     : bindings.Auxiliary3 is null ? 0 : 1,
                 bindings.Diffuse?.HasMeaningfulAlpha == true ? 1 : 0),
+            TextureFlags2 = new Vector4(
+                bindings.Auxiliary5 is null ? 0 : 1,
+                bindings.Auxiliary6 is null ? 0 : 1,
+                0,
+                0),
+            CustomSkinParameters = new Vector4(
+                GetScalar(material, "HED_Custom_Scar_Scalar", 0),
+                GetScalar(material, "HED_Scar_Diffuse_Scalar", 0),
+                0,
+                0),
+            CustomScarColor = GetVector(material, "HED_Scar_Vector", Vector4.Zero),
             GeneralParameters = new Vector4(
                 GetScalar(material, "HED_TMis_Scalar", 1),
                 GetScalar(material, "HED_SPwr_Scalar", 5),

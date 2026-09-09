@@ -21,6 +21,7 @@ public static class HumanSkinMaterialTests
         new("Human Female makeup mask controls brow tint", FemaleMakeupMaskControlsBrowTint),
         new("Human Female blush uses makeup blue-alpha coverage", FemaleBlushUsesMakeupCoverage),
         new("Human Female addition power cannot alter unmasked face specular", FemaleAdditionPowerIsMaskBound),
+        new("custom player brow and scar textures affect the live preview", CustomPlayerBrowAndScarAffectPreview),
         new("face transmission scalar does not disable skin tone", FaceTransmissionDoesNotDisableSkinTone),
         new("LE3 human face transmission uses diffuse blue rather than alpha", Le3FaceTransmissionUsesDiffuseBlue),
         new("skin scattering uses inverse diffuse alpha under directional lights", SkinScatteringUsesInverseDiffuseAlpha)
@@ -170,6 +171,36 @@ public static class HumanSkinMaterialTests
             TestAssert.True(
                 first.SequenceEqual(second),
                 "HED_Addn_SPwr_Add_Scalar replaced the base HMF exponent where no addition mask was present.");
+        }
+    }
+
+    private static void CustomPlayerBrowAndScarAffectPreview()
+    {
+        var neutral = CreateCustomPlayerSkinMaterial(
+            "skin", [128, 128, 255, 0], [128, 128, 255, 0],
+            scarNormalStrength: 0,
+            scarColourStrength: 0);
+        var brow = CreateCustomPlayerSkinMaterial(
+            "skin", [255, 128, 0, 255], [128, 128, 255, 0],
+            scarNormalStrength: 0,
+            scarColourStrength: 0);
+        var scar = CreateCustomPlayerSkinMaterial(
+            "skin", [128, 128, 255, 0], [255, 128, 0, 255],
+            scarNormalStrength: 1,
+            scarColourStrength: 1);
+        var (renderer, camera) = CreateTriangleRenderer(neutral);
+        using (renderer)
+        {
+            var neutralPixels = renderer.Render(camera, new HeadPreviewOptions()).BgraPixels;
+            renderer.UpdateMaterials(new Dictionary<string, HeadPreviewMaterial> { [brow.Key] = brow });
+            var browPixels = renderer.Render(camera, new HeadPreviewOptions()).BgraPixels;
+            TestAssert.True(!neutralPixels.SequenceEqual(browPixels),
+                "HED_Brow remained disconnected from the custom-player preview shader.");
+
+            renderer.UpdateMaterials(new Dictionary<string, HeadPreviewMaterial> { [scar.Key] = scar });
+            var scarPixels = renderer.Render(camera, new HeadPreviewOptions()).BgraPixels;
+            TestAssert.True(!neutralPixels.SequenceEqual(scarPixels),
+                "HED_Scar remained disconnected from the custom-player preview shader.");
         }
     }
 

@@ -70,6 +70,26 @@ public sealed class WpfEditorDialogService : IEditorDialogService
         return dialog.ShowDialog() == true ? dialog.FileName : null;
     }
 
+    public MorphFaceGame? ChooseStandaloneImportGame()
+    {
+        var window = new StandaloneImportGameWindow
+        {
+            Owner = Application.Current.MainWindow
+        };
+        return window.ShowDialog() == true ? window.SelectedGame : null;
+    }
+
+    public string? ChooseStandaloneMorphName(
+        string suggestedName,
+        IReadOnlyCollection<string> existingObjectNames)
+    {
+        var window = new CloneMorphWindow(suggestedName, existingObjectNames, importMode: true)
+        {
+            Owner = Application.Current.MainWindow
+        };
+        return window.ShowDialog() == true ? window.ObjectName : null;
+    }
+
     public string? ChooseRonExportFile(string suggestedFileName, string? initialDirectory = null)
     {
         var dialog = new SaveFileDialog

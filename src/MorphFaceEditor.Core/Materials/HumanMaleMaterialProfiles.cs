@@ -107,7 +107,8 @@ public static class HumanMaterialProfiles
         AddScalars(result, HeadMaterialFamily.Skin, "Face", 0, 1,
             "HED_Mask_Scalar", "HED_Frek_RedChannel_Scalar",
             "HED_Frek_BlueChannel_Scalar", "HED_Frek_GreenChannel_Scalar", "HED_Norm_Blend",
-            "HED_TMis_Scalar", "HED_Scar_Scalar", "HED_Brow_FadeOut_Scalar", "HED_Addn_Blend_Scalar");
+            "HED_TMis_Scalar", "HED_Scar_Scalar", "HED_Brow_FadeOut_Scalar", "HED_Addn_Blend_Scalar",
+            "HED_Custom_Scar_Scalar", "HED_Scar_Diffuse_Scalar");
         AddScalars(result, HeadMaterialFamily.Skin, "Face", 0, 4,
             "HED_Addn_Blowout_Scalar", "HED_Addn_Colour_02_Scalar", "HED_Addn_SPwr_Add_Scalar",
             "HED_Addn_Spec_Add_Scalar", "HED_Addn_Add_Scalar", "HED_Addn_Multiply_Scalar");
@@ -120,10 +121,16 @@ public static class HumanMaterialProfiles
         AddTexture(result, HeadMaterialFamily.Skin, "HED_Norm", "Face normal", "Face", TextureRole.Normal, TextureColorSpace.Linear);
         // RGB stores a tangent-space addition normal and alpha stores the facial-hair/addition mask.
         AddTexture(result, HeadMaterialFamily.Skin, "HED_Addn", "Face addition", "Face", TextureRole.Detail, TextureColorSpace.Linear, TextureAlphaPolicy.Mask);
+        AddTexture(result, HeadMaterialFamily.Skin, "HED_Brow", "Custom brow", "Player face",
+            TextureRole.Other, TextureColorSpace.Linear, TextureAlphaPolicy.Mask,
+            "Custom-player packed brow/addition map. RG perturbs the face normal, blue shapes the secondary colour, and alpha selects the primary colour.");
+        AddTexture(result, HeadMaterialFamily.Skin, "HED_Scar", "Custom scar", "Player face",
+            TextureRole.Other, TextureColorSpace.Linear, TextureAlphaPolicy.Mask,
+            "Custom-player packed scar map. RG supplies the scar normal, blue selects the diffuse scar colour, and alpha controls normal coverage.");
         AddVectors(result, HeadMaterialFamily.Skin, "Face",
             "SkinTone", "HED_TClr_Vector", "HED_Scar_Colour_Vector", "HED_Addn_Colour_Vector",
             "HED_Spec_Add_Vector", "HED_Frek_RedChannel_Vector", "HED_Mask_Vector", "SkinLightScattering",
-            "HED_Frek_BlueChannel_Vector", "HED_Frek_GreenChannel_Vector", "blonde");
+            "HED_Frek_BlueChannel_Vector", "HED_Frek_GreenChannel_Vector", "blonde", "HED_Scar_Vector");
 
         // HMF replaces the HMM packed face/scar selector with a dedicated
         // makeup mask. The base and direct-light FXC permutations prove the

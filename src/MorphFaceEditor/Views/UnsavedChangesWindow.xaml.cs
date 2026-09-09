@@ -17,6 +17,14 @@ public partial class UnsavedChangesWindow : Window
             SummaryText.Text = "The loaded BioMorphFace has unsaved changes.";
             SaveExplanationText.Text = "Save keeps these edits in the temporary package workspace.";
         }
+        else if (scope == UnsavedChangesScope.StandaloneFace)
+        {
+            Title = "Unsaved standalone morph changes";
+            SummaryText.Text = "The loaded standalone morph has unsaved changes.";
+            SaveExplanationText.Text =
+                "Export opens Save Morph to PCC. The installed game template is read-only and will not be modified.";
+            SaveButton.Content = "Export…";
+        }
     }
 
     public UnsavedChangesChoice Choice { get; private set; } = UnsavedChangesChoice.Cancel;

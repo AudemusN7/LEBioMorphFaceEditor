@@ -33,6 +33,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly MorphFaceInterchangeService _interchangeService;
     private readonly IMorphFaceClipboardService _clipboard;
     private readonly ActorAssignmentService _actorAssignmentService;
+    private readonly StandalonePlayerMorphImportService _standaloneImportService;
     private readonly MorphRandomisationCatalog _randomisationCatalog;
     private readonly AsyncRelayCommand _openPackageCommand;
     private readonly AsyncRelayCommand _loadSelectedFaceCommand;
@@ -57,6 +58,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly AsyncRelayCommand _assignMorphToActorCommand;
     private readonly AsyncRelayCommand _assignMaterialsToActorCommand;
     private MorphFacePackageWorkspace? _packageWorkspace;
+    private string? _standaloneImportPath;
+    private MorphFaceGame? _standaloneGame;
+    private readonly HashSet<string> _fixedBakeFacePaths = new(StringComparer.OrdinalIgnoreCase);
     private bool _hasWorkspaceChanges;
     private CancellationTokenSource? _loadCancellation;
     private LoadedMorphFace? _loadedFace;
@@ -103,7 +107,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         MorphFaceInterchangeService interchangeService,
         IMorphFaceClipboardService clipboard,
         MorphRandomisationCatalog? randomisationCatalog = null,
-        ActorAssignmentService? actorAssignmentService = null)
+        ActorAssignmentService? actorAssignmentService = null,
+        StandalonePlayerMorphImportService? standaloneImportService = null)
     {
         _dialogs = dialogs;
         _catalogService = catalogService;
@@ -117,6 +122,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _interchangeService = interchangeService;
         _clipboard = clipboard;
         _actorAssignmentService = actorAssignmentService ?? new ActorAssignmentService();
+        _standaloneImportService = standaloneImportService ?? new StandalonePlayerMorphImportService();
         _randomisationCatalog = randomisationCatalog ?? MorphRandomisationCatalog.Empty;
         _openPackageCommand = new AsyncRelayCommand(OpenPackageAsync, () => !IsBusy);
         _loadSelectedFaceCommand = new AsyncRelayCommand(
@@ -124,22 +130,22 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             () => !IsBusy && SelectedFace is not null && WorkspacePackagePath is not null);
         _saveCommand = new AsyncRelayCommand(
             SaveExistingCommandAsync,
-            () => !IsBusy && IsDirty && _packageWorkspace is not null);
+            () => !IsBusy && IsDirty && _packageWorkspace?.CanCommit == true);
         _saveMorphToPccCommand = new AsyncRelayCommand(
-            SaveMorphToPccAsync,
+            SaveMorphToPccCommandAsync,
             () => !IsBusy && Editor is not null && _loadedFace is not null && _packageWorkspace is not null);
         _fixMorphCommand = new RelayCommand(FixMorph, () => !IsBusy && Editor?.CanFixMorph == true);
         _editBackgroundColorCommand = new RelayCommand(EditBackgroundColor);
         _dismissErrorCommand = new RelayCommand(() => ErrorMessage = null);
         _textureRegistrySettingsCommand = new RelayCommand(_dialogs.ShowTextureRegistrySettings);
-        _cloneMorphCommand = new AsyncRelayCommand(CloneMorphAsync, CanUseFaceContextMenu);
-        _deleteMorphCommand = new AsyncRelayCommand(DeleteMorphAsync, CanUseFaceContextMenu);
-        _convertMorphCommand = new AsyncRelayCommand(ConvertMorphAsync, CanUseFaceContextMenu);
+        _cloneMorphCommand = new AsyncRelayCommand(CloneMorphAsync, CanMutatePackageContext);
+        _deleteMorphCommand = new AsyncRelayCommand(DeleteMorphAsync, CanMutatePackageContext);
+        _convertMorphCommand = new AsyncRelayCommand(ConvertMorphAsync, CanMutatePackageContext);
         _copyMorphDataCommand = new AsyncRelayCommand(CopyMorphDataAsync, CanUseFaceContextMenu);
         _pasteMorphDataCommand = new AsyncRelayCommand(PasteMorphDataAsync, CanPasteMorphData);
         _copyMaterialDataCommand = new AsyncRelayCommand(CopyMaterialDataAsync, CanUseFaceContextMenu);
         _pasteMaterialDataCommand = new AsyncRelayCommand(PasteMaterialDataAsync, CanPasteMaterialData);
-        _importMorphCommand = new AsyncRelayCommand(ImportMorphAsync, CanUseFaceContextMenu);
+        _importMorphCommand = new AsyncRelayCommand(ImportMorphAsync, () => !IsBusy);
         _exportMorphPskCommand = new AsyncRelayCommand(
             () => ExportMorphMeshAsync(MorphMeshFormat.Psk), CanUseFaceContextMenu);
         _exportMorphGltfCommand = new AsyncRelayCommand(
@@ -147,8 +153,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _exportMorphMd5Command = new AsyncRelayCommand(
             () => ExportMorphMeshAsync(MorphMeshFormat.Md5), CanUseFaceContextMenu);
         _exportMorphRonCommand = new AsyncRelayCommand(ExportMorphRonAsync, CanUseFaceContextMenu);
-        _assignMorphToActorCommand = new AsyncRelayCommand(AssignMorphToActorAsync, CanUseFaceContextMenu);
-        _assignMaterialsToActorCommand = new AsyncRelayCommand(AssignMaterialsToActorAsync, CanUseFaceContextMenu);
+        _assignMorphToActorCommand = new AsyncRelayCommand(AssignMorphToActorAsync, CanMutatePackageContext);
+        _assignMaterialsToActorCommand = new AsyncRelayCommand(AssignMaterialsToActorAsync, CanMutatePackageContext);
         FilteredFaces = CollectionViewSource.GetDefaultView(Faces);
         FilteredFaces.Filter = item =>
             item is BioMorphFaceListItem face && BioMorphFaceSearch.Matches(face, FaceSearchText);
@@ -209,11 +215,14 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
-    public string PackageName => PackagePath is null ? "No package open" : Path.GetFileName(PackagePath);
+    public string PackageName => _standaloneGame is not null
+        ? $"{_standaloneGame} Standalone RON Workspace"
+        : PackagePath is null ? "No package open" : Path.GetFileName(PackagePath);
     public string PackageDisplayName => IsDirty ? $"{PackageName} *" : PackageName;
     public bool IsDirty => _hasWorkspaceChanges || Editor?.IsDirty == true;
     public bool CanFixMorph => Editor?.CanFixMorph == true;
     private string? WorkspacePackagePath => _packageWorkspace?.WorkingPath;
+    private bool IsStandaloneWorkspace => _standaloneGame is not null;
 
     public string FaceSearchText
     {
@@ -531,7 +540,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         !IsBusy && EditorFileDrop.Classify(path) switch
         {
             EditorFileDropKind.Package => true,
-            EditorFileDropKind.MorphImport => CanUseFaceContextMenu(),
+            EditorFileDropKind.MorphImport => true,
             _ => false
         };
 
@@ -574,6 +583,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         SetEditor(null, null);
         DisposePackageWorkspace();
         _packageWorkspace = workspace;
+        _standaloneImportPath = null;
+        _standaloneGame = null;
+        _fixedBakeFacePaths.Clear();
         _hasWorkspaceChanges = false;
         PackagePath = workspace.SourcePath;
         OnDirtyStateChanged();
@@ -689,7 +701,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             var result = await _previewLoadService.LoadAsync(
                 workspacePath,
                 SelectedFace.UIndex.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                cancellationToken);
+                cancellationToken,
+                _fixedBakeFacePaths.Contains(SelectedFace.InstancedPath)
+                    ? MorphFaceGeometryMode.FixedBake
+                    : null);
             cancellationToken.ThrowIfCancellationRequested();
             foreach (var warning in result.Loaded.Warnings)
             {
@@ -705,7 +720,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             FaceDetails = $"{topology.VertexCount:N0} vertices · {topology.IndexCount / 3:N0} triangles · " +
                           $"{topology.Sections.Count} sections · {displayedFinalBoneCount} final bones · " +
                           $"{materialOverrides.Scalars.Count}/{materialOverrides.Vectors.Count}/{materialOverrides.Textures.Count} material S/V/T · " +
-                          (result.EditingSession.CanEdit
+                          (result.EditingSession.GeometryMode == MorphFaceGeometryMode.FixedBake
+                              ? "fixed imported bake"
+                              : result.EditingSession.CanEdit
                               ? $"oracle {oracle!.MaximumError:G4} max"
                               : result.Profile.IgnoresAuthoredGeometry
                                   ? "base-head material-only preview"
@@ -747,7 +764,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                                       !string.Equals(_previewCameraFamily, cameraFamily, StringComparison.OrdinalIgnoreCase);
             _previewCameraFamily = cameraFamily;
             PreviewSceneReady?.Invoke(result.Scene, resetCameraPosition);
-            Status = result.EditingSession.CanEdit
+            Status = result.EditingSession.GeometryMode == MorphFaceGeometryMode.FixedBake
+                ? $"Loaded {SelectedFace.DisplayName} ({result.Profile.DisplayName}); fixed-bake geometry, bone and material editing ready. Morph sliders are preserved but disabled."
+                : result.EditingSession.CanEdit
                 ? $"Loaded {SelectedFace.DisplayName} ({result.Profile.DisplayName}); live geometry and material editing ready."
                 : result.Profile.IgnoresAuthoredGeometry
                     ? $"Loaded {SelectedFace.DisplayName} ({result.Profile.DisplayName}); material editing ready with base-head preview. " +
@@ -1237,6 +1256,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             return false;
         }
+        if (!_packageWorkspace.CanCommit)
+        {
+            ErrorMessage = "Standalone imports cannot overwrite the installed player template package. Use Save Morph to PCC instead.";
+            Status = "Choose Save Morph to PCC for this standalone import.";
+            return false;
+        }
         if (Editor?.IsDirty == true && !await FlushEditorToWorkspaceAsync())
         {
             return false;
@@ -1285,9 +1310,13 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
         return _dialogs.ConfirmUnsavedChanges(
             LoadedFacePath ?? "Loaded BioMorphFace",
-            UnsavedChangesScope.Face) switch
+            IsStandaloneWorkspace
+                ? UnsavedChangesScope.StandaloneFace
+                : UnsavedChangesScope.Face) switch
         {
-            UnsavedChangesChoice.Save => await FlushEditorToWorkspaceAsync(),
+            UnsavedChangesChoice.Save => IsStandaloneWorkspace
+                ? await SaveMorphToPccAsync()
+                : await FlushEditorToWorkspaceAsync(),
             UnsavedChangesChoice.Discard => true,
             _ => false
         };
@@ -1299,9 +1328,13 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             return true;
         }
-        return _dialogs.ConfirmUnsavedChanges(PackagePath ?? "Open package") switch
+        return _dialogs.ConfirmUnsavedChanges(
+            IsStandaloneWorkspace ? LoadedFacePath ?? PackageName : PackagePath ?? "Open package",
+            IsStandaloneWorkspace ? UnsavedChangesScope.StandaloneFace : UnsavedChangesScope.Package) switch
         {
-            UnsavedChangesChoice.Save => await CommitWorkspaceAsync(showConfirmation: false),
+            UnsavedChangesChoice.Save => IsStandaloneWorkspace
+                ? await SaveMorphToPccAsync()
+                : await CommitWorkspaceAsync(showConfirmation: false),
             UnsavedChangesChoice.Discard => true,
             _ => false
         };
@@ -1321,17 +1354,22 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public Task<bool> ConfirmCloseAsync() => EnsureCanAbandonWorkspaceAsync();
 
-    private async Task SaveMorphToPccAsync()
+    private async Task SaveMorphToPccCommandAsync() => _ = await SaveMorphToPccAsync();
+
+    private async Task<bool> SaveMorphToPccAsync()
     {
         if (Editor is null || _loadedFace is null || PackagePath is null || WorkspacePackagePath is null)
         {
-            return;
+            return false;
         }
-        var sourceName = SelectedFace?.DisplayName ?? _loadedFace.Document.Source.InstancedPath.Split('.').Last();
-        var request = _dialogs.ChooseMorphPackageDestination($"{sourceName}.pcc", PackagePath);
+        var sourceName = SelectedFace?.ObjectName ??
+                         _loadedFace.Document.Source.InstancedPath.Split('.').Last();
+        var request = _dialogs.ChooseMorphPackageDestination(
+            $"{sourceName}.pcc",
+            _standaloneImportPath ?? PackagePath);
         if (request is null)
         {
-            return;
+            return false;
         }
 
         IsBusy = true;
@@ -1366,12 +1404,14 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 $"Package: {result.PackagePath}\nFace: {result.FaceInstancedPath}\n" +
                 $"Baked LODs: {result.LodCount}\nTexture references: {result.TextureReferenceCount}" + warningSummary);
             AppLog.Information($"Morph package export verified: '{result.FaceInstancedPath}' in '{result.PackagePath}'.");
+            return true;
         }
         catch (Exception exception)
         {
             AppLog.Error($"Morph package export failed for '{LoadedFacePath}' in '{PackagePath}'.", exception);
             ErrorMessage = $"The morph could not be exported: {exception.Message}";
             Status = "Save failed; the source PCC was not modified.";
+            return false;
         }
         finally
         {

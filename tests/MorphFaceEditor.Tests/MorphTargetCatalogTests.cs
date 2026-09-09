@@ -1,4 +1,5 @@
 using MorphFaceEditor.Services;
+using MorphFaceEditor.LegendaryExplorer;
 
 namespace MorphFaceEditor.Tests;
 
@@ -8,8 +9,31 @@ public static class MorphTargetCatalogTests
     [
         new("default profiles load morph targets from embedded bundles", DefaultProfilesLoadEmbeddedBundles),
         new("bundled profiles expose authored morph LOD coverage", BundledProfilesExposeAuthoredLodCoverage),
+        new("player Custom and Custom CC heads resolve explicit human profiles", PlayerHeadsResolveHumanProfiles),
         new("HMM inert droop metadata remains distinct from the authored droop target", HmmDroopMetadataRemainsDistinct)
     ];
+
+    private static void PlayerHeadsResolveHumanProfiles()
+    {
+        var profiles = MorphFaceProfileRegistry.CreateDefault();
+        foreach (var game in new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 })
+        foreach (var sex in new[] { "HMM", "HMF" })
+        {
+            var root = sex == "HMM" ? "BIOG_HMM_HED_PROMorph" : "BIOG_HMF_HED_PROMorph_R";
+            var suffix = sex == "HMM" ? "human-male" : "human-female";
+            var regular = profiles.Find(game, "Player.Imported", $"{root}.Custom.{sex}_HED_PROCustom_MDL");
+            TestAssert.Equal($"{game.ToString().ToLowerInvariant()}-{suffix}", regular?.Key);
+            var cc = profiles.Find(game, "Player.Imported", $"{root}.Custom.{sex}_HED_PROCustom_MDL_CC");
+            if (game == MorphFaceGame.LE3)
+            {
+                TestAssert.Equal($"le3-{suffix}", cc?.Key);
+            }
+            else
+            {
+                TestAssert.Equal<MorphFaceProfile?>(null, cc);
+            }
+        }
+    }
 
     private static void HmmDroopMetadataRemainsDistinct()
     {

@@ -6,11 +6,22 @@ namespace MorphFaceEditor.Views;
 public partial class CloneMorphWindow : Window
 {
     private readonly IReadOnlySet<string> _existingNames;
+    private readonly bool _importMode;
 
-    public CloneMorphWindow(string suggestedName, IReadOnlyCollection<string> existingObjectNames)
+    public CloneMorphWindow(
+        string suggestedName,
+        IReadOnlyCollection<string> existingObjectNames,
+        bool importMode = false)
     {
         InitializeComponent();
         DarkTitleBar.Apply(this);
+        _importMode = importMode;
+        if (importMode)
+        {
+            Title = "Name Imported BioMorphFace";
+            IntroText.Text = "Choose the BioMorphFace export name used in this standalone workspace and any PCC you export.";
+            PrimaryButton.Content = "Import Morph";
+        }
         _existingNames = existingObjectNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
         ObjectNameBox.Text = suggestedName;
         ObjectNameBox.SelectAll();
@@ -38,7 +49,9 @@ public partial class CloneMorphWindow : Window
     {
         if (string.IsNullOrWhiteSpace(name))
         {
-            return "Enter a name for the cloned BioMorphFace.";
+            return _importMode
+                ? "Enter a name for the imported BioMorphFace."
+                : "Enter a name for the cloned BioMorphFace.";
         }
         if (!(char.IsLetter(name[0]) || name[0] == '_') ||
             name.Skip(1).Any(character => !(char.IsLetterOrDigit(character) || character == '_')))

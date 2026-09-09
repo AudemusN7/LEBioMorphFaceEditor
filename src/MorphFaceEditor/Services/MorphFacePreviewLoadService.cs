@@ -35,7 +35,8 @@ public sealed class MorphFacePreviewLoadService : IDisposable
     public Task<MorphFacePreviewLoadResult> LoadAsync(
         string packagePath,
         string exportSelector,
-        CancellationToken cancellationToken = default) => Task.Run(() =>
+        CancellationToken cancellationToken = default,
+        MorphFaceGeometryMode? geometryMode = null) => Task.Run(() =>
     {
         cancellationToken.ThrowIfCancellationRequested();
         var loaded = _reader.Load(packagePath, exportSelector);
@@ -59,6 +60,9 @@ public sealed class MorphFacePreviewLoadService : IDisposable
         var geometryEditBlockReason = profileResolution.UsesCustomMesh
             ? "This BioMorphFace uses a custom base mesh; morph and bone controls are disabled. Material editing remains available."
             : profile.GeometryEditBlockReason(loaded.BaseHead.Source.InstancedPath);
+        var resolvedGeometryMode = profileResolution.UsesCustomMesh || profile.IgnoresAuthoredGeometry
+            ? MorphFaceGeometryMode.BaseMeshOnly
+            : geometryMode ?? MorphFaceGeometryMode.MorphEvaluated;
         var session = new MorphFaceEditingSession(
             loaded.Document,
             loaded.BaseHead,
@@ -71,9 +75,7 @@ public sealed class MorphFacePreviewLoadService : IDisposable
             profile.RecognizesBaseVariant,
             geometryEditBlockReason,
             profile.IgnoresAuthoredGeometry,
-            profileResolution.UsesCustomMesh
-                ? MorphFaceGeometryMode.BaseMeshOnly
-                : MorphFaceGeometryMode.MorphEvaluated);
+            resolvedGeometryMode);
         var baseMaterialKeys = loaded.BaseHead.RenderData?.MaterialSlots
             .Where(identity => identity is not null)
             .Select(identity => MaterialIdentityKey.Create(identity!))

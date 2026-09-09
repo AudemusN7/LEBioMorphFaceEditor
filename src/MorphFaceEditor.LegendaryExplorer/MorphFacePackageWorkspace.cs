@@ -13,7 +13,7 @@ public sealed class MorphFacePackageWorkspace : IDisposable
     private PackageFingerprint _sourceFingerprint;
     private bool _disposed;
 
-    public MorphFacePackageWorkspace(string sourcePackagePath)
+    public MorphFacePackageWorkspace(string sourcePackagePath, bool canCommit = true)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePackagePath);
         SourcePath = Path.GetFullPath(sourcePackagePath);
@@ -34,14 +34,21 @@ public sealed class MorphFacePackageWorkspace : IDisposable
             workspaceDirectory,
             $"{Path.GetFileNameWithoutExtension(SourcePath)}.{Guid.NewGuid():N}.workspace.pcc");
         File.Copy(SourcePath, WorkingPath, overwrite: false);
+        CanCommit = canCommit;
     }
 
     public string SourcePath { get; }
     public string WorkingPath { get; }
+    public bool CanCommit { get; }
 
     public void Commit()
     {
         ThrowIfDisposed();
+        if (!CanCommit)
+        {
+            throw new InvalidOperationException(
+                "This detached workspace is read-only with respect to its installed seed and cannot be committed.");
+        }
         if (PackageFingerprint.Capture(SourcePath) != _sourceFingerprint)
         {
             throw new IOException(

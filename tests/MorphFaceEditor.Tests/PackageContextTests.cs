@@ -5,6 +5,7 @@ using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.Models;
+using MorphFaceEditor.Rendering;
 using MorphFaceEditor.Services;
 using LegendaryExplorerCore.Packages;
 using LegendaryExplorerCore.Packages.CloningImportingAndRelinking;
@@ -35,6 +36,8 @@ public static class PackageContextTests
         new("LE3 context material paste round-trips every override kind", PasteLe3MaterialData),
         new("bundled human and Asari eyes recover both fixed reflection cubes", HumanAndAsariEyeCubesResolve),
         new("TSE RON export and import round-trip a real BioMorphFace", RonRoundTripsMorph),
+        new("standalone player RON sex detection uses per-game LOD0 topology", StandalonePlayerRonSexDetection),
+        new("standalone player RON import creates a detached non-committable workspace", StandalonePlayerRonImport),
         new("legacy Gibbed ME2 and ME3 head morphs import through the context pipeline", GibbedHeadMorphsImport),
         new("broken attachment materials fall back without blocking face authoring", BrokenAttachmentMaterialFallsBack),
         new("UModel staging package contains only baked mesh geometry", MeshExportStagingIsGeometryOnly),
@@ -830,6 +833,139 @@ public static class PackageContextTests
                 }
             }
         });
+    }
+
+    private static void StandalonePlayerRonSexDetection()
+    {
+        foreach (var game in new[] { MorphFaceGame.LE1, MorphFaceGame.LE2 })
+        {
+            TestAssert.Equal(StandalonePlayerSex.Male,
+                StandalonePlayerMorphImportService.IdentifySex(game, 2294));
+            TestAssert.Equal(StandalonePlayerSex.Female,
+                StandalonePlayerMorphImportService.IdentifySex(game, 2232));
+        }
+        TestAssert.Equal(StandalonePlayerSex.Male,
+            StandalonePlayerMorphImportService.IdentifySex(MorphFaceGame.LE3, 2392));
+        TestAssert.Equal(StandalonePlayerSex.Female,
+            StandalonePlayerMorphImportService.IdentifySex(MorphFaceGame.LE3, 2390));
+
+        var rejected = false;
+        try
+        {
+            _ = StandalonePlayerMorphImportService.IdentifySex(MorphFaceGame.LE3, 2294);
+        }
+        catch (InvalidDataException exception)
+        {
+            rejected = exception.Message.Contains("expected 2392", StringComparison.Ordinal) &&
+                       exception.Message.Contains("2390", StringComparison.Ordinal);
+        }
+        TestAssert.True(rejected, "LE3 accepted an LE1/LE2 player topology or returned an unclear error.");
+    }
+
+    private static void StandalonePlayerRonImport()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        var cooked = LegendaryExplorerCoreRuntime.DefaultLe1CookedPath;
+        var seedPath = cooked is null ? null : Path.Combine(cooked, "EntryMenu.pcc");
+        if (seedPath is null || !File.Exists(seedPath))
+        {
+            // This is an installed-game integration check; source fixtures do
+            // not contain the player packages needed for standalone import.
+            return;
+        }
+
+        const string templatePath = "BIOG_MORPH_FACE.Player_Base_Male";
+        var context = new MorphFacePackageContextService();
+        var ronPath = Path.Combine(Path.GetTempPath(), $"MFE-StandalonePlayer-{Guid.NewGuid():N}.ron");
+        var before = PackageFingerprint.Capture(seedPath);
+        try
+        {
+            context.ExportRon(seedPath, templatePath, ronPath);
+            var expectedMorph = context.CaptureMorphData(seedPath, templatePath);
+            var expectedMaterial = context.CaptureMaterialData(seedPath, templatePath);
+            TestAssert.True(expectedMorph.BakedLods.Count > 1,
+                "The installed player template cannot exercise standalone lower-LOD variance.");
+            var importedMorph = expectedMorph with
+            {
+                BakedLods = [expectedMorph.BakedLods[0].ToArray()]
+            };
+            var ron = TseHeadMorphRon.Read(ronPath);
+            TseHeadMorphRon.Write(ronPath, ron with { MorphData = importedMorph });
+
+            var importService = new StandalonePlayerMorphImportService();
+            using var imported = importService.ImportPlayerRon(
+                MorphFaceGame.LE1,
+                ronPath,
+                "Ryan_Test_Morph");
+            TestAssert.True(!imported.CanCommit && !imported.Workspace.CanCommit,
+                "A standalone player import exposed a commit-capable workspace.");
+            TestAssert.Equal(MorphFaceGame.LE1, imported.Game);
+            TestAssert.Equal(StandalonePlayerSex.Male, imported.Sex);
+            TestAssert.Equal("BIOG_MORPH_FACE.Ryan_Test_Morph", imported.ImportedFacePath);
+
+            AssertMorphEqual(
+                importedMorph,
+                context.CaptureMorphData(imported.Workspace.WorkingPath, imported.ImportedFacePath));
+            AssertMaterialEqual(
+                expectedMaterial,
+                context.CaptureMaterialData(imported.Workspace.WorkingPath, imported.ImportedFacePath));
+
+            var appended = importService.ImportPlayerRonIntoWorkspace(
+                MorphFaceGame.LE1,
+                ronPath,
+                "Ryan_Second_Morph",
+                imported.Workspace);
+            TestAssert.Equal("BIOG_MORPH_FACE.Ryan_Second_Morph", appended.FaceInstancedPath);
+            AssertMorphEqual(
+                importedMorph,
+                context.CaptureMorphData(imported.Workspace.WorkingPath, imported.ImportedFacePath));
+            AssertMorphEqual(
+                importedMorph,
+                context.CaptureMorphData(imported.Workspace.WorkingPath, appended.FaceInstancedPath));
+
+            var sceneFactory = new HeadPreviewSceneFactory();
+            var profiles = MorphFaceProfileRegistry.CreateDefault();
+            using (var previewLoader = new MorphFacePreviewLoadService(
+                       sceneFactory,
+                       new MorphTargetCatalog(),
+                       profiles,
+                       new MorphFacePackageReader()))
+            {
+                var preview = previewLoader.LoadAsync(
+                        imported.Workspace.WorkingPath,
+                        imported.ImportedFacePath,
+                        geometryMode: MorphFaceGeometryMode.FixedBake)
+                    .GetAwaiter().GetResult();
+                TestAssert.Equal(MorphFaceGeometryMode.FixedBake, preview.EditingSession.GeometryMode);
+                TestAssert.True(!preview.EditingSession.CanEditMorphFeatures,
+                    "A standalone fixed bake exposed morph sliders that could replace its imported geometry.");
+                TestAssert.True(preview.EditingSession.CreateDraft(
+                            preview.Loaded.Document.HairMeshReference,
+                            preview.Loaded.Document.OtherMeshReferences,
+                            preview.Loaded.Document.MaterialOverrides).BakedLods[0]
+                        .SequenceEqual(importedMorph.BakedLods[0]),
+                    "Loading the standalone preview replaced its imported LOD0 bake.");
+            }
+
+            var commitThrew = false;
+            try
+            {
+                imported.Workspace.Commit();
+            }
+            catch (InvalidOperationException)
+            {
+                commitThrew = true;
+            }
+            TestAssert.True(commitThrew, "A detached standalone workspace accepted Commit().");
+            TestAssert.Equal(before, PackageFingerprint.Capture(seedPath));
+        }
+        finally
+        {
+            if (File.Exists(ronPath))
+            {
+                File.Delete(ronPath);
+            }
+        }
     }
 
     private static void GibbedHeadMorphsImport()

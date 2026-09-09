@@ -87,16 +87,122 @@ public sealed partial class MainWindowViewModel
 
     private async Task ImportMorphAsync()
     {
+        var game = _dialogs.ChooseStandaloneImportGame();
+        if (game is null)
+        {
+            return;
+        }
         var sourcePath = _dialogs.ChooseMorphImportFile(
-            PackagePath is null ? null : Path.GetDirectoryName(PackagePath));
+            _standaloneImportPath is not null
+                ? Path.GetDirectoryName(_standaloneImportPath)
+                : PackagePath is null ? null : Path.GetDirectoryName(PackagePath));
         if (sourcePath is null)
         {
             return;
         }
-        await ImportMorphAsync(sourcePath);
+        await RouteMorphImportAsync(sourcePath, game.Value);
     }
 
     private async Task ImportMorphAsync(string sourcePath)
+    {
+        var game = _dialogs.ChooseStandaloneImportGame();
+        if (game is not null)
+        {
+            await RouteMorphImportAsync(sourcePath, game.Value);
+        }
+    }
+
+    private async Task RouteMorphImportAsync(string sourcePath, MorphFaceGame game)
+    {
+        if (CanMutatePackageContext() && _loadedFace?.Game == game)
+        {
+            await ImportMorphIntoPackageAsync(sourcePath);
+            return;
+        }
+        await ImportStandaloneMorphAsync(sourcePath, game);
+    }
+
+    private async Task ImportStandaloneMorphAsync(string sourcePath, MorphFaceGame game)
+    {
+        if (!Path.GetExtension(sourcePath).Equals(".ron", StringComparison.OrdinalIgnoreCase))
+        {
+            ErrorMessage = "Standalone player import currently accepts Trilogy Save Editor .ron files only. " +
+                           "Gibbed head morphs and baked meshes will be added in later checkpoints.";
+            Status = "Standalone import requires a .ron file.";
+            return;
+        }
+        var appendingToCurrentGame = _standaloneGame == game && _packageWorkspace is not null;
+        var existingNames = appendingToCurrentGame
+            ? Faces.Select(face => face.ObjectName).ToArray()
+            : Array.Empty<string>();
+        var suggestedName = SuggestImportName(
+            SanitizeObjectName(Path.GetFileNameWithoutExtension(sourcePath)),
+            existingNames);
+        var objectName = _dialogs.ChooseStandaloneMorphName(suggestedName, existingNames);
+        if (objectName is null)
+        {
+            return;
+        }
+
+        var canContinue = appendingToCurrentGame
+            ? await EnsureCanAbandonEditorChangesAsync()
+            : await EnsureCanAbandonWorkspaceAsync();
+        if (!canContinue)
+        {
+            return;
+        }
+
+        IsBusy = true;
+        ErrorMessage = null;
+        Status = $"Importing {Path.GetFileName(sourcePath)} as a standalone {game} player morph…";
+        try
+        {
+            string importedFacePath;
+            if (appendingToCurrentGame)
+            {
+                var workspace = _packageWorkspace!;
+                var saveResult = await Task.Run(() => _standaloneImportService.ImportPlayerRonIntoWorkspace(
+                    game, sourcePath, objectName, workspace));
+                importedFacePath = saveResult.FaceInstancedPath;
+            }
+            else
+            {
+                var result = await Task.Run(() => _standaloneImportService.ImportPlayerRon(
+                    game, sourcePath, objectName));
+                CancelPendingLoad();
+                SetEditor(null, null);
+                DisposePackageWorkspace();
+                _packageWorkspace = result.Workspace;
+                _standaloneGame = game;
+                _fixedBakeFacePaths.Clear();
+                PackagePath = result.Workspace.SourcePath;
+                importedFacePath = result.ImportedFacePath;
+            }
+            _standaloneImportPath = Path.GetFullPath(sourcePath);
+            _fixedBakeFacePaths.Add(importedFacePath);
+            _hasWorkspaceChanges = false;
+            OnPropertyChanged(nameof(PackageName));
+            OnPropertyChanged(nameof(PackageDisplayName));
+            OnDirtyStateChanged();
+            if (!await RefreshWorkspaceAsync(importedFacePath, clearSearch: true))
+            {
+                ErrorMessage ??= "The player RON was imported, but its detached workspace could not be opened.";
+                Status = "Standalone import completed; workspace load failed.";
+            }
+        }
+        catch (Exception exception)
+        {
+            AppLog.Error($"Standalone player RON import failed for '{sourcePath}' as {game}.", exception);
+            ErrorMessage = $"The standalone player morph could not be imported: {exception.Message}";
+            Status = "Standalone import failed; the current workspace was not changed.";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    private async Task ImportMorphIntoPackageAsync(string sourcePath)
     {
         if (SelectedFace is not { } template || WorkspacePackagePath is not { } workspacePath)
         {
@@ -228,5 +334,23 @@ public sealed partial class MainWindowViewModel
             return "ImportedMorph";
         }
         return char.IsDigit(sanitized[0]) ? $"Morph_{sanitized}" : sanitized;
+    }
+
+    private static string SuggestImportName(
+        string sourceName,
+        IReadOnlyCollection<string> existingNames)
+    {
+        if (!existingNames.Contains(sourceName, StringComparer.OrdinalIgnoreCase))
+        {
+            return sourceName;
+        }
+        for (var number = 2; ; number++)
+        {
+            var candidate = $"{sourceName}_{number}";
+            if (!existingNames.Contains(candidate, StringComparer.OrdinalIgnoreCase))
+            {
+                return candidate;
+            }
+        }
     }
 }

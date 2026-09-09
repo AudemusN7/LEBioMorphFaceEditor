@@ -34,6 +34,9 @@ cbuffer MaterialConstants : register(b1)
     float4 SurfaceParameters;
     float4 TextureFlags0;
     float4 TextureFlags1;
+    float4 TextureFlags2;
+    float4 CustomSkinParameters;
+    float4 CustomScarColor;
     float4 GeneralParameters;
     float4 SkinParameters0;
     float4 SkinParameters1;
@@ -60,6 +63,8 @@ Texture2D AuxiliaryTexture3 : register(t6);
 Texture2D AuxiliaryTexture4 : register(t7);
 TextureCube FixedCubeTexture : register(t8);
 TextureCube SecondaryFixedCubeTexture : register(t9);
+Texture2D CustomBrowTexture : register(t15);
+Texture2D CustomScarTexture : register(t16);
 SamplerState MaterialSampler : register(s0);
 
 cbuffer PostProcessConstants : register(b4)
@@ -830,6 +835,12 @@ float4 PSMain(
     float4 detailSample = TextureFlags0.w > 0.5 && diagnostic < 0.5
         ? DetailTexture.Sample(MaterialSampler, materialUv)
         : float4(0.5, 0.5, 1, 0);
+    float4 customBrowSample = TextureFlags2.x > 0.5 && diagnostic < 0.5
+        ? CustomBrowTexture.Sample(MaterialSampler, materialUv)
+        : float4(0.5, 0.5, 1, 0);
+    float4 customScarSample = TextureFlags2.y > 0.5 && diagnostic < 0.5
+        ? CustomScarTexture.Sample(MaterialSampler, materialUv)
+        : float4(0.5, 0.5, 1, 0);
 
     // The face mask is a packed selector shared by colour, normal, scar, and
     // specular branches. Recover it before normal composition so every branch
@@ -874,10 +885,29 @@ float4 PSMain(
             float2 additionNormal = detailSample.rg * 2 - 1;
             float additionSelector = femaleFace
                 ? saturate(detailSample.a * 10)
-                : faceSelector;
+                : TextureFlags2.x > 0.5 ? 1 : faceSelector;
             tangentNormal = normalize(tangentNormal + float3(
                 additionNormal * additionSelector * SkinParameters0.y,
                 0));
+        }
+        if (family == 1 && TextureFlags2.x > 0.5)
+        {
+            // The PROCustom face master uses HED_Brow as a second packed
+            // addition: RG is a normal perturbation and blue fades it out.
+            float2 browNormal = customBrowSample.rg * 2 - 1;
+            float browNormalMask = saturate(customBrowSample.b * 10);
+            tangentNormal = normalize(tangentNormal + float3(
+                browNormal * browNormalMask * SkinParameters0.y,
+                0));
+        }
+        if (family == 1 && TextureFlags2.y > 0.5)
+        {
+            // HED_Scar alpha and HED_Custom_Scar_Scalar blend its authored
+            // tangent normal over the composed face/brow normal.
+            float3 scarNormal = normalize(float3(customScarSample.rg * 2 - 1, 1));
+            float scarNormalMask = saturate(
+                customScarSample.a * CustomSkinParameters.x);
+            tangentNormal = normalize(lerp(tangentNormal, scarNormal, scarNormalMask));
         }
         if (family == 6 && TextureFlags0.w > 0.5)
         {
@@ -1076,6 +1106,23 @@ float4 PSMain(
             albedo = lerp(albedo, FreckleGreenColor.rgb, greenFreckle);
         }
 
+        if (TextureFlags2.x > 0.5)
+        {
+            // PROCustom HED_Brow uses the same two addition colours as the
+            // ordinary face graph. A selected custom scar suppresses those
+            // brow layers beneath its alpha coverage.
+            float scarExclusion = TextureFlags2.y > 0.5
+                ? saturate(1 - customScarSample.a * CustomSkinParameters.x)
+                : 1;
+            float primaryBrow = saturate(
+                customBrowSample.a * SkinParameters1.x * scarExclusion);
+            albedo = lerp(albedo, SecondaryColor.rgb, primaryBrow);
+            float secondaryBrow = saturate(
+                customBrowSample.a * (2 - 2 * customBrowSample.b)
+                * SkinParameters1.y * scarExclusion);
+            albedo = lerp(albedo, BlondeColor.rgb, secondaryBrow);
+        }
+
         if (femaleFace)
         {
             float4 makeupSample = TextureFlags1.z > 0.5
@@ -1097,7 +1144,7 @@ float4 PSMain(
                 diffuseSample.g * 3.5 * FreckleBlueColor.rgb,
                 lipMask);
 
-            if (TextureFlags0.w > 0.5)
+            if (TextureFlags0.w > 0.5 && TextureFlags2.x < 0.5)
             {
                 float primaryAddition = saturate(detailSample.a * SkinParameters1.x);
                 albedo = lerp(albedo, SecondaryColor.rgb, primaryAddition);
@@ -1120,15 +1167,25 @@ float4 PSMain(
             // Alpha selects the primary Addn colour; inverse packed blue
             // selects the secondary `blonde` colour.
             float primaryAddition = saturate(
-                faceSelector * detailSample.a * SkinParameters1.x);
+                (TextureFlags2.x > 0.5 ? 1 : faceSelector)
+                * detailSample.a * SkinParameters1.x);
             albedo = lerp(albedo, SecondaryColor.rgb, primaryAddition);
 
             float secondaryAddition = saturate(
-                faceSelector * (2 - 2 * detailSample.b) * SkinParameters1.y);
+                (TextureFlags2.x > 0.5 ? 1 : faceSelector)
+                * (2 - 2 * detailSample.b) * SkinParameters1.y);
             albedo = lerp(albedo, BlondeColor.rgb, secondaryAddition);
         }
 
-        if (!femaleFace)
+        if (TextureFlags2.y > 0.5)
+        {
+            // The custom master selects scar diffuse from inverse packed blue;
+            // alpha is reserved for the independently controlled normal blend.
+            float scarDiffuseMask = saturate(
+                (2 - 2 * customScarSample.b) * CustomSkinParameters.y);
+            albedo = lerp(albedo, CustomScarColor.rgb, scarDiffuseMask);
+        }
+        else if (!femaleFace)
         {
             float scarMask = faceSelector
                 * saturate(1 - maskSample.a * GeneralParameters.z)

@@ -12,6 +12,8 @@ public interface IEditorDialogService
         string sourcePackagePath);
     string? ChooseCloneName(string suggestedName, IReadOnlyCollection<string> existingObjectNames);
     string? ChooseMorphImportFile(string? initialDirectory = null);
+    MorphFaceGame? ChooseStandaloneImportGame();
+    string? ChooseStandaloneMorphName(string suggestedName, IReadOnlyCollection<string> existingObjectNames);
     string? ChooseRonExportFile(string suggestedFileName, string? initialDirectory = null);
     string? ChooseMeshExportDirectory(string? initialDirectory = null);
     ActorAssignmentCandidate? ChooseActorAssignment(
@@ -43,5 +45,6 @@ public enum UnsavedChangesChoice
 public enum UnsavedChangesScope
 {
     Face,
+    StandaloneFace,
     Package
 }

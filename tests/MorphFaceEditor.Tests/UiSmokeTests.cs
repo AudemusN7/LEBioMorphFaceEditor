@@ -2,6 +2,7 @@ using System.Numerics;
 using System.Threading;
 using System.Windows;
 using MorphFaceEditor.Core.Domain;
+using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Models;
 using MorphFaceEditor.ViewModels;
 using MorphFaceEditor.Views;
@@ -27,6 +28,8 @@ public static class UiSmokeTests
         new("Fix Morph undo restores baked preview and UI state", FixMorphUndoRestoresBakedPreview),
         new("texture thumbnails discard alpha", TextureThumbnailsDiscardAlpha),
         new("editor file drops recognise every supported format", EditorFileDropsRecogniseSupportedFormats),
+        new("standalone morph import is available before opening a PCC", StandaloneImportIsAvailableWithoutPackage),
+        new("morph import asks for its source game with an open PCC", ImportAsksForSourceGameWithOpenPcc),
         new("numeric wheel increments are finite and crash-safe", NumericWheelIncrementsAreSafe),
         new("extended sliders are optional and preserve edited values", ExtendedSlidersAreOptional),
         new("each face editor owns a valid selected bone transform", BoneTransformSelectionIsPerEditor),
@@ -44,6 +47,7 @@ public static class UiSmokeTests
         new("exhausted texture randomisation is reported without discarding numeric values", ExhaustedTextureRandomisationIsReported),
         new("LE3 HMM scalp randomisation preserves its required texture pair", Le3HmmScalpRandomisationAppliesCorePair),
         new("cursed mode randomises morph bones and materials as one undo step", CursedModeRandomisesOneUndoStep),
+        new("fixed-bake Cursed mode cannot mutate morph sliders", FixedBakeCursedModePreservesMorphs),
         new("cursed mode ignores global randomisation exclusions", CursedModeIgnoresGlobalExclusions),
         new("cursed mode can be enabled without a donor corpus", CursedModeBypassesDonorAvailability),
         new("failed cursed randomisation rolls back its partial edit", FailedCursedRandomisationRollsBack),
@@ -81,6 +85,39 @@ public static class UiSmokeTests
         TestAssert.Equal(EditorFileDropKind.Unsupported, EditorFileDrop.Classify("folder.with.pcc\\face.txt"));
     }
 
+    private static void StandaloneImportIsAvailableWithoutPackage()
+    {
+        using var reader = new MorphFacePackageReader();
+        var dialogs = new StubEditorDialogs();
+        using var viewModel = CreateMainWindowViewModel(reader, dialogs);
+
+        TestAssert.True(viewModel.ImportMorphCommand.CanExecute(null),
+            "Import Morph remained coupled to an open PCC and selected face.");
+        TestAssert.True(viewModel.CanOpenDroppedFile("player.ron"),
+            "An empty editor rejected a dropped player RON before game selection.");
+        TestAssert.True(!viewModel.SaveCommand.CanExecute(null),
+            "An empty editor exposed Save PCC.");
+        viewModel.ImportMorphCommand.Execute(null);
+        TestAssert.Equal(1, dialogs.StandaloneGameChoiceCount);
+        TestAssert.Equal(0, dialogs.MorphImportFileChoiceCount);
+    }
+
+    private static void ImportAsksForSourceGameWithOpenPcc()
+    {
+        using var reader = new MorphFacePackageReader();
+        var dialogs = new StubEditorDialogs();
+        using var viewModel = CreateMainWindowViewModel(reader, dialogs);
+        var packagePath = Path.GetFullPath(Path.Combine("tests", "Global Morphs", "LE1 GlobalMorphs.pcc"));
+
+        viewModel.OpenDroppedFileAsync(packagePath).GetAwaiter().GetResult();
+        TestAssert.True(viewModel.PackagePath is not null,
+            $"The PCC fixture did not establish the package context needed by the import regression: {viewModel.ErrorMessage}");
+        viewModel.ImportMorphCommand.Execute(null);
+
+        TestAssert.Equal(1, dialogs.StandaloneGameChoiceCount);
+        TestAssert.Equal(0, dialogs.MorphImportFileChoiceCount);
+    }
+
     private static void FemaleTurianProfileIsMaterialOnly()
     {
         using var reader = new MorphFacePackageReader();
@@ -94,6 +131,8 @@ public static class UiSmokeTests
         TestAssert.Equal(0, editor.Bones.Count);
         TestAssert.True(!editor.CanEdit,
             "Female Turian test session did not reproduce its geometry-edit block.");
+        TestAssert.True(!editor.CanEditAttachments,
+            "Female Turian material-only mode exposed authored hair or accessory references.");
         TestAssert.True(!editor.AllowsMorphRandomisation && !editor.RandomiseMorphs,
             "Female Turian exposed inherited TUR geometry randomisation.");
         TestAssert.True(editor.AllowsMaterialRandomisation && editor.AllowsCursedRandomisation,
@@ -587,6 +626,31 @@ public static class UiSmokeTests
             "Set to Defaults did not remove the complete cursed state.");
     }
 
+    private static void FixedBakeCursedModePreservesMorphs()
+    {
+        using var reader = new MorphFacePackageReader();
+        using var editor = CreateEditor(
+            reader,
+            geometryMode: MorphFaceGeometryMode.FixedBake);
+        var before = editor.CreateDraft();
+
+        TestAssert.True(editor.CanEditAttachments,
+            "Fixed-bake mode disabled its independently editable hair and accessory references.");
+
+        editor.CursedMode = true;
+        TestAssert.True(!editor.RandomiseMorphs && editor.AllowsCursedRandomisation && editor.CanRandomise,
+            "Fixed-bake Cursed mode re-enabled morph randomisation or disabled valid bone randomisation.");
+        editor.RandomisationStrength = 100;
+        editor.RandomiseCommand.Execute(null);
+
+        var after = editor.CreateDraft();
+        TestAssert.True(before.MorphFeatures.SequenceEqual(after.MorphFeatures),
+            "Fixed-bake Cursed mode changed authored morph slider values.");
+        TestAssert.True(before.BakedLods.SelectMany(value => value)
+                .SequenceEqual(after.BakedLods.SelectMany(value => value)),
+            "Fixed-bake Cursed mode replaced the imported baked geometry.");
+    }
+
     private static void CursedModeBypassesDonorAvailability()
     {
         using var reader = new MorphFacePackageReader();
@@ -713,9 +777,12 @@ public static class UiSmokeTests
         MorphFacePackageReader reader,
         IHeadEditorUiProfile? metadataCatalog = null,
         string profileKey = "le1-human-male",
-        bool ignoresAuthoredGeometry = false)
+        bool ignoresAuthoredGeometry = false,
+        MorphFaceGeometryMode geometryMode = MorphFaceGeometryMode.MorphEvaluated)
     {
-        var mesh = TestFixtures.CreateMesh();
+        var mesh = geometryMode == MorphFaceGeometryMode.FixedBake
+            ? TestFixtures.CreateRenderableTwoLodMesh()
+            : TestFixtures.CreateMesh();
         var document = new MorphFaceDocument(
             TestFixtures.CreateIdentity("Face", "BioMorphFace"),
             new PackageFingerprint(1, DateTime.UnixEpoch, new string('0', 64)),
@@ -734,7 +801,8 @@ public static class UiSmokeTests
                 ? FemaleTurianFeatureMetadataCatalog.MetadataOnlyFeatures
                 : null,
             geometryEditBlockReason: ignoresAuthoredGeometry ? "Material-only test profile." : null,
-            ignoreAuthoredGeometry: ignoresAuthoredGeometry);
+            ignoreAuthoredGeometry: ignoresAuthoredGeometry,
+            geometryMode: geometryMode);
         var materialIdentity = TestFixtures.CreateIdentity("TurianHeadMaterial", "MaterialInstanceConstant");
         var resolvedMaterials = ignoresAuthoredGeometry
             ? new ResolvedHeadMaterialSet(new Dictionary<string, ResolvedHeadMaterial>
@@ -1082,11 +1150,25 @@ public static class UiSmokeTests
     private sealed class StubEditorDialogs : IEditorDialogService
     {
         public bool TextureRegistrySettingsWasShown { get; private set; }
+        public int StandaloneGameChoiceCount { get; private set; }
+        public int MorphImportFileChoiceCount { get; private set; }
         public string? ChoosePackage(string? initialDirectory = null) => null;
         public MorphPackageSaveRequest? ChooseMorphPackageDestination(string suggestedFileName, string sourcePackagePath) => null;
         public MorphConversionSaveRequest? ChooseMorphConversionDestination(MorphFaceGame sourceGame, string suggestedFileName, string sourcePackagePath) => null;
         public string? ChooseCloneName(string suggestedName, IReadOnlyCollection<string> existingObjectNames) => null;
-        public string? ChooseMorphImportFile(string? initialDirectory = null) => null;
+        public string? ChooseMorphImportFile(string? initialDirectory = null)
+        {
+            MorphImportFileChoiceCount++;
+            return null;
+        }
+        public MorphFaceGame? ChooseStandaloneImportGame()
+        {
+            StandaloneGameChoiceCount++;
+            return null;
+        }
+        public string? ChooseStandaloneMorphName(
+            string suggestedName,
+            IReadOnlyCollection<string> existingObjectNames) => null;
         public string? ChooseRonExportFile(string suggestedFileName, string? initialDirectory = null) => null;
         public string? ChooseMeshExportDirectory(string? initialDirectory = null) => null;
         public ActorAssignmentCandidate? ChooseActorAssignment(
@@ -1320,6 +1402,7 @@ public static class UiSmokeTests
                 var morphToggle = mainWindow.FindName("RandomiseMorphsCheckBox") as CheckBox;
                 var materialToggle = mainWindow.FindName("RandomiseMaterialsCheckBox") as CheckBox;
                 var cursedMode = mainWindow.FindName("CursedModeCheckBox") as CheckBox;
+                var attachmentPanel = mainWindow.FindName("AttachmentMeshPanel") as StackPanel;
                 var morphStrengthLabel = mainWindow.FindName("MorphRandomisationStrengthLabel") as TextBlock;
                 var morphStrengthValue = mainWindow.FindName("MorphRandomisationStrengthValue") as TextBlock;
                 var materialStrengthLabel = mainWindow.FindName("MaterialRandomisationStrengthLabel") as TextBlock;
@@ -1409,6 +1492,8 @@ public static class UiSmokeTests
                     "Cursed Mode was not retained by window-session state.");
                 TestAssert.True(cursedMode!.GetBindingExpression(System.Windows.UIElement.IsEnabledProperty) is not null,
                     "The Cursed Mode checkbox cannot be enabled independently of donor availability.");
+                TestAssert.Equal("Editor.CanEditAttachments",
+                    attachmentPanel?.GetBindingExpression(UIElement.IsEnabledProperty)?.ParentBinding.Path.Path);
                 TestAssert.Equal("Enable this only if you are mentally disturbed and/or are Mgamerz",
                     cursedMode!.ToolTip?.ToString());
                 mainWindow.Close();
@@ -1449,6 +1534,22 @@ public static class UiSmokeTests
                     confirmation: true,
                     primaryLabel: "Delete Morph");
                 message.Close();
+                var standaloneGame = new StandaloneImportGameWindow();
+                standaloneGame.Close();
+                var standaloneName = new CloneMorphWindow(
+                    "Imported_Player",
+                    ["Existing_Player"],
+                    importMode: true);
+                TestAssert.Equal("Name Imported BioMorphFace", standaloneName.Title);
+                standaloneName.Close();
+                var standaloneUnsaved = new UnsavedChangesWindow(
+                    "BIOG_MORPH_FACE.Imported_Player",
+                    UnsavedChangesScope.StandaloneFace);
+                TestAssert.Equal("Export…", ((Button)standaloneUnsaved.FindName("SaveButton")).Content);
+                TestAssert.True(((TextBlock)standaloneUnsaved.FindName("SaveExplanationText")).Text
+                        .Contains("read-only", StringComparison.OrdinalIgnoreCase),
+                    "The standalone warning does not explain that the installed template is protected.");
+                standaloneUnsaved.Close();
                 var morphPackage = new SaveMorphToPccWindow(
                     "Face.pcc",
                     Path.GetFullPath("fixture.pcc"));

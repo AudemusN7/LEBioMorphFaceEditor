@@ -157,11 +157,12 @@ public sealed partial class MainWindowViewModel
         var extension = Path.GetExtension(sourcePath).ToLowerInvariant();
         var isRon = extension == ".ron";
         var isLegacy = extension is ".me2headmorph" or ".me3headmorph";
-        if (!isRon && !isLegacy)
+        var isMesh = extension is ".psk" or ".pskx" or ".gltf" or ".glb";
+        if (!isRon && !isLegacy && !isMesh)
         {
-            ErrorMessage = "Standalone player import currently accepts Trilogy Save Editor .ron and " +
-                           "Gibbed .me2headmorph/.me3headmorph files. Baked meshes will be added in later checkpoints.";
-            Status = "Standalone import requires a player head-morph file.";
+            ErrorMessage = "Standalone import accepts Trilogy Save Editor .ron, Gibbed " +
+                           ".me2headmorph/.me3headmorph, and PSK/PSKX or glTF/GLB mesh files.";
+            Status = "Standalone import requires a supported head-morph or mesh file.";
             return;
         }
         if (isLegacy)
@@ -215,14 +216,28 @@ public sealed partial class MainWindowViewModel
 
             string importedFacePath;
             IReadOnlyList<string> importWarnings;
+            StandalonePlayerMeshRecognition? meshRecognition = null;
             if (appendingToCurrentGame)
             {
                 var workspace = _packageWorkspace!;
-                var saveResult = await Task.Run(() => isRon
-                    ? _standaloneImportService.ImportPlayerRonIntoWorkspace(
-                        game, sourcePath, objectName, workspace, assetCatalog)
-                    : _standaloneLegacyImportService.ImportIntoWorkspace(
+                MorphFaceSaveResult saveResult;
+                if (isRon)
+                {
+                    saveResult = await Task.Run(() => _standaloneImportService.ImportPlayerRonIntoWorkspace(
+                        game, sourcePath, objectName, workspace, assetCatalog));
+                }
+                else if (isLegacy)
+                {
+                    saveResult = await Task.Run(() => _standaloneLegacyImportService.ImportIntoWorkspace(
                         game, sourcePath, objectName, workspace));
+                }
+                else
+                {
+                    var meshResult = await Task.Run(() => _standaloneMeshImportService.ImportIntoWorkspace(
+                        game, sourcePath, objectName, workspace));
+                    saveResult = meshResult.SaveResult;
+                    meshRecognition = meshResult.Recognition;
+                }
                 importedFacePath = saveResult.FaceInstancedPath;
                 importWarnings = saveResult.Warnings;
             }
@@ -240,7 +255,7 @@ public sealed partial class MainWindowViewModel
                 importedFacePath = result.ImportedFacePath;
                 importWarnings = result.SaveResult.Warnings;
             }
-            else
+            else if (isLegacy)
             {
                 var result = await Task.Run(() => _standaloneLegacyImportService.Import(
                     game, sourcePath, objectName));
@@ -253,6 +268,21 @@ public sealed partial class MainWindowViewModel
                 PackagePath = result.Workspace.SourcePath;
                 importedFacePath = result.ImportedFacePath;
                 importWarnings = result.SaveResult.Warnings;
+            }
+            else
+            {
+                var result = await Task.Run(() => _standaloneMeshImportService.Import(
+                    game, sourcePath, objectName));
+                CancelPendingLoad();
+                SetEditor(null, null);
+                DisposePackageWorkspace();
+                _packageWorkspace = result.Workspace;
+                _standaloneGame = game;
+                _fixedBakeFacePaths.Clear();
+                PackagePath = result.Workspace.SourcePath;
+                importedFacePath = result.ImportedFacePath;
+                importWarnings = result.SaveResult.Warnings;
+                meshRecognition = result.Recognition;
             }
             _standaloneImportPath = Path.GetFullPath(sourcePath);
             _fixedBakeFacePaths.Add(importedFacePath);
@@ -276,6 +306,12 @@ public sealed partial class MainWindowViewModel
                     "Player morph imported with warnings",
                     "The morph was imported, but some legacy asset references could not be retained exactly:\n\n- " +
                     string.Join("\n- ", importWarnings));
+            }
+            else if (meshRecognition is not null)
+            {
+                Status = $"Imported {importedFacePath} as a recognised {game} " +
+                         $"{meshRecognition.Sex} player mesh ({meshRecognition.CoordinateSystem}); " +
+                         "fixed-bake geometry, canonical bone rig and material editing ready.";
             }
         }
         catch (Exception exception)

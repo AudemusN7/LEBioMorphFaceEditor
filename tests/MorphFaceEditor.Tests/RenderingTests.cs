@@ -42,6 +42,8 @@ public static class RenderingTests
         new("custom mesh preview ignores BioMorphFace geometry and skeleton", CustomMeshIgnoresMorphFaceGeometry),
         new("fixed-bake preview skins preserved imported geometry", FixedBakePreviewSkinsPreservedGeometry),
         new("preview lifecycle blocks inactive window states", PreviewLifecycleBlocksInactiveStates),
+        new("explicit preview updates render while inactive but realized", ExplicitPreviewUpdatesRenderWhileInactive),
+        new("scene publication settles with a second viewport frame", ScenePublicationSettlesWithSecondFrame),
         new("renderer rejects work after deterministic disposal", RendererRejectsWorkAfterDisposal)
     ];
 
@@ -625,6 +627,75 @@ public static class RenderingTests
         TestAssert.True(!PreviewRenderPolicy.CanRender(active with { IsMinimized = true }), "Minimised preview rendered.");
         TestAssert.True(!PreviewRenderPolicy.CanRender(active with { IsClosed = true }), "Closed preview rendered.");
         TestAssert.True(!PreviewRenderPolicy.CanRender(active with { HostWidth = 0 }), "Zero-sized preview rendered.");
+    }
+
+    private static void ExplicitPreviewUpdatesRenderWhileInactive()
+    {
+        var inactive = new PreviewActivityState(true, false, false, false, 800, 600);
+        TestAssert.True(PreviewRenderPolicy.CanRenderExplicitly(inactive),
+            "An explicit scene publication was dropped solely because the window was inactive.");
+        TestAssert.True(!PreviewRenderPolicy.CanRenderExplicitly(inactive with { IsVisible = false }) &&
+                        !PreviewRenderPolicy.CanRenderExplicitly(inactive with { IsMinimized = true }) &&
+                        !PreviewRenderPolicy.CanRenderExplicitly(inactive with { HostWidth = 0 }),
+            "Explicit preview rendering bypassed visibility, minimization, or realization guards.");
+    }
+
+    private static void ScenePublicationSettlesWithSecondFrame()
+    {
+        Exception? failure = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                var image = new System.Windows.Controls.Image();
+                var host = new System.Windows.Controls.Grid();
+                host.Children.Add(image);
+                var window = new System.Windows.Window
+                {
+                    Width = 96,
+                    Height = 96,
+                    Left = -2000,
+                    Top = -2000,
+                    ShowInTaskbar = false,
+                    WindowStyle = System.Windows.WindowStyle.None,
+                    Content = host
+                };
+                window.Show();
+                PumpDispatcher();
+
+                using var controller = new HeadPreviewHostController(window, host, image);
+                controller.SetScene(CreateTriangleScene());
+                for (var index = 0; index < 8 && controller.Diagnostics.FramesRendered < 2; index++)
+                {
+                    PumpDispatcher();
+                }
+
+                TestAssert.Equal(2L, controller.Diagnostics.FramesRendered);
+                TestAssert.True(image.Source is System.Windows.Media.Imaging.WriteableBitmap,
+                    "The settled frame was not presented to the WPF image.");
+                window.Close();
+            }
+            catch (Exception exception)
+            {
+                failure = exception;
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+        if (failure is not null)
+        {
+            throw new InvalidOperationException("The WPF scene-publication regression failed.", failure);
+        }
+
+        static void PumpDispatcher()
+        {
+            var frame = new System.Windows.Threading.DispatcherFrame();
+            System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(
+                System.Windows.Threading.DispatcherPriority.ApplicationIdle,
+                () => frame.Continue = false);
+            System.Windows.Threading.Dispatcher.PushFrame(frame);
+        }
     }
 
     private static void RendererCanHideAttachments()

@@ -32,6 +32,7 @@ public static class UiSmokeTests
         new("morph import asks for its source game with an open PCC", ImportAsksForSourceGameWithOpenPcc),
         new("same-game RON import asks for player or selected PCC destination", SameGameRonAsksForDestination),
         new("standalone Gibbed import rejects the wrong selected game before mutation", StandaloneGibbedRejectsWrongGame),
+        new("standalone fixed-bake workspaces allow material clipboard commands", StandaloneFixedBakeMaterialClipboardCommands),
         new("numeric wheel increments are finite and crash-safe", NumericWheelIncrementsAreSafe),
         new("extended sliders are optional and preserve edited values", ExtendedSlidersAreOptional),
         new("each face editor owns a valid selected bone transform", BoneTransformSelectionIsPerEditor),
@@ -162,6 +163,59 @@ public static class UiSmokeTests
         TestAssert.True(!MainWindowViewModel.RequiresRonImportDestination(
                 "player.me2headmorph", hasMatchingPccContext: true),
             "An unambiguously player-only Gibbed file entered the RON destination route.");
+    }
+
+    private static void StandaloneFixedBakeMaterialClipboardCommands()
+    {
+        using var reader = new MorphFacePackageReader();
+        var packagePath = Path.GetFullPath(Path.Combine("tests", "Global Morphs", "LE1 GlobalMorphs.pcc"));
+        var clipboard = new StubClipboard(MorphFaceClipboardKind.Material);
+        using var viewModel = CreateMainWindowViewModel(reader, clipboard: clipboard);
+        var selectedFace = new BioMorphFaceListItem(
+            1,
+            "Fixture.Face",
+            "Face",
+            ProfileKey: "le1-human-male");
+
+        var workspaceField = typeof(MainWindowViewModel).GetField(
+            "_packageWorkspace",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new Exception("MainWindowViewModel._packageWorkspace was not found.");
+        var detachedWorkspace = new MorphFacePackageWorkspace(packagePath, canCommit: false);
+        workspaceField.SetValue(viewModel, detachedWorkspace);
+        viewModel.SelectedFace = selectedFace;
+
+        var standaloneGameField = typeof(MainWindowViewModel).GetField(
+            "_standaloneGame",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new Exception("MainWindowViewModel._standaloneGame was not found.");
+
+        TestAssert.True(!viewModel.CopyMaterialDataCommand.CanExecute(null) &&
+                        !viewModel.PasteMaterialDataCommand.CanExecute(null),
+            "A non-committable non-standalone workspace exposed material clipboard commands.");
+
+        standaloneGameField.SetValue(viewModel, MorphFaceGame.LE1);
+
+        var fixedBakePathsField = typeof(MainWindowViewModel).GetField(
+            "_fixedBakeFacePaths",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new Exception("MainWindowViewModel._fixedBakeFacePaths was not found.");
+        var fixedBakePaths = (HashSet<string>?)fixedBakePathsField.GetValue(viewModel)
+                             ?? throw new Exception("MainWindowViewModel fixed-bake path set was null.");
+
+        TestAssert.True(!viewModel.CopyMaterialDataCommand.CanExecute(null) &&
+                        !viewModel.PasteMaterialDataCommand.CanExecute(null),
+            "A non-fixed-bake detached workspace exposed material clipboard commands.");
+
+        fixedBakePaths.Add(selectedFace.InstancedPath);
+        viewModel.RefreshClipboardCommandAvailability();
+
+        TestAssert.True(viewModel.CopyMaterialDataCommand.CanExecute(null),
+            "A standalone fixed-bake player face did not expose Copy Material Data.");
+        TestAssert.True(viewModel.PasteMaterialDataCommand.CanExecute(null),
+            "A standalone fixed-bake player face did not expose Paste Material Data.");
+        TestAssert.True(!viewModel.PasteMorphDataCommand.CanExecute(null),
+            "Standalone fixed-bake material support incorrectly enabled morph paste.");
     }
 
     private static void FemaleTurianProfileIsMaterialOnly()
@@ -797,7 +851,8 @@ public static class UiSmokeTests
 
     private static MainWindowViewModel CreateMainWindowViewModel(
         MorphFacePackageReader reader,
-        StubEditorDialogs? dialogs = null)
+        StubEditorDialogs? dialogs = null,
+        StubClipboard? clipboard = null)
     {
         var sceneFactory = new HeadPreviewSceneFactory();
         var profiles = MorphFaceProfileRegistry.CreateDefault();
@@ -816,7 +871,7 @@ public static class UiSmokeTests
             new MorphFaceConversionService(
                 profiles, targets, context, TestFixtures.CreateMissingTextureCatalogService()),
             new MorphFaceInterchangeService(),
-            new StubClipboard());
+            clipboard ?? new StubClipboard());
     }
 
     private static FaceEditorViewModel CreateEditor(
@@ -1188,9 +1243,14 @@ public static class UiSmokeTests
 
     private sealed class StubClipboard : IMorphFaceClipboardService
     {
+        private readonly HashSet<MorphFaceClipboardKind> _availableKinds;
+
+        public StubClipboard(params MorphFaceClipboardKind[] availableKinds) =>
+            _availableKinds = availableKinds.ToHashSet();
+
         public void Set(MorphFaceClipboardPayload payload) => throw new NotSupportedException();
         public MorphFaceClipboardPayload Get(MorphFaceClipboardKind expectedKind) => throw new NotSupportedException();
-        public bool Contains(MorphFaceClipboardKind expectedKind) => false;
+        public bool Contains(MorphFaceClipboardKind expectedKind) => _availableKinds.Contains(expectedKind);
     }
 
     private sealed class StubEditorDialogs : IEditorDialogService

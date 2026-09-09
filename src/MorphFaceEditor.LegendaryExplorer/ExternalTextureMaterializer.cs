@@ -70,18 +70,26 @@ internal static class ExternalTextureMaterializer
         return textureExport;
     }
 
-    private static ExportEntry ResolveSourceExport(IMEPackage source, AssetIdentity identity)
+    internal static ExportEntry ResolveSourceExport(IMEPackage source, AssetIdentity identity)
     {
+        // A package can store Scars.Texture locally while RON and the registry
+        // address it as Package.Scars.Texture. Only the source package's exact
+        // name may qualify that local path; UIndex alone is not identity proof.
+        bool Matches(ExportEntry export) =>
+            export.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase) &&
+            (export.InstancedFullPath.Equals(identity.InstancedPath, StringComparison.OrdinalIgnoreCase) ||
+             $"{Path.GetFileNameWithoutExtension(source.FilePath)}.{export.InstancedFullPath}"
+                 .Equals(identity.InstancedPath, StringComparison.OrdinalIgnoreCase));
+
         if (identity.UIndex > 0 && source.IsUExport(identity.UIndex) &&
             source.GetUExport(identity.UIndex) is { } indexed &&
-            indexed.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase) &&
-            indexed.InstancedFullPath.Equals(identity.InstancedPath, StringComparison.OrdinalIgnoreCase))
+            Matches(indexed))
         {
             return indexed;
         }
-        return source.FindExport(identity.InstancedPath, "Texture2D")
-               ?? throw new InvalidDataException(
-                   $"Texture2D '{identity.InstancedPath}' was not found in '{identity.PackagePath}'.");
+        var matches = source.Exports.Where(Matches).Take(2).ToArray();
+        return matches.Length == 1 ? matches[0] : throw new InvalidDataException(
+            $"Texture2D '{identity.InstancedPath}' was {(matches.Length == 0 ? "not found" : "ambiguous")} in '{identity.PackagePath}'.");
     }
 
     private static ExportEntry? EnsurePackagePath(IMEPackage destination, string assetPath)

@@ -25,6 +25,8 @@ public sealed class HeadPreviewHostController : IDisposable
     private int _pixelHeight;
     private bool _renderQueued;
     private bool _queuedRenderMayRunInactive;
+    private long _scenePublicationVersion;
+    private long _settledScenePublicationVersion;
     private bool _disposed;
 
     public HeadPreviewHostController(Window window, FrameworkElement host, Image image)
@@ -56,6 +58,7 @@ public sealed class HeadPreviewHostController : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         var isFirstScene = _scene is null;
         _scene = scene ?? throw new ArgumentNullException(nameof(scene));
+        _scenePublicationVersion++;
         if (isFirstScene)
         {
             _camera.Fit(scene.Bounds);
@@ -73,7 +76,11 @@ public sealed class HeadPreviewHostController : IDisposable
         {
             _renderer.SetScene(scene);
         }
-        RequestRender();
+        // Scene publication is an explicit content update. A package/head load
+        // often completes while the owner is briefly inactive (for example
+        // after a file dialog closes); do not drop its first render and leave
+        // the old frame visible until an unrelated input event requests one.
+        RequestRender(allowInactive: true);
     }
 
     public void SetOptions(HeadPreviewOptions options, bool allowInactive = false)
@@ -194,8 +201,13 @@ public sealed class HeadPreviewHostController : IDisposable
         _host.ActualHeight));
 
     private bool CanRenderNow(bool allowInactive) => allowInactive
-        ? _window.IsVisible && _window.WindowState != WindowState.Minimized && !_disposed &&
-          _host.ActualWidth > 0 && _host.ActualHeight > 0
+        ? PreviewRenderPolicy.CanRenderExplicitly(new PreviewActivityState(
+            _window.IsVisible,
+            _window.IsActive,
+            _window.WindowState == WindowState.Minimized,
+            _disposed,
+            _host.ActualWidth,
+            _host.ActualHeight))
         : CanRender;
 
     private void RenderNow(bool allowInactive = false)
@@ -217,6 +229,16 @@ public sealed class HeadPreviewHostController : IDisposable
                 0);
             Diagnostics.FramesRendered++;
             FramePresented?.Invoke(frame);
+            if (_settledScenePublicationVersion != _scenePublicationVersion)
+            {
+                // Replacing a complete GPU scene can leave the first WPF-hosted
+                // frame with stale material resources on some D3D drivers. A
+                // camera input always repaired it because that requested the
+                // next frame. Settle each scene publication here so a loaded
+                // head never depends on unrelated viewport input.
+                _settledScenePublicationVersion = _scenePublicationVersion;
+                RequestRender(allowInactive: true);
+            }
         }
         catch (Exception exception)
         {

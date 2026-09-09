@@ -290,6 +290,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         }
     }
     public MorphFaceEvaluation Evaluation => _session.Evaluation;
+    public IReadOnlyList<int> AvailableLodIndices => _session.AvailableLodIndices;
     public MorphMeshFitResult FitMeshPositions(IReadOnlyList<MorphMeshPositionCandidate> candidates) =>
         _session.FitMeshPositions(candidates);
     public bool HasMorphGeometryAtLod(int lodIndex) => _morphGeometryLods.Contains(lodIndex);

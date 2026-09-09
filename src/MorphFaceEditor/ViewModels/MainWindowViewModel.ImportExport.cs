@@ -2,6 +2,7 @@ using System.IO;
 using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.Models;
+using MorphFaceEditor.Services;
 
 namespace MorphFaceEditor.ViewModels;
 
@@ -114,7 +115,30 @@ public sealed partial class MainWindowViewModel
 
     private async Task RouteMorphImportAsync(string sourcePath, MorphFaceGame game)
     {
-        if (CanMutatePackageContext() && _loadedFace?.Game == game)
+        var extension = Path.GetExtension(sourcePath).ToLowerInvariant();
+        var hasMatchingPccContext = CanMutatePackageContext() && _loadedFace?.Game == game;
+        if (RequiresRonImportDestination(sourcePath, hasMatchingPccContext))
+        {
+            var destination = _dialogs.ChooseRonImportDestination(
+                SelectedFace?.DisplayName ?? LoadedFacePath ?? "the selected BioMorphFace");
+            if (destination is null)
+            {
+                return;
+            }
+            if (destination == RonImportDestination.PlayerWorkspace)
+            {
+                await ImportStandaloneMorphAsync(sourcePath, game);
+                return;
+            }
+            await ImportMorphIntoPackageAsync(sourcePath);
+            return;
+        }
+        if (extension is ".me2headmorph" or ".me3headmorph")
+        {
+            await ImportStandaloneMorphAsync(sourcePath, game);
+            return;
+        }
+        if (hasMatchingPccContext)
         {
             await ImportMorphIntoPackageAsync(sourcePath);
             return;
@@ -122,14 +146,36 @@ public sealed partial class MainWindowViewModel
         await ImportStandaloneMorphAsync(sourcePath, game);
     }
 
+    internal static bool RequiresRonImportDestination(
+        string sourcePath,
+        bool hasMatchingPccContext) =>
+        hasMatchingPccContext &&
+        Path.GetExtension(sourcePath).Equals(".ron", StringComparison.OrdinalIgnoreCase);
+
     private async Task ImportStandaloneMorphAsync(string sourcePath, MorphFaceGame game)
     {
-        if (!Path.GetExtension(sourcePath).Equals(".ron", StringComparison.OrdinalIgnoreCase))
+        var extension = Path.GetExtension(sourcePath).ToLowerInvariant();
+        var isRon = extension == ".ron";
+        var isLegacy = extension is ".me2headmorph" or ".me3headmorph";
+        if (!isRon && !isLegacy)
         {
-            ErrorMessage = "Standalone player import currently accepts Trilogy Save Editor .ron files only. " +
-                           "Gibbed head morphs and baked meshes will be added in later checkpoints.";
-            Status = "Standalone import requires a .ron file.";
+            ErrorMessage = "Standalone player import currently accepts Trilogy Save Editor .ron and " +
+                           "Gibbed .me2headmorph/.me3headmorph files. Baked meshes will be added in later checkpoints.";
+            Status = "Standalone import requires a player head-morph file.";
             return;
+        }
+        if (isLegacy)
+        {
+            try
+            {
+                StandaloneLegacyHeadMorphImportService.ValidateSourceGame(game, sourcePath);
+            }
+            catch (Exception exception)
+            {
+                ErrorMessage = exception.Message;
+                Status = "The selected game does not match the Gibbed head morph.";
+                return;
+            }
         }
         var appendingToCurrentGame = _standaloneGame == game && _packageWorkspace is not null;
         var existingNames = appendingToCurrentGame
@@ -161,13 +207,29 @@ public sealed partial class MainWindowViewModel
             if (appendingToCurrentGame)
             {
                 var workspace = _packageWorkspace!;
-                var saveResult = await Task.Run(() => _standaloneImportService.ImportPlayerRonIntoWorkspace(
-                    game, sourcePath, objectName, workspace));
+                var saveResult = await Task.Run(() => isRon
+                    ? _standaloneImportService.ImportPlayerRonIntoWorkspace(
+                        game, sourcePath, objectName, workspace)
+                    : _standaloneLegacyImportService.ImportIntoWorkspace(
+                        game, sourcePath, objectName, workspace));
                 importedFacePath = saveResult.FaceInstancedPath;
+            }
+            else if (isRon)
+            {
+                var result = await Task.Run(() => _standaloneImportService.ImportPlayerRon(
+                    game, sourcePath, objectName));
+                CancelPendingLoad();
+                SetEditor(null, null);
+                DisposePackageWorkspace();
+                _packageWorkspace = result.Workspace;
+                _standaloneGame = game;
+                _fixedBakeFacePaths.Clear();
+                PackagePath = result.Workspace.SourcePath;
+                importedFacePath = result.ImportedFacePath;
             }
             else
             {
-                var result = await Task.Run(() => _standaloneImportService.ImportPlayerRon(
+                var result = await Task.Run(() => _standaloneLegacyImportService.Import(
                     game, sourcePath, objectName));
                 CancelPendingLoad();
                 SetEditor(null, null);
@@ -186,13 +248,13 @@ public sealed partial class MainWindowViewModel
             OnDirtyStateChanged();
             if (!await RefreshWorkspaceAsync(importedFacePath, clearSearch: true))
             {
-                ErrorMessage ??= "The player RON was imported, but its detached workspace could not be opened.";
+                ErrorMessage ??= "The player head morph was imported, but its detached workspace could not be opened.";
                 Status = "Standalone import completed; workspace load failed.";
             }
         }
         catch (Exception exception)
         {
-            AppLog.Error($"Standalone player RON import failed for '{sourcePath}' as {game}.", exception);
+            AppLog.Error($"Standalone player import failed for '{sourcePath}' as {game}.", exception);
             ErrorMessage = $"The standalone player morph could not be imported: {exception.Message}";
             Status = "Standalone import failed; the current workspace was not changed.";
         }

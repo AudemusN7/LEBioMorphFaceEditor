@@ -39,6 +39,8 @@ public static class PackageContextTests
         new("standalone player RON sex detection uses per-game LOD0 topology", StandalonePlayerRonSexDetection),
         new("standalone player RON import creates a detached non-committable workspace", StandalonePlayerRonImport),
         new("legacy Gibbed ME2 and ME3 head morphs import through the context pipeline", GibbedHeadMorphsImport),
+        new("standalone legacy imports reject a destination-game mismatch", StandaloneLegacyImportRejectsMismatch),
+        new("installed LE2 and LE3 legacy imports create detached workspaces", StandaloneLegacyImportsInstalledPlayers),
         new("broken attachment materials fall back without blocking face authoring", BrokenAttachmentMaterialFallsBack),
         new("UModel staging package contains only baked mesh geometry", MeshExportStagingIsGeometryOnly),
         new("real baked mesh projects back into its profile target span", RealBakedMeshInverts)
@@ -1042,6 +1044,116 @@ public static class PackageContextTests
                 }
             }
         });
+    }
+
+    private static void StandaloneLegacyImportRejectsMismatch()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"MFE-Mismatch-{Guid.NewGuid():N}.me2headmorph");
+        try
+        {
+            File.WriteAllBytes(path, [0]);
+            var threw = false;
+            try
+            {
+                _ = new StandaloneLegacyHeadMorphImportService().Import(
+                    MorphFaceGame.LE3,
+                    path,
+                    "Mismatch");
+            }
+            catch (InvalidDataException exception)
+            {
+                threw = exception.Message.Contains("LE2", StringComparison.OrdinalIgnoreCase) &&
+                        exception.Message.Contains("LE3", StringComparison.OrdinalIgnoreCase);
+            }
+
+            TestAssert.True(threw,
+                "A .me2headmorph imported as LE3 without a clear destination-game mismatch error.");
+        }
+        finally
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+    }
+
+    private static void StandaloneLegacyImportsInstalledPlayers()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        foreach (var (game, gameNumber, templatePath) in new[]
+                 {
+                     (MorphFaceGame.LE2, 2, "BIOG_MORPH_FACE.CharacterCreation_Base_Male"),
+                     (MorphFaceGame.LE3, 3, "biog_morph_face.CharacterCreation_Base_Male")
+                 })
+        {
+            var cooked = LegendaryExplorerCoreRuntime.GetCookedPath(game);
+            var seedPath = cooked is null ? null : Path.Combine(cooked, "BioP_Char.pcc");
+            if (seedPath is null || !File.Exists(seedPath))
+            {
+                continue;
+            }
+
+            var ronPath = Path.Combine(Path.GetTempPath(), $"MFE-LegacySource-{Guid.NewGuid():N}.ron");
+            var legacyPath = Path.Combine(Path.GetTempPath(), $"MFE-LegacySource-{Guid.NewGuid():N}.me{gameNumber}headmorph");
+            var before = PackageFingerprint.Capture(seedPath);
+            try
+            {
+                var context = new MorphFacePackageContextService();
+                context.ExportRon(seedPath, templatePath, ronPath);
+                var ron = TseHeadMorphRon.Read(ronPath);
+                WriteGibbedHeadMorph(
+                    legacyPath,
+                    gameNumber,
+                    ron.MorphData,
+                    ron.MaterialData,
+                    formatVersion: gameNumber == 2 ? 1 : 0);
+
+                using var imported = new StandaloneLegacyHeadMorphImportService().Import(
+                    game,
+                    legacyPath,
+                    $"Ryan_LE{gameNumber}_Legacy");
+                TestAssert.True(!imported.CanCommit && !imported.Workspace.CanCommit,
+                    $"LE{gameNumber} legacy import exposed a commit-capable workspace.");
+                TestAssert.Equal(game, imported.Game);
+                TestAssert.Equal(StandalonePlayerSex.Male, imported.Sex);
+
+                var converted = context.CaptureMorphData(
+                    imported.Workspace.WorkingPath,
+                    imported.ImportedFacePath);
+                TestAssert.True(converted.BakedLods.Count > 1 &&
+                                converted.BakedLods.All(lod => lod.Length > 0),
+                    $"LE{gameNumber} legacy import did not rebuild native player LODs.");
+
+                var failedAppend = false;
+                try
+                {
+                    _ = new StandaloneLegacyHeadMorphImportService().ImportIntoWorkspace(
+                        game == MorphFaceGame.LE2 ? MorphFaceGame.LE3 : MorphFaceGame.LE2,
+                        legacyPath,
+                        "WrongGameAppend",
+                        imported.Workspace);
+                }
+                catch (InvalidDataException)
+                {
+                    failedAppend = true;
+                }
+                TestAssert.True(failedAppend && File.Exists(imported.Workspace.WorkingPath),
+                    $"LE{gameNumber} failed legacy append disposed or lost the existing detached workspace.");
+                TestAssert.Equal(before, PackageFingerprint.Capture(seedPath));
+            }
+            finally
+            {
+                if (File.Exists(ronPath))
+                {
+                    File.Delete(ronPath);
+                }
+                if (File.Exists(legacyPath))
+                {
+                    File.Delete(legacyPath);
+                }
+            }
+        }
     }
 
     private static void WriteGibbedHeadMorph(

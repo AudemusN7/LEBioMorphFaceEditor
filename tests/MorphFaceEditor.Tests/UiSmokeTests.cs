@@ -30,6 +30,8 @@ public static class UiSmokeTests
         new("editor file drops recognise every supported format", EditorFileDropsRecogniseSupportedFormats),
         new("standalone morph import is available before opening a PCC", StandaloneImportIsAvailableWithoutPackage),
         new("morph import asks for its source game with an open PCC", ImportAsksForSourceGameWithOpenPcc),
+        new("same-game RON import asks for player or selected PCC destination", SameGameRonAsksForDestination),
+        new("standalone Gibbed import rejects the wrong selected game before mutation", StandaloneGibbedRejectsWrongGame),
         new("numeric wheel increments are finite and crash-safe", NumericWheelIncrementsAreSafe),
         new("extended sliders are optional and preserve edited values", ExtendedSlidersAreOptional),
         new("each face editor owns a valid selected bone transform", BoneTransformSelectionIsPerEditor),
@@ -116,6 +118,50 @@ public static class UiSmokeTests
 
         TestAssert.Equal(1, dialogs.StandaloneGameChoiceCount);
         TestAssert.Equal(0, dialogs.MorphImportFileChoiceCount);
+    }
+
+    private static void StandaloneGibbedRejectsWrongGame()
+    {
+        var sourcePath = Path.Combine(Path.GetTempPath(), $"MFE-WrongGame-{Guid.NewGuid():N}.me2headmorph");
+        try
+        {
+            File.WriteAllBytes(sourcePath, [0]);
+            using var reader = new MorphFacePackageReader();
+            var dialogs = new StubEditorDialogs
+            {
+                StandaloneGameChoiceResult = MorphFaceGame.LE3
+            };
+            using var viewModel = CreateMainWindowViewModel(reader, dialogs);
+
+            viewModel.OpenDroppedFileAsync(sourcePath).GetAwaiter().GetResult();
+
+            TestAssert.Equal(1, dialogs.StandaloneGameChoiceCount);
+            TestAssert.Equal(0, dialogs.StandaloneNameChoiceCount);
+            TestAssert.True(viewModel.ErrorMessage?.Contains("LE2", StringComparison.OrdinalIgnoreCase) == true &&
+                            viewModel.ErrorMessage.Contains("LE3", StringComparison.OrdinalIgnoreCase),
+                "The mismatched standalone Gibbed import did not identify both the file and selected games.");
+            TestAssert.Equal<string?>(null, viewModel.PackagePath);
+        }
+        finally
+        {
+            if (File.Exists(sourcePath))
+            {
+                File.Delete(sourcePath);
+            }
+        }
+    }
+
+    private static void SameGameRonAsksForDestination()
+    {
+        TestAssert.True(MainWindowViewModel.RequiresRonImportDestination(
+                "player.ron", hasMatchingPccContext: true),
+            "A same-game RON did not enter the explicit player-versus-PCC destination route.");
+        TestAssert.True(!MainWindowViewModel.RequiresRonImportDestination(
+                "player.ron", hasMatchingPccContext: false),
+            "A RON without a matching PCC context was treated as ambiguous.");
+        TestAssert.True(!MainWindowViewModel.RequiresRonImportDestination(
+                "player.me2headmorph", hasMatchingPccContext: true),
+            "An unambiguously player-only Gibbed file entered the RON destination route.");
     }
 
     private static void FemaleTurianProfileIsMaterialOnly()
@@ -1151,7 +1197,11 @@ public static class UiSmokeTests
     {
         public bool TextureRegistrySettingsWasShown { get; private set; }
         public int StandaloneGameChoiceCount { get; private set; }
+        public int StandaloneNameChoiceCount { get; private set; }
+        public int RonImportDestinationChoiceCount { get; private set; }
         public int MorphImportFileChoiceCount { get; private set; }
+        public MorphFaceGame? StandaloneGameChoiceResult { get; init; }
+        public RonImportDestination? RonImportDestinationChoiceResult { get; init; }
         public string? ChoosePackage(string? initialDirectory = null) => null;
         public MorphPackageSaveRequest? ChooseMorphPackageDestination(string suggestedFileName, string sourcePackagePath) => null;
         public MorphConversionSaveRequest? ChooseMorphConversionDestination(MorphFaceGame sourceGame, string suggestedFileName, string sourcePackagePath) => null;
@@ -1164,11 +1214,20 @@ public static class UiSmokeTests
         public MorphFaceGame? ChooseStandaloneImportGame()
         {
             StandaloneGameChoiceCount++;
-            return null;
+            return StandaloneGameChoiceResult;
+        }
+        public RonImportDestination? ChooseRonImportDestination(string selectedFaceDisplayName)
+        {
+            RonImportDestinationChoiceCount++;
+            return RonImportDestinationChoiceResult;
         }
         public string? ChooseStandaloneMorphName(
             string suggestedName,
-            IReadOnlyCollection<string> existingObjectNames) => null;
+            IReadOnlyCollection<string> existingObjectNames)
+        {
+            StandaloneNameChoiceCount++;
+            return null;
+        }
         public string? ChooseRonExportFile(string suggestedFileName, string? initialDirectory = null) => null;
         public string? ChooseMeshExportDirectory(string? initialDirectory = null) => null;
         public ActorAssignmentCandidate? ChooseActorAssignment(
@@ -1536,6 +1595,10 @@ public static class UiSmokeTests
                 message.Close();
                 var standaloneGame = new StandaloneImportGameWindow();
                 standaloneGame.Close();
+                var ronDestination = new RonImportDestinationWindow("NPC_Test_Face");
+                TestAssert.Equal("NPC_Test_Face",
+                    ((TextBlock)ronDestination.FindName("SelectedFaceText")).Text);
+                ronDestination.Close();
                 var standaloneName = new CloneMorphWindow(
                     "Imported_Player",
                     ["Existing_Player"],

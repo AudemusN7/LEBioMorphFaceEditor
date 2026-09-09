@@ -203,21 +203,33 @@ public sealed partial class MainWindowViewModel
         Status = $"Importing {Path.GetFileName(sourcePath)} as a standalone {game} player morph…";
         try
         {
+            StandalonePlayerAssetCatalog? assetCatalog = null;
+            if (isRon)
+            {
+                var textureCatalog = await _referenceService.ReadTextureCatalogAsync(game);
+                assetCatalog = await Task.Run(() => StandalonePlayerAssetCatalog.ForRon(
+                    game,
+                    sourcePath,
+                    textureCatalog.Candidates));
+            }
+
             string importedFacePath;
+            IReadOnlyList<string> importWarnings;
             if (appendingToCurrentGame)
             {
                 var workspace = _packageWorkspace!;
                 var saveResult = await Task.Run(() => isRon
                     ? _standaloneImportService.ImportPlayerRonIntoWorkspace(
-                        game, sourcePath, objectName, workspace)
+                        game, sourcePath, objectName, workspace, assetCatalog)
                     : _standaloneLegacyImportService.ImportIntoWorkspace(
                         game, sourcePath, objectName, workspace));
                 importedFacePath = saveResult.FaceInstancedPath;
+                importWarnings = saveResult.Warnings;
             }
             else if (isRon)
             {
                 var result = await Task.Run(() => _standaloneImportService.ImportPlayerRon(
-                    game, sourcePath, objectName));
+                    game, sourcePath, objectName, assetCatalog));
                 CancelPendingLoad();
                 SetEditor(null, null);
                 DisposePackageWorkspace();
@@ -226,6 +238,7 @@ public sealed partial class MainWindowViewModel
                 _fixedBakeFacePaths.Clear();
                 PackagePath = result.Workspace.SourcePath;
                 importedFacePath = result.ImportedFacePath;
+                importWarnings = result.SaveResult.Warnings;
             }
             else
             {
@@ -239,6 +252,7 @@ public sealed partial class MainWindowViewModel
                 _fixedBakeFacePaths.Clear();
                 PackagePath = result.Workspace.SourcePath;
                 importedFacePath = result.ImportedFacePath;
+                importWarnings = result.SaveResult.Warnings;
             }
             _standaloneImportPath = Path.GetFullPath(sourcePath);
             _fixedBakeFacePaths.Add(importedFacePath);
@@ -250,6 +264,18 @@ public sealed partial class MainWindowViewModel
             {
                 ErrorMessage ??= "The player head morph was imported, but its detached workspace could not be opened.";
                 Status = "Standalone import completed; workspace load failed.";
+            }
+            else if (importWarnings.Count > 0)
+            {
+                foreach (var warning in importWarnings)
+                {
+                    AppLog.Warning(warning);
+                }
+                Status = $"Imported {importedFacePath} with {importWarnings.Count} visible asset warning(s).";
+                _dialogs.ShowInformation(
+                    "Player morph imported with warnings",
+                    "The morph was imported, but some legacy asset references could not be retained exactly:\n\n- " +
+                    string.Join("\n- ", importWarnings));
             }
         }
         catch (Exception exception)

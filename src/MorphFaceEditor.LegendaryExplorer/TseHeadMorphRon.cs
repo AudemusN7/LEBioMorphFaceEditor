@@ -251,6 +251,7 @@ internal static class TseHeadMorphRon
                     colours,
                     textures.Select(value => new Core.Materials.TextureMaterialOverride(
                         value.Name,
+                        string.IsNullOrWhiteSpace(value.Path) ||
                         string.Equals(value.Path, "None", StringComparison.OrdinalIgnoreCase)
                             ? null
                             : new AssetIdentity(string.Empty, value.Path, 0, "Texture2D"))).ToArray()));

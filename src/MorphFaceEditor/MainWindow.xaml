@@ -170,6 +170,14 @@
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Text="Material" Foreground="{StaticResource SecondaryText}" VerticalAlignment="Center" Margin="0,0,7,0" />
                     <ComboBox Width="108" ItemsSource="{Binding RenderModes}" SelectedItem="{Binding RenderMode}" />
+                    <TextBlock Text="Up axis" Foreground="{StaticResource SecondaryText}" VerticalAlignment="Center" Margin="14,0,7,0"
+                               Visibility="{Binding IsDetachedMeshWorkspace, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    <ComboBox Width="74"
+                              ItemsSource="{Binding DetachedMeshUpAxes}"
+                              DisplayMemberPath="Name"
+                              SelectedValuePath="Axis"
+                              SelectedValue="{Binding DetachedMeshUpAxis}"
+                              Visibility="{Binding IsDetachedMeshWorkspace, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     <TextBlock Text="LOD" Foreground="{StaticResource SecondaryText}" VerticalAlignment="Center" Margin="14,0,7,0" />
                     <ComboBox Width="74"
                               ItemsSource="{Binding PreviewLods}"
@@ -412,20 +420,24 @@
                             <TextBlock x:Name="MorphRandomisationStrengthLabel" Text="Morph Randomisation Strength"
                                        Style="{StaticResource FieldLabel}"
                                        HorizontalAlignment="Left" VerticalAlignment="Center"
-                                       Margin="0,0,12,0" />
+                                       Margin="0,0,12,0"
+                                       Visibility="{Binding Editor.HasMorphControls, Converter={StaticResource BooleanToVisibilityConverter}}" />
                             <Slider x:Name="MorphRandomisationStrengthSlider" Grid.Column="1"
                                     Minimum="0" Maximum="100" TickFrequency="1" SmallChange="10" LargeChange="10"
                                     Value="{Binding MorphRandomisationStrength, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                     IsEnabled="{Binding Editor.RandomiseMorphs}"
+                                    Visibility="{Binding Editor.HasMorphControls, Converter={StaticResource BooleanToVisibilityConverter}}"
                                     VerticalAlignment="Center" />
                             <TextBlock x:Name="MorphRandomisationStrengthValue" Grid.Column="2"
                                        Style="{StaticResource FieldLabel}"
                                        Foreground="{StaticResource SecondaryText}"
                                        Text="{Binding MorphRandomisationStrength, StringFormat={}{0}%}"
+                                       Visibility="{Binding Editor.HasMorphControls, Converter={StaticResource BooleanToVisibilityConverter}}"
                                        HorizontalAlignment="Right" VerticalAlignment="Center" />
                             <CheckBox x:Name="RandomiseMorphsCheckBox" Grid.Column="3" Content="Randomise Morphs"
                                       IsChecked="{Binding RandomiseMorphs, Mode=TwoWay}"
                                       IsEnabled="{Binding Editor.AllowsMorphRandomisation}"
+                                      Visibility="{Binding Editor.HasMorphControls, Converter={StaticResource BooleanToVisibilityConverter}}"
                                       Margin="14,0,0,0" VerticalAlignment="Center" />
 
                             <TextBlock x:Name="MaterialRandomisationStrengthLabel" Grid.Row="1"

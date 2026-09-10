@@ -56,8 +56,7 @@ public sealed record StandalonePlayerAssetCatalog(
         foreach (var requestedPath in requestedTextures)
         {
             var registryMatches = textures
-                .Where(candidate => CandidateMatchesGame(candidate, game) &&
-                                    candidate.InstancedPath.Equals(requestedPath, StringComparison.OrdinalIgnoreCase))
+                .Where(candidate => MatchesRequestedTexturePath(candidate, game, requestedPath))
                 .Take(2)
                 .ToArray();
             if (registryMatches.Length == 1 && File.Exists(registryMatches[0].EffectiveOccurrence.PackagePath))
@@ -117,7 +116,13 @@ public sealed record StandalonePlayerAssetCatalog(
         string className)
     {
         var rootPackage = requestedPath.Split('.')[0] + ".pcc";
-        if (!loadedFiles.TryGetValue(rootPackage, out var packagePath) || !File.Exists(packagePath))
+        if (!loadedFiles.TryGetValue(rootPackage, out var packagePath))
+        {
+            packagePath = loadedFiles
+                .FirstOrDefault(pair => pair.Key.Equals(rootPackage, StringComparison.OrdinalIgnoreCase))
+                .Value;
+        }
+        if (string.IsNullOrWhiteSpace(packagePath) || !File.Exists(packagePath))
         {
             return null;
         }
@@ -146,6 +151,26 @@ public sealed record StandalonePlayerAssetCatalog(
             (TextureCatalogGame.LE3, MorphFaceGame.LE3) => true,
             _ => false
         };
+
+    internal static bool MatchesRequestedTexturePath(
+        TextureCatalogCandidate candidate,
+        MorphFaceGame game,
+        string requestedPath)
+    {
+        if (!CandidateMatchesGame(candidate, game))
+        {
+            return false;
+        }
+        if (candidate.InstancedPath.Equals(requestedPath, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+        var packageName = Path.GetFileNameWithoutExtension(candidate.EffectiveOccurrence.PackagePath);
+        return !string.IsNullOrWhiteSpace(packageName) &&
+               $"{packageName}.{candidate.InstancedPath}".Equals(
+                   requestedPath,
+                   StringComparison.OrdinalIgnoreCase);
+    }
 
     private static string CanonicalPath(IMEPackage package, IEntry entry) =>
         entry is ImportEntry || entry.InstancedFullPath.StartsWith("BIO", StringComparison.OrdinalIgnoreCase)

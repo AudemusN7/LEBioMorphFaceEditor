@@ -3,6 +3,7 @@ using System.Threading;
 using System.Windows;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Editing;
+using MorphFaceEditor.Core.Services;
 using MorphFaceEditor.Models;
 using MorphFaceEditor.ViewModels;
 using MorphFaceEditor.Views;
@@ -14,6 +15,9 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Media.Imaging;
 using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.Core.Randomisation;
+using LegendaryExplorerCore.Unreal;
+using MorphFaceEditor.Rendering;
+using System.Windows.Threading;
 
 namespace MorphFaceEditor.Tests;
 
@@ -29,6 +33,7 @@ public static class UiSmokeTests
         new("texture thumbnails discard alpha", TextureThumbnailsDiscardAlpha),
         new("editor file drops recognise every supported format", EditorFileDropsRecogniseSupportedFormats),
         new("standalone morph import is available before opening a PCC", StandaloneImportIsAvailableWithoutPackage),
+        new("unrecognised mesh import publishes a detached preview workspace", UnrecognisedMeshPublishesDetachedWorkspace),
         new("morph import asks for its source game with an open PCC", ImportAsksForSourceGameWithOpenPcc),
         new("same-game RON import asks for player or selected PCC destination", SameGameRonAsksForDestination),
         new("standalone Gibbed import rejects the wrong selected game before mutation", StandaloneGibbedRejectsWrongGame),
@@ -103,6 +108,87 @@ public static class UiSmokeTests
         viewModel.ImportMorphCommand.Execute(null);
         TestAssert.Equal(1, dialogs.StandaloneGameChoiceCount);
         TestAssert.Equal(0, dialogs.MorphImportFileChoiceCount);
+    }
+
+    private static void UnrecognisedMeshPublishesDetachedWorkspace()
+    {
+        var sourcePath = Path.Combine(Path.GetTempPath(), $"MFE-Detached-{Guid.NewGuid():N}.psk");
+        try
+        {
+            new PSK
+            {
+                Points = [new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)],
+                Wedges =
+                [
+                    new() { PointIndex = 0, U = 0, V = 0 },
+                    new() { PointIndex = 1, U = 1, V = 0 },
+                    new() { PointIndex = 2, U = 0, V = 1 }
+                ],
+                Faces = [new() { WedgeIdx0 = 0, WedgeIdx1 = 1, WedgeIdx2 = 2, MatIndex = 0 }],
+                Materials = [new() { Name = "Unknown" }],
+                Bones = [],
+                Weights = [],
+                VertexNormals = []
+            }.ToFile(sourcePath);
+            using var reader = new MorphFacePackageReader();
+            var dialogs = new StubEditorDialogs
+            {
+                StandaloneGameChoiceResult = MorphFaceGame.LE2,
+                StandaloneNameChoiceResult = "DetachedFixture"
+            };
+            using var viewModel = CreateMainWindowViewModel(reader, dialogs);
+            HeadPreviewScene? scene = null;
+            viewModel.PreviewSceneReady += (value, _) => scene = value;
+
+            RunWithDispatcher(() => viewModel.OpenDroppedFileAsync(sourcePath));
+
+            TestAssert.True(viewModel.ErrorMessage is null, viewModel.ErrorMessage ?? "Detached mesh import failed.");
+            TestAssert.True(viewModel.PackageName.Contains("Detached Mesh Workspace", StringComparison.Ordinal),
+                "Unrecognised mesh was not published as a detached workspace.");
+            TestAssert.True(viewModel.Editor is { CanEditMorphFeatures: false, CanEditBones: false, HasMorphControls: false },
+                "Unrigged detached mesh exposed morph or bone controls.");
+            TestAssert.Equal(0, viewModel.Editor?.Features.Count ?? -1);
+            TestAssert.True(viewModel.Editor?.AllowsMorphRandomisation == false,
+                "Detached custom mesh exposed morph randomisation.");
+            TestAssert.True(viewModel.Editor?.CanEditAttachments == false,
+                "Detached Stage B mesh exposed attachment editing.");
+            TestAssert.True(scene?.Meshes.Single().Vertices.Count == 3 && scene.Meshes.Single().ApplySkinning == false,
+                "Detached mesh did not reach the renderer with its authored LOD0.");
+            TestAssert.True(!viewModel.SaveCommand.CanExecute(null) && !viewModel.SaveMorphToPccCommand.CanExecute(null),
+                "Detached Stage B mesh exposed a package save command.");
+            TestAssert.True(viewModel.IsDetachedMeshWorkspace &&
+                            viewModel.DetachedMeshUpAxis == DetachedMeshUpAxis.Auto,
+                "Detached mesh did not expose its automatic preview up-axis choice.");
+            viewModel.DetachedMeshUpAxis = DetachedMeshUpAxis.YUp;
+            TestAssert.Equal(DetachedMeshUpAxis.YUp, viewModel.DetachedMeshUpAxis);
+            TestAssert.True(viewModel.Status.Contains("Source mesh data remains unchanged", StringComparison.Ordinal),
+                "Changing detached preview orientation did not preserve the source-data boundary.");
+        }
+        finally
+        {
+            if (File.Exists(sourcePath)) File.Delete(sourcePath);
+        }
+    }
+
+    private static void RunWithDispatcher(Func<Task> action)
+    {
+        var dispatcher = Dispatcher.CurrentDispatcher;
+        var previous = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(dispatcher));
+        try
+        {
+            var task = action();
+            var frame = new DispatcherFrame();
+            _ = task.ContinueWith(
+                _ => dispatcher.BeginInvoke(new Action(() => frame.Continue = false)),
+                TaskScheduler.Default);
+            Dispatcher.PushFrame(frame);
+            task.GetAwaiter().GetResult();
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
     }
 
     private static void ImportAsksForSourceGameWithOpenPcc()
@@ -1261,6 +1347,7 @@ public static class UiSmokeTests
         public int RonImportDestinationChoiceCount { get; private set; }
         public int MorphImportFileChoiceCount { get; private set; }
         public MorphFaceGame? StandaloneGameChoiceResult { get; init; }
+        public string? StandaloneNameChoiceResult { get; init; }
         public RonImportDestination? RonImportDestinationChoiceResult { get; init; }
         public string? ChoosePackage(string? initialDirectory = null) => null;
         public MorphPackageSaveRequest? ChooseMorphPackageDestination(string suggestedFileName, string sourcePackagePath) => null;
@@ -1286,7 +1373,7 @@ public static class UiSmokeTests
             IReadOnlyCollection<string> existingObjectNames)
         {
             StandaloneNameChoiceCount++;
-            return null;
+            return StandaloneNameChoiceResult;
         }
         public string? ChooseRonExportFile(string suggestedFileName, string? initialDirectory = null) => null;
         public string? ChooseMeshExportDirectory(string? initialDirectory = null) => null;

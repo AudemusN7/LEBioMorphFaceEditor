@@ -36,6 +36,8 @@ public sealed class HeadPreviewSceneFactory
         var finalSkeleton = usesBaseHeadGeometry
             ? []
             : loaded.Document.FinalSkeleton;
+        var hasVerifiedRig = loaded.BaseHead.Topology.ReferenceSkeleton.Count > 0 &&
+                             finalSkeleton.Count > 0;
         var pose = SkeletalPoseComposer.Compose(
             loaded.BaseHead.Topology.ReferenceSkeleton,
             finalSkeleton);
@@ -45,7 +47,7 @@ public sealed class HeadPreviewSceneFactory
             baseLod.Normals,
             finalSkeleton,
             ConvertPalette(pose.SkinningMatrices),
-            applySkinning: !usesBaseHeadGeometry,
+            applySkinning: !usesBaseHeadGeometry && hasVerifiedRig,
             lodIndex);
     }
 

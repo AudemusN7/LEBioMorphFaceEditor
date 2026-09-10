@@ -3,13 +3,14 @@ using MorphFaceEditor.Tests;
 // Suites keep routine feature work local. The expensive/full path is always explicit.
 var suites = new Dictionary<string, IReadOnlyList<TestCase>>(StringComparer.OrdinalIgnoreCase)
 {
-    ["core"] = DeformationTests.All.Concat(EditingTests.All).Concat(RandomisationTests.Runtime).ToArray(),
+    ["core"] = DeformationTests.All.Concat(EditingTests.All).Concat(DetachedMeshPreviewTests.All)
+        .Concat(RandomisationTests.Runtime).ToArray(),
     ["materials"] = MaterialTests.All,
     ["rendering"] = RenderingTests.All,
     ["ui"] = UiSmokeTests.All.Concat(TextureRegistrySettingsTests.All)
         .Concat(MorphTargetCatalogTests.All).Concat(CustomMeshTests.All).ToArray(),
     ["package"] = PackageContextTests.All.Concat(PackageIntegrityTests.All).Concat(ActorAssignmentInventoryTests.All)
-        .Concat(ActorAssignmentTransactionTests.All).ToArray(),
+        .Concat(ActorAssignmentTransactionTests.All).Concat(RonStressTests.All).ToArray(),
     ["tooling"] = RandomisationTests.Tooling
 };
 

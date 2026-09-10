@@ -574,7 +574,7 @@ public sealed class MorphFacePackageContextService
             var warnings = new List<string>();
             var resolvedMaterial = mergeWithTemplate
                 ? MergeLegacyMaterials(package, templateMaterial, ron.MaterialData, warnings)
-                : ResolveRonMaterials(package, ron.MaterialData, assetCatalog, strictAssetResolution);
+                : ResolveRonMaterials(package, ron.MaterialData, assetCatalog, strictAssetResolution, warnings);
             WriteMorphData(clone, morphData);
             WriteMaterialData(package, materialOverride, resolvedMaterial);
             if (mergeWithTemplate)
@@ -583,7 +583,7 @@ public sealed class MorphFacePackageContextService
             }
             else
             {
-                WriteRonMeshReferences(package, clone, ron, assetCatalog, strictAssetResolution);
+                WriteRonMeshReferences(package, clone, ron, assetCatalog, strictAssetResolution, warnings);
             }
             return new PendingResult(
                 clone.InstancedFullPath,
@@ -939,7 +939,8 @@ public sealed class MorphFacePackageContextService
         IMEPackage package,
         MorphFaceMaterialData materialData,
         StandalonePlayerAssetCatalog? assetCatalog,
-        bool strictAssetResolution)
+        bool strictAssetResolution,
+        ICollection<string> warnings)
     {
         var textures = materialData.Textures.Select(value =>
         {
@@ -948,13 +949,26 @@ public sealed class MorphFacePackageContextService
                 return value;
             }
             var existing = package.FindEntry(value.TextureReference.InstancedPath, "Texture2D");
-            IEntry? entry = existing as ExportEntry
-                        ?? (!strictAssetResolution ? existing : null)
-                        ?? ResolveTextureCandidate(
-                            package,
-                            value.TextureReference.InstancedPath,
-                            assetCatalog,
-                            existing as ImportEntry);
+            IEntry? entry = existing as ExportEntry ?? (!strictAssetResolution ? existing : null);
+            if (entry is null)
+            {
+                try
+                {
+                    entry = ResolveTextureCandidate(
+                        package,
+                        value.TextureReference.InstancedPath,
+                        assetCatalog,
+                        existing as ImportEntry);
+                }
+                catch (Exception exception) when (strictAssetResolution &&
+                                                  exception is InvalidDataException or FileNotFoundException)
+                {
+                    entry = EnsureImport(package, value.TextureReference.InstancedPath, "Texture2D");
+                    warnings.Add(
+                        $"RON texture '{value.TextureReference.InstancedPath}' is unavailable in the selected game's installed assets. " +
+                        "Its exact authored reference was retained for RON roundtrip; preview will use inherited or placeholder material data.");
+                }
+            }
             return value with { TextureReference = ToIdentity(entry) };
         }).ToArray();
         return materialData with { Textures = textures };
@@ -1160,7 +1174,8 @@ public sealed class MorphFacePackageContextService
         ExportEntry face,
         TseHeadMorph ron,
         StandalonePlayerAssetCatalog? assetCatalog,
-        bool strictAssetResolution)
+        bool strictAssetResolution,
+        ICollection<string> warnings)
     {
         var properties = face.GetProperties();
         if (string.IsNullOrWhiteSpace(ron.HairMesh) ||
@@ -1171,22 +1186,42 @@ public sealed class MorphFacePackageContextService
         else
         {
             var existing = package.FindEntry(ron.HairMesh, "SkeletalMesh");
-            IEntry? hair = existing as ExportEntry
-                       ?? (!strictAssetResolution ? existing : null)
-                       ?? ResolveMeshCandidate(
-                           package,
-                           ron.HairMesh,
-                           assetCatalog,
-                           existing as ImportEntry);
+            IEntry? hair = existing as ExportEntry ?? (!strictAssetResolution ? existing : null);
+            if (hair is null)
+            {
+                try
+                {
+                    hair = ResolveMeshCandidate(package, ron.HairMesh, assetCatalog, existing as ImportEntry);
+                }
+                catch (Exception exception) when (strictAssetResolution && exception is InvalidDataException or FileNotFoundException)
+                {
+                    hair = EnsureImport(package, ron.HairMesh, "SkeletalMesh");
+                    warnings.Add(
+                        $"RON attachment '{ron.HairMesh}' is unavailable in the selected game's installed assets. " +
+                        "Its exact authored reference was retained for RON roundtrip and omitted from preview.");
+                }
+            }
             properties.AddOrReplaceProp(new ObjectProperty(hair, "m_oHairMesh"));
         }
 
         var accessories = ron.AccessoryMeshes.Select(path =>
         {
             var existing = package.FindEntry(path, "SkeletalMesh");
-            IEntry entry = existing as ExportEntry
-                           ?? (!strictAssetResolution ? existing : null)
-                           ?? ResolveMeshCandidate(package, path, assetCatalog, existing as ImportEntry);
+            IEntry? entry = existing as ExportEntry ?? (!strictAssetResolution ? existing : null);
+            if (entry is null)
+            {
+                try
+                {
+                    entry = ResolveMeshCandidate(package, path, assetCatalog, existing as ImportEntry);
+                }
+                catch (Exception exception) when (strictAssetResolution && exception is InvalidDataException or FileNotFoundException)
+                {
+                    entry = EnsureImport(package, path, "SkeletalMesh");
+                    warnings.Add(
+                        $"RON attachment '{path}' is unavailable in the selected game's installed assets. " +
+                        "Its exact authored reference was retained for RON roundtrip and omitted from preview.");
+                }
+            }
             return new ObjectProperty(entry);
         }).ToArray();
         if (accessories.Length == 0)
@@ -1198,6 +1233,33 @@ public sealed class MorphFacePackageContextService
             properties.AddOrReplaceProp(new ArrayProperty<ObjectProperty>(accessories, "m_oOtherMeshes"));
         }
         face.WriteProperties(properties);
+    }
+
+    private static IEntry EnsureImport(IMEPackage destination, string instancedPath, string className)
+    {
+        if (destination.FindEntry(instancedPath, className) is { } existing)
+        {
+            return existing;
+        }
+        var segments = instancedPath.Split('.', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length < 2)
+        {
+            throw new InvalidDataException($"Cannot preserve malformed {className} path '{instancedPath}'.");
+        }
+        IEntry? parent = null;
+        var currentPath = string.Empty;
+        for (var index = 0; index < segments.Length; index++)
+        {
+            currentPath = index == 0 ? segments[index] : $"{currentPath}.{segments[index]}";
+            var segmentClass = index == segments.Length - 1 ? className : "Package";
+            parent = destination.FindEntry(currentPath, segmentClass) ?? (index == 0
+                ? destination.CreatePackageImport(NameReference.FromInstancedString(segments[index]))
+                : destination.CreateImport(
+                    segmentClass,
+                    NameReference.FromInstancedString(segments[index]),
+                    parent));
+        }
+        return parent!;
     }
 
     private static ExportEntry EnsureIndependentMaterialOverride(ExportEntry clone)

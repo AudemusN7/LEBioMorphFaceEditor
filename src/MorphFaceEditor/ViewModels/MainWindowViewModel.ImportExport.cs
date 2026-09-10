@@ -1,7 +1,10 @@
 using System.IO;
+using MorphFaceEditor.Core.Domain;
+using MorphFaceEditor.Core.Services;
 using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.Models;
+using MorphFaceEditor.Presentation;
 using MorphFaceEditor.Services;
 
 namespace MorphFaceEditor.ViewModels;
@@ -178,7 +181,30 @@ public sealed partial class MainWindowViewModel
                 return;
             }
         }
-        var appendingToCurrentGame = _standaloneGame == game && _packageWorkspace is not null;
+        StandalonePlayerMeshAnalysis? meshAnalysis = null;
+        if (isMesh)
+        {
+            IsBusy = true;
+            ErrorMessage = null;
+            Status = $"Inspecting {Path.GetFileName(sourcePath)} topology…";
+            try
+            {
+                meshAnalysis = await Task.Run(() => _standaloneMeshImportService.Analyze(game, sourcePath));
+            }
+            catch (Exception exception)
+            {
+                AppLog.Error($"Mesh analysis failed for '{sourcePath}' as {game}.", exception);
+                ErrorMessage = $"The mesh could not be imported: {exception.Message}";
+                Status = "Mesh import failed; the current workspace was not changed.";
+                return;
+            }
+            finally
+            {
+                IsBusy = false;
+            }
+        }
+        var appendingToCurrentGame = _standaloneGame == game && _packageWorkspace is not null &&
+                                     (meshAnalysis is null || meshAnalysis.Recognition is not null);
         var existingNames = appendingToCurrentGame
             ? Faces.Select(face => face.ObjectName).ToArray()
             : Array.Empty<string>();
@@ -204,6 +230,14 @@ public sealed partial class MainWindowViewModel
         Status = $"Importing {Path.GetFileName(sourcePath)} as a standalone {game} player morph…";
         try
         {
+            if (meshAnalysis is { Recognition: null })
+            {
+                var detached = await Task.Run(() =>
+                    _detachedMeshPreviewLoadService.Load(game, meshAnalysis.ImportedMesh));
+                PublishDetachedMeshWorkspace(detached, sourcePath, objectName, game);
+                return;
+            }
+
             StandalonePlayerAssetCatalog? assetCatalog = null;
             if (isRon)
             {
@@ -234,7 +268,7 @@ public sealed partial class MainWindowViewModel
                 else
                 {
                     var meshResult = await Task.Run(() => _standaloneMeshImportService.ImportIntoWorkspace(
-                        game, sourcePath, objectName, workspace));
+                        game, objectName, workspace, meshAnalysis!));
                     saveResult = meshResult.SaveResult;
                     meshRecognition = meshResult.Recognition;
                 }
@@ -250,6 +284,7 @@ public sealed partial class MainWindowViewModel
                 DisposePackageWorkspace();
                 _packageWorkspace = result.Workspace;
                 _standaloneGame = game;
+                SetDetachedMeshSource(null);
                 _fixedBakeFacePaths.Clear();
                 PackagePath = result.Workspace.SourcePath;
                 importedFacePath = result.ImportedFacePath;
@@ -264,6 +299,7 @@ public sealed partial class MainWindowViewModel
                 DisposePackageWorkspace();
                 _packageWorkspace = result.Workspace;
                 _standaloneGame = game;
+                SetDetachedMeshSource(null);
                 _fixedBakeFacePaths.Clear();
                 PackagePath = result.Workspace.SourcePath;
                 importedFacePath = result.ImportedFacePath;
@@ -272,12 +308,13 @@ public sealed partial class MainWindowViewModel
             else
             {
                 var result = await Task.Run(() => _standaloneMeshImportService.Import(
-                    game, sourcePath, objectName));
+                    game, objectName, meshAnalysis!));
                 CancelPendingLoad();
                 SetEditor(null, null);
                 DisposePackageWorkspace();
                 _packageWorkspace = result.Workspace;
                 _standaloneGame = game;
+                SetDetachedMeshSource(null);
                 _fixedBakeFacePaths.Clear();
                 PackagePath = result.Workspace.SourcePath;
                 importedFacePath = result.ImportedFacePath;
@@ -304,7 +341,7 @@ public sealed partial class MainWindowViewModel
                 Status = $"Imported {importedFacePath} with {importWarnings.Count} visible asset warning(s).";
                 _dialogs.ShowInformation(
                     "Player morph imported with warnings",
-                    "The morph was imported, but some legacy asset references could not be retained exactly:\n\n- " +
+                    "The morph was imported and its authored references were retained, but some assets could not be resolved for preview:\n\n- " +
                     string.Join("\n- ", importWarnings));
             }
             else if (meshRecognition is not null)
@@ -323,6 +360,115 @@ public sealed partial class MainWindowViewModel
         finally
         {
             IsBusy = false;
+        }
+    }
+
+    private void PublishDetachedMeshWorkspace(
+        DetachedMeshPreviewLoadResult result,
+        string sourcePath,
+        string objectName,
+        MorphFaceGame game)
+    {
+        CancelPendingLoad();
+        SetEditor(null, null);
+        DisposePackageWorkspace();
+        SetDetachedMeshSource(result.Detached.Source, result.Detached.UpAxis);
+        _standaloneGame = game;
+        _standaloneImportPath = Path.GetFullPath(sourcePath);
+        _fixedBakeFacePaths.Clear();
+        _hasWorkspaceChanges = false;
+        PackagePath = Path.GetFullPath(sourcePath);
+        _referenceCatalog = new PackageReferenceCatalog([], []);
+        FaceSearchText = string.Empty;
+        Faces.Clear();
+        var face = new BioMorphFaceListItem(
+            0,
+            result.Preview.Loaded.Document.Source.InstancedPath,
+            objectName,
+            result.Preview.Profile.ExportTag,
+            result.Preview.Profile.ExportTagColor,
+            result.Preview.Profile.Key);
+        Faces.Add(face);
+        SelectedFace = face;
+        LoadedFacePath = face.InstancedPath;
+
+        var topology = result.Preview.Loaded.BaseHead.Topology;
+        var editor = new FaceEditorViewModel(
+            result.Preview.EditingSession,
+            result.Preview.Profile.UiProfile,
+            result.Preview.MaterialEditingSession,
+            _colorDialog,
+            _referenceService,
+            sourcePath,
+            [],
+            [],
+            null,
+            [],
+            SetEditorError,
+            result.Preview.Profile.Key,
+            _randomisationCatalog,
+            randomisationInclusionState: _randomisationInclusionState,
+            ignoresAuthoredGeometry: false,
+            allowsAttachmentEditing: false);
+        SetEditor(editor, result.Preview.Loaded);
+        FaceDetails = $"{topology.VertexCount:N0} vertices · {topology.IndexCount / 3:N0} triangles · " +
+                      $"{topology.Sections.Count} sections · {topology.ReferenceSkeleton.Count} verified bones · " +
+                      "detached LOD0 preview";
+        HasPreview = true;
+        var cameraFamily = PreviewCameraGrouping.ForProfile(result.Preview.Profile.Key);
+        var resetCamera = !string.Equals(_previewCameraFamily, cameraFamily, StringComparison.OrdinalIgnoreCase);
+        _previewCameraFamily = cameraFamily;
+        PreviewSceneReady?.Invoke(result.Preview.Scene, resetCamera);
+        foreach (var warning in result.Detached.Warnings)
+        {
+            AppLog.Warning(warning);
+        }
+        Status = result.Preview.EditingSession.CanEditBones
+            ? $"Loaded {objectName} as an unrecognised custom mesh; LOD0 preview and verified bone controls ready with exact source data retained. Morph controls are disabled."
+            : $"Loaded {objectName} as an unrecognised custom mesh; LOD0 preview ready with exact source data retained. Morph and bone controls are disabled.";
+        OnPropertyChanged(nameof(PackageName));
+        OnPropertyChanged(nameof(PackageDisplayName));
+        OnDirtyStateChanged();
+        RaiseFaceContextCanExecuteChanged();
+    }
+
+    private void SetDetachedMeshSource(
+        ImportedMeshAsset? source,
+        DetachedMeshUpAxis upAxis = DetachedMeshUpAxis.Auto)
+    {
+        _detachedMeshSource = source;
+        _detachedMeshUpAxis = upAxis;
+        OnPropertyChanged(nameof(IsDetachedMeshWorkspace));
+        OnPropertyChanged(nameof(DetachedMeshUpAxis));
+    }
+
+    private void RebuildDetachedMeshPreview(DetachedMeshUpAxis upAxis)
+    {
+        if (_detachedMeshSource is null || _standaloneGame is null)
+        {
+            return;
+        }
+        if (IsDirty)
+        {
+            ErrorMessage = "The preview up axis cannot be changed after bone edits. Undo or reopen the mesh first.";
+            OnPropertyChanged(nameof(DetachedMeshUpAxis));
+            return;
+        }
+
+        var previous = _detachedMeshUpAxis;
+        try
+        {
+            var sourcePath = _standaloneImportPath ?? _detachedMeshSource.SourcePath;
+            var objectName = SelectedFace?.ObjectName ?? Path.GetFileNameWithoutExtension(sourcePath);
+            var result = _detachedMeshPreviewLoadService.Load(_standaloneGame.Value, _detachedMeshSource, upAxis);
+            PublishDetachedMeshWorkspace(result, sourcePath, objectName, _standaloneGame.Value);
+            Status = $"Preview orientation changed to {upAxis}. Source mesh data remains unchanged.";
+        }
+        catch (Exception exception)
+        {
+            _detachedMeshUpAxis = previous;
+            OnPropertyChanged(nameof(DetachedMeshUpAxis));
+            ErrorMessage = $"The preview orientation could not be changed: {exception.Message}";
         }
     }
 

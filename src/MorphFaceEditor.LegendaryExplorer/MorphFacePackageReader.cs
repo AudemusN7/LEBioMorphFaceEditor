@@ -78,21 +78,31 @@ public sealed class MorphFacePackageReader : IDisposable
         var baseMaterialExports = new List<ExportEntry>();
         var baseHead = GetSkeletalMesh(baseHeadEntry, baseMaterialExports);
         var baseHeadTime = Mark(ref checkpoint);
-        var directHairEntry = ResolveObjectReference(export, "m_oHairMesh");
+        var referenceWarnings = new List<string>();
+        var rawHairEntry = export.GetProperty<ObjectProperty>("m_oHairMesh")?.ResolveToEntry(export.FileRef);
+        var directHairEntry = ResolveOptionalMeshReference(
+            rawHairEntry,
+            $"BioMorphFace '{export.InstancedFullPath}' m_oHairMesh",
+            referenceWarnings);
         var otherMeshProperties = export.GetProperty<ArrayProperty<ObjectProperty>>("m_oOtherMeshes");
-        var otherMeshEntries = otherMeshProperties?
+        var rawOtherMeshEntries = otherMeshProperties?
             .Select((item, index) => (Entry: item.ResolveToEntry(export.FileRef), Index: index))
+            .ToArray() ?? [];
+        var otherMeshEntries = rawOtherMeshEntries
             .Where(item => item.Entry is not null)
             .Select(item => (
-                Entry: _referenceResolver.Require(
-                    item.Entry!,
-                    $"BioMorphFace '{export.InstancedFullPath}' m_oOtherMeshes[{item.Index}]"),
+                Entry: ResolveOptionalMeshReference(
+                    item.Entry,
+                    $"BioMorphFace '{export.InstancedFullPath}' m_oOtherMeshes[{item.Index}]",
+                    referenceWarnings),
                 item.Index))
-            .ToArray() ?? [];
+            .Where(item => item.Entry is not null)
+            .Select(item => (Entry: item.Entry!, item.Index))
+            .ToArray();
         document = document with
         {
-            HairMeshReference = ToIdentity(directHairEntry),
-            OtherMeshReferences = otherMeshEntries.Select(item => ToIdentity(item.Entry)).ToArray()
+            HairMeshReference = ToIdentity(rawHairEntry),
+            OtherMeshReferences = rawOtherMeshEntries.Select(item => ToIdentity(item.Entry)).ToArray()
         };
         var attachmentMaterialExports = new List<ExportEntry>();
         var hairMesh = directHairEntry is null
@@ -133,7 +143,7 @@ public sealed class MorphFacePackageReader : IDisposable
                 _ => MorphFaceGame.Unsupported
             },
             OtherMeshes = otherMeshes,
-            Warnings = materialResult.Warnings
+            Warnings = materialResult.Warnings.Concat(referenceWarnings).Distinct().ToArray()
         };
     }
 
@@ -235,6 +245,30 @@ public sealed class MorphFacePackageReader : IDisposable
             : _referenceResolver.Require(
                 entry,
                 $"BioMorphFace '{owner.InstancedFullPath}' {propertyName}");
+    }
+
+    private ExportEntry? ResolveOptionalMeshReference(
+        IEntry? entry,
+        string purpose,
+        ICollection<string> warnings)
+    {
+        if (entry is null)
+        {
+            return null;
+        }
+        if (!entry.ClassName.Equals("SkeletalMesh", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidDataException($"{purpose} resolved to {entry.ClassName}, not SkeletalMesh.");
+        }
+        var resolved = _referenceResolver.Resolve(entry);
+        if (resolved is not null)
+        {
+            return resolved;
+        }
+        warnings.Add(
+            $"Could not resolve optional attachment '{entry.InstancedFullPath}'. " +
+            "Its exact authored reference is retained, but the attachment is omitted from preview.");
+        return null;
     }
 
     private SkeletalMeshAsset ReadSkeletalMesh(ExportEntry export, ICollection<ExportEntry> materialExports)

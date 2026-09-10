@@ -9,6 +9,7 @@ using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Core.Materials;
+using MorphFaceEditor.Core.Services;
 using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.Models;
 using MorphFaceEditor.Presentation;
@@ -36,6 +37,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly StandalonePlayerMorphImportService _standaloneImportService;
     private readonly StandalonePlayerMeshImportService _standaloneMeshImportService;
     private readonly StandaloneLegacyHeadMorphImportService _standaloneLegacyImportService;
+    private readonly DetachedMeshPreviewLoadService _detachedMeshPreviewLoadService;
     private readonly MorphRandomisationCatalog _randomisationCatalog;
     private readonly AsyncRelayCommand _openPackageCommand;
     private readonly AsyncRelayCommand _loadSelectedFaceCommand;
@@ -62,6 +64,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private MorphFacePackageWorkspace? _packageWorkspace;
     private string? _standaloneImportPath;
     private MorphFaceGame? _standaloneGame;
+    private ImportedMeshAsset? _detachedMeshSource;
+    private DetachedMeshUpAxis _detachedMeshUpAxis = DetachedMeshUpAxis.Auto;
     private readonly HashSet<string> _fixedBakeFacePaths = new(StringComparer.OrdinalIgnoreCase);
     private bool _hasWorkspaceChanges;
     private CancellationTokenSource? _loadCancellation;
@@ -112,7 +116,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         ActorAssignmentService? actorAssignmentService = null,
         StandalonePlayerMorphImportService? standaloneImportService = null,
         StandalonePlayerMeshImportService? standaloneMeshImportService = null,
-        StandaloneLegacyHeadMorphImportService? standaloneLegacyImportService = null)
+        StandaloneLegacyHeadMorphImportService? standaloneLegacyImportService = null,
+        DetachedMeshPreviewLoadService? detachedMeshPreviewLoadService = null)
     {
         _dialogs = dialogs;
         _catalogService = catalogService;
@@ -130,6 +135,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _standaloneMeshImportService = standaloneMeshImportService ??
                                        new StandalonePlayerMeshImportService(interchangeService, packageContextService);
         _standaloneLegacyImportService = standaloneLegacyImportService ?? new StandaloneLegacyHeadMorphImportService();
+        _detachedMeshPreviewLoadService = detachedMeshPreviewLoadService ?? new DetachedMeshPreviewLoadService(sceneFactory);
         _randomisationCatalog = randomisationCatalog ?? MorphRandomisationCatalog.Empty;
         _openPackageCommand = new AsyncRelayCommand(OpenPackageAsync, () => !IsBusy);
         _loadSelectedFaceCommand = new AsyncRelayCommand(
@@ -176,6 +182,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public ObservableCollection<PreviewLodChoice> PreviewLods { get; } = [];
     public ICollectionView FilteredFaces { get; }
     public IReadOnlyList<HeadPreviewRenderMode> RenderModes { get; } = Enum.GetValues<HeadPreviewRenderMode>();
+    public IReadOnlyList<DetachedMeshUpAxisChoice> DetachedMeshUpAxes { get; } =
+    [
+        new(DetachedMeshUpAxis.Auto, "Auto"),
+        new(DetachedMeshUpAxis.ZUp, "Z up"),
+        new(DetachedMeshUpAxis.YUp, "Y up")
+    ];
     public IReadOnlyList<PreviewLightingChoice> LightingPresets { get; } =
     [
         new(HeadPreviewLightingPreset.Studio, "Studio"),
@@ -222,14 +234,18 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
-    public string PackageName => _standaloneGame is not null
+    public string PackageName => _detachedMeshSource is not null
+        ? $"{_standaloneGame} Detached Mesh Workspace"
+        : _standaloneGame is not null
         ? $"{_standaloneGame} Standalone Player Workspace"
         : PackagePath is null ? "No package open" : Path.GetFileName(PackagePath);
     public string PackageDisplayName => IsDirty ? $"{PackageName} *" : PackageName;
     public bool IsDirty => _hasWorkspaceChanges || Editor?.IsDirty == true;
     public bool CanFixMorph => Editor?.CanFixMorph == true;
+    public bool IsDetachedMeshWorkspace => _detachedMeshSource is not null;
     private string? WorkspacePackagePath => _packageWorkspace?.WorkingPath;
     private bool IsStandaloneWorkspace => _standaloneGame is not null;
+    private bool IsPlayerWorkspace => _standaloneGame is not null && _packageWorkspace is not null;
 
     public string FaceSearchText
     {
@@ -543,6 +559,24 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
+    public DetachedMeshUpAxis DetachedMeshUpAxis
+    {
+        get => _detachedMeshUpAxis;
+        set
+        {
+            if (value == _detachedMeshUpAxis)
+            {
+                return;
+            }
+            if (_detachedMeshSource is null)
+            {
+                SetProperty(ref _detachedMeshUpAxis, value);
+                return;
+            }
+            RebuildDetachedMeshPreview(value);
+        }
+    }
+
     internal bool CanOpenDroppedFile(string path) =>
         !IsBusy && EditorFileDrop.Classify(path) switch
         {
@@ -592,6 +626,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _packageWorkspace = workspace;
         _standaloneImportPath = null;
         _standaloneGame = null;
+        SetDetachedMeshSource(null);
         _fixedBakeFacePaths.Clear();
         _hasWorkspaceChanges = false;
         PackagePath = workspace.SourcePath;
@@ -721,6 +756,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             var topology = result.Loaded.BaseHead.Topology;
             var oracle = result.EditingSession.Evaluation.OriginalOracleReport;
             var materialOverrides = result.Loaded.Document.MaterialOverrides;
+            var selectableTextures = IsPlayerWorkspace
+                ? PlayerWorkspaceReferencePolicy.SelectPackageAssets(_referenceCatalog.Textures)
+                : _referenceCatalog.Textures;
+            var selectableMeshes = IsPlayerWorkspace
+                ? PlayerWorkspaceReferencePolicy.SelectPackageAssets(_referenceCatalog.SkeletalMeshes)
+                : _referenceCatalog.SkeletalMeshes;
             var displayedFinalBoneCount = result.Profile.IgnoresAuthoredGeometry
                 ? 0
                 : result.Loaded.Document.FinalSkeleton.Count;
@@ -742,8 +783,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 _colorDialog,
                 _referenceService,
                 workspacePath,
-                _referenceCatalog.Textures,
-                _referenceCatalog.SkeletalMeshes,
+                selectableTextures,
+                selectableMeshes,
                 result.Loaded.Document.HairMeshReference,
                 result.Loaded.Document.OtherMeshReferences,
                 SetEditorError,
@@ -828,8 +869,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 return;
             }
 
+            var candidates = IsPlayerWorkspace
+                ? PlayerWorkspaceReferencePolicy.SelectRegistryTextures(catalog.Candidates)
+                : catalog.Candidates;
             editor.UpdateRegistryTextureCandidates(
-                catalog.Candidates,
+                candidates,
                 catalogProfile,
                 catalog.IsAvailable);
             AppLog.Information(catalog.IsAvailable
@@ -1457,3 +1501,4 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
 public sealed record PreviewLightingChoice(HeadPreviewLightingPreset Preset, string Name);
 public sealed record PreviewLodChoice(int LodIndex, string Name);
+public sealed record DetachedMeshUpAxisChoice(DetachedMeshUpAxis Axis, string Name);

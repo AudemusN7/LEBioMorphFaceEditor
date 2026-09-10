@@ -63,11 +63,17 @@ internal static class MaterialisationVerifier
                     }
                     var donor = source.FileRef.GetEntry(originalIndex)
                         ?? throw new InvalidDataException($"'{source.InstancedFullPath}' has an unresolved donor reference at {reference.Key} ({originalIndex}).");
-                    var expected = options.CrossPackageMap.TryGetValue(donor, out var mapped)
+                    var hasMappedEntry = options.CrossPackageMap.TryGetValue(donor, out var mapped);
+                    var expected = hasMappedEntry
                         ? mapped : root.FileRef.FindEntry(donor.InstancedFullPath, donor.ClassName);
                     var actual = root.FileRef.GetEntry(reference.Value);
-                    if (expected is null || actual is null || !ReferenceEquals(expected.FileRef, root.FileRef) ||
-                        actual.UIndex != expected.UIndex || actual.ClassName != donor.ClassName)
+                    var exactCanonicalEquivalent = !hasMappedEntry && actual is not null &&
+                                                   actual.ClassName == donor.ClassName &&
+                                                   HasExactPackageQualifiedIdentity(donor, actual);
+                    if (actual is null || actual.ClassName != donor.ClassName ||
+                        (!exactCanonicalEquivalent &&
+                         (expected is null || !ReferenceEquals(expected.FileRef, root.FileRef) ||
+                          actual.UIndex != expected.UIndex)))
                         throw new InvalidDataException($"Required relink failed for '{target.InstancedFullPath}' {reference.Key}: " +
                             $"expected {donor.ClassName} '{donor.InstancedFullPath}', got " +
                             $"{actual?.ClassName ?? "None"} '{actual?.InstancedFullPath ?? "None"}' ({reference.Value}).");
@@ -123,5 +129,23 @@ internal static class MaterialisationVerifier
         MaterialisationDiagnostics.Observer.Value?.Invoke(new(sourceGame, root.Game, root.ClassName,
             root.InstancedFullPath, root.InstancedFullPath, root.ClassName, "Materialised root verified",
             "retained", MaterialisationIssueSeverity.Warning, true));
+    }
+
+    private static bool HasExactPackageQualifiedIdentity(IEntry donor, IEntry actual)
+    {
+        var donorPath = donor.InstancedFullPath;
+        var actualPath = actual.InstancedFullPath;
+        if (donorPath.Equals(actualPath, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+        var donorPackage = Path.GetFileNameWithoutExtension(donor.FileRef.FilePath);
+        if (string.IsNullOrWhiteSpace(donorPackage))
+        {
+            return false;
+        }
+        var prefix = donorPackage + ".";
+        return actualPath.Equals(prefix + donorPath, StringComparison.OrdinalIgnoreCase) ||
+               donorPath.Equals(prefix + actualPath, StringComparison.OrdinalIgnoreCase);
     }
 }

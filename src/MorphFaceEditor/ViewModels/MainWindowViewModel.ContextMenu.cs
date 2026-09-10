@@ -20,7 +20,8 @@ public sealed partial class MainWindowViewModel
     private bool IsStandaloneFixedBakeFace() =>
         IsStandaloneWorkspace &&
         SelectedFace is { } selectedFace &&
-        _fixedBakeFacePaths.Contains(selectedFace.InstancedPath);
+        (_fixedBakeFacePaths.Contains(selectedFace.InstancedPath) ||
+         _relativeBakeFacePaths.Contains(selectedFace.InstancedPath));
 
     private bool CanPasteMorphData() =>
         CanMutatePackageContext() && _clipboard.Contains(MorphFaceClipboardKind.Morph);

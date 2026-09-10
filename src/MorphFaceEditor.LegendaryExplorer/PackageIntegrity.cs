@@ -12,6 +12,18 @@ internal static class PackageIntegrity
     // each issue identity so a newly added duplicate cannot inherit an older exemption.
     internal static IReadOnlySet<string> CaptureIssues(IMEPackage package) => CollectIssues(package).ToHashSet();
 
+    /// <summary>
+    /// Resolves an exact entry identity even when LEC's indexed path lookup does
+    /// not expose an imported entry under its fully qualified authored path.
+    /// </summary>
+    internal static IEntry? FindExactEntry(IMEPackage package, string instancedPath, string className) =>
+        package.FindEntry(instancedPath, className) ??
+        package.Exports.Cast<IEntry>()
+            .Concat(package.Imports)
+            .FirstOrDefault(entry =>
+                entry.ClassName.Equals(className, StringComparison.OrdinalIgnoreCase) &&
+                entry.InstancedFullPath.Equals(instancedPath, StringComparison.OrdinalIgnoreCase));
+
     internal static ExportEntry? EnsurePackagePath(IMEPackage package, string assetPath, string? assetClass = null)
     {
         // Check the entire path before creating anything: import promotion needs its own proven relink policy.
@@ -20,17 +32,17 @@ internal static class PackageIntegrity
         foreach (var segment in paths)
         {
             path = path.Length == 0 ? segment : $"{path}.{segment}";
-            if (package.FindEntry(path, "Package") is ImportEntry)
+            if (FindExactEntry(package, path, "Package") is ImportEntry)
                 throw new InvalidDataException($"Cannot materialise '{assetPath}': import ancestor or asset '{path}' occupies the required export identity.");
         }
-        if (assetClass is not null && package.FindEntry(assetPath, assetClass) is ImportEntry)
+        if (assetClass is not null && FindExactEntry(package, assetPath, assetClass) is ImportEntry)
             throw new InvalidDataException($"Cannot materialise '{assetPath}': an import occupies the required {assetClass} export identity.");
         ExportEntry? parent = null;
         path = string.Empty;
         foreach (var segment in paths)
         {
             path = path.Length == 0 ? segment : $"{path}.{segment}";
-            var existing = package.FindEntry(path, "Package");
+            var existing = FindExactEntry(package, path, "Package");
             parent = existing as ExportEntry ?? package.CreatePackageExport(NameReference.FromInstancedString(segment), parent);
         }
         return parent;

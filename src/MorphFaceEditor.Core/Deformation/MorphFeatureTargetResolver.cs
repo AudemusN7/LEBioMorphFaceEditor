@@ -116,6 +116,17 @@ public sealed class MorphFeatureTargetResolver
     public static IReadOnlySet<string> Le3HumanFemaleMetadataOnlyFeatures { get; } =
         new HashSet<string>(HumanFemaleMetadataOnlyFeatures, StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// LE1/2 male character creation serialises these two UI feature names even
+    /// though their canonical HMM target objects use different names.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> Le12HumanMaleFeatureAliases { get; } =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Jaw_Width"] = "jaw_wide",
+            ["mouthShape_thick"] = "mouthShape_fatLips"
+        };
+
     public static IReadOnlyDictionary<string, string> HumanFemaleFeatureAliases { get; } =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         { };

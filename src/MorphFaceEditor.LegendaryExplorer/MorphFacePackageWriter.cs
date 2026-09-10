@@ -476,12 +476,17 @@ public sealed class MorphFacePackageWriter
         {
             return null!;
         }
-        if (identity.IsImport &&
-            package.FindEntry(identity.InstancedPath, "Texture2D") is { } preservedImport)
+        // A texture reference can lose its provenance bit while crossing the
+        // RON/material preview boundary. The destination package is still the
+        // authority: if the exact canonical path is already an import, retain
+        // that authored dependency regardless of identity.IsImport. Attempting
+        // to materialise an export beside it creates a duplicate Texture2D
+        // identity and PackageIntegrity correctly rejects the graph.
+        if (PackageIntegrity.FindExactEntry(package, identity.InstancedPath, "Texture2D") is ImportEntry preservedImport)
         {
             return preservedImport;
         }
-        return package.FindExport(identity.InstancedPath, "Texture2D")
+        return PackageIntegrity.FindExactEntry(package, identity.InstancedPath, "Texture2D") as ExportEntry
                ?? ExternalTextureMaterializer.Materialize(package, identity, warnings);
     }
 

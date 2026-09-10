@@ -18,6 +18,8 @@ public static class TextureCatalogTests
         new("texture catalogue: active texture ranks before profile matches", ActiveTextureRanksFirst),
         new("texture catalogue: profile matches precede shared and general textures", ProfileMatchesRankBeforeSharedAndGeneral),
         new("texture catalogue: search matches path package and origin", SearchMatchesUserFacingProvenance),
+        new("texture catalogue: malformed RON parent does not hide its valid repair candidate", MalformedRonParentKeepsRepairCandidate),
+        new("player workspace: pickers admit only seek-free qualified BIOG references", PlayerPickerRequiresSeekFreePaths),
         new("texture catalogue: duplicate paths keep the highest mounted occurrence", DuplicatePathsKeepEffectiveOccurrence),
         new("texture catalogue: current local texture remains local when its path is indexed", CurrentLocalTextureRemainsLocal),
         new("texture catalogue: picker accepts registry candidates after the editor is already open", PickerAcceptsRegistryCandidatesAfterOpen),
@@ -33,6 +35,45 @@ public static class TextureCatalogTests
         new("texture registry: availability resolves installed and local paths", AvailabilityResolvesMergedPaths),
         new("texture registry: ambiguous object names are not resolved", AmbiguousObjectNamesAreRejected)
     ];
+
+    private static void PlayerPickerRequiresSeekFreePaths()
+    {
+        const string qualified = "BIOG_HMF_HED_PROMorph_R.PROSheppard.HMF_HED_PROSheppard_Face_Diff_Stack";
+        const string relative = "PROSheppard.HMF_HED_PROSheppard_Face_Diff_Stack";
+        TestAssert.True(PlayerWorkspaceReferencePolicy.IsSeekFreeQualified(qualified),
+            "A package-qualified BIOG reference was rejected.");
+        TestAssert.True(!PlayerWorkspaceReferencePolicy.IsSeekFreeQualified(relative),
+            "A package-relative reference was admitted to the Player picker.");
+
+        var qualifiedTexture = Candidate(qualified, "EntryMenu.pcc");
+        var relativeTexture = Candidate(relative, "BIOG_HMF_HED_PROMorph_R.pcc");
+        var textures = PlayerWorkspaceReferencePolicy.SelectRegistryTextures([qualifiedTexture, relativeTexture]);
+        TestAssert.Equal(1, textures.Count);
+        TestAssert.Equal(qualified, textures[0].InstancedPath);
+
+        var qualifiedMesh = new PackageAssetListItem(new AssetIdentity(
+            "EntryMenu.pcc", "BIOG_HMF_HIR_PRO.Hair_PROShepard.HMF_HIR_PROShepard_MDL", 1, "SkeletalMesh"));
+        var relativeMesh = new PackageAssetListItem(new AssetIdentity(
+            "BIOG_HMF_HIR_PRO.pcc", "Hair_PROShepard.HMF_HIR_PROShepard_MDL", 2, "SkeletalMesh"));
+        var meshes = PlayerWorkspaceReferencePolicy.SelectPackageAssets([qualifiedMesh, relativeMesh]);
+        TestAssert.Equal(1, meshes.Count);
+        TestAssert.Equal(qualifiedMesh.Identity, meshes[0].Identity);
+    }
+
+    private static void MalformedRonParentKeepsRepairCandidate()
+    {
+        const string malformed = "BIOG_HMM_HIR_PRO_R.PROCustomFade02.HMM_HIR_PROCustomFade01_Mask";
+        const string valid = "BIOG_HMM_HIR_PRO_R.PROCustomFade01.HMM_HIR_PROCustomFade01_Mask";
+        var candidate = Candidate(valid, "BIOG_HMM_HIR_PRO_R.pcc");
+        var results = TextureCatalogSearch.FilterAndRank(
+            [candidate],
+            TextureCatalogProfile.Empty,
+            malformed,
+            "HMM_HIR_PROCustomFade01_Mask");
+
+        TestAssert.Equal(1, results.Count);
+        TestAssert.Equal(valid, results[0].InstancedPath);
+    }
 
     private static void RequiredDecodeFailureReportsFamilySignature()
     {

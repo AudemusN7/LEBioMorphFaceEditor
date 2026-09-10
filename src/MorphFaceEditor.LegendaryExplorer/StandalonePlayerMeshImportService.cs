@@ -12,6 +12,16 @@ public sealed record StandalonePlayerMeshRecognition(
     Vector3[] CanonicalOrderPositions,
     IReadOnlyList<BoneTranslation> FinalSkeleton);
 
+public sealed record StandalonePlayerMeshAnalysis(
+    MorphFaceGame Game,
+    ImportedMeshAsset ImportedMesh,
+    StandalonePlayerMeshRecognition? Recognition,
+    string Diagnostic,
+    bool IsAmbiguous)
+{
+    public bool IsRecognisedPlayerMesh => Recognition is not null;
+}
+
 /// <summary>Result of importing a recognised mesh into a detached player package.</summary>
 public sealed class StandalonePlayerMeshImportResult : IDisposable
 {
@@ -60,8 +70,17 @@ public sealed class StandalonePlayerMeshImportService
         string meshPath,
         string objectName)
     {
+        var analysis = Analyze(game, meshPath);
+        return Import(game, objectName, analysis);
+    }
+
+    public StandalonePlayerMeshImportResult Import(
+        MorphFaceGame game,
+        string objectName,
+        StandalonePlayerMeshAnalysis analysis)
+    {
+        var recognition = RequireRecognition(game, analysis);
         var seedPath = StandalonePlayerMorphImportService.ResolveInstalledSeed(game);
-        var recognition = Recognize(game, seedPath, meshPath);
         var workspace = new MorphFacePackageWorkspace(seedPath, canCommit: false);
         try
         {
@@ -85,6 +104,15 @@ public sealed class StandalonePlayerMeshImportService
         string objectName,
         MorphFacePackageWorkspace workspace)
     {
+        return ImportIntoWorkspace(game, objectName, workspace, Analyze(game, meshPath));
+    }
+
+    public (MorphFaceSaveResult SaveResult, StandalonePlayerMeshRecognition Recognition) ImportIntoWorkspace(
+        MorphFaceGame game,
+        string objectName,
+        MorphFacePackageWorkspace workspace,
+        StandalonePlayerMeshAnalysis analysis)
+    {
         ArgumentNullException.ThrowIfNull(workspace);
         if (workspace.CanCommit)
         {
@@ -98,19 +126,43 @@ public sealed class StandalonePlayerMeshImportService
                 $"The open standalone workspace uses different game assets. Start a {game} workspace before importing this mesh.");
         }
 
-        var recognition = Recognize(game, expectedSeed, meshPath);
+        var recognition = RequireRecognition(game, analysis);
         return (ImportRecognized(workspace, objectName, recognition), recognition);
     }
 
     public StandalonePlayerMeshRecognition Recognize(MorphFaceGame game, string meshPath) =>
-        Recognize(game, StandalonePlayerMorphImportService.ResolveInstalledSeed(game), meshPath);
+        RequireRecognition(game, Analyze(game, meshPath));
 
-    private StandalonePlayerMeshRecognition Recognize(
-        MorphFaceGame game,
-        string seedPath,
-        string meshPath)
+    public StandalonePlayerMeshAnalysis Analyze(MorphFaceGame game, string meshPath)
     {
         var imported = _interchange.ReadMesh(meshPath);
+        try
+        {
+            return Analyze(
+                game,
+                StandalonePlayerMorphImportService.ResolveInstalledSeed(game),
+                meshPath,
+                imported);
+        }
+        catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
+        {
+            return new StandalonePlayerMeshAnalysis(
+                game,
+                imported,
+                null,
+                $"Installed {game} player assets were unavailable for topology recognition; " +
+                "the decoded mesh remains eligible for detached preview.",
+                false);
+        }
+    }
+
+    private StandalonePlayerMeshAnalysis Analyze(
+        MorphFaceGame game,
+        string seedPath,
+        string meshPath,
+        ImportedMeshAsset? decoded = null)
+    {
+        var imported = decoded ?? _interchange.ReadMesh(meshPath);
         using var reader = new MorphFacePackageReader();
         var matches = new List<StandalonePlayerMeshRecognition>();
         var candidateDiagnostics = new List<string>();
@@ -165,18 +217,33 @@ public sealed class StandalonePlayerMeshImportService
                 finalSkeleton));
         }
 
-        return matches.Count switch
+        var diagnostic = matches.Count switch
         {
-            1 => matches[0],
-            0 => throw new InvalidDataException(
+            1 => $"Unique {game} {matches[0].Sex} player topology match.",
+            0 =>
                 $"The mesh does not have a trustworthy {game} HMM or HMF player topology. " +
                 $"It decoded as {imported.Positions.Length} vertices/{imported.Indices.Length} indices " +
                 $"with {(imported.HasCompleteTextureCoordinates ? "complete" : "incomplete")} UV0; " +
-                $"{string.Join(", ", candidateDiagnostics)}. No player workspace was created; " +
-                "unrecognised meshes will enter Custom Mode in the next checkpoint."),
-            _ => throw new InvalidDataException(
-                $"The mesh ambiguously matches more than one {game} player topology. No workspace was created.")
+                $"{string.Join(", ", candidateDiagnostics)}.",
+            _ => $"The mesh ambiguously matches more than one {game} player topology."
         };
+        return new StandalonePlayerMeshAnalysis(
+            game,
+            imported,
+            matches.Count == 1 ? matches[0] : null,
+            diagnostic,
+            matches.Count > 1);
+    }
+
+    private static StandalonePlayerMeshRecognition RequireRecognition(
+        MorphFaceGame game,
+        StandalonePlayerMeshAnalysis analysis)
+    {
+        ArgumentNullException.ThrowIfNull(analysis);
+        if (analysis.Game != game)
+            throw new InvalidOperationException($"Mesh analysis is for {analysis.Game}, not {game}.");
+        return analysis.Recognition ?? throw new InvalidDataException(
+            analysis.Diagnostic + " No player workspace was created.");
     }
 
     private MorphFaceSaveResult ImportRecognized(

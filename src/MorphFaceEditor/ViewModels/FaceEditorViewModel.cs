@@ -40,6 +40,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     private readonly IReadOnlySet<int> _morphGeometryLods;
     private readonly IReadOnlyList<MorphFaceEditor.Core.Domain.AssetIdentity?> _preservedOtherMeshes;
     private readonly RandomisationInclusionState _randomisationInclusionState;
+    private readonly bool _allowsAttachmentEditing;
 
     public FaceEditorViewModel(
         MorphFaceEditingSession session,
@@ -60,7 +61,8 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         IReadOnlyList<TextureCatalogCandidate>? registryTextureCandidates = null,
         TextureCatalogProfile? textureCatalogProfile = null,
         bool isTextureRegistryAvailable = false,
-        bool ignoresAuthoredGeometry = false)
+        bool ignoresAuthoredGeometry = false,
+        bool allowsAttachmentEditing = true)
     {
         _session = session;
         _profileKey = profileKey;
@@ -74,6 +76,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         _randomSeedFactory = randomSeedFactory ?? Random.Shared.Next;
         _reportError = reportError;
         _randomisationInclusionState = randomisationInclusionState ?? new RandomisationInclusionState();
+        _allowsAttachmentEditing = allowsAttachmentEditing;
         _morphGeometryLods = session.Evaluation.Resolution.Features
             .Where(feature => feature.Target is not null)
             .SelectMany(feature => feature.Target!.Lods)
@@ -214,8 +217,15 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     public bool CanEdit => CanEditMorphFeatures;
     public bool CanEditMorphFeatures => _session.CanEditMorphFeatures;
     public bool CanEditBones => _session.CanEditBones;
-    public bool CanEditAttachments => _session.GeometryMode != MorphFaceGeometryMode.BaseMeshOnly;
+    public bool CanEditAttachments => _allowsAttachmentEditing &&
+                                      _session.GeometryMode != MorphFaceGeometryMode.BaseMeshOnly;
     public bool UsesLiveDeformationPreview => _session.UsesLiveDeformationPreview || CanEditBones;
+    /// <summary>
+    /// Indicates whether this editor has any visible morph feature controls.
+    /// Material-only and detached custom-mesh profiles keep their material
+    /// controls while removing the unrelated morph-randomisation affordances.
+    /// </summary>
+    public bool HasMorphControls => Features.Count > 0;
     public bool CanFixMorph => _session.CanFixMorph;
     public bool HasPendingRepair => _session.HasPendingRepair;
     public string? EditBlockReason => _session.EditBlockReason;

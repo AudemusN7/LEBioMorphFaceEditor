@@ -137,6 +137,16 @@ public static class CustomMeshTests
             TestAssert.True(mesh.Tangents is not null, "UV-bearing PSK did not receive tangents.");
             TestAssert.Equal(0, mesh.Bones.Count);
             TestAssert.True(!mesh.HasRig, "An unrigged PSK was reported as rigged.");
+            var preview = new DetachedMeshPreviewLoadService(new HeadPreviewSceneFactory())
+                .Load(MorphFaceGame.LE2, mesh);
+            TestAssert.True(!preview.Preview.EditingSession.CanEditMorphFeatures,
+                "Detached PSK exposed morph controls.");
+            TestAssert.True(!preview.Preview.EditingSession.CanEditBones,
+                "Unrigged detached PSK exposed bone controls.");
+            TestAssert.True(!preview.Preview.Scene.Meshes.Single().ApplySkinning,
+                "Unrigged detached PSK enabled renderer skinning.");
+            TestAssert.True(preview.Detached.Source.Positions.SequenceEqual(mesh.Positions),
+                "Detached PSK did not retain exact source positions.");
         }
         finally { if (File.Exists(path)) File.Delete(path); }
     }
@@ -162,6 +172,11 @@ public static class CustomMeshTests
                 "UV-bearing glTF did not receive generated tangents.");
             TestAssert.True(mesh.TextureCoordinates is not null, "glTF UV0 was dropped.");
             TestAssert.Equal(0, mesh.Bones.Count);
+            var preview = new DetachedMeshPreviewLoadService(new HeadPreviewSceneFactory())
+                .Load(MorphFaceGame.LE3, mesh);
+            TestAssert.Equal(2, preview.Preview.Scene.Meshes.Single().Sections.Count);
+            TestAssert.True(preview.Detached.Source.Positions.SequenceEqual(mesh.Positions),
+                "Detached glTF preview did not retain transformed source positions.");
         }
         finally { if (File.Exists(path)) File.Delete(path); if (File.Exists(path + ".bin")) File.Delete(path + ".bin"); }
     }
@@ -197,6 +212,14 @@ public static class CustomMeshTests
             TestAssert.Equal("root", mesh.Bones[0].Name);
             TestAssert.Equal(new BoneIndex4(0, 0, 0, 0), mesh.BoneIndices![0]);
             TestAssert.Near(1, mesh.BoneWeights![0].X, 0);
+            var preview = new DetachedMeshPreviewLoadService(new HeadPreviewSceneFactory())
+                .Load(MorphFaceGame.LE2, mesh);
+            TestAssert.True(preview.Preview.EditingSession.CanEditBones,
+                "Structurally valid detached PSK rig did not expose bone controls.");
+            TestAssert.True(!preview.Preview.EditingSession.CanEditMorphFeatures,
+                "Rigged detached PSK exposed morph controls.");
+            TestAssert.True(preview.Preview.Scene.Meshes.Single().ApplySkinning,
+                "Verified detached PSK rig did not enable renderer skinning.");
         }
         finally { if (File.Exists(path)) File.Delete(path); }
     }
@@ -215,6 +238,11 @@ public static class CustomMeshTests
             TestAssert.True(mesh.TextureCoordinates is not null, "GLB TEXCOORD_0 was dropped.");
             TestAssert.True(mesh.NormalsWereGenerated, "GLB normal generation was not exercised.");
             TestAssert.True(!mesh.HasRig, "An unrigged GLB was reported as rigged.");
+            var preview = new DetachedMeshPreviewLoadService(new HeadPreviewSceneFactory())
+                .Load(MorphFaceGame.LE1, mesh);
+            TestAssert.Equal(1, preview.Preview.Scene.Meshes.Single().Sections.Count);
+            TestAssert.True(!preview.Preview.Scene.Meshes.Single().ApplySkinning,
+                "Unrigged detached GLB enabled skinning.");
         }
         finally { if (File.Exists(path)) File.Delete(path); }
     }

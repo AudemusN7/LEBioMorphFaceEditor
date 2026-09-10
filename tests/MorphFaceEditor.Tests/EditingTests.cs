@@ -19,8 +19,149 @@ public static class EditingTests
         new("semantic transfer rebakes destination geometry and preserves bone residuals", SemanticTransferRebakesDestinationProfile),
         new("fixed-bake mode preserves imported geometry and authored morphs while editing bones", FixedBakePreservesDraftAndEditsBones),
         new("fixed-bake bone translation uses semantic undo and redo", FixedBakeBoneTranslationUndoRedo),
+        new("relative-bake mode preserves the authored player bake initially", RelativeBakePreservesInitialAuthoredBake),
+        new("relative-bake applies one canonical slider delta", RelativeBakeAppliesSliderDelta),
+        new("relative-bake recomputes from a stable baseline", RelativeBakeDoesNotAccumulate),
+        new("relative-bake preserves an unproven lower LOD", RelativeBakePreservesUnprovenLowerLod),
+        new("relative-bake draft persists features bones and derived bake", RelativeBakeDraftPersistsState),
+        new("relative-bake slider undo and redo restore derived geometry", RelativeBakeUndoRedo),
+        new("relative-bake disables on incompatible authored LOD0 topology", RelativeBakeRejectsIncompatibleTopology),
         new("base-mesh-only and blocked profiles do not expose bone editing", BaseMeshOnlyDoesNotExposeBones)
     ];
+
+    private static void RelativeBakePreservesInitialAuthoredBake()
+    {
+        var (mesh, document, target) = CreateRelativeBakeFixture();
+        var session = CreateRelativeSession(mesh, document, target);
+
+        TestAssert.True(session.GeometryMode == MorphFaceGeometryMode.RelativeBake,
+            "The relative-bake session did not retain its explicit geometry mode.");
+        TestAssert.True(session.CanEditMorphFeatures, session.EditBlockReason ?? "Relative-bake editing was disabled.");
+        TestAssert.True(session.Evaluation.Geometry.Positions.SequenceEqual(document.BakedLods[0]),
+            "Initial relative-bake geometry was reconstructed instead of preserving authored vertices.");
+        TestAssert.True(session.Evaluation.LodGeometry[1].Positions.SequenceEqual(document.BakedLods[1]),
+            "Initial lower-LOD geometry was not preserved exactly.");
+    }
+
+    private static void RelativeBakeAppliesSliderDelta()
+    {
+        var (mesh, document, target) = CreateRelativeBakeFixture();
+        var session = CreateRelativeSession(mesh, document, target);
+        session.SetFeature("Target", 1f);
+
+        TestAssert.Near(new Vector3(11, 2, 3), session.Evaluation.Geometry.Positions[1], 0.000001f);
+        TestAssert.Near(new Vector3(102, 0, 0), session.Evaluation.LodGeometry[1].Positions[1], 0.000001f);
+    }
+
+    private static void RelativeBakeDoesNotAccumulate()
+    {
+        var (mesh, document, target) = CreateRelativeBakeFixture();
+        var session = CreateRelativeSession(mesh, document, target);
+        session.SetFeature("Target", 1f);
+        session.SetFeature("Target", 2f);
+        session.SetFeature("Target", 1f);
+
+        TestAssert.Near(new Vector3(11, 2, 3), session.Evaluation.Geometry.Positions[1], 0.000001f);
+        var draft = session.CreateDraft(null, MorphFaceMaterialOverrides.Empty);
+        TestAssert.Near(new Vector3(11, 2, 3), draft.BakedLods[0][1], 0.000001f);
+    }
+
+    private static void RelativeBakeDraftPersistsState()
+    {
+        var (mesh, document, target) = CreateRelativeBakeFixture();
+        var session = CreateRelativeSession(mesh, document, target);
+        session.SetFeature("Target", 1f);
+        session.SetBoneAxis("root", 0, 3f);
+
+        var draft = session.CreateDraft(null, MorphFaceMaterialOverrides.Empty);
+        TestAssert.Near(1f, draft.GetFeatureOffset("Target"), 0.000001f);
+        TestAssert.Near(new Vector3(3, 2, 0), draft.FinalSkeleton.Single().Translation, 0.000001f);
+        TestAssert.Near(new Vector3(11, 2, 3), draft.BakedLods[0][1], 0.000001f);
+    }
+
+    private static void RelativeBakePreservesUnprovenLowerLod()
+    {
+        var (mesh, document, target) = CreateRelativeBakeFixture();
+        var unprovenTarget = target with
+        {
+            Lods =
+            [
+                target.Lods[0],
+                new MorphTargetLod(1, 4, [new MorphVertexDelta(1, new Vector3(100, 0, 0), Vector3.Zero)])
+            ]
+        };
+        var session = CreateRelativeSession(mesh, document, unprovenTarget);
+        session.SetFeature("Target", 1f);
+
+        TestAssert.True(session.CanEditMorphFeatures,
+            "An incompatible lower LOD incorrectly disabled a compatible LOD0.");
+        TestAssert.True(session.Evaluation.LodGeometry[1].Positions.SequenceEqual(document.BakedLods[1]),
+            "An unproven lower LOD was modified by relative-bake editing.");
+        TestAssert.True(session.CreateDraft(null, MorphFaceMaterialOverrides.Empty)
+            .BakedLods[1].SequenceEqual(document.BakedLods[1]),
+            "CreateDraft rewrote an unproven lower LOD.");
+    }
+
+    private static void RelativeBakeUndoRedo()
+    {
+        var (mesh, document, target) = CreateRelativeBakeFixture();
+        var session = CreateRelativeSession(mesh, document, target);
+        session.SetFeature("Target", 1f);
+        session.Undo();
+        TestAssert.Near(document.BakedLods[0][1], session.Evaluation.Geometry.Positions[1], 0.000001f);
+        session.Redo();
+        TestAssert.Near(new Vector3(11, 2, 3), session.Evaluation.Geometry.Positions[1], 0.000001f);
+    }
+
+    private static void RelativeBakeRejectsIncompatibleTopology()
+    {
+        var (mesh, document, _) = CreateRelativeBakeFixture();
+        var incompatibleTarget = new MorphTargetAsset(
+            TestFixtures.CreateIdentity("Set.Target", "MorphTarget"),
+            [new MorphTargetLod(0, 4, [new MorphVertexDelta(1, Vector3.UnitX, Vector3.Zero)])],
+            []);
+        var session = CreateRelativeSession(mesh, document, incompatibleTarget);
+        TestAssert.True(!session.CanEditMorphFeatures && !session.CanEdit,
+            "Incompatible authored LOD0 topology exposed relative-bake morph editing.");
+        TestAssert.True(session.CanEditBones,
+            "Incompatible morph topology disabled the independently verified Player bone rig.");
+    }
+
+    private static MorphFaceEditingSession CreateRelativeSession(
+        SkeletalMeshAsset mesh,
+        MorphFaceDocument document,
+        MorphTargetAsset target) => new(
+        document,
+        mesh,
+        [target],
+        geometryMode: MorphFaceGeometryMode.RelativeBake);
+
+    private static (SkeletalMeshAsset Mesh, MorphFaceDocument Document, MorphTargetAsset Target)
+        CreateRelativeBakeFixture()
+    {
+        var mesh = TestFixtures.CreateRenderableTwoLodMesh();
+        var target = new MorphTargetAsset(
+            TestFixtures.CreateIdentity("Set.Target", "MorphTarget"),
+            [
+                new MorphTargetLod(0, 3, [new MorphVertexDelta(1, new Vector3(2, 0, 0), Vector3.Zero)]),
+                new MorphTargetLod(1, 3, [new MorphVertexDelta(1, new Vector3(4, 0, 0), Vector3.Zero)])
+            ],
+            [new MorphTargetBoneOffset("root", new Vector3(0, 2, 0))]);
+        var document = new MorphFaceDocument(
+            TestFixtures.CreateIdentity("Face", "BioMorphFace"),
+            new PackageFingerprint(1, DateTime.UnixEpoch, "relative-bake"),
+            mesh.Source,
+            null,
+            [new MorphFeatureValue("Target", 0.5f)],
+            [new BoneTranslation("root", new Vector3(0, 1, 0))],
+            MorphFaceMaterialOverrides.Empty,
+            [
+                [new Vector3(10, 0, 0), new Vector3(10, 2, 3), new Vector3(9, -2, -3)],
+                [new Vector3(100, 0, 0), new Vector3(100, 0, 0), new Vector3(100, 2, 0)]
+            ],
+            []);
+        return (mesh, document, target);
+    }
 
     private static void FixedBakePreservesDraftAndEditsBones()
     {

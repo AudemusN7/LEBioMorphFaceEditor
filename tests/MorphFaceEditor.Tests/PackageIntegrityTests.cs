@@ -23,6 +23,7 @@ internal static class PackageIntegrityTests
         new("package integrity rejects parent cycles before formatting entry paths", ParentCyclesRejected),
         new("import ancestor preflight reuses export ancestors and rejects nested imports", AncestorPreflight),
         new("same-game skeletal materialisation verifies retained references", MaterialiseValidMesh),
+        new("writer retains an exact Texture2D import instead of materialising a duplicate", WriterRetainsExactTextureImport),
         new("texture donor resolution qualifies local paths without trusting stale indices", TextureDonorResolution),
         new("relink preserves PROShort01 target donors and optional attachment omissions", HairDonorsAndOmissions),
         new("relink preserves every LE1 Add and Tat fallback policy", TextureFallbacks)
@@ -151,6 +152,75 @@ internal static class PackageIntegrityTests
             PackageIntegrity.Verify(destination);
         }
         finally { File.Delete(path); }
+    }
+
+    private static void WriterRetainsExactTextureImport()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        var destinationPath = Path.Combine(Path.GetTempPath(), $"MFE-ExactImport-{Guid.NewGuid():N}.pcc");
+        var donorPath = Path.Combine(Path.GetTempPath(), $"MFE-ExactImportDonor-{Guid.NewGuid():N}.pcc");
+        const string texturePath = "MFE_ExactImport.Eye.EYE_Diff";
+        try
+        {
+            File.Copy(Path.GetFullPath("tests/Global Morphs/LE3 GlobalMorphs.pcc"), destinationPath);
+            CreateTextureImport(destinationPath, texturePath);
+            using (var donor = Empty("MFE_ExactImportDonor"))
+            {
+                var root = donor.CreatePackageExport("MFE_ExactImport");
+                var eye = donor.CreatePackageExport("Eye", root);
+                donor.CreateExport("EYE_Diff", "Texture2D", eye, indexed: false);
+                donor.Save(donorPath);
+            }
+
+            string facePath;
+            using (var package = MEPackageHandler.OpenMEPackage(destinationPath, forceLoadFromDisk: true))
+                facePath = package.Exports.First(entry => entry.ClassName == "BioMorphFace").InstancedFullPath;
+            using var reader = new MorphFacePackageReader();
+            var loaded = reader.Load(destinationPath, facePath);
+            var draft = loaded.Document with
+            {
+                MaterialOverrides = loaded.Document.MaterialOverrides with
+                {
+                    Textures = [new TextureMaterialOverride(
+                        "EYE_Diff",
+                        new AssetIdentity(donorPath, texturePath, 0, "Texture2D"))]
+                }
+            };
+
+            new MorphFacePackageWriter().SaveExisting(draft);
+            using var reopened = MEPackageHandler.OpenMEPackage(destinationPath, forceLoadFromDisk: true);
+            var imports = reopened.Imports.Count(entry =>
+                entry.ClassName == "Texture2D" && entry.InstancedFullPath == texturePath);
+            var exports = reopened.Exports.Count(entry =>
+                entry.ClassName == "Texture2D" && entry.InstancedFullPath == texturePath);
+            TestAssert.Equal(1, imports);
+            TestAssert.Equal(0, exports);
+        }
+        finally
+        {
+            File.Delete(destinationPath);
+            File.Delete(donorPath);
+        }
+    }
+
+    private static void CreateTextureImport(string packagePath, string texturePath)
+    {
+        using var package = MEPackageHandler.OpenMEPackage(packagePath, forceLoadFromDisk: true);
+        var segments = texturePath.Split('.');
+        IEntry? parent = null;
+        var path = string.Empty;
+        for (var index = 0; index < segments.Length; index++)
+        {
+            path = path.Length == 0 ? segments[index] : $"{path}.{segments[index]}";
+            var className = index == segments.Length - 1 ? "Texture2D" : "Package";
+            parent = package.FindEntry(path, className) ?? (index == 0
+                ? package.CreatePackageImport(segments[index])
+                : package.CreateImport(
+                    className,
+                    segments[index],
+                    parent));
+        }
+        package.Save(packagePath);
     }
 
     private static void SaveFailurePreservesOriginal(bool collision)

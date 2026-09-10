@@ -18,11 +18,14 @@ public sealed record MorphFaceEvaluation(
 /// Selects which authored geometry the editing session treats as authoritative.
 /// Morph-evaluated faces are reconstructed from profile targets; fixed-bake faces
 /// keep imported vertices and expose only a valid final-skeleton edit surface.
+/// Relative-bake faces keep the imported player RON bake as a stable baseline and
+/// apply only the delta between the current and authored canonical feature values.
 /// Base-mesh-only faces are material/custom-mesh workspaces with no geometry edits.
 /// </summary>
 public enum MorphFaceGeometryMode
 {
     MorphEvaluated,
+    RelativeBake,
     FixedBake,
     BaseMeshOnly
 }
@@ -45,6 +48,7 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
     private readonly Func<DeformationComparisonReport, bool>? _recognizesBaseVariant;
     private readonly string? _geometryEditBlockReason;
     private readonly bool _hasValidBoneRig;
+    private readonly RelativeMorphBakeEvaluator? _relativeBakeEvaluator;
     private IReadOnlyList<Vector3[]> _positionCorrections = [];
     private readonly Dictionary<string, float> _features;
     private readonly HashSet<string> _originalFeatureNames;
@@ -117,6 +121,13 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
         }
         _featureOrder = availableNames;
 
+        // Player RONs contain an authored bake which is not necessarily the
+        // profile's neutral (zero-weight) face. Keep immutable snapshots so
+        // every relative evaluation starts from exactly that imported state.
+        _relativeBakeEvaluator = GeometryMode == MorphFaceGeometryMode.RelativeBake
+            ? new RelativeMorphBakeEvaluator(baseHead, document.BakedLods, Resolve().WeightedTargets, targets)
+            : null;
+
         _templateBones = ignoreAuthoredGeometry ? [] : document.FinalSkeleton.ToArray();
         var resolution = Resolve();
         var composed = MorphBoneOffsetComposer.Compose(
@@ -134,7 +145,9 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
         _defaultTemplateBones = _templateBones.ToArray();
         _defaultBoneOverrides = new Dictionary<string, Vector3>(
             _boneOverrides, StringComparer.OrdinalIgnoreCase);
-        _positionCorrections = ignoreAuthoredGeometry ? [] : DetectPositionCorrections(resolution);
+        _positionCorrections = ignoreAuthoredGeometry || GeometryMode == MorphFaceGeometryMode.RelativeBake
+            ? []
+            : DetectPositionCorrections(resolution);
         Evaluation = Evaluate(includeOracle: GeometryMode == MorphFaceGeometryMode.MorphEvaluated);
         ValidationErrors = ValidateEditableTargets(Evaluation.Resolution);
         _hasValidBoneRig = baseHead.RenderData is not null &&
@@ -157,7 +170,7 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
     public bool CanEdit => CanEditMorphFeatures;
 
     /// <summary>Whether the preview may show live target deformation.</summary>
-    public bool UsesLiveDeformationPreview => GeometryMode == MorphFaceGeometryMode.MorphEvaluated &&
+    public bool UsesLiveDeformationPreview => GeometryMode is (MorphFaceGeometryMode.MorphEvaluated or MorphFaceGeometryMode.RelativeBake) &&
                                               CanEditMorphFeatures;
 
     public bool CanFixMorph => GeometryMode == MorphFaceGeometryMode.MorphEvaluated &&
@@ -184,7 +197,18 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
             }
             if (Evaluation.Resolution.UnresolvedFeatureNames.Count > 0)
             {
-                return $"Unresolved features: {string.Join(", ", Evaluation.Resolution.UnresolvedFeatureNames.Take(5))}.";
+                if (GeometryMode != MorphFaceGeometryMode.RelativeBake || !HasSafeRelativeResolution(Evaluation))
+                {
+                    return $"Unresolved features: {string.Join(", ", Evaluation.Resolution.UnresolvedFeatureNames.Take(5))}.";
+                }
+            }
+            if (GeometryMode == MorphFaceGeometryMode.RelativeBake && !HasCompatibleRelativeLod0)
+            {
+                return "The imported authored LOD 0 does not match the selected profile topology.";
+            }
+            if (GeometryMode == MorphFaceGeometryMode.RelativeBake && !HasValidRelativeTargetState(Evaluation))
+            {
+                return "The selected canonical target set has invalid or incomplete topology data.";
             }
             var report = Evaluation.OriginalOracleReport;
             if (report is not { IsWithinTolerance: true })
@@ -203,7 +227,7 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
         .Select(name => new MorphFeatureValue(name, _features[name]))
         .ToArray();
     public IReadOnlyList<BoneTranslation> FinalSkeleton => Evaluation.FinalSkeleton;
-    public IReadOnlyList<int> AvailableLodIndices => GeometryMode == MorphFaceGeometryMode.FixedBake
+    public IReadOnlyList<int> AvailableLodIndices => GeometryMode is MorphFaceGeometryMode.FixedBake or MorphFaceGeometryMode.RelativeBake
         ? Evaluation.LodGeometry.Keys.Order().ToArray()
         : _orderedBaseLods.Select(lod => lod.LodIndex).ToArray();
 
@@ -253,6 +277,25 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
                 MaterialOverrides = materialOverrides,
                 MorphFeatures = _document.MorphFeatures.ToArray(),
                 BakedLods = CloneLods(_document.BakedLods)
+            };
+        }
+
+        if (GeometryMode == MorphFaceGeometryMode.RelativeBake)
+        {
+            // Relative-bake output is evaluated from the imported baseline on
+            // every pass. This preserves unsupported/unknown LODs verbatim.
+            return _document with
+            {
+                HairMeshReference = hairMeshReference,
+                OtherMeshReferences = otherMeshReferences,
+                MorphFeatures = Features
+                    .Where(feature => _originalFeatureNames.Contains(feature.Name) || feature.Offset != 0)
+                    .ToArray(),
+                FinalSkeleton = _pastedBoneNames is null
+                    ? FinalSkeleton
+                    : FinalSkeleton.Where(value => _pastedBoneNames.Contains(value.BoneName)).ToArray(),
+                MaterialOverrides = materialOverrides,
+                BakedLods = _relativeBakeEvaluator!.CreateDraftLods(Evaluation.LodGeometry)
             };
         }
 
@@ -715,6 +758,10 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
 
     private MorphFaceEvaluation Evaluate(bool includeOracle, bool applyPositionCorrections = true)
     {
+        if (GeometryMode == MorphFaceGeometryMode.RelativeBake)
+        {
+            return EvaluateRelativeBake();
+        }
         if (GeometryMode == MorphFaceGeometryMode.FixedBake)
         {
             return EvaluateFixedBake();
@@ -750,6 +797,23 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
             ? DeformationComparison.Compare(geometry, _document.BakedLods[0], OracleMismatchThreshold, 10)
             : null;
         return new MorphFaceEvaluation(geometry, lodGeometry, finalSkeleton, pose, resolution, report);
+    }
+
+    private MorphFaceEvaluation EvaluateRelativeBake()
+    {
+        var resolution = Resolve();
+        var geometryLods = _relativeBakeEvaluator!.Evaluate(resolution.WeightedTargets);
+
+        var finalSkeleton = MorphBoneOffsetComposer.Compose(
+            _baseHead.Topology.ReferenceSkeleton,
+            _templateBones,
+            resolution.WeightedTargets,
+            _boneOverrides);
+        var pose = SkeletalPoseComposer.Compose(_baseHead.Topology.ReferenceSkeleton, finalSkeleton);
+        var geometry = geometryLods.TryGetValue(0, out var lod0)
+            ? lod0
+            : new DeformationResult([], [], 0, ["No imported authored LOD 0 is available."]);
+        return new MorphFaceEvaluation(geometry, geometryLods, finalSkeleton, pose, resolution, null);
     }
 
     private MorphFaceEvaluation EvaluateBaseMeshOnly()
@@ -830,6 +894,54 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
         evaluation.Resolution.UnresolvedFeatureNames.Count == 0 &&
         evaluation.OriginalOracleReport is { IsWithinTolerance: true } &&
         ValidationErrors.Count == 0;
+
+    private bool IsEditableByRelativeBake(MorphFaceEvaluation evaluation) =>
+        GeometryMode == MorphFaceGeometryMode.RelativeBake &&
+        _geometryEditBlockReason is null &&
+        HasSafeRelativeResolution(evaluation) &&
+        HasValidRelativeTargetState(evaluation) &&
+        HasCompatibleRelativeLod0;
+
+    private bool HasSafeRelativeResolution(MorphFaceEvaluation evaluation)
+    {
+        // Unknown authored metadata is intentionally retained in the RON and
+        // must not disable canonical sliders. An unresolved name which does
+        // correspond to one or more profile targets, however, is an ambiguous
+        // canonical control and cannot be safely edited.
+        foreach (var feature in evaluation.Resolution.Features.Where(value =>
+                     value.Kind == MorphFeatureResolutionKind.Unresolved))
+        {
+            var targetName = _aliases.GetValueOrDefault(feature.Feature.Name) ?? feature.Feature.Name;
+            if (_targets.Any(target => string.Equals(
+                    GetObjectName(target.Source.InstancedPath), targetName,
+                    StringComparison.OrdinalIgnoreCase)))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private bool HasValidRelativeTargetState(MorphFaceEvaluation evaluation)
+    {
+        var targets = evaluation.Resolution.Features
+            .Where(feature => feature.Target is not null)
+            .Select(feature => feature.Target!)
+            .Distinct()
+            .ToArray();
+        foreach (var target in targets)
+        {
+            if (target.BoneOffsets.Any(offset =>
+                    string.IsNullOrWhiteSpace(offset.BoneName) || !IsFinite(offset.Offset)))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private bool HasCompatibleRelativeLod0 =>
+        _relativeBakeEvaluator?.HasCompatibleLod0 == true;
 
     private bool HasCompatibleBakedLods =>
         _document.BakedLods.Count > 0 &&
@@ -1021,11 +1133,14 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
 
     private void UpdateCapabilities()
     {
-        CanEditMorphFeatures = IsEditableByOracle(Evaluation);
+        CanEditMorphFeatures = IsEditableByOracle(Evaluation) || IsEditableByRelativeBake(Evaluation);
         CanEditBones = GeometryMode switch
         {
             MorphFaceGeometryMode.MorphEvaluated => CanEditMorphFeatures,
             MorphFaceGeometryMode.FixedBake => _geometryEditBlockReason is null && _hasValidBoneRig,
+            // A malformed or unsupported target disables relative sliders, not
+            // an otherwise verified imported Player rig's bone-only fallback.
+            MorphFaceGeometryMode.RelativeBake => _geometryEditBlockReason is null && _hasValidBoneRig,
             _ => false
         };
     }

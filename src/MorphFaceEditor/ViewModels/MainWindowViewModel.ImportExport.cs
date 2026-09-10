@@ -286,6 +286,7 @@ public sealed partial class MainWindowViewModel
                 _standaloneGame = game;
                 SetDetachedMeshSource(null);
                 _fixedBakeFacePaths.Clear();
+                _relativeBakeFacePaths.Clear();
                 PackagePath = result.Workspace.SourcePath;
                 importedFacePath = result.ImportedFacePath;
                 importWarnings = result.SaveResult.Warnings;
@@ -301,6 +302,7 @@ public sealed partial class MainWindowViewModel
                 _standaloneGame = game;
                 SetDetachedMeshSource(null);
                 _fixedBakeFacePaths.Clear();
+                _relativeBakeFacePaths.Clear();
                 PackagePath = result.Workspace.SourcePath;
                 importedFacePath = result.ImportedFacePath;
                 importWarnings = result.SaveResult.Warnings;
@@ -316,13 +318,26 @@ public sealed partial class MainWindowViewModel
                 _standaloneGame = game;
                 SetDetachedMeshSource(null);
                 _fixedBakeFacePaths.Clear();
+                _relativeBakeFacePaths.Clear();
                 PackagePath = result.Workspace.SourcePath;
                 importedFacePath = result.ImportedFacePath;
                 importWarnings = result.SaveResult.Warnings;
                 meshRecognition = result.Recognition;
             }
             _standaloneImportPath = Path.GetFullPath(sourcePath);
-            _fixedBakeFacePaths.Add(importedFacePath);
+            if (isRon)
+            {
+                // A classified Player RON's LOD0 array is ordered for the exact
+                // selected-game HMM/HMF template. Its authored bake therefore
+                // supports canonical target deltas without inverse fitting.
+                _relativeBakeFacePaths.Add(importedFacePath);
+                _fixedBakeFacePaths.Remove(importedFacePath);
+            }
+            else
+            {
+                _fixedBakeFacePaths.Add(importedFacePath);
+                _relativeBakeFacePaths.Remove(importedFacePath);
+            }
             _hasWorkspaceChanges = false;
             OnPropertyChanged(nameof(PackageName));
             OnPropertyChanged(nameof(PackageDisplayName));
@@ -343,6 +358,11 @@ public sealed partial class MainWindowViewModel
                     "Player morph imported with warnings",
                     "The morph was imported and its authored references were retained, but some assets could not be resolved for preview:\n\n- " +
                     string.Join("\n- ", importWarnings));
+            }
+            else if (isRon)
+            {
+                Status = $"Imported {importedFacePath} as a canonical {game} Player RON; " +
+                         "authored geometry preserved with relative morph editing ready.";
             }
             else if (meshRecognition is not null)
             {
@@ -376,6 +396,7 @@ public sealed partial class MainWindowViewModel
         _standaloneGame = game;
         _standaloneImportPath = Path.GetFullPath(sourcePath);
         _fixedBakeFacePaths.Clear();
+        _relativeBakeFacePaths.Clear();
         _hasWorkspaceChanges = false;
         PackagePath = Path.GetFullPath(sourcePath);
         _referenceCatalog = new PackageReferenceCatalog([], []);

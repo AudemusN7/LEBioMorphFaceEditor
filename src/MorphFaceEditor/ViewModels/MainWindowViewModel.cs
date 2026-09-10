@@ -67,6 +67,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private ImportedMeshAsset? _detachedMeshSource;
     private DetachedMeshUpAxis _detachedMeshUpAxis = DetachedMeshUpAxis.Auto;
     private readonly HashSet<string> _fixedBakeFacePaths = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _relativeBakeFacePaths = new(StringComparer.OrdinalIgnoreCase);
     private bool _hasWorkspaceChanges;
     private CancellationTokenSource? _loadCancellation;
     private LoadedMorphFace? _loadedFace;
@@ -628,6 +629,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _standaloneGame = null;
         SetDetachedMeshSource(null);
         _fixedBakeFacePaths.Clear();
+        _relativeBakeFacePaths.Clear();
         _hasWorkspaceChanges = false;
         PackagePath = workspace.SourcePath;
         OnDirtyStateChanged();
@@ -744,9 +746,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 workspacePath,
                 SelectedFace.UIndex.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 cancellationToken,
-                _fixedBakeFacePaths.Contains(SelectedFace.InstancedPath)
-                    ? MorphFaceGeometryMode.FixedBake
-                    : null);
+                _relativeBakeFacePaths.Contains(SelectedFace.InstancedPath)
+                    ? MorphFaceGeometryMode.RelativeBake
+                    : _fixedBakeFacePaths.Contains(SelectedFace.InstancedPath)
+                        ? MorphFaceGeometryMode.FixedBake
+                        : null);
             cancellationToken.ThrowIfCancellationRequested();
             foreach (var warning in result.Loaded.Warnings)
             {
@@ -768,8 +772,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             FaceDetails = $"{topology.VertexCount:N0} vertices · {topology.IndexCount / 3:N0} triangles · " +
                           $"{topology.Sections.Count} sections · {displayedFinalBoneCount} final bones · " +
                           $"{materialOverrides.Scalars.Count}/{materialOverrides.Vectors.Count}/{materialOverrides.Textures.Count} material S/V/T · " +
-                          (result.EditingSession.GeometryMode == MorphFaceGeometryMode.FixedBake
-                              ? "fixed imported bake"
+                          (result.EditingSession.GeometryMode == MorphFaceGeometryMode.RelativeBake
+                              ? "relative imported bake"
+                              : result.EditingSession.GeometryMode == MorphFaceGeometryMode.FixedBake
+                                  ? "fixed imported bake"
                               : result.EditingSession.CanEdit
                               ? $"oracle {oracle!.MaximumError:G4} max"
                               : result.Profile.IgnoresAuthoredGeometry
@@ -812,8 +818,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                                       !string.Equals(_previewCameraFamily, cameraFamily, StringComparison.OrdinalIgnoreCase);
             _previewCameraFamily = cameraFamily;
             PreviewSceneReady?.Invoke(result.Scene, resetCameraPosition);
-            Status = result.EditingSession.GeometryMode == MorphFaceGeometryMode.FixedBake
-                ? $"Loaded {SelectedFace.DisplayName} ({result.Profile.DisplayName}); fixed-bake geometry, bone and material editing ready. Morph sliders are preserved but disabled."
+            Status = result.EditingSession.GeometryMode == MorphFaceGeometryMode.RelativeBake
+                ? $"Loaded {SelectedFace.DisplayName} ({result.Profile.DisplayName}); authored geometry preserved with relative morph, bone and material editing ready."
+                : result.EditingSession.GeometryMode == MorphFaceGeometryMode.FixedBake
+                    ? $"Loaded {SelectedFace.DisplayName} ({result.Profile.DisplayName}); fixed-bake geometry, bone and material editing ready. Morph sliders are preserved but disabled."
                 : result.EditingSession.CanEdit
                 ? $"Loaded {SelectedFace.DisplayName} ({result.Profile.DisplayName}); live geometry and material editing ready."
                 : result.Profile.IgnoresAuthoredGeometry

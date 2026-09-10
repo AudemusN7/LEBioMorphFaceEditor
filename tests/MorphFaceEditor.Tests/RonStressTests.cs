@@ -1,7 +1,9 @@
 using System.Numerics;
+using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.LegendaryExplorer;
+using MorphFaceEditor.Services;
 
 namespace MorphFaceEditor.Tests;
 
@@ -239,6 +241,7 @@ internal static class RonStressTests
                     AssertMaterialEqual(expected.MaterialData,
                         context.CaptureMaterialData(imported.Workspace.WorkingPath, imported.ImportedFacePath),
                         $"{game} {primary.FileName} imported material data");
+                    MorphFaceMorphData editedMorph;
                     using (var reader = new MorphFacePackageReader())
                     {
                         var loaded = reader.Load(imported.Workspace.WorkingPath, imported.ImportedFacePath);
@@ -248,6 +251,11 @@ internal static class RonStressTests
                                 ? new MorphFaceMorphData(document.MorphFeatures, document.FinalSkeleton, document.BakedLods)
                                 : throw new Exception("Preview document was unavailable."),
                             $"{game} {primary.FileName} preview payload");
+                        editedMorph = CreateRelativeMorphEdit(
+                            loaded,
+                            imported.Workspace.WorkingPath,
+                            expected.MorphData,
+                            $"{game} {primary.FileName}");
                     }
 
                     context.ExportRon(imported.Workspace.WorkingPath, imported.ImportedFacePath, readbackPath);
@@ -260,6 +268,21 @@ internal static class RonStressTests
                     TestAssert.True(expected.AccessoryMeshes.SequenceEqual(readback.AccessoryMeshes,
                             StringComparer.OrdinalIgnoreCase),
                         $"{game} {primary.FileName} changed accessory references during RON readback.");
+
+                    context.PasteMorphData(
+                        imported.Workspace.WorkingPath,
+                        imported.ImportedFacePath,
+                        editedMorph);
+                    AssertMorphEqual(
+                        editedMorph,
+                        context.CaptureMorphData(imported.Workspace.WorkingPath, imported.ImportedFacePath),
+                        $"{game} {primary.FileName} persisted relative morph edit");
+                    File.Delete(readbackPath);
+                    context.ExportRon(imported.Workspace.WorkingPath, imported.ImportedFacePath, readbackPath);
+                    AssertMorphEqual(
+                        editedMorph,
+                        TseHeadMorphRon.Read(readbackPath).MorphData,
+                        $"{game} {primary.FileName} exported relative morph edit");
                     completed++;
                 }
                 catch (UnauthorizedAccessException exception) when (IsWorkspacePermissionBlock(exception))
@@ -326,6 +349,89 @@ internal static class RonStressTests
                 }
             }
         }
+    }
+
+    private static MorphFaceMorphData CreateRelativeMorphEdit(
+        LoadedMorphFace loaded,
+        string workspacePath,
+        MorphFaceMorphData expected,
+        string label)
+    {
+        var profiles = MorphFaceProfileRegistry.CreateDefault();
+        var resolution = profiles.Resolve(
+            loaded.Game,
+            loaded.Document.Source.InstancedPath,
+            loaded.Document.BaseHeadReference?.InstancedPath,
+            loaded.Document.MaterialOverrides,
+            loaded.Materials) ?? throw new Exception($"{label} did not resolve a Player profile.");
+        TestAssert.True(!resolution.UsesCustomMesh,
+            $"{label} was classified as a custom-mesh profile instead of canonical Player topology.");
+        var profile = resolution.Profile;
+        var session = new MorphFaceEditingSession(
+            loaded.Document,
+            loaded.BaseHead,
+            new MorphTargetCatalog().Load(profile, loaded.Game, workspacePath),
+            profile.MetadataOnlyFeatures,
+            profile.DisplayName,
+            profile.FeatureAliases,
+            profile.RecognizesBaseVariant,
+            profile.GeometryEditBlockReason(loaded.BaseHead.Source.InstancedPath),
+            geometryMode: MorphFaceGeometryMode.RelativeBake);
+
+        TestAssert.True(session.CanEditMorphFeatures,
+            $"{label} did not expose safe relative morph editing: {session.EditBlockReason}");
+        TestAssert.True(session.CanEditBones,
+            $"{label} lost its independently verified Player bone controls.");
+        TestAssert.True(session.Evaluation.Geometry.Positions.SequenceEqual(expected.BakedLods[0]),
+            $"{label} changed its iconic authored bake merely by entering relative mode.");
+
+        var expectedAliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Jaw_Width"] = "jaw_wide",
+            ["mouthShape_thick"] = "mouthShape_fatLips"
+        };
+        foreach (var (authoredName, targetName) in expectedAliases.Where(alias =>
+                     expected.MorphFeatures.Any(feature =>
+                         string.Equals(feature.Name, alias.Key, StringComparison.OrdinalIgnoreCase))))
+        {
+            var resolved = session.Evaluation.Resolution.Features.Single(feature =>
+                string.Equals(feature.Feature.Name, authoredName, StringComparison.OrdinalIgnoreCase));
+            TestAssert.True(
+                resolved.Kind == MorphFaceEditor.Core.Deformation.MorphFeatureResolutionKind.AliasTarget &&
+                string.Equals(
+                    resolved.Target?.Source.InstancedPath.Split('.').Last(),
+                    targetName,
+                    StringComparison.OrdinalIgnoreCase),
+                $"{label} did not resolve creator feature '{authoredName}' to canonical target '{targetName}'.");
+        }
+
+        var feature = session.Evaluation.Resolution.Features.FirstOrDefault(value =>
+            value.Target?.Lods.FirstOrDefault(lod => lod.LodIndex == 0)?.Vertices.Any(vertex =>
+                vertex.PositionDelta.LengthSquared() > 1e-12f) == true)
+            ?? throw new Exception($"{label} did not expose a canonical LOD0 position target.");
+        var targetLod = feature.Target!.Lods.First(lod => lod.LodIndex == 0);
+        var changedVertex = targetLod.Vertices.First(vertex => vertex.PositionDelta.LengthSquared() > 1e-12f);
+        var before = expected.BakedLods[0][changedVertex.SourceIndex];
+        session.SetFeature(feature.Feature.Name, feature.Feature.Offset + 0.125f);
+        var after = session.Evaluation.Geometry.Positions[changedVertex.SourceIndex];
+        TestAssert.Near(before + changedVertex.PositionDelta * 0.125f, after, 0.00001f);
+        var edited = session.CreateDraft(
+            loaded.Document.HairMeshReference,
+            loaded.Document.OtherMeshReferences,
+            loaded.Document.MaterialOverrides);
+        session.Undo();
+        TestAssert.True(session.Evaluation.Geometry.Positions.SequenceEqual(expected.BakedLods[0]),
+            $"{label} did not restore the exact authored bake after undoing a relative slider edit.");
+        session.Redo();
+        var redone = session.CreateDraft(
+            loaded.Document.HairMeshReference,
+            loaded.Document.OtherMeshReferences,
+            loaded.Document.MaterialOverrides);
+        AssertMorphEqual(
+            new MorphFaceMorphData(edited.MorphFeatures, edited.FinalSkeleton, edited.BakedLods),
+            new MorphFaceMorphData(redone.MorphFeatures, redone.FinalSkeleton, redone.BakedLods),
+            $"{label} relative morph redo");
+        return new MorphFaceMorphData(edited.MorphFeatures, edited.FinalSkeleton, edited.BakedLods);
     }
 
     private static void AssertMaterialEqual(MorphFaceMaterialData expected, MorphFaceMaterialData actual,

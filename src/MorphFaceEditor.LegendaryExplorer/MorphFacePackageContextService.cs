@@ -948,7 +948,7 @@ public sealed class MorphFacePackageContextService
             {
                 return value;
             }
-            var existing = package.FindEntry(value.TextureReference.InstancedPath, "Texture2D");
+            var existing = PackageIntegrity.FindExactEntry(package, value.TextureReference.InstancedPath, "Texture2D");
             IEntry? entry = existing as ExportEntry ?? (!strictAssetResolution ? existing : null);
             if (entry is null)
             {

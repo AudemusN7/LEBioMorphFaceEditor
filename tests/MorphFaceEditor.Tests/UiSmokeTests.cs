@@ -56,6 +56,7 @@ public static class UiSmokeTests
         new("LE3 HMM scalp randomisation preserves its required texture pair", Le3HmmScalpRandomisationAppliesCorePair),
         new("cursed mode randomises morph bones and materials as one undo step", CursedModeRandomisesOneUndoStep),
         new("fixed-bake Cursed mode cannot mutate morph sliders", FixedBakeCursedModePreservesMorphs),
+        new("relative-bake Player RON exposes live morph controls", RelativeBakeExposesMorphControls),
         new("cursed mode ignores global randomisation exclusions", CursedModeIgnoresGlobalExclusions),
         new("cursed mode can be enabled without a donor corpus", CursedModeBypassesDonorAvailability),
         new("failed cursed randomisation rolls back its partial edit", FailedCursedRandomisationRollsBack),
@@ -837,6 +838,23 @@ public static class UiSmokeTests
             "Fixed-bake Cursed mode replaced the imported baked geometry.");
     }
 
+    private static void RelativeBakeExposesMorphControls()
+    {
+        using var reader = new MorphFacePackageReader();
+        using var editor = CreateEditor(
+            reader,
+            geometryMode: MorphFaceGeometryMode.RelativeBake);
+
+        TestAssert.True(editor.CanEditMorphFeatures && editor.HasMorphControls,
+            "A canonical Player RON relative bake did not expose its morph controls.");
+        var feature = editor.Features.Single(value =>
+            string.Equals(value.Name, "Target", StringComparison.OrdinalIgnoreCase));
+        TestAssert.True(feature.IsEditable,
+            "The canonical Player RON morph control was visible but disabled.");
+        feature.Value = 0.5f;
+        TestAssert.Near(0.5f, editor.CreateDraft().GetFeatureOffset("Target"), 0);
+    }
+
     private static void CursedModeBypassesDonorAvailability()
     {
         using var reader = new MorphFacePackageReader();
@@ -967,7 +985,7 @@ public static class UiSmokeTests
         bool ignoresAuthoredGeometry = false,
         MorphFaceGeometryMode geometryMode = MorphFaceGeometryMode.MorphEvaluated)
     {
-        var mesh = geometryMode == MorphFaceGeometryMode.FixedBake
+        var mesh = geometryMode is MorphFaceGeometryMode.FixedBake or MorphFaceGeometryMode.RelativeBake
             ? TestFixtures.CreateRenderableTwoLodMesh()
             : TestFixtures.CreateMesh();
         var document = new MorphFaceDocument(

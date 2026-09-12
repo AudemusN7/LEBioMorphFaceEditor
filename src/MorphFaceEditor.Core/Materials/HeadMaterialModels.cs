@@ -133,6 +133,8 @@ public sealed record ResolvedHeadMaterial(
     public IReadOnlySet<string> SupportedTextures { get; init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     public DecodedTextureCubeAsset? FixedCubeTexture { get; init; }
     public DecodedTextureCubeAsset? SecondaryFixedCubeTexture { get; init; }
+    public string? ParameterScopeKey { get; init; }
+    public string? ParameterScopeLabel { get; init; }
 
     public bool Supports(string name, MaterialParameterKind kind) => kind switch
     {
@@ -141,6 +143,37 @@ public sealed record ResolvedHeadMaterial(
         MaterialParameterKind.Texture => SupportedTextures.Count == 0 ? Textures.ContainsKey(name) : SupportedTextures.Contains(name),
         _ => false
     };
+}
+
+/// <summary>
+/// Encodes a MESH-only control namespace while preserving the shader parameter
+/// name needed by material evaluation and texture decoding.
+/// </summary>
+public static class MaterialParameterControlKey
+{
+    private const string Prefix = "@";
+    private const char Separator = '/';
+
+    public static string Create(string scopeKey, string parameterName) =>
+        $"{Prefix}{scopeKey}{Separator}{parameterName}";
+
+    public static string ParameterName(string controlKey) =>
+        TryParse(controlKey, out _, out var parameterName) ? parameterName : controlKey;
+
+    public static string? ScopeKey(string controlKey) =>
+        TryParse(controlKey, out var scopeKey, out _) ? scopeKey : null;
+
+    public static bool TryParse(string controlKey, out string scopeKey, out string parameterName)
+    {
+        scopeKey = string.Empty;
+        parameterName = controlKey;
+        if (!controlKey.StartsWith(Prefix, StringComparison.Ordinal)) return false;
+        var separator = controlKey.IndexOf(Separator, Prefix.Length);
+        if (separator <= Prefix.Length || separator == controlKey.Length - 1) return false;
+        scopeKey = controlKey[Prefix.Length..separator];
+        parameterName = controlKey[(separator + 1)..];
+        return true;
+    }
 }
 
 public sealed record ResolvedHeadMaterialSet(

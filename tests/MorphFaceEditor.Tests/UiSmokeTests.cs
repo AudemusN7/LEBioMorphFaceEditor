@@ -52,6 +52,7 @@ public static class UiSmokeTests
         new("subcategory inclusion toggles filter only global randomisation and persist in-session", SubcategoryInclusionsFilterGlobalScope),
         new("normal material randomisation obeys its independent toggle and undo", MaterialRandomisationObeysToggle),
         new("detached material randomisation uses its compatible human donor profile", DetachedMaterialRandomisationUsesCompatibleProfile),
+        new("detached mixed-species materials randomise from each assigned profile", DetachedMixedSpeciesMaterialsRandomiseByProfile),
         new("material vector subcategories expose independent randomise commands", MaterialVectorSubcategoriesRandomiseIndependently),
         new("exhausted texture randomisation is reported without discarding numeric values", ExhaustedTextureRandomisationIsReported),
         new("LE3 HMM scalp randomisation preserves its required texture pair", Le3HmmScalpRandomisationAppliesCorePair),
@@ -68,6 +69,7 @@ public static class UiSmokeTests
         new("actor assignment chooser filters evidence and scopes eligibility by operation", ActorChooserFiltersAndScopesEligibility),
         new("WPF resources construct and nested menus expose their popup", HdrPickerConstructs),
         new("Human Male UI profile orders, groups, and filters features", HumanMaleProfileOrganizesFeatures),
+        new("material editor hides Unreal selection colour parameters", MaterialEditorHidesSelectionColor),
         new("LE3 Human Male UI hides inert eye metadata and marks vestigial pupils", Le3HumanMaleProfileOrganizesFeatures),
         new("Human Female UI profile exposes female morph and makeup controls", HumanFemaleProfileOrganizesFeatures),
         new("LE3 Human Female UI exposes character targets and hides malformed hair targets", Le3HumanFemaleProfileOrganizesFeatures),
@@ -77,7 +79,8 @@ public static class UiSmokeTests
         new("Batarian UI profile groups racial structure and species material controls", BatarianProfileOrganizesFeatures),
         new("Krogan UI profile separates head plates and Wrex character controls", KroganProfileOrganizesFeatures),
         new("Vorcha UI keeps reconstructed morphs hidden and bones editable", VorchaProfileIsMaterialAndBoneOnly),
-        new("Female Turian UI exposes Turian materials without inherited geometry controls", FemaleTurianProfileIsMaterialOnly)
+        new("Female Turian UI exposes Turian materials without inherited geometry controls", FemaleTurianProfileIsMaterialOnly),
+        new("detached mesh UI reuses racial material presentation", DetachedMeshProfileUsesRacialMaterialPresentation)
     ];
 
     private static void EditorFileDropsRecogniseSupportedFormats()
@@ -827,6 +830,53 @@ public static class UiSmokeTests
             .Single(value => value.Name == "HED_Norm_Blend").Value, 0);
     }
 
+    private static void DetachedMixedSpeciesMaterialsRandomiseByProfile()
+    {
+        using var reader = new MorphFacePackageReader();
+        using var editor = CreateRandomisationEditor(
+            reader,
+            profileKey: "le1-detached-mesh",
+            mixedCustomMaterials: true);
+        editor.RandomiseMorphs = false;
+        editor.RandomiseMaterials = true;
+        editor.MaterialRandomisationStrength = 0;
+
+        var humanSkinTone = editor.Material.Vectors.Single(value =>
+            value.Name == MaterialParameterControlKey.Create("human", "SkinTone"));
+        var kroganSkinTone = editor.Material.Vectors.Single(value =>
+            value.Name == MaterialParameterControlKey.Create("krogan", "SkinTone"));
+        TestAssert.True(humanSkinTone.Label == "Human - Skin Tone" &&
+                        kroganSkinTone.Label == "Krogan - Skin Tone",
+            "MESH controls did not expose their racial parameter prefixes.");
+        editor.Material.SetNumericValues(
+            new Dictionary<string, float>(),
+            new Dictionary<string, Vector4> { [kroganSkinTone.Name] = new(0.25f) });
+        TestAssert.True(editor.Material.Materials.Materials.Values
+                            .Single(value => value.Family == HeadMaterialFamily.Skin)
+                            .Vectors["SkinTone"] == Vector4.One &&
+                        editor.Material.Materials.Materials.Values
+                            .Single(value => value.Family == HeadMaterialFamily.KroganSkin)
+                            .Vectors["SkinTone"] == new Vector4(0.25f),
+            "Editing Krogan Skin Tone also changed the Human material parameter.");
+
+        TestAssert.True(editor.RandomiseCommand.CanExecute(null),
+            "A mixed Custom material surface did not expose material randomisation.");
+        editor.RandomiseCommand.Execute(null);
+        var scalars = editor.CreateDraft().MaterialOverrides.Scalars
+            .ToDictionary(value => value.Name, value => value.Value, StringComparer.OrdinalIgnoreCase);
+        TestAssert.Near(4, scalars[MaterialParameterControlKey.Create("human", "HED_Norm_Blend")], 0);
+        TestAssert.Near(0.8f,
+            scalars[MaterialParameterControlKey.Create("krogan", "KRO_HED_Spec_Scalar")], 0);
+        var shellGradient = editor.Material.Scalars.Single(value =>
+            value.Name == MaterialParameterControlKey.Create("krogan", "KRO_HED_Shell_Grad_Scalar"));
+        TestAssert.True(shellGradient.CategoryKey == "facial-structure" &&
+                        shellGradient.Label == "Krogan - Head Plate Gradient Strength",
+            "The mixed Custom workspace did not use Krogan PCC presentation metadata.");
+        TestAssert.True(editor.Categories.Single(value => value.Key == "facial-structure")
+                .SliderGroups.Any(group => group.Scalars.Contains(shellGradient)),
+            "The mixed Custom workspace did not place the Krogan shell control in its racial category.");
+    }
+
     private static void FixedBakeCursedModePreservesMorphs()
     {
         using var reader = new MorphFacePackageReader();
@@ -1066,7 +1116,8 @@ public static class UiSmokeTests
         Func<int>? randomSeedFactory = null,
         bool includeSecondDonor = false,
         string profileKey = "le1-human-male",
-        string? materialRandomisationProfileKey = null)
+        string? materialRandomisationProfileKey = null,
+        bool mixedCustomMaterials = false)
     {
         var sourceMesh = TestFixtures.CreateMesh();
         var mesh = sourceMesh with
@@ -1110,12 +1161,45 @@ public static class UiSmokeTests
             new Dictionary<string, float> { ["HED_Norm_Blend"] = 2, ["Emis_Scalar"] = 1 },
             new Dictionary<string, Vector4> { ["SkinTone"] = Vector4.One, ["Emis_Color"] = Vector4.One },
             new Dictionary<string, MaterialTextureBinding>());
+        var kroganIdentity = TestFixtures.CreateIdentity("KroganMaterial", "MaterialInstanceConstant");
+        var kroganMaterial = new ResolvedHeadMaterial(
+            MaterialIdentityKey.Create(kroganIdentity), kroganIdentity, "BIOG_KRO_HED_PROMorph",
+            HeadMaterialFamily.KroganSkin, HeadMaterialBlendMode.Opaque, false,
+            new Dictionary<string, float>
+            {
+                ["KRO_HED_Spec_Scalar"] = 0.2f,
+                ["KRO_HED_Shell_Grad_Scalar"] = 0.5f
+            },
+            new Dictionary<string, Vector4> { ["SkinTone"] = new(0.2f) },
+            new Dictionary<string, MaterialTextureBinding>());
+        CustomMaterialWorkspace? customWorkspace = null;
+        IReadOnlyList<CustomMaterialAssignmentOption> customOptions = [];
+        if (mixedCustomMaterials)
+        {
+            var source = new ImportedMeshAsset(
+                "mixed-custom.psk",
+                [Vector3.Zero, Vector3.UnitX, Vector3.UnitY],
+                null, null, null,
+                [0, 1, 2],
+                [new ImportedMeshSection(0, "Human", 0, 3), new ImportedMeshSection(1, "Krogan", 0, 3)],
+                [], null, null, [0, 1, 2]);
+            customWorkspace = new CustomMaterialWorkspace(source);
+            customOptions =
+            [
+                new CustomMaterialAssignmentOption(
+                    "human", "Human", "human-male", "head", HeadMaterialFamily.Skin, resolvedMaterial)
+                    { RandomisationProfileKey = "le1-human-male" },
+                new CustomMaterialAssignmentOption(
+                    "krogan", "Krogan", "krogan", "head", HeadMaterialFamily.KroganSkin, kroganMaterial)
+                    { RandomisationProfileKey = "le1-krogan" }
+            ];
+            customWorkspace.Assign(0, customOptions[0]);
+            customWorkspace.Assign(1, customOptions[1]);
+        }
         var materials = new MorphFaceEditor.Core.Editing.MaterialEditingSession(
             MorphFaceMaterialOverrides.Empty,
-            new ResolvedHeadMaterialSet(new Dictionary<string, ResolvedHeadMaterial>
-            {
-                [resolvedMaterial.Key] = resolvedMaterial
-            }));
+            customWorkspace?.ActiveMaterials ?? new ResolvedHeadMaterialSet(
+                new Dictionary<string, ResolvedHeadMaterial> { [resolvedMaterial.Key] = resolvedMaterial }));
         var donor = new MorphRandomisationDonor(
             "LE1:Seed", "le1-human-male",
             new HashSet<string>(["nose_BridgeIn", "eyes_Big"], StringComparer.OrdinalIgnoreCase),
@@ -1156,39 +1240,67 @@ public static class UiSmokeTests
                 ["Emis_Color"] = new(0.2f, 0.3f, 0.4f, 1)
             }
         };
+        var kroganDonor = new MorphRandomisationDonor(
+            "LE1:KroganSeed", "le1-krogan",
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase))
+        {
+            MaterialScalars = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["KRO_HED_Spec_Scalar"] = 0.8f
+            }
+        };
+        var pools = new Dictionary<MorphRandomisationPoolKey, IReadOnlyList<MorphRandomisationDonor>>
+        {
+            [MorphRandomisationPoolKey.HumanMaleLe12] = includeDonor
+                ? includeSecondDonor ? [donor, secondDonor] : [donor]
+                : []
+        };
+        if (mixedCustomMaterials)
+        {
+            pools[MorphRandomisationPoolKey.Krogan] = [kroganDonor];
+        }
+        var profiles = new Dictionary<string, MaterialRandomisationProfile>(StringComparer.OrdinalIgnoreCase);
+        if (includeDonor)
+        {
+            profiles["le1-human-male"] = new MaterialRandomisationProfile(
+                "le1-human-male",
+                new Dictionary<string, MaterialScalarStatistics>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["HED_Norm_Blend"] = new("HED_Norm_Blend", 1, 6, 2, 5),
+                    ["Emis_Scalar"] = new("Emis_Scalar", 0, 4, 1, 3)
+                },
+                new Dictionary<string, MaterialVectorStatistics>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["SkinTone"] = new("SkinTone", MaterialVectorRandomisationKind.PerceptualColour,
+                        new Vector4(0.1f, 0.05f, 0.02f, 1), new Vector4(0.8f, 0.6f, 0.4f, 1), []),
+                    ["Emis_Color"] = new("Emis_Color", MaterialVectorRandomisationKind.PerceptualColour,
+                        Vector4.Zero, new Vector4(4), [])
+                },
+                new HashSet<string>());
+        }
+        if (mixedCustomMaterials)
+        {
+            profiles["le1-krogan"] = new MaterialRandomisationProfile(
+                "le1-krogan",
+                new Dictionary<string, MaterialScalarStatistics>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["KRO_HED_Spec_Scalar"] = new("KRO_HED_Spec_Scalar", 0, 1, 0.2f, 0.8f)
+                },
+                new Dictionary<string, MaterialVectorStatistics>(StringComparer.OrdinalIgnoreCase),
+                new HashSet<string>());
+        }
         var corpus = new MorphRandomisationCorpus(
             MorphRandomisationCorpus.CurrentFormatVersion,
-            new Dictionary<MorphRandomisationPoolKey, IReadOnlyList<MorphRandomisationDonor>>
-            {
-                [MorphRandomisationPoolKey.HumanMaleLe12] = includeDonor
-                    ? includeSecondDonor ? [donor, secondDonor] : [donor]
-                    : []
-            })
+            pools)
         {
-            MaterialProfiles = includeDonor
-                ? new Dictionary<string, MaterialRandomisationProfile>(StringComparer.OrdinalIgnoreCase)
-                {
-                    ["le1-human-male"] = new MaterialRandomisationProfile(
-                        "le1-human-male",
-                        new Dictionary<string, MaterialScalarStatistics>(StringComparer.OrdinalIgnoreCase)
-                        {
-                            ["HED_Norm_Blend"] = new("HED_Norm_Blend", 1, 6, 2, 5),
-                            ["Emis_Scalar"] = new("Emis_Scalar", 0, 4, 1, 3)
-                        },
-                        new Dictionary<string, MaterialVectorStatistics>(StringComparer.OrdinalIgnoreCase)
-                        {
-                            ["SkinTone"] = new("SkinTone", MaterialVectorRandomisationKind.PerceptualColour,
-                                new Vector4(0.1f, 0.05f, 0.02f, 1), new Vector4(0.8f, 0.6f, 0.4f, 1), []),
-                            ["Emis_Color"] = new("Emis_Color", MaterialVectorRandomisationKind.PerceptualColour,
-                                Vector4.Zero, new Vector4(4), [])
-                        },
-                        new HashSet<string>())
-                }
-                : new Dictionary<string, MaterialRandomisationProfile>()
+            MaterialProfiles = profiles
         };
         return new FaceEditorViewModel(
             session,
-            new HumanMaleFeatureMetadataCatalog(),
+            mixedCustomMaterials
+                ? new DetachedMeshFeatureMetadataCatalog(customWorkspace)
+                : new HumanMaleFeatureMetadataCatalog(),
             materials,
             new StubColorDialog(),
             new PackageReferenceService(reader, TestFixtures.CreateMissingTextureCatalogService()),
@@ -1198,6 +1310,8 @@ public static class UiSmokeTests
             new MorphRandomisationCatalog(corpus),
             randomSeedFactory ?? (() => 123),
             randomisationInclusionState,
+            customMaterialWorkspace: customWorkspace,
+            customMaterialOptions: customOptions,
             materialRandomisationProfileKey: materialRandomisationProfileKey);
     }
 
@@ -1952,6 +2066,42 @@ public static class UiSmokeTests
             Task.FromResult(CreateTestTexture(packagePath, texturePath, definition.Name));
     }
 
+    private static void MaterialEditorHidesSelectionColor()
+    {
+        var identity = TestFixtures.CreateIdentity("SelectionColorMaterial", "MaterialInstanceConstant");
+        var material = new ResolvedHeadMaterial(
+            MaterialIdentityKey.Create(identity), identity, "SelectionColorMaterial",
+            HeadMaterialFamily.Eyes, HeadMaterialBlendMode.Opaque, false,
+            new Dictionary<string, float>(),
+            new Dictionary<string, Vector4>
+            {
+                ["EyeColour"] = Vector4.One,
+                ["SelectionColor"] = new(1, 0, 1, 1)
+            },
+            new Dictionary<string, MaterialTextureBinding>())
+        {
+            SupportedVectors = new HashSet<string>(["EyeColour", "SelectionColor"],
+                StringComparer.OrdinalIgnoreCase)
+        };
+        var session = new MorphFaceEditor.Core.Editing.MaterialEditingSession(
+            MorphFaceMaterialOverrides.Empty,
+            new ResolvedHeadMaterialSet(new Dictionary<string, ResolvedHeadMaterial>
+            {
+                [material.Key] = material
+            }));
+        using var editor = new MaterialEditorViewModel(
+            session, new StubColorDialog(), new ImmediateTextureLoader(), string.Empty, [],
+            message => throw new Exception(message), new HumanMaleFeatureMetadataCatalog());
+
+        TestAssert.True(editor.Vectors.Any(value => value.Name == "EyeColour"),
+            "The ordinary eye colour control was hidden with Selection Color.");
+        TestAssert.True(editor.Vectors.All(value => value.Name != "SelectionColor"),
+            "The Unreal Selection Color property remained visible in the material editor.");
+        TestAssert.True(MaterialEditorViewModel.IsEngineEditorOnlyParameter("Selection Color") &&
+                        MaterialEditorViewModel.IsEngineEditorOnlyParameter("Selection_Color"),
+            "Selection Color spelling variants were not recognized as engine-only properties.");
+    }
+
     private static void HumanMaleProfileOrganizesFeatures()
     {
         var profile = new HumanMaleFeatureMetadataCatalog();
@@ -2274,6 +2424,38 @@ public static class UiSmokeTests
         TestAssert.Equal("HAIR", profile.Categories
             .Single(category => category.Key == "facial-structure").SliderGroups
             .Single(group => group.Key == "hair").Label);
+    }
+
+    private static void DetachedMeshProfileUsesRacialMaterialPresentation()
+    {
+        var detached = new DetachedMeshFeatureMetadataCatalog();
+        var cases = new (string Name, MaterialParameterKind Kind, IHeadEditorUiProfile Species)[]
+        {
+            ("ASA_HED_MakeUp_Eyes", MaterialParameterKind.Vector, new AsariFeatureMetadataCatalog()),
+            ("SAL_HED_Tatt", MaterialParameterKind.Texture, new SalarianFeatureMetadataCatalog()),
+            ("TUR_HED_Diff_Tint_Teeth", MaterialParameterKind.Vector, new TurianFeatureMetadataCatalog()),
+            ("KRO_HED_Shell_Grad_Vector", MaterialParameterKind.Vector, new KroganFeatureMetadataCatalog()),
+            ("BAT_HED_Neck_Grad_Vector", MaterialParameterKind.Vector, new BatarianFeatureMetadataCatalog()),
+            ("Tattoo_Color", MaterialParameterKind.Vector, new VorchaFeatureMetadataCatalog())
+        };
+
+        foreach (var (name, kind, species) in cases)
+        {
+            var definition = HumanMaterialProfiles.Describe(name, kind);
+            var expected = species.DescribeMaterial(definition);
+            var actual = detached.DescribeMaterial(definition);
+            TestAssert.True(actual.Label == expected.Label && actual.Group == expected.Group,
+                $"Detached presentation for '{name}' did not reuse its PCC label/category.");
+            TestAssert.Equal(species.GetMaterialSubcategory(name, kind),
+                detached.GetMaterialSubcategory(name, kind));
+            TestAssert.Equal(species.GetMaterialSortOrder(name, kind),
+                detached.GetMaterialSortOrder(name, kind));
+
+            var category = detached.Categories.Single(value => value.Key == actual.Group);
+            var subcategory = detached.GetMaterialSubcategory(name, kind);
+            TestAssert.True(category.SliderGroups.Any(value => value.Key == subcategory),
+                $"Detached category '{actual.Group}' omitted subcategory '{subcategory}'.");
+        }
     }
 
     private static void AsariProfileOrganizesFeatures()

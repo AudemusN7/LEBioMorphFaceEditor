@@ -17,6 +17,7 @@ public static class TextureCatalogTests
     [
         new("texture catalogue: active texture ranks before profile matches", ActiveTextureRanksFirst),
         new("texture catalogue: profile matches precede shared and general textures", ProfileMatchesRankBeforeSharedAndGeneral),
+        new("texture catalogue: detached mesh profile covers supported racial scopes", DetachedMeshProfileCoversSupportedRacialScopes),
         new("texture catalogue: search matches path package and origin", SearchMatchesUserFacingProvenance),
         new("texture catalogue: malformed RON parent does not hide its valid repair candidate", MalformedRonParentKeepsRepairCandidate),
         new("player workspace: pickers admit only seek-free qualified BIOG references", PlayerPickerRequiresSeekFreePaths),
@@ -281,6 +282,40 @@ public static class TextureCatalogTests
         var ranked = TextureCatalogSearch.FilterAndRank([preferred, active], profile, active.InstancedPath, string.Empty);
 
         TestAssert.Equal(active.InstancedPath, ranked[0].InstancedPath);
+    }
+
+    private static void DetachedMeshProfileCoversSupportedRacialScopes()
+    {
+        var detachedProfile = TextureCatalogProfiles.For(new MorphFaceProfile(
+            "le3-detached-mesh",
+            "Detached Custom Mesh",
+            MorphFaceGame.LE3,
+            string.Empty,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+            new HumanMaleFeatureMetadataCatalog(),
+            "[MESH]",
+            "#66717D",
+            _ => false,
+            (_, _) => false));
+
+        var requiredHeadScopes = new[]
+        {
+            "HMM_HED", "HMN_HED", "HMF_HED", "ASA_HED", "SAL_HED", "TUR_HED",
+            "KRO_HED", "BAT_HED", "ALN_HED", "HMF_HIR", "HMM_HIR"
+        };
+        var requiredEyeScopes = new[]
+        {
+            "HMM_EYE", "HMF_EYE", "HED_EYE", "ASA_EYE", "SAL_EYE", "TUR_EYE",
+            "KRO_EYE", "ALN_EYE", "Eye_Norm", "HAIR_"
+        };
+
+        TestAssert.True(requiredHeadScopes.All(detachedProfile.PreferredPathFragments.Contains),
+            "Detached texture discovery did not include every supported racial head/hair scope.");
+        TestAssert.True(requiredEyeScopes.All(detachedProfile.SharedPathFragments.Contains),
+            "Detached texture discovery did not include every supported eye/hair scope.");
+        TestAssert.True(!detachedProfile.SharedPathFragments.Contains("BAT_EYE"),
+            "Detached texture discovery introduced an eye scope for Batarians, which have no eye material.");
     }
 
     private static void ProfileMatchesRankBeforeSharedAndGeneral()

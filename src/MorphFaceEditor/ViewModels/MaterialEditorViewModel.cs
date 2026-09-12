@@ -68,25 +68,27 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
     {
         foreach (var texture in _textures) texture.Dispose();
         _scalars = _session.ScalarNames
+            .Where(name => IsMaterialVisible(name, MaterialParameterKind.Scalar))
             .Select(name => new MaterialScalarEditorViewModel(
                 _session,
-                _uiProfile.DescribeMaterial(HumanMaterialProfiles.Describe(name, MaterialParameterKind.Scalar))))
+                DescribeControl(name, MaterialParameterKind.Scalar)))
             .OrderBy(value => value.Group)
             .ThenBy(value => value.Label)
             .ToArray();
         _vectors = _session.VectorNames
+            .Where(name => IsMaterialVisible(name, MaterialParameterKind.Vector))
             .Select(name => new MaterialVectorEditorViewModel(
                 _session,
-                _uiProfile.DescribeMaterial(HumanMaterialProfiles.Describe(name, MaterialParameterKind.Vector)),
+                DescribeControl(name, MaterialParameterKind.Vector),
                 _colorDialog))
             .OrderBy(value => value.Group)
             .ThenBy(value => value.Label)
             .ToArray();
         _textures = _session.TextureParameters
-            .Where(value => _uiProfile.IsMaterialVisible(value.Name, MaterialParameterKind.Texture))
+            .Where(value => IsMaterialVisible(value.Name, MaterialParameterKind.Texture))
             .Select(value => new MaterialTextureEditorViewModel(
                 _session,
-                _uiProfile.DescribeMaterial(HumanMaterialProfiles.Describe(value.Name, MaterialParameterKind.Texture)),
+                DescribeControl(value.Name, MaterialParameterKind.Texture),
                 _references,
                 _packagePath,
                 _textureCandidates,
@@ -101,9 +103,53 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(Vectors));
         OnPropertyChanged(nameof(Textures));
     }
+
+    private bool IsMaterialVisible(string controlName, MaterialParameterKind kind)
+    {
+        var parameterName = _session.GetSourceParameterName(controlName);
+        return !IsEngineEditorOnlyParameter(parameterName) &&
+               _uiProfile.IsMaterialVisible(parameterName, kind);
+    }
+
+    internal static bool IsEngineEditorOnlyParameter(string parameterName)
+    {
+        var normalized = parameterName
+            .Replace("_", string.Empty, StringComparison.Ordinal)
+            .Replace(" ", string.Empty, StringComparison.Ordinal);
+        return normalized.Equals("SelectionColor", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private MaterialParameterDefinition DescribeControl(string controlName, MaterialParameterKind kind)
+    {
+        var parameterName = _session.GetSourceParameterName(controlName);
+        var definition = HumanMaterialProfiles.Describe(parameterName, kind) with { Name = controlName };
+        var described = _uiProfile.DescribeMaterial(definition);
+        var scopeLabel = _session.GetParameterScopeLabel(controlName);
+        return described with
+        {
+            Name = controlName,
+            Label = scopeLabel is null ? described.Label : $"{scopeLabel} - {described.Label}"
+        };
+    }
+    public string SourceParameterName(string controlName) => _session.GetSourceParameterName(controlName);
+    public string? ParameterScopeKey(string controlName) => _session.GetParameterScopeKey(controlName);
+    public string? FindControlName(string? scopeKey, string parameterName, MaterialParameterKind kind)
+    {
+        IEnumerable<string> controls = kind switch
+        {
+            MaterialParameterKind.Scalar => Scalars.Select(value => value.Name),
+            MaterialParameterKind.Vector => Vectors.Select(value => value.Name),
+            MaterialParameterKind.Texture => Textures.Select(value => value.Name),
+            _ => []
+        };
+        return controls.FirstOrDefault(control =>
+            string.Equals(SourceParameterName(control), parameterName, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(ParameterScopeKey(control), scopeKey, StringComparison.OrdinalIgnoreCase));
+    }
     public bool CanResolveTexturePath(string parameterName, string instancedPath) =>
-        Textures.FirstOrDefault(texture => texture.Name.Equals(parameterName, StringComparison.OrdinalIgnoreCase))
-            ?.CanResolveInstancedPath(instancedPath) == true;
+        Textures.Where(texture => SourceParameterName(texture.Name).Equals(
+                parameterName, StringComparison.OrdinalIgnoreCase))
+            .Any(texture => texture.CanResolveInstancedPath(instancedPath));
     public void UpdateRegistryCandidates(
         IReadOnlyList<TextureCatalogCandidate> candidates,
         TextureCatalogProfile profile,
@@ -137,7 +183,8 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
     public async Task<PreparedMaterialRandomisation> PrepareRandomisationAsync(
         IReadOnlyDictionary<string, float> scalars,
         IReadOnlyDictionary<string, System.Numerics.Vector4> vectors,
-        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> textureFamilies)
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> textureFamilies,
+        string? parameterScopeKey = null)
     {
         ArgumentNullException.ThrowIfNull(scalars);
         ArgumentNullException.ThrowIfNull(vectors);
@@ -159,8 +206,13 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
                 foreach (var member in family.Value)
                 {
                     var required = IsRequiredRandomisationTextureMember(family.Key, member.Key);
-                    var editor = Textures.FirstOrDefault(value =>
-                        value.Name.Equals(member.Key, StringComparison.OrdinalIgnoreCase));
+                    var editor = MaterialParameterControlKey.TryParse(member.Key, out _, out _)
+                        ? Textures.FirstOrDefault(value =>
+                            value.Name.Equals(member.Key, StringComparison.OrdinalIgnoreCase))
+                        : Textures.FirstOrDefault(value =>
+                            SourceParameterName(value.Name).Equals(member.Key, StringComparison.OrdinalIgnoreCase) &&
+                            string.Equals(ParameterScopeKey(value.Name), parameterScopeKey,
+                                StringComparison.OrdinalIgnoreCase));
                     if (editor is null)
                     {
                         if (required)
@@ -174,7 +226,7 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
                     }
                     try
                     {
-                        resolved[member.Key] = await editor.ResolveInstancedPathAsync(member.Value);
+                        resolved[editor.Name] = await editor.ResolveInstancedPathAsync(member.Value);
                     }
                     catch (Exception exception) when (!required)
                     {
@@ -198,14 +250,16 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
     }
 
     private static bool IsRequiredRandomisationTextureMember(string family, string parameterName) =>
-        family.Equals("human-face", StringComparison.OrdinalIgnoreCase)
-            ? parameterName is "HED_Diff" or "HED_Norm"
-            : family.Equals("human-scalp", StringComparison.OrdinalIgnoreCase)
-                ? parameterName is "HED_Scalp_Diff" or "HED_Scalp_Norm"
-                : family.EndsWith("-face", StringComparison.OrdinalIgnoreCase)
-                    ? parameterName.EndsWith("_HED_Diff", StringComparison.OrdinalIgnoreCase) ||
-                      parameterName.EndsWith("_HED_Norm", StringComparison.OrdinalIgnoreCase)
+        SourceFamilyName(family).Equals("human-face", StringComparison.OrdinalIgnoreCase)
+            ? MaterialParameterControlKey.ParameterName(parameterName) is "HED_Diff" or "HED_Norm"
+            : SourceFamilyName(family).Equals("human-scalp", StringComparison.OrdinalIgnoreCase)
+                ? MaterialParameterControlKey.ParameterName(parameterName) is "HED_Scalp_Diff" or "HED_Scalp_Norm"
+                : SourceFamilyName(family).EndsWith("-face", StringComparison.OrdinalIgnoreCase)
+                    ? MaterialParameterControlKey.ParameterName(parameterName).EndsWith("_HED_Diff", StringComparison.OrdinalIgnoreCase) ||
+                      MaterialParameterControlKey.ParameterName(parameterName).EndsWith("_HED_Norm", StringComparison.OrdinalIgnoreCase)
                 : true;
+    private static string SourceFamilyName(string family) =>
+        family.Contains('|') ? family[(family.IndexOf('|') + 1)..] : family;
     public void ApplyRandomisation(PreparedMaterialRandomisation values)
     {
         ArgumentNullException.ThrowIfNull(values);
@@ -221,15 +275,20 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
     public async Task ApplyDataAsync(MorphFaceMaterialData data)
     {
         ArgumentNullException.ThrowIfNull(data);
-        var desiredTextures = data.Textures.ToDictionary(value => value.Name, StringComparer.OrdinalIgnoreCase);
         var decoded = new Dictionary<string, DecodedTextureAsset?>(StringComparer.OrdinalIgnoreCase);
-        foreach (var editor in Textures)
+        foreach (var desired in data.Textures)
         {
-            if (desiredTextures.GetValueOrDefault(editor.Name)?.TextureReference is not { } reference)
+            if (desired.TextureReference is not { } reference)
             {
                 continue;
             }
-            decoded[editor.Name] = await editor.ResolveReferenceAsync(reference);
+            var controlName = _session.ResolveControlName(desired.Name, MaterialParameterKind.Texture);
+            var editor = Textures.FirstOrDefault(value => value.Name.Equals(
+                controlName, StringComparison.OrdinalIgnoreCase));
+            if (editor is not null)
+            {
+                decoded[controlName] = await editor.ResolveReferenceAsync(reference);
+            }
         }
         _session.ApplyMaterialData(data, decoded);
     }

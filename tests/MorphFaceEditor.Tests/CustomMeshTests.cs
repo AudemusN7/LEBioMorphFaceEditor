@@ -57,8 +57,9 @@ public static class CustomMeshTests
         TestAssert.Equal(stableKey, result.Preview.Scene.Meshes.Single().Sections.Single().Material.Key);
 
         result.CustomMaterials.Assign(2, option);
-        TestAssert.True(result.Preview.MaterialEditingSession.ScalarNames.Contains("HED_Norm_Blend"),
-            "Assignment did not rebuild the shared material-control surface.");
+        TestAssert.True(result.Preview.MaterialEditingSession.ScalarNames.Contains(
+                MaterialParameterControlKey.Create("human", "HED_Norm_Blend")),
+            "Assignment did not rebuild the Human material-control surface.");
         var update = factory.CreateMaterialUpdate(
             result.Preview.Loaded, result.Preview.MaterialEditingSession.Materials);
         TestAssert.Equal(HeadMaterialFamily.Skin, update.Materials[stableKey].Family);

@@ -89,7 +89,7 @@ public sealed class DetachedMeshPreviewLoadService
             customMaterials.ActiveMaterialsChanged += (_, args) =>
                 materialSession.RebaseMaterialSurface(args.Materials);
         }
-        var profile = CreateProfile(game);
+        var profile = CreateProfile(game, customMaterials);
         var scene = session.CanEditBones
             ? _sceneFactory.CreateEditable(loaded, session.Evaluation)
             : _sceneFactory.Create(loaded);
@@ -128,39 +128,19 @@ public sealed class DetachedMeshPreviewLoadService
         };
     }
 
-    private static MorphFaceProfile CreateProfile(MorphFaceGame game) => new(
+    private static MorphFaceProfile CreateProfile(
+        MorphFaceGame game,
+        CustomMaterialWorkspace? customMaterials) => new(
         $"{game.ToString().ToLowerInvariant()}-detached-mesh",
         "Detached Custom Mesh",
         game,
         string.Empty,
         new HashSet<string>(StringComparer.OrdinalIgnoreCase),
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
-        DetachedMeshUiProfile.Instance,
+        new DetachedMeshFeatureMetadataCatalog(customMaterials),
         "[MESH]",
         "#66717D",
         _ => false,
         (_, _) => false);
 
-    private sealed class DetachedMeshUiProfile : IHeadEditorUiProfile
-    {
-        public static DetachedMeshUiProfile Instance { get; } = new();
-        private readonly HumanFemaleFeatureMetadataCatalog _human = new();
-        public IReadOnlyList<EditorCategoryDefinition> Categories => _human.Categories;
-
-        public MorphFeatureMetadata Describe(ResolvedMorphFeature feature, bool sessionCanEdit) =>
-            new(feature.Feature.Name, feature.Feature.Name, string.Empty, string.Empty, false, 0, 0, 0, 0, false,
-                "Morph controls are unavailable for detached custom meshes.");
-
-        public MaterialParameterDefinition DescribeMaterial(MaterialParameterDefinition definition) =>
-            _human.DescribeMaterial(definition);
-        public bool IsMaterialVisible(string parameterName, MaterialParameterKind kind) =>
-            _human.IsMaterialVisible(parameterName, kind) &&
-            !parameterName.StartsWith("MaterialExpression", StringComparison.OrdinalIgnoreCase);
-        public string GetMaterialCategory(string parameterName, MaterialParameterKind kind) =>
-            _human.GetMaterialCategory(parameterName, kind);
-        public string GetMaterialSubcategory(string parameterName, MaterialParameterKind kind) =>
-            _human.GetMaterialSubcategory(parameterName, kind);
-        public int GetMaterialSortOrder(string parameterName, MaterialParameterKind kind) =>
-            _human.GetMaterialSortOrder(parameterName, kind);
-    }
 }

@@ -20,6 +20,7 @@ public sealed class MaterialEditingSession : IUndoableEditSource
     private readonly HashSet<string> _editedVectors = new(StringComparer.OrdinalIgnoreCase);
     private readonly MaterialEditHistory _history = new();
     private bool _replaying;
+    private bool _hasScopedMaterials;
 
     public MaterialEditingSession(
         MorphFaceMaterialOverrides overrides,
@@ -29,6 +30,7 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         ArgumentNullException.ThrowIfNull(overrides);
         _originalOverrides = overrides;
         _originalMaterials = materials ?? throw new ArgumentNullException(nameof(materials));
+        _hasScopedMaterials = HasScopedMaterials(materials);
         _baseMaterials = baseMaterialKeys is null
             ? materials
             : new ResolvedHeadMaterialSet(materials.Materials
@@ -62,11 +64,11 @@ public sealed class MaterialEditingSession : IUndoableEditSource
 
     public IReadOnlyList<string> ScalarNames => _scalars.Keys
         .Where(name => _originalMaterials.Materials.Values.Any(material =>
-            material.Supports(name, MaterialParameterKind.Scalar)))
+            AppliesTo(material, name, MaterialParameterKind.Scalar)))
         .OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray();
     public IReadOnlyList<string> VectorNames => _vectors.Keys
         .Where(name => _originalMaterials.Materials.Values.Any(material =>
-            material.Supports(name, MaterialParameterKind.Vector)))
+            AppliesTo(material, name, MaterialParameterKind.Vector)))
         .OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray();
     public IReadOnlyList<TextureMaterialOverride> TextureParameters { get; private set; }
     public ResolvedHeadMaterialSet Materials { get; private set; }
@@ -81,17 +83,57 @@ public sealed class MaterialEditingSession : IUndoableEditSource
             ? selected
             : GetEffectiveTexture(name)?.Texture;
 
+    public string GetSourceParameterName(string controlName) =>
+        MaterialParameterControlKey.ParameterName(controlName);
+    public string? GetParameterScopeKey(string controlName) =>
+        MaterialParameterControlKey.ScopeKey(controlName);
+    public string ResolveControlName(string parameterName, MaterialParameterKind kind)
+    {
+        IReadOnlyList<string> controls = kind switch
+        {
+            MaterialParameterKind.Scalar => ScalarNames,
+            MaterialParameterKind.Vector => VectorNames,
+            MaterialParameterKind.Texture => TextureParameters.Select(value => value.Name).ToArray(),
+            _ => []
+        };
+        if (controls.Contains(parameterName, StringComparer.OrdinalIgnoreCase)) return parameterName;
+        var matches = controls.Where(control => GetSourceParameterName(control).Equals(
+                parameterName, StringComparison.OrdinalIgnoreCase))
+            .Take(2).ToArray();
+        return matches.Length switch
+        {
+            1 => matches[0],
+            0 => parameterName,
+            _ => throw new InvalidDataException(
+                $"Material parameter '{parameterName}' exists in more than one MESH racial scope; " +
+                "use a scoped MFE material payload.")
+        };
+    }
+    public string? GetParameterScopeLabel(string controlName)
+    {
+        var scopeKey = GetParameterScopeKey(controlName);
+        return scopeKey is null
+            ? null
+            : _originalMaterials.Materials.Values
+                .FirstOrDefault(material => string.Equals(
+                    EffectiveScopeKey(material), scopeKey, StringComparison.OrdinalIgnoreCase))
+                ?.ParameterScopeLabel ?? scopeKey;
+    }
+
     public DecodedTextureAsset? GetPreviewTexture(string name) => Materials.Materials.Values
-        .Select(material => material.Textures.GetValueOrDefault(name)?.Texture)
+        .Where(material => AppliesTo(material, name, MaterialParameterKind.Texture))
+        .Select(material => material.Textures.GetValueOrDefault(GetSourceParameterName(name))?.Texture)
         .FirstOrDefault(texture => texture is not null);
 
     public DecodedTextureAsset? GetDefaultTexture(string name) => _originalMaterials.Materials.Values
+        .Where(material => AppliesTo(material, name, MaterialParameterKind.Texture))
         .Select(material => (material.DefaultTextures.Count == 0 ? material.Textures : material.DefaultTextures)
-            .GetValueOrDefault(name)?.Texture)
+            .GetValueOrDefault(GetSourceParameterName(name))?.Texture)
         .FirstOrDefault(texture => texture is not null);
 
     public MaterialTextureBinding? GetEffectiveTexture(string name) => _originalMaterials.Materials.Values
-        .Select(material => material.Textures.GetValueOrDefault(name))
+        .Where(material => AppliesTo(material, name, MaterialParameterKind.Texture))
+        .Select(material => material.Textures.GetValueOrDefault(GetSourceParameterName(name)))
         .FirstOrDefault(value => value is not null);
 
     public MorphFaceMaterialOverrides CreateOverrides()
@@ -171,6 +213,7 @@ public sealed class MaterialEditingSession : IUndoableEditSource
 
         _baseMaterials = materials;
         _originalMaterials = MergeMaterialSets(_baseMaterials, _attachmentMaterials);
+        _hasScopedMaterials = HasScopedMaterials(_baseMaterials);
         _defaultScalars = BuildDefaultScalars(_originalMaterials, firstWins: true);
         _defaultVectors = BuildDefaultVectors(_originalMaterials, firstWins: true);
 
@@ -241,6 +284,7 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         _baseMaterials = state.BaseMaterials;
         _attachmentMaterials = state.AttachmentMaterials;
         _originalMaterials = state.OriginalMaterials;
+        _hasScopedMaterials = HasScopedMaterials(_baseMaterials);
         _defaultScalars = state.DefaultScalars;
         _defaultVectors = state.DefaultVectors;
         TextureParameters = state.TextureParameters;
@@ -269,12 +313,13 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         var hairTextureNames = TextureParameters
             .Select(value => value.Name)
             .Where(name => HumanMaterialProfiles.Describe(
-                name, MaterialParameterKind.Texture).Family == HeadMaterialFamily.Hair)
+                GetSourceParameterName(name), MaterialParameterKind.Texture).Family == HeadMaterialFamily.Hair)
             .Distinct(StringComparer.OrdinalIgnoreCase);
         foreach (var name in hairTextureNames)
         {
+            var parameterName = GetSourceParameterName(name);
             var replacement = replacementHair
-                .Select(material => material.Textures.GetValueOrDefault(name))
+                .Select(material => material.Textures.GetValueOrDefault(parameterName))
                 .FirstOrDefault(binding => binding is not null);
             _textureReferences[name] = replacement?.Texture;
         }
@@ -505,22 +550,37 @@ public sealed class MaterialEditingSession : IUndoableEditSource
             throw new InvalidDataException("Pasted material values must be finite.");
         }
 
+        var mappedScalars = data.Scalars.Select(value => value with
+        {
+            Name = ResolveControlName(value.Name, MaterialParameterKind.Scalar)
+        }).ToArray();
+        var mappedVectors = data.Vectors.Select(value => value with
+        {
+            Name = ResolveControlName(value.Name, MaterialParameterKind.Vector)
+        }).ToArray();
+        var mappedTextures = data.Textures.Select(value => value with
+        {
+            Name = ResolveControlName(value.Name, MaterialParameterKind.Texture)
+        }).ToArray();
+        ValidateUnique(mappedScalars.Select(value => value.Name), "mapped scalar");
+        ValidateUnique(mappedVectors.Select(value => value.Name), "mapped vector");
+        ValidateUnique(mappedTextures.Select(value => value.Name), "mapped texture");
         _originalOverrides = new MorphFaceMaterialOverrides(
             _originalOverrides.Source,
-            data.Scalars.ToArray(),
-            data.Vectors.ToArray(),
-            data.Textures.ToArray());
+            mappedScalars,
+            mappedVectors,
+            mappedTextures);
         _editedScalars.Clear();
         _editedVectors.Clear();
         _scalars.Clear();
         foreach (var value in _defaultScalars) _scalars[value.Key] = value.Value;
         _vectors.Clear();
         foreach (var value in _defaultVectors) _vectors[value.Key] = value.Value;
-        foreach (var value in data.Scalars)
+        foreach (var value in mappedScalars)
         {
             _scalars[value.Name] = value.Value;
         }
-        foreach (var value in data.Vectors)
+        foreach (var value in mappedVectors)
         {
             _vectors[value.Name] = value.Value;
         }
@@ -530,7 +590,7 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         {
             _textureReferences[parameter.Name] = null;
         }
-        foreach (var value in data.Textures)
+        foreach (var value in mappedTextures)
         {
             if (value.TextureReference is null)
             {
@@ -563,33 +623,34 @@ public sealed class MaterialEditingSession : IUndoableEditSource
             var scalars = new Dictionary<string, float>(material.Scalars, StringComparer.OrdinalIgnoreCase);
             var vectors = new Dictionary<string, Vector4>(material.Vectors, StringComparer.OrdinalIgnoreCase);
             var textures = new Dictionary<string, MaterialTextureBinding>(material.Textures, StringComparer.OrdinalIgnoreCase);
-            foreach (var value in _scalars.Where(value => material.Supports(value.Key, MaterialParameterKind.Scalar)))
+            foreach (var value in _scalars.Where(value => AppliesTo(material, value.Key, MaterialParameterKind.Scalar)))
             {
-                scalars[value.Key] = value.Value;
+                scalars[GetSourceParameterName(value.Key)] = value.Value;
             }
-            foreach (var value in _vectors.Where(value => material.Supports(value.Key, MaterialParameterKind.Vector)))
+            foreach (var value in _vectors.Where(value => AppliesTo(material, value.Key, MaterialParameterKind.Vector)))
             {
-                vectors[value.Key] = value.Value;
+                vectors[GetSourceParameterName(value.Key)] = value.Value;
             }
-            foreach (var value in _textureReferences.Where(value => material.Supports(value.Key, MaterialParameterKind.Texture)))
+            foreach (var value in _textureReferences.Where(value => AppliesTo(material, value.Key, MaterialParameterKind.Texture)))
             {
+                var parameterName = GetSourceParameterName(value.Key);
                 if (value.Value is null)
                 {
                     var defaults = material.DefaultTextures.Count == 0
                         ? material.Textures
                         : material.DefaultTextures;
-                    if (defaults.TryGetValue(value.Key, out var defaultTexture))
+                    if (defaults.TryGetValue(parameterName, out var defaultTexture))
                     {
-                        textures[value.Key] = defaultTexture;
+                        textures[parameterName] = defaultTexture;
                     }
                     else
                     {
-                        textures.Remove(value.Key);
+                        textures.Remove(parameterName);
                     }
                 }
                 else
                 {
-                    textures[value.Key] = new MaterialTextureBinding(value.Key, value.Value);
+                    textures[parameterName] = new MaterialTextureBinding(parameterName, value.Value);
                 }
             }
             return material with { Scalars = scalars, Vectors = vectors, Textures = textures };
@@ -597,7 +658,7 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         return new ResolvedHeadMaterialSet(materials);
     }
 
-    private static Dictionary<string, float> BuildDefaultScalars(
+    private Dictionary<string, float> BuildDefaultScalars(
         ResolvedHeadMaterialSet materials,
         bool firstWins)
     {
@@ -607,19 +668,22 @@ public sealed class MaterialEditingSession : IUndoableEditSource
             var defaults = material.DefaultScalars.Count == 0 ? material.Scalars : material.DefaultScalars;
             foreach (var value in defaults)
             {
-                if (firstWins && values.ContainsKey(value.Key)) continue;
-                values[value.Key] = value.Value;
+                var controlName = ControlName(material, value.Key);
+                if (firstWins && values.ContainsKey(controlName)) continue;
+                values[controlName] = value.Value;
             }
             foreach (var value in material.Scalars)
             {
-                if (!defaults.ContainsKey(value.Key) && !values.ContainsKey(value.Key))
+                var controlName = ControlName(material, value.Key);
+                if (!defaults.ContainsKey(value.Key) && !values.ContainsKey(controlName))
                 {
-                    values[value.Key] = value.Value;
+                    values[controlName] = value.Value;
                 }
             }
             foreach (var name in material.SupportedScalars)
             {
-                if (!values.ContainsKey(name)) values[name] = material.Scalars.GetValueOrDefault(name);
+                var controlName = ControlName(material, name);
+                if (!values.ContainsKey(controlName)) values[controlName] = material.Scalars.GetValueOrDefault(name);
             }
         }
         return values;
@@ -635,7 +699,7 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         return new ResolvedHeadMaterialSet(merged);
     }
 
-    private static Dictionary<string, Vector4> BuildDefaultVectors(
+    private Dictionary<string, Vector4> BuildDefaultVectors(
         ResolvedHeadMaterialSet materials,
         bool firstWins)
     {
@@ -645,41 +709,81 @@ public sealed class MaterialEditingSession : IUndoableEditSource
             var defaults = material.DefaultVectors.Count == 0 ? material.Vectors : material.DefaultVectors;
             foreach (var value in defaults)
             {
-                if (firstWins && values.ContainsKey(value.Key)) continue;
-                values[value.Key] = value.Value;
+                var controlName = ControlName(material, value.Key);
+                if (firstWins && values.ContainsKey(controlName)) continue;
+                values[controlName] = value.Value;
             }
             foreach (var value in material.Vectors)
             {
-                if (!defaults.ContainsKey(value.Key) && !values.ContainsKey(value.Key))
+                var controlName = ControlName(material, value.Key);
+                if (!defaults.ContainsKey(value.Key) && !values.ContainsKey(controlName))
                 {
-                    values[value.Key] = value.Value;
+                    values[controlName] = value.Value;
                 }
             }
             foreach (var name in material.SupportedVectors)
             {
-                if (!values.ContainsKey(name)) values[name] = material.Vectors.GetValueOrDefault(name);
+                var controlName = ControlName(material, name);
+                if (!values.ContainsKey(controlName)) values[controlName] = material.Vectors.GetValueOrDefault(name);
             }
         }
         return values;
     }
 
-    private static TextureMaterialOverride[] BuildTextureParameters(
+    private TextureMaterialOverride[] BuildTextureParameters(
         ResolvedHeadMaterialSet materials,
         IEnumerable<TextureMaterialOverride> authored)
     {
         var values = new Dictionary<string, AssetIdentity?>(StringComparer.OrdinalIgnoreCase);
         foreach (var material in materials.Materials.Values)
         {
-            foreach (var value in material.Textures.Values) values.TryAdd(value.ParameterName, value.Texture.Source);
-            foreach (var value in material.DefaultTextures.Values) values.TryAdd(value.ParameterName, value.Texture.Source);
-            foreach (var name in material.SupportedTextures) values.TryAdd(name, null);
+            foreach (var value in material.Textures.Values)
+                values.TryAdd(ControlName(material, value.ParameterName), value.Texture.Source);
+            foreach (var value in material.DefaultTextures.Values)
+                values.TryAdd(ControlName(material, value.ParameterName), value.Texture.Source);
+            foreach (var name in material.SupportedTextures) values.TryAdd(ControlName(material, name), null);
         }
         foreach (var value in authored) values.TryAdd(value.Name, value.TextureReference);
         return values
             .Where(value => materials.Materials.Values.Any(material =>
-                material.Supports(value.Key, MaterialParameterKind.Texture)))
+                AppliesTo(material, value.Key, MaterialParameterKind.Texture)))
             .Select(value => new TextureMaterialOverride(value.Key, value.Value))
             .ToArray();
+    }
+
+    private static bool HasScopedMaterials(ResolvedHeadMaterialSet materials) =>
+        materials.Materials.Values.Any(material => !string.IsNullOrWhiteSpace(material.ParameterScopeKey));
+
+    private string ControlName(ResolvedHeadMaterial material, string parameterName)
+    {
+        var scopeKey = EffectiveScopeKey(material);
+        return scopeKey is null
+            ? parameterName
+            : MaterialParameterControlKey.Create(scopeKey, parameterName);
+    }
+
+    private string? EffectiveScopeKey(ResolvedHeadMaterial material)
+    {
+        if (!_hasScopedMaterials) return null;
+        if (!string.IsNullOrWhiteSpace(material.ParameterScopeKey)) return material.ParameterScopeKey;
+        // Preview-only human hair attachments remain linked to the shared Human
+        // colour controls without becoming independently authored MESH slots.
+        return material.Family is HeadMaterialFamily.Hair or HeadMaterialFamily.MaskedHair or
+            HeadMaterialFamily.Scalp
+            ? "human"
+            : null;
+    }
+
+    private bool AppliesTo(
+        ResolvedHeadMaterial material,
+        string controlName,
+        MaterialParameterKind kind)
+    {
+        var parameterName = GetSourceParameterName(controlName);
+        if (!material.Supports(parameterName, kind)) return false;
+        var controlScope = GetParameterScopeKey(controlName);
+        var materialScope = EffectiveScopeKey(material);
+        return string.Equals(controlScope, materialScope, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool ShouldRetainValue<T>(

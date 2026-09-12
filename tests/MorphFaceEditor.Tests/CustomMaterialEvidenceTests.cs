@@ -22,6 +22,7 @@ public static class CustomMaterialEvidenceTests
     private static void CatalogueExposesProvenFamilies()
     {
         LegendaryExplorerCoreRuntime.Initialize();
+        var randomisation = MorphRandomisationCatalog.LoadEmbedded();
         foreach (var game in new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 })
         {
             var cookedPath = LegendaryExplorerCoreRuntime.GetCookedPath(game);
@@ -34,20 +35,64 @@ public static class CustomMaterialEvidenceTests
                 $"The installed {game} catalogue exposed an Unknown family.");
             TestAssert.True(result.Options.Any(option => option.Family == HeadMaterialFamily.Hair),
                 $"The installed {game} catalogue did not recognise the reviewed Shepard hair master.");
+            var expectedNpcFamilies = new[]
+            {
+                HeadMaterialFamily.AsariSkin,
+                HeadMaterialFamily.SalarianSkin,
+                HeadMaterialFamily.SalarianEyes,
+                HeadMaterialFamily.TurianSkin,
+                HeadMaterialFamily.TurianEyes,
+                HeadMaterialFamily.KroganSkin,
+                HeadMaterialFamily.KroganEyes,
+                HeadMaterialFamily.BatarianSkin
+            };
+            foreach (var family in expectedNpcFamilies)
+            {
+                TestAssert.True(result.Options.Any(option => option.Family == family),
+                    $"The installed {game} catalogue omitted {family}.");
+            }
+            if (game is MorphFaceGame.LE2 or MorphFaceGame.LE3)
+            {
+                TestAssert.True(result.Options.Any(option => option.Family == HeadMaterialFamily.VorchaSkin) &&
+                                result.Options.Any(option => option.Label == "Vorcha Eyes" &&
+                                    option.Family == (game == MorphFaceGame.LE3
+                                        ? HeadMaterialFamily.TurianEyes
+                                        : HeadMaterialFamily.VorchaEyes)),
+                    $"The installed {game} catalogue omitted the Vorcha skin/eye pair. " +
+                    string.Join(" | ", result.Warnings));
+            }
+            TestAssert.True(result.Options.All(option =>
+                    option.Family != HeadMaterialFamily.BatarianSkin || option.MaterialRole == "head"),
+                $"The installed {game} catalogue fabricated a Batarian eye role.");
             TestAssert.True(result.Options.Any(option => option.Label == "Human Hair"),
                 $"The installed {game} catalogue omitted the standard human hair material.");
+            TestAssert.True(result.Options.Where(option => option.Label == "Human Hair").All(option =>
+                    option.RandomisationProfileKey == $"{game.ToString().ToLowerInvariant()}-human-male"),
+                $"The installed {game} standard hair option did not use the human material donor profile.");
             var humanMaleOptions = result.Options.Where(option => option.Label.StartsWith("Human Male", StringComparison.Ordinal)).ToArray();
             var humanFemaleOptions = result.Options.Where(option => option.Label.StartsWith("Human Female", StringComparison.Ordinal)).ToArray();
             TestAssert.True(humanMaleOptions.All(option => option.AppearanceCompatibilityKey == "human-male"),
                 $"The installed {game} human-male options did not retain their sex-specific compatibility key.");
             TestAssert.True(humanFemaleOptions.All(option => option.AppearanceCompatibilityKey == "human-female"),
                 $"The installed {game} human-female options did not retain their sex-specific compatibility key.");
+            TestAssert.True(result.Options.Any(option => option.Label == "Human Female/Asari Eyes") &&
+                            result.Options.Any(option => option.Label == "Human Female/Asari Lashes"),
+                $"The installed {game} catalogue did not expose the shared HMF/Asari eye and lash labels.");
+            TestAssert.True(result.Options.All(option => !string.IsNullOrWhiteSpace(option.RandomisationProfileKey)),
+                $"The installed {game} catalogue exposed an option without a randomisation profile.");
+            TestAssert.True(result.Options.All(option =>
+                    randomisation.GetMaterialProfile(option.RandomisationProfileKey!) is not null &&
+                    randomisation.HasMaterialDonors(option.RandomisationProfileKey!)),
+                $"The installed {game} catalogue exposed an option whose randomisation profile has no material donors.");
             var iconicHair = result.Options.SingleOrDefault(option =>
                 option.Label == "Human Iconic FemShep - Hair");
             TestAssert.True((game is MorphFaceGame.LE1 or MorphFaceGame.LE2) == (iconicHair is not null),
                 $"The installed {game} catalogue exposed iconic FemShep hair in the wrong game set.");
             if (iconicHair is not null)
             {
+                TestAssert.True(iconicHair.RandomisationProfileKey ==
+                                $"{game.ToString().ToLowerInvariant()}-human-female",
+                    $"The installed {game} iconic hair option did not use the female human donor profile.");
                 TestAssert.True(iconicHair.Template.Textures.ContainsKey("HAIR_Diff") &&
                                 iconicHair.Template.SupportedTextures.Contains("HAIR_Diff"),
                     $"The installed {game} iconic FemShep hair did not expose its semantic diffuse sampler.");

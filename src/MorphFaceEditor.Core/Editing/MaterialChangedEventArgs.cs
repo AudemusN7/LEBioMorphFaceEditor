@@ -3,6 +3,7 @@ namespace MorphFaceEditor.Core.Editing;
 public enum MaterialChangeKind
 {
     Full,
+    Surface,
     Scalar,
     Vector,
     Texture

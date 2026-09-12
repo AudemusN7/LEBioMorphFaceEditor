@@ -1,3 +1,4 @@
+using System.IO;
 using MorphFaceEditor.Core.Deformation;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Editing;
@@ -9,20 +10,26 @@ namespace MorphFaceEditor.Services;
 
 public sealed record DetachedMeshPreviewLoadResult(
     DetachedMeshPreview Detached,
-    MorphFacePreviewLoadResult Preview);
+    MorphFacePreviewLoadResult Preview,
+    CustomMaterialWorkspace? CustomMaterials,
+    IReadOnlyList<CustomMaterialAssignmentOption> MaterialOptions,
+    IReadOnlyList<AssetIdentity> PreviewAttachments);
 
 /// <summary>Composes an unrecognised imported mesh into the existing editor/renderer boundary.</summary>
 public sealed class DetachedMeshPreviewLoadService
 {
     private readonly DetachedMeshPreviewService _detachedMeshes;
     private readonly HeadPreviewSceneFactory _sceneFactory;
+    private readonly ICustomMaterialTemplateCatalog? _materialCatalog;
 
     public DetachedMeshPreviewLoadService(
         HeadPreviewSceneFactory sceneFactory,
-        DetachedMeshPreviewService? detachedMeshes = null)
+        DetachedMeshPreviewService? detachedMeshes = null,
+        ICustomMaterialTemplateCatalog? materialCatalog = null)
     {
         _sceneFactory = sceneFactory;
         _detachedMeshes = detachedMeshes ?? new DetachedMeshPreviewService();
+        _materialCatalog = materialCatalog;
     }
 
     public DetachedMeshPreviewLoadResult Load(
@@ -31,6 +38,22 @@ public sealed class DetachedMeshPreviewLoadService
         DetachedMeshUpAxis upAxis = DetachedMeshUpAxis.Auto)
     {
         var detached = _detachedMeshes.Create(imported, upAxis);
+        var warnings = detached.Warnings.ToList();
+        CustomMaterialWorkspace? customMaterials = null;
+        CustomMaterialTemplateCatalogResult materialCatalog = CustomMaterialTemplateCatalogResult.Empty;
+        try
+        {
+            customMaterials = new CustomMaterialWorkspace(detached.Source);
+            materialCatalog = _materialCatalog?.Load(game) ?? CustomMaterialTemplateCatalogResult.Empty;
+            warnings.AddRange(materialCatalog.Warnings);
+            detached = detached with { Mesh = BindPreviewMaterialSlots(detached.Mesh, customMaterials) };
+        }
+        catch (InvalidDataException exception) when (
+            exception.Message.Contains("at most", StringComparison.OrdinalIgnoreCase))
+        {
+            warnings.Add(exception.Message + " The mesh remains previewable with its material slots unassigned.");
+        }
+        detached = detached with { Warnings = warnings.Distinct(StringComparer.Ordinal).ToArray() };
         var loaded = new LoadedMorphFace(
             detached.Document,
             detached.Mesh,
@@ -39,6 +62,7 @@ public sealed class DetachedMeshPreviewLoadService
             detached.TopologyDiagnostics)
         {
             Game = game,
+            UsesNativeAttachmentBindPose = true,
             Warnings = detached.Warnings
         };
         var blockReason = detached.Editing.Rig.IsValid
@@ -60,13 +84,48 @@ public sealed class DetachedMeshPreviewLoadService
         var materialSession = new MaterialEditingSession(
             MorphFaceMaterialOverrides.Empty,
             ResolvedHeadMaterialSet.Empty);
+        if (customMaterials is not null)
+        {
+            customMaterials.ActiveMaterialsChanged += (_, args) =>
+                materialSession.RebaseMaterialSurface(args.Materials);
+        }
         var profile = CreateProfile(game);
         var scene = session.CanEditBones
             ? _sceneFactory.CreateEditable(loaded, session.Evaluation)
             : _sceneFactory.Create(loaded);
         return new DetachedMeshPreviewLoadResult(
             detached,
-            new MorphFacePreviewLoadResult(loaded, scene, session, materialSession, profile));
+            new MorphFacePreviewLoadResult(loaded, scene, session, materialSession, profile),
+            customMaterials,
+            materialCatalog.Options,
+            materialCatalog.PreviewAttachments);
+    }
+
+    private static SkeletalMeshAsset BindPreviewMaterialSlots(
+        SkeletalMeshAsset mesh,
+        CustomMaterialWorkspace workspace)
+    {
+        SkeletalMeshRenderData Bind(SkeletalMeshRenderData renderData)
+        {
+            var materialSlots = renderData.MaterialSlots.ToArray();
+            foreach (var slot in workspace.UsedSlots)
+            {
+                if ((uint)slot.MaterialIndex < (uint)materialSlots.Length)
+                {
+                    materialSlots[slot.MaterialIndex] = workspace.GetPreviewMaterialIdentity(slot);
+                }
+            }
+            return renderData with { MaterialSlots = materialSlots };
+        }
+
+        var lods = mesh.AvailableLods
+            .Select(lod => lod with { RenderData = Bind(lod.RenderData) })
+            .ToArray();
+        return mesh with
+        {
+            RenderData = mesh.RenderData is null ? null : Bind(mesh.RenderData),
+            Lods = lods
+        };
     }
 
     private static MorphFaceProfile CreateProfile(MorphFaceGame game) => new(
@@ -85,16 +144,23 @@ public sealed class DetachedMeshPreviewLoadService
     private sealed class DetachedMeshUiProfile : IHeadEditorUiProfile
     {
         public static DetachedMeshUiProfile Instance { get; } = new();
-        public IReadOnlyList<EditorCategoryDefinition> Categories { get; } = [];
+        private readonly HumanFemaleFeatureMetadataCatalog _human = new();
+        public IReadOnlyList<EditorCategoryDefinition> Categories => _human.Categories;
 
         public MorphFeatureMetadata Describe(ResolvedMorphFeature feature, bool sessionCanEdit) =>
             new(feature.Feature.Name, feature.Feature.Name, string.Empty, string.Empty, false, 0, 0, 0, 0, false,
                 "Morph controls are unavailable for detached custom meshes.");
 
-        public MaterialParameterDefinition DescribeMaterial(MaterialParameterDefinition definition) => definition;
-        public bool IsMaterialVisible(string parameterName, MaterialParameterKind kind) => false;
-        public string GetMaterialCategory(string parameterName, MaterialParameterKind kind) => string.Empty;
-        public string GetMaterialSubcategory(string parameterName, MaterialParameterKind kind) => string.Empty;
-        public int GetMaterialSortOrder(string parameterName, MaterialParameterKind kind) => 0;
+        public MaterialParameterDefinition DescribeMaterial(MaterialParameterDefinition definition) =>
+            _human.DescribeMaterial(definition);
+        public bool IsMaterialVisible(string parameterName, MaterialParameterKind kind) =>
+            _human.IsMaterialVisible(parameterName, kind) &&
+            !parameterName.StartsWith("MaterialExpression", StringComparison.OrdinalIgnoreCase);
+        public string GetMaterialCategory(string parameterName, MaterialParameterKind kind) =>
+            _human.GetMaterialCategory(parameterName, kind);
+        public string GetMaterialSubcategory(string parameterName, MaterialParameterKind kind) =>
+            _human.GetMaterialSubcategory(parameterName, kind);
+        public int GetMaterialSortOrder(string parameterName, MaterialParameterKind kind) =>
+            _human.GetMaterialSortOrder(parameterName, kind);
     }
 }

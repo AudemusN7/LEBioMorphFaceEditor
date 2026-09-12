@@ -170,14 +170,6 @@
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Text="Material" Foreground="{StaticResource SecondaryText}" VerticalAlignment="Center" Margin="0,0,7,0" />
                     <ComboBox Width="108" ItemsSource="{Binding RenderModes}" SelectedItem="{Binding RenderMode}" />
-                    <TextBlock Text="Up axis" Foreground="{StaticResource SecondaryText}" VerticalAlignment="Center" Margin="14,0,7,0"
-                               Visibility="{Binding IsDetachedMeshWorkspace, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                    <ComboBox Width="74"
-                              ItemsSource="{Binding DetachedMeshUpAxes}"
-                              DisplayMemberPath="Name"
-                              SelectedValuePath="Axis"
-                              SelectedValue="{Binding DetachedMeshUpAxis}"
-                              Visibility="{Binding IsDetachedMeshWorkspace, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     <TextBlock Text="LOD" Foreground="{StaticResource SecondaryText}" VerticalAlignment="Center" Margin="14,0,7,0" />
                     <ComboBox Width="74"
                               ItemsSource="{Binding PreviewLods}"
@@ -493,7 +485,40 @@
 
                     <TabControl Grid.Row="2" SelectedIndex="0">
                         <TabItem Header="Features">
-                            <TabControl ItemsSource="{Binding Editor.Categories}"
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+                                <Border Background="#1C242C" BorderBrush="{StaticResource BorderBrush}"
+                                        BorderThickness="0,0,0,1" Padding="10,8"
+                                        Visibility="{Binding Editor.HasCustomMaterialSlots, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <StackPanel>
+                                        <TextBlock Text="CUSTOM MESH MATERIAL ASSIGNMENTS" Style="{StaticResource FieldLabel}"
+                                                   Margin="2,0,0,7" />
+                                        <ItemsControl ItemsSource="{Binding Editor.CustomMaterialSlots}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid Margin="0,0,0,6">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="170" />
+                                                            <ColumnDefinition Width="*" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <StackPanel VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding Label}" Foreground="{StaticResource SecondaryText}" FontSize="10" />
+                                                            <TextBlock Text="{Binding Detail}" Foreground="#788591" FontSize="9" />
+                                                        </StackPanel>
+                                                        <ComboBox Grid.Column="1" ItemsSource="{Binding Options}"
+                                                                  SelectedItem="{Binding Selected, Mode=TwoWay}"
+                                                                  DisplayMemberPath="DisplayName"
+                                                                  ToolTip="Assign one evidence-backed material family to this used mesh slot" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+                            <TabControl Grid.Row="1" ItemsSource="{Binding Editor.Categories}"
                                         SelectedItem="{Binding Editor.SelectedCategory, Mode=TwoWay}"
                                         Background="#151A20">
                                 <TabControl.ItemContainerStyle>
@@ -610,6 +635,7 @@
                                     </DataTemplate>
                                 </TabControl.ContentTemplate>
                             </TabControl>
+                            </Grid>
                         </TabItem>
 
                         <TabItem Header="Bones" IsEnabled="{Binding Editor.CanEditBones}">

@@ -22,6 +22,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     private readonly List<RelayCommand> _subcategoryRandomiseCommands = [];
     private readonly MorphRandomisationCatalog _randomisationCatalog;
     private readonly string _profileKey;
+    private readonly string _materialRandomisationProfileKey;
     private readonly bool _allowsMorphRandomisation;
     private readonly Func<int> _randomSeedFactory;
     private readonly Action<string> _reportError;
@@ -41,6 +42,10 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     private readonly IReadOnlyList<MorphFaceEditor.Core.Domain.AssetIdentity?> _preservedOtherMeshes;
     private readonly RandomisationInclusionState _randomisationInclusionState;
     private readonly bool _allowsAttachmentEditing;
+    private readonly IHeadEditorUiProfile _metadataCatalog;
+    private readonly CustomMaterialWorkspace? _customMaterialWorkspace;
+    private IReadOnlyDictionary<int, string> _cleanMaterialAssignments =
+        new Dictionary<int, string>();
 
     public FaceEditorViewModel(
         MorphFaceEditingSession session,
@@ -62,10 +67,17 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         TextureCatalogProfile? textureCatalogProfile = null,
         bool isTextureRegistryAvailable = false,
         bool ignoresAuthoredGeometry = false,
-        bool allowsAttachmentEditing = true)
+        bool allowsAttachmentEditing = true,
+        CustomMaterialWorkspace? customMaterialWorkspace = null,
+        IReadOnlyList<CustomMaterialAssignmentOption>? customMaterialOptions = null,
+        string? materialRandomisationProfileKey = null,
+        bool previewOnlyAttachments = false)
     {
         _session = session;
+        _metadataCatalog = metadataCatalog;
+        _customMaterialWorkspace = customMaterialWorkspace;
         _profileKey = profileKey;
+        _materialRandomisationProfileKey = materialRandomisationProfileKey ?? profileKey;
         _allowsMorphRandomisation = !ignoresAuthoredGeometry &&
                                     !profileKey.EndsWith("-vorcha", StringComparison.OrdinalIgnoreCase);
         if (!_allowsMorphRandomisation)
@@ -120,37 +132,60 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             .Select(index => new AssetReferenceEditingSession(otherMeshReferences.ElementAtOrDefault(index)))
             .ToArray();
         _preservedOtherMeshes = otherMeshReferences.Skip(1).ToArray();
-        _history = new EditorUndoCoordinator(
-            [session, materialSession, hairSession, .. otherMeshSessions]);
+        var historySources = new List<IUndoableEditSource>
+        {
+            session, materialSession, hairSession
+        };
+        historySources.AddRange(otherMeshSessions);
+        if (customMaterialWorkspace is not null) historySources.Add(customMaterialWorkspace);
+        _history = new EditorUndoCoordinator(historySources.ToArray());
         _undoCommand = new RelayCommand(_history.Undo, () => _history.CanUndo);
         _redoCommand = new RelayCommand(_history.Redo, () => _history.CanRedo);
         _setToDefaultsCommand = new RelayCommand(SetToDefaults, CanSetToDefaults);
         _randomiseCommand = new RelayCommand(
             () => Randomise(GlobalRandomisationScope(CursedMode), includeCursedBones: true),
             () => CanRandomiseScope(GlobalRandomisationScope(CursedMode)));
-        HairMesh = new HairMeshEditorViewModel(hairSession, meshCandidates, "m_oHairMesh", 0);
+        HairMesh = new HairMeshEditorViewModel(
+            hairSession, meshCandidates, previewOnlyAttachments ? "Hair mesh (preview only)" : "m_oHairMesh", 0);
         OtherMeshes = otherMeshSessions
             .Select((otherSession, index) => new HairMeshEditorViewModel(
                 otherSession,
                 meshCandidates,
-                "m_oOtherMeshes",
+                previewOnlyAttachments ? "Accessory mesh (preview only)" : "m_oOtherMeshes",
                 index + 1))
             .ToArray();
         AttachmentMeshes = [HairMesh, .. OtherMeshes];
         Material = new MaterialEditorViewModel(
             materialSession, colorDialog, references, packagePath, textureCandidates, reportError, metadataCatalog,
             registryTextureCandidates, textureCatalogProfile, isTextureRegistryAvailable);
-        Categories = metadataCatalog.Categories
+        CustomMaterialSlots = customMaterialWorkspace?.UsedSlots
+            .Select(slot => new CustomMaterialSlotEditorViewModel(
+                customMaterialWorkspace, slot, customMaterialOptions ?? [], reportError))
+            .ToArray() ?? [];
+        Categories = BuildCategories();
+        _selectedCategory = Categories.FirstOrDefault();
+        session.EvaluationChanged += OnEvaluationChanged;
+        _history.HistoryChanged += OnHistoryChanged;
+        Material.PreviewChanged += OnMaterialPreviewChanged;
+        Material.ControlsChanged += OnMaterialControlsChanged;
+        _cleanState = CreateDraft();
+        _cleanMaterialAssignments = CaptureMaterialAssignments();
+    }
+
+    private IReadOnlyList<EditorFeatureCategoryViewModel> BuildCategories()
+    {
+        _subcategoryRandomiseCommands.Clear();
+        return _metadataCatalog.Categories
             .Select(category => new EditorFeatureCategoryViewModel(
                 category,
                 Features.Where(value => value.CategoryKey == category.Key).ToArray(),
                 Material.Scalars.Where(value => value.CategoryKey == category.Key).ToArray(),
                 Material.Vectors.Where(value => value.CategoryKey == category.Key).ToArray(),
                 Material.Textures.Where(value => value.CategoryKey == category.Key).ToArray(),
-                metadataCatalog,
+                _metadataCatalog,
                 scope =>
                 {
-                    var eligibleTextures = _randomisationCatalog.EligibleTextureParameters(_profileKey);
+                    var eligibleTextures = _randomisationCatalog.EligibleTextureParameters(_materialRandomisationProfileKey);
                     if (!scope.HasValues ||
                         (scope.MorphFeatures.Count + scope.Scalars.Count + scope.Vectors.Count == 0 &&
                          !scope.Textures.Any(value => eligibleTextures.Contains(value.Name))))
@@ -166,11 +201,6 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                 _randomisationInclusionState,
                 RaiseRandomisationCanExecuteChanged))
             .ToArray();
-        _selectedCategory = Categories.FirstOrDefault();
-        session.EvaluationChanged += OnEvaluationChanged;
-        _history.HistoryChanged += OnHistoryChanged;
-        Material.PreviewChanged += OnMaterialPreviewChanged;
-        _cleanState = CreateDraft();
     }
 
     public event EventHandler? PreviewChanged;
@@ -178,7 +208,9 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     public event EventHandler? DirtyStateChanged;
 
     public IReadOnlyList<MorphFeatureEditorViewModel> Features { get; }
-    public IReadOnlyList<EditorFeatureCategoryViewModel> Categories { get; }
+    public IReadOnlyList<EditorFeatureCategoryViewModel> Categories { get; private set; }
+    public IReadOnlyList<CustomMaterialSlotEditorViewModel> CustomMaterialSlots { get; }
+    public bool HasCustomMaterialSlots => CustomMaterialSlots.Count > 0;
     public EditorFeatureCategoryViewModel? SelectedCategory
     {
         get => _selectedCategory;
@@ -367,7 +399,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                 ? requested.MorphFeatures.Where(value => value.IsEditable)
                     .Select(value => value.Name).ToHashSet(StringComparer.OrdinalIgnoreCase)
                 : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var materialProfile = _randomisationCatalog.GetMaterialProfile(_profileKey);
+            var materialProfile = _randomisationCatalog.GetMaterialProfile(_materialRandomisationProfileKey);
             var scalarScope = RandomiseMaterials && materialProfile is not null
                 ? requested.Scalars.Select(value => value.Name)
                     .Where(materialProfile.Scalars.ContainsKey).ToHashSet(StringComparer.OrdinalIgnoreCase)
@@ -403,9 +435,9 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             if (hasMaterial && materialProfile is not null)
             {
                 var materialDonor = _randomisationCatalog.SelectMaterialDonor(
-                    _profileKey, materialSeed!.Value, morphDonor?.Id);
+                    _materialRandomisationProfileKey, materialSeed!.Value, morphDonor?.Id);
                 var installedMaterialDonors = _randomisationCatalog.ProjectInstalledMaterialDonors(
-                    _profileKey, Material.CanResolveTexturePath);
+                    _materialRandomisationProfileKey, Material.CanResolveTexturePath);
                 var donorsFromOtherHeads = morphDonor is null
                     ? installedMaterialDonors
                     : installedMaterialDonors.Where(value =>
@@ -516,9 +548,10 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         var cursedTextureFamilies = new Dictionary<string, IReadOnlyDictionary<string, string>>(
             StringComparer.OrdinalIgnoreCase);
         if (RandomiseMaterials && requested.Textures.Count > 0 &&
-            _randomisationCatalog.HasMaterialDonors(_profileKey))
+            _randomisationCatalog.HasMaterialDonors(_materialRandomisationProfileKey))
         {
-            var donor = _randomisationCatalog.SelectDonor(_profileKey, seed, requireMaterial: true);
+            var donor = _randomisationCatalog.SelectDonor(
+                _materialRandomisationProfileKey, seed, requireMaterial: true);
             var requestedNames = requested.Textures.Select(value => value.Name)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
             var availableTextureNames = Material.Textures.Select(value => value.Name)
@@ -622,14 +655,14 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         var hasMorph = CanEditMorphFeatures && RandomiseMorphs && scope.MorphFeatures.Any(value => value.IsEditable);
         var hasRawNumericMaterial = RandomiseMaterials &&
                                     (scope.Scalars.Count + scope.Vectors.Count > 0);
-        var eligibleTextures = _randomisationCatalog.EligibleTextureParameters(_profileKey);
+        var eligibleTextures = _randomisationCatalog.EligibleTextureParameters(_materialRandomisationProfileKey);
         var hasEligibleTexture = RandomiseMaterials &&
                                  scope.Textures.Any(value => eligibleTextures.Contains(value.Name)) &&
-                                 _randomisationCatalog.HasMaterialDonors(_profileKey);
+                                 _randomisationCatalog.HasMaterialDonors(_materialRandomisationProfileKey);
         var hasCursedBones = CursedMode && CanEditBones;
         if (CursedMode) return hasMorph || hasCursedBones || hasRawNumericMaterial || hasEligibleTexture;
         var hasEligibleMorph = hasMorph && _randomisationCatalog.HasDonors(_profileKey);
-        var profile = _randomisationCatalog.GetMaterialProfile(_profileKey);
+        var profile = _randomisationCatalog.GetMaterialProfile(_materialRandomisationProfileKey);
         var hasEligibleMaterial = RandomiseMaterials && profile is not null &&
             (scope.Scalars.Any(value => profile.Scalars.ContainsKey(value.Name)) ||
              scope.Vectors.Any(value => profile.Vectors.ContainsKey(value.Name)) ||
@@ -697,9 +730,36 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         RefreshDirtyState();
     }
 
+    private IReadOnlyDictionary<int, string> CaptureMaterialAssignments() =>
+        _customMaterialWorkspace?.Assignments.ToDictionary(
+            value => value.Slot.MaterialIndex,
+            value => value.Option.Id) ?? new Dictionary<int, string>();
+
+    private bool MaterialAssignmentsMatchCleanState()
+    {
+        var current = CaptureMaterialAssignments();
+        return current.Count == _cleanMaterialAssignments.Count && current.All(value =>
+            _cleanMaterialAssignments.TryGetValue(value.Key, out var clean) &&
+            string.Equals(clean, value.Value, StringComparison.OrdinalIgnoreCase));
+    }
+
     private void RefreshDirtyState() =>
         IsDirty = _session.HasPendingRepair ||
+                  !MaterialAssignmentsMatchCleanState() ||
                   !MorphFaceEditorStateComparer.Equals(_cleanState, CreateDraft());
+
+    private void OnMaterialControlsChanged(object? sender, EventArgs e)
+    {
+        var selectedKey = SelectedCategory?.Key;
+        Categories = BuildCategories();
+        OnPropertyChanged(nameof(Categories));
+        SelectedCategory = Categories.FirstOrDefault(category =>
+                               string.Equals(category.Key, selectedKey, StringComparison.OrdinalIgnoreCase))
+                           ?? Categories.FirstOrDefault();
+        OnPropertyChanged(nameof(AllowsMaterialRandomisation));
+        OnPropertyChanged(nameof(AllowsCursedRandomisation));
+        RaiseRandomisationCanExecuteChanged();
+    }
 
     private void OnMaterialPreviewChanged(object? sender, EventArgs e) =>
         MaterialPreviewChanged?.Invoke(this, EventArgs.Empty);
@@ -713,6 +773,8 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         _session.EvaluationChanged -= OnEvaluationChanged;
         _history.HistoryChanged -= OnHistoryChanged;
         Material.PreviewChanged -= OnMaterialPreviewChanged;
+        Material.ControlsChanged -= OnMaterialControlsChanged;
+        foreach (var slot in CustomMaterialSlots) slot.Dispose();
         Material.Dispose();
         HairMesh.Dispose();
         foreach (var otherMesh in OtherMeshes)

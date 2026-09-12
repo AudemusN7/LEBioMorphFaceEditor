@@ -40,6 +40,7 @@ public static class RenderingTests
         new("lower LOD sections use their authored material remap", LowerLodSectionsUseMaterialRemap),
         new("custom mesh sections use the mesh material-slot order", CustomMeshUsesAuthoredMaterialOrder),
         new("custom mesh preview ignores BioMorphFace geometry and skeleton", CustomMeshIgnoresMorphFaceGeometry),
+        new("detached attachments retain their native bind placement", DetachedAttachmentsRetainNativeBindPlacement),
         new("fixed-bake preview skins preserved imported geometry", FixedBakePreviewSkinsPreservedGeometry),
         new("preview lifecycle blocks inactive window states", PreviewLifecycleBlocksInactiveStates),
         new("explicit preview updates render while inactive but realized", ExplicitPreviewUpdatesRenderWhileInactive),
@@ -267,6 +268,37 @@ public static class RenderingTests
         TestAssert.Equal(baked[0], session.Evaluation.Geometry.Positions[0]);
         TestAssert.True(scene.SkinningPalette is { Count: > 0 } && scene.SkinningPalette[0] != Matrix4x4.Identity,
             "The edited fixed-bake skeleton did not reach the preview palette.");
+    }
+
+    private static void DetachedAttachmentsRetainNativeBindPlacement()
+    {
+        var mesh = TestFixtures.CreateRenderableTwoLodMesh();
+        var document = new MorphFaceDocument(
+            TestFixtures.CreateIdentity("DetachedMesh.CustomHead", "ImportedMesh"),
+            new PackageFingerprint(1, DateTime.UnixEpoch, new string('0', 64)),
+            mesh.Source,
+            mesh.Source,
+            [],
+            [new BoneTranslation("root", new Vector3(-4.5f, 0, -35))],
+            MorphFaceMaterialOverrides.Empty,
+            mesh.AvailableLodPositions,
+            []);
+        var loaded = new LoadedMorphFace(
+            document,
+            mesh,
+            mesh,
+            ResolvedHeadMaterialSet.Empty,
+            MorphFaceEditor.Core.Diagnostics.TopologyDiagnostics.Analyze(mesh, document))
+        {
+            UsesNativeAttachmentBindPose = true
+        };
+
+        var scene = new HeadPreviewSceneFactory().Create(loaded);
+
+        TestAssert.True(
+            scene.Meshes[0].Vertices.Select(vertex => vertex.Position)
+                .SequenceEqual(scene.Meshes[1].Vertices.Select(vertex => vertex.Position)),
+            "The detached face pose displaced an attachment from its native bind geometry.");
     }
 
     private static void SceneFactoryHandlesUnmatchedBakedLod()

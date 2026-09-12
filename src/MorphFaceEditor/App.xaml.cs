@@ -51,7 +51,10 @@ public partial class App : Application
             new MorphFaceConversionService(profiles, targets, packageContext, textureCatalogService),
             new MorphFaceInterchangeService(),
             new WpfMorphFaceClipboardService(),
-            MorphRandomisationCatalog.LoadEmbedded());
+            MorphRandomisationCatalog.LoadEmbedded(),
+            detachedMeshPreviewLoadService: new DetachedMeshPreviewLoadService(
+                sceneFactory,
+                materialCatalog: new CustomMaterialTemplateCatalogService(packageReader)));
         var window = new MainWindow(_viewModel);
         MainWindow = window;
         window.Show();

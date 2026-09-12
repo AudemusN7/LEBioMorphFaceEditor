@@ -29,6 +29,7 @@ public static class RandomisationTests
         new("material safety policy constrains or excludes hazardous numeric parameters", MaterialSafetyPolicyProtectsNumericParameters),
         new("material texture selection balances variants and rejects unsafe families", MaterialTextureSelectionIsCurated),
         new("texture-dependent selector rules remain valid", TextureDependentSelectorsRemainValid),
+        new("LE1 female makeup randomisation applies its required mask", Le1FemaleMakeupRandomisationAppliesMask),
         new("LE1 Batarian material randomisation falls back to compatible pooled donors", Le1BatarianUsesCompatibleMaterialDonors),
         new("material donor compatibility follows cross-game species and human pools", MaterialDonorsUseApprovedCrossGamePools),
         new("embedded randomisation corpus exposes face and eye texture families", EmbeddedCorpusExposesFaceAndEyeFamilies),
@@ -69,6 +70,35 @@ public static class RandomisationTests
             100, 17, excludedTextureSignatures: new HashSet<string>([failedSignature], StringComparer.OrdinalIgnoreCase));
 
         TestAssert.Equal("Installed.Fallback_Diff", proposal.TextureFamilies["face"]["HED_Diff"]);
+    }
+
+    private static void Le1FemaleMakeupRandomisationAppliesMask()
+    {
+        const string scalar = "HED_Lips_Tint_Scalar";
+        var donor = PolicyDonor("le1-human-female") with
+        {
+            MaterialScalars = Values((scalar, 0.75f))
+        };
+        var proposal = MaterialRandomiser.CreateProposal(
+            donor,
+            [donor],
+            PolicyProfile("le1-human-female", [(scalar, 0, 1, 0, 1)], []),
+            Values((scalar, 0)),
+            new Dictionary<string, Vector4>(),
+            [new MaterialRandomisationScalarBounds(scalar, 0, 1)],
+            new HashSet<string>([scalar], StringComparer.OrdinalIgnoreCase),
+            new HashSet<string>(),
+            new HashSet<string>(),
+            0,
+            17,
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["HED_Makeup_Mask"] = "BIOG_GBL_ARM_ALL_T.Black.GBL_ARM_ALL_Black"
+            });
+
+        TestAssert.Equal(
+            "BIOG_HMF_HED_PROMorph_R.Masks.HMF_HED_PROCustom_MKup_01",
+            proposal.TextureFamilies["human-makeup-required"]["HED_Makeup_Mask"]);
     }
 
     private static void EmbeddedCorpusExposesFaceAndEyeFamilies()

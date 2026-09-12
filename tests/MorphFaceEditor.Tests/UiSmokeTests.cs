@@ -51,6 +51,7 @@ public static class UiSmokeTests
         new("global morph and material randomisation uses separate donors", GlobalRandomisationUsesSeparateDonors),
         new("subcategory inclusion toggles filter only global randomisation and persist in-session", SubcategoryInclusionsFilterGlobalScope),
         new("normal material randomisation obeys its independent toggle and undo", MaterialRandomisationObeysToggle),
+        new("detached material randomisation uses its compatible human donor profile", DetachedMaterialRandomisationUsesCompatibleProfile),
         new("material vector subcategories expose independent randomise commands", MaterialVectorSubcategoriesRandomiseIndependently),
         new("exhausted texture randomisation is reported without discarding numeric values", ExhaustedTextureRandomisationIsReported),
         new("LE3 HMM scalp randomisation preserves its required texture pair", Le3HmmScalpRandomisationAppliesCorePair),
@@ -151,19 +152,14 @@ public static class UiSmokeTests
             TestAssert.Equal(0, viewModel.Editor?.Features.Count ?? -1);
             TestAssert.True(viewModel.Editor?.AllowsMorphRandomisation == false,
                 "Detached custom mesh exposed morph randomisation.");
-            TestAssert.True(viewModel.Editor?.CanEditAttachments == false,
-                "Detached Stage B mesh exposed attachment editing.");
+            TestAssert.True(viewModel.Editor?.CanEditAttachments == true,
+                "Detached mesh did not expose its preview-only attachment selectors.");
             TestAssert.True(scene?.Meshes.Single().Vertices.Count == 3 && scene.Meshes.Single().ApplySkinning == false,
                 "Detached mesh did not reach the renderer with its authored LOD0.");
             TestAssert.True(!viewModel.SaveCommand.CanExecute(null) && !viewModel.SaveMorphToPccCommand.CanExecute(null),
                 "Detached Stage B mesh exposed a package save command.");
-            TestAssert.True(viewModel.IsDetachedMeshWorkspace &&
-                            viewModel.DetachedMeshUpAxis == DetachedMeshUpAxis.Auto,
-                "Detached mesh did not expose its automatic preview up-axis choice.");
-            viewModel.DetachedMeshUpAxis = DetachedMeshUpAxis.YUp;
-            TestAssert.Equal(DetachedMeshUpAxis.YUp, viewModel.DetachedMeshUpAxis);
-            TestAssert.True(viewModel.Status.Contains("Source mesh data remains unchanged", StringComparison.Ordinal),
-                "Changing detached preview orientation did not preserve the source-data boundary.");
+            TestAssert.True(viewModel.IsDetachedMeshWorkspace,
+                "Detached mesh was not identified as a detached workspace.");
         }
         finally
         {
@@ -813,6 +809,24 @@ public static class UiSmokeTests
             "Set to Defaults did not remove the complete cursed state.");
     }
 
+    private static void DetachedMaterialRandomisationUsesCompatibleProfile()
+    {
+        using var reader = new MorphFacePackageReader();
+        using var editor = CreateRandomisationEditor(
+            reader,
+            profileKey: "le1-detached-mesh",
+            materialRandomisationProfileKey: "le1-human-male");
+        editor.RandomiseMorphs = false;
+        editor.RandomiseMaterials = true;
+        editor.MaterialRandomisationStrength = 0;
+
+        TestAssert.True(editor.RandomiseCommand.CanExecute(null),
+            "Detached material randomisation remained disabled despite a compatible donor profile.");
+        editor.RandomiseCommand.Execute(null);
+        TestAssert.Near(4, editor.CreateDraft().MaterialOverrides.Scalars
+            .Single(value => value.Name == "HED_Norm_Blend").Value, 0);
+    }
+
     private static void FixedBakeCursedModePreservesMorphs()
     {
         using var reader = new MorphFacePackageReader();
@@ -1050,7 +1064,9 @@ public static class UiSmokeTests
         bool extremeBoneOffset = false,
         RandomisationInclusionState? randomisationInclusionState = null,
         Func<int>? randomSeedFactory = null,
-        bool includeSecondDonor = false)
+        bool includeSecondDonor = false,
+        string profileKey = "le1-human-male",
+        string? materialRandomisationProfileKey = null)
     {
         var sourceMesh = TestFixtures.CreateMesh();
         var mesh = sourceMesh with
@@ -1178,10 +1194,11 @@ public static class UiSmokeTests
             new PackageReferenceService(reader, TestFixtures.CreateMissingTextureCatalogService()),
             "fixture.pcc",
             [], [], null, [], _ => { },
-            "le1-human-male",
+            profileKey,
             new MorphRandomisationCatalog(corpus),
             randomSeedFactory ?? (() => 123),
-            randomisationInclusionState);
+            randomisationInclusionState,
+            materialRandomisationProfileKey: materialRandomisationProfileKey);
     }
 
     private static void NumericWheelIncrementsAreSafe()
@@ -1985,6 +2002,8 @@ public static class UiSmokeTests
             "HED_Mask_Vector", MaterialParameterKind.Vector));
         TestAssert.True(!profile.IsMaterialVisible("Diffuseuse", MaterialParameterKind.Texture),
             "The HMM Diffuseuse texture remained visible.");
+        TestAssert.True(!profile.IsMaterialVisible("CubeMap", MaterialParameterKind.Texture),
+            "The human-eye reflection cube remained exposed as an editable 2D texture.");
         TestAssert.True(!profile.IsMaterialVisible("__PROShort01_Diffuse", MaterialParameterKind.Texture),
             "A fixed compiled PROShort01 sampler leaked into the editable material controls.");
 

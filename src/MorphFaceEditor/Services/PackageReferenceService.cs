@@ -56,7 +56,10 @@ public sealed class PackageReferenceService(
         cancellationToken.ThrowIfCancellationRequested();
         var inventory = PackageAssetInspector.Inventory(packagePath, ["Texture2D", "SkeletalMesh"]);
         PackageAssetListItem[] Select(string className) => inventory.Entries
-            .Where(entry => !entry.IsDefaultObject && string.Equals(entry.ClassName, className, StringComparison.OrdinalIgnoreCase))
+            .Where(entry => !entry.IsDefaultObject &&
+                            string.Equals(entry.ClassName, className, StringComparison.OrdinalIgnoreCase) &&
+                            (!className.Equals("SkeletalMesh", StringComparison.OrdinalIgnoreCase) ||
+                             !CustomMaterialTemplateCatalogService.IsDevelopmentLeftover(entry.InstancedPath)))
             .Select(entry => new PackageAssetListItem(new AssetIdentity(
                 inventory.PackagePath,
                 entry.InstancedPath,
@@ -98,6 +101,13 @@ public sealed class PackageReferenceService(
         string meshPath,
         CancellationToken cancellationToken = default) => ReadAsync(
             () => reader.LoadAttachment(packagePath, facePath, meshPath),
+            cancellationToken);
+
+    public Task<LoadedAttachment> LoadDetachedAttachmentAsync(
+        string packagePath,
+        string meshPath,
+        CancellationToken cancellationToken = default) => ReadAsync(
+            () => reader.LoadDetachedAttachment(packagePath, meshPath),
             cancellationToken);
 
     private async Task<T> ReadAsync<T>(Func<T> operation, CancellationToken cancellationToken)

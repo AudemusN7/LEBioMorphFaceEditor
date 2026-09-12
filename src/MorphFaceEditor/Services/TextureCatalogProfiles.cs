@@ -10,6 +10,11 @@ public static class TextureCatalogProfiles
         ArgumentNullException.ThrowIfNull(profile);
         return profile.Key switch
         {
+            var key when key.EndsWith("detached-mesh", StringComparison.OrdinalIgnoreCase) =>
+                new TextureCatalogProfile(
+                    key,
+                    ["HMM_HED", "HMF_HED", "HMF_HIR", "HMM_HIR", "HMN_HED"],
+                    ["HMM_EYE", "HMF_EYE", "HED_EYE", "HAIR_"]),
             var key when key.EndsWith("human-male", StringComparison.OrdinalIgnoreCase) =>
                 new TextureCatalogProfile(key, ["HMM_HED", "HMN_HED"], ["HMM_EYE", "HED_EYE"]),
             var key when key.EndsWith("human-female", StringComparison.OrdinalIgnoreCase) =>

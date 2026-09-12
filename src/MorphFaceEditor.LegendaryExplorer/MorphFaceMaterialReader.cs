@@ -29,6 +29,28 @@ internal sealed class MorphFaceMaterialReader(
 
     public MaterialReadMetrics LastReadMetrics { get; private set; } = new(TimeSpan.Zero, TimeSpan.Zero, 0, 0);
 
+    /// <summary>
+    /// Reads one material's detached defaults without applying a BioMorphFace
+    /// override. This is the package adapter path used by Custom material
+    /// evidence; the normal face loader continues to use <see cref="Read"/>.
+    /// </summary>
+    internal ResolvedHeadMaterial ReadMaterialEvidence(ExportEntry materialExport)
+    {
+        ArgumentNullException.ThrowIfNull(materialExport);
+        var identity = MorphFacePackageReader.ToIdentity(materialExport)!;
+        var materialKey = MaterialIdentityKey.Create(identity);
+        if (_materialCache.TryGetValue(materialKey, out var cached))
+        {
+            _materialCacheHits++;
+            return cached;
+        }
+
+        _materialCacheMisses++;
+        var material = ReadMaterialDefaults(materialExport, identity, materialKey);
+        _materialCache[materialKey] = material;
+        return material;
+    }
+
     public MorphRandomisationMaterialEvidence ReadRandomisationEvidence(
         ExportEntry face,
         IReadOnlyCollection<ExportEntry> baseMaterialExports)
@@ -409,10 +431,16 @@ internal sealed class MorphFaceMaterialReader(
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var master = ReadMaterialChain(materialExport, scalarValues, vectorValues, textureValues, visited)
             ?? materialExport;
+        // The effective master is the only family authority here. In
+        // particular, an imported/custom material name must never select a
+        // family merely because it resembles a stock mesh or character name.
         var family = HumanMaterialProfiles.ClassifyMaster(master.ObjectNameString);
         if (family == HeadMaterialFamily.Unknown)
         {
-            family = InferFamily(materialExport.InstancedFullPath);
+            // Some game builds use a master name variant not present in the
+            // compact schema map. Classify that effective master only; never
+            // fall back to the child MIC that happened to reference it.
+            family = HeadMaterialClassifier.Classify(master.InstancedFullPath);
         }
 
         if (family == HeadMaterialFamily.AsariSkin)
@@ -422,6 +450,29 @@ internal sealed class MorphFaceMaterialReader(
         else if (family == HeadMaterialFamily.MaskedHair)
         {
             AddMaskedHairLiteralTextures(master, textureValues);
+        }
+        if (master.Game == MEGame.LE1 && family == HeadMaterialFamily.Hair &&
+            !textureValues.ContainsKey("HAIR_Diff"))
+        {
+            // LE1's backported ME3 Shepard-hair master exposes its only live
+            // diffuse sampler under the retained expression export name. The
+            // LE2/LE3 versions call the same sampler HAIR_Diff. Promote that
+            // single proven hair diffuse to the shared semantic name while
+            // retaining the anonymous source binding for exact provenance.
+            var anonymousDiffuse = textureValues
+                .Where(value => value.Key.StartsWith(
+                                    "MaterialExpressionTextureSampleParameter2D_",
+                                    StringComparison.OrdinalIgnoreCase) &&
+                                value.Value.ObjectNameString.Contains("HAIR", StringComparison.OrdinalIgnoreCase) &&
+                                value.Value.ObjectNameString.Contains("Diff", StringComparison.OrdinalIgnoreCase))
+                .Select(value => value.Value)
+                .DistinctBy(value => value.UIndex)
+                .Take(2)
+                .ToArray();
+            if (anonymousDiffuse.Length == 1)
+            {
+                textureValues["HAIR_Diff"] = anonymousDiffuse[0];
+            }
         }
 
         var decodedTextures = textureValues
@@ -497,7 +548,8 @@ internal sealed class MorphFaceMaterialReader(
             DefaultTextures = decodedTextures,
             SupportedScalars = supportedScalars,
             SupportedVectors = supportedVectors,
-            SupportedTextures = (support?.Textures.AsEnumerable() ?? textureValues.Keys)
+            SupportedTextures = (support?.Textures.AsEnumerable() ?? [])
+                .Concat(textureValues.Keys)
                 .Where(name => !name.StartsWith("__ASA_", StringComparison.OrdinalIgnoreCase))
                 .ToHashSet(StringComparer.OrdinalIgnoreCase),
             FixedCubeTexture = fixedCubeTexture,
@@ -986,52 +1038,6 @@ internal sealed class MorphFaceMaterialReader(
 
     private ExportEntry? ResolveOptional(IEntry? entry, string purpose) =>
         entry is null ? null : referenceResolver.Require(entry, purpose);
-
-    private static HeadMaterialFamily InferFamily(string value)
-    {
-        if (value.Contains("ALN_HED", StringComparison.OrdinalIgnoreCase) ||
-            value.Contains("ALN_EYE", StringComparison.OrdinalIgnoreCase))
-        {
-            return value.Contains("EYE", StringComparison.OrdinalIgnoreCase)
-                ? HeadMaterialFamily.VorchaEyes
-                : HeadMaterialFamily.VorchaSkin;
-        }
-        if (value.Contains("BAT_HED", StringComparison.OrdinalIgnoreCase) ||
-            value.Contains("Batarian", StringComparison.OrdinalIgnoreCase))
-        {
-            return HeadMaterialFamily.BatarianSkin;
-        }
-        if (value.Contains("KRO_HED", StringComparison.OrdinalIgnoreCase) ||
-            value.Contains("KRO_EYE", StringComparison.OrdinalIgnoreCase))
-        {
-            return value.Contains("EYE", StringComparison.OrdinalIgnoreCase)
-                ? HeadMaterialFamily.KroganEyes
-                : HeadMaterialFamily.KroganSkin;
-        }
-        if (value.Contains("TUR_HED", StringComparison.OrdinalIgnoreCase) ||
-            value.Contains("TUR_EYE", StringComparison.OrdinalIgnoreCase))
-        {
-            return value.Contains("EYE", StringComparison.OrdinalIgnoreCase)
-                ? HeadMaterialFamily.TurianEyes
-                : HeadMaterialFamily.TurianSkin;
-        }
-        if (value.Contains("SAL_HED", StringComparison.OrdinalIgnoreCase))
-        {
-            return value.Contains("EYE", StringComparison.OrdinalIgnoreCase)
-                ? HeadMaterialFamily.SalarianEyes
-                : HeadMaterialFamily.SalarianSkin;
-        }
-        if (value.Contains("_hat_", StringComparison.OrdinalIgnoreCase) ||
-            value.Contains("hat", StringComparison.OrdinalIgnoreCase)) return HeadMaterialFamily.Accessory;
-        if (value.Contains("PROShort01", StringComparison.OrdinalIgnoreCase) ||
-            value.Contains("PROShort_01", StringComparison.OrdinalIgnoreCase)) return HeadMaterialFamily.MaskedHair;
-        if (value.Contains("lash", StringComparison.OrdinalIgnoreCase)) return HeadMaterialFamily.Lashes;
-        if (value.Contains("eye", StringComparison.OrdinalIgnoreCase)) return HeadMaterialFamily.Eyes;
-        if (value.Contains("scalp", StringComparison.OrdinalIgnoreCase)) return HeadMaterialFamily.Scalp;
-        if (value.Contains("hair", StringComparison.OrdinalIgnoreCase) || value.Contains("_hir_", StringComparison.OrdinalIgnoreCase)) return HeadMaterialFamily.Hair;
-        if (value.Contains("hed", StringComparison.OrdinalIgnoreCase) || value.Contains("face", StringComparison.OrdinalIgnoreCase)) return HeadMaterialFamily.Skin;
-        return HeadMaterialFamily.Accessory;
-    }
 
     private static bool IsHatAttachment(ExportEntry material) =>
         material.InstancedFullPath.Contains("_hat_", StringComparison.OrdinalIgnoreCase) ||

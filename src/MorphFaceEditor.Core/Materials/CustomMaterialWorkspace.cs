@@ -29,6 +29,18 @@ public sealed record CustomMaterialAssignmentOption(
     ResolvedHeadMaterial Template)
 {
     public HeadMaterialFamily MaterialFamily => Family;
+    public string? RandomisationProfileKey { get; init; }
+    public string? ParameterScopeKey { get; init; }
+    public string? ParameterScopeLabel { get; init; }
+
+    public string EffectiveParameterScopeKey => ParameterScopeKey ??
+        (AppearanceCompatibilityKey.StartsWith("human", StringComparison.OrdinalIgnoreCase)
+            ? "human"
+            : AppearanceCompatibilityKey.ToLowerInvariant());
+    public string EffectiveParameterScopeLabel => ParameterScopeLabel ??
+        (EffectiveParameterScopeKey == "human"
+            ? "Human"
+            : char.ToUpperInvariant(EffectiveParameterScopeKey[0]) + EffectiveParameterScopeKey[1..]);
 }
 
 /// <summary>One selected option and its exact detached slot identity.</summary>
@@ -92,6 +104,13 @@ public sealed class CustomMaterialWorkspace : Editing.IUndoableEditSource
         _assignments.OrderBy(value => value.Key)
             .Select(value => new CustomMaterialAssignment(_slotsByIndex[value.Key], value.Value))
             .ToArray();
+    public IReadOnlyList<string> ActiveRandomisationProfileKeys => _assignments
+        .OrderBy(value => value.Key)
+        .Select(value => value.Value.RandomisationProfileKey)
+        .Where(value => !string.IsNullOrWhiteSpace(value))
+        .Cast<string>()
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToArray();
     public ResolvedHeadMaterialSet ActiveMaterials { get; private set; }
     public bool CanUndo => _undo.Count > 0;
     public bool CanRedo => _redo.Count > 0;
@@ -203,18 +222,23 @@ public sealed class CustomMaterialWorkspace : Editing.IUndoableEditSource
             .Where(value => value.Key != materialIndexBeingReplaced)
             .Select(value => value.Value)
             .Where(value => CompatibilityRole(value) == role);
-        var incompatible = role == CustomMaterialCompatibilityRole.Hair
-            ? sameRoleAssignments.FirstOrDefault(value =>
-                !string.Equals(value.Id, option.Id, StringComparison.OrdinalIgnoreCase))
-            : sameRoleAssignments.FirstOrDefault(value =>
-                !string.Equals(value.AppearanceCompatibilityKey,
-                    option.AppearanceCompatibilityKey, StringComparison.OrdinalIgnoreCase));
+        var incompatible = role switch
+        {
+            // HMM and HMF/Asari eyes still share one human control surface.
+            // Racial eye materials have independent scopes and may be mixed freely.
+            CustomMaterialCompatibilityRole.Eyes when option.Family == HeadMaterialFamily.Eyes =>
+                sameRoleAssignments.FirstOrDefault(value =>
+                    value.Family == HeadMaterialFamily.Eyes &&
+                    !string.Equals(value.Id, option.Id, StringComparison.OrdinalIgnoreCase)),
+            CustomMaterialCompatibilityRole.Lashes or CustomMaterialCompatibilityRole.Hair =>
+                sameRoleAssignments.FirstOrDefault(value =>
+                    !string.Equals(value.Id, option.Id, StringComparison.OrdinalIgnoreCase)),
+            _ => null
+        };
         if (incompatible is not null)
         {
             throw new ArgumentException(
-                role == CustomMaterialCompatibilityRole.Hair
-                    ? "Hair assignments on one custom head must use the same material."
-                    : $"{role} assignments on one custom head must share an appearance compatibility key.",
+                $"{role} assignments on one custom head must use the same material.",
                 nameof(option));
         }
     }
@@ -288,7 +312,9 @@ public sealed class CustomMaterialWorkspace : Editing.IUndoableEditSource
                 DefaultTextures = new Dictionary<string, MaterialTextureBinding>(template.DefaultTextures, StringComparer.OrdinalIgnoreCase),
                 SupportedScalars = new HashSet<string>(template.SupportedScalars, StringComparer.OrdinalIgnoreCase),
                 SupportedVectors = new HashSet<string>(template.SupportedVectors, StringComparer.OrdinalIgnoreCase),
-                SupportedTextures = new HashSet<string>(template.SupportedTextures, StringComparer.OrdinalIgnoreCase)
+                SupportedTextures = new HashSet<string>(template.SupportedTextures, StringComparer.OrdinalIgnoreCase),
+                ParameterScopeKey = assignment.Value.EffectiveParameterScopeKey,
+                ParameterScopeLabel = assignment.Value.EffectiveParameterScopeLabel
             };
         }
         ActiveMaterials = new ResolvedHeadMaterialSet(materials);

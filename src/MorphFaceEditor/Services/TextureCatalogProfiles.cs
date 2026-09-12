@@ -13,8 +13,20 @@ public static class TextureCatalogProfiles
             var key when key.EndsWith("detached-mesh", StringComparison.OrdinalIgnoreCase) =>
                 new TextureCatalogProfile(
                     key,
-                    ["HMM_HED", "HMF_HED", "HMF_HIR", "HMM_HIR", "HMN_HED"],
-                    ["HMM_EYE", "HMF_EYE", "HED_EYE", "HAIR_"]),
+                    [
+                        // Detached meshes may use any supported head archetype. These
+                        // signals promote the racial head/scalp and human hair paths
+                        // without filtering out unrelated installed textures.
+                        "HMM_HED", "HMN_HED", "HMF_HED", "ASA_HED", "SAL_HED",
+                        "TUR_HED", "TUF_HED", "KRO_HED", "BAT_HED", "ALN_HED",
+                        "HMF_HIR", "HMM_HIR"
+                    ],
+                    [
+                        // Eye paths are shared across the detached material surface.
+                        // Batarians intentionally have no eye material or eye scope.
+                        "HMM_EYE", "HMF_EYE", "HED_EYE", "ASA_EYE", "SAL_EYE",
+                        "TUR_EYE", "TUF_EYE", "KRO_EYE", "ALN_EYE", "Eye_Norm", "HAIR_"
+                    ]),
             var key when key.EndsWith("human-male", StringComparison.OrdinalIgnoreCase) =>
                 new TextureCatalogProfile(key, ["HMM_HED", "HMN_HED"], ["HMM_EYE", "HED_EYE"]),
             var key when key.EndsWith("human-female", StringComparison.OrdinalIgnoreCase) =>

@@ -54,7 +54,7 @@ public partial class App : Application
             MorphRandomisationCatalog.LoadEmbedded(),
             detachedMeshPreviewLoadService: new DetachedMeshPreviewLoadService(
                 sceneFactory,
-                materialCatalog: new CustomMaterialTemplateCatalogService(packageReader)));
+                materialCatalog: new CustomMaterialTemplateCatalogService(packageReader, textureRegistryStore)));
         var window = new MainWindow(_viewModel);
         MainWindow = window;
         window.Show();

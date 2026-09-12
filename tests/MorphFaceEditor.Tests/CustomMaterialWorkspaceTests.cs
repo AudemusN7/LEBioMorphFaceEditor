@@ -16,6 +16,7 @@ public static class CustomMaterialWorkspaceTests
         new("custom material assignment undo is one semantic action", AssignmentUndoRedo),
         new("custom material defaults use the lowest assigned slot", LowestSlotWinsDefaults),
         new("custom material rebase exposes shared union and preserves overrides", RebasePreservesUnionAndOverrides),
+        new("custom material parameters remain independent across racial scopes", RacialScopesRemainIndependent),
         new("custom material rebase preserves edited values while hidden", RebasePreservesHiddenEdit),
         new("custom material rebase retains preview attachment materials", RebaseRetainsAttachments)
     ];
@@ -84,6 +85,19 @@ public static class CustomMaterialWorkspaceTests
             Option("hmm-lashes", "HMM Lashes", "human-male", "lashes", HeadMaterialFamily.Lashes),
             Option("hmf-lashes", "HMF Lashes", "human-female", "lashes", HeadMaterialFamily.Lashes),
             "HMM and HMF lash materials were accepted together.");
+
+        workspace.Assign(0, Option("hmm-eyes", "HMM Eyes", "human-male", "eyes", HeadMaterialFamily.Eyes));
+        workspace.Assign(1, Option("turian-eyes", "Turian Eyes", "turian", "eyes", HeadMaterialFamily.TurianEyes));
+        TestAssert.Equal(2, workspace.Assignments.Count);
+        workspace.Unassign(0);
+        workspace.Unassign(1);
+        workspace.Assign(0, Option("salarian-eyes", "Salarian Eyes", "salarian", "eyes",
+            HeadMaterialFamily.SalarianEyes));
+        workspace.Assign(1, Option("krogan-eyes", "Krogan Eyes", "krogan", "eyes",
+            HeadMaterialFamily.KroganEyes));
+        TestAssert.Equal(2, workspace.Assignments.Count);
+        workspace.Unassign(0);
+        workspace.Unassign(1);
 
         workspace.Assign(0, Option("hmm-eyes", "HMM Eyes", "human-male", "eyes", HeadMaterialFamily.Eyes));
         workspace.Assign(1, Option("hmf-lashes", "HMF Lashes", "human-female", "lashes", HeadMaterialFamily.Lashes));
@@ -160,7 +174,7 @@ public static class CustomMaterialWorkspaceTests
 
         var session = new MaterialEditingSession(MorphFaceMaterialOverrides.Empty, ResolvedHeadMaterialSet.Empty);
         session.RebaseMaterialSurface(workspace);
-        TestAssert.Equal(1f, session.GetScalar("Shared"));
+        TestAssert.Equal(1f, session.GetScalar(MaterialParameterControlKey.Create("head", "Shared")));
         TestAssert.Equal(1f, session.Materials.Materials.Values.First().Scalars["Shared"]);
         TestAssert.Equal(1, workspace.ActiveMaterials.Materials.Values.First().Source.UIndex * -1 - 1);
     }
@@ -180,16 +194,51 @@ public static class CustomMaterialWorkspaceTests
         session.MaterialsChanged += (_, args) => { if (args.Kind == MaterialChangeKind.Surface) surfaceChanges++; };
 
         session.RebaseMaterialSurface(workspace.ActiveMaterials);
-        TestAssert.True(session.ScalarNames.Contains("Shared"), "Shared parameter was not exposed.");
-        TestAssert.True(session.ScalarNames.Contains("SkinOnly"), "Union parameter was not exposed.");
+        var shared = MaterialParameterControlKey.Create("head", "Shared");
+        TestAssert.True(session.ScalarNames.Contains(shared), "Shared parameter was not exposed.");
+        TestAssert.True(session.ScalarNames.Contains(MaterialParameterControlKey.Create("head", "SkinOnly")),
+            "Union parameter was not exposed.");
         TestAssert.Near(0.75f,
             session.CreateOverrides().Scalars.Single(value => value.Name == "LegacyUnsupported").Value, 0);
-        session.SetScalar("Shared", 0.9f);
+        session.SetScalar(shared, 0.9f);
         TestAssert.True(session.Materials.Materials.Values.All(material =>
             material.Scalars.TryGetValue("Shared", out var value) && Math.Abs(value - 0.9f) < 1e-6f),
             "One shared edit did not project to every applicable material.");
         TestAssert.Equal(1, surfaceChanges);
         TestAssert.Equal(0.75f, session.CreateOverrides().Scalars.Single(value => value.Name == "LegacyUnsupported").Value);
+    }
+
+    private static void RacialScopesRemainIndependent()
+    {
+        var workspace = new CustomMaterialWorkspace(CreateSource(
+            new ImportedMeshSection(0, "Human", 0, 3),
+            new ImportedMeshSection(1, "Krogan", 3, 3)));
+        workspace.Assign(0, Option("human", "Human", "human-male", "head", HeadMaterialFamily.Skin, 0.2f));
+        workspace.Assign(1, Option("krogan", "Krogan", "krogan", "head", HeadMaterialFamily.KroganSkin, 0.7f));
+        var session = new MaterialEditingSession(MorphFaceMaterialOverrides.Empty, workspace.ActiveMaterials);
+        var human = MaterialParameterControlKey.Create("human", "Shared");
+        var krogan = MaterialParameterControlKey.Create("krogan", "Shared");
+
+        TestAssert.True(session.ScalarNames.Contains(human) && session.ScalarNames.Contains(krogan),
+            "Two racial materials collapsed their same-named parameter into one control.");
+        try
+        {
+            session.ApplyMaterialData(
+                new MorphFaceMaterialData([new ScalarMaterialOverride("Shared", 0.5f)], [], []),
+                new Dictionary<string, DecodedTextureAsset?>());
+            throw new InvalidOperationException("An ambiguous unscoped material payload was silently applied.");
+        }
+        catch (InvalidDataException exception)
+        {
+            TestAssert.True(exception.Message.Contains("more than one MESH racial scope",
+                    StringComparison.OrdinalIgnoreCase),
+                "The ambiguous material payload failed for the wrong reason.");
+        }
+        session.SetScalar(krogan, 0.9f);
+
+        var materials = session.Materials.Materials.Values.ToArray();
+        TestAssert.Near(0.2f, materials.Single(value => value.Family == HeadMaterialFamily.Skin).Scalars["Shared"], 0);
+        TestAssert.Near(0.9f, materials.Single(value => value.Family == HeadMaterialFamily.KroganSkin).Scalars["Shared"], 0);
     }
 
     private static void RebasePreservesHiddenEdit()
@@ -200,11 +249,12 @@ public static class CustomMaterialWorkspaceTests
         workspace.Assign(0, option);
         var session = new MaterialEditingSession(MorphFaceMaterialOverrides.Empty, ResolvedHeadMaterialSet.Empty);
         session.RebaseMaterialSurface(workspace);
-        session.SetScalar("Shared", 0.9f);
+        var shared = MaterialParameterControlKey.Create("head", "Shared");
+        session.SetScalar(shared, 0.9f);
         workspace.Unassign(0);
         session.RebaseMaterialSurface(workspace);
-        TestAssert.Near(0.9f, session.GetScalar("Shared"), 0);
-        TestAssert.Near(0.9f, session.CreateOverrides().Scalars.Single(value => value.Name == "Shared").Value, 0);
+        TestAssert.Near(0.9f, session.GetScalar(shared), 0);
+        TestAssert.Near(0.9f, session.CreateOverrides().Scalars.Single(value => value.Name == shared).Value, 0);
         workspace.Assign(0, option);
         session.RebaseMaterialSurface(workspace);
         TestAssert.Near(0.9f, session.Materials.Materials.Values.Single().Scalars["Shared"], 0);
@@ -265,6 +315,14 @@ public static class CustomMaterialWorkspaceTests
             },
             new Dictionary<string, Vector4>(),
             new Dictionary<string, MaterialTextureBinding>());
-        return new CustomMaterialAssignmentOption(id, label, compatibility, role, family, template);
+        return new CustomMaterialAssignmentOption(id, label, compatibility, role, family, template)
+        {
+            ParameterScopeKey = compatibility.StartsWith("human", StringComparison.OrdinalIgnoreCase)
+                ? "human"
+                : compatibility,
+            ParameterScopeLabel = compatibility.StartsWith("human", StringComparison.OrdinalIgnoreCase)
+                ? "Human"
+                : label
+        };
     }
 }

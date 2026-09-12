@@ -4,13 +4,14 @@ using MorphFaceEditor.Tests;
 var suites = new Dictionary<string, IReadOnlyList<TestCase>>(StringComparer.OrdinalIgnoreCase)
 {
     ["core"] = DeformationTests.All.Concat(EditingTests.All).Concat(DetachedMeshPreviewTests.All)
-        .Concat(RandomisationTests.Runtime).ToArray(),
+        .Concat(CustomMaterialWorkspaceTests.All).Concat(RandomisationTests.Runtime).ToArray(),
     ["materials"] = MaterialTests.All,
     ["rendering"] = RenderingTests.All,
     ["ui"] = UiSmokeTests.All.Concat(TextureRegistrySettingsTests.All)
         .Concat(MorphTargetCatalogTests.All).Concat(CustomMeshTests.All).ToArray(),
     ["package"] = PackageContextTests.All.Concat(PackageIntegrityTests.All).Concat(ActorAssignmentInventoryTests.All)
-        .Concat(ActorAssignmentTransactionTests.All).Concat(RonStressTests.All).ToArray(),
+        .Concat(ActorAssignmentTransactionTests.All).Concat(CustomMaterialEvidenceTests.All)
+        .Concat(RonStressTests.All).ToArray(),
     ["tooling"] = RandomisationTests.Tooling
 };
 

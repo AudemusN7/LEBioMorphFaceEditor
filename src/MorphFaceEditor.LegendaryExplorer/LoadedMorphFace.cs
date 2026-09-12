@@ -22,6 +22,8 @@ public sealed record LoadedMorphFace(
     public MorphFaceGame Game { get; init; } = MorphFaceGame.LE1;
     public bool UsesCustomBaseMesh { get; init; }
     public bool IgnoresAuthoredGeometry { get; init; }
+    /// <summary>Prevents preview-only attachments from consuming interchange-rig bind transforms as morph pose data.</summary>
+    public bool UsesNativeAttachmentBindPose { get; init; }
     public IReadOnlyList<SkeletalMeshAsset> OtherMeshes { get; init; } = [];
     public IReadOnlyList<string> Warnings { get; init; } = [];
 }

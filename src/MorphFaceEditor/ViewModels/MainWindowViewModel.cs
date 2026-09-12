@@ -65,7 +65,6 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private string? _standaloneImportPath;
     private MorphFaceGame? _standaloneGame;
     private ImportedMeshAsset? _detachedMeshSource;
-    private DetachedMeshUpAxis _detachedMeshUpAxis = DetachedMeshUpAxis.Auto;
     private readonly HashSet<string> _fixedBakeFacePaths = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _relativeBakeFacePaths = new(StringComparer.OrdinalIgnoreCase);
     private bool _hasWorkspaceChanges;
@@ -183,12 +182,6 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public ObservableCollection<PreviewLodChoice> PreviewLods { get; } = [];
     public ICollectionView FilteredFaces { get; }
     public IReadOnlyList<HeadPreviewRenderMode> RenderModes { get; } = Enum.GetValues<HeadPreviewRenderMode>();
-    public IReadOnlyList<DetachedMeshUpAxisChoice> DetachedMeshUpAxes { get; } =
-    [
-        new(DetachedMeshUpAxis.Auto, "Auto"),
-        new(DetachedMeshUpAxis.ZUp, "Z up"),
-        new(DetachedMeshUpAxis.YUp, "Y up")
-    ];
     public IReadOnlyList<PreviewLightingChoice> LightingPresets { get; } =
     [
         new(HeadPreviewLightingPreset.Studio, "Studio"),
@@ -557,24 +550,6 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         if (await EnsureCanAbandonWorkspaceAsync())
         {
             await OpenSourcePackagePathAsync(selectedPath);
-        }
-    }
-
-    public DetachedMeshUpAxis DetachedMeshUpAxis
-    {
-        get => _detachedMeshUpAxis;
-        set
-        {
-            if (value == _detachedMeshUpAxis)
-            {
-                return;
-            }
-            if (_detachedMeshSource is null)
-            {
-                SetProperty(ref _detachedMeshUpAxis, value);
-                return;
-            }
-            RebuildDetachedMeshPreview(value);
         }
     }
 
@@ -1121,14 +1096,16 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         if (!_suppressMaterialPreview && Editor is not null && _loadedFace is not null)
         {
-            PreviewMaterialReady?.Invoke(_sceneFactory.CreateMaterialUpdate(_loadedFace, Editor.Material.Materials));
+            var materials = CreatePreviewMaterials(_loadedFace, Editor.Material.Materials);
+            PreviewMaterialReady?.Invoke(_sceneFactory.CreateMaterialUpdate(_loadedFace, materials));
         }
     }
 
     private async void OnAttachmentMeshChanged(object? sender, EventArgs e)
     {
-        if (Editor is null || _loadedFace is null || WorkspacePackagePath is not { } workspacePath ||
-            sender is not HairMeshEditorViewModel changedSlot)
+        if (Editor is null || _loadedFace is null ||
+            sender is not HairMeshEditorViewModel changedSlot ||
+            !IsDetachedMeshWorkspace && WorkspacePackagePath is null)
         {
             return;
         }
@@ -1136,7 +1113,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         var version = ++_attachmentChangeVersion;
         var editor = Editor;
         var loadedFace = _loadedFace;
-        var packagePath = workspacePath;
+        var packagePath = WorkspacePackagePath;
+        var detachedPreview = IsDetachedMeshWorkspace;
         var references = editor.AttachmentMeshes.Select(mesh => mesh.Value).ToArray();
         AttachmentMaterialState? materialState = null;
         try
@@ -1148,10 +1126,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 {
                     continue;
                 }
-                attachments[index] = await _referenceService.LoadAttachmentAsync(
-                    packagePath,
-                    loadedFace.Document.Source.InstancedPath,
-                    reference.InstancedPath);
+                attachments[index] = detachedPreview
+                    ? await _referenceService.LoadDetachedAttachmentAsync(
+                        reference.PackagePath, reference.InstancedPath)
+                    : await _referenceService.LoadAttachmentAsync(
+                        packagePath!, loadedFace.Document.Source.InstancedPath, reference.InstancedPath);
             }
 
             if (version != _attachmentChangeVersion || Editor != editor || _loadedFace != loadedFace)
@@ -1173,11 +1152,16 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 .Select(attachment => attachment!.Mesh)
                 .Concat(preservedOtherMeshes)
                 .ToArray();
+            var stagedMaterials = detachedPreview
+                ? MergeMaterials(
+                    editor.Material.Materials,
+                    ApplyDetachedAttachmentHairColour(attachmentMaterials, editor.Material.Materials))
+                : MergeMaterials(loadedFace.Materials, attachmentMaterials);
             var stagedLoadedFace = loadedFace with
             {
                 HairMesh = attachments[0]?.Mesh,
                 OtherMeshes = otherMeshes,
-                Materials = MergeMaterials(loadedFace.Materials, attachmentMaterials),
+                Materials = stagedMaterials,
                 Document = loadedFace.Document with
                 {
                     HairMeshReference = references[0],
@@ -1193,12 +1177,17 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 ? _sceneFactory.CreateEditable(stagedLoadedFace, editor.Evaluation, PreviewLod)
                 : _sceneFactory.Create(stagedLoadedFace, PreviewLod);
 
-            materialState = editor.Material.CaptureAttachmentState();
             _suppressMaterialPreview = true;
-            editor.Material.ReplaceAttachmentMaterials(
-                attachmentMaterials,
-                attachments.ElementAtOrDefault(changedSlot.SlotIndex)?.Materials);
-            var committedLoadedFace = stagedLoadedFace with { Materials = editor.Material.Materials };
+            if (!detachedPreview)
+            {
+                materialState = editor.Material.CaptureAttachmentState();
+                editor.Material.ReplaceAttachmentMaterials(
+                    attachmentMaterials,
+                    attachments.ElementAtOrDefault(changedSlot.SlotIndex)?.Materials);
+            }
+            var committedLoadedFace = detachedPreview
+                ? stagedLoadedFace
+                : stagedLoadedFace with { Materials = editor.Material.Materials };
             var committedScene = editor.UsesLiveDeformationPreview
                 ? _sceneFactory.CreateEditable(committedLoadedFace, editor.Evaluation, PreviewLod)
                 : _sceneFactory.Create(committedLoadedFace, PreviewLod);
@@ -1230,10 +1219,28 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         var editor = Editor ?? throw new InvalidOperationException("No face is loaded.");
         var loaded = _loadedFace ?? throw new InvalidOperationException("No face is loaded.");
-        var previewSource = loaded with { Materials = editor.Material.Materials };
+        var previewSource = loaded with { Materials = CreatePreviewMaterials(loaded, editor.Material.Materials) };
         return editor.UsesLiveDeformationPreview
             ? _sceneFactory.CreateEditable(previewSource, editor.Evaluation, PreviewLod)
             : _sceneFactory.Create(previewSource, PreviewLod);
+    }
+
+    private ResolvedHeadMaterialSet CreatePreviewMaterials(
+        LoadedMorphFace loaded,
+        ResolvedHeadMaterialSet editorMaterials)
+    {
+        if (!IsDetachedMeshWorkspace)
+        {
+            return editorMaterials;
+        }
+
+        IEnumerable<SkeletalMeshAsset> attachmentMeshes = loaded.HairMesh is null
+            ? loaded.OtherMeshes
+            : Enumerable.Repeat(loaded.HairMesh, 1).Concat(loaded.OtherMeshes);
+        var attachmentMaterials = ResolveMeshMaterials(attachmentMeshes, loaded.Materials);
+        return MergeMaterials(
+            editorMaterials,
+            ApplyDetachedAttachmentHairColour(attachmentMaterials, editorMaterials));
     }
 
     private static ResolvedHeadMaterialSet MergeMaterials(
@@ -1262,6 +1269,40 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         return new ResolvedHeadMaterialSet(materials.Materials
             .Where(pair => keys.Contains(pair.Key))
             .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase));
+    }
+
+    private static ResolvedHeadMaterialSet ApplyDetachedAttachmentHairColour(
+        ResolvedHeadMaterialSet attachmentMaterials,
+        ResolvedHeadMaterialSet editorMaterials)
+    {
+        const string parameter = "HED_Hair_Colour_Vector";
+        var selected = editorMaterials.Materials.Values
+            .Where(material => material.Supports(parameter, MaterialParameterKind.Vector))
+            .Select(material => material.Vectors.TryGetValue(parameter, out var value)
+                ? (Found: true, Value: value)
+                : (Found: false, Value: default(System.Numerics.Vector4)))
+            .FirstOrDefault(value => value.Found);
+        if (!selected.Found)
+        {
+            return attachmentMaterials;
+        }
+
+        return new ResolvedHeadMaterialSet(attachmentMaterials.Materials.Values
+            .Select(material =>
+            {
+                if (material.Family is not (HeadMaterialFamily.Hair or HeadMaterialFamily.MaskedHair) ||
+                    !material.Supports(parameter, MaterialParameterKind.Vector))
+                {
+                    return material;
+                }
+                var vectors = new Dictionary<string, System.Numerics.Vector4>(
+                    material.Vectors, StringComparer.OrdinalIgnoreCase)
+                {
+                    [parameter] = selected.Value
+                };
+                return material with { Vectors = vectors };
+            })
+            .ToDictionary(material => material.Key, StringComparer.OrdinalIgnoreCase));
     }
 
     private async Task SaveExistingCommandAsync() =>
@@ -1509,4 +1550,3 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
 public sealed record PreviewLightingChoice(HeadPreviewLightingPreset Preset, string Name);
 public sealed record PreviewLodChoice(int LodIndex, string Name);
-public sealed record DetachedMeshUpAxisChoice(DetachedMeshUpAxis Axis, string Name);

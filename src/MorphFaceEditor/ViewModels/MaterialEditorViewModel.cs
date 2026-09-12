@@ -16,6 +16,18 @@ namespace MorphFaceEditor.ViewModels;
 public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
 {
     private readonly MaterialEditingSession _session;
+    private readonly IHdrColorDialogService _colorDialog;
+    private readonly ITextureReferenceLoader _references;
+    private readonly string _packagePath;
+    private readonly IReadOnlyList<MorphFaceEditor.Models.PackageAssetListItem> _textureCandidates;
+    private readonly Action<string> _reportError;
+    private readonly IHeadEditorUiProfile _uiProfile;
+    private IReadOnlyList<TextureCatalogCandidate>? _registryCandidates;
+    private TextureCatalogProfile? _registryProfile;
+    private bool _isRegistryAvailable;
+    private IReadOnlyList<MaterialScalarEditorViewModel> _scalars = [];
+    private IReadOnlyList<MaterialVectorEditorViewModel> _vectors = [];
+    private IReadOnlyList<MaterialTextureEditorViewModel> _textures = [];
     private bool _disposed;
 
     public MaterialEditorViewModel(
@@ -31,45 +43,64 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
         bool isRegistryAvailable = false)
     {
         _session = session;
-        Scalars = session.ScalarNames
-            .Select(name => new MaterialScalarEditorViewModel(
-                session,
-                uiProfile.DescribeMaterial(HumanMaterialProfiles.Describe(name, MaterialParameterKind.Scalar))))
-            .OrderBy(value => value.Group)
-            .ThenBy(value => value.Label)
-            .ToArray();
-        Vectors = session.VectorNames
-            .Select(name => new MaterialVectorEditorViewModel(
-                session,
-                uiProfile.DescribeMaterial(HumanMaterialProfiles.Describe(name, MaterialParameterKind.Vector)),
-                colorDialog))
-            .OrderBy(value => value.Group)
-            .ThenBy(value => value.Label)
-            .ToArray();
-        Textures = session.TextureParameters
-            .Where(value => uiProfile.IsMaterialVisible(value.Name, MaterialParameterKind.Texture))
-            .Select(value => new MaterialTextureEditorViewModel(
-                session,
-                uiProfile.DescribeMaterial(HumanMaterialProfiles.Describe(value.Name, MaterialParameterKind.Texture)),
-                references,
-                packagePath,
-                textureCandidates,
-                reportError,
-                registryCandidates,
-                registryProfile,
-                isRegistryAvailable))
-            .OrderBy(value => value.Group)
-            .ThenBy(value => value.Label)
-            .ToArray();
+        _colorDialog = colorDialog;
+        _references = references;
+        _packagePath = packagePath;
+        _textureCandidates = textureCandidates;
+        _reportError = reportError;
+        _uiProfile = uiProfile;
+        _registryCandidates = registryCandidates;
+        _registryProfile = registryProfile;
+        _isRegistryAvailable = isRegistryAvailable;
+        RebuildControls();
         session.MaterialsChanged += OnMaterialsChanged;
         session.HistoryChanged += OnHistoryChanged;
     }
 
     public event EventHandler? PreviewChanged;
+    public event EventHandler? ControlsChanged;
 
-    public IReadOnlyList<MaterialScalarEditorViewModel> Scalars { get; }
-    public IReadOnlyList<MaterialVectorEditorViewModel> Vectors { get; }
-    public IReadOnlyList<MaterialTextureEditorViewModel> Textures { get; }
+    public IReadOnlyList<MaterialScalarEditorViewModel> Scalars => _scalars;
+    public IReadOnlyList<MaterialVectorEditorViewModel> Vectors => _vectors;
+    public IReadOnlyList<MaterialTextureEditorViewModel> Textures => _textures;
+
+    private void RebuildControls()
+    {
+        foreach (var texture in _textures) texture.Dispose();
+        _scalars = _session.ScalarNames
+            .Select(name => new MaterialScalarEditorViewModel(
+                _session,
+                _uiProfile.DescribeMaterial(HumanMaterialProfiles.Describe(name, MaterialParameterKind.Scalar))))
+            .OrderBy(value => value.Group)
+            .ThenBy(value => value.Label)
+            .ToArray();
+        _vectors = _session.VectorNames
+            .Select(name => new MaterialVectorEditorViewModel(
+                _session,
+                _uiProfile.DescribeMaterial(HumanMaterialProfiles.Describe(name, MaterialParameterKind.Vector)),
+                _colorDialog))
+            .OrderBy(value => value.Group)
+            .ThenBy(value => value.Label)
+            .ToArray();
+        _textures = _session.TextureParameters
+            .Where(value => _uiProfile.IsMaterialVisible(value.Name, MaterialParameterKind.Texture))
+            .Select(value => new MaterialTextureEditorViewModel(
+                _session,
+                _uiProfile.DescribeMaterial(HumanMaterialProfiles.Describe(value.Name, MaterialParameterKind.Texture)),
+                _references,
+                _packagePath,
+                _textureCandidates,
+                _reportError,
+                _registryCandidates,
+                _registryProfile,
+                _isRegistryAvailable))
+            .OrderBy(value => value.Group)
+            .ThenBy(value => value.Label)
+            .ToArray();
+        OnPropertyChanged(nameof(Scalars));
+        OnPropertyChanged(nameof(Vectors));
+        OnPropertyChanged(nameof(Textures));
+    }
     public bool CanResolveTexturePath(string parameterName, string instancedPath) =>
         Textures.FirstOrDefault(texture => texture.Name.Equals(parameterName, StringComparison.OrdinalIgnoreCase))
             ?.CanResolveInstancedPath(instancedPath) == true;
@@ -78,6 +109,9 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
         TextureCatalogProfile profile,
         bool isRegistryAvailable)
     {
+        _registryCandidates = candidates;
+        _registryProfile = profile;
+        _isRegistryAvailable = isRegistryAvailable;
         foreach (var texture in Textures)
         {
             texture.UpdateRegistryCandidates(candidates, profile, isRegistryAvailable);
@@ -209,7 +243,12 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
 
     private void OnMaterialsChanged(object? sender, MaterialChangedEventArgs e)
     {
-        if (e.Kind == MaterialChangeKind.Full)
+        if (e.Kind == MaterialChangeKind.Surface)
+        {
+            RebuildControls();
+            ControlsChanged?.Invoke(this, EventArgs.Empty);
+        }
+        else if (e.Kind == MaterialChangeKind.Full)
         {
             foreach (var scalar in Scalars) scalar.Refresh();
             foreach (var vector in Vectors) vector.Refresh();

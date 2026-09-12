@@ -592,13 +592,13 @@ float3 EvaluateSpecular(
     {
         float tangentDot = saturate(abs(dot(tangent, halfDirection)));
         float tangentLobe = sqrt(saturate(1 - tangentDot * tangentDot));
-        if (le3)
+        bool layeredHair = SkinParameters3.w > 0.5;
+        if (layeredHair)
         {
             bool additionalHair = SkinParameters3.z > 0.5;
-            // LE3 exposes both anisotropic highlight colours, powers and
-            // intensities in the HMM one-texture hair permutation. HMF's
-            // additional-hair master uses the same two powers and colours but
-            // has no intensity uniforms or extra gain.
+            // LE3 standard hair and the backported LE1/LE2 iconic-HMF master
+            // expose both anisotropic highlight colours and powers. The
+            // additional-hair variant has no intensity uniforms or extra gain.
             float primary = pow(max(tangentLobe, 0.0001), max(ScalpParameters2.x, 0.1));
             float secondary = pow(max(tangentLobe, 0.0001), max(ScalpParameters2.z, 0.1));
             float primaryIntensity = additionalHair ? 1 : max(ScalpParameters2.y, 0);
@@ -1614,9 +1614,10 @@ float4 PSMain(
         // gained HairColour product as its diffuse term; the brighter half-
         // green blend belongs only to the two anisotropic highlight lobes.
         bool additionalHair = SkinParameters3.z > 0.5;
+        bool layeredHair = SkinParameters3.w > 0.5;
         float hairDiffuseGain = BaseColor.r >= 0.09 ? 0.25 : 0.5;
         albedo = abs(diffuseSample.g)
-            * (le3 ? 1 : hairDiffuseGain)
+            * (layeredHair ? 1 : hairDiffuseGain)
             * (additionalHair ? max(BaseColor.rgb * BaseColor.rgb, 0) : max(BaseColor.rgb, 0));
         // The translucent master always writes HAIR_Diff alpha. DXT1 textures
         // naturally decode to alpha=1; substituting luminance made them

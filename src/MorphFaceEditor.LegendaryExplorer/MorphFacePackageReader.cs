@@ -189,6 +189,114 @@ public sealed class MorphFacePackageReader : IDisposable
         return new LoadedAttachment(ToIdentity(meshExport)!, mesh, materials);
     }
 
+    /// <summary>Loads an exact installed attachment for detached preview without requiring a BioMorphFace owner.</summary>
+    public LoadedAttachment LoadDetachedAttachment(string packagePath, string meshSelector)
+    {
+        ThrowIfDisposed();
+        LegendaryExplorerCoreRuntime.Initialize();
+        var fullPath = RequireFile(packagePath);
+        var package = _packageCache.GetCachedPackage(fullPath)
+            ?? throw new InvalidDataException($"Legendary Explorer Core could not open '{fullPath}'.");
+        var meshExport = ExportSelector.Find(package, meshSelector, "SkeletalMesh");
+        var materialExports = new List<ExportEntry>();
+        var mesh = ReadSkeletalMesh(meshExport, materialExports);
+        var materials = materialExports
+            .DistinctBy(material => MaterialIdentityKey.Create(ToIdentity(material)!))
+            .Select(_materialReader.ReadMaterialEvidence)
+            .ToDictionary(material => material.Key, StringComparer.OrdinalIgnoreCase);
+        return new LoadedAttachment(
+            ToIdentity(meshExport)!, mesh, new ResolvedHeadMaterialSet(materials));
+    }
+
+    /// <summary>
+    /// Validates the exact mesh and material-slot dependency graph used by
+    /// detached attachment preview without decoding material textures. This is
+    /// used while building preview menus so malformed review exports are not
+    /// offered as choices that will fail later on selection.
+    /// </summary>
+    public void ValidateDetachedAttachment(string packagePath, string meshSelector)
+    {
+        ThrowIfDisposed();
+        LegendaryExplorerCoreRuntime.Initialize();
+        var fullPath = RequireFile(packagePath);
+        var package = _packageCache.GetCachedPackage(fullPath)
+            ?? throw new InvalidDataException($"Legendary Explorer Core could not open '{fullPath}'.");
+        var meshExport = ExportSelector.Find(package, meshSelector, "SkeletalMesh");
+        _ = ReadSkeletalMesh(meshExport, new List<ExportEntry>());
+    }
+
+    /// <summary>
+    /// Reads the material evidence used by one exact SkeletalMesh export.
+    /// Geometry is intentionally not decoded: this adapter owns package
+    /// identity, LOD section-to-slot ownership, and detached material data;
+    /// Custom Mode owns the later assignment of that evidence to custom mesh
+    /// sections.
+    /// </summary>
+    public MeshMaterialEvidence LoadMeshMaterialEvidence(
+        string packagePath,
+        string meshSelector)
+    {
+        ThrowIfDisposed();
+        LegendaryExplorerCoreRuntime.Initialize();
+        var fullPath = RequireFile(packagePath);
+        var package = _packageCache.GetCachedPackage(fullPath)
+            ?? throw new InvalidDataException($"Legendary Explorer Core could not open '{fullPath}'.");
+        var meshExport = ExportSelector.Find(package, meshSelector, "SkeletalMesh");
+        var mesh = meshExport.GetBinaryData<SkeletalMesh>();
+        if (mesh.LODModels is not { Length: > 0 })
+        {
+            throw new InvalidDataException(
+                $"SkeletalMesh '{meshExport.InstancedFullPath}' has no LOD models.");
+        }
+
+        var materialUIndices = mesh.Materials ?? [];
+        var materialMaps = ReadLodMaterialMaps(
+            meshExport,
+            mesh.LODModels.Length,
+            materialUIndices.Length);
+        var usedSections = new SortedDictionary<int, List<MeshMaterialEvidenceSection>>();
+        for (var lodIndex = 0; lodIndex < mesh.LODModels.Length; lodIndex++)
+        {
+            var sectionIndex = 0;
+            foreach (var section in mesh.LODModels[lodIndex].Sections ?? [])
+            {
+                var slotIndex = LodMaterialMap.Resolve(
+                    section.MaterialIndex,
+                    materialMaps[lodIndex],
+                    materialUIndices.Length,
+                    $"SkeletalMesh '{meshExport.InstancedFullPath}' LOD {lodIndex} section");
+                if (!usedSections.TryGetValue(slotIndex, out var slotSections))
+                {
+                    slotSections = [];
+                    usedSections.Add(slotIndex, slotSections);
+                }
+                slotSections.Add(new MeshMaterialEvidenceSection(lodIndex, sectionIndex));
+                sectionIndex++;
+            }
+        }
+
+        var slots = usedSections
+            .Select(pair =>
+            {
+                var materialReference = meshExport.FileRef.GetEntry(materialUIndices[pair.Key])
+                    ?? throw new InvalidDataException(
+                        $"SkeletalMesh '{meshExport.InstancedFullPath}' has invalid material UIndex " +
+                        $"{materialUIndices[pair.Key]} in slot {pair.Key}.");
+                var materialExport = _referenceResolver.Require(
+                    materialReference,
+                    $"SkeletalMesh '{meshExport.InstancedFullPath}' material slot {pair.Key}");
+                var material = _materialReader.ReadMaterialEvidence(materialExport);
+                return new MeshMaterialEvidenceSlot(
+                    pair.Key,
+                    ToIdentity(materialExport)!,
+                    material,
+                    pair.Value.ToArray());
+            })
+            .ToArray();
+
+        return new MeshMaterialEvidence(ToIdentity(meshExport)!, slots);
+    }
+
     public DecodedTextureAsset LoadTexture(
         string packagePath,
         string textureSelector,
@@ -615,3 +723,23 @@ public sealed class MorphFacePackageReader : IDisposable
         SkeletalMeshAsset Asset,
         IReadOnlyList<ExportEntry> Materials);
 }
+
+/// <summary>Detached material evidence grouped by the source mesh's used slots.</summary>
+public sealed record MeshMaterialEvidence(
+    AssetIdentity Mesh,
+    IReadOnlyList<MeshMaterialEvidenceSlot> Slots)
+{
+    /// <summary>Materials in stable ascending source-slot order, retaining duplicate refs.</summary>
+    public IReadOnlyList<ResolvedHeadMaterial> Materials =>
+        Slots.Select(slot => slot.Material).ToArray();
+}
+
+/// <summary>One source material slot and every LOD section that consumes it.</summary>
+public sealed record MeshMaterialEvidenceSlot(
+    int SlotIndex,
+    AssetIdentity Source,
+    ResolvedHeadMaterial Material,
+    IReadOnlyList<MeshMaterialEvidenceSection> Sections);
+
+/// <summary>Stable section location within a source mesh's LOD array.</summary>
+public readonly record struct MeshMaterialEvidenceSection(int LodIndex, int SectionIndex);

@@ -20,8 +20,59 @@ public static class CustomMeshTests
         new("detached PSK decoding preserves optional rig weights", PskDecodePreservesRig),
         new("detached glTF decoding applies node transforms and derives streams", GltfDecodeAppliesTransforms),
         new("detached GLB decoding retains render sections", GlbDecodeRetainsSections),
+        new("detached custom material assignment rebases the preview surface", DetachedMaterialAssignmentRebasesPreview),
         new("player topology recognition maps reordered vertices and rejects unrelated triangles", PlayerTopologyRecognitionIsStructural)
     ];
+
+    private static void DetachedMaterialAssignmentRebasesPreview()
+    {
+        var source = new ImportedMeshAsset(
+            "custom-material.psk",
+            [Vector3.Zero, Vector3.UnitX, Vector3.UnitY],
+            [Vector3.UnitZ, Vector3.UnitZ, Vector3.UnitZ],
+            [new Vector4(1, 0, 0, 1), new Vector4(1, 0, 0, 1), new Vector4(1, 0, 0, 1)],
+            [Vector2.Zero, Vector2.UnitX, Vector2.UnitY],
+            [0, 1, 2],
+            [new ImportedMeshSection(2, "Authored Skin", 0, 3)],
+            [], null, null, [0, 1, 2]);
+        var templateIdentity = new AssetIdentity(
+            "installed.pcc", "Custom.HMF_HED_PROCustom_MAT", 42, "MaterialInstanceConstant");
+        var template = new ResolvedHeadMaterial(
+            MaterialIdentityKey.Create(templateIdentity), templateIdentity, "HMF_HED_PRO_MASTER_FACE_MAT",
+            HeadMaterialFamily.Skin, HeadMaterialBlendMode.Opaque, false,
+            new Dictionary<string, float> { ["HED_Norm_Blend"] = 0.25f },
+            new Dictionary<string, Vector4>(), new Dictionary<string, MaterialTextureBinding>());
+        var option = new CustomMaterialAssignmentOption(
+            "le3:human-female:skin", "Human Female - Skin", "human", "head",
+            HeadMaterialFamily.Skin, template);
+        var factory = new HeadPreviewSceneFactory();
+        var result = new DetachedMeshPreviewLoadService(
+            factory,
+            materialCatalog: new FixedCustomMaterialCatalog(option))
+            .Load(MorphFaceGame.LE3, source);
+
+        TestAssert.Equal(1, result.CustomMaterials!.UsedSlots.Count);
+        TestAssert.Equal(2, result.CustomMaterials.UsedSlots[0].MaterialIndex);
+        var stableKey = MaterialIdentityKey.Create(result.CustomMaterials.GetPreviewMaterialIdentity(2));
+        TestAssert.Equal(stableKey, result.Preview.Scene.Meshes.Single().Sections.Single().Material.Key);
+
+        result.CustomMaterials.Assign(2, option);
+        TestAssert.True(result.Preview.MaterialEditingSession.ScalarNames.Contains("HED_Norm_Blend"),
+            "Assignment did not rebuild the shared material-control surface.");
+        var update = factory.CreateMaterialUpdate(
+            result.Preview.Loaded, result.Preview.MaterialEditingSession.Materials);
+        TestAssert.Equal(HeadMaterialFamily.Skin, update.Materials[stableKey].Family);
+        TestAssert.True(source.Positions.SequenceEqual(result.Detached.Source.Positions) &&
+                        source.Indices.SequenceEqual(result.Detached.Source.Indices) &&
+                        source.Sections.SequenceEqual(result.Detached.Source.Sections),
+            "Material assignment changed authored imported mesh geometry or section data.");
+    }
+
+    private sealed class FixedCustomMaterialCatalog(CustomMaterialAssignmentOption option)
+        : ICustomMaterialTemplateCatalog
+    {
+        public CustomMaterialTemplateCatalogResult Load(MorphFaceGame game) => new([option], [], []);
+    }
 
     private static void ProfileIsInferredFromMaterials()
     {

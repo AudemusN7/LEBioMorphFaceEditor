@@ -5,6 +5,16 @@ namespace MorphFaceEditor.Core.Randomisation;
 /// <summary>Creates corpus-bounded scalar, perceptual-colour, selector and texture-family proposals.</summary>
 public static class MaterialRandomiser
 {
+    private const string Le1FemaleMakeupMask =
+        "BIOG_HMF_HED_PROMorph_R.Masks.HMF_HED_PROCustom_MKup_01";
+    private static readonly HashSet<string> MakeupScalars = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "HED_Blush_Scalar",
+        "HED_Brow_Tint_Scalar",
+        "HED_EyeShadow_Tint_Scalar",
+        "HED_Lips_Tint_Scalar"
+    };
+
     public static MaterialRandomisationProposal CreateProposal(
         MorphRandomisationDonor donor,
         IReadOnlyList<MorphRandomisationDonor> compatibleDonors,
@@ -46,6 +56,7 @@ public static class MaterialRandomiser
         var textureRandom = new MorphRandomiser.StableRandom(
             unchecked((ulong)(uint)randomSeed) ^ 0xD1B54A32D192ED03UL);
         var scalars = new Dictionary<string, float>(currentScalars, StringComparer.OrdinalIgnoreCase);
+        var randomisedScalars = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var name in scalarScope.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
         {
             if (IsExcludedScalar(profile.ProfileKey, name)) continue;
@@ -57,6 +68,7 @@ public static class MaterialRandomiser
             if (IsSeedExactScalar(profile.ProfileKey, name))
             {
                 scalars[name] = seedValue;
+                randomisedScalars.Add(name);
                 continue;
             }
             if (IsSafetyConstrainedScalar(profile.ProfileKey, name))
@@ -64,10 +76,18 @@ public static class MaterialRandomiser
                 limit = new MaterialRandomisationScalarBounds(name, statistics.P10, statistics.P90);
             }
             scalars[name] = SampleScalar(seedValue, statistics, limit, strengthPercent, numericRandom);
+            randomisedScalars.Add(name);
         }
 
         var textures = SelectTextureFamilies(
             donor, compatibleDonors, profile.ProfileKey, textureFamilyScope, strengthPercent, textureRandom,
+            excludedTextureSignatures);
+        textures = ApplyRequiredTextures(
+            profile.ProfileKey,
+            scalars,
+            randomisedScalars,
+            currentTextures,
+            textures,
             excludedTextureSignatures);
         var vectors = new Dictionary<string, Vector4>(currentVectors, StringComparer.OrdinalIgnoreCase);
         foreach (var name in vectorScope.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
@@ -86,6 +106,39 @@ public static class MaterialRandomiser
         ApplyTextureDependencies(profile.ProfileKey, textures, currentTextures, vectors, numericRandom);
 
         return new MaterialRandomisationProposal(donor.Id, randomSeed, scalars, vectors, textures);
+    }
+
+    private static IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> ApplyRequiredTextures(
+        string profileKey,
+        IReadOnlyDictionary<string, float> scalars,
+        IReadOnlySet<string> randomisedScalars,
+        IReadOnlyDictionary<string, string>? currentTextures,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> textures,
+        IReadOnlySet<string>? excludedTextureSignatures)
+    {
+        if (!profileKey.Equals("le1-human-female", StringComparison.OrdinalIgnoreCase) ||
+            currentTextures?.ContainsKey("HED_Makeup_Mask") != true ||
+            !randomisedScalars.Any(name => MakeupScalars.Contains(name) &&
+                                          scalars.TryGetValue(name, out var value) && value != 0))
+        {
+            return textures;
+        }
+
+        IReadOnlyDictionary<string, string> makeup = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["HED_Makeup_Mask"] = Le1FemaleMakeupMask
+        };
+        if (excludedTextureSignatures?.Contains(TextureSignature(makeup)) == true)
+        {
+            return textures;
+        }
+
+        var result = new Dictionary<string, IReadOnlyDictionary<string, string>>(
+            textures, StringComparer.OrdinalIgnoreCase)
+        {
+            ["human-makeup-required"] = makeup
+        };
+        return result;
     }
 
     public static IReadOnlySet<string> DependentVectorNames(

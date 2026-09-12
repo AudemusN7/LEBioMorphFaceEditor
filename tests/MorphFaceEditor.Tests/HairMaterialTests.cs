@@ -21,6 +21,7 @@ public static class HairMaterialTests
         new("hair diffuse uses its packed green channel", HairDiffuseUsesPackedGreenChannel),
         new("DXT1 hair uses decoded alpha instead of luminance", Dxt1HairUsesDecodedAlpha),
         new("compiled hair highlight scalars do not affect rendering", HairHighlightScalarsAreCompiledOut),
+        new("layered hair highlight colours drive LE1 and LE3 rendering", LayeredHairHighlightColoursRender),
         new("compiled hair auxiliary maps do not affect rendering", HairAuxiliaryMapsAreCompiledOut),
         new("LE3 Human Female additional hair binds its packed diffuse map", Le3FemaleAdditionalHairBindsPackedDiffuse),
         new("opaque hair strand cores occlude rear cards", HairDepthPrepassOccludesRearCards),
@@ -162,6 +163,48 @@ public static class HairMaterialTests
                 first.SequenceEqual(second),
                 "Hair highlight scalar parameters affected rendering despite being absent from the FXC uniform table.");
         }
+    }
+
+    private static void LayeredHairHighlightColoursRender()
+    {
+        foreach (var isLe3 in new[] { false, true })
+        {
+            var dark = CreateLayeredHairMaterial("hair", Vector4.Zero, Vector4.Zero, isLe3);
+            var coloured = CreateLayeredHairMaterial(
+                "hair", new Vector4(1, 0, 0, 1), new Vector4(0, 0, 1, 1), isLe3);
+            var (renderer, camera) = CreateTriangleRenderer(dark);
+            using (renderer)
+            {
+                var first = renderer.Render(camera, new HeadPreviewOptions()).BgraPixels;
+                renderer.UpdateMaterials(new Dictionary<string, HeadPreviewMaterial> { [coloured.Key] = coloured });
+                var second = renderer.Render(camera, new HeadPreviewOptions()).BgraPixels;
+                TestAssert.True(
+                    !first.SequenceEqual(second),
+                    $"Layered hair highlight colours did not affect the {(isLe3 ? "LE3" : "LE1/2")} preview path.");
+            }
+        }
+    }
+
+    private static HeadPreviewMaterial CreateLayeredHairMaterial(
+        string key,
+        Vector4 highlight1,
+        Vector4 highlight2,
+        bool isLe3)
+    {
+        var material = CreateHairMaterial(key, [255, 128, 0, 255], isLe3: isLe3);
+        return material with
+        {
+            Scalars = new Dictionary<string, float>(material.Scalars, StringComparer.OrdinalIgnoreCase)
+            {
+                ["Hightlight1Intensity"] = 2,
+                ["Hightlight2Intensity"] = 3
+            },
+            Vectors = new Dictionary<string, Vector4>(material.Vectors, StringComparer.OrdinalIgnoreCase)
+            {
+                ["Highlight1Color"] = highlight1,
+                ["Highlight2Color"] = highlight2
+            }
+        };
     }
 
     private static void HairAuxiliaryMapsAreCompiledOut()

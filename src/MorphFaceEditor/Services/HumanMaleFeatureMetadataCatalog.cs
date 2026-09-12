@@ -246,6 +246,7 @@ public class HumanMaleFeatureMetadataCatalog : IHeadEditorUiProfile
     public virtual bool IsMaterialVisible(string parameterName, MaterialParameterKind kind) =>
         !(kind == MaterialParameterKind.Texture &&
           (parameterName.Equals("Diffuseuse", StringComparison.OrdinalIgnoreCase) ||
+           parameterName.Equals("CubeMap", StringComparison.OrdinalIgnoreCase) ||
            parameterName.StartsWith("__", StringComparison.Ordinal)));
 
     public virtual string GetMaterialCategory(string parameterName, MaterialParameterKind kind)

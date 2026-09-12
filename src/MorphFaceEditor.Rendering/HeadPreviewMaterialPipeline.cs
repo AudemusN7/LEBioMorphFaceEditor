@@ -379,7 +379,9 @@ internal struct HeadPreviewMaterialConstants
                 material.Family == HeadMaterialFamily.Hair && material.Textures.ContainsKey("HAIR_ADDN_Diff")
                     ? 1
                     : GetScalar(material, "HED_Addn_Colour_Blend_Scalar", 0),
-                femaleFace ? 1 : 0),
+                material.Family == HeadMaterialFamily.Hair
+                    ? HasLayeredHairHighlights(material) ? 1 : 0
+                    : femaleFace ? 1 : 0),
             ScalpParameters0 = new Vector4(
                 GetScalar(material, "HED_Scalp_Mask_Scalar", 1),
                 GetScalar(material, "HED_Scalp_BuzzCut_Alpha_Scalar", 0),
@@ -390,12 +392,14 @@ internal struct HeadPreviewMaterialConstants
                 GetScalar(material, "HED_Teeth_Scalar", 0.75f),
                 GetScalar(material, "HED_Scalp_PhongSpec_Scalar", 1),
                 GetScalar(material, "HED_Spec_Aniso_Exp_Scalar", 3)),
-            ScalpParameters2 = material.Family == HeadMaterialFamily.Hair && material.IsLe3
+            ScalpParameters2 = material.Family == HeadMaterialFamily.Hair && HasLayeredHairHighlights(material)
                 ? new Vector4(
-                    GetScalar(material, "Highlight1SpecExp_Scalar", 50),
-                    GetScalar(material, "Hightlight1Intensity", 1),
-                    GetScalar(material, "Highlight2SpecExp_Scalar", 250),
-                    GetScalar(material, "Hightlight2Intensity", 1))
+                    GetFirstScalar(material, 50,
+                        "Highlight1SpecExp_Scalar", "Highlight1Specularity", "Highlight1Colour_Specularity"),
+                    GetFirstScalar(material, 1, "Highlight1Intensity", "Hightlight1Intensity"),
+                    GetFirstScalar(material, 250,
+                        "Highlight2SpecExp_Scalar", "Highlight2Specularity", "Highlight2Colour_Specularity"),
+                    GetFirstScalar(material, 1, "Highlight2Intensity", "Hightlight2Intensity"))
                 : new Vector4(
                     GetScalar(material, "HAIR_Shine_Desaturate_Scalar", 0),
                     GetScalar(material, "Highlight1SpecExp_Scalar", 50),
@@ -807,7 +811,8 @@ internal struct HeadPreviewMaterialConstants
         HeadMaterialFamily.Eyes => GetVector(material, "EYE_White_Colour_Vector", Vector4.One),
         HeadMaterialFamily.Skin => GetVector(material, "HED_Addn_Colour_Vector", Vector4.Zero),
         HeadMaterialFamily.Scalp => GetVector(material, "HED_Hair_Colour_Vector", Vector4.Zero),
-        HeadMaterialFamily.Hair when material.IsLe3 => GetVector(material, "Highlight1Color", Vector4.One),
+        HeadMaterialFamily.Hair when HasLayeredHairHighlights(material) => GetFirstVector(
+            material, Vector4.One, "Highlight1Color", "Highlight1Colour_Vector"),
         _ => Vector4.One
     };
 
@@ -816,7 +821,8 @@ internal struct HeadPreviewMaterialConstants
         HeadMaterialFamily.Skin => GetVector(material, "HED_Mask_Vector", Vector4.Zero),
         HeadMaterialFamily.Scalp => GetVector(material, "HED_Teeth_Vector", Vector4.One),
         HeadMaterialFamily.Eyes => GetVector(material, "EyeLightScattering", Vector4.Zero),
-        HeadMaterialFamily.Hair when material.IsLe3 => GetVector(material, "Highlight2Color", Vector4.One),
+        HeadMaterialFamily.Hair when HasLayeredHairHighlights(material) => GetFirstVector(
+            material, Vector4.One, "Highlight2Color", "Highlight2Colour_Vector"),
         _ => Vector4.Zero
     };
 
@@ -842,6 +848,45 @@ internal struct HeadPreviewMaterialConstants
         material.Supports(name, MaterialParameterKind.Scalar) && material.Scalars.TryGetValue(name, out var value)
             ? value
             : fallback;
+
+    private static bool HasLayeredHairHighlights(HeadPreviewMaterial material) =>
+        material.Family == HeadMaterialFamily.Hair &&
+        (material.Supports("Highlight1Color", MaterialParameterKind.Vector) ||
+         material.Supports("Highlight1Colour_Vector", MaterialParameterKind.Vector) ||
+         material.Supports("Highlight2Color", MaterialParameterKind.Vector) ||
+         material.Supports("Highlight2Colour_Vector", MaterialParameterKind.Vector));
+
+    private static float GetFirstScalar(
+        HeadPreviewMaterial material,
+        float fallback,
+        params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (material.Supports(name, MaterialParameterKind.Scalar) &&
+                material.Scalars.TryGetValue(name, out var value))
+            {
+                return value;
+            }
+        }
+        return fallback;
+    }
+
+    private static Vector4 GetFirstVector(
+        HeadPreviewMaterial material,
+        Vector4 fallback,
+        params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (material.Supports(name, MaterialParameterKind.Vector) &&
+                material.Vectors.TryGetValue(name, out var value))
+            {
+                return new Vector4(value.X, value.Y, value.Z, value.W);
+            }
+        }
+        return fallback;
+    }
 
     private static Vector3 DiagnosticColor(HeadMaterialFamily family) => family switch
     {

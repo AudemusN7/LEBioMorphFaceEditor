@@ -403,6 +403,9 @@ public static class HumanMaterialProfiles
             "Declared by the LE1 master graph but optimized out of the supplied base/direct-light FXC permutations.");
         AddScalar(result, HeadMaterialFamily.Hair, "Highlight1SpecExp_Scalar", "Hair", 0, 500, 2.5f,
             "Declared by the LE1 master graph but optimized out of the supplied base/direct-light FXC permutations.");
+        AddScalars(result, HeadMaterialFamily.Hair, "Hair", 0, 500,
+            "Highlight1Specularity", "Highlight2Specularity",
+            "Highlight1Colour_Specularity", "Highlight2Colour_Specularity");
         AddTexture(result, HeadMaterialFamily.Hair, "HAIR_Diff", "Hair diffuse / opacity", "Hair", TextureRole.Diffuse, TextureColorSpace.Srgb, TextureAlphaPolicy.Translucency);
         AddTexture(result, HeadMaterialFamily.Hair, "HAIR_ADDN_Diff", "Additional hair diffuse / opacity", "Hair", TextureRole.Diffuse, TextureColorSpace.Srgb, TextureAlphaPolicy.Translucency,
             "LE3 HMF additional-hair packed map: red selects the two highlight lobes, green supplies base colour, and alpha supplies opacity.");
@@ -416,6 +419,10 @@ public static class HumanMaterialProfiles
         AddTexture(result, HeadMaterialFamily.Hair, "HAIR_SpecShift2", "Secondary hair specular shift", "Hair", TextureRole.Specular, TextureColorSpace.Linear);
         AddTexture(result, HeadMaterialFamily.Hair, "HAIR_Tang", "Hair tangent map", "Hair", TextureRole.Tangent, TextureColorSpace.Linear);
         AddVector(result, HeadMaterialFamily.Hair, "HED_Hair_Colour_Vector", "Hair colour", "Hair");
+        AddVector(result, HeadMaterialFamily.Hair, "Highlight1Color", "Highlight 1 colour", "Hair");
+        AddVector(result, HeadMaterialFamily.Hair, "Highlight2Color", "Highlight 2 colour", "Hair");
+        AddVector(result, HeadMaterialFamily.Hair, "Highlight1Colour_Vector", "Highlight 1 colour", "Hair");
+        AddVector(result, HeadMaterialFamily.Hair, "Highlight2Colour_Vector", "Highlight 2 colour", "Hair");
         return result;
     }
 

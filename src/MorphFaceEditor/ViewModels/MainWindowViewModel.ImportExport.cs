@@ -392,7 +392,7 @@ public sealed partial class MainWindowViewModel
         CancelPendingLoad();
         SetEditor(null, null);
         DisposePackageWorkspace();
-        SetDetachedMeshSource(result.Detached.Source, result.Detached.UpAxis);
+        SetDetachedMeshSource(result.Detached.Source);
         _standaloneGame = game;
         _standaloneImportPath = Path.GetFullPath(sourcePath);
         _fixedBakeFacePaths.Clear();
@@ -414,6 +414,9 @@ public sealed partial class MainWindowViewModel
         LoadedFacePath = face.InstancedPath;
 
         var topology = result.Preview.Loaded.BaseHead.Topology;
+        var previewAttachmentOptions = result.PreviewAttachments
+            .Select(identity => new PackageAssetListItem(identity))
+            .ToArray();
         var editor = new FaceEditorViewModel(
             result.Preview.EditingSession,
             result.Preview.Profile.UiProfile,
@@ -422,7 +425,7 @@ public sealed partial class MainWindowViewModel
             _referenceService,
             sourcePath,
             [],
-            [],
+            previewAttachmentOptions,
             null,
             [],
             SetEditorError,
@@ -430,67 +433,40 @@ public sealed partial class MainWindowViewModel
             _randomisationCatalog,
             randomisationInclusionState: _randomisationInclusionState,
             ignoresAuthoredGeometry: false,
-            allowsAttachmentEditing: false);
+            allowsAttachmentEditing: true,
+            customMaterialWorkspace: result.CustomMaterials,
+            customMaterialOptions: result.MaterialOptions,
+            materialRandomisationProfileKey: $"{game.ToString().ToLowerInvariant()}-human-female",
+            previewOnlyAttachments: true);
         SetEditor(editor, result.Preview.Loaded);
         FaceDetails = $"{topology.VertexCount:N0} vertices · {topology.IndexCount / 3:N0} triangles · " +
                       $"{topology.Sections.Count} sections · {topology.ReferenceSkeleton.Count} verified bones · " +
-                      "detached LOD0 preview";
+                      $"{result.CustomMaterials?.UsedSlots.Count ?? 0} used material slots · detached LOD0 preview";
         HasPreview = true;
         var cameraFamily = PreviewCameraGrouping.ForProfile(result.Preview.Profile.Key);
         var resetCamera = !string.Equals(_previewCameraFamily, cameraFamily, StringComparison.OrdinalIgnoreCase);
         _previewCameraFamily = cameraFamily;
         PreviewSceneReady?.Invoke(result.Preview.Scene, resetCamera);
+        var textureCatalogProfile = TextureCatalogProfiles.For(result.Preview.Profile);
+        _ = LoadTextureRegistryAsync(
+            editor, game, result.Preview.Profile, textureCatalogProfile, CancellationToken.None);
         foreach (var warning in result.Detached.Warnings)
         {
             AppLog.Warning(warning);
         }
         Status = result.Preview.EditingSession.CanEditBones
-            ? $"Loaded {objectName} as an unrecognised custom mesh; LOD0 preview and verified bone controls ready with exact source data retained. Morph controls are disabled."
-            : $"Loaded {objectName} as an unrecognised custom mesh; LOD0 preview ready with exact source data retained. Morph and bone controls are disabled.";
+            ? $"Loaded {objectName} as an unrecognised custom mesh; material assignment, LOD0 preview and verified bone controls ready with exact source data retained. Morph controls are disabled."
+            : $"Loaded {objectName} as an unrecognised custom mesh; material assignment and LOD0 preview ready with exact source data retained. Morph and bone controls are disabled.";
         OnPropertyChanged(nameof(PackageName));
         OnPropertyChanged(nameof(PackageDisplayName));
         OnDirtyStateChanged();
         RaiseFaceContextCanExecuteChanged();
     }
 
-    private void SetDetachedMeshSource(
-        ImportedMeshAsset? source,
-        DetachedMeshUpAxis upAxis = DetachedMeshUpAxis.Auto)
+    private void SetDetachedMeshSource(ImportedMeshAsset? source)
     {
         _detachedMeshSource = source;
-        _detachedMeshUpAxis = upAxis;
         OnPropertyChanged(nameof(IsDetachedMeshWorkspace));
-        OnPropertyChanged(nameof(DetachedMeshUpAxis));
-    }
-
-    private void RebuildDetachedMeshPreview(DetachedMeshUpAxis upAxis)
-    {
-        if (_detachedMeshSource is null || _standaloneGame is null)
-        {
-            return;
-        }
-        if (IsDirty)
-        {
-            ErrorMessage = "The preview up axis cannot be changed after bone edits. Undo or reopen the mesh first.";
-            OnPropertyChanged(nameof(DetachedMeshUpAxis));
-            return;
-        }
-
-        var previous = _detachedMeshUpAxis;
-        try
-        {
-            var sourcePath = _standaloneImportPath ?? _detachedMeshSource.SourcePath;
-            var objectName = SelectedFace?.ObjectName ?? Path.GetFileNameWithoutExtension(sourcePath);
-            var result = _detachedMeshPreviewLoadService.Load(_standaloneGame.Value, _detachedMeshSource, upAxis);
-            PublishDetachedMeshWorkspace(result, sourcePath, objectName, _standaloneGame.Value);
-            Status = $"Preview orientation changed to {upAxis}. Source mesh data remains unchanged.";
-        }
-        catch (Exception exception)
-        {
-            _detachedMeshUpAxis = previous;
-            OnPropertyChanged(nameof(DetachedMeshUpAxis));
-            ErrorMessage = $"The preview orientation could not be changed: {exception.Message}";
-        }
     }
 
     private async Task ImportMorphIntoPackageAsync(string sourcePath)

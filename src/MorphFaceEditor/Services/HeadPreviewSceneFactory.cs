@@ -114,7 +114,10 @@ public sealed class HeadPreviewSceneFactory
                 .Select(attachment =>
                 {
                     var attachmentLod = SelectLod(attachment, lodIndex);
-                    var deformed = SkinAttachment(attachment, attachmentLod, evaluation.FinalSkeleton);
+                    var deformed = SkinAttachment(
+                        attachment,
+                        attachmentLod,
+                        AttachmentPose(loaded, evaluation.FinalSkeleton));
                     var attachmentMesh = CreateMesh(
                         attachment,
                         attachmentLod,
@@ -174,7 +177,10 @@ public sealed class HeadPreviewSceneFactory
         if (loaded.HairMesh is not null)
         {
             var attachmentLod = SelectLod(loaded.HairMesh, lodIndex);
-            var deformed = SkinAttachment(loaded.HairMesh, attachmentLod, finalSkeleton);
+            var deformed = SkinAttachment(
+                loaded.HairMesh,
+                attachmentLod,
+                AttachmentPose(loaded, finalSkeleton));
             meshes.Add(CreateMesh(
                 loaded.HairMesh,
                 attachmentLod,
@@ -188,7 +194,10 @@ public sealed class HeadPreviewSceneFactory
         foreach (var otherMesh in loaded.OtherMeshes)
         {
             var attachmentLod = SelectLod(otherMesh, lodIndex);
-            var deformed = SkinAttachment(otherMesh, attachmentLod, finalSkeleton);
+            var deformed = SkinAttachment(
+                otherMesh,
+                attachmentLod,
+                AttachmentPose(loaded, finalSkeleton));
             meshes.Add(CreateMesh(
                 otherMesh,
                 attachmentLod,
@@ -230,6 +239,13 @@ public sealed class HeadPreviewSceneFactory
             lod.RenderData,
             pose.SkinningMatrices);
     }
+
+    private static IReadOnlyList<BoneTranslation> AttachmentPose(
+        LoadedMorphFace loaded,
+        IReadOnlyList<BoneTranslation> facePose) =>
+        loaded.UsesNativeAttachmentBindPose
+            ? []
+            : facePose;
 
     private static void Validate(LoadedMorphFace loaded)
     {

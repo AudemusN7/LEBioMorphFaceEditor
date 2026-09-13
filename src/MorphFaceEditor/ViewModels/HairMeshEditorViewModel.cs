@@ -14,6 +14,7 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
 {
     private readonly AssetReferenceEditingSession _session;
     private HairMeshOption _selected;
+    private IReadOnlyList<HairMeshOption> _options;
 
     public HairMeshEditorViewModel(
         AssetReferenceEditingSession session,
@@ -30,7 +31,7 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
         {
             options.Add(new HairMeshOption($"{current.InstancedPath} (current reference)", current));
         }
-        Options = options.ToArray();
+        _options = options.ToArray();
         _selected = Find(session.Value);
         session.ValueChanged += OnValueChanged;
     }
@@ -39,7 +40,7 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
 
     public string Label { get; }
     public int SlotIndex { get; }
-    public IReadOnlyList<HairMeshOption> Options { get; }
+    public IReadOnlyList<HairMeshOption> Options => _options;
     public HairMeshOption Selected
     {
         get => _selected;
@@ -52,6 +53,16 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
         }
     }
     public AssetIdentity? Value => _session.Value;
+
+    public void SetImportedPreview(AssetIdentity? value)
+    {
+        if (value is not null && !_options.Any(option => Same(option.Identity, value)))
+        {
+            _options = [.. _options, new HairMeshOption($"{value.InstancedPath} (imported preview)", value)];
+            OnPropertyChanged(nameof(Options));
+        }
+        _session.Set(value);
+    }
 
     private HairMeshOption Find(AssetIdentity? value) => Options.First(option => Same(option.Identity, value));
 

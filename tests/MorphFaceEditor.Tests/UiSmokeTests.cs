@@ -163,6 +163,27 @@ public static class UiSmokeTests
                 "Detached Stage B mesh exposed a package save command.");
             TestAssert.True(viewModel.IsDetachedMeshWorkspace,
                 "Detached mesh was not identified as a detached workspace.");
+            TestAssert.True(viewModel.ExportMaterialsCommand.CanExecute(null) && viewModel.ImportMaterialsCommand.CanExecute(null),
+                "Detached mesh did not expose its MFE material file actions.");
+            TestAssert.True(!viewModel.ExportTseMaterialsCommand.CanExecute(null) && !viewModel.ImportTseMaterialsCommand.CanExecute(null),
+                "Unassigned mesh exposed TSE material actions.");
+            var editor = viewModel.Editor!;
+            // This shell fixture deliberately has no installed catalogue; seed only the assignment needed for routing.
+            var template = MaterialTestFixtures.CreateSession().Materials.Materials.Values.First();
+            editor.CustomMaterials!.Assign(0, new CustomMaterialAssignmentOption(
+                "human-test", "Human test", "le2-human-male", "head", HeadMaterialFamily.Skin, template)
+                { ParameterScopeKey = "human", ParameterScopeLabel = "Human" });
+            TestAssert.True(viewModel.ExportTseMaterialsCommand.CanExecute(null) && viewModel.ImportTseMaterialsCommand.CanExecute(null),
+                "Human assignment did not enable TSE material actions.");
+            var gamePrompts = dialogs.StandaloneGameChoiceCount;
+            var namePrompts = dialogs.StandaloneNameChoiceCount;
+            viewModel.ImportTseMaterialsCommand.Execute(null);
+            viewModel.ImportMaterialsCommand.Execute(null);
+            TestAssert.Equal(2, dialogs.MaterialImportFileChoiceCount);
+            TestAssert.Equal(gamePrompts, dialogs.StandaloneGameChoiceCount);
+            TestAssert.Equal(namePrompts, dialogs.StandaloneNameChoiceCount);
+            TestAssert.True(ReferenceEquals(editor, viewModel.Editor) && viewModel.IsDetachedMeshWorkspace,
+                "Cancelling a context material import changed the current workspace.");
         }
         finally
         {
@@ -1495,6 +1516,7 @@ public static class UiSmokeTests
         public int StandaloneNameChoiceCount { get; private set; }
         public int RonImportDestinationChoiceCount { get; private set; }
         public int MorphImportFileChoiceCount { get; private set; }
+        public int MaterialImportFileChoiceCount { get; private set; }
         public MorphFaceGame? StandaloneGameChoiceResult { get; init; }
         public string? StandaloneNameChoiceResult { get; init; }
         public RonImportDestination? RonImportDestinationChoiceResult { get; init; }
@@ -1505,6 +1527,11 @@ public static class UiSmokeTests
         public string? ChooseMorphImportFile(string? initialDirectory = null)
         {
             MorphImportFileChoiceCount++;
+            return null;
+        }
+        public string? ChooseMaterialImportFile(bool tse, string? initialDirectory = null)
+        {
+            MaterialImportFileChoiceCount++;
             return null;
         }
         public MorphFaceGame? ChooseStandaloneImportGame()

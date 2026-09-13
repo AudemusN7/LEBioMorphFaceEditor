@@ -83,6 +83,30 @@ public sealed class MaterialEditingSession : IUndoableEditSource
             ? selected
             : GetEffectiveTexture(name)?.Texture;
 
+    public AssetIdentity? GetTextureReference(string name) =>
+        _textureReferences.TryGetValue(name, out var selected) ? selected?.Source :
+        _originalOverrides.Textures.FirstOrDefault(value => value.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+            is { } authored ? authored.TextureReference : GetEffectiveTexture(name)?.Texture.Source;
+
+    /// <summary>Captures effective values, explicit inheritance and unresolved references for material interchange.</summary>
+    public MorphFaceMaterialData CaptureInterchangeData()
+    {
+        var scalarNames = ScalarNames.Concat(_editedScalars).Concat(_originalOverrides.Scalars.Select(value => value.Name))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var vectorNames = VectorNames.Concat(_editedVectors).Concat(_originalOverrides.Vectors.Select(value => value.Name))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return new(
+            _scalars.Where(value => scalarNames.Contains(value.Key))
+                .OrderBy(value => value.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(value => new ScalarMaterialOverride(value.Key, value.Value)).ToArray(),
+            _vectors.Where(value => vectorNames.Contains(value.Key))
+                .OrderBy(value => value.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(value => new VectorMaterialOverride(value.Key, value.Value)).ToArray(),
+            TextureParameters.Select(value => value.Name).Concat(_originalOverrides.Textures.Select(value => value.Name))
+                .Concat(_textureReferences.Keys).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase)
+                .Select(name => new TextureMaterialOverride(name, GetTextureReference(name))).ToArray());
+    }
+
     public string GetSourceParameterName(string controlName) =>
         MaterialParameterControlKey.ParameterName(controlName);
     public string? GetParameterScopeKey(string controlName) =>
@@ -436,15 +460,15 @@ public sealed class MaterialEditingSession : IUndoableEditSource
 
     public void SetTextureReference(string name, DecodedTextureAsset? texture)
     {
-        var before = GetSelectedTexture(name);
-        if (before?.Source == texture?.Source && (before is null) == (texture is null))
+        var before = new MaterialTextureState(_textureReferences.GetValueOrDefault(name), _textureReferences.ContainsKey(name));
+        if (GetTextureReference(name) == texture?.Source)
         {
             return;
         }
         _textureReferences[name] = texture;
         if (!_replaying)
         {
-            CommitHistory(_history.Record(new MaterialSemanticEdit(TextureKey(name), before, texture)));
+            CommitHistory(_history.Record(new MaterialSemanticEdit(TextureKey(name), before, new MaterialTextureState(texture, true))));
         }
         Refresh(MaterialChangeKind.Texture, name);
     }
@@ -535,7 +559,8 @@ public sealed class MaterialEditingSession : IUndoableEditSource
     /// </summary>
     public void ApplyMaterialData(
         MorphFaceMaterialData data,
-        IReadOnlyDictionary<string, DecodedTextureAsset?> decodedTextures)
+        IReadOnlyDictionary<string, DecodedTextureAsset?> decodedTextures,
+        bool preserveUnspecifiedTextures = false)
     {
         ArgumentNullException.ThrowIfNull(data);
         ArgumentNullException.ThrowIfNull(decodedTextures);
@@ -565,6 +590,7 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         ValidateUnique(mappedScalars.Select(value => value.Name), "mapped scalar");
         ValidateUnique(mappedVectors.Select(value => value.Name), "mapped vector");
         ValidateUnique(mappedTextures.Select(value => value.Name), "mapped texture");
+        var before = CaptureResetState();
         _originalOverrides = new MorphFaceMaterialOverrides(
             _originalOverrides.Source,
             mappedScalars,
@@ -586,7 +612,11 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         }
 
         _textureReferences.Clear();
-        foreach (var parameter in TextureParameters)
+        if (preserveUnspecifiedTextures)
+        {
+            foreach (var value in before.Textures) _textureReferences[value.Key] = value.Value;
+        }
+        else foreach (var parameter in TextureParameters)
         {
             _textureReferences[parameter.Name] = null;
         }
@@ -601,8 +631,40 @@ public sealed class MaterialEditingSession : IUndoableEditSource
             {
                 _textureReferences[value.Name] = texture;
             }
+            else
+            {
+                // Keep the authored path even when preview decoding failed. Absence from
+                // the decoded map is different from an explicit None override.
+                _textureReferences.Remove(value.Name);
+            }
         }
+        if (!_replaying) CommitHistory(_history.Record(new MaterialSemanticEdit("defaults", before, CaptureResetState())));
         Refresh(MaterialChangeKind.Full);
+    }
+
+    /// <summary>Applies a partial material file as one undoable edit; absent values retain their current state.</summary>
+    public void MergeMaterialData(MorphFaceMaterialData data, IReadOnlyDictionary<string, DecodedTextureAsset?> decodedTextures)
+    {
+        var current = CreateOverrides();
+        var scalars = current.Scalars.ToDictionary(value => value.Name, StringComparer.OrdinalIgnoreCase);
+        var vectors = current.Vectors.ToDictionary(value => value.Name, StringComparer.OrdinalIgnoreCase);
+        var textures = current.Textures.ToDictionary(value => value.Name, StringComparer.OrdinalIgnoreCase);
+        ValidateUnique(data.Scalars.Select(value => value.Name), "scalar");
+        ValidateUnique(data.Vectors.Select(value => value.Name), "vector");
+        ValidateUnique(data.Textures.Select(value => value.Name), "texture");
+        foreach (var value in data.Scalars) scalars[value.Name] = value;
+        foreach (var value in data.Vectors) vectors[value.Name] = value;
+        foreach (var value in data.Textures) textures[value.Name] = value;
+        var decoded = new Dictionary<string, DecodedTextureAsset?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var value in current.Textures)
+        {
+            var texture = GetSelectedTexture(value.Name);
+            if (texture?.Source == value.TextureReference) decoded[value.Name] = texture;
+        }
+        foreach (var value in data.Textures) decoded.Remove(value.Name);
+        foreach (var value in decodedTextures) decoded[value.Key] = value.Value;
+        ApplyMaterialData(new(scalars.Values.ToArray(), vectors.Values.ToArray(), textures.Values.ToArray()), decoded,
+            preserveUnspecifiedTextures: true);
     }
 
     public void Undo() => Replay(_history.PopUndo(), useAfter: false);
@@ -829,16 +891,9 @@ public sealed class MaterialEditingSession : IUndoableEditSource
                     SetEdited(_editedVectors, parts[1], vector.Edited);
                     break;
                 case "texture":
-                    var texture = value as DecodedTextureAsset;
-                    var original = GetEffectiveTexture(parts[1])?.Texture;
-                    if (texture?.Source == original?.Source && (texture is null) == (original is null))
-                    {
-                        _textureReferences.Remove(parts[1]);
-                    }
-                    else
-                    {
-                        _textureReferences[parts[1]] = texture;
-                    }
+                    var texture = (MaterialTextureState)value!;
+                    if (texture.Explicit) _textureReferences[parts[1]] = texture.Value;
+                    else _textureReferences.Remove(parts[1]);
                     Refresh(MaterialChangeKind.Texture, parts[1]);
                     break;
             }

@@ -166,6 +166,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _exportMorphMd5Command = new AsyncRelayCommand(
             () => ExportMorphMeshAsync(MorphMeshFormat.Md5), CanUseFaceContextMenu);
         _exportMorphRonCommand = new AsyncRelayCommand(ExportMorphRonAsync, CanUseFaceContextMenu);
+        _exportTseMaterialsCommand = new AsyncRelayCommand(async () => { await ExportMeshMaterialsAsync(true); },
+            () => CanUseMeshMaterialFiles() && Editor?.CanExportTseMaterials == true);
+        _importTseMaterialsCommand = new AsyncRelayCommand(() => ImportMeshMaterialsAsync(true),
+            () => CanUseMeshMaterialFiles() && Editor?.CanImportTseMaterials == true);
+        _exportMaterialsCommand = new AsyncRelayCommand(async () => { await ExportMeshMaterialsAsync(false); }, CanUseMeshMaterialFiles);
+        _importMaterialsCommand = new AsyncRelayCommand(() => ImportMeshMaterialsAsync(false), CanUseMeshMaterialFiles);
         _assignMorphToActorCommand = new AsyncRelayCommand(AssignMorphToActorAsync, CanMutatePackageContext);
         _assignMaterialsToActorCommand = new AsyncRelayCommand(AssignMaterialsToActorAsync, CanMutatePackageContext);
         FilteredFaces = CollectionViewSource.GetDefaultView(Faces);
@@ -945,6 +951,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         if (sender is not FaceEditorViewModel editor) return;
         switch (e.PropertyName)
         {
+            case nameof(FaceEditorViewModel.CanExportTseMaterials):
+            case nameof(FaceEditorViewModel.CanImportTseMaterials):
+                RaiseMaterialFileCanExecuteChanged();
+                break;
             case nameof(FaceEditorViewModel.RandomiseMorphs):
                 RandomiseMorphs = editor.RandomiseMorphs;
                 break;
@@ -972,6 +982,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private void OnDirtyStateChanged()
     {
+        RaiseMaterialFileCanExecuteChanged();
         OnPropertyChanged(nameof(IsDirty));
         OnPropertyChanged(nameof(PackageDisplayName));
         OnPropertyChanged(nameof(CanFixMorph));
@@ -1411,11 +1422,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
         return _dialogs.ConfirmUnsavedChanges(
             LoadedFacePath ?? "Loaded BioMorphFace",
-            IsStandaloneWorkspace
+            IsDetachedMeshWorkspace ? UnsavedChangesScope.DetachedMaterials : IsStandaloneWorkspace
                 ? UnsavedChangesScope.StandaloneFace
                 : UnsavedChangesScope.Face) switch
         {
-            UnsavedChangesChoice.Save => IsStandaloneWorkspace
+            UnsavedChangesChoice.Save => IsDetachedMeshWorkspace ? await ExportMeshMaterialsAsync(false) : IsStandaloneWorkspace
                 ? await SaveMorphToPccAsync()
                 : await FlushEditorToWorkspaceAsync(),
             UnsavedChangesChoice.Discard => true,
@@ -1431,9 +1442,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
         return _dialogs.ConfirmUnsavedChanges(
             IsStandaloneWorkspace ? LoadedFacePath ?? PackageName : PackagePath ?? "Open package",
-            IsStandaloneWorkspace ? UnsavedChangesScope.StandaloneFace : UnsavedChangesScope.Package) switch
+            IsDetachedMeshWorkspace ? UnsavedChangesScope.DetachedMaterials :
+                IsStandaloneWorkspace ? UnsavedChangesScope.StandaloneFace : UnsavedChangesScope.Package) switch
         {
-            UnsavedChangesChoice.Save => IsStandaloneWorkspace
+            UnsavedChangesChoice.Save => IsDetachedMeshWorkspace ? await ExportMeshMaterialsAsync(false) : IsStandaloneWorkspace
                 ? await SaveMorphToPccAsync()
                 : await CommitWorkspaceAsync(showConfirmation: false),
             UnsavedChangesChoice.Discard => true,

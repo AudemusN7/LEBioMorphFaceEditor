@@ -17,6 +17,13 @@ public partial class UnsavedChangesWindow : Window
             SummaryText.Text = "The loaded BioMorphFace has unsaved changes.";
             SaveExplanationText.Text = "Save keeps these edits in the temporary package workspace.";
         }
+        else if (scope == UnsavedChangesScope.DetachedMaterials)
+        {
+            Title = "Unsaved mesh material settings";
+            SummaryText.Text = "The mesh workspace has unsaved edits.";
+            SaveExplanationText.Text = "Export Materials keeps slot assignments and material settings in an MFE RON. Preview bones and attachments are not included.";
+            SaveButton.Content = "Export Materials…";
+        }
         else if (scope == UnsavedChangesScope.StandaloneFace)
         {
             Title = "Unsaved standalone morph changes";

@@ -20,6 +20,30 @@ public sealed record StandalonePlayerAssetCatalog(
         new(game, [], []);
 
     /// <summary>
+    /// Resolves full seek-free mesh paths only through the installed package named by each path.
+    /// No object-name or cross-package substitution is permitted.
+    /// </summary>
+    public static IReadOnlyDictionary<string, AssetIdentity> ResolveInstalledSkeletalMeshes(
+        MorphFaceGame game,
+        IEnumerable<string> requestedPaths)
+    {
+        ArgumentNullException.ThrowIfNull(requestedPaths);
+        LegendaryExplorerCoreRuntime.Initialize();
+        var loadedFiles = MELoadedFiles.GetFilesLoadedInGame(ToMeGame(game), forceUseCached: true);
+        string? fallbackPackage = null;
+        try { fallbackPackage = StandalonePlayerMorphImportService.ResolveInstalledSeed(game); }
+        catch (Exception) { /* The seek-free package may still resolve without a player seed. */ }
+        return requestedPaths
+            .Where(path => !string.IsNullOrWhiteSpace(path) && !path.Equals("None", StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(path => (Path: path, Identity:
+                FindInstalledExport(loadedFiles, path, "SkeletalMesh", packageLocalPath: true) ??
+                FindPackageExport(fallbackPackage, path, "SkeletalMesh")))
+            .Where(value => value.Identity is not null)
+            .ToDictionary(value => value.Path, value => value.Identity!, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// Builds the bounded donor set needed by one RON. The verified texture
     /// registry is preferred; remaining references are resolved only through
     /// their named installed package or the seed's exact import target.
@@ -113,7 +137,8 @@ public sealed record StandalonePlayerAssetCatalog(
     private static AssetIdentity? FindInstalledExport(
         IReadOnlyDictionary<string, string> loadedFiles,
         string requestedPath,
-        string className)
+        string className,
+        bool packageLocalPath = false)
     {
         var rootPackage = requestedPath.Split('.')[0] + ".pcc";
         if (!loadedFiles.TryGetValue(rootPackage, out var packagePath))
@@ -137,9 +162,22 @@ public sealed record StandalonePlayerAssetCatalog(
         return matches.Length == 1
             ? new AssetIdentity(
                 Path.GetFullPath(packagePath),
-                requestedPath,
+                packageLocalPath ? matches[0].InstancedFullPath : requestedPath,
                 matches[0].UIndex,
                 matches[0].ClassName)
+            : null;
+    }
+
+    private static AssetIdentity? FindPackageExport(string? packagePath, string requestedPath, string className)
+    {
+        if (string.IsNullOrWhiteSpace(packagePath) || !File.Exists(packagePath)) return null;
+        using var package = MEPackageHandler.OpenMEPackage(packagePath, forceLoadFromDisk: true);
+        var matches = package.Exports.Where(export => export.ClassName.Equals(className, StringComparison.OrdinalIgnoreCase) &&
+                                                       export.InstancedFullPath.Equals(requestedPath, StringComparison.OrdinalIgnoreCase))
+            .Take(2).ToArray();
+        return matches.Length == 1
+            ? new AssetIdentity(Path.GetFullPath(packagePath), matches[0].InstancedFullPath,
+                matches[0].UIndex, matches[0].ClassName)
             : null;
     }
 

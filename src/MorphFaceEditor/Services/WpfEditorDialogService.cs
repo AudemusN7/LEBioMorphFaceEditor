@@ -114,6 +114,31 @@ public sealed class WpfEditorDialogService : IEditorDialogService
         return dialog.ShowDialog() == true ? dialog.FileName : null;
     }
 
+    public string? ChooseMaterialImportFile(bool tse, string? initialDirectory = null)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = tse ? "Import TSE RON Material Settings" : "Import Materials",
+            Filter = tse ? "TSE RON (*.ron)|*.ron" : "MFE materials (*.ron)|*.ron",
+            InitialDirectory = Directory.Exists(initialDirectory) ? initialDirectory : null,
+            Multiselect = false
+        };
+        return dialog.ShowDialog() == true ? dialog.FileName : null;
+    }
+
+    public string? ChooseMaterialExportFile(bool tse, string suggestedFileName, string? initialDirectory = null)
+    {
+        var dialog = new SaveFileDialog
+        {
+            Title = tse ? "Export TSE RON" : "Export Materials",
+            Filter = tse ? "TSE RON (*.ron)|*.ron" : "MFE materials (*.ron)|*.ron",
+            DefaultExt = ".ron", AddExtension = true, OverwritePrompt = true,
+            FileName = suggestedFileName,
+            InitialDirectory = Directory.Exists(initialDirectory) ? initialDirectory : null
+        };
+        return dialog.ShowDialog() == true ? dialog.FileName : null;
+    }
+
     public string? ChooseMeshExportDirectory(string? initialDirectory = null)
     {
         var dialog = new OpenFolderDialog

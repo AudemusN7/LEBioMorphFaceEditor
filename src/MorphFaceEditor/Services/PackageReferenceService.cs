@@ -110,6 +110,22 @@ public sealed class PackageReferenceService(
             () => reader.LoadDetachedAttachment(packagePath, meshPath),
             cancellationToken);
 
+    public async Task ValidateDetachedAttachmentAsync(
+        string packagePath,
+        string meshPath,
+        CancellationToken cancellationToken = default) => await ReadAsync(() =>
+    {
+        reader.ValidateDetachedAttachment(packagePath, meshPath);
+        return true;
+    }, cancellationToken);
+
+    public Task<IReadOnlyDictionary<string, AssetIdentity>> ResolveInstalledSkeletalMeshesAsync(
+        MorphFaceGame game,
+        IEnumerable<string> requestedPaths,
+        CancellationToken cancellationToken = default) => Task.Run(
+            () => StandalonePlayerAssetCatalog.ResolveInstalledSkeletalMeshes(game, requestedPaths),
+            cancellationToken);
+
     private async Task<T> ReadAsync<T>(Func<T> operation, CancellationToken cancellationToken)
     {
         await _readerGate.WaitAsync(cancellationToken).ConfigureAwait(false);

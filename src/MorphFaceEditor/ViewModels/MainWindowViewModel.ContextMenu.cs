@@ -31,12 +31,14 @@ public sealed partial class MainWindowViewModel
 
     public void RefreshClipboardCommandAvailability()
     {
+        RaiseMaterialFileCanExecuteChanged();
         _pasteMorphDataCommand.RaiseCanExecuteChanged();
         _pasteMaterialDataCommand.RaiseCanExecuteChanged();
     }
 
     private void RaiseFaceContextCanExecuteChanged()
     {
+        RaiseMaterialFileCanExecuteChanged();
         _cloneMorphCommand.RaiseCanExecuteChanged();
         _deleteMorphCommand.RaiseCanExecuteChanged();
         _convertMorphCommand.RaiseCanExecuteChanged();

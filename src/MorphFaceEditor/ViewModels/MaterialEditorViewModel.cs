@@ -63,6 +63,9 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
     public IReadOnlyList<MaterialScalarEditorViewModel> Scalars => _scalars;
     public IReadOnlyList<MaterialVectorEditorViewModel> Vectors => _vectors;
     public IReadOnlyList<MaterialTextureEditorViewModel> Textures => _textures;
+    public MorphFaceMaterialData CaptureInterchangeData() => _session.CaptureInterchangeData();
+    public void MergeMaterialData(MorphFaceMaterialData data, IReadOnlyDictionary<string, DecodedTextureAsset?> textures) =>
+        _session.MergeMaterialData(data, textures);
 
     private void RebuildControls()
     {

@@ -64,7 +64,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
         var current = session.GetSelectedTexture(Name)?.Source.InstancedPath;
         _selectedTexture = FindOptionForCurrentTexture(current);
         _initializing = false;
-        RefreshPreview();
+        Refresh();
     }
 
     public string Name => _definition.Name;
@@ -133,12 +133,15 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
         get => _previewThumbnail;
         private set => SetProperty(ref _previewThumbnail, value);
     }
-    public string SourceName => _session.GetPreviewTexture(Name)?.Source.InstancedPath ?? "None";
+    public string SourceName => _session.GetTextureReference(Name)?.InstancedPath ??
+        _session.GetPreviewTexture(Name)?.Source.InstancedPath ?? "None";
     public string Details
     {
         get
         {
             var texture = _session.GetPreviewTexture(Name);
+            if (_session.GetTextureReference(Name) is { } authored && texture?.Source != authored)
+                return "Unresolved reference retained · showing the material default";
             var sourceWidth = texture?.SourceWidth > 0 ? texture.SourceWidth : texture?.Width;
             var sourceHeight = texture?.SourceHeight > 0 ? texture.SourceHeight : texture?.Height;
             var preview = texture is not null && (sourceWidth != texture.Width || sourceHeight != texture.Height)
@@ -152,8 +155,15 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
 
     public void Refresh()
     {
-        var current = _session.GetSelectedTexture(Name)?.Source.InstancedPath;
+        var reference = _session.GetTextureReference(Name);
+        var current = reference?.InstancedPath;
         _initializing = true;
+        if (reference is not null && !_allCandidates.Any(value => value.InstancedPath.Equals(current, StringComparison.OrdinalIgnoreCase)))
+        {
+            _allCandidates.Add(new MaterialTextureOption(new MorphFaceEditor.Models.PackageAssetListItem(reference),
+                DisplayNameOverride: $"{current} (unresolved reference)"));
+            ApplySearch();
+        }
         SelectedTexture = FindOptionForCurrentTexture(current);
         _initializing = false;
         RefreshPreview();
@@ -215,6 +225,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
         _initializing = false;
         OnPropertyChanged(nameof(IsRegistryAvailable));
         OnPropertyChanged(nameof(RegistryStatusLabel));
+        Refresh();
     }
 
     private void RefreshPreview()
@@ -397,9 +408,10 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
         {
             return _allCandidates[0];
         }
-        var current = _session.GetSelectedTexture(Name)?.Source;
+        var current = _session.GetTextureReference(Name);
         return current is not null
             ? _allCandidates.FirstOrDefault(candidate => candidate.MatchesIdentity(current))
+                ?? _allCandidates.FirstOrDefault(candidate => candidate.InstancedPath.Equals(instancedPath, StringComparison.OrdinalIgnoreCase))
                 ?? _allCandidates[0]
             : _allCandidates[0];
     }
@@ -427,9 +439,9 @@ public sealed record MaterialTextureOption(
         }
         return RegistryCandidate is { } candidate &&
                candidate.InstancedPath.Equals(identity.InstancedPath, StringComparison.OrdinalIgnoreCase) &&
-               Path.GetFullPath(candidate.EffectiveOccurrence.PackagePath).Equals(
-                   Path.GetFullPath(identity.PackagePath), StringComparison.OrdinalIgnoreCase) &&
-               candidate.EffectiveOccurrence.ExportUIndex == identity.UIndex;
+               (string.IsNullOrWhiteSpace(identity.PackagePath) || Path.GetFullPath(candidate.EffectiveOccurrence.PackagePath).Equals(
+                   Path.GetFullPath(identity.PackagePath), StringComparison.OrdinalIgnoreCase)) &&
+               (identity.UIndex == 0 || candidate.EffectiveOccurrence.ExportUIndex == identity.UIndex);
     }
     public System.Windows.Media.ImageSource? Thumbnail => Asset?.Thumbnail;
     public string? ThumbnailError => Asset?.ThumbnailError;

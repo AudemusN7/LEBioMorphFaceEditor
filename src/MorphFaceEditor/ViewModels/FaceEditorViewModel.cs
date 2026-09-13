@@ -44,6 +44,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     private readonly bool _allowsAttachmentEditing;
     private readonly IHeadEditorUiProfile _metadataCatalog;
     private readonly CustomMaterialWorkspace? _customMaterialWorkspace;
+    private readonly IReadOnlyList<CustomMaterialAssignmentOption> _customMaterialOptions;
     private IReadOnlyDictionary<int, string> _cleanMaterialAssignments =
         new Dictionary<int, string>();
 
@@ -76,6 +77,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         _session = session;
         _metadataCatalog = metadataCatalog;
         _customMaterialWorkspace = customMaterialWorkspace;
+        _customMaterialOptions = customMaterialOptions ?? [];
         _profileKey = profileKey;
         _materialRandomisationProfileKey = materialRandomisationProfileKey ?? profileKey;
         _allowsMorphRandomisation = !ignoresAuthoredGeometry &&
@@ -211,6 +213,28 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     public IReadOnlyList<EditorFeatureCategoryViewModel> Categories { get; private set; }
     public IReadOnlyList<CustomMaterialSlotEditorViewModel> CustomMaterialSlots { get; }
     public bool HasCustomMaterialSlots => CustomMaterialSlots.Count > 0;
+    public CustomMaterialWorkspace? CustomMaterials => _customMaterialWorkspace;
+    public IReadOnlyList<CustomMaterialAssignmentOption> CustomMaterialOptions => _customMaterialOptions;
+    public bool CanExportTseMaterials => _customMaterialWorkspace is { } workspace && MeshMaterialInterchange.CanExportTse(workspace);
+    public bool CanImportTseMaterials => _customMaterialWorkspace is { } workspace && MeshMaterialInterchange.CanImportTse(workspace);
+
+    public void ApplyMeshMaterialImport(PreparedMeshMaterialImport import)
+    {
+        if (_customMaterialWorkspace is null) throw new InvalidOperationException("A MESH material workspace is required.");
+        using (var aggregate = _history.BeginAggregate())
+        {
+            if (import.Assignments is not null) _customMaterialWorkspace.ReplaceAssignments(import.Assignments);
+            Material.MergeMaterialData(import.Parameters, import.Textures);
+            if (import.PreviewAttachments is { } attachments)
+            {
+                if (attachments.ApplyHair) HairMesh.SetImportedPreview(attachments.Hair);
+                if (attachments.ApplyAccessory && OtherMeshes.Count > 0)
+                    OtherMeshes[0].SetImportedPreview(attachments.Accessory);
+            }
+            aggregate.Commit();
+        }
+        RefreshDirtyState();
+    }
     public EditorFeatureCategoryViewModel? SelectedCategory
     {
         get => _selectedCategory;
@@ -913,6 +937,8 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
 
     private void OnMaterialControlsChanged(object? sender, EventArgs e)
     {
+        OnPropertyChanged(nameof(CanExportTseMaterials));
+        OnPropertyChanged(nameof(CanImportTseMaterials));
         var selectedKey = SelectedCategory?.Key;
         Categories = BuildCategories();
         OnPropertyChanged(nameof(Categories));

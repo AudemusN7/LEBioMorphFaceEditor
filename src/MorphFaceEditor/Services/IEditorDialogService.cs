@@ -16,6 +16,9 @@ public interface IEditorDialogService
     RonImportDestination? ChooseRonImportDestination(string selectedFaceDisplayName);
     string? ChooseStandaloneMorphName(string suggestedName, IReadOnlyCollection<string> existingObjectNames);
     string? ChooseRonExportFile(string suggestedFileName, string? initialDirectory = null);
+    string? ChooseMaterialImportFile(bool tse, string? initialDirectory = null) => ChooseMorphImportFile(initialDirectory);
+    string? ChooseMaterialExportFile(bool tse, string suggestedFileName, string? initialDirectory = null) =>
+        ChooseRonExportFile(suggestedFileName, initialDirectory);
     string? ChooseMeshExportDirectory(string? initialDirectory = null);
     ActorAssignmentCandidate? ChooseActorAssignment(
         ActorAssignmentInventory inventory,
@@ -53,5 +56,6 @@ public enum UnsavedChangesScope
 {
     Face,
     StandaloneFace,
+    DetachedMaterials,
     Package
 }

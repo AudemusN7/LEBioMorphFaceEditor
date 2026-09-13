@@ -183,6 +183,19 @@ public sealed class CustomMaterialWorkspace : Editing.IUndoableEditSource
         Commit(before);
     }
 
+    /// <summary>Validates a complete incoming assignment set before publishing one semantic change.</summary>
+    public void ReplaceAssignments(IReadOnlyDictionary<int, CustomMaterialAssignmentOption> assignments)
+    {
+        var validation = new CustomMaterialWorkspace(Source);
+        foreach (var value in assignments.OrderBy(value => value.Key)) validation.Assign(value.Key, value.Value);
+        if (_assignments.Count == assignments.Count && assignments.All(value =>
+                _assignments.TryGetValue(value.Key, out var current) && current == value.Value)) return;
+        var before = Snapshot();
+        _assignments.Clear();
+        foreach (var value in assignments) _assignments[value.Key] = value.Value;
+        Commit(before);
+    }
+
     public void Undo() => Replay(_undo, _redo);
     public void Redo() => Replay(_redo, _undo);
 

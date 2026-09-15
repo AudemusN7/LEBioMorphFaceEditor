@@ -152,13 +152,12 @@ public sealed class DetachedMeshPreviewService
 
     public DetachedMeshPreview Build(ImportedMeshAsset imported) => Create(imported);
 
-    private static DetachedMeshUpAxis ResolveUpAxis(string sourcePath, DetachedMeshUpAxis requested) =>
+    private static DetachedMeshUpAxis ResolveUpAxis(string _, DetachedMeshUpAxis requested) =>
         requested != DetachedMeshUpAxis.Auto
             ? requested
-            : Path.GetExtension(sourcePath).Equals(".gltf", StringComparison.OrdinalIgnoreCase) ||
-              Path.GetExtension(sourcePath).Equals(".glb", StringComparison.OrdinalIgnoreCase)
-                ? DetachedMeshUpAxis.YUp
-                : DetachedMeshUpAxis.ZUp;
+            // Decoders now return the same canonical UE3 basis for PSK, glTF
+            // and GLB. File extension is not an axis signal at this boundary.
+            : DetachedMeshUpAxis.ZUp;
 
     private static ImportedMeshAsset RotateYUpToZUp(ImportedMeshAsset source)
     {

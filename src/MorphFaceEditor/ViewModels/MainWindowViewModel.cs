@@ -29,6 +29,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly IHdrColorDialogService _colorDialog;
     private readonly PackageReferenceService _referenceService;
     private readonly MorphFacePackageWriter _packageWriter;
+    private readonly CustomMeshPccMaterializer _customMeshPccMaterializer;
+    private readonly ICustomMeshBinaryWriter _customMeshBinaryWriter;
     private readonly MorphFacePackageContextService _packageContextService;
     private readonly MorphFaceConversionService _conversionService;
     private readonly MorphFaceInterchangeService _interchangeService;
@@ -126,6 +128,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _colorDialog = colorDialog;
         _referenceService = referenceService;
         _packageWriter = packageWriter;
+        _customMeshPccMaterializer = new CustomMeshPccMaterializer();
+        _customMeshBinaryWriter = new ImportedSkeletalMeshPackageWriter();
         _packageContextService = packageContextService;
         _conversionService = conversionService;
         _interchangeService = interchangeService;
@@ -146,7 +150,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             () => !IsBusy && IsDirty && _packageWorkspace?.CanCommit == true);
         _saveMorphToPccCommand = new AsyncRelayCommand(
             SaveMorphToPccCommandAsync,
-            () => !IsBusy && Editor is not null && _loadedFace is not null && _packageWorkspace is not null);
+            () => !IsBusy && Editor is not null && _loadedFace is not null &&
+                  (_packageWorkspace is not null ||
+                   IsDetachedMeshWorkspace && _standaloneGame is not null &&
+                   Editor.CustomMaterials is not null));
         _fixMorphCommand = new RelayCommand(FixMorph, () => !IsBusy && Editor?.CanFixMorph == true);
         _editBackgroundColorCommand = new RelayCommand(EditBackgroundColor);
         _dismissErrorCommand = new RelayCommand(() => ErrorMessage = null);
@@ -1370,8 +1377,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
         if (!_packageWorkspace.CanCommit)
         {
-            ErrorMessage = "Standalone imports cannot overwrite the installed player template package. Use Save Morph to PCC instead.";
-            Status = "Choose Save Morph to PCC for this standalone import.";
+            ErrorMessage = "Standalone imports cannot overwrite the installed player template package. Use Save to PCC instead.";
+            Status = "Choose Save to PCC for this standalone import.";
             return false;
         }
         if (Editor?.IsDirty == true && !await FlushEditorToWorkspaceAsync())
@@ -1471,6 +1478,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private async Task<bool> SaveMorphToPccAsync()
     {
+        if (IsDetachedMeshWorkspace)
+        {
+            return await SaveDetachedMeshToPccAsync();
+        }
         if (Editor is null || _loadedFace is null || PackagePath is null || WorkspacePackagePath is null)
         {
             return false;
@@ -1524,6 +1535,72 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             AppLog.Error($"Morph package export failed for '{LoadedFacePath}' in '{PackagePath}'.", exception);
             ErrorMessage = $"The morph could not be exported: {exception.Message}";
             Status = "Save failed; the source PCC was not modified.";
+            return false;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    private async Task<bool> SaveDetachedMeshToPccAsync()
+    {
+        if (Editor is not { CustomMaterials: { } workspace } editor ||
+            _detachedMeshSource is null || _standaloneGame is not { } game ||
+            SelectedFace is null)
+        {
+            return false;
+        }
+
+        var destination = _dialogs.ChooseMeshPackageDestination(
+            $"{SelectedFace.ObjectName}.pcc",
+            _detachedMeshSource.SourcePath);
+        if (destination is null)
+        {
+            return false;
+        }
+
+        IsBusy = true;
+        ErrorMessage = null;
+        Status = "Creating the mesh, materials and package dependencies…";
+        try
+        {
+            var textureCatalog = await _referenceService.ReadTextureCatalogAsync(game);
+            if (!textureCatalog.IsAvailable)
+            {
+                throw new InvalidOperationException(
+                    "Save to PCC requires a ready texture database for the selected game.");
+            }
+            var request = new CustomMeshPccSaveRequest(
+                _detachedMeshSource,
+                workspace,
+                editor.Material.CaptureInterchangeData(),
+                game,
+                destination,
+                SelectedFace.ObjectName,
+                _customMeshBinaryWriter,
+                textureCatalog.Candidates);
+            var result = await Task.Run(() => _customMeshPccMaterializer.Save(request));
+            Status = $"Saved and verified {result.MeshPath} with {result.Materials.Count} authored material(s).";
+            var warningSummary = result.Warnings.Count == 0
+                ? string.Empty
+                : $"\nDependency warnings: {result.Warnings.Count} (details were written to the application log).";
+            foreach (var warning in result.Warnings)
+            {
+                AppLog.Warning(warning);
+            }
+            _dialogs.ShowInformation(
+                "Mesh package saved",
+                $"The mesh and its authored materials were saved successfully.\n\n" +
+                $"Package: {result.PackagePath}\nMesh: {result.MeshPath}\n" +
+                $"Materials: {result.Materials.Count}{warningSummary}");
+            return true;
+        }
+        catch (Exception exception)
+        {
+            AppLog.Error($"Custom mesh PCC export failed for '{_detachedMeshSource.SourcePath}'.", exception);
+            ErrorMessage = $"The mesh could not be saved: {exception.Message}";
+            Status = "Save failed; the source mesh and current material edit were not modified.";
             return false;
         }
         finally

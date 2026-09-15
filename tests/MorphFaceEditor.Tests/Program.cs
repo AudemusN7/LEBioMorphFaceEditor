@@ -12,6 +12,10 @@ var suites = new Dictionary<string, IReadOnlyList<TestCase>>(StringComparer.Ordi
     ["package"] = PackageContextTests.All.Concat(PackageIntegrityTests.All).Concat(ActorAssignmentInventoryTests.All)
         .Concat(ActorAssignmentTransactionTests.All).Concat(CustomMaterialEvidenceTests.All)
         .Concat(RonStressTests.All).ToArray(),
+    ["c4"] = ImportedSkeletalMeshWriterTests.All
+        .Concat(CustomMeshPccMaterializerTests.All)
+        .Concat(PccTextureDependencyResolverTests.All)
+        .ToArray(),
     ["tooling"] = RandomisationTests.Tooling
 };
 

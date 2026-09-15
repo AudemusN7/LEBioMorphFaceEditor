@@ -28,6 +28,8 @@
              CopyToOutputDirectory="PreserveNewest" />
     <EmbeddedResource Include="Assets\CrossGameAssetReconciliation.json"
                       LogicalName="MorphFaceEditor.CrossGameAssetReconciliation.json" />
+    <EmbeddedResource Include="Assets\MaterialDependencyOracle.json"
+                      LogicalName="MorphFaceEditor.MaterialDependencyOracle.json" />
   </ItemGroup>
 
   <ItemGroup>

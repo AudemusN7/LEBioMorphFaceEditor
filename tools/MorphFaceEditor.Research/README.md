@@ -18,6 +18,13 @@ from those canonical source/port pairs:
 dotnet run --project tools/MorphFaceEditor.Research -c Release -- corpus-reconciliation "tests/Global Morphs" <output.json>
 ```
 
+Regenerate the runtime material dependency oracle from the native LE1, LE2,
+and LE3 corpora:
+
+```powershell
+dotnet run --project tools/MorphFaceEditor.Research -c Release -- material-oracle "tests/Global Morphs" "src/MorphFaceEditor.LegendaryExplorer/Assets/MaterialDependencyOracle.json"
+```
+
 Locate exports by a case-insensitive name fragment:
 
 ```powershell

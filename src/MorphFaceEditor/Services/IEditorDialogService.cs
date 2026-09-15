@@ -6,6 +6,7 @@ public interface IEditorDialogService
 {
     string? ChoosePackage(string? initialDirectory = null);
     MorphPackageSaveRequest? ChooseMorphPackageDestination(string suggestedFileName, string sourcePackagePath);
+    string? ChooseMeshPackageDestination(string suggestedFileName, string sourceMeshPath) => null;
     MorphConversionSaveRequest? ChooseMorphConversionDestination(
         MorphFaceGame sourceGame,
         string suggestedFileName,

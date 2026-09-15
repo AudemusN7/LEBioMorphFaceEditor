@@ -236,6 +236,8 @@ public static class TextureCatalogTests
             "BIOG_SAL_HED_PROMorph_R.Add.SAL_HED_PRO_Add1",
             "BIOG_HMM_HIR_PRO.Hair.HMM_HIR_Diff",
             "biog_hmf_hir_pro.hair.hmf_hir_norm",
+            "BIOG_HMF_HED_Alignment.Scar.HMF_Face_NormScars_03",
+            "BIOG_Humanoid_MASTER_MTR_R.Skin_HumanHED_SpecMulitplier_Mask",
             "BIOG_HMM_EYE.Eye.EYE_Iris_Norm",
             "BIOG_ASA_EYE.Materials.ASA_EYE_Diff",
             "BIOG_KRO_EYE.Materials.KRO_EYE_Norm"

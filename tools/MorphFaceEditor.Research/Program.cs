@@ -79,6 +79,36 @@ if (args.Length == 3 && args[0].Equals("corpus-reconciliation", StringComparison
     return 0;
 }
 
+if (args.Length == 3 && args[0].Equals("material-oracle", StringComparison.OrdinalIgnoreCase))
+{
+    LegendaryExplorerCoreRuntime.Initialize();
+    var oracleDirectory = Path.GetFullPath(args[1]);
+    var oracleOutputPath = Path.GetFullPath(args[2]);
+    var oracleGames = new Dictionary<string, MaterialOracleGame>(StringComparer.OrdinalIgnoreCase);
+    foreach (var gameName in new[] { "LE1", "LE2", "LE3" })
+    {
+        var sourcePath = Path.Combine(oracleDirectory, $"{gameName} GlobalMorphs.pcc");
+        using var sourcePackage = MEPackageHandler.OpenMEPackage(sourcePath, forceLoadFromDisk: true);
+        var entries = sourcePackage.Imports.Cast<IEntry>().Concat(sourcePackage.Exports)
+            .Where(entry => IsMaterialOracleClass(entry.ClassName))
+            .Select(entry => new MaterialOracleEntry(
+                entry.ClassName,
+                entry.InstancedFullPath,
+                entry is ExportEntry ? "Export" : "Import"))
+            .OrderBy(entry => entry.ClassName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(entry => entry.Path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        oracleGames.Add(gameName, new MaterialOracleGame(entries));
+        Console.WriteLine($"{gameName}: {entries.Length} material/texture identities");
+    }
+    Directory.CreateDirectory(Path.GetDirectoryName(oracleOutputPath)!);
+    File.WriteAllText(oracleOutputPath, JsonSerializer.Serialize(
+        new MaterialOracleDocument(1, oracleGames),
+        new JsonSerializerOptions { WriteIndented = true }), new UTF8Encoding(false));
+    Console.WriteLine($"Wrote {oracleOutputPath}");
+    return 0;
+}
+
 if (args.Length == 4 && args[0].Equals("actor-inventory", StringComparison.OrdinalIgnoreCase))
 {
     var inventory = new ActorAssignmentInventoryService().Read(
@@ -315,6 +345,7 @@ if (args.Length is not 4 || !args[0].Equals("trace-material", StringComparison.O
 {
     Console.Error.WriteLine("Usage: corpus-audit <corpus-directory> <output.json>");
     Console.Error.WriteLine("   or: corpus-reconciliation <corpus-directory> <output.json>");
+    Console.Error.WriteLine("   or: material-oracle <corpus-directory> <output.json>");
     Console.Error.WriteLine("   or: locate-export <game-root> <export-name>");
     Console.Error.WriteLine("   or: inventory-faces <package.pcc> <base-head-name-fragment>");
     Console.Error.WriteLine("   or: actor-inventory <package.pcc> <face-selector> <profile-key>");
@@ -590,6 +621,15 @@ static string Describe(IEntry? entry) => entry is null
 
 static string Escape(string? value) => (value ?? string.Empty).Replace("`", "'").Replace("\r", " ").Replace("\n", " ");
 
+static bool IsMaterialOracleClass(string className) =>
+    className.Equals("Package", StringComparison.OrdinalIgnoreCase) ||
+    className.Equals("Material", StringComparison.OrdinalIgnoreCase) ||
+    className.Equals("MaterialInstanceConstant", StringComparison.OrdinalIgnoreCase) ||
+    className.Equals("BioMaterialInstanceConstant", StringComparison.OrdinalIgnoreCase) ||
+    className.Equals("RvrEffectsMaterialUser", StringComparison.OrdinalIgnoreCase) ||
+    className.Equals("Texture2D", StringComparison.OrdinalIgnoreCase) ||
+    className.Equals("TextureCube", StringComparison.OrdinalIgnoreCase);
+
 static string HashPositions(IReadOnlyList<Vector3> positions)
 {
     var bytes = new byte[positions.Count * sizeof(float) * 3];
@@ -784,3 +824,10 @@ sealed record CorpusReconciliationDecision(
     string SourcePath,
     string? TargetPath,
     int EvidenceCount);
+
+sealed record MaterialOracleDocument(
+    int FormatVersion,
+    IReadOnlyDictionary<string, MaterialOracleGame> Games);
+
+sealed record MaterialOracleGame(IReadOnlyList<MaterialOracleEntry> Entries);
+sealed record MaterialOracleEntry(string ClassName, string Path, string Kind);

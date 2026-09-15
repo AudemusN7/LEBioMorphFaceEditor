@@ -29,7 +29,7 @@ public partial class UnsavedChangesWindow : Window
             Title = "Unsaved standalone morph changes";
             SummaryText.Text = "The loaded standalone morph has unsaved changes.";
             SaveExplanationText.Text =
-                "Export opens Save Morph to PCC. The installed game template is read-only and will not be modified.";
+                "Export opens Save to PCC. The installed game template is read-only and will not be modified.";
             SaveButton.Content = "Export…";
         }
     }

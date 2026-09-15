@@ -211,11 +211,12 @@ public static class CustomMeshTests
             WriteGltfFixture(path);
             var mesh = new MorphFaceInterchangeService().ReadMesh(path);
             TestAssert.Equal(6, mesh.Positions.Length);
-            TestAssert.Equal(new Vector3(100, 200, 300), mesh.Positions[0]);
-            TestAssert.Equal(new Vector3(-100, 200, 300), mesh.Positions[1]);
-            TestAssert.Equal(new Vector3(100, 400, 300), mesh.Positions[2]);
+            TestAssert.Equal(new Vector3(100, 300, 200), mesh.Positions[0]);
+            TestAssert.Equal(new Vector3(-100, 300, 200), mesh.Positions[1]);
+            TestAssert.Equal(new Vector3(100, 300, 400), mesh.Positions[2]);
             TestAssert.Equal(6, mesh.Indices.Length);
-            TestAssert.Equal(2, mesh.Indices[1]); // negative determinant corrected the winding
+            // The node reflection and glTF-to-game basis reflection cancel.
+            TestAssert.Equal(1, mesh.Indices[1]);
             TestAssert.Equal(2, mesh.Sections.Count);
             TestAssert.Equal("Face", mesh.Sections[0].MaterialName);
             TestAssert.Equal("Detail", mesh.Sections[1].MaterialName);

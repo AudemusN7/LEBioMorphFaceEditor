@@ -36,6 +36,23 @@ public sealed class WpfEditorDialogService : IEditorDialogService
         return window.ShowDialog() == true ? window.Request : null;
     }
 
+    public string? ChooseMeshPackageDestination(string suggestedFileName, string sourceMeshPath)
+    {
+        var dialog = new SaveFileDialog
+        {
+            Title = "Save Mesh and Materials to PCC",
+            Filter = "Mass Effect packages (*.pcc)|*.pcc",
+            DefaultExt = ".pcc",
+            AddExtension = true,
+            OverwritePrompt = true,
+            FileName = suggestedFileName,
+            InitialDirectory = Directory.Exists(Path.GetDirectoryName(sourceMeshPath))
+                ? Path.GetDirectoryName(sourceMeshPath)
+                : null
+        };
+        return dialog.ShowDialog(Application.Current.MainWindow) == true ? dialog.FileName : null;
+    }
+
     public MorphConversionSaveRequest? ChooseMorphConversionDestination(
         MorphFaceEditor.LegendaryExplorer.MorphFaceGame sourceGame,
         string suggestedFileName,

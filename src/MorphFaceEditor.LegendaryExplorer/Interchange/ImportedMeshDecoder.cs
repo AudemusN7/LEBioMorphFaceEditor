@@ -146,7 +146,10 @@ public static class ImportedMeshDecoder
             var world = node?.WorldMatrix ?? Matrix4x4.Identity;
             if (!Matrix4x4.Invert(world, out var inverse)) throw new InvalidDataException("glTF node has a non-invertible transform.");
             var normalMatrix = Matrix4x4.Transpose(inverse);
-            var mirrored = world.GetDeterminant() < 0;
+            // Legendary Explorer exports game vectors as glTF (X, Z, Y).
+            // Swapping Y/Z is itself a reflection, so an otherwise ordinary
+            // node changes handedness while an explicitly mirrored node does not.
+            var changesHandedness = world.GetDeterminant() >= 0;
             var skin = node?.Skin;
             if (skin is not null)
             {
@@ -184,9 +187,18 @@ public static class ImportedMeshDecoder
                     streamOffsets.Add(streamKey, offset);
                     for (var i = 0; i < localPositions.Length; i++)
                     {
-                        positions.Add(Vector3.Transform(localPositions[i], world) * GltfToGameUnits);
-                        normals.Add(localNormals is null ? Vector3.Zero : NormalizeOrZero(Vector3.TransformNormal(localNormals[i], normalMatrix)));
-                        tangents.Add(localTangents is null ? Vector4.Zero : new Vector4(NormalizeOrZero(Vector3.TransformNormal(new Vector3(localTangents[i].X, localTangents[i].Y, localTangents[i].Z), normalMatrix)), mirrored ? -localTangents[i].W : localTangents[i].W));
+                        positions.Add(GltfToCanonicalVector(Vector3.Transform(localPositions[i], world)) * GltfToGameUnits);
+                        normals.Add(localNormals is null
+                            ? Vector3.Zero
+                            : NormalizeOrZero(GltfToCanonicalVector(
+                                Vector3.TransformNormal(localNormals[i], normalMatrix))));
+                        tangents.Add(localTangents is null
+                            ? Vector4.Zero
+                            : new Vector4(
+                                NormalizeOrZero(GltfToCanonicalVector(Vector3.TransformNormal(
+                                    new Vector3(localTangents[i].X, localTangents[i].Y, localTangents[i].Z),
+                                    normalMatrix))),
+                                changesHandedness ? -localTangents[i].W : localTangents[i].W));
                         uvs.Add(localUvs is null ? Vector2.Zero : localUvs[i]);
                         normalPresent.Add(localNormals is not null);
                         tangentPresent.Add(localTangents is not null);
@@ -201,8 +213,8 @@ public static class ImportedMeshDecoder
                     if ((uint)a >= (uint)localPositions.Length || (uint)b >= (uint)localPositions.Length || (uint)c >= (uint)localPositions.Length)
                         throw new InvalidDataException("glTF triangle references an invalid vertex.");
                     indices.Add(offset + a);
-                    indices.Add(offset + (mirrored ? c : b));
-                    indices.Add(offset + (mirrored ? b : c));
+                    indices.Add(offset + (changesHandedness ? c : b));
+                    indices.Add(offset + (changesHandedness ? b : c));
                 }
                 var materialKey = primitive.Material?.LogicalIndex ?? -1;
                 if (!materialSlots.TryGetValue(materialKey, out var materialIndex))
@@ -285,7 +297,20 @@ public static class ImportedMeshDecoder
         var map = joints.Select((joint, index) => (joint, index)).ToDictionary(v => v.joint, v => v.index);
         return joints.Select((joint, index) => new ImportedMeshBone(
             joint.Name ?? $"Bone{index}", joint.VisualParent is not null && map.TryGetValue(joint.VisualParent, out var parent) ? parent : -1,
-            joint.LocalTransform.Translation * GltfToGameUnits, joint.LocalTransform.Rotation)).ToArray();
+            GltfToCanonicalVector(joint.LocalTransform.Translation) * GltfToGameUnits,
+            GltfToCanonicalQuaternion(joint.LocalTransform.Rotation))).ToArray();
+    }
+
+    internal static Vector3 GltfToCanonicalVector(Vector3 value) => new(value.X, value.Z, value.Y);
+
+    internal static Quaternion GltfToCanonicalQuaternion(Quaternion value)
+    {
+        // A reflected basis transforms the quaternion's vector (axial) part
+        // by det(S) * S while retaining W. This keeps identity as identity.
+        var converted = new Quaternion(-value.X, -value.Z, -value.Y, value.W);
+        return converted.LengthSquared() > 1e-12f
+            ? Quaternion.Normalize(converted)
+            : Quaternion.Identity;
     }
 
     private static Vector3 RestorePskHandedness(Vector3 value) => new(value.X, -value.Y, value.Z);

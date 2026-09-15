@@ -38,6 +38,10 @@ internal sealed class LecTextureRegistryPackageScanner : ITextureRegistryPackage
         var templates = new List<MorphFaceTemplateCandidate>();
         var origin = GetOrigin(packagePath, meGame);
         var mountPriority = GetMountPriority(packagePath, meGame);
+        var packageName = Path.GetFileNameWithoutExtension(packagePath);
+        var isCharacterCreatorPackage =
+            packageName.StartsWith("BioP_Char", StringComparison.OrdinalIgnoreCase) ||
+            packageName.StartsWith("EntryMenu", StringComparison.OrdinalIgnoreCase);
         foreach (var export in package.Exports)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -55,7 +59,8 @@ internal sealed class LecTextureRegistryPackageScanner : ITextureRegistryPackage
             }
             if (export.IsDefaultObject ||
                 !export.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase) ||
-                (!TextureRegistryDiscovery.IsRelevantPath(export.InstancedFullPath) &&
+                (!isCharacterCreatorPackage &&
+                 !TextureRegistryDiscovery.IsRelevantPath(export.InstancedFullPath) &&
                  !CrossGameAssetReconciliationCatalog.IsReviewedTexturePath(export.InstancedFullPath)))
             {
                 continue;

@@ -31,7 +31,7 @@ internal static class MaterialisationVerifier
     }
 
     internal static void Verify(ExportEntry root, MEGame sourceGame, RelinkerOptionsPackage options,
-        ICollection<string>? warnings = null)
+        ICollection<string>? warnings = null, bool rootOnly = false)
     {
         var issues = new List<MaterialisationDiagnostic>();
         var checkedEntries = new HashSet<IEntry>();
@@ -44,7 +44,8 @@ internal static class MaterialisationVerifier
             foreach (var pair in options.CrossPackageMap)
             {
                 if (pair.Key is not ExportEntry source || pair.Value is not ExportEntry target ||
-                    !ReferenceEquals(target.FileRef, root.FileRef)) continue;
+                    !ReferenceEquals(target.FileRef, root.FileRef) ||
+                    rootOnly && !ReferenceEquals(target, root)) continue;
                 var original = PackageIntegrity.References(source);
                 var final = PackageIntegrity.References(target);
                 foreach (var reference in final)

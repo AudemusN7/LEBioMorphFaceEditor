@@ -13,7 +13,7 @@ public static class DetachedMeshPreviewTests
         new("detached unrigged meshes receive safe zero-weight streams", UnriggedMeshIsRenderable),
         new("detached malformed rigs disable fixed-bake bone editing", MalformedRigIsRejected),
         new("detached valid rigs preserve weights and expose fixed-bake bones", ValidRigEnablesBonePreview)
-        ,new("detached glTF preview converts Y-up without changing retained source", GltfOrientationIsPreviewOnly)
+        ,new("detached glTF preview preserves the decoder's canonical basis", GltfCanonicalBasisIsPreserved)
     ];
 
     private static void UnriggedMeshIsRenderable()
@@ -94,7 +94,7 @@ public static class DetachedMeshPreviewTests
         TestAssert.True(!preview.Editing.CanEditMorphFeatures, "Imported mesh unexpectedly exposed morph controls.");
     }
 
-    private static void GltfOrientationIsPreviewOnly()
+    private static void GltfCanonicalBasisIsPreserved()
     {
         var sourceOrientation = Quaternion.CreateFromAxisAngle(Vector3.UnitY, 0.4f);
         var imported = CreateAsset(
@@ -110,19 +110,16 @@ public static class DetachedMeshPreviewTests
 
         var preview = new DetachedMeshPreviewService().Create(imported);
         TestAssert.Equal(DetachedMeshUpAxis.Auto, preview.UpAxis);
-        TestAssert.Equal(DetachedMeshUpAxis.YUp, preview.EffectiveUpAxis);
+        TestAssert.Equal(DetachedMeshUpAxis.ZUp, preview.EffectiveUpAxis);
         TestAssert.True(preview.Source.Positions.SequenceEqual(imported.Positions), "Retained glTF source positions changed.");
-        TestAssert.True(Vector3.Distance(preview.Mesh.Positions[2], Vector3.UnitZ) <= 1e-5f,
-            "Y-up preview position was not rotated upright.");
-        TestAssert.True(Vector3.Distance(preview.Mesh.Topology.ReferenceSkeleton[0].Position, Vector3.UnitZ) <= 1e-5f,
-            "Y-up preview bone was not rotated with its mesh.");
-        var basis = Matrix4x4.CreateRotationX(MathF.PI / 2f);
-        var sourceDirectionAfterBone = Vector3.Transform(Vector3.Transform(Vector3.UnitZ, sourceOrientation), basis);
-        var previewDirectionAfterBone = Vector3.Transform(
-            Vector3.Transform(Vector3.UnitZ, basis),
-            preview.Mesh.Topology.ReferenceSkeleton[0].Orientation);
-        TestAssert.True(Vector3.Distance(sourceDirectionAfterBone, previewDirectionAfterBone) <= 1e-5f,
-            "Y-up preview bone orientation did not use the same basis change as its mesh.");
+        TestAssert.True(preview.Mesh.Positions.SequenceEqual(imported.Positions),
+            "Canonical glTF preview positions were rotated a second time.");
+        TestAssert.True(preview.Mesh.Topology.ReferenceSkeleton[0].Position == Vector3.UnitY,
+            "Canonical glTF preview bone translation was rotated a second time.");
+        TestAssert.True(Quaternion.Dot(
+                preview.Mesh.Topology.ReferenceSkeleton[0].Orientation,
+                sourceOrientation) > 0.99999f,
+            "Canonical glTF preview bone orientation changed at the detached boundary.");
 
         var zUp = new DetachedMeshPreviewService().Create(imported, DetachedMeshUpAxis.ZUp);
         TestAssert.True(zUp.Mesh.Positions.SequenceEqual(imported.Positions), "Explicit Z-up preview changed positions.");

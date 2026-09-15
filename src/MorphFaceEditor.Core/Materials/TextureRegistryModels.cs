@@ -19,7 +19,7 @@ public sealed record TextureRegistrySnapshot(
     int InstalledPackageCount,
     IReadOnlyList<TextureCatalogCandidate> Candidates)
 {
-    public const int CurrentSchemaVersion = 4;
+    public const int CurrentSchemaVersion = 5;
 
     public IReadOnlyList<MorphFaceTemplateCandidate> MorphFaceTemplates { get; init; } = [];
 }
@@ -39,6 +39,10 @@ public static class TextureRegistryDiscovery
     private static readonly string[] RelevantPathFragments =
     [
         "PROMorph",
+        "HMM_HED",
+        "HMF_HED",
+        "HMN_HED",
+        "HumanHED",
         "HMM_HIR",
         "HMF_HIR",
         "HMM_EYE",

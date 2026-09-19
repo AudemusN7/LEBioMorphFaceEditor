@@ -159,8 +159,10 @@ public static class UiSmokeTests
                 "Detached mesh did not expose its preview-only attachment selectors.");
             TestAssert.True(scene?.Meshes.Single().Vertices.Count == 3 && scene.Meshes.Single().ApplySkinning == false,
                 "Detached mesh did not reach the renderer with its authored LOD0.");
-            TestAssert.True(!viewModel.SaveCommand.CanExecute(null) && !viewModel.SaveMorphToPccCommand.CanExecute(null),
-                "Detached Stage B mesh exposed a package save command.");
+            TestAssert.True(!viewModel.SaveCommand.CanExecute(null),
+                "Detached mesh exposed Save PCC for a package it does not own.");
+            TestAssert.True(viewModel.SaveMorphToPccCommand.CanExecute(null),
+                "Detached mesh did not expose Save to PCC for a new package.");
             TestAssert.True(viewModel.IsDetachedMeshWorkspace,
                 "Detached mesh was not identified as a detached workspace.");
             TestAssert.True(viewModel.ExportMaterialsCommand.CanExecute(null) && viewModel.ImportMaterialsCommand.CanExecute(null),

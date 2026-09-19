@@ -1,5 +1,4 @@
 using LegendaryExplorerCore.Packages;
-using LegendaryExplorerCore.Packages.CloningImportingAndRelinking;
 using LegendaryExplorerCore.Textures;
 using LegendaryExplorerCore.Unreal;
 using LecTexture2D = LegendaryExplorerCore.Unreal.Classes.Texture2D;
@@ -40,17 +39,14 @@ internal static class ExternalTextureMaterializer
         }
         var sourceExport = ResolveSourceExport(source, identity);
         var parent = EnsurePackagePath(destination, identity.InstancedPath);
-        ExternalSkeletalMeshMaterializer.PrepareReferencedPackagePaths(destination, sourceExport);
-        var relinker = new RelinkerOptionsPackage { ImportExportDependencies = true };
-        var imported = EntryImporter.ImportExport(destination, sourceExport, parent?.UIndex ?? 0, relinker);
-        MaterialisationVerifier.Relink(relinker);
-
-        if (imported is not ExportEntry textureExport ||
-            !textureExport.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidDataException(
-                $"LEC did not materialise Texture2D '{identity.InstancedPath}' as an export.");
-        }
+        var textureExport = PccPackageWorkflow.ImportDependencyGraph(
+            destination,
+            sourceExport,
+            parent,
+            textureCatalog: null,
+            preferBiogTextures: false,
+            warnings,
+            applyCorpusMaterialPolicy: false);
         if (!textureExport.InstancedFullPath.Equals(identity.InstancedPath, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidDataException(
@@ -66,7 +62,6 @@ internal static class ExternalTextureMaterializer
             image,
             textureExport.GetProperties(),
             isPackageStored: true));
-        MaterialisationVerifier.Verify(textureExport, source.Game, relinker, warnings);
         return textureExport;
     }
 

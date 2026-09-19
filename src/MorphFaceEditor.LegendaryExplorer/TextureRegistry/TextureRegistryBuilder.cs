@@ -37,9 +37,11 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
     private readonly TextureRegistryStore _store;
     private readonly ITextureRegistryPackageScanner _scanner;
     private readonly Func<MorphFaceGame, IReadOnlyList<string>> _loadedFiles;
+    private readonly Func<MorphFaceGame, string?> _cookedPath;
 
     public TextureRegistryBuilder(TextureRegistryStore store)
-        : this(store, new LecTextureRegistryPackageScanner(), GetLoadedFiles)
+        : this(store, new LecTextureRegistryPackageScanner(), GetLoadedFiles,
+            LegendaryExplorerCoreRuntime.GetCookedPath)
     {
     }
 
@@ -47,10 +49,20 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
         TextureRegistryStore store,
         ITextureRegistryPackageScanner scanner,
         Func<MorphFaceGame, IReadOnlyList<string>> loadedFiles)
+        : this(store, scanner, loadedFiles, _ => null)
+    {
+    }
+
+    internal TextureRegistryBuilder(
+        TextureRegistryStore store,
+        ITextureRegistryPackageScanner scanner,
+        Func<MorphFaceGame, IReadOnlyList<string>> loadedFiles,
+        Func<MorphFaceGame, string?> cookedPath)
     {
         _store = store;
         _scanner = scanner;
         _loadedFiles = loadedFiles;
+        _cookedPath = cookedPath;
     }
 
     public Task<TextureRegistryStatus> RebuildAsync(
@@ -78,7 +90,8 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var files = _loadedFiles(game);
+        var effectiveFiles = _loadedFiles(game);
+        var files = MergeScanPaths(effectiveFiles, _cookedPath(game));
         var occurrencesByPath = new Dictionary<string, List<TextureCatalogOccurrence>>(
             StringComparer.OrdinalIgnoreCase);
         var morphFaceTemplates = new List<MorphFaceTemplateCandidate>();
@@ -149,6 +162,92 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
     {
         LegendaryExplorerCoreRuntime.Initialize();
         return MELoadedFiles.GetFilesLoadedInGame(LecTextureRegistryPackageScanner.ToMeGame(game)).Values.ToArray();
+    }
+
+    /// <summary>
+    /// Adds only physical base-game packages shadowed by an effective DLC package.
+    /// The effective file list remains first so its occurrence wins mount precedence;
+    /// the base package is a secondary source for native morph-face templates.
+    /// </summary>
+    internal static IReadOnlyList<string> MergeScanPaths(
+        IEnumerable<string> effectiveFiles,
+        string? cookedPath)
+    {
+        ArgumentNullException.ThrowIfNull(effectiveFiles);
+
+        var paths = new List<string>();
+        var seenAbsolutePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in effectiveFiles)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                continue;
+            }
+
+            var absolutePath = Path.GetFullPath(path);
+            if (seenAbsolutePaths.Add(absolutePath))
+            {
+                // Preserve the loaded-map spelling for effective paths. In production
+                // these are absolute; preserving it also keeps injected scanners useful.
+                paths.Add(path);
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(cookedPath))
+        {
+            return paths;
+        }
+
+        var absoluteCookedPath = Path.GetFullPath(cookedPath);
+        var effectiveCount = paths.Count;
+        for (var index = 0; index < effectiveCount; index++)
+        {
+            var effectivePath = Path.GetFullPath(paths[index]);
+            var dlcCookedPath = FindDlcCookedPath(effectivePath);
+            if (dlcCookedPath is null)
+            {
+                continue;
+            }
+
+            var fileName = Path.GetFileName(effectivePath);
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                continue;
+            }
+
+            var relativePath = Path.GetRelativePath(dlcCookedPath, effectivePath);
+            foreach (var basePath in new[]
+                     {
+                         Path.Combine(absoluteCookedPath, relativePath),
+                         Path.Combine(absoluteCookedPath, fileName)
+                     }.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                if (!File.Exists(basePath) || !seenAbsolutePaths.Add(basePath))
+                {
+                    continue;
+                }
+
+                paths.Add(basePath);
+            }
+        }
+
+        return paths;
+    }
+
+    private static string? FindDlcCookedPath(string path)
+    {
+        var directory = new FileInfo(path).Directory;
+        while (directory is not null &&
+               !directory.Name.Equals("CookedPCConsole", StringComparison.OrdinalIgnoreCase))
+        {
+            directory = directory.Parent;
+        }
+        var dlcDirectory = directory?.Parent;
+        return dlcDirectory is not null &&
+               dlcDirectory.Name.StartsWith("DLC_", StringComparison.OrdinalIgnoreCase) &&
+               dlcDirectory.Parent?.Name.Equals("DLC", StringComparison.OrdinalIgnoreCase) == true
+            ? directory!.FullName
+            : null;
     }
 
     private static TextureCatalogGame ToCatalogGame(MorphFaceGame game) => game switch

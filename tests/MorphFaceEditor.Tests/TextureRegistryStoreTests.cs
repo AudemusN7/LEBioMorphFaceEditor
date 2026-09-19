@@ -16,6 +16,8 @@ public static class TextureRegistryStoreTests
         new("texture registry store: cancelled write preserves active file", CancelledWritePreservesActiveFile),
         new("texture registry store: concurrent writes use independent temporary files", ConcurrentWritesUseIndependentTemporaryFiles),
         new("texture registry builder: scans each package once", BuilderScansEachPackageOnce),
+        new("texture registry builder: adds only shadowed physical base packages", BuilderAddsOnlyShadowedPhysicalBasePackages),
+        new("texture registry builder: retains native templates beneath mod overrides", BuilderRetainsNativeTemplatesBeneathModOverrides),
         new("texture registry builder: groups paths by mount precedence", BuilderGroupsPathsByMountPrecedence),
         new("texture registry builder: reports scan write verify phases", BuilderReportsEveryPhase),
         new("texture registry builder: cancelled rebuild preserves active file", CancelledBuildPreservesActiveFile),
@@ -47,6 +49,80 @@ public static class TextureRegistryStoreTests
 
         TestAssert.True(scanner.Paths.OrderBy(value => value).SequenceEqual(["A.pcc", "B.pcc", "C.pcc"]),
             "The builder skipped or reopened an effective package.");
+    }
+
+    private static void BuilderAddsOnlyShadowedPhysicalBasePackages()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"MFE-TextureRegistry-Merge-{Guid.NewGuid():N}");
+        var cookedPath = Path.Combine(root, "Game", "ME1", "BioGame", "CookedPCConsole");
+        var modCookedPath = Path.Combine(root, "Game", "ME1", "BioGame", "DLC", "DLC_MOD_Test",
+            "CookedPCConsole");
+        Directory.CreateDirectory(cookedPath);
+        Directory.CreateDirectory(modCookedPath);
+        var basePackage = Path.Combine(cookedPath, "BIOA_STA60_01nodest_DSG.pcc");
+        var modPackage = Path.Combine(modCookedPath, "STA", "BIOA_STA60_01nodest_DSG.pcc");
+        File.WriteAllBytes(basePackage, [0x01]);
+
+        try
+        {
+            var paths = TextureRegistryBuilder.MergeScanPaths(
+                [modPackage, modPackage.ToLowerInvariant(), Path.Combine(root, "outside", "unrelated.pcc")],
+                cookedPath);
+
+            TestAssert.True(paths.SequenceEqual(
+                    [modPackage, Path.Combine(root, "outside", "unrelated.pcc"), basePackage]),
+                "The merge did not preserve effective order, absolute-path deduplication, and the matching base package.");
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    private static void BuilderRetainsNativeTemplatesBeneathModOverrides()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"MFE-TextureRegistry-Templates-{Guid.NewGuid():N}");
+        var cookedPath = Path.Combine(root, "Game", "ME1", "BioGame", "CookedPCConsole");
+        var modCookedPath = Path.Combine(root, "Game", "ME1", "BioGame", "DLC", "DLC_MOD_Test",
+            "CookedPCConsole");
+        Directory.CreateDirectory(cookedPath);
+        Directory.CreateDirectory(modCookedPath);
+        var basePackage = Path.Combine(cookedPath, "BIOA_STA60_01nodest_DSG.pcc");
+        var modPackage = Path.Combine(modCookedPath, "STA", "BIOA_STA60_01nodest_DSG.pcc");
+        File.WriteAllBytes(basePackage, [0x01]);
+        try
+        {
+            using var fixture = RegistryFixture.Create();
+            const string texturePath = "BIOG_ASA_HED_PROMorph_R.PROBase.ASA_HED_PROBase_Diff";
+            var scanner = new FakePackageScanner(
+                new Dictionary<string, IReadOnlyList<TextureRegistryScannedTexture>>
+                {
+                    [modPackage] = [new(texturePath, Occurrence(modPackage, 9000, TextureCatalogOrigin.Mod))],
+                    [basePackage] = [new(texturePath, Occurrence(basePackage, 0, TextureCatalogOrigin.BaseGame))]
+                },
+                templates: new Dictionary<string, IReadOnlyList<MorphFaceTemplateCandidate>>
+                {
+                    [modPackage] = [new(modPackage, 10, "ASA.Mod_Asari", "BIOG_ASA_HED_PROMorph_R.PROBase.ASA_HED_PROBASE_MDL", 9000, TextureCatalogOrigin.Mod)],
+                    [basePackage] = [new(basePackage, 20, "ASA.sta60_amb_asari01", "BIOG_ASA_HED_PROMorph_R.PROBase.ASA_HED_PROBASE_MDL", 0, TextureCatalogOrigin.BaseGame)]
+                });
+            var builder = new TextureRegistryBuilder(fixture.Store, scanner, _ => [modPackage], _ => cookedPath);
+
+            _ = builder.RebuildAsync(MorphFaceGame.LE1).GetAwaiter().GetResult();
+            var snapshot = fixture.Store.Read(MorphFaceGame.LE1);
+
+            TestAssert.True(scanner.Paths.SequenceEqual([modPackage, basePackage]),
+                "The shadowed physical base package was not scanned after the effective mod package.");
+            TestAssert.Equal(basePackage, snapshot.MorphFaceTemplates[0].PackagePath);
+            TestAssert.Equal("ASA.sta60_amb_asari01", snapshot.MorphFaceTemplates[0].FacePath);
+            TestAssert.Equal(modPackage, snapshot.Candidates.Single().EffectiveOccurrence.PackagePath);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
     }
 
     private static void BuilderGroupsPathsByMountPrecedence()
@@ -316,10 +392,13 @@ public static class TextureRegistryStoreTests
 
     private sealed class FakePackageScanner(
         IReadOnlyDictionary<string, IReadOnlyList<TextureRegistryScannedTexture>>? results = null,
-        Action? onScan = null) : ITextureRegistryPackageScanner
+        Action? onScan = null,
+        IReadOnlyDictionary<string, IReadOnlyList<MorphFaceTemplateCandidate>>? templates = null) : ITextureRegistryPackageScanner
     {
         private readonly IReadOnlyDictionary<string, IReadOnlyList<TextureRegistryScannedTexture>> _results =
             results ?? new Dictionary<string, IReadOnlyList<TextureRegistryScannedTexture>>();
+        private readonly IReadOnlyDictionary<string, IReadOnlyList<MorphFaceTemplateCandidate>> _templates =
+            templates ?? new Dictionary<string, IReadOnlyList<MorphFaceTemplateCandidate>>();
 
         public List<string> Paths { get; } = [];
         public List<MorphFaceGame> Games { get; } = [];
@@ -332,7 +411,9 @@ public static class TextureRegistryStoreTests
             Games.Add(game);
             Paths.Add(packagePath);
             onScan?.Invoke();
-            return new TextureRegistryPackageScan(_results.GetValueOrDefault(packagePath) ?? [], []);
+            return new TextureRegistryPackageScan(
+                _results.GetValueOrDefault(packagePath) ?? [],
+                _templates.GetValueOrDefault(packagePath) ?? []);
         }
     }
 

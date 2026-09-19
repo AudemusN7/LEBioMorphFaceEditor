@@ -77,28 +77,19 @@ public sealed class MorphFacePackageContextService
             IReadOnlyList<string> stagingWarnings;
             string facePath;
             string materialPath;
+            PccDependencyGraphSnapshot dependencyGraph;
             using (var template = OpenPackage(templatePath))
             using (var package = MEPackageHandler.CreateMemoryEmptyPackage(temporaryPath, template.Game))
             {
                 var templateFace = FindFace(template, targetTemplateFacePath);
                 NormalizeInvalidHmmMorphPackageAliases(template);
-                ExternalSkeletalMeshMaterializer.PrepareReferencedPackagePaths(package, templateFace);
-                var stagingIssues = EntryExporter.ExportExportToPackage(
-                    templateFace,
+                var stagingMessages = new List<string>();
+                var face = PccPackageWorkflow.ImportRootPreservingStructure(
                     package,
-                    out var stagedEntry,
-                    customROP: new RelinkerOptionsPackage
-                    {
-                        ImportExportDependencies = true,
-                        GenerateImportsForGlobalFiles = false,
-                        CheckImportsWhenExportingToPackage = false
-                    });
-                stagingWarnings = stagingIssues.Select(issue => issue.Message).ToArray();
-                if (stagedEntry is not ExportEntry face ||
-                    !face.ClassName.Equals("BioMorphFace", StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new InvalidDataException("LEC did not stage the target BioMorphFace template.");
-                }
+                    templateFace,
+                    stagingMessages,
+                    checkImportsWhenExportingToPackage: false);
+                stagingWarnings = stagingMessages;
                 EnsureNoExportParentsAreImports(package, "target-template staging");
                 face.ObjectName = new NameReference(objectName);
                 var materialOverride = ResolveMaterialOverride(face);
@@ -145,15 +136,16 @@ public sealed class MorphFacePackageContextService
                 WriteAttachments(face, attachments);
                 facePath = face.InstancedFullPath;
                 materialPath = materialOverride.InstancedFullPath;
+                dependencyGraph = PccPackageWorkflow.CaptureDependencyGraph(face);
                 package.Save(temporaryPath);
             }
 
-            VerifyMinimalConvertedPackage(temporaryPath, facePath, materialPath);
+            VerifyMinimalConvertedPackage(temporaryPath, facePath, materialPath, dependencyGraph);
             if (File.Exists(destination))
             {
                 throw new IOException("The new conversion destination was created by another process.");
             }
-            File.Move(temporaryPath, destination);
+            PccPackageWorkflow.AtomicReplace(temporaryPath, destination);
             return new TransferredMaterialSaveResult(
                 new MorphFaceSaveResult(
                     destination,
@@ -239,7 +231,7 @@ public sealed class MorphFacePackageContextService
             {
                 throw new IOException("The open PCC changed while the morph was being deleted. Nothing was replaced.");
             }
-            AtomicReplace(temporaryPath, path);
+            PccPackageWorkflow.AtomicReplace(temporaryPath, path);
         }
         finally
         {
@@ -727,13 +719,15 @@ public sealed class MorphFacePackageContextService
     private static void VerifyMinimalConvertedPackage(
         string packagePath,
         string facePath,
-        string materialPath)
+        string materialPath,
+        PccDependencyGraphSnapshot dependencyGraph)
     {
         using var package = OpenPackage(packagePath);
         PackageIntegrity.Verify(package);
         _ = FindFace(package, facePath);
         _ = package.FindExport(materialPath, "BioMaterialOverride")
             ?? throw new InvalidDataException("The converted material override was not saved.");
+        PccPackageWorkflow.VerifyDependencyGraph(package, dependencyGraph, verifyCorpusRoles: false);
         var malformed = package.Exports
             .Where(export => export.GetProperties().Any(ContainsUnknownProperty))
             .Select(export => export.InstancedFullPath)
@@ -821,7 +815,7 @@ public sealed class MorphFacePackageContextService
                 throw new IOException("The open PCC changed while the operation was being written. Nothing was replaced.");
             }
 
-            AtomicReplace(temporaryPath, path);
+            PccPackageWorkflow.AtomicReplace(temporaryPath, path);
             return new MorphFaceSaveResult(
                 path,
                 pending.FacePath,
@@ -1503,25 +1497,6 @@ public sealed class MorphFacePackageContextService
         MorphFaceGame.LE3 => MEGame.LE3,
         _ => throw new InvalidDataException($"Unsupported source game '{game}'.")
     };
-
-    private static void AtomicReplace(string temporaryPath, string destination)
-    {
-        var backup = $"{destination}.{Guid.NewGuid():N}.backup";
-        try
-        {
-            File.Replace(temporaryPath, destination, backup, ignoreMetadataErrors: true);
-            File.Delete(backup);
-        }
-        catch
-        {
-            if (File.Exists(backup))
-            {
-                File.Copy(backup, destination, overwrite: true);
-                File.Delete(backup);
-            }
-            throw;
-        }
-    }
 
     private static AssetIdentity? ToIdentity(IEntry? entry) => entry is null
         ? null

@@ -1,5 +1,4 @@
 using LegendaryExplorerCore.Packages;
-using LegendaryExplorerCore.Packages.CloningImportingAndRelinking;
 using LegendaryExplorerCore.Textures;
 using LegendaryExplorerCore.Unreal;
 using LegendaryExplorerCore.Unreal.Classes;
@@ -252,10 +251,7 @@ internal static class MorphFaceTextureTransferEngine
         {
             return requestedPath;
         }
-        var objectName = ObjectName(requestedPath);
-        var matches = candidates.Keys.Where(path =>
-            string.Equals(ObjectName(path), objectName, StringComparison.OrdinalIgnoreCase)).Take(2).ToArray();
-        return matches.Length == 1 ? matches[0] : null;
+        return null;
     }
 
     private static IEnumerable<string> TargetDonorPaths(string? targetTemplatePackagePath)
@@ -281,17 +277,16 @@ internal static class MorphFaceTextureTransferEngine
         var installed = FindCatalogCandidate(targetTextureCatalog, canonicalPath);
         if (installed is not null)
         {
-            if (HasImportedPackageAncestor(destination, canonicalPath))
-            {
-                return EnsureVerifiedTextureImport(destination, canonicalPath);
-            }
             var occurrence = installed.EffectiveOccurrence;
-            return ExternalSkeletalMeshMaterializer.Materialize(
+            return PccPackageWorkflow.ResolveTextureReference(
                 destination,
-                occurrence.PackagePath,
-                canonicalPath,
-                "Texture2D",
-                occurrence.ExportUIndex,
+                new AssetIdentity(
+                    occurrence.PackagePath,
+                    canonicalPath,
+                    occurrence.ExportUIndex,
+                    "Texture2D"),
+                targetTextureCatalog,
+                PreferBiogTexture(canonicalPath),
                 warnings);
         }
         foreach (var path in TargetDonorPaths(targetTemplatePackagePath))
@@ -302,75 +297,28 @@ internal static class MorphFaceTextureTransferEngine
             {
                 continue;
             }
-            var export = FindExportByCanonicalPath(donor, canonicalPath, "Texture2D")
-                         ?? FindUniqueExportByObjectName(donor, canonicalPath, "Texture2D");
+            var export = FindExportByCanonicalPath(donor, canonicalPath, "Texture2D");
             if (export is null) continue;
-            return ExternalSkeletalMeshMaterializer.Materialize(
+            return PccPackageWorkflow.ResolveTextureReference(
                 destination,
-                path,
-                canonicalPath,
-                "Texture2D",
-                export.UIndex,
-                warnings);
+                new AssetIdentity(path, canonicalPath, export.UIndex, "Texture2D"),
+                textureCatalog: null,
+                preferBiogTextures: false,
+                warnings: warnings);
         }
         return null;
-    }
-
-    private static bool HasImportedPackageAncestor(IMEPackage destination, string canonicalPath)
-    {
-        var segments = canonicalPath.Split('.');
-        var path = string.Empty;
-        foreach (var segment in segments.SkipLast(1))
-        {
-            path = path.Length == 0 ? segment : $"{path}.{segment}";
-            if (destination.FindEntry(path, "Package") is ImportEntry) return true;
-        }
-        return false;
-    }
-
-    private static IEntry EnsureVerifiedTextureImport(IMEPackage destination, string canonicalPath)
-    {
-        IEntry? parent = null;
-        var segments = canonicalPath.Split('.');
-        var path = string.Empty;
-        for (var index = 0; index < segments.Length; index++)
-        {
-            path = path.Length == 0 ? segments[index] : $"{path}.{segments[index]}";
-            var className = index == segments.Length - 1 ? "Texture2D" : "Package";
-            parent = destination.FindEntry(path, className) ?? (index == 0
-                ? destination.CreatePackageImport(NameReference.FromInstancedString(segments[index]))
-                : destination.CreateImport(
-                    className,
-                    NameReference.FromInstancedString(segments[index]),
-                    parent));
-        }
-        return parent!;
     }
 
     private static TextureCatalogCandidate? FindCatalogCandidate(
         IReadOnlyList<TextureCatalogCandidate> candidates,
         string requestedPath)
-    {
-        var exact = candidates.FirstOrDefault(candidate =>
+        => candidates.FirstOrDefault(candidate =>
             candidate.InstancedPath.Equals(requestedPath, StringComparison.OrdinalIgnoreCase));
-        if (exact is not null) return exact;
-        var objectName = ObjectName(requestedPath);
-        var matches = candidates.Where(candidate =>
-            candidate.ObjectName.Equals(objectName, StringComparison.OrdinalIgnoreCase)).Take(2).ToArray();
-        return matches.Length == 1 ? matches[0] : null;
-    }
 
-    private static ExportEntry? FindUniqueExportByObjectName(
-        IMEPackage package,
-        string canonicalPath,
-        string className)
-    {
-        var objectName = ObjectName(canonicalPath);
-        var matches = package.Exports.Where(export =>
-            export.ClassName.Equals(className, StringComparison.OrdinalIgnoreCase) &&
-            export.ObjectName.Instanced.Equals(objectName, StringComparison.OrdinalIgnoreCase)).Take(2).ToArray();
-        return matches.Length == 1 ? matches[0] : null;
-    }
+    private static bool PreferBiogTexture(string path) =>
+        path.Contains("HMM_", StringComparison.OrdinalIgnoreCase) ||
+        path.Contains("HMF_", StringComparison.OrdinalIgnoreCase) ||
+        path.Contains("Humanoid", StringComparison.OrdinalIgnoreCase);
 
     private static IEntry EmbedPackageStoredSourceTexture(
         IMEPackage destination,
@@ -389,16 +337,11 @@ internal static class MorphFaceTextureTransferEngine
         var pixelFormat = Image.getPixelFormatType(sourceTexture.TextureFormat);
         var image = sourceTexture.ToImage(pixelFormat);
         var parent = EnsurePackagePath(destination, sourcePath);
-        ExternalSkeletalMeshMaterializer.PrepareReferencedPackagePaths(destination, sourceExport);
-        var rop = new RelinkerOptionsPackage { ImportExportDependencies = true };
-        var importedEntry = EntryImporter.ImportExport(
-            destination, sourceExport, parent?.UIndex ?? 0, rop);
-        MaterialisationVerifier.Relink(rop);
-        if (importedEntry is not ExportEntry importedTexture ||
-            !string.Equals(importedTexture.ClassName, "Texture2D", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidDataException($"LEC did not embed source Texture2D '{sourcePath}'.");
-        }
+        var importedTexture = PccPackageWorkflow.ImportForPackageStorageConversion(
+            destination,
+            sourceExport,
+            parent,
+            warnings);
         if (!importedTexture.InstancedFullPath.Equals(sourcePath, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidDataException(
@@ -412,7 +355,6 @@ internal static class MorphFaceTextureTransferEngine
         warnings.Add(
             $"Embedded '{sourcePath}' as package-stored because {destination.Game} has no stock equivalent. " +
             "You may wish to move this texture into your mod's TFC before release.");
-        MaterialisationVerifier.Verify(importedTexture, sourceGame, rop, warnings);
         return importedTexture;
     }
 
@@ -442,7 +384,8 @@ internal static class MorphFaceTextureTransferEngine
             if (package.Game == sourceGame &&
                 package.IsUExport(installed.EffectiveOccurrence.ExportUIndex) &&
                 package.GetUExport(installed.EffectiveOccurrence.ExportUIndex) is { } indexed &&
-                indexed.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase))
+                indexed.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase) &&
+                CanonicalPath(package, indexed).Equals(sourcePath, StringComparison.OrdinalIgnoreCase))
             {
                 return indexed;
             }

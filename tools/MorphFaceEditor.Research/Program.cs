@@ -10,7 +10,35 @@ using LegendaryExplorerCore.Unreal;
 using LegendaryExplorerCore.Unreal.BinaryConverters;
 using LegendaryExplorerCore.Unreal.BinaryConverters.Shaders;
 using LegendaryExplorerCore.Unreal.ObjectInfo;
+using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.LegendaryExplorer;
+using MorphFaceEditor.LegendaryExplorer.TextureRegistry;
+
+if (args.Length is 1 or 2 && args[0].Equals("build-texture-registries", StringComparison.OrdinalIgnoreCase))
+{
+    LegendaryExplorerCoreRuntime.Initialize();
+    var builder = new TextureRegistryBuilder(new TextureRegistryStore(TextureRegistryPaths.CreateDefault()));
+    MorphFaceGame[] games = args.Length == 1
+        ? new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 }
+        : args[1].ToUpperInvariant() switch
+        {
+            "LE1" => [MorphFaceGame.LE1],
+            "LE2" => [MorphFaceGame.LE2],
+            "LE3" => [MorphFaceGame.LE3],
+            _ => throw new ArgumentException("Specify LE1, LE2 or LE3.")
+        };
+    foreach (var game in games)
+    {
+        Console.WriteLine($"Building {game} texture database...");
+        var status = await builder.RebuildAsync(game);
+        if (status.State != TextureRegistryState.Ready)
+        {
+            throw new InvalidDataException($"{game} texture database build failed: {status.ErrorMessage}");
+        }
+        Console.WriteLine($"{game}: {status.TextureCount} indexed textures.");
+    }
+    return 0;
+}
 
 if (args.Length == 3 && args[0].Equals("corpus-audit", StringComparison.OrdinalIgnoreCase))
 {
@@ -89,8 +117,12 @@ if (args.Length == 3 && args[0].Equals("material-oracle", StringComparison.Ordin
     {
         var sourcePath = Path.Combine(oracleDirectory, $"{gameName} GlobalMorphs.pcc");
         using var sourcePackage = MEPackageHandler.OpenMEPackage(sourcePath, forceLoadFromDisk: true);
-        var entries = sourcePackage.Imports.Cast<IEntry>().Concat(sourcePackage.Exports)
-            .Where(entry => IsMaterialOracleClass(entry.ClassName))
+        var materialRoots = sourcePackage.Exports
+            .Where(entry => IsMaterialGraphRootClass(entry.ClassName))
+            .ToArray();
+        var entries = materialRoots
+            .SelectMany(root => EntryImporter.GetAllReferencesOfExport(root).Append<IEntry>(root))
+            .Distinct()
             .Select(entry => new MaterialOracleEntry(
                 entry.ClassName,
                 entry.InstancedFullPath,
@@ -343,7 +375,8 @@ if (args.Length == 6 && args[0].Equals("dump-shaders", StringComparison.OrdinalI
 
 if (args.Length is not 4 || !args[0].Equals("trace-material", StringComparison.OrdinalIgnoreCase))
 {
-    Console.Error.WriteLine("Usage: corpus-audit <corpus-directory> <output.json>");
+    Console.Error.WriteLine("Usage: build-texture-registries [LE1|LE2|LE3]");
+    Console.Error.WriteLine("   or: corpus-audit <corpus-directory> <output.json>");
     Console.Error.WriteLine("   or: corpus-reconciliation <corpus-directory> <output.json>");
     Console.Error.WriteLine("   or: material-oracle <corpus-directory> <output.json>");
     Console.Error.WriteLine("   or: locate-export <game-root> <export-name>");
@@ -621,14 +654,11 @@ static string Describe(IEntry? entry) => entry is null
 
 static string Escape(string? value) => (value ?? string.Empty).Replace("`", "'").Replace("\r", " ").Replace("\n", " ");
 
-static bool IsMaterialOracleClass(string className) =>
-    className.Equals("Package", StringComparison.OrdinalIgnoreCase) ||
+static bool IsMaterialGraphRootClass(string className) =>
     className.Equals("Material", StringComparison.OrdinalIgnoreCase) ||
     className.Equals("MaterialInstanceConstant", StringComparison.OrdinalIgnoreCase) ||
     className.Equals("BioMaterialInstanceConstant", StringComparison.OrdinalIgnoreCase) ||
-    className.Equals("RvrEffectsMaterialUser", StringComparison.OrdinalIgnoreCase) ||
-    className.Equals("Texture2D", StringComparison.OrdinalIgnoreCase) ||
-    className.Equals("TextureCube", StringComparison.OrdinalIgnoreCase);
+    className.Equals("RvrEffectsMaterialUser", StringComparison.OrdinalIgnoreCase);
 
 static string HashPositions(IReadOnlyList<Vector3> positions)
 {

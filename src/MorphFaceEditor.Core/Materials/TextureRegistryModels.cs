@@ -19,7 +19,7 @@ public sealed record TextureRegistrySnapshot(
     int InstalledPackageCount,
     IReadOnlyList<TextureCatalogCandidate> Candidates)
 {
-    public const int CurrentSchemaVersion = 5;
+    public const int CurrentSchemaVersion = 7;
 
     public IReadOnlyList<MorphFaceTemplateCandidate> MorphFaceTemplates { get; init; } = [];
 }
@@ -53,7 +53,8 @@ public static class TextureRegistryDiscovery
         "SAL_EYE",
         "TUR_EYE",
         "KRO_EYE",
-        "BAT_EYE"
+        "BAT_EYE",
+        "GBL_Norm_Alpha"
     ];
 
     public static bool IsRelevantPath(string path)

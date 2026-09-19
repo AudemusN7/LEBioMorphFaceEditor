@@ -1,5 +1,4 @@
 using LegendaryExplorerCore.Packages;
-using LegendaryExplorerCore.Packages.CloningImportingAndRelinking;
 using LegendaryExplorerCore.Unreal;
 using LegendaryExplorerCore.Unreal.Classes;
 using MorphFaceEditor.Core.Domain;
@@ -36,6 +35,26 @@ internal static class PccTextureDependencyResolver
 
         if (candidate is null)
         {
+            var canonicalMatches = catalog.Where(value => value.Occurrences
+                    .Append(value.EffectiveOccurrence)
+                    .Any(occurrence => PccAssetPathPolicy.FromDonorOccurrence(
+                            value.InstancedPath,
+                            occurrence.PackagePath)
+                        .Equals(identity.InstancedPath, StringComparison.OrdinalIgnoreCase)))
+                .Distinct()
+                .Take(2)
+                .ToArray();
+            candidate = canonicalMatches.Length switch
+            {
+                0 => null,
+                1 => canonicalMatches[0],
+                _ => throw new InvalidDataException(
+                    $"Texture2D '{identity.InstancedPath}' maps to multiple exact package-qualified catalogue identities.")
+            };
+        }
+
+        if (candidate is null)
+        {
             throw new KeyNotFoundException(
                 $"Texture2D '{identity.InstancedPath}' is not present in the installed texture database.");
         }
@@ -45,11 +64,15 @@ internal static class PccTextureDependencyResolver
             : candidate.Occurrences;
         var occurrence = SelectOccurrence(
             candidate.InstancedPath,
+            requestedPath,
             identity.PackagePath,
             candidate.EffectiveOccurrence,
             occurrences,
             preferBiog);
-        return new PccTextureSource(requestedPath, candidate.InstancedPath, occurrence);
+        return new PccTextureSource(
+            requestedPath,
+            PccAssetPathPolicy.FromDonorOccurrence(candidate.InstancedPath, occurrence.PackagePath),
+            occurrence);
     }
 
     /// <summary>
@@ -82,7 +105,7 @@ internal static class PccTextureDependencyResolver
         ArgumentNullException.ThrowIfNull(identity);
         var source = new PccTextureSource(
             identity.InstancedPath,
-            identity.InstancedPath,
+            PccAssetPathPolicy.FromDonorOccurrence(identity.InstancedPath, identity.PackagePath),
             new TextureCatalogOccurrence(
                 identity.PackagePath,
                 identity.UIndex,
@@ -97,7 +120,7 @@ internal static class PccTextureDependencyResolver
         return MaterializeResolved(destination, source, warnings);
     }
 
-    private static ExportEntry MaterializeResolved(
+    internal static ExportEntry MaterializeResolved(
         IMEPackage destination,
         PccTextureSource source,
         ICollection<string>? warnings)
@@ -136,26 +159,14 @@ internal static class PccTextureDependencyResolver
             destination,
             source.InstancedPath,
             "Texture2D");
-        ExternalSkeletalMeshMaterializer.PrepareReferencedPackagePaths(destination, donorTexture);
-
-        var relinker = new RelinkerOptionsPackage
-        {
-            ImportExportDependencies = true,
-            GenerateImportsForGlobalFiles = false
-        };
-        var imported = EntryImporter.ImportExport(
+        var textureExport = PccPackageWorkflow.ImportDependencyGraph(
             destination,
             donorTexture,
-            parent?.UIndex ?? 0,
-            relinker);
-        MaterialisationVerifier.Relink(relinker);
-
-        if (imported is not ExportEntry textureExport ||
-            !textureExport.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidDataException(
-                $"LEC did not materialise Texture2D '{source.InstancedPath}' as an export.");
-        }
+            parent,
+            textureCatalog: null,
+            preferBiogTextures: false,
+            warnings,
+            applyCorpusMaterialPolicy: false);
         if (!textureExport.InstancedFullPath.Equals(source.InstancedPath, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidDataException(
@@ -164,7 +175,6 @@ internal static class PccTextureDependencyResolver
         }
 
         VerifyBulkDataPreserved(donorTexture, textureExport);
-        MaterialisationVerifier.Verify(textureExport, donor.Game, relinker, warnings);
         return textureExport;
     }
 
@@ -184,11 +194,54 @@ internal static class PccTextureDependencyResolver
 
     private static TextureCatalogOccurrence SelectOccurrence(
         string texturePath,
+        string requestedPath,
         string requestedPackagePath,
         TextureCatalogOccurrence effectiveOccurrence,
         IReadOnlyList<TextureCatalogOccurrence> occurrences,
         bool preferBiog)
     {
+        var exactIdentities = occurrences
+            .Where(value => PccAssetPathPolicy.FromDonorOccurrence(texturePath, value.PackagePath)
+                .Equals(requestedPath, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (exactIdentities.Length == 1)
+        {
+            return exactIdentities[0];
+        }
+        if (exactIdentities.Length > 1)
+        {
+            var requested = !string.IsNullOrWhiteSpace(requestedPackagePath)
+                ? exactIdentities.FirstOrDefault(value => Path.GetFullPath(value.PackagePath).Equals(
+                    Path.GetFullPath(requestedPackagePath), StringComparison.OrdinalIgnoreCase))
+                : null;
+            if (requested is not null)
+            {
+                return requested;
+            }
+            if (preferBiog)
+            {
+                var seekfree = exactIdentities
+                    .Where(value => IsSeekfreePackage(value.PackagePath))
+                    .OrderByDescending(HasExternalMips)
+                    .ThenByDescending(value => value.MountPriority)
+                    .ThenBy(value => value.PackagePath, StringComparer.OrdinalIgnoreCase)
+                    .FirstOrDefault();
+                if (seekfree is not null)
+                {
+                    return seekfree;
+                }
+            }
+            if (exactIdentities.Contains(effectiveOccurrence))
+            {
+                return effectiveOccurrence;
+            }
+            return exactIdentities
+                .OrderByDescending(HasExternalMips)
+                .ThenByDescending(value => value.MountPriority)
+                .ThenBy(value => value.PackagePath, StringComparer.OrdinalIgnoreCase)
+                .First();
+        }
+
         if (preferBiog)
         {
             var seekfree = occurrences
@@ -232,7 +285,7 @@ internal static class PccTextureDependencyResolver
     private static bool HasExternalMips(TextureCatalogOccurrence occurrence) =>
         occurrence.Mips.Any(mip => ((StorageFlags)mip.StorageType & StorageFlags.externalFile) != 0);
 
-    private static ExportEntry ResolveSourceExport(
+    internal static ExportEntry ResolveSourceExport(
         IMEPackage source,
         string instancedPath,
         int sourceUIndex)
@@ -255,17 +308,20 @@ internal static class PccTextureDependencyResolver
                 $"Texture2D '{instancedPath}' was {(matches.Length == 0 ? "not found" : "ambiguous")} in '{source.FilePath}'.");
     }
 
-    private static void VerifyBulkDataPreserved(ExportEntry source, ExportEntry destination)
+    internal static void VerifyBulkDataPreserved(ExportEntry source, ExportEntry destination)
     {
         var sourceTexture = new Texture2D(source);
         var destinationTexture = new Texture2D(destination);
-        if (!string.Equals(
-                source.GetProperty<NameProperty>("TextureFileCacheName")?.Value.Instanced,
-                destination.GetProperty<NameProperty>("TextureFileCacheName")?.Value.Instanced,
+        var sourceCacheName = source.GetProperty<NameProperty>("TextureFileCacheName")?.Value.Instanced;
+        var destinationCacheName = destination.GetProperty<NameProperty>("TextureFileCacheName")?.Value.Instanced;
+        if (sourceCacheName is not null && !string.Equals(
+                sourceCacheName,
+                destinationCacheName,
                 StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidDataException(
-                $"Texture2D '{source.InstancedFullPath}' lost its TextureFileCacheName during PCC import.");
+                $"Texture2D '{source.InstancedFullPath}' changed TextureFileCacheName " +
+                $"'{sourceCacheName ?? "None"}' -> '{destinationCacheName ?? "None"}' during PCC import.");
         }
 
         var sourceMips = sourceTexture.Mips.Where(mip => mip.storageType != StorageTypes.empty).ToArray();

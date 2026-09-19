@@ -32,6 +32,7 @@ public static class TextureCatalogTests
         new("texture catalogue: texture editor resolves installed paths without guessing", TextureEditorResolvesInstalledPathsWithoutGuessing),
         new("randomisation texture: required decode failure reports family signature", RequiredDecodeFailureReportsFamilySignature),
         new("texture registry: discovery admits morph HIR and shared-eye paths", DiscoveryAdmitsSupportedPaths),
+        new("texture registry: installed scans include GBL_Norm_Alpha across games", InstalledScansIncludeGlobalNormalAlpha),
         new("texture registry: occurrence retains mip storage metadata", OccurrenceRetainsMipStorageMetadata),
         new("texture registry: availability resolves installed and local paths", AvailabilityResolvesMergedPaths),
         new("texture registry: ambiguous object names are not resolved", AmbiguousObjectNamesAreRejected)
@@ -240,7 +241,8 @@ public static class TextureCatalogTests
             "BIOG_Humanoid_MASTER_MTR_R.Skin_HumanHED_SpecMulitplier_Mask",
             "BIOG_HMM_EYE.Eye.EYE_Iris_Norm",
             "BIOG_ASA_EYE.Materials.ASA_EYE_Diff",
-            "BIOG_KRO_EYE.Materials.KRO_EYE_Norm"
+            "BIOG_KRO_EYE.Materials.KRO_EYE_Norm",
+            "BIOG_Humanoid_MASTER_MTR_R.GBL_Norm_Alpha"
         ];
 
         TestAssert.True(admitted.All(TextureRegistryDiscovery.IsRelevantPath),
@@ -284,6 +286,36 @@ public static class TextureCatalogTests
         var ranked = TextureCatalogSearch.FilterAndRank([preferred, active], profile, active.InstancedPath, string.Empty);
 
         TestAssert.Equal(active.InstancedPath, ranked[0].InstancedPath);
+    }
+
+    private static void InstalledScansIncludeGlobalNormalAlpha()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        var cases = new[]
+        {
+            (MorphFaceGame.LE1, LegendaryExplorerCoreRuntime.DefaultLe1CookedPath, "BIOC_Materials.pcc"),
+            (MorphFaceGame.LE2, LegendaryExplorerCoreRuntime.DefaultLe2CookedPath, "SFXGame.pcc"),
+            (MorphFaceGame.LE3, LegendaryExplorerCoreRuntime.DefaultLe3CookedPath, "BioP_Char.pcc")
+        };
+        if (cases.Any(value => string.IsNullOrWhiteSpace(value.Item2)))
+        {
+            return;
+        }
+
+        const string path = "BIOG_Humanoid_MASTER_MTR_R.GBL_Norm_Alpha";
+        var scanner = new LecTextureRegistryPackageScanner();
+        foreach (var (game, cookedPath, fileName) in cases)
+        {
+            var packagePath = Path.Combine(cookedPath!, fileName);
+            if (!File.Exists(packagePath))
+            {
+                throw new FileNotFoundException($"The installed {game} registry donor is missing.", packagePath);
+            }
+            var scan = scanner.Scan(game, packagePath, CancellationToken.None);
+            TestAssert.True(scan.Textures.Any(value =>
+                    value.InstancedPath.Equals(path, StringComparison.OrdinalIgnoreCase)),
+                $"The installed {game} registry scan omitted '{path}' from {fileName}.");
+        }
     }
 
     private static void DetachedMeshProfileCoversSupportedRacialScopes()

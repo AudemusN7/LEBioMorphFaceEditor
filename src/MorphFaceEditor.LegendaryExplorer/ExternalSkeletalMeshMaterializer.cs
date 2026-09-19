@@ -58,72 +58,34 @@ internal static class ExternalSkeletalMeshMaterializer
                                $"{className} '{instancedPath}' was not found in '{source.FilePath}'.");
         return MaterializeResolved(
             destination,
-            source,
             sourceExport,
             instancedPath,
             className,
-            warnings,
-            new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+            warnings);
     }
 
     private static ExportEntry MaterializeResolved(
         IMEPackage destination,
-        IMEPackage source,
         ExportEntry sourceExport,
         string instancedPath,
         string className,
-        ICollection<string>? warnings,
-        HashSet<string> active)
+        ICollection<string>? warnings)
     {
         if (destination.FindExport(instancedPath, className) is { } existing)
         {
             return existing;
         }
 
-        var key = $"{className}:{instancedPath}";
-        if (!active.Add(key))
-        {
-            throw new InvalidDataException($"Circular target-donor materialisation detected at '{instancedPath}'.");
-        }
-
         var parent = PackageIntegrity.EnsurePackagePath(destination, instancedPath, className);
-        PrepareReferencedPackagePaths(destination, sourceExport);
-
-        foreach (var import in EntryImporter.GetAllReferencesOfExport(sourceExport).OfType<ImportEntry>()
-                     .Where(import => import.ClassName is "Texture2D" or "SkeletalMesh"))
-        {
-            if (destination.FindEntry(import.InstancedFullPath, import.ClassName) is not null)
-            {
-                continue;
-            }
-            var dependency = ResolveSourceExport(
-                source,
-                import.InstancedFullPath,
-                import.ClassName,
-                sourceUIndex: 0,
-                required: false);
-            if (dependency is not null)
-            {
-                MaterializeResolved(
-                    destination,
-                    source,
-                    dependency,
-                    import.InstancedFullPath,
-                    import.ClassName,
-                    warnings,
-                    active);
-            }
-        }
-
-        var relinker = new RelinkerOptionsPackage
-        {
-            ImportExportDependencies = true,
-            GenerateImportsForGlobalFiles = false
-        };
-        var imported = EntryImporter.ImportExport(destination, sourceExport, parent?.UIndex ?? 0, relinker);
-        MaterialisationVerifier.Relink(relinker);
-
-        if (imported is not ExportEntry materialized ||
+        var materialized = PccPackageWorkflow.ImportDependencyGraph(
+            destination,
+            sourceExport,
+            parent,
+            textureCatalog: null,
+            preferBiogTextures: false,
+            warnings,
+            applyCorpusMaterialPolicy: true);
+        if (
             !materialized.ClassName.Equals(className, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidDataException(
@@ -135,8 +97,6 @@ internal static class ExternalSkeletalMeshMaterializer
                 $"The materialised {className} path changed from '{instancedPath}' " +
                 $"to '{materialized.InstancedFullPath}'.");
         }
-        active.Remove(key);
-        MaterialisationVerifier.Verify(materialized, source.Game, relinker, warnings);
         return materialized;
     }
 
@@ -181,19 +141,22 @@ internal static class ExternalSkeletalMeshMaterializer
         int sourceUIndex,
         bool required = true)
     {
+        bool Matches(ExportEntry export) =>
+            export.ClassName.Equals(className, StringComparison.OrdinalIgnoreCase) &&
+            (export.InstancedFullPath.Equals(instancedPath, StringComparison.OrdinalIgnoreCase) ||
+             CanonicalPath(source, export).Equals(instancedPath, StringComparison.OrdinalIgnoreCase));
+
         if (sourceUIndex > 0 && source.IsUExport(sourceUIndex) &&
             source.GetUExport(sourceUIndex) is { } indexed &&
             indexed.ClassName.Equals(className, StringComparison.OrdinalIgnoreCase))
         {
             return indexed;
         }
-        var found = source.FindExport(instancedPath, className)
-                    ?? source.Exports.FirstOrDefault(export =>
-                        export.ClassName.Equals(className, StringComparison.OrdinalIgnoreCase) &&
-                        CanonicalPath(source, export).Equals(instancedPath, StringComparison.OrdinalIgnoreCase));
+        var matches = source.Exports.Where(Matches).Take(2).ToArray();
+        var found = matches.Length == 1 ? matches[0] : null;
         return found ?? (required
             ? throw new InvalidDataException(
-                $"{className} '{instancedPath}' was not found in '{source.FilePath}'.")
+                $"{className} '{instancedPath}' was {(matches.Length == 0 ? "not found" : "ambiguous")} in '{source.FilePath}'.")
             : null);
     }
 

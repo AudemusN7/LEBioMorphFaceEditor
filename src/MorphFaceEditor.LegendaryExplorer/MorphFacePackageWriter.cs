@@ -64,7 +64,8 @@ public sealed class MorphFacePackageWriter
         {
             string facePath;
             string overridePath;
-            List<string> warnings;
+            var warnings = new List<string>();
+            PccDependencyGraphSnapshot dependencyGraph;
             var sourceBytes = File.ReadAllBytes(sourcePath);
             using (var sourceStream = new MemoryStream(sourceBytes, writable: false))
             using (var sourcePackage = MEPackageHandler.OpenMEPackageFromStream(sourceStream, logicalSourcePath))
@@ -86,14 +87,10 @@ public sealed class MorphFacePackageWriter
                         $"The destination already contains an entry named '{destinationFacePath}'.");
                 }
 
-                ExternalSkeletalMeshMaterializer.PrepareReferencedPackagePaths(destinationPackage, sourceFace);
-                var issues = EntryExporter.ExportExportToPackage(sourceFace, destinationPackage, out var portedEntry);
-                warnings = issues.Select(issue => issue.Message).ToList();
-                if (portedEntry is not ExportEntry portedFace ||
-                    !string.Equals(portedFace.ClassName, "BioMorphFace", StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new InvalidDataException("LEC did not produce a BioMorphFace export in the destination.");
-                }
+                var portedFace = PccPackageWorkflow.ImportRootPreservingStructure(
+                    destinationPackage,
+                    sourceFace,
+                    warnings);
                 if (destinationObjectName is not null)
                 {
                     portedFace.ObjectName = new NameReference(destinationObjectName);
@@ -109,10 +106,11 @@ public sealed class MorphFacePackageWriter
                 WriteMaterialOverride(destinationPackage, materialOverride, draft.MaterialOverrides, warnings);
                 facePath = portedFace.InstancedFullPath;
                 overridePath = materialOverride.InstancedFullPath;
+                dependencyGraph = PccPackageWorkflow.CaptureDependencyGraph(portedFace);
                 destinationPackage.Save(temporaryPath);
             }
 
-            Verify(temporaryPath, facePath, draft, destinationIntegrityBaseline);
+            Verify(temporaryPath, facePath, draft, destinationIntegrityBaseline, dependencyGraph);
             if (PackageFingerprint.Capture(sourcePath) != draft.SourceFingerprint)
             {
                 throw new IOException("The source PCC changed while the morph package was being written. Nothing was replaced.");
@@ -124,7 +122,7 @@ public sealed class MorphFacePackageWriter
                 throw new IOException("The destination changed while the morph package was being written. Nothing was replaced.");
             }
 
-            AtomicReplace(temporaryPath, destination);
+            PccPackageWorkflow.AtomicReplace(temporaryPath, destination);
             return new MorphFaceSaveResult(
                 destination,
                 facePath,
@@ -183,7 +181,7 @@ public sealed class MorphFacePackageWriter
                 throw new IOException("The open PCC changed while the face was being written. Nothing was replaced.");
             }
 
-            AtomicReplace(temporaryPath, packagePath);
+            PccPackageWorkflow.AtomicReplace(temporaryPath, packagePath);
             return new MorphFaceSaveResult(
                 packagePath,
                 draft.Source.InstancedPath,
@@ -275,10 +273,15 @@ public sealed class MorphFacePackageWriter
         string packagePath,
         string facePath,
         MorphFaceDocument expected,
-        IReadOnlySet<string>? allowedExistingIntegrityIssues = null)
+        IReadOnlySet<string>? allowedExistingIntegrityIssues = null,
+        PccDependencyGraphSnapshot? dependencyGraph = null)
     {
         using var package = MEPackageHandler.OpenMEPackage(packagePath, forceLoadFromDisk: true);
         PackageIntegrity.Verify(package, allowedExistingIntegrityIssues);
+        if (dependencyGraph is not null)
+        {
+            PccPackageWorkflow.VerifyDependencyGraph(package, dependencyGraph, verifyCorpusRoles: false);
+        }
         var face = FindExport(package, facePath, "BioMorphFace");
         var properties = face.GetProperties();
         var binary = face.GetBinaryData<BinaryMorphFace>();
@@ -487,7 +490,12 @@ public sealed class MorphFacePackageWriter
             return preservedImport;
         }
         return PackageIntegrity.FindExactEntry(package, identity.InstancedPath, "Texture2D") as ExportEntry
-               ?? ExternalTextureMaterializer.Materialize(package, identity, warnings);
+               ?? PccPackageWorkflow.ResolveTextureReference(
+                   package,
+                   identity,
+                   textureCatalog: null,
+                   preferBiogTextures: false,
+                   warnings: warnings);
     }
 
     private static IEntry ResolveAttachmentDraftEntry(
@@ -590,32 +598,6 @@ public sealed class MorphFacePackageWriter
     {
         var separator = instancedPath.LastIndexOf('.');
         return separator < 0 ? objectName : $"{instancedPath[..separator]}.{objectName}";
-    }
-
-    private static void AtomicReplace(string temporaryPath, string destination)
-    {
-        if (File.Exists(destination))
-        {
-            var backup = $"{destination}.{Guid.NewGuid():N}.backup";
-            try
-            {
-                File.Replace(temporaryPath, destination, backup, ignoreMetadataErrors: true);
-                File.Delete(backup);
-            }
-            catch
-            {
-                if (File.Exists(backup))
-                {
-                    File.Copy(backup, destination, overwrite: true);
-                    File.Delete(backup);
-                }
-                throw;
-            }
-        }
-        else
-        {
-            File.Move(temporaryPath, destination);
-        }
     }
 
     private static StructProperty VectorProperty(Vector3 value, string name) => new(

@@ -1,8 +1,10 @@
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.LegendaryExplorer;
+using MorphFaceEditor.LegendaryExplorer.TextureRegistry;
 using LegendaryExplorerCore.GameFilesystem;
 using LegendaryExplorerCore.Packages;
+using LegendaryExplorerCore.Packages.CloningImportingAndRelinking;
 using LegendaryExplorerCore.Unreal;
 using LegendaryExplorerCore.Unreal.Classes;
 
@@ -14,6 +16,9 @@ public static class PccTextureDependencyResolverTests
     public static IReadOnlyList<TestCase> All { get; } =
     [
         new("PCC texture resolver: human prefers exact BIOG donor", HumanPrefersBiog),
+        new("PCC texture resolver: package-relative BIOG paths become PCC identities", RelativeBiogPathBecomesPccIdentity),
+        new("D1 installed non-corpus BIOG texture becomes a package-qualified PCC export", InstalledNonCorpusTextureUsesDonorIdentity),
+        new("D1 arbitrary custom texture materialises without corpus knowledge", ArbitraryCustomTextureUsesDonorIdentity),
         new("PCC texture resolver: exact path never remaps by object name", ExactPathNeverRemapsByObjectName),
         new("PCC texture resolver: human falls back to character creator", HumanFallsBackToCharacterCreator),
         new("PCC texture resolver: alien retains effective occurrence", AlienRetainsEffectiveOccurrence),
@@ -48,6 +53,155 @@ public static class PccTextureDependencyResolverTests
             preferBiog: true);
 
         TestAssert.Equal(Path.GetFileName("BioP_Char.pcc"), resolved.Occurrence.PackageName);
+    }
+
+    private static void RelativeBiogPathBecomesPccIdentity()
+    {
+        const string localPath = "Hair_CrewCut.HMF_HIR_Cru_Diff";
+        var seekfree = Occurrence("BIOG_HMF_HIR_PRO.pcc", 100);
+        var characterCreator = Occurrence("BioP_Char.pcc", 10);
+        var candidate = Candidate(localPath, seekfree, characterCreator);
+
+        var resolved = PccTextureDependencyResolver.Resolve(
+            new AssetIdentity("BioP_Char.pcc", localPath, 1, "Texture2D"),
+            [candidate],
+            preferBiog: true);
+
+        TestAssert.Equal("BIOG_HMF_HIR_PRO.Hair_CrewCut.HMF_HIR_Cru_Diff", resolved.InstancedPath);
+        TestAssert.Equal(Path.GetFileName("BIOG_HMF_HIR_PRO.pcc"), resolved.Occurrence.PackageName);
+
+        var alreadyQualified = PccTextureDependencyResolver.Resolve(
+            new AssetIdentity(
+                "BioP_Char.pcc",
+                "BIOG_HMF_HIR_PRO.Hair_CrewCut.HMF_HIR_Cru_Diff",
+                1,
+                "Texture2D"),
+            [candidate],
+            preferBiog: true);
+        TestAssert.Equal(resolved.InstancedPath, alreadyQualified.InstancedPath);
+        TestAssert.Equal(resolved.Occurrence.PackagePath, alreadyQualified.Occurrence.PackagePath);
+    }
+
+    private static void InstalledNonCorpusTextureUsesDonorIdentity()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        var store = new TextureRegistryStore(TextureRegistryPaths.CreateDefault());
+        if (store.GetStatus(MorphFaceGame.LE2).State != TextureRegistryState.Ready)
+        {
+            throw new InvalidOperationException("The LE2 texture database is required for the D1 non-corpus texture test.");
+        }
+
+        var candidateAndOccurrence = store.Read(MorphFaceGame.LE2).Candidates
+            .SelectMany(candidate => candidate.Occurrences
+                .Where(occurrence => PccTextureDependencyResolver.IsSeekfreePackage(occurrence.PackagePath))
+                .Select(occurrence => (Candidate: candidate, Occurrence: occurrence)))
+            .Where(value => !value.Candidate.InstancedPath.StartsWith("BIO", StringComparison.OrdinalIgnoreCase))
+            .Where(value => File.Exists(value.Occurrence.PackagePath))
+            .Select(value => (
+                value.Candidate,
+                value.Occurrence,
+                TargetPath: PccAssetPathPolicy.FromDonorOccurrence(
+                    value.Candidate.InstancedPath,
+                    value.Occurrence.PackagePath)))
+            .FirstOrDefault(value => MaterialDependencyOracle.Instance.GetKind(
+                MEGame.LE2,
+                "Texture2D",
+                value.TargetPath) == MaterialOracleEntryKind.Unknown);
+        if (candidateAndOccurrence.Candidate is null)
+        {
+            throw new InvalidOperationException(
+                "The LE2 registry contains no package-relative BIOG texture outside the Global Morphs oracle.");
+        }
+
+        var resolved = PccTextureDependencyResolver.Resolve(
+            new AssetIdentity(
+                candidateAndOccurrence.Occurrence.PackagePath,
+                candidateAndOccurrence.Candidate.InstancedPath,
+                candidateAndOccurrence.Occurrence.ExportUIndex,
+                "Texture2D"),
+            [candidateAndOccurrence.Candidate],
+            preferBiog: true);
+        TestAssert.Equal(candidateAndOccurrence.TargetPath, resolved.InstancedPath);
+
+        using var destination = MEPackageHandler.CreateMemoryEmptyPackage(
+            "D1InstalledNonCorpusTexture.pcc",
+            MEGame.LE2);
+        var materialised = PccTextureDependencyResolver.Materialize(
+            destination,
+            new AssetIdentity(
+                candidateAndOccurrence.Occurrence.PackagePath,
+                candidateAndOccurrence.Candidate.InstancedPath,
+                candidateAndOccurrence.Occurrence.ExportUIndex,
+                "Texture2D"),
+            [candidateAndOccurrence.Candidate],
+            preferBiog: true);
+        TestAssert.Equal(candidateAndOccurrence.TargetPath, materialised.InstancedFullPath);
+        TestAssert.True(
+            destination.FindExport(candidateAndOccurrence.Candidate.InstancedPath, "Texture2D") is null,
+            "The PCC retained an unqualified duplicate of the installed BIOG texture.");
+    }
+
+    private static void ArbitraryCustomTextureUsesDonorIdentity()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        var donorPath = Path.Combine(Path.GetTempPath(), $"MFE-D1-CustomTexture-{Guid.NewGuid():N}.pcc");
+        var outputPath = Path.Combine(Path.GetTempPath(), $"MFE-D1-CustomTextureOutput-{Guid.NewGuid():N}.pcc");
+        try
+        {
+            using (var source = MEPackageHandler.OpenMEPackage(
+                       Path.GetFullPath("tests/Global Morphs/LE2 GlobalMorphs.pcc"),
+                       forceLoadFromDisk: true))
+            using (var donor = MEPackageHandler.CreateMemoryEmptyPackage(donorPath, MEGame.LE2))
+            {
+                var sourceTexture = source.Exports.First(export =>
+                    export.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase) &&
+                    new Texture2D(export).Mips.Any(mip => mip.storageType != StorageTypes.empty));
+                var parent = donor.CreatePackageExport("CustomTextures");
+                var imported = EntryImporter.ImportExport(
+                    donor,
+                    sourceTexture,
+                    parent.UIndex,
+                    new RelinkerOptionsPackage
+                    {
+                        ImportExportDependencies = false,
+                        GenerateImportsForGlobalFiles = false
+                    }) as ExportEntry ?? throw new InvalidDataException("The custom donor texture was not cloned.");
+                imported.ObjectName = new NameReference("Ryan_D1_Arbitrary_Diff");
+                donor.Save(donorPath);
+            }
+
+            using (var donor = MEPackageHandler.OpenMEPackage(donorPath, forceLoadFromDisk: true))
+            using (var destination = MEPackageHandler.CreateMemoryEmptyPackage(outputPath, MEGame.LE2))
+            {
+                const string localPath = "CustomTextures.Ryan_D1_Arbitrary_Diff";
+                var sourceTexture = donor.FindExport(localPath, "Texture2D")
+                                    ?? throw new InvalidDataException("The saved custom donor texture is missing.");
+                var targetPath = PccAssetPathPolicy.FromDonorOccurrence(localPath, donorPath);
+                TestAssert.Equal(
+                    MaterialOracleEntryKind.Unknown,
+                    MaterialDependencyOracle.Instance.GetKind(MEGame.LE2, "Texture2D", targetPath));
+                var materialised = PccTextureDependencyResolver.MaterializeDirect(
+                    destination,
+                    new AssetIdentity(donorPath, localPath, sourceTexture.UIndex, "Texture2D"));
+                TestAssert.Equal(targetPath, materialised.InstancedFullPath);
+                TestAssert.True(destination.FindExport(localPath, "Texture2D") is null,
+                    "The custom texture was duplicated at its package-relative path.");
+                destination.Save(outputPath);
+            }
+
+            using var reopened = MEPackageHandler.OpenMEPackage(outputPath, forceLoadFromDisk: true);
+            var expectedPath = PccAssetPathPolicy.FromDonorOccurrence(
+                "CustomTextures.Ryan_D1_Arbitrary_Diff",
+                donorPath);
+            TestAssert.True(reopened.FindExport(expectedPath, "Texture2D") is not null,
+                "The package-qualified arbitrary texture did not survive save/reopen.");
+            PackageIntegrity.Verify(reopened);
+        }
+        finally
+        {
+            if (File.Exists(donorPath)) File.Delete(donorPath);
+            if (File.Exists(outputPath)) File.Delete(outputPath);
+        }
     }
 
     private static void ExactPathNeverRemapsByObjectName()
@@ -92,6 +246,12 @@ public static class PccTextureDependencyResolverTests
             preferBiog: false);
 
         TestAssert.Equal(Path.GetFileName(effective.PackagePath), resolved.Occurrence.PackageName);
+
+        var explicitlySelected = PccTextureDependencyResolver.Resolve(
+            new AssetIdentity(alternate.PackagePath, path, 1, "Texture2D"),
+            [candidate],
+            preferBiog: false);
+        TestAssert.Equal(Path.GetFileName(alternate.PackagePath), explicitlySelected.Occurrence.PackageName);
     }
 
     private static void DuplicateObjectNamesDoNotAffectExactIdentity()

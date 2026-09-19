@@ -70,17 +70,6 @@ internal sealed class GamePackageReferenceResolver(PackageCache packageCache)
                 {
                     return exact;
                 }
-
-                var sameName = package.Exports
-                    .Where(export =>
-                        string.Equals(export.ClassName, import.ClassName, StringComparison.OrdinalIgnoreCase) &&
-                        string.Equals(export.ObjectNameString, import.ObjectNameString, StringComparison.OrdinalIgnoreCase))
-                    .Take(2)
-                    .ToArray();
-                if (sameName.Length == 1)
-                {
-                    return sameName[0];
-                }
             }
             catch
             {

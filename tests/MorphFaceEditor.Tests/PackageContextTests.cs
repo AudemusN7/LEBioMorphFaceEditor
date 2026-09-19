@@ -30,6 +30,9 @@ public static class PackageContextTests
         new("cross-game conversion rebakes LE2 to LE3 and LE3 to LE1 packages", ConvertMorphsAcrossGameBoundary),
         new("cross-game conversion requires current texture databases", ConversionRequiresTextureDatabases),
         new("all six cross-game directions preserve canonical hair donors", PreserveCanonicalHairAcrossAllDirections),
+        new("LE2 human attachment to LE1 preserves material graph", Le2HumanAttachmentToLe1),
+        new("installed LE1 Asari template survives a shadowing mod", InstalledLe1AsariTemplateSurvivesMod),
+        new("D1 corpus conversion matrix preserves attachment semantics", D1CorpusConversionMatrix),
         new("reviewed cross-game texture policy aliases donors and omits inert overrides", ApplyReviewedTextureTransferPolicy),
         new("reviewed cross-game texture paths are admitted to the local registry", ReviewedTexturePathsAreRegistryEligible),
         new("later-game alien textures embed package-stored when LE1 has no stock equivalent", EmbedMissingAlienTextureIntoLe1),
@@ -691,6 +694,407 @@ public static class PackageContextTests
             }
         }
     }
+
+    private static void Le2HumanAttachmentToLe1()
+    {
+        var service = new MorphFaceConversionService(
+            MorphFaceProfileRegistry.CreateDefault(),
+            new MorphTargetCatalog(),
+            new MorphFacePackageContextService(),
+            TestFixtures.GetCorpusTextureCatalogService());
+        var destination = Path.Combine(Path.GetTempPath(), $"MFE-D1-LE2-human-{Guid.NewGuid():N}.pcc");
+        try
+        {
+            var result = service.Convert(new MorphFaceConversionRequest(
+                FixturePath("LE2 GlobalMorphs.pcc"),
+                "HMM.BioFace_Security2",
+                MorphFaceGame.LE1,
+                destination,
+                CreateNewPackage: true,
+                FixturePath("LE1 GlobalMorphs.pcc")));
+            using var reopened = MEPackageHandler.OpenMEPackage(destination, forceLoadFromDisk: true);
+            TestAssert.True(reopened.FindExport(result.SaveResult.FaceInstancedPath, "BioMorphFace") is not null,
+                "Converted LE1 human face was not saved.");
+        }
+        finally
+        {
+            if (File.Exists(destination)) File.Delete(destination);
+        }
+    }
+
+    private static void InstalledLe1AsariTemplateSurvivesMod()
+    {
+        var store = new TextureRegistryStore(TextureRegistryPaths.CreateDefault());
+        if (store.GetStatus(MorphFaceGame.LE1).State != TextureRegistryState.Ready)
+        {
+            throw new InvalidOperationException("The v7 LE1 texture database is required for automatic Asari template selection.");
+        }
+        var installedTemplates = store.Read(MorphFaceGame.LE1).MorphFaceTemplates;
+        TestAssert.True(installedTemplates.Any(candidate =>
+                candidate.Origin == TextureCatalogOrigin.BaseGame &&
+                candidate.FacePath.Equals(
+                    "BIOA_STA_FAC.ASA.Ambient.sta60_amb_asari01", StringComparison.OrdinalIgnoreCase) &&
+                candidate.BaseHeadPath?.Equals(
+                    "BIOG_ASA_HED_PROMorph_R.PROBase.ASA_HED_PROBASE_MDL", StringComparison.OrdinalIgnoreCase) == true),
+            "The registry omitted the shadowed physical LE1 Asari face template. Nearby candidates: " +
+            string.Join("; ", installedTemplates
+                .Where(candidate => candidate.FacePath.Contains("sta60_amb_asari01", StringComparison.OrdinalIgnoreCase))
+                .Select(candidate => $"{candidate.Origin} {candidate.PackagePath} {candidate.FacePath} {candidate.BaseHeadPath}")));
+        var service = new MorphFaceConversionService(
+            MorphFaceProfileRegistry.CreateDefault(),
+            new MorphTargetCatalog(),
+            new MorphFacePackageContextService(),
+            new TextureCatalogService(store));
+        var destination = Path.Combine(Path.GetTempPath(), $"MFE-D1-Asari-template-{Guid.NewGuid():N}.pcc");
+        try
+        {
+            var result = service.Convert(new MorphFaceConversionRequest(
+                FixturePath("LE2 GlobalMorphs.pcc"),
+                "ASA.BioFace_Asari_Spectre_Head",
+                MorphFaceGame.LE1,
+                destination,
+                CreateNewPackage: true,
+                TemplatePackagePath: null));
+            using var reopened = MEPackageHandler.OpenMEPackage(destination, forceLoadFromDisk: true);
+            TestAssert.True(reopened.FindExport(result.SaveResult.FaceInstancedPath, "BioMorphFace") is not null,
+                "The automatically templated LE1 Asari conversion did not save a face.");
+        }
+        finally
+        {
+            if (File.Exists(destination)) File.Delete(destination);
+        }
+    }
+
+    private static void D1CorpusConversionMatrix()
+    {
+        var profiles = MorphFaceProfileRegistry.CreateDefault();
+        var service = new MorphFaceConversionService(
+            profiles,
+            new MorphTargetCatalog(),
+            new MorphFacePackageContextService(),
+            TestFixtures.GetCorpusTextureCatalogService());
+        var failures = new List<string>();
+        var sources = new List<D1CorpusSource>();
+
+        foreach (var candidate in D1CorpusCandidates())
+        {
+            var sourcePath = FixturePath($"{candidate.SourceGame} GlobalMorphs.pcc");
+            var expectedFacePath = $"{candidate.Family}.{candidate.ObjectName}";
+            BioMorphFaceListItem? face = null;
+            MorphFaceMeshReferences? references = null;
+            try
+            {
+                var matches = ReadFaces(sourcePath)
+                    .Where(value => value.InstancedPath.Equals(
+                        expectedFacePath, StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+                if (matches.Length != 1)
+                {
+                    var available = ReadFaces(sourcePath)
+                        .Where(value => value.InstancedPath.StartsWith(
+                            $"{candidate.Family}.", StringComparison.OrdinalIgnoreCase))
+                        .Select(value => value.InstancedPath)
+                        .Take(12);
+                    throw new InvalidDataException(
+                        $"Exact face lookup found {matches.Length} matches for '{expectedFacePath}'. " +
+                        $"Nearby {candidate.Family} paths: {string.Join(", ", available)}");
+                }
+
+                face = matches[0];
+                references = MorphFaceReferenceInspector.Inspect(sourcePath)
+                    .SingleOrDefault(value => value.FacePath.Equals(
+                        expectedFacePath, StringComparison.OrdinalIgnoreCase));
+                if (references is null)
+                {
+                    throw new InvalidDataException(
+                        $"Exact reference lookup found no BioMorphFace graph for '{expectedFacePath}'.");
+                }
+
+                var sourceProfile = profiles.Find(
+                    candidate.SourceGame,
+                    references.FacePath,
+                    references.BaseHeadPath);
+                if (sourceProfile is null)
+                {
+                    throw new NotSupportedException(
+                        $"'{expectedFacePath}' has no supported {candidate.SourceGame} profile " +
+                        $"for base '{references.BaseHeadPath ?? "<unresolved>"}'.");
+                }
+
+                var expectedProfilePrefix = candidate.Family switch
+                {
+                    "HMM" => "human-male",
+                    "HMF" => "human-female",
+                    "ASA" => "asari",
+                    "SAL" => "salarian",
+                    "TUR" => "turian",
+                    "KRO" => "krogan",
+                    "BAT" => "batarian",
+                    "ALN" => "vorcha",
+                    _ => throw new InvalidDataException($"Unknown D1 family '{candidate.Family}'.")
+                };
+                if (!sourceProfile.Key.EndsWith(
+                        $"-{expectedProfilePrefix}", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidDataException(
+                        $"'{expectedFacePath}' resolved to profile '{sourceProfile.Key}', " +
+                        $"not the expected {expectedProfilePrefix} profile.");
+                }
+
+                sources.Add(new D1CorpusSource(candidate, sourcePath, face!, references, sourceProfile.Key));
+            }
+            catch (Exception exception)
+            {
+                failures.Add($"SOURCE {candidate.SourceGame}/{expectedFacePath}: {exception.Message}");
+            }
+        }
+
+        AssertD1AttachmentCoverage(sources, failures);
+
+        var conversionCount = 0;
+        foreach (var source in sources)
+        {
+            foreach (var targetGame in D1TargetGames(source.Candidate))
+            {
+                conversionCount++;
+                var label = $"{source.Candidate.SourceGame}->{targetGame} " +
+                             $"{source.References.FacePath}";
+                var destination = Path.Combine(
+                    Path.GetTempPath(), $"MFE-D1-{Guid.NewGuid():N}.pcc");
+                try
+                {
+                    var sourceInfo = new FileInfo(source.SourcePath);
+                    var result = service.Convert(new MorphFaceConversionRequest(
+                        source.SourcePath,
+                        source.References.FacePath,
+                        targetGame,
+                        destination,
+                        CreateNewPackage: true,
+                        FixturePath($"{targetGame} GlobalMorphs.pcc")));
+                    AssertD1ConversionReopened(
+                        destination,
+                        result,
+                        targetGame,
+                        source,
+                        label);
+
+                    var unchanged = new FileInfo(source.SourcePath);
+                    TestAssert.Equal(sourceInfo.Length, unchanged.Length);
+                    TestAssert.Equal(sourceInfo.LastWriteTimeUtc, unchanged.LastWriteTimeUtc);
+                    var sourceAfter = MorphFaceReferenceInspector.Inspect(source.SourcePath)
+                        .SingleOrDefault(value => value.FacePath.Equals(
+                            source.References.FacePath, StringComparison.OrdinalIgnoreCase));
+                    TestAssert.True(sourceAfter is not null,
+                        $"{label}: source face disappeared after conversion.");
+                    TestAssert.Equal(source.References.HairMeshPath, sourceAfter!.HairMeshPath);
+                    TestAssert.True(
+                        source.References.OtherMeshPaths.SequenceEqual(
+                            sourceAfter.OtherMeshPaths, StringComparer.OrdinalIgnoreCase),
+                        $"{label}: source m_oOtherMeshes changed after conversion.");
+                }
+                catch (Exception exception)
+                {
+                    failures.Add($"CASE {label}: {exception.Message}");
+                }
+                finally
+                {
+                    if (File.Exists(destination))
+                    {
+                        File.Delete(destination);
+                    }
+                }
+            }
+        }
+
+        const int expectedConversionCount = 68;
+        if (conversionCount != expectedConversionCount)
+        {
+            failures.Add(
+                $"MATRIX expected {expectedConversionCount} conversions but constructed {conversionCount}; " +
+                "one or more exact source cases were unavailable or invalid.");
+        }
+
+        if (failures.Count > 0)
+        {
+            throw new Exception(
+                $"D1 corpus matrix failed with {failures.Count} issue(s):{Environment.NewLine}" +
+                string.Join(Environment.NewLine, failures));
+        }
+    }
+
+    private static void AssertD1AttachmentCoverage(
+        IReadOnlyList<D1CorpusSource> sources,
+        ICollection<string> failures)
+    {
+        foreach (var sourceGame in new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 })
+        {
+            var human = sources
+                .Where(source => source.Candidate.SourceGame == sourceGame &&
+                                 (source.Candidate.Family is "HMM" or "HMF"))
+                .ToArray();
+            var masks = human.Select(source => GetD1AttachmentMask(source.References)).ToArray();
+            var observed = human.Length == 0
+                ? "<none>"
+                : string.Join(", ", human.Select(source =>
+                    $"{source.References.FacePath}={GetD1AttachmentMask(source.References)}"));
+            if (!masks.Contains(D1AttachmentMask.None) ||
+                !masks.Any(mask => mask.HasFlag(D1AttachmentMask.Hair)) ||
+                !masks.Any(mask => mask.HasFlag(D1AttachmentMask.Other)))
+            {
+                failures.Add(
+                    $"ATTACHMENT COVERAGE {sourceGame}: expected hair, other/hat, and none across " +
+                    $"the three HMM and three HMF candidates; observed {observed}.");
+            }
+        }
+    }
+
+    private static void AssertD1ConversionReopened(
+        string destination,
+        MorphFaceConversionResult result,
+        MorphFaceGame targetGame,
+        D1CorpusSource source,
+        string label)
+    {
+        TestAssert.True(File.Exists(destination), $"{label}: CreateNewPackage produced no PCC.");
+        using var package = MEPackageHandler.OpenMEPackage(destination, forceLoadFromDisk: true);
+        TestAssert.Equal(targetGame, D1MorphFaceGame(package.Game));
+        var face = package.FindExport(result.SaveResult.FaceInstancedPath, "BioMorphFace")
+                   ?? throw new InvalidDataException(
+                       $"{label}: saved face '{result.SaveResult.FaceInstancedPath}' was not found.");
+        var references = MorphFaceReferenceInspector.Inspect(destination)
+            .SingleOrDefault(value => value.FacePath.Equals(
+                result.SaveResult.FaceInstancedPath, StringComparison.OrdinalIgnoreCase));
+        TestAssert.True(references is not null,
+            $"{label}: reopened package has no reference graph for saved face.");
+        TestAssert.Equal(targetGame, references!.Game);
+        TestAssert.True(!string.IsNullOrWhiteSpace(references.BaseHeadPath),
+            $"{label}: target m_oBaseHead is missing from the reference graph.");
+
+        var rawHair = face.GetProperty<ObjectProperty>("m_oHairMesh");
+        var hair = rawHair?.ResolveToEntry(package);
+        if (rawHair is not null && rawHair.Value != 0)
+        {
+            TestAssert.True(hair is not null,
+                $"{label}: target m_oHairMesh is an unresolved reference.");
+            TestAssert.Equal("SkeletalMesh", hair!.ClassName);
+        }
+
+        var rawOthers = face.GetProperty<ArrayProperty<ObjectProperty>>("m_oOtherMeshes")?.ToArray() ?? [];
+        var others = rawOthers.Select((value, index) =>
+        {
+            var resolved = value.ResolveToEntry(package);
+            TestAssert.True(resolved is not null,
+                $"{label}: target m_oOtherMeshes[{index}] is an unresolved reference.");
+            TestAssert.Equal("SkeletalMesh", resolved!.ClassName);
+            return resolved;
+        }).ToArray();
+        TestAssert.True(
+            references.OtherMeshPaths.Count == others.Length,
+            $"{label}: reference graph and m_oOtherMeshes disagree ({references.OtherMeshPaths.Count} vs {others.Length}).");
+        if (hair is not null)
+        {
+            TestAssert.True(
+                !others.Any(other => other.InstancedFullPath.Equals(
+                    hair.InstancedFullPath, StringComparison.OrdinalIgnoreCase)),
+                $"{label}: target hair was duplicated into m_oOtherMeshes.");
+        }
+
+        var sourceMask = GetD1AttachmentMask(source.References);
+        var targetMask = (hair is not null ? D1AttachmentMask.Hair : D1AttachmentMask.None) |
+                         (others.Length > 0 ? D1AttachmentMask.Other : D1AttachmentMask.None);
+        TestAssert.Equal(sourceMask, targetMask);
+        var graphMask = (references.HairMeshPath is not null ? D1AttachmentMask.Hair : D1AttachmentMask.None) |
+                        (references.OtherMeshPaths.Count > 0 ? D1AttachmentMask.Other : D1AttachmentMask.None);
+        TestAssert.Equal(targetMask, graphMask);
+    }
+
+    private static IEnumerable<MorphFaceGame> D1TargetGames(D1CorpusCandidate candidate)
+    {
+        if (candidate.Family.Equals("ALN", StringComparison.OrdinalIgnoreCase))
+        {
+            return candidate.SourceGame switch
+            {
+                MorphFaceGame.LE2 => [MorphFaceGame.LE3],
+                MorphFaceGame.LE3 => [MorphFaceGame.LE2],
+                _ => []
+            };
+        }
+
+        return Enum.GetValues<MorphFaceGame>()
+            .Where(game => game is MorphFaceGame.LE1 or MorphFaceGame.LE2 or MorphFaceGame.LE3)
+            .Where(game => game != candidate.SourceGame);
+    }
+
+    private static IReadOnlyList<D1CorpusCandidate> D1CorpusCandidates() =>
+    [
+        new(MorphFaceGame.LE1, "HMM", "rp115_admiral"),
+        new(MorphFaceGame.LE1, "HMM", "BIOA_PRC2_YoungWarrior"),
+        new(MorphFaceGame.LE1, "HMM", "sta20_human_ambassador"),
+        new(MorphFaceGame.LE1, "HMF", "sta70_control02"),
+        new(MorphFaceGame.LE1, "HMF", "rp105a_emilywong"),
+        new(MorphFaceGame.LE1, "HMF", "ice_ercs_guard3"),
+        new(MorphFaceGame.LE1, "ASA", "Psyrana"),
+        new(MorphFaceGame.LE1, "SAL", "sta60_schells"),
+        new(MorphFaceGame.LE1, "TUR", "sta60_assassin02"),
+        new(MorphFaceGame.LE1, "KRO", "jug70_docdroyas"),
+        new(MorphFaceGame.LE1, "BAT", "prc1_balak"),
+        new(MorphFaceGame.LE2, "HMM", "BioFace_Security2"),
+        new(MorphFaceGame.LE2, "HMM", "PtyMtl_Partner"),
+        new(MorphFaceGame.LE2, "HMM", "zyavtl_vido"),
+        new(MorphFaceGame.LE2, "HMF", "cithub_csec_officer_b"),
+        new(MorphFaceGame.LE2, "HMF", "BioFace_HMF_Guest04"),
+        new(MorphFaceGame.LE2, "HMF", "zyavtl_corpse_1"),
+        new(MorphFaceGame.LE2, "ALN", "BioFace_LyingVorcha1"),
+        new(MorphFaceGame.LE2, "ASA", "BioFace_Asari_Spectre_Head"),
+        new(MorphFaceGame.LE2, "SAL", "BioFace_male_extra2"),
+        new(MorphFaceGame.LE2, "TUR", "face_gangster_1"),
+        new(MorphFaceGame.LE2, "KRO", "KroPrl_weyrloc_clanspeaker"),
+        new(MorphFaceGame.LE2, "BAT", "face_anto"),
+        new(MorphFaceGame.LE3, "HMM", "BioFace_End001_CommRoomTech"),
+        new(MorphFaceGame.LE3, "HMM", "nor_ken"),
+        new(MorphFaceGame.LE3, "HMM", "global_udina"),
+        new(MorphFaceGame.LE3, "HMF", "nor_warroom_guard2"),
+        new(MorphFaceGame.LE3, "HMF", "cermir_Orianna"),
+        new(MorphFaceGame.LE3, "HMF", "citprs_bounty_hunter01"),
+        new(MorphFaceGame.LE3, "ALN", "citwrd_gryll"),
+        new(MorphFaceGame.LE3, "ASA", "global_aria"),
+        new(MorphFaceGame.LE3, "SAL", "GenericSalarian01_Face"),
+        new(MorphFaceGame.LE3, "TUR", "Turian_Primarchson_face"),
+        new(MorphFaceGame.LE3, "KRO", "norkro_wreav"),
+        new(MorphFaceGame.LE3, "BAT", "Batarian_Crew4_Face")
+    ];
+
+    private static D1AttachmentMask GetD1AttachmentMask(MorphFaceMeshReferences references) =>
+        (references.HairMeshPath is not null ? D1AttachmentMask.Hair : D1AttachmentMask.None) |
+        (references.OtherMeshPaths.Count > 0 ? D1AttachmentMask.Other : D1AttachmentMask.None);
+
+    private static MorphFaceGame D1MorphFaceGame(MEGame game) => game switch
+    {
+        MEGame.LE1 => MorphFaceGame.LE1,
+        MEGame.LE2 => MorphFaceGame.LE2,
+        MEGame.LE3 => MorphFaceGame.LE3,
+        _ => MorphFaceGame.Unsupported
+    };
+
+    [Flags]
+    private enum D1AttachmentMask
+    {
+        None = 0,
+        Hair = 1,
+        Other = 2
+    }
+
+    private sealed record D1CorpusCandidate(
+        MorphFaceGame SourceGame,
+        string Family,
+        string ObjectName);
+
+    private sealed record D1CorpusSource(
+        D1CorpusCandidate Candidate,
+        string SourcePath,
+        BioMorphFaceListItem Face,
+        MorphFaceMeshReferences References,
+        string ProfileKey);
 
     private static void EmbedMissingAlienTextureIntoLe1()
     {

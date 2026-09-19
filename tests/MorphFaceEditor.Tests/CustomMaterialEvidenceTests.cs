@@ -16,8 +16,51 @@ public static class CustomMaterialEvidenceTests
     [
         new("custom material evidence enumerates used mesh slots deterministically", EnumeratesUsedMeshSlotsDeterministically),
         new("custom material evidence retains duplicate source material refs", RetainsDuplicateSourceMaterialRefs),
-        new("custom material catalogue exposes only proven installed families", CatalogueExposesProvenFamilies)
+        new("custom material catalogue exposes only proven installed families", CatalogueExposesProvenFamilies),
+        new("D1 human scar and teeth support follows compiled material evidence", HumanScarAndTeethSupportFollowsEvidence)
     ];
+
+    private static void HumanScarAndTeethSupportFollowsEvidence()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        using var reader = new MorphFacePackageReader();
+        CustomMaterialAssignmentOption Find(MorphFaceGame game, HeadMaterialFamily family) =>
+            new CustomMaterialTemplateCatalogService(reader)
+                .Load(game)
+                .Options
+                .First(option =>
+                    option.AppearanceCompatibilityKey.Equals("human-female", StringComparison.OrdinalIgnoreCase) &&
+                    option.Family == family);
+
+        var le1Skin = Find(MorphFaceGame.LE1, HeadMaterialFamily.Skin).Template;
+        TestAssert.True(le1Skin.Supports("HED_Custom_Scar_Scalar", MaterialParameterKind.Scalar),
+            "LE1 HMF skin lost its custom-scar strength control.");
+        TestAssert.True(le1Skin.Supports("HED_Scar_Diffuse_Scalar", MaterialParameterKind.Scalar),
+            "LE1 HMF skin lost its scar-colour strength control.");
+        TestAssert.True(le1Skin.Supports("HED_Scar_Vector", MaterialParameterKind.Vector),
+            "LE1 HMF skin lost its scar-colour control.");
+        TestAssert.True(le1Skin.Supports("HED_Scar", MaterialParameterKind.Texture),
+            "LE1 HMF skin lost its scar texture control.");
+        TestAssert.True(Find(MorphFaceGame.LE1, HeadMaterialFamily.Scalp).Template
+                .Supports("HED_Teeth_Vector", MaterialParameterKind.Vector),
+            "LE1 HMF scalp lost its teeth-colour control.");
+
+        foreach (var game in new[] { MorphFaceGame.LE2, MorphFaceGame.LE3 })
+        {
+            var skin = Find(game, HeadMaterialFamily.Skin).Template;
+            TestAssert.True(!skin.Supports("HED_Custom_Scar_Scalar", MaterialParameterKind.Scalar),
+                $"{game} HMF skin fabricated LE1 custom-scar strength support.");
+            TestAssert.True(!skin.Supports("HED_Scar_Diffuse_Scalar", MaterialParameterKind.Scalar),
+                $"{game} HMF skin fabricated LE1 scar-colour strength support.");
+            TestAssert.True(!skin.Supports("HED_Scar_Vector", MaterialParameterKind.Vector),
+                $"{game} HMF skin fabricated LE1 scar-colour support.");
+            TestAssert.True(!skin.Supports("HED_Scar", MaterialParameterKind.Texture),
+                $"{game} HMF skin fabricated unsupported scar texture support.");
+            TestAssert.True(!Find(game, HeadMaterialFamily.Scalp).Template
+                    .Supports("HED_Teeth_Vector", MaterialParameterKind.Vector),
+                $"{game} HMF scalp fabricated unsupported teeth-colour support.");
+        }
+    }
 
     private static void CatalogueExposesProvenFamilies()
     {

@@ -507,6 +507,12 @@ public sealed class MorphFacePackageWriter
         {
             throw new InvalidDataException("A SkeletalMesh reference is required.");
         }
+        if (package.FindEntry(identity.InstancedPath, "SkeletalMesh") is ImportEntry)
+        {
+            throw new InvalidDataException(
+                $"Referenced imported SkeletalMesh '{identity.InstancedPath}' has no materialised mesh dependency graph; " +
+                "the PCC export was rejected to avoid writing an unresolved attachment.");
+        }
         if (package.FindEntry(identity.InstancedPath, "SkeletalMesh") is { } existing)
         {
             return existing;

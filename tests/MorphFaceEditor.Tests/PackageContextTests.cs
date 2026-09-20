@@ -41,8 +41,13 @@ public static class PackageContextTests
         new("bundled human and Asari eyes recover both fixed reflection cubes", HumanAndAsariEyeCubesResolve),
         new("TSE RON export and import round-trip a real BioMorphFace", RonRoundTripsMorph),
         new("unresolved RON assets fail atomically without same-name substitution", RonUnresolvedAssetsFailAtomically),
+        new("unresolved standalone RON attachments are rejected before PCC publication", StandaloneRonUnresolvedAttachmentFailsAtomically),
+        new("standalone NPC RON omits unresolved hair with a visible warning", StandaloneNpcRonUnresolvedHairDegrades),
         new("standalone player RON sex detection uses per-game LOD0 topology", StandalonePlayerRonSexDetection),
         new("standalone player RON import creates a detached non-committable workspace", StandalonePlayerRonImport),
+        new("standalone NPC RON import uses a detached native donor workspace", StandaloneNpcRonImport),
+        new("standalone LE1 and LE2 Asari RONs import directly in both directions", StandaloneNpcRonLe1ToLe2),
+        new("standalone NPC RON rejects cross-game LE3 routing before publication", StandaloneNpcRonRejectsLe3CrossGame),
         new("standalone player PSK import proves topology and preserves its fixed bake", StandalonePlayerPskImport),
         new("standalone player glTF export-import preserves its exact fixed bake", StandalonePlayerGltfImport),
         new("standalone RON mesh exports preserve the baked pose on PSK and glTF round trips", StandaloneRonMeshRoundTripPreservesPose),
@@ -1295,6 +1300,182 @@ public static class PackageContextTests
         });
     }
 
+    private static void StandaloneRonUnresolvedAttachmentFailsAtomically()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        WithPackageCopy("LE3 GlobalMorphs.pcc", path =>
+        {
+            var service = new MorphFacePackageContextService();
+            string facePath;
+            string hairPath;
+            int hairUIndex;
+            using (var package = MEPackageHandler.OpenMEPackage(path, forceLoadFromDisk: true))
+            {
+                var face = package.Exports.First(candidate =>
+                    candidate.ClassName.Equals("BioMorphFace", StringComparison.OrdinalIgnoreCase) &&
+                    candidate.GetProperty<ObjectProperty>("m_oHairMesh")?.ResolveToEntry(package) is not null);
+                facePath = face.InstancedFullPath;
+                var hair = face.GetProperty<ObjectProperty>("m_oHairMesh")!.ResolveToEntry(package)!;
+                hairPath = hair.InstancedFullPath;
+                hairUIndex = hair.UIndex;
+            }
+
+            var ronPath = Path.Combine(Path.GetTempPath(), $"MFE-RonMissingHair-{Guid.NewGuid():N}.ron");
+            const string missingPath = "BIOG_MFE_Missing_Hair.Hair_Missing.HMF_HIR_Missing_MDL";
+            try
+            {
+                // Reproduce a cloned-template import placeholder with an exact donor candidate.
+                using (var package = MEPackageHandler.OpenMEPackage(path, forceLoadFromDisk: true))
+                {
+                    _ = MorphFaceAttachmentTransferEngine.EnsureImport(package, missingPath);
+                    package.Save();
+                }
+                var sourceFingerprint = PackageFingerprint.Capture(path);
+                service.ExportRon(path, facePath, ronPath);
+                var original = File.ReadAllText(ronPath);
+                File.WriteAllText(ronPath, original.Replace(
+                    $"hair_mesh: \"{hairPath}\"",
+                    $"hair_mesh: \"{missingPath}\"",
+                    StringComparison.Ordinal));
+
+                var threw = false;
+                try
+                {
+                    _ = service.ImportStandalonePlayerRon(
+                        path,
+                        facePath,
+                        "MFE_UnresolvedHair",
+                        ronPath,
+                        new StandalonePlayerAssetCatalog(
+                            MorphFaceGame.LE3,
+                            [],
+                            [new AssetIdentity(path, missingPath, hairUIndex, "SkeletalMesh")]));
+                }
+                catch (InvalidDataException exception)
+                {
+                    threw = exception.Message.Contains(missingPath, StringComparison.Ordinal) &&
+                        (exception.Message.Contains("import placeholder", StringComparison.OrdinalIgnoreCase) ||
+                         exception.Message.Contains("cannot be exported safely", StringComparison.OrdinalIgnoreCase));
+                }
+
+                TestAssert.True(threw,
+                    "An unresolved standalone RON hair mesh was accepted as a placeholder import.");
+                TestAssert.Equal(sourceFingerprint, PackageFingerprint.Capture(path));
+                TestAssert.True(ReadFaces(path).All(face =>
+                    !face.ObjectName.Equals("MFE_UnresolvedHair", StringComparison.OrdinalIgnoreCase)),
+                    "An unresolved standalone hair import left a partial BioMorphFace in the package.");
+            }
+            finally
+            {
+                if (File.Exists(ronPath))
+                {
+                    File.Delete(ronPath);
+                }
+            }
+        });
+    }
+
+    private static void StandaloneNpcRonUnresolvedHairDegrades()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        WithPackageCopy("LE3 GlobalMorphs.pcc", path =>
+        {
+            var service = new MorphFacePackageContextService();
+            string facePath;
+            string hairPath;
+            int hairUIndex;
+            using (var package = MEPackageHandler.OpenMEPackage(path, forceLoadFromDisk: true))
+            {
+                var face = package.Exports.First(candidate =>
+                    candidate.ClassName.Equals("BioMorphFace", StringComparison.OrdinalIgnoreCase) &&
+                    candidate.GetProperty<ObjectProperty>("m_oHairMesh")?.ResolveToEntry(package) is not null);
+                facePath = face.InstancedFullPath;
+                var hair = face.GetProperty<ObjectProperty>("m_oHairMesh")!.ResolveToEntry(package)!;
+                hairPath = hair.InstancedFullPath;
+                hairUIndex = hair.UIndex;
+            }
+
+            var ronPath = Path.Combine(Path.GetTempPath(), $"MFE-RonNpcMissingHair-{Guid.NewGuid():N}.ron");
+            const string missingPath = "BIOG_MFE_Missing_Npc_Hair.Hair_Missing.HMF_HIR_Missing_MDL";
+            try
+            {
+                // Leave the destination with a cloned-template import placeholder. The NPC
+                // route may omit this unsafe hair reference, while Player remains strict.
+                using (var package = MEPackageHandler.OpenMEPackage(path, forceLoadFromDisk: true))
+                {
+                    _ = MorphFaceAttachmentTransferEngine.EnsureImport(package, missingPath);
+                    package.Save();
+                }
+
+                service.ExportRon(path, facePath, ronPath);
+                var original = File.ReadAllText(ronPath);
+                File.WriteAllText(ronPath, original.Replace(
+                    $"hair_mesh: \"{hairPath}\"",
+                    $"hair_mesh: \"{missingPath}\"",
+                    StringComparison.Ordinal));
+                var expectedMorph = service.CaptureMorphData(path, facePath);
+
+                var result = service.ImportStandaloneNpcRon(
+                    path,
+                    facePath,
+                    "MFE_Npc_UnresolvedHair",
+                    ronPath,
+                    MorphFaceGame.LE3,
+                    MorphFaceGame.LE3,
+                    "le3-hmm",
+                    path,
+                    [],
+                    [],
+                    new StandalonePlayerAssetCatalog(
+                        MorphFaceGame.LE3,
+                        [],
+                        [new AssetIdentity(path, missingPath, hairUIndex, "SkeletalMesh")]));
+
+                TestAssert.True(result.Warnings.Any(warning =>
+                        warning.Contains(missingPath, StringComparison.Ordinal) &&
+                        warning.Contains("omitted", StringComparison.OrdinalIgnoreCase) &&
+                        warning.Contains("import placeholder", StringComparison.OrdinalIgnoreCase)),
+                    "The NPC import did not report the omitted hair path and reason.");
+                AssertMorphEqual(expectedMorph,
+                    service.CaptureMorphData(path, result.FaceInstancedPath));
+
+                using (var package = MEPackageHandler.OpenMEPackage(path, forceLoadFromDisk: true))
+                {
+                    var imported = package.FindEntry(result.FaceInstancedPath, "BioMorphFace") as ExportEntry;
+                    TestAssert.True(imported is not null, "The NPC import did not publish its BioMorphFace.");
+                    TestAssert.True(imported!.GetProperty<ObjectProperty>("m_oHairMesh") is null,
+                        "The NPC import retained an unresolved m_oHairMesh reference.");
+                }
+
+                var exportedPath = Path.Combine(Path.GetTempPath(),
+                    $"MFE-NpcMissingHairExport-{Guid.NewGuid():N}.pcc");
+                try
+                {
+                    using var reader = new MorphFacePackageReader();
+                    var loaded = reader.Load(path, result.FaceInstancedPath);
+                    var saved = new MorphFacePackageWriter().SaveMorphToPackage(
+                        loaded.Document,
+                        path,
+                        exportedPath,
+                        createNewPackage: true);
+                    AssertMorphEqual(expectedMorph,
+                        service.CaptureMorphData(exportedPath, saved.FaceInstancedPath));
+                }
+                finally
+                {
+                    if (File.Exists(exportedPath)) File.Delete(exportedPath);
+                }
+            }
+            finally
+            {
+                if (File.Exists(ronPath))
+                {
+                    File.Delete(ronPath);
+                }
+            }
+        });
+    }
+
     private static void StandalonePlayerRonSexDetection()
     {
         foreach (var game in new[] { MorphFaceGame.LE1, MorphFaceGame.LE2 })
@@ -1426,6 +1607,179 @@ public static class PackageContextTests
                 File.Delete(ronPath);
             }
         }
+    }
+
+    private static void StandaloneNpcRonImport()
+    {
+        WithPackageCopy("LE2 GlobalMorphs.pcc", donorPath =>
+        {
+            var context = new MorphFacePackageContextService();
+            var donor = ReadFaces(donorPath).First(face =>
+                face.ProfileKey.Equals("le2-human-male", StringComparison.OrdinalIgnoreCase));
+            var ronPath = Path.Combine(Path.GetTempPath(), $"MFE-StandaloneNpc-{Guid.NewGuid():N}.ron");
+            var donorFingerprint = PackageFingerprint.Capture(donorPath);
+            try
+            {
+                context.ExportRon(donorPath, donor.InstancedPath, ronPath);
+                var expectedMorph = context.CaptureMorphData(donorPath, donor.InstancedPath);
+                var expectedMaterial = context.CaptureMaterialData(donorPath, donor.InstancedPath);
+
+                using var imported = new StandaloneNpcMorphImportService().ImportNpcRon(
+                    new StandaloneNpcMorphImportRequest(
+                        MorphFaceGame.LE2,
+                        MorphFaceGame.LE2,
+                        "HMM",
+                        ronPath,
+                        donorPath,
+                        donor.InstancedPath,
+                        "MFE_Npc_HMM",
+                        IsVerifiedNativeNpcDonor: true));
+
+                TestAssert.True(!imported.CanCommit && !imported.Workspace.CanCommit,
+                    "An NPC import exposed a commit-capable workspace.");
+                TestAssert.Equal(MorphFaceGame.LE2, imported.TargetGame);
+                TestAssert.Equal("HMM", imported.Archetype);
+                AssertMorphEqual(
+                    expectedMorph,
+                    context.CaptureMorphData(imported.Workspace.WorkingPath, imported.ImportedFacePath));
+                AssertMaterialEqual(
+                    expectedMaterial,
+                    context.CaptureMaterialData(imported.Workspace.WorkingPath, imported.ImportedFacePath));
+                TestAssert.Equal(donorFingerprint, PackageFingerprint.Capture(donorPath));
+
+                var exportedPath = Path.Combine(Path.GetTempPath(),
+                    $"MFE-NpcExport-{Guid.NewGuid():N}.pcc");
+                try
+                {
+                    using var reader = new MorphFacePackageReader();
+                    var loaded = reader.Load(imported.Workspace.WorkingPath, imported.ImportedFacePath);
+                    var saved = new MorphFacePackageWriter().SaveMorphToPackage(
+                        loaded.Document,
+                        imported.Workspace.WorkingPath,
+                        exportedPath,
+                        createNewPackage: true);
+                    AssertMorphEqual(expectedMorph,
+                        context.CaptureMorphData(exportedPath, saved.FaceInstancedPath));
+                }
+                finally
+                {
+                    if (File.Exists(exportedPath)) File.Delete(exportedPath);
+                }
+            }
+            finally
+            {
+                if (File.Exists(ronPath))
+                {
+                    File.Delete(ronPath);
+                }
+            }
+        });
+    }
+
+    private static void StandaloneNpcRonLe1ToLe2()
+    {
+        VerifyDirectNpcRonImport(MorphFaceGame.LE1, MorphFaceGame.LE2);
+        VerifyDirectNpcRonImport(MorphFaceGame.LE2, MorphFaceGame.LE1);
+    }
+
+    private static void VerifyDirectNpcRonImport(MorphFaceGame sourceGame, MorphFaceGame targetGame)
+    {
+        WithPackageCopy($"{sourceGame} GlobalMorphs.pcc", sourcePath =>
+        WithPackageCopy($"{targetGame} GlobalMorphs.pcc", donorPath =>
+        {
+            var context = new MorphFacePackageContextService();
+            var source = ReadFaces(sourcePath).First(face =>
+                face.ProfileKey.Equals($"{sourceGame.ToString().ToLowerInvariant()}-asari", StringComparison.OrdinalIgnoreCase));
+            var donor = ReadFaces(donorPath).First(face =>
+                face.ProfileKey.Equals($"{targetGame.ToString().ToLowerInvariant()}-asari", StringComparison.OrdinalIgnoreCase));
+            var ronPath = Path.Combine(Path.GetTempPath(), $"MFE-NpcCrossGame-{Guid.NewGuid():N}.ron");
+            var sourceFingerprint = PackageFingerprint.Capture(sourcePath);
+            var donorFingerprint = PackageFingerprint.Capture(donorPath);
+            try
+            {
+                context.ExportRon(sourcePath, source.InstancedPath, ronPath);
+                var expectedMorph = context.CaptureMorphData(sourcePath, source.InstancedPath);
+                var expectedMaterial = context.CaptureMaterialData(sourcePath, source.InstancedPath);
+                var registry = new TextureCatalogService(
+                    new TextureRegistryStore(TextureRegistryPaths.CreateDefault()));
+                var sourceCatalog = registry.ReadAsync(sourceGame).GetAwaiter().GetResult();
+                var targetCatalog = registry.ReadAsync(targetGame).GetAwaiter().GetResult();
+                TestAssert.True(sourceCatalog.IsAvailable && targetCatalog.IsAvailable,
+                    "LE1/LE2 texture databases are needed to verify direct NPC material transfer.");
+                var assets = StandalonePlayerAssetCatalog.ForRon(
+                    targetGame, ronPath, targetCatalog.Candidates);
+
+                using var imported = new StandaloneNpcMorphImportService().ImportNpcRon(
+                    new StandaloneNpcMorphImportRequest(
+                        sourceGame,
+                        targetGame,
+                        "ASA",
+                        ronPath,
+                        donorPath,
+                        donor.InstancedPath,
+                        "MFE_Npc_CrossGame_ASA",
+                        assets,
+                        IsVerifiedNativeNpcDonor: true,
+                        SourceTextureCatalog: sourceCatalog.Candidates,
+                        TargetTextureCatalog: targetCatalog.Candidates));
+                AssertMorphEqual(expectedMorph,
+                    context.CaptureMorphData(imported.Workspace.WorkingPath, imported.ImportedFacePath));
+                var importedMaterial = context.CaptureMaterialData(
+                    imported.Workspace.WorkingPath, imported.ImportedFacePath);
+                TestAssert.Equal(expectedMaterial.Scalars.Count, importedMaterial.Scalars.Count);
+                TestAssert.Equal(expectedMaterial.Vectors.Count, importedMaterial.Vectors.Count);
+                TestAssert.Equal(expectedMaterial.Textures.Count, importedMaterial.Textures.Count);
+                TestAssert.Equal(sourceFingerprint, PackageFingerprint.Capture(sourcePath));
+                TestAssert.Equal(donorFingerprint, PackageFingerprint.Capture(donorPath));
+            }
+            finally
+            {
+                if (File.Exists(ronPath)) File.Delete(ronPath);
+            }
+        }));
+    }
+
+    private static void StandaloneNpcRonRejectsLe3CrossGame()
+    {
+        WithPackageCopy("LE2 GlobalMorphs.pcc", donorPath =>
+        {
+            var context = new MorphFacePackageContextService();
+            var donor = ReadFaces(donorPath).First(face =>
+                face.ProfileKey.Equals("le2-human-male", StringComparison.OrdinalIgnoreCase));
+            var ronPath = Path.Combine(Path.GetTempPath(), $"MFE-StandaloneNpc-Le3-{Guid.NewGuid():N}.ron");
+            try
+            {
+                context.ExportRon(donorPath, donor.InstancedPath, ronPath);
+                var rejected = false;
+                try
+                {
+                    _ = new StandaloneNpcMorphImportService().ImportNpcRon(
+                        new StandaloneNpcMorphImportRequest(
+                            MorphFaceGame.LE3,
+                            MorphFaceGame.LE2,
+                            "HMM",
+                            ronPath,
+                            donorPath,
+                            donor.InstancedPath,
+                            "MFE_Invalid_Npc"));
+                }
+                catch (InvalidDataException exception)
+                {
+                    rejected = exception.Message.Contains("LE3", StringComparison.OrdinalIgnoreCase) &&
+                               exception.Message.Contains("cross-game", StringComparison.OrdinalIgnoreCase);
+                }
+
+                TestAssert.True(rejected,
+                    "The NPC service accepted an LE3 cross-game route instead of leaving it to explicit conversion.");
+            }
+            finally
+            {
+                if (File.Exists(ronPath))
+                {
+                    File.Delete(ronPath);
+                }
+            }
+        });
     }
 
     private static void StandalonePlayerPskImport()

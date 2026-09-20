@@ -14,7 +14,10 @@ public interface IEditorDialogService
     string? ChooseCloneName(string suggestedName, IReadOnlyCollection<string> existingObjectNames);
     string? ChooseMorphImportFile(string? initialDirectory = null);
     MorphFaceGame? ChooseStandaloneImportGame();
-    RonImportDestination? ChooseRonImportDestination(string selectedFaceDisplayName);
+    RonImportDestinationChoice? ChooseRonImportDestination(
+        MorphFaceGame targetGame,
+        IReadOnlyList<RonNpcArchetypeOption> archetypes,
+        bool allowPlayer);
     string? ChooseStandaloneMorphName(string suggestedName, IReadOnlyCollection<string> existingObjectNames);
     string? ChooseRonExportFile(string suggestedFileName, string? initialDirectory = null);
     string? ChooseMaterialImportFile(bool tse, string? initialDirectory = null) => ChooseMorphImportFile(initialDirectory);
@@ -43,8 +46,13 @@ public sealed record MorphConversionSaveRequest(
 public enum RonImportDestination
 {
     PlayerWorkspace,
-    SelectedPccFace
+    NpcFace
 }
+
+public sealed record RonNpcArchetypeOption(string Key, string DisplayName);
+public sealed record RonImportDestinationChoice(
+    RonImportDestination Destination,
+    string? NpcArchetypeKey);
 
 public enum UnsavedChangesChoice
 {

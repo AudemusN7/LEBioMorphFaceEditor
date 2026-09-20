@@ -35,7 +35,10 @@ public static class UiSmokeTests
         new("standalone morph import is available before opening a PCC", StandaloneImportIsAvailableWithoutPackage),
         new("unrecognised mesh import publishes a detached preview workspace", UnrecognisedMeshPublishesDetachedWorkspace),
         new("morph import asks for its source game with an open PCC", ImportAsksForSourceGameWithOpenPcc),
-        new("same-game RON import asks for player or selected PCC destination", SameGameRonAsksForDestination),
+        new("NPC RON donor choices include supported game-local archetypes", NpcRonArchetypesAreGameLocal),
+        new("NPC RON resolver accepts static ALN donors and rejects player donors", RonResolverAcceptsStaticAlnDonor),
+        new("empty editor imports a tagged native NPC RON", EmptyEditorImportsTaggedNpcRon),
+        new("tagged human RON follows the user's NPC or Player destination", TaggedHumanRonFollowsDestination),
         new("standalone Gibbed import rejects the wrong selected game before mutation", StandaloneGibbedRejectsWrongGame),
         new("standalone fixed-bake workspaces allow material clipboard commands", StandaloneFixedBakeMaterialClipboardCommands),
         new("numeric wheel increments are finite and crash-safe", NumericWheelIncrementsAreSafe),
@@ -261,17 +264,203 @@ public static class UiSmokeTests
         }
     }
 
-    private static void SameGameRonAsksForDestination()
+    private static void NpcRonArchetypesAreGameLocal()
     {
-        TestAssert.True(MainWindowViewModel.RequiresRonImportDestination(
-                "player.ron", hasMatchingPccContext: true),
-            "A same-game RON did not enter the explicit player-versus-PCC destination route.");
-        TestAssert.True(!MainWindowViewModel.RequiresRonImportDestination(
-                "player.ron", hasMatchingPccContext: false),
-            "A RON without a matching PCC context was treated as ambiguous.");
-        TestAssert.True(!MainWindowViewModel.RequiresRonImportDestination(
-                "player.me2headmorph", hasMatchingPccContext: true),
-            "An unambiguously player-only Gibbed file entered the RON destination route.");
+        var resolver = new RonNpcDonorResolver(MorphFaceProfileRegistry.CreateDefault());
+        var le2 = resolver.Archetypes(MorphFaceGame.LE2);
+        TestAssert.True(le2.Any(value => value.Key == "HMM") &&
+                        le2.Any(value => value.Key == "HMF") &&
+                        le2.Any(value => value.Key == "SAL"),
+            "LE2 NPC RON import did not offer the supported human and Salarian archetypes.");
+        TestAssert.True(le2.Any(value => value.Key == "ALN") &&
+                        !le2.Any(value => value.Key == "TUF"),
+            "ALN static NPC donors should be offered while geometry-ignored TUF donors remain hidden.");
+    }
+
+    private static void RonResolverAcceptsStaticAlnDonor()
+    {
+        var packagePath = Path.Combine(Path.GetTempPath(), $"MFE-ALN-Donor-{Guid.NewGuid():N}.pcc");
+        var playerPackagePath = Path.Combine(Path.GetTempPath(), $"MFE-ALN-Player-{Guid.NewGuid():N}.pcc");
+        try
+        {
+            File.WriteAllBytes(packagePath, []);
+            File.WriteAllBytes(playerPackagePath, []);
+            var resolver = new RonNpcDonorResolver(MorphFaceProfileRegistry.CreateDefault());
+            var selected = resolver.Resolve(
+                MorphFaceGame.LE2,
+                "ALN",
+                [
+                    new MorphFaceTemplateCandidate(
+                        playerPackagePath,
+                        2,
+                        "BIOG_Player_Base_ALN.BioFace_Player",
+                        "BIOG_ALN_HED_PROMorph_R.ALN_HED_PROBase_MDL",
+                        0,
+                        TextureCatalogOrigin.BaseGame),
+                    new MorphFaceTemplateCandidate(
+                        packagePath,
+                        1,
+                        "BIOG_ALN_HED_PROMorph_R.BioFace_LyingVorcha1",
+                        "BIOG_ALN_HED_PROMorph_R.ALN_HED_PROBase_MDL",
+                        0,
+                        TextureCatalogOrigin.BaseGame)
+                ]);
+
+            TestAssert.True(string.Equals(packagePath, selected.PackagePath, StringComparison.OrdinalIgnoreCase),
+                "The ALN resolver did not select the exact native static donor package.");
+            TestAssert.True(string.Equals(
+                    "BIOG_ALN_HED_PROMorph_R.BioFace_LyingVorcha1",
+                    selected.FacePath,
+                    StringComparison.OrdinalIgnoreCase),
+                "The ALN resolver did not select the exact native static donor face.");
+        }
+        finally
+        {
+            if (File.Exists(packagePath)) File.Delete(packagePath);
+            if (File.Exists(playerPackagePath)) File.Delete(playerPackagePath);
+        }
+    }
+
+    private static void EmptyEditorImportsTaggedNpcRon()
+    {
+        var textureCatalog = new MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureCatalogService(
+            new MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureRegistryStore(
+                MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureRegistryPaths.CreateDefault()));
+        var snapshot = textureCatalog.ReadAsync(MorphFaceGame.LE2).GetAwaiter().GetResult();
+        TestAssert.True(snapshot.IsAvailable, "The installed LE2 texture database is needed for NPC import.");
+        var donor = new RonNpcDonorResolver(MorphFaceProfileRegistry.CreateDefault())
+            .Resolve(MorphFaceGame.LE2, "SAL", snapshot.MorphFaceTemplates);
+        var ronPath = Path.Combine(Path.GetTempPath(), $"MFE-UiNpc-{Guid.NewGuid():N}.ron");
+        try
+        {
+            new MorphFacePackageContextService().ExportRon(
+                donor.PackagePath,
+                donor.FacePath,
+                ronPath,
+                new RonExportProvenance(RonExportProducer.MFE, "0.1.0", MorphFaceGame.LE2, "SAL", false));
+            using var reader = new MorphFacePackageReader();
+            var dialogs = new StubEditorDialogs
+            {
+                StandaloneGameChoiceResult = MorphFaceGame.LE2,
+                StandaloneNameChoiceResult = "MFE_UiNpc"
+            };
+            using var viewModel = CreateMainWindowViewModel(reader, dialogs, textureCatalog: textureCatalog);
+            TestAssert.Equal<string?>(null, viewModel.PackagePath);
+            RunWithDispatcher(() => viewModel.OpenDroppedFileAsync(ronPath));
+            TestAssert.True(viewModel.ErrorMessage is null, viewModel.ErrorMessage ?? "NPC import failed.");
+            TestAssert.True(viewModel.PackageName.Contains("NPC Workspace", StringComparison.Ordinal),
+                "The NPC import was not published as a standalone NPC workspace.");
+            TestAssert.True(viewModel.Editor?.CanEditMorphFeatures == true,
+                "The imported native Salarian did not expose its verified morph controls.");
+            TestAssert.Equal(0, dialogs.RonImportDestinationChoiceCount);
+            TestAssert.True(viewModel.SaveMorphToPccCommand.CanExecute(null),
+                "The NPC workspace cannot export through the accepted PCC workflow.");
+        }
+        finally
+        {
+            if (File.Exists(ronPath)) File.Delete(ronPath);
+        }
+    }
+
+    private static void TaggedHumanRonFollowsDestination()
+    {
+        var textureCatalog = new MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureCatalogService(
+            new MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureRegistryStore(
+                MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureRegistryPaths.CreateDefault()));
+        var snapshot = textureCatalog.ReadAsync(MorphFaceGame.LE2).GetAwaiter().GetResult();
+        TestAssert.True(snapshot.IsAvailable, "The installed LE2 texture database is needed for human RON routing.");
+        var donor = new RonNpcDonorResolver(MorphFaceProfileRegistry.CreateDefault())
+            .Resolve(MorphFaceGame.LE2, "HMM", snapshot.MorphFaceTemplates);
+        var ronPath = Path.Combine(Path.GetTempPath(), $"MFE-UiHumanNpc-{Guid.NewGuid():N}.ron");
+        var incompatiblePath = Path.Combine(Path.GetTempPath(), $"MFE-UiHumanNpc-Bad-{Guid.NewGuid():N}.ron");
+        try
+        {
+            new MorphFacePackageContextService().ExportRon(
+                donor.PackagePath,
+                donor.FacePath,
+                ronPath,
+                new RonExportProvenance(RonExportProducer.MFE, "0.1.0", MorphFaceGame.LE2, "HMM", false));
+            foreach (var (choice, expectedWorkspace) in new[]
+                     {
+                         (new RonImportDestinationChoice(RonImportDestination.NpcFace, "HMM"), "NPC Workspace"),
+                         (new RonImportDestinationChoice(RonImportDestination.PlayerWorkspace, null), "Player Workspace")
+                     })
+            {
+                using var reader = new MorphFacePackageReader();
+                var dialogs = new StubEditorDialogs
+                {
+                    StandaloneGameChoiceResult = MorphFaceGame.LE2,
+                    StandaloneNameChoiceResult = "MFE_UiHuman",
+                    RonImportDestinationChoiceResult = choice
+                };
+                using var viewModel = CreateMainWindowViewModel(
+                    reader, dialogs, textureCatalog: textureCatalog);
+                RunWithDispatcher(() => viewModel.OpenDroppedFileAsync(ronPath));
+                TestAssert.True(viewModel.ErrorMessage is null, viewModel.ErrorMessage ?? "Human RON import failed.");
+                TestAssert.True(viewModel.PackageName.Contains(expectedWorkspace, StringComparison.Ordinal),
+                    $"The selected {choice.Destination} route did not publish a {expectedWorkspace}.");
+                TestAssert.Equal(1, dialogs.RonImportDestinationChoiceCount);
+            }
+
+            using (var reader = new MorphFacePackageReader())
+            {
+                var dialogs = new StubEditorDialogs
+                {
+                    StandaloneGameChoiceResult = MorphFaceGame.LE2,
+                    RonImportDestinationChoiceResult = null
+                };
+                using var viewModel = CreateMainWindowViewModel(
+                    reader, dialogs, textureCatalog: textureCatalog);
+                RunWithDispatcher(() => viewModel.OpenDroppedFileAsync(donor.PackagePath));
+                TestAssert.True(viewModel.Editor is not null,
+                    viewModel.ErrorMessage ?? "The pre-existing PCC workspace did not load.");
+                var priorEditor = viewModel.Editor;
+                var priorPath = viewModel.PackagePath;
+                var priorFace = viewModel.LoadedFacePath;
+                RunWithDispatcher(() => viewModel.OpenDroppedFileAsync(ronPath));
+                TestAssert.Equal(1, dialogs.RonImportDestinationChoiceCount);
+                TestAssert.Equal(priorPath, viewModel.PackagePath);
+                TestAssert.Equal(priorFace, viewModel.LoadedFacePath);
+                TestAssert.True(ReferenceEquals(priorEditor, viewModel.Editor),
+                    "Cancelling the HMM destination replaced the previous editor.");
+            }
+
+            var authored = TseHeadMorphRon.Read(ronPath);
+            var shortenedLods = authored.MorphData.BakedLods.Select(lod => lod.ToArray()).ToArray();
+            shortenedLods[0] = shortenedLods[0][..^1];
+            TseHeadMorphRon.Write(
+                incompatiblePath,
+                authored with { MorphData = authored.MorphData with { BakedLods = shortenedLods } },
+                new RonExportProvenance(RonExportProducer.MFE, "0.1.0", MorphFaceGame.LE2, "HMM", false));
+            using (var reader = new MorphFacePackageReader())
+            {
+                var dialogs = new StubEditorDialogs
+                {
+                    StandaloneGameChoiceResult = MorphFaceGame.LE2,
+                    StandaloneNameChoiceResult = "MFE_BadNpc",
+                    RonImportDestinationChoiceResult =
+                        new RonImportDestinationChoice(RonImportDestination.NpcFace, "HMM")
+                };
+                using var viewModel = CreateMainWindowViewModel(
+                    reader, dialogs, textureCatalog: textureCatalog);
+                RunWithDispatcher(() => viewModel.OpenDroppedFileAsync(donor.PackagePath));
+                var priorEditor = viewModel.Editor;
+                var priorPath = viewModel.PackagePath;
+                var priorFace = viewModel.LoadedFacePath;
+                RunWithDispatcher(() => viewModel.OpenDroppedFileAsync(incompatiblePath));
+                TestAssert.True(viewModel.ErrorMessage?.Contains("LOD 0", StringComparison.Ordinal) == true,
+                    "The incompatible NPC RON did not report its LOD0 mismatch.");
+                TestAssert.Equal(priorPath, viewModel.PackagePath);
+                TestAssert.Equal(priorFace, viewModel.LoadedFacePath);
+                TestAssert.True(ReferenceEquals(priorEditor, viewModel.Editor),
+                    "A failed NPC import replaced the previous editor.");
+            }
+        }
+        finally
+        {
+            if (File.Exists(ronPath)) File.Delete(ronPath);
+            if (File.Exists(incompatiblePath)) File.Delete(incompatiblePath);
+        }
     }
 
     private static void StandaloneFixedBakeMaterialClipboardCommands()
@@ -1043,24 +1232,26 @@ public static class UiSmokeTests
     private static MainWindowViewModel CreateMainWindowViewModel(
         MorphFacePackageReader reader,
         StubEditorDialogs? dialogs = null,
-        StubClipboard? clipboard = null)
+        StubClipboard? clipboard = null,
+        MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureCatalogService? textureCatalog = null)
     {
         var sceneFactory = new HeadPreviewSceneFactory();
         var profiles = MorphFaceProfileRegistry.CreateDefault();
         var targets = new MorphTargetCatalog();
         var writer = new MorphFacePackageWriter();
         var context = new MorphFacePackageContextService();
+        textureCatalog ??= TestFixtures.CreateMissingTextureCatalogService();
         return new MainWindowViewModel(
             dialogs ?? new StubEditorDialogs(),
             new MorphFaceCatalogService(profiles),
             new MorphFacePreviewLoadService(sceneFactory, targets, profiles, reader),
             sceneFactory,
             new StubColorDialog(),
-            new PackageReferenceService(reader, TestFixtures.CreateMissingTextureCatalogService()),
+            new PackageReferenceService(reader, textureCatalog),
             writer,
             context,
             new MorphFaceConversionService(
-                profiles, targets, context, TestFixtures.CreateMissingTextureCatalogService()),
+                profiles, targets, context, textureCatalog),
             new MorphFaceInterchangeService(),
             clipboard ?? new StubClipboard());
     }
@@ -1521,7 +1712,7 @@ public static class UiSmokeTests
         public int MaterialImportFileChoiceCount { get; private set; }
         public MorphFaceGame? StandaloneGameChoiceResult { get; init; }
         public string? StandaloneNameChoiceResult { get; init; }
-        public RonImportDestination? RonImportDestinationChoiceResult { get; init; }
+        public RonImportDestinationChoice? RonImportDestinationChoiceResult { get; init; }
         public string? ChoosePackage(string? initialDirectory = null) => null;
         public MorphPackageSaveRequest? ChooseMorphPackageDestination(string suggestedFileName, string sourcePackagePath) => null;
         public MorphConversionSaveRequest? ChooseMorphConversionDestination(MorphFaceGame sourceGame, string suggestedFileName, string sourcePackagePath) => null;
@@ -1541,7 +1732,10 @@ public static class UiSmokeTests
             StandaloneGameChoiceCount++;
             return StandaloneGameChoiceResult;
         }
-        public RonImportDestination? ChooseRonImportDestination(string selectedFaceDisplayName)
+        public RonImportDestinationChoice? ChooseRonImportDestination(
+            MorphFaceGame targetGame,
+            IReadOnlyList<RonNpcArchetypeOption> archetypes,
+            bool allowPlayer)
         {
             RonImportDestinationChoiceCount++;
             return RonImportDestinationChoiceResult;
@@ -1920,9 +2114,14 @@ public static class UiSmokeTests
                 message.Close();
                 var standaloneGame = new StandaloneImportGameWindow();
                 standaloneGame.Close();
-                var ronDestination = new RonImportDestinationWindow("NPC_Test_Face");
-                TestAssert.Equal("NPC_Test_Face",
-                    ((TextBlock)ronDestination.FindName("SelectedFaceText")).Text);
+                var ronDestination = new RonImportDestinationWindow(
+                    MorphFaceGame.LE2,
+                    [new RonNpcArchetypeOption("ASA", "Asari")],
+                    allowPlayer: true);
+                TestAssert.Equal(SizeToContent.Height, ronDestination.SizeToContent);
+                TestAssert.Equal("Asari", ((TextBlock)ronDestination.FindName("ArchetypeText")).Text);
+                TestAssert.True(ronDestination.FindName("ArchetypeBox") is null,
+                    "The NPC archetype should be presented as a read-only label.");
                 ronDestination.Close();
                 var standaloneName = new CloneMorphWindow(
                     "Imported_Player",

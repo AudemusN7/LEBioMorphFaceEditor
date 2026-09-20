@@ -1,5 +1,6 @@
 using System.IO;
 using MorphFaceEditor.Core.Domain;
+using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Core.Services;
 using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.LegendaryExplorer;
@@ -71,10 +72,12 @@ public sealed partial class MainWindowViewModel
         Status = $"Exporting {selected.DisplayName} as Trilogy Save Editor RON…";
         try
         {
+            var provenance = CreateRonExportProvenance(selected);
             await Task.Run(() => _packageContextService.ExportRon(
                 workspacePath,
                 selected.InstancedPath,
-                destination));
+                destination,
+                provenance));
             Status = $"Exported {selected.DisplayName} as {Path.GetFileName(destination)}.";
         }
         catch (Exception exception)
@@ -87,6 +90,34 @@ public sealed partial class MainWindowViewModel
         {
             IsBusy = false;
         }
+    }
+
+    private RonExportProvenance? CreateRonExportProvenance(BioMorphFaceListItem selected)
+    {
+        if (_loadedFace is null)
+        {
+            return null;
+        }
+        var archetype = selected.ProfileTag.Trim('[', ']');
+        if (archetype is not ("ALN" or "ASA" or "BAT" or "HMM" or "HMF" or "KRO" or "SAL" or "TUF" or "TUR"))
+        {
+            return null;
+        }
+        var basePath = _loadedFace.Document.BaseHeadReference?.InstancedPath ?? string.Empty;
+        var player = IsPlayerWorkspace ||
+                     basePath.Contains("Player_Base_", StringComparison.OrdinalIgnoreCase) ||
+                     basePath.Contains("Player_Iconic_", StringComparison.OrdinalIgnoreCase) ||
+                     basePath.Contains("CharacterCreation_Base_", StringComparison.OrdinalIgnoreCase);
+        if (player && Editor?.CanEditMorphFeatures != true)
+        {
+            return null;
+        }
+        return new RonExportProvenance(
+            RonExportProducer.MFE,
+            typeof(MainWindowViewModel).Assembly.GetName().Version?.ToString() ?? "0.0.0",
+            _loadedFace.Game,
+            archetype,
+            player);
     }
 
     private async Task ImportMorphAsync()
@@ -119,23 +150,12 @@ public sealed partial class MainWindowViewModel
     private async Task RouteMorphImportAsync(string sourcePath, MorphFaceGame game)
     {
         var extension = Path.GetExtension(sourcePath).ToLowerInvariant();
-        var hasMatchingPccContext = CanMutatePackageContext() && _loadedFace?.Game == game;
-        if (RequiresRonImportDestination(sourcePath, hasMatchingPccContext))
+        if (extension == ".ron")
         {
-            var destination = _dialogs.ChooseRonImportDestination(
-                SelectedFace?.DisplayName ?? LoadedFacePath ?? "the selected BioMorphFace");
-            if (destination is null)
-            {
-                return;
-            }
-            if (destination == RonImportDestination.PlayerWorkspace)
-            {
-                await ImportStandaloneMorphAsync(sourcePath, game);
-                return;
-            }
-            await ImportMorphIntoPackageAsync(sourcePath);
+            await RouteRonImportAsync(sourcePath, game);
             return;
         }
+        var hasMatchingPccContext = CanMutatePackageContext() && _loadedFace?.Game == game;
         if (extension is ".me2headmorph" or ".me3headmorph")
         {
             await ImportStandaloneMorphAsync(sourcePath, game);
@@ -149,11 +169,236 @@ public sealed partial class MainWindowViewModel
         await ImportStandaloneMorphAsync(sourcePath, game);
     }
 
-    internal static bool RequiresRonImportDestination(
+    private async Task RouteRonImportAsync(string sourcePath, MorphFaceGame targetGame)
+    {
+        RonExportProvenance? provenance;
+        try
+        {
+            provenance = await Task.Run(() => TseHeadMorphRon.ReadProvenance(sourcePath));
+        }
+        catch (Exception exception)
+        {
+            ErrorMessage = $"The RON provenance could not be read: {exception.Message}";
+            Status = "RON import failed; the current workspace was not changed.";
+            return;
+        }
+
+        // Untagged Trilogy Save Editor RONs follow the accepted HMM/HMF Player route.
+        if (provenance is null)
+        {
+            await ImportStandaloneMorphAsync(sourcePath, targetGame);
+            return;
+        }
+
+        if (!StandaloneNpcMorphImportService.AreGamesCompatible(provenance.Game, targetGame))
+        {
+            ErrorMessage = $"A {provenance.Game} RON cannot be imported directly into {targetGame}. " +
+                           "LE3 cross-game morphs require the explicit conversion workflow.";
+            Status = "RON import failed; the current workspace was not changed.";
+            return;
+        }
+
+        var isHuman = provenance.Archetype is "HMM" or "HMF";
+        var destination = provenance.PlayerMorph
+            ? RonImportDestination.PlayerWorkspace
+            : RonImportDestination.NpcFace;
+        var archetype = provenance.Archetype;
+        if (isHuman)
+        {
+            var choice = _dialogs.ChooseRonImportDestination(
+                targetGame,
+                [new RonNpcArchetypeOption(archetype, archetype == "HMM" ? "Human Male" : "Human Female")],
+                allowPlayer: true);
+            if (choice is null)
+            {
+                return;
+            }
+            destination = choice.Destination;
+            archetype = choice.NpcArchetypeKey ?? archetype;
+        }
+
+        if (destination == RonImportDestination.PlayerWorkspace)
+        {
+            if (!isHuman)
+            {
+                ErrorMessage = $"{provenance.Archetype} has no supported standalone Player Morph route.";
+                Status = "RON import failed; the current workspace was not changed.";
+                return;
+            }
+            await ImportStandaloneMorphAsync(sourcePath, targetGame);
+            return;
+        }
+
+        await ImportStandaloneNpcMorphAsync(
+            sourcePath, provenance.Game, targetGame, archetype);
+    }
+
+    private async Task ImportStandaloneNpcMorphAsync(
         string sourcePath,
-        bool hasMatchingPccContext) =>
-        hasMatchingPccContext &&
-        Path.GetExtension(sourcePath).Equals(".ron", StringComparison.OrdinalIgnoreCase);
+        MorphFaceGame sourceGame,
+        MorphFaceGame targetGame,
+        string archetype)
+    {
+        var suggestedName = SuggestImportName(
+            SanitizeObjectName(Path.GetFileNameWithoutExtension(sourcePath)), []);
+        var objectName = _dialogs.ChooseStandaloneMorphName(suggestedName, []);
+        if (objectName is null || !await EnsureCanAbandonWorkspaceAsync())
+        {
+            return;
+        }
+
+        IsBusy = true;
+        ErrorMessage = null;
+        Status = $"Preparing a native {targetGame} {archetype} NPC workspace…";
+        StandaloneNpcMorphImportResult? imported = null;
+        FaceEditorViewModel? preparedEditor = null;
+        IReadOnlyList<string> importWarnings = [];
+        try
+        {
+            var textureCatalog = await _referenceService.ReadTextureCatalogAsync(targetGame);
+            if (!textureCatalog.IsAvailable)
+            {
+                throw new InvalidOperationException(
+                    $"The {targetGame} texture database is unavailable. Build it in Texture Databases before importing an NPC RON.");
+            }
+            var donor = new RonNpcDonorResolver(MorphFaceProfileRegistry.CreateDefault())
+                .Resolve(targetGame, archetype, textureCatalog.MorphFaceTemplates);
+            var sourceCatalog = sourceGame == targetGame
+                ? textureCatalog
+                : await _referenceService.ReadTextureCatalogAsync(sourceGame);
+            if (!sourceCatalog.IsAvailable)
+            {
+                throw new InvalidOperationException(
+                    $"The {sourceGame} texture database is unavailable. Build it in Texture Databases before transferring this NPC RON.");
+            }
+            var assets = await Task.Run(() => StandalonePlayerAssetCatalog.ForRon(
+                targetGame, sourcePath, textureCatalog.Candidates, donor.PackagePath));
+            imported = await Task.Run(() => new StandaloneNpcMorphImportService().ImportNpcRon(
+                new StandaloneNpcMorphImportRequest(
+                    sourceGame,
+                    targetGame,
+                    archetype,
+                    sourcePath,
+                    donor.PackagePath,
+                    donor.FacePath,
+                    objectName,
+                    assets,
+                    IsVerifiedNativeNpcDonor: true,
+                    SourceTextureCatalog: sourceCatalog.Candidates,
+                    TargetTextureCatalog: textureCatalog.Candidates)));
+            importWarnings = imported.SaveResult.Warnings;
+
+            // Read and prepare the complete candidate before replacing the active editor.
+            var candidatePath = imported.Workspace.WorkingPath;
+            var catalogTask = _catalogService.ReadAsync(candidatePath);
+            var referencesTask = _referenceService.ReadCatalogAsync(candidatePath);
+            await Task.WhenAll(catalogTask, referencesTask);
+            var catalog = await catalogTask;
+            var references = await referencesTask;
+            var selected = catalog.Faces.FirstOrDefault(face =>
+                string.Equals(face.InstancedPath, imported.ImportedFacePath,
+                    StringComparison.OrdinalIgnoreCase)) ?? throw new InvalidDataException(
+                "The imported NPC face was absent from its verified workspace catalogue.");
+            var preview = await _previewLoadService.LoadAsync(
+                candidatePath,
+                selected.UIndex.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                geometryMode: MorphFaceGeometryMode.RelativeBake);
+            if (!preview.EditingSession.CanEditMorphFeatures)
+            {
+                throw new InvalidDataException(
+                    "The imported NPC face does not have a usable native morph target set: " +
+                    preview.EditingSession.EditBlockReason);
+            }
+            var textureProfile = TextureCatalogProfiles.For(preview.Profile);
+            preparedEditor = new FaceEditorViewModel(
+                preview.EditingSession,
+                preview.Profile.UiProfile,
+                preview.MaterialEditingSession,
+                _colorDialog,
+                _referenceService,
+                candidatePath,
+                references.Textures,
+                references.SkeletalMeshes,
+                preview.Loaded.Document.HairMeshReference,
+                preview.Loaded.Document.OtherMeshReferences,
+                SetEditorError,
+                preview.Profile.Key,
+                _randomisationCatalog,
+                randomisationInclusionState: _randomisationInclusionState,
+                registryTextureCandidates: [],
+                textureCatalogProfile: textureProfile,
+                isTextureRegistryAvailable: false,
+                ignoresAuthoredGeometry: preview.Profile.IgnoresAuthoredGeometry);
+
+            CancelPendingLoad();
+            SetEditor(null, null);
+            DisposePackageWorkspace();
+            _packageWorkspace = imported.Workspace;
+            imported = null;
+            _standaloneGame = targetGame;
+            _isStandaloneNpcWorkspace = true;
+            _standaloneImportPath = Path.GetFullPath(sourcePath);
+            SetDetachedMeshSource(null);
+            _fixedBakeFacePaths.Clear();
+            _relativeBakeFacePaths.Clear();
+            _relativeBakeFacePaths.Add(selected.InstancedPath);
+            _hasWorkspaceChanges = false;
+            PackagePath = _packageWorkspace.SourcePath;
+            _referenceCatalog = references;
+            FaceSearchText = string.Empty;
+            Faces.Clear();
+            foreach (var face in catalog.Faces)
+            {
+                Faces.Add(face);
+            }
+            SelectedFace = selected;
+            LoadedFacePath = preview.Loaded.Document.Source.InstancedPath;
+            FaceDetails = $"{preview.Loaded.BaseHead.Topology.VertexCount:N0} vertices · " +
+                          $"{preview.Loaded.Document.BakedLods.Count} authored LODs · " +
+                          "native NPC relative bake";
+            SetEditor(preparedEditor, preview.Loaded);
+            preparedEditor = null;
+            HasPreview = true;
+            var cameraFamily = PreviewCameraGrouping.ForProfile(preview.Profile.Key);
+            var resetCamera = _previewCameraFamily is not null &&
+                              !string.Equals(_previewCameraFamily, cameraFamily,
+                                  StringComparison.OrdinalIgnoreCase);
+            _previewCameraFamily = cameraFamily;
+            PreviewSceneReady?.Invoke(preview.Scene, resetCamera);
+            OnPropertyChanged(nameof(PackageName));
+            OnPropertyChanged(nameof(PackageDisplayName));
+            OnDirtyStateChanged();
+            RaiseFaceContextCanExecuteChanged();
+            _ = LoadTextureRegistryAsync(
+                Editor!, targetGame, preview.Profile, textureProfile, CancellationToken.None);
+            Status = $"Imported {selected.DisplayName} as a {targetGame} {archetype} NPC morph; " +
+                     "authored geometry preserved with native morph editing ready.";
+            foreach (var warning in importWarnings.Concat(preview.Loaded.Warnings))
+            {
+                AppLog.Warning(warning);
+            }
+            if (importWarnings.Count > 0)
+            {
+                Status = $"Imported {selected.DisplayName} with {importWarnings.Count} asset or static-LOD warning(s).";
+                _dialogs.ShowInformation(
+                    "NPC morph imported with warnings",
+                    "The authored data was retained. Review these preview or material limitations:\n\n- " +
+                    string.Join("\n- ", importWarnings));
+            }
+        }
+        catch (Exception exception)
+        {
+            AppLog.Error($"Standalone NPC import failed for '{sourcePath}' as {targetGame} {archetype}.", exception);
+            ErrorMessage = $"The standalone NPC morph could not be imported: {exception.Message}";
+            Status = "NPC import failed; the current workspace was not changed.";
+        }
+        finally
+        {
+            preparedEditor?.Dispose();
+            imported?.Dispose();
+            IsBusy = false;
+        }
+    }
 
     private async Task ImportStandaloneMorphAsync(string sourcePath, MorphFaceGame game)
     {
@@ -204,6 +449,7 @@ public sealed partial class MainWindowViewModel
             }
         }
         var appendingToCurrentGame = _standaloneGame == game && _packageWorkspace is not null &&
+                                     !_isStandaloneNpcWorkspace &&
                                      (meshAnalysis is null || meshAnalysis.Recognition is not null);
         var existingNames = appendingToCurrentGame
             ? Faces.Select(face => face.ObjectName).ToArray()
@@ -284,6 +530,7 @@ public sealed partial class MainWindowViewModel
                 DisposePackageWorkspace();
                 _packageWorkspace = result.Workspace;
                 _standaloneGame = game;
+                _isStandaloneNpcWorkspace = false;
                 SetDetachedMeshSource(null);
                 _fixedBakeFacePaths.Clear();
                 _relativeBakeFacePaths.Clear();
@@ -300,6 +547,7 @@ public sealed partial class MainWindowViewModel
                 DisposePackageWorkspace();
                 _packageWorkspace = result.Workspace;
                 _standaloneGame = game;
+                _isStandaloneNpcWorkspace = false;
                 SetDetachedMeshSource(null);
                 _fixedBakeFacePaths.Clear();
                 _relativeBakeFacePaths.Clear();
@@ -316,6 +564,7 @@ public sealed partial class MainWindowViewModel
                 DisposePackageWorkspace();
                 _packageWorkspace = result.Workspace;
                 _standaloneGame = game;
+                _isStandaloneNpcWorkspace = false;
                 SetDetachedMeshSource(null);
                 _fixedBakeFacePaths.Clear();
                 _relativeBakeFacePaths.Clear();
@@ -394,6 +643,7 @@ public sealed partial class MainWindowViewModel
         DisposePackageWorkspace();
         SetDetachedMeshSource(result.Detached.Source);
         _standaloneGame = game;
+        _isStandaloneNpcWorkspace = false;
         _standaloneImportPath = Path.GetFullPath(sourcePath);
         _fixedBakeFacePaths.Clear();
         _relativeBakeFacePaths.Clear();

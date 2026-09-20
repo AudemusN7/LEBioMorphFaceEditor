@@ -25,11 +25,75 @@ internal static class RonStressTests
 
     internal static IReadOnlyList<TestCase> All { get; } =
     [
+        new("RON provenance metadata round-trips and rejects partial headers", ProvenanceMetadata),
         new("RON stress corpus parses all 34 files and verifies variant structure", ParseCorpus),
         new("RON texture catalogue canonicalises occurrence package paths", CanonicalTextureCataloguePaths),
         new("RON stress primary roots classify for their intended games", ClassifyPrimaryRoots),
         new("RON stress standalone imports preserve primary payloads and installed fingerprints", StandalonePrimaryRoundTrips)
     ];
+
+    private static void ProvenanceMetadata()
+    {
+        var sourcePath = Path.Combine(CorpusDirectory(), PrimaryCases[0].FileName);
+        var temporaryPath = Path.Combine(Path.GetTempPath(), $"MFE-RonProvenance-{Guid.NewGuid():N}.ron");
+        try
+        {
+            var expected = new RonExportProvenance(
+                RonExportProducer.MFE,
+                "0.9.17",
+                MorphFaceGame.LE2,
+                "ASA",
+                PlayerMorph: false);
+            TseHeadMorphRon.Write(temporaryPath, TseHeadMorphRon.Read(sourcePath), expected);
+            var actual = TseHeadMorphRon.ReadProvenance(temporaryPath);
+            TestAssert.Equal(expected, actual);
+            TestAssert.True(File.ReadLines(temporaryPath).Take(4).SequenceEqual(
+                    [
+                        "// Exported from: MFE 0.9.17",
+                        "// Game: LE2",
+                        "// Archetype: ASA",
+                        "// Player Morph: NO"
+                    ]),
+                "RON provenance was not written as the four-line comment header.");
+            TestAssert.True(TseHeadMorphRon.ReadProvenance(sourcePath) is null,
+                "An untagged legacy RON unexpectedly reported exporter provenance.");
+
+            File.WriteAllText(temporaryPath, "// Game: LE2\n(\n)");
+            var partialRejected = false;
+            try
+            {
+                _ = TseHeadMorphRon.ReadProvenance(temporaryPath);
+            }
+            catch (InvalidDataException exception)
+            {
+                partialRejected = exception.Message.Contains("incomplete header", StringComparison.OrdinalIgnoreCase) &&
+                    exception.Message.Contains("Archetype", StringComparison.Ordinal);
+            }
+            TestAssert.True(partialRejected,
+                "A partial recognised RON provenance header did not report its missing fields.");
+
+            File.WriteAllText(temporaryPath,
+                "// Exported from: UntrustedTool 1\n// Game: LE2\n// Archetype: ASA\n// Player Morph: NO\n(\n)");
+            var untrustedRejected = false;
+            try
+            {
+                _ = TseHeadMorphRon.ReadProvenance(temporaryPath);
+            }
+            catch (InvalidDataException exception)
+            {
+                untrustedRejected = exception.Message.Contains("trusted producer", StringComparison.OrdinalIgnoreCase);
+            }
+            TestAssert.True(untrustedRejected,
+                "An untrusted RON exporter was accepted as provenance.");
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath))
+            {
+                File.Delete(temporaryPath);
+            }
+        }
+    }
 
     private static void ParseCorpus()
     {

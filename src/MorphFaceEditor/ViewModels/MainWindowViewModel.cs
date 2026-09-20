@@ -66,6 +66,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private MorphFacePackageWorkspace? _packageWorkspace;
     private string? _standaloneImportPath;
     private MorphFaceGame? _standaloneGame;
+    private bool _isStandaloneNpcWorkspace;
     private ImportedMeshAsset? _detachedMeshSource;
     private readonly HashSet<string> _fixedBakeFacePaths = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _relativeBakeFacePaths = new(StringComparer.OrdinalIgnoreCase);
@@ -244,7 +245,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public string PackageName => _detachedMeshSource is not null
         ? $"{_standaloneGame} Detached Mesh Workspace"
         : _standaloneGame is not null
-        ? $"{_standaloneGame} Standalone Player Workspace"
+        ? $"{_standaloneGame} Standalone {(_isStandaloneNpcWorkspace ? "NPC" : "Player")} Workspace"
         : PackagePath is null ? "No package open" : Path.GetFileName(PackagePath);
     public string PackageDisplayName => IsDirty ? $"{PackageName} *" : PackageName;
     public bool IsDirty => _hasWorkspaceChanges || Editor?.IsDirty == true;
@@ -252,7 +253,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public bool IsDetachedMeshWorkspace => _detachedMeshSource is not null;
     private string? WorkspacePackagePath => _packageWorkspace?.WorkingPath;
     private bool IsStandaloneWorkspace => _standaloneGame is not null;
-    private bool IsPlayerWorkspace => _standaloneGame is not null && _packageWorkspace is not null;
+    private bool IsPlayerWorkspace =>
+        _standaloneGame is not null && _packageWorkspace is not null && !_isStandaloneNpcWorkspace;
 
     public string FaceSearchText
     {
@@ -615,6 +617,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _packageWorkspace = workspace;
         _standaloneImportPath = null;
         _standaloneGame = null;
+        _isStandaloneNpcWorkspace = false;
         SetDetachedMeshSource(null);
         _fixedBakeFacePaths.Clear();
         _relativeBakeFacePaths.Clear();
@@ -1482,7 +1485,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             return await SaveDetachedMeshToPccAsync();
         }
-        if (Editor is null || _loadedFace is null || PackagePath is null || WorkspacePackagePath is null)
+        var workspacePath = WorkspacePackagePath;
+        if (Editor is null || _loadedFace is null || PackagePath is null || workspacePath is null)
         {
             return false;
         }
@@ -1507,7 +1511,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 $"(create new package: {request.CreateNewPackage}).");
             var result = await Task.Run(() => _packageWriter.SaveMorphToPackage(
                 draft,
-                PackagePath,
+                workspacePath,
                 request.DestinationPackagePath,
                 request.CreateNewPackage));
             Status = result.Warnings.Count == 0

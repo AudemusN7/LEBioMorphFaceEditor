@@ -96,13 +96,18 @@ public sealed class WpfEditorDialogService : IEditorDialogService
         return window.ShowDialog() == true ? window.SelectedGame : null;
     }
 
-    public RonImportDestination? ChooseRonImportDestination(string selectedFaceDisplayName)
+    public RonImportDestinationChoice? ChooseRonImportDestination(
+        MorphFaceGame targetGame,
+        IReadOnlyList<RonNpcArchetypeOption> archetypes,
+        bool allowPlayer)
     {
-        var window = new RonImportDestinationWindow(selectedFaceDisplayName)
+        var window = new RonImportDestinationWindow(targetGame, archetypes, allowPlayer)
         {
             Owner = Application.Current.MainWindow
         };
-        return window.ShowDialog() == true ? window.Destination : null;
+        return window.ShowDialog() == true && window.Destination is { } destination
+            ? new RonImportDestinationChoice(destination, window.SelectedNpcArchetypeKey)
+            : null;
     }
 
     public string? ChooseStandaloneMorphName(

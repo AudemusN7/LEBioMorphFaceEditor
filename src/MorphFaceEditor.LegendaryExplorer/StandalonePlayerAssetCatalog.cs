@@ -51,7 +51,8 @@ public sealed record StandalonePlayerAssetCatalog(
     public static StandalonePlayerAssetCatalog ForRon(
         MorphFaceGame game,
         string ronPath,
-        IReadOnlyList<TextureCatalogCandidate> textures)
+        IReadOnlyList<TextureCatalogCandidate> textures,
+        string? referencePackagePath = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(ronPath);
         ArgumentNullException.ThrowIfNull(textures);
@@ -72,9 +73,12 @@ public sealed record StandalonePlayerAssetCatalog(
             .ToArray();
         var loadedFiles = MELoadedFiles.GetFilesLoadedInGame(ToMeGame(game), forceUseCached: true);
         using var packageCache = new PackageCache { CacheMaxSize = 8 };
-        var seedPath = StandalonePlayerMorphImportService.ResolveInstalledSeed(game);
-        var seedPackage = packageCache.GetCachedPackage(seedPath)
-                          ?? throw new InvalidDataException($"Could not open installed player seed '{seedPath}'.");
+        var referencePath = referencePackagePath is null
+            ? StandalonePlayerMorphImportService.ResolveInstalledSeed(game)
+            : Path.GetFullPath(referencePackagePath);
+        var referencePackage = packageCache.GetCachedPackage(referencePath)
+                               ?? throw new InvalidDataException(
+                                   $"Could not open installed RON reference package '{referencePath}'.");
         var referenceResolver = new GamePackageReferenceResolver(packageCache);
         var textureAssets = new List<AssetIdentity>();
         foreach (var requestedPath in requestedTextures)
@@ -95,7 +99,7 @@ public sealed record StandalonePlayerAssetCatalog(
             }
 
             if ((FindInstalledExport(loadedFiles, requestedPath, "Texture2D") ??
-                 FindReferencedExport(seedPackage, referenceResolver, requestedPath, "Texture2D")) is { } texture)
+                 FindReferencedExport(referencePackage, referenceResolver, requestedPath, "Texture2D")) is { } texture)
             {
                 textureAssets.Add(texture);
             }
@@ -105,7 +109,7 @@ public sealed record StandalonePlayerAssetCatalog(
         foreach (var requestedPath in requestedMeshes)
         {
             if ((FindInstalledExport(loadedFiles, requestedPath, "SkeletalMesh") ??
-                 FindReferencedExport(seedPackage, referenceResolver, requestedPath, "SkeletalMesh")) is { } mesh)
+                 FindReferencedExport(referencePackage, referenceResolver, requestedPath, "SkeletalMesh")) is { } mesh)
             {
                 meshes.Add(mesh);
             }

@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Choose RON destination"
-        Width="500" Height="270" ResizeMode="NoResize"
+        Width="500" SizeToContent="Height" ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner"
         Background="{StaticResource WindowBackground}"
         Foreground="{StaticResource PrimaryText}">
@@ -10,24 +10,31 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
-        <TextBlock Text="This RON does not identify whether it belongs to a player head or an NPC racial archetype."
+
+        <TextBlock Text="Choose how to import this RON. The target game and NPC archetype determine the native assets used to build the workspace."
                    TextWrapping="Wrap" Foreground="{StaticResource SecondaryText}" />
-        <Border Grid.Row="1" Margin="0,14,0,0" Padding="10" Background="#22FFFFFF" CornerRadius="4">
-            <StackPanel>
-                <TextBlock Text="CURRENT NPC TEMPLATE" Style="{StaticResource FieldLabel}" />
-                <TextBlock x:Name="SelectedFaceText" Margin="0,4,0,0" TextWrapping="Wrap" />
-            </StackPanel>
-        </Border>
-        <TextBlock Grid.Row="2" Margin="0,14,0,0" TextWrapping="Wrap"
-                   Foreground="{StaticResource SecondaryText}"
-                   Text="For an NPC RON, first select a BioMorphFace from the same racial archetype in the open PCC, then choose Selected PCC Face. The selected face supplies the required base mesh, baked-LOD topology and morph profile. Choose Player Workspace for Trilogy Save Editor player heads." />
-        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+
+        <StackPanel Grid.Row="1" Margin="0,14,0,0">
+            <TextBlock Text="TARGET GAME" Style="{StaticResource FieldLabel}" />
+            <TextBlock x:Name="TargetGameText" Margin="0,4,0,0" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="2" Margin="0,14,0,0">
+            <TextBlock Text="NPC ARCHETYPE" Style="{StaticResource FieldLabel}" />
+            <TextBlock x:Name="ArchetypeText" Margin="0,4,0,0" TextWrapping="Wrap" />
+        </StackPanel>
+
+        <TextBlock x:Name="ValidationText" Grid.Row="3" Margin="0,10,0,0"
+                   TextWrapping="Wrap" Foreground="#FFFF8C8C" FontSize="11" />
+
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
             <Button Content="Cancel" IsCancel="True" MinWidth="76" Margin="0,0,8,0" />
-            <Button Content="Selected PCC Face" MinWidth="130" Margin="0,0,8,0" Click="OnSelectedPccFace" />
-            <Button Content="Player Workspace" IsDefault="True" MinWidth="130" Click="OnPlayerWorkspace" />
+            <Button x:Name="NpcButton" Content="NPC Morph" MinWidth="105" Margin="0,0,8,0" Click="OnNpcMorph" />
+            <Button x:Name="PlayerButton" Content="Player Morph" MinWidth="105" Click="OnPlayerMorph" />
         </StackPanel>
     </Grid>
 </Window>

@@ -152,6 +152,14 @@ internal static class PackageIntegrity
 
     private readonly struct ReferenceCollector(Dictionary<string, int> result) : IUIndexAction
     {
-        public void Invoke(ref int uIndex, string propName) => result.Add($"binary.{propName}", uIndex);
+        public void Invoke(ref int uIndex, string propName)
+        {
+            var key = $"binary.{propName}";
+            if (result.TryAdd(key, uIndex)) return;
+            // PrefabInstance multimaps can report several values under one
+            // property label. Keep each edge in the saved-graph check.
+            for (var occurrence = 1; ; occurrence++)
+                if (result.TryAdd($"{key}#{occurrence}", uIndex)) return;
+        }
     }
 }

@@ -695,6 +695,14 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         await Material.ApplyDataAsync(data);
         RefreshDirtyState();
     }
+
+    public async Task<IReadOnlyList<string>> MergeMaterialDataAsync(
+        MorphFaceEditor.Core.Domain.MorphFaceMaterialData data)
+    {
+        var warnings = await Material.MergeMaterialDataAsync(data);
+        RefreshDirtyState();
+        return warnings;
+    }
     private void OnEvaluationChanged(object? sender, EventArgs e)
     {
         foreach (var feature in Features)

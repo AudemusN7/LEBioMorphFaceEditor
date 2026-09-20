@@ -31,8 +31,13 @@ public static class MorphFaceEditorStateComparer
     private static bool SameReference(AssetIdentity? left, AssetIdentity? right) =>
         ReferenceEquals(left, right) ||
         left is not null && right is not null &&
-        string.Equals(Path.GetFullPath(left.PackagePath), Path.GetFullPath(right.PackagePath), StringComparison.OrdinalIgnoreCase) &&
+        SamePackagePath(left.PackagePath, right.PackagePath) &&
         string.Equals(left.InstancedPath, right.InstancedPath, StringComparison.OrdinalIgnoreCase);
+
+    private static bool SamePackagePath(string left, string right) =>
+        string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right)
+            ? string.IsNullOrWhiteSpace(left) && string.IsNullOrWhiteSpace(right)
+            : string.Equals(Path.GetFullPath(left), Path.GetFullPath(right), StringComparison.OrdinalIgnoreCase);
 
     private static bool SameReferences(
         IReadOnlyList<AssetIdentity?> left,

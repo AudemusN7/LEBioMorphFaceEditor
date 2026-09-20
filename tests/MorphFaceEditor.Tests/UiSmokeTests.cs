@@ -483,6 +483,11 @@ public static class UiSmokeTests
         workspaceField.SetValue(viewModel, detachedWorkspace);
         viewModel.SelectedFace = selectedFace;
 
+        TestAssert.True(viewModel.IsMaterialFileWorkspace &&
+                        viewModel.ExportMaterialsCommand.CanExecute(null) &&
+                        viewModel.ImportMaterialsCommand.CanExecute(null),
+            "A selected PCC face did not expose material file actions before it was loaded.");
+
         var standaloneGameField = typeof(MainWindowViewModel).GetField(
             "_standaloneGame",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)

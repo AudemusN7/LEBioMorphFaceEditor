@@ -18,7 +18,13 @@ public static class MaterialRonCodec
         IReadOnlyList<string>? AccessoryMeshes);
 
     public static MorphFaceMaterialData ReadTse(string text)
-        => ReadTseDocument(text).Parameters;
+    {
+        var root = new MaterialRonReader(text).Read();
+        if (root.ContainsKey("format")) throw new InvalidDataException("Use Import Materials for an MFE material file.");
+        if (!new[] { "scalar_parameters", "vector_parameters", "texture_parameters" }.Any(root.ContainsKey))
+            throw new InvalidDataException("The TSE RON contains no material parameter maps.");
+        return ReadParameters(root);
+    }
 
     public static TseMaterialDocument ReadTseDocument(string text)
     {
@@ -67,9 +73,23 @@ public static class MaterialRonCodec
             scopes.ToDictionary(value => value.Key, value => ReadParameters(Object(value.Value)), StringComparer.OrdinalIgnoreCase));
     }
 
+    /// <summary>Reads only the material maps; face workspaces do not use MESH slot or source-game metadata.</summary>
+    public static IReadOnlyDictionary<string, MorphFaceMaterialData> ReadMfeParameterScopes(string text)
+    {
+        var root = new MaterialRonReader(text).Read();
+        if (String(root, "format") != "MorphFaceEditor.Materials")
+            throw new InvalidDataException("This is not an MFE material file.");
+        var scopes = Object(root["parameters"]);
+        return scopes.ToDictionary(value => value.Key,
+            value => ReadParameters(Object(value.Value)), StringComparer.OrdinalIgnoreCase);
+    }
+
     public static string WriteMfe(MeshMaterialDocument document)
     {
-        var output = new StringBuilder("// MFE material settings. Reimport onto the source mesh with Import Materials.\n(\n");
+        var output = new StringBuilder("// Material settings only; no authored geometry or bone offsets.\n");
+        output.AppendLine($"// MFE material export version: {MeshMaterialDocument.CurrentVersion}");
+        output.AppendLine($"// Material target game: {document.Game}");
+        output.AppendLine("(");
         Field(output, "format", "MorphFaceEditor.Materials", 1);
         output.AppendLine($"    version: {MeshMaterialDocument.CurrentVersion},");
         Field(output, "game", document.Game, 1);

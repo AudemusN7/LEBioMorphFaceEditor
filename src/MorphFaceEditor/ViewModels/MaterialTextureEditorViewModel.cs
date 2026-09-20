@@ -196,6 +196,19 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
         return ResolveReferenceAsync(identity);
     }
 
+    /// <summary>Resolves file imports by full path, without the picker’s unique-name fallback.</summary>
+    public Task<DecodedTextureAsset> ResolveExactInstancedPathAsync(string instancedPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(instancedPath);
+        var candidate = _allCandidates.FirstOrDefault(value => value.Asset is { } asset &&
+            (value.InstancedPath.Equals(instancedPath, StringComparison.OrdinalIgnoreCase) ||
+             MeshMaterialFileService.QualifyPath(asset.Identity).Equals(instancedPath,
+                 StringComparison.OrdinalIgnoreCase)))
+            ?? throw new FileNotFoundException($"Texture '{instancedPath}' is not available at its full path.");
+        var identity = candidate.Asset!.Identity;
+        return ResolveReferenceAsync(identity);
+    }
+
     public bool CanResolveInstancedPath(string instancedPath) =>
         !string.IsNullOrWhiteSpace(instancedPath) && FindResolvableOption(instancedPath) is not null;
 

@@ -247,10 +247,6 @@
                                           Visibility="{Binding IsDetachedMeshWorkspace, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                 <MenuItem Header="Import TSE RON" Command="{Binding ImportTseMaterialsCommand}"
                                           Visibility="{Binding IsDetachedMeshWorkspace, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                                <MenuItem Header="Export Materials" Command="{Binding ExportMaterialsCommand}"
-                                          Visibility="{Binding IsDetachedMeshWorkspace, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                                <MenuItem Header="Import Materials" Command="{Binding ImportMaterialsCommand}"
-                                          Visibility="{Binding IsDetachedMeshWorkspace, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                 <MenuItem Header="Clone Morph…" Style="{StaticResource PccContextAction}" Command="{Binding CloneMorphCommand}" />
                                 <MenuItem Header="{Binding ConvertMorphHeader}" Style="{StaticResource PccContextAction}" Command="{Binding ConvertMorphCommand}" />
                                 <MenuItem Header="Export Morph as Mesh" Style="{StaticResource PccContextAction}">
@@ -262,6 +258,11 @@
                                 <Separator Style="{StaticResource PccContextSeparator}" />
                                 <MenuItem Header="Assign Morph to Actor…" Style="{StaticResource PccContextAction}" Command="{Binding AssignMorphToActorCommand}" />
                                 <MenuItem Header="Assign Materials to Actor…" Style="{StaticResource PccContextAction}" Command="{Binding AssignMaterialsToActorCommand}" />
+                                <Separator Visibility="{Binding IsMaterialFileWorkspace, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                <MenuItem Header="Export Materials" Command="{Binding ExportMaterialsCommand}"
+                                          Visibility="{Binding IsMaterialFileWorkspace, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                <MenuItem Header="Import Materials" Command="{Binding ImportMaterialsCommand}"
+                                          Visibility="{Binding IsMaterialFileWorkspace, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                 <Separator Style="{StaticResource PccContextSeparator}" />
                                 <MenuItem Header="Copy Morph Data" Style="{StaticResource PccContextAction}" Command="{Binding CopyMorphDataCommand}" />
                                 <MenuItem Header="Paste Morph Data" Style="{StaticResource PccContextAction}" Command="{Binding PasteMorphDataCommand}" />

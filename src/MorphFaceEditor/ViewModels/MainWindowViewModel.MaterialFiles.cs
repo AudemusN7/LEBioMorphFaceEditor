@@ -2,11 +2,12 @@ using System.IO;
 using System.Windows.Input;
 using MorphFaceEditor.Core.Services;
 using MorphFaceEditor.Infrastructure;
+using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.Services;
 
 namespace MorphFaceEditor.ViewModels;
 
-/// <summary>Routes the four detached MESH file actions through the material interchange service.</summary>
+/// <summary>Routes material file actions through the MESH or face workspace interchange path.</summary>
 public sealed partial class MainWindowViewModel
 {
     private readonly AsyncRelayCommand _exportTseMaterialsCommand;
@@ -20,6 +21,16 @@ public sealed partial class MainWindowViewModel
 
     private bool CanUseMeshMaterialFiles() => !IsBusy && IsDetachedMeshWorkspace &&
         Editor?.CustomMaterials is not null && SelectedFace?.InstancedPath == LoadedFacePath;
+
+    /// <summary>A selected package face can be loaded before its material file action.</summary>
+    private bool CanUseFaceMaterialFiles() => !IsBusy && !IsDetachedMeshWorkspace &&
+        SelectedFace is not null && WorkspacePackagePath is not null;
+
+    public bool IsMaterialFileWorkspace => IsDetachedMeshWorkspace
+        ? Editor is not null && SelectedFace?.InstancedPath == LoadedFacePath
+        : SelectedFace is not null && WorkspacePackagePath is not null;
+
+    private bool CanUseMaterialFiles() => CanUseMeshMaterialFiles() || CanUseFaceMaterialFiles();
 
     private async Task<bool> ExportMeshMaterialsAsync(bool tse)
     {
@@ -89,11 +100,97 @@ public sealed partial class MainWindowViewModel
         finally { IsBusy = false; }
     }
 
+    private async Task ExportFaceMaterialsAsync()
+    {
+        if (!CanUseFaceMaterialFiles() || !await EnsureSelectedFaceLoadedForMaterialsAsync() ||
+            Editor is not { } editor || SelectedFace is not { } face)
+            return;
+        var path = _dialogs.ChooseMaterialExportFile(false, face.ObjectName + ".materials.ron",
+            Path.GetDirectoryName(_standaloneImportPath ?? _packageWorkspace?.SourcePath));
+        if (path is null) return;
+        IsBusy = true;
+        ErrorMessage = null;
+        try
+        {
+            var values = editor.Material.CaptureInterchangeData();
+            var game = ResolveMaterialFileGame();
+            var text = MaterialRonCodec.WriteMfe(FaceMaterialFileService.Capture(game, face.ObjectName, values));
+            await MeshMaterialFileService.WriteAsync(path, text,
+                _standaloneImportPath ?? _packageWorkspace?.SourcePath ?? path);
+            Status = $"Exported MFE material settings to {Path.GetFileName(path)}.";
+        }
+        catch (Exception exception)
+        {
+            AppLog.Error("Face material export failed.", exception);
+            ErrorMessage = exception.Message;
+            Status = "Material export failed; the current face edit is retained.";
+        }
+        finally { IsBusy = false; }
+    }
+
+    private async Task ImportFaceMaterialsAsync()
+    {
+        if (!CanUseFaceMaterialFiles() || !await EnsureSelectedFaceLoadedForMaterialsAsync() ||
+            Editor is not { } editor)
+            return;
+        var path = _dialogs.ChooseMaterialImportFile(false,
+            Path.GetDirectoryName(_standaloneImportPath ?? _packageWorkspace?.SourcePath));
+        if (path is null) return;
+        IsBusy = true;
+        ErrorMessage = null;
+        Status = "Reading material settings…";
+        try
+        {
+            var text = await File.ReadAllTextAsync(path);
+            var imported = FaceMaterialFileService.Read(text, allowTse: IsPlayerWorkspace);
+            if (!ReferenceEquals(Editor, editor)) return;
+            var warnings = imported.Warnings.Concat(await editor.MergeMaterialDataAsync(imported.Parameters)).ToList();
+            Status = imported.IsTse
+                ? $"Imported TSE material settings from {Path.GetFileName(path)} as one undoable edit."
+                : $"Imported material settings from {Path.GetFileName(path)} as one undoable edit.";
+            if (warnings.Count > 0)
+            {
+                foreach (var warning in warnings) AppLog.Warning(warning);
+                const int displayLimit = 8;
+                var details = string.Join("\n\n", warnings.Take(displayLimit));
+                if (warnings.Count > displayLimit)
+                    details += $"\n\nPlus {warnings.Count - displayLimit} more warnings. All details are in the application log.";
+                _dialogs.ShowInformation("Materials imported with warnings", details);
+            }
+        }
+        catch (Exception exception)
+        {
+            AppLog.Error("Face material import failed.", exception);
+            ErrorMessage = exception.Message;
+            Status = "Material import failed; the current face edit is retained.";
+        }
+        finally { IsBusy = false; }
+    }
+
+    private Task<bool> EnsureSelectedFaceLoadedForMaterialsAsync() =>
+        Editor is not null && SelectedFace?.InstancedPath == LoadedFacePath
+            ? Task.FromResult(true)
+            : LoadSelectedFaceAsync(confirmUnsavedChanges: true);
+
+    private MorphFaceGame ResolveMaterialFileGame()
+    {
+        if (_standaloneGame is { } standaloneGame) return standaloneGame;
+        if (_packageWorkspace is null || LoadedFacePath is null)
+            throw new InvalidOperationException("The current face workspace has no source package.");
+        var reference = MorphFaceReferenceInspector.Inspect(_packageWorkspace.SourcePath)
+            .SingleOrDefault(value => string.Equals(value.FacePath, LoadedFacePath,
+                StringComparison.OrdinalIgnoreCase));
+        if (reference is null || reference.Game == MorphFaceGame.Unsupported)
+            throw new InvalidOperationException($"Could not determine the game for '{LoadedFacePath}'.");
+        return reference.Game;
+    }
+
     private void RaiseMaterialFileCanExecuteChanged()
     {
         _exportTseMaterialsCommand.RaiseCanExecuteChanged();
         _importTseMaterialsCommand.RaiseCanExecuteChanged();
         _exportMaterialsCommand.RaiseCanExecuteChanged();
         _importMaterialsCommand.RaiseCanExecuteChanged();
+        OnPropertyChanged(nameof(IsMaterialFileWorkspace));
     }
 }

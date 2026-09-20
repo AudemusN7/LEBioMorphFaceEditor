@@ -141,7 +141,7 @@ public sealed class WpfEditorDialogService : IEditorDialogService
         var dialog = new OpenFileDialog
         {
             Title = tse ? "Import TSE RON Material Settings" : "Import Materials",
-            Filter = tse ? "TSE RON (*.ron)|*.ron" : "MFE materials (*.ron)|*.ron",
+            Filter = tse ? "TSE RON (*.ron)|*.ron" : "RON material files (*.ron)|*.ron",
             InitialDirectory = Directory.Exists(initialDirectory) ? initialDirectory : null,
             Multiselect = false
         };
@@ -153,7 +153,7 @@ public sealed class WpfEditorDialogService : IEditorDialogService
         var dialog = new SaveFileDialog
         {
             Title = tse ? "Export TSE RON" : "Export Materials",
-            Filter = tse ? "TSE RON (*.ron)|*.ron" : "MFE materials (*.ron)|*.ron",
+            Filter = tse ? "TSE RON (*.ron)|*.ron" : "RON material files (*.ron)|*.ron",
             DefaultExt = ".ron", AddExtension = true, OverwritePrompt = true,
             FileName = suggestedFileName,
             InitialDirectory = Directory.Exists(initialDirectory) ? initialDirectory : null

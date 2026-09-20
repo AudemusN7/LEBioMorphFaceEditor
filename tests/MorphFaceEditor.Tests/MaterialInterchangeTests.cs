@@ -18,7 +18,9 @@ public static class MaterialInterchangeTests
         new("C3 TSE material import preserves alien values and export qualifies attachments", TsePolicy),
         new("C3 material import rejects malformed and incompatible files before editing", RejectsInvalidFiles),
         new("C3 texture import resolves exact registry paths without name substitution", ResolvesExactTexturePaths),
-        new("C3 material export writes atomically and protects the source mesh", ExportProtectsSource)
+        new("C3 material export writes atomically and protects the source mesh", ExportProtectsSource),
+        new("D3 face material export wraps unscoped values and writes safe metadata", FaceMaterialExport),
+        new("D3 face material import separates tagged heads from untagged TSE", FaceMaterialImport)
     ];
 
     private static void MfeRoundTrip()
@@ -209,6 +211,67 @@ public static class MaterialInterchangeTests
             TestAssert.Equal(2, Directory.GetFiles(directory).Length);
         }
         finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    private static void FaceMaterialExport()
+    {
+        var data = new MorphFaceMaterialData(
+            [new("Shared", 0.75f)], [],
+            [new("HED_Diff", null)]);
+        var text = MaterialRonCodec.WriteMfe(FaceMaterialFileService.Capture(
+            MorphFaceGame.LE2, "BioFace_doctor", data));
+
+        TestAssert.True(text.Contains("Material settings only; no authored geometry or bone offsets.", StringComparison.Ordinal) &&
+                        text.Contains("MFE material export version: 1", StringComparison.Ordinal) &&
+                        text.Contains("Material target game: LE2", StringComparison.Ordinal) &&
+                        text.Contains("\"face\"", StringComparison.Ordinal),
+            "Face material export did not include its safe metadata and neutral scope.");
+        var prepared = FaceMaterialFileService.Read(text, allowTse: false);
+        TestAssert.Equal(0.75f, prepared.Parameters.Scalars.Single().Value);
+        TestAssert.Equal("Shared", prepared.Parameters.Scalars.Single().Name);
+        TestAssert.Equal<AssetIdentity?>(null, prepared.Parameters.Textures.Single().TextureReference);
+        TestAssert.True(!prepared.IsTse, "An MFE material document was classified as TSE.");
+
+        using var fixture = new Fixture();
+        fixture.Workspace.Assign(0, fixture.Human);
+        fixture.Session.MergeMaterialData(prepared.Parameters, new Dictionary<string, DecodedTextureAsset?>());
+        TestAssert.Near(0.75f, fixture.Session.GetScalar(Key("human", "Shared")), 0);
+    }
+
+    private static void FaceMaterialImport()
+    {
+        const string untagged = "(morph_features: {}, offset_bones: {}, " +
+            "lod0_vertices: [(x: 0, y: 0, z: 0)], scalar_parameters: {\"Shared\": 0.25})";
+        Reject(() => FaceMaterialFileService.Read(untagged, allowTse: false));
+        var tse = FaceMaterialFileService.Read(untagged, allowTse: true);
+        TestAssert.True(tse.IsTse && tse.Parameters.Scalars.Single().Value == 0.25f,
+            "Player TSE material import was not accepted.");
+        var irrelevantAttachment = FaceMaterialFileService.Read(
+            "(hair_mesh: 42, accessory_mesh: [7], scalar_parameters: {\"Shared\": 0.25})", allowTse: true);
+        TestAssert.Equal(0.25f, irrelevantAttachment.Parameters.Scalars.Single().Value);
+
+        const string tagged = "// Exported from: MFE 1\n// Game: LE2\n// Archetype: HMF\n// Player Morph: NO\n" + untagged;
+        var head = FaceMaterialFileService.Read(tagged, allowTse: false);
+        TestAssert.True(!head.IsTse && head.Parameters.Scalars.Single().Value == 0.25f,
+            "A tagged MFE head was not accepted as material-only input.");
+
+        var lexTagged = tagged.Replace("Exported from: MFE", "Exported from: LEX", StringComparison.Ordinal);
+        Reject(() => FaceMaterialFileService.Read(lexTagged, allowTse: false));
+        var ignoredMetadata = FaceMaterialFileService.Read(
+            "(format: \"MorphFaceEditor.Materials\", version: 50, game: \"LE2\", " +
+            "mesh_name: \"face\", slots: [\"irrelevant\"], " +
+            "parameters: {\"face\": (scalar_parameters: {\"Shared\": 0.5})})", allowTse: false);
+        TestAssert.Equal(0.5f, ignoredMetadata.Parameters.Scalars.Single().Value);
+
+        var mixed = FaceMaterialFileService.Read(MaterialRonCodec.WriteMfe(new MeshMaterialDocument(
+            "LE3", "mixed", [], new Dictionary<string, MorphFaceMaterialData>
+            {
+                ["human"] = new([new("Shared", 0.1f), new("HumanOnly", 0.2f)], [], []),
+                ["krogan"] = new([new("Shared", 0.9f), new("KroganOnly", 0.8f)], [], [])
+            })), allowTse: false);
+        TestAssert.True(mixed.Parameters.Scalars.Select(value => value.Name).Order().SequenceEqual(
+                new[] { "HumanOnly", "KroganOnly" }) && mixed.Warnings.Count == 1,
+            "Mixed MESH scopes blocked unique material values or guessed a conflicting value.");
     }
 
     private static string Key(string scope, string name) => MaterialParameterControlKey.Create(scope, name);

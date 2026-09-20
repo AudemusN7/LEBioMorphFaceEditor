@@ -636,6 +636,18 @@ public static class EditingTests
                 }
             }),
             "A material edit was not detected.");
+        var unresolved = baseline with
+        {
+            MaterialOverrides = material with
+            {
+                Textures = [new TextureMaterialOverride("HED_Diff",
+                    new AssetIdentity("", "BIOG_Example.Diff.Test", 0, "Texture2D"))]
+            }
+        };
+        TestAssert.True(MorphFaceEditorStateComparer.Equals(unresolved, unresolved with { BakedLods = [new[] { Vector3.One }] }),
+            "An unresolved authored texture path broke dirty-state comparison.");
+        TestAssert.True(!MorphFaceEditorStateComparer.Equals(baseline, unresolved),
+            "An unresolved authored texture edit was not detected.");
     }
 
     private sealed class FakeSource(string name) : IUndoableEditSource

@@ -67,6 +67,49 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
     public void MergeMaterialData(MorphFaceMaterialData data, IReadOnlyDictionary<string, DecodedTextureAsset?> textures) =>
         _session.MergeMaterialData(data, textures);
 
+    /// <summary>
+    /// Resolves the texture references in a partial material import and merges
+    /// the values into the current edit as one logical change. A texture that
+    /// cannot be decoded is still retained as an authored reference by the
+    /// editing session; callers receive the diagnostic so the rest of the
+    /// material import can continue.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> MergeMaterialDataAsync(MorphFaceMaterialData data)
+    {
+        ArgumentNullException.ThrowIfNull(data);
+        var decoded = new Dictionary<string, DecodedTextureAsset?>(StringComparer.OrdinalIgnoreCase);
+        var warnings = new List<string>();
+        foreach (var desired in data.Textures)
+        {
+            if (desired.TextureReference is not { } reference)
+            {
+                continue;
+            }
+
+            var controlName = _session.ResolveControlName(desired.Name, MaterialParameterKind.Texture);
+            var editor = Textures.FirstOrDefault(value => value.Name.Equals(
+                controlName, StringComparison.OrdinalIgnoreCase));
+            if (editor is null)
+            {
+                continue;
+            }
+
+            try
+            {
+                decoded[controlName] = string.IsNullOrWhiteSpace(reference.PackagePath)
+                    ? await editor.ResolveExactInstancedPathAsync(reference.InstancedPath)
+                    : await editor.ResolveReferenceAsync(reference);
+            }
+            catch (Exception exception)
+            {
+                warnings.Add($"Texture '{desired.Name}' could not be resolved: {exception.Message}");
+            }
+        }
+
+        _session.MergeMaterialData(data, decoded);
+        return warnings;
+    }
+
     private void RebuildControls()
     {
         foreach (var texture in _textures) texture.Dispose();

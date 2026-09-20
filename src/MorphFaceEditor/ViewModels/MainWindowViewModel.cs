@@ -178,8 +178,13 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             () => CanUseMeshMaterialFiles() && Editor?.CanExportTseMaterials == true);
         _importTseMaterialsCommand = new AsyncRelayCommand(() => ImportMeshMaterialsAsync(true),
             () => CanUseMeshMaterialFiles() && Editor?.CanImportTseMaterials == true);
-        _exportMaterialsCommand = new AsyncRelayCommand(async () => { await ExportMeshMaterialsAsync(false); }, CanUseMeshMaterialFiles);
-        _importMaterialsCommand = new AsyncRelayCommand(() => ImportMeshMaterialsAsync(false), CanUseMeshMaterialFiles);
+        _exportMaterialsCommand = new AsyncRelayCommand(async () =>
+        {
+            if (CanUseMeshMaterialFiles()) await ExportMeshMaterialsAsync(false);
+            else await ExportFaceMaterialsAsync();
+        }, CanUseMaterialFiles);
+        _importMaterialsCommand = new AsyncRelayCommand(() =>
+            CanUseMeshMaterialFiles() ? ImportMeshMaterialsAsync(false) : ImportFaceMaterialsAsync(), CanUseMaterialFiles);
         _assignMorphToActorCommand = new AsyncRelayCommand(AssignMorphToActorAsync, CanMutatePackageContext);
         _assignMaterialsToActorCommand = new AsyncRelayCommand(AssignMaterialsToActorAsync, CanMutatePackageContext);
         FilteredFaces = CollectionViewSource.GetDefaultView(Faces);
@@ -285,6 +290,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 _loadSelectedFaceCommand.RaiseCanExecuteChanged();
                 _saveMorphToPccCommand.RaiseCanExecuteChanged();
                 RaiseFaceContextCanExecuteChanged();
+                OnPropertyChanged(nameof(IsMaterialFileWorkspace));
             }
         }
     }
@@ -388,7 +394,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public string? LoadedFacePath
     {
         get => _loadedFacePath;
-        private set => SetProperty(ref _loadedFacePath, value);
+        private set
+        {
+            if (SetProperty(ref _loadedFacePath, value))
+                OnPropertyChanged(nameof(IsMaterialFileWorkspace));
+        }
     }
 
     public bool IsBusy

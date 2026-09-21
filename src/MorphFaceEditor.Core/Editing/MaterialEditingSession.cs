@@ -103,7 +103,10 @@ public sealed class MaterialEditingSession : IUndoableEditSource
                 .OrderBy(value => value.Key, StringComparer.OrdinalIgnoreCase)
                 .Select(value => new VectorMaterialOverride(value.Key, value.Value)).ToArray(),
             TextureParameters.Select(value => value.Name).Concat(_originalOverrides.Textures.Select(value => value.Name))
-                .Concat(_textureReferences.Keys).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase)
+                .Concat(_textureReferences.Keys).Distinct(StringComparer.OrdinalIgnoreCase)
+                .Where(name => !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(name) &&
+                               !IsPreviewOnlyAttachmentTexture(name))
+                .Order(StringComparer.OrdinalIgnoreCase)
                 .Select(name => new TextureMaterialOverride(name, GetTextureReference(name))).ToArray());
     }
 
@@ -202,7 +205,9 @@ public sealed class MaterialEditingSession : IUndoableEditSource
                 .Select(value => new ScalarMaterialOverride(value.Key, value.Value)).ToArray(),
             vectors.OrderBy(value => value.Key, StringComparer.OrdinalIgnoreCase)
                 .Select(value => new VectorMaterialOverride(value.Key, value.Value)).ToArray(),
-            textures.OrderBy(value => value.Key, StringComparer.OrdinalIgnoreCase)
+            textures.Where(value => !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(value.Key) &&
+                                    !IsPreviewOnlyAttachmentTexture(value.Key))
+                .OrderBy(value => value.Key, StringComparer.OrdinalIgnoreCase)
                 .Select(value => new TextureMaterialOverride(value.Key, value.Value)).ToArray());
     }
 
@@ -805,6 +810,7 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         var values = new Dictionary<string, AssetIdentity?>(StringComparer.OrdinalIgnoreCase);
         foreach (var material in materials.Materials.Values)
         {
+            if (material.IsPreviewOnlyAttachment) continue;
             foreach (var value in material.Textures.Values)
                 values.TryAdd(ControlName(material, value.ParameterName), value.Texture.Source);
             foreach (var value in material.DefaultTextures.Values)
@@ -814,10 +820,19 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         foreach (var value in authored) values.TryAdd(value.Name, value.TextureReference);
         return values
             .Where(value => materials.Materials.Values.Any(material =>
+                !material.IsPreviewOnlyAttachment &&
                 AppliesTo(material, value.Key, MaterialParameterKind.Texture)))
             .Select(value => new TextureMaterialOverride(value.Key, value.Value))
             .ToArray();
     }
+
+    private bool IsPreviewOnlyAttachmentTexture(string controlName) =>
+        _originalMaterials.Materials.Values.Any(material =>
+            material.IsPreviewOnlyAttachment &&
+            AppliesTo(material, controlName, MaterialParameterKind.Texture)) &&
+        !_baseMaterials.Materials.Values.Any(material =>
+            !material.IsPreviewOnlyAttachment &&
+            AppliesTo(material, controlName, MaterialParameterKind.Texture));
 
     private static bool HasScopedMaterials(ResolvedHeadMaterialSet materials) =>
         materials.Materials.Values.Any(material => !string.IsNullOrWhiteSpace(material.ParameterScopeKey));

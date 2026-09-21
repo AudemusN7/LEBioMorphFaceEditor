@@ -250,7 +250,10 @@ internal sealed class MorphFaceMaterialReader(
             false,
             new Dictionary<string, float>(),
             new Dictionary<string, Vector4>(),
-            decodedTextures);
+            decodedTextures)
+        {
+            IsPreviewOnlyAttachment = true
+        };
         _materialCache[materialKey] = material;
         return material;
     }

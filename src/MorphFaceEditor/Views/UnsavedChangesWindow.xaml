@@ -21,7 +21,7 @@
         </StackPanel>
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Content="Cancel" MinWidth="82" IsCancel="True" Click="OnCancel" />
-            <Button Content="Don't Save" MinWidth="96" Margin="8,0,0,0" Click="OnDiscard" />
+            <Button x:Name="DiscardButton" Content="Don't Save" MinWidth="96" Margin="8,0,0,0" Click="OnDiscard" />
             <Button x:Name="SaveButton" Content="Save" MinWidth="82" Margin="8,0,0,0" IsDefault="True" Click="OnSave" />
         </StackPanel>
     </Grid>

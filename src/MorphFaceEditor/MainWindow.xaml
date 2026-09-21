@@ -321,7 +321,16 @@
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
-                    <Button Grid.Row="3" Content="Load selected face" Command="{Binding LoadSelectedFaceCommand}" Margin="0,10,0,0" />
+                    <Grid Grid.Row="3" Margin="0,10,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Button Content="Load selected face" Command="{Binding LoadSelectedFaceCommand}" />
+                        <Button x:Name="CommitFaceButton" Grid.Column="1" Content="Commit" Command="{Binding CommitCommand}" Margin="7,0,0,0"
+                                Visibility="{Binding CanCommitFace, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                ToolTip="Commit the loaded face to the temporary package workspace without saving the source PCC." />
+                    </Grid>
                     <Button Grid.Row="4" Content="Fix Morph" Command="{Binding FixMorphCommand}" Margin="0,7,0,0"
                             Visibility="{Binding CanFixMorph, Converter={StaticResource BooleanToVisibilityConverter}}"
                             ToolTip="Rebuild this face from the profile's canonical base head, restoring the baked geometry/oracle relationship without changing its current slider values." />
@@ -734,9 +743,19 @@
                                                             </Style>
                                                         </Border.Style>
                                                         <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                                <ColumnDefinition Width="18" />
+                                                            </Grid.ColumnDefinitions>
                                                             <TextBlock Text="{Binding BoneName}" Foreground="{StaticResource PrimaryText}" FontSize="11" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                                            <Button Content="Reset" Command="{Binding ResetCommand}"
+                                                                    Grid.Column="1" Margin="5,0,5,0"
+                                                                    HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                                    Visibility="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                                                    Padding="7,2" FontSize="9" ToolTip="Restore this bone to its loaded translation" />
                                                             <Path Data="M 0 0 L 4 4 L 8 0" Stroke="{StaticResource SecondaryText}" StrokeThickness="1.2"
-                                                                  HorizontalAlignment="Right" VerticalAlignment="Center">
+                                                                  Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center">
                                                                 <Path.Style>
                                                                     <Style TargetType="Path">
                                                                         <Style.Triggers>

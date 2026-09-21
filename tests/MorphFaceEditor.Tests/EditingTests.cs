@@ -20,6 +20,7 @@ public static class EditingTests
         new("semantic transfer rebakes destination geometry and preserves bone residuals", SemanticTransferRebakesDestinationProfile),
         new("fixed-bake mode preserves imported geometry and authored morphs while editing bones", FixedBakePreservesDraftAndEditsBones),
         new("fixed-bake bone translation uses semantic undo and redo", FixedBakeBoneTranslationUndoRedo),
+        new("per-bone reset restores loaded translation as one semantic edit", BoneTranslationResetRestoresLoadedValue),
         new("relative-bake mode preserves the authored player bake initially", RelativeBakePreservesInitialAuthoredBake),
         new("relative-bake applies one canonical slider delta", RelativeBakeAppliesSliderDelta),
         new("relative-bake recomputes from a stable baseline", RelativeBakeDoesNotAccumulate),
@@ -215,6 +216,38 @@ public static class EditingTests
         TestAssert.Near(Vector3.Zero, session.FinalSkeleton.Single().Translation, 0.000001f);
         session.Redo();
         TestAssert.Near(new Vector3(2, 3, 0), session.FinalSkeleton.Single().Translation, 0.000001f);
+    }
+
+    private static void BoneTranslationResetRestoresLoadedValue()
+    {
+        var mesh = TestFixtures.CreateRenderableTwoLodMesh();
+        var document = CreateFixedBakeDocument(mesh, mesh.Positions, featureOffset: 0.25f, bone: new Vector3(3, 4, 5));
+        var session = new MorphFaceEditingSession(
+            document,
+            mesh,
+            [],
+            geometryMode: MorphFaceGeometryMode.FixedBake);
+
+        for (var value = 0; value < 5; value++)
+        {
+            session.SetBoneAxis("root", 0, 10 + value);
+            session.SetBoneAxis("root", 1, 20 + value);
+        }
+
+        session.ResetBoneTranslation("root");
+        TestAssert.Near(new Vector3(3, 4, 5), session.FinalSkeleton.Single().Translation, 0.000001f);
+        session.Undo();
+        TestAssert.Near(new Vector3(14, 24, 5), session.FinalSkeleton.Single().Translation, 0.000001f);
+        session.Redo();
+        TestAssert.Near(new Vector3(3, 4, 5), session.FinalSkeleton.Single().Translation, 0.000001f);
+
+        var (relativeMesh, relativeDocument, target) = CreateRelativeBakeFixture();
+        var relative = CreateRelativeSession(relativeMesh, relativeDocument, target);
+        var initiallyLoaded = relative.FinalSkeleton.Single().Translation;
+        relative.SetFeature("Target", 1f);
+        relative.SetBoneAxis("root", 1, 9);
+        relative.ResetBoneTranslation("root");
+        TestAssert.Near(initiallyLoaded, relative.FinalSkeleton.Single().Translation, 0.000001f);
     }
 
     private static void BaseMeshOnlyDoesNotExposeBones()

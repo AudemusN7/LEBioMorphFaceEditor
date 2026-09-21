@@ -15,7 +15,9 @@ public partial class UnsavedChangesWindow : Window
         {
             Title = "Unsaved BioMorphFace changes";
             SummaryText.Text = "The loaded BioMorphFace has unsaved changes.";
-            SaveExplanationText.Text = "Save keeps these edits in the temporary package workspace.";
+            SaveExplanationText.Text = "Commit keeps these edits in the temporary package workspace without saving the source PCC.";
+            DiscardButton.Content = "Don't Commit";
+            SaveButton.Content = "Commit";
         }
         else if (scope == UnsavedChangesScope.DetachedMaterials)
         {

@@ -56,6 +56,7 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
     private readonly Dictionary<string, Vector3> _boneOverrides;
     private readonly IReadOnlyList<BoneTranslation> _defaultTemplateBones;
     private readonly IReadOnlyDictionary<string, Vector3> _defaultBoneOverrides;
+    private readonly IReadOnlyList<BoneTranslation> _defaultFinalSkeleton;
     private IReadOnlyList<BoneTranslation> _templateBones;
     private HashSet<string>? _pastedBoneNames;
     private readonly SemanticEditHistory _history = new();
@@ -149,6 +150,11 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
             ? []
             : DetectPositionCorrections(resolution);
         Evaluation = Evaluate(includeOracle: GeometryMode == MorphFaceGeometryMode.MorphEvaluated);
+        // Keep the complete evaluated skeleton as the reset baseline. This is
+        // important for bones introduced by a morph target: they have no
+        // authored template entry, but their initially loaded/evaluated value
+        // is still the value a per-bone reset must restore.
+        _defaultFinalSkeleton = Evaluation.FinalSkeleton.ToArray();
         ValidationErrors = ValidateEditableTargets(Evaluation.Resolution);
         _hasValidBoneRig = baseHead.RenderData is not null &&
                            TopologyDiagnostics.Analyze(baseHead, document).IsValid &&
@@ -569,6 +575,37 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
             {
                 EditCommitted?.Invoke(this, EventArgs.Empty);
             }
+        }
+        Refresh();
+    }
+
+    /// <summary>
+    /// Restores one bone to its initially loaded/evaluated translation without
+    /// disturbing other bones or morph values. The complete translation is
+    /// recorded as one semantic history entry.
+    /// </summary>
+    public void ResetBoneTranslation(string boneName)
+    {
+        EnsureBoneEditable();
+        ArgumentException.ThrowIfNullOrWhiteSpace(boneName);
+        EndActiveBoneTranslationEdit();
+
+        var before = GetBoneTranslation(boneName);
+        var original = _defaultFinalSkeleton.FirstOrDefault(candidate =>
+            string.Equals(candidate.BoneName, boneName, StringComparison.OrdinalIgnoreCase));
+        if (original is null || before == original.Translation)
+        {
+            return;
+        }
+
+        var overrideValue = _boneOverrides.GetValueOrDefault(boneName);
+        var delta = original.Translation - before;
+        _boneOverrides[boneName] = overrideValue + delta;
+        _pastedBoneNames?.Add(boneName);
+        if (!_replayingHistory &&
+            _history.Record(new SemanticBoneTranslationEdit(boneName, before, original.Translation)))
+        {
+            EditCommitted?.Invoke(this, EventArgs.Empty);
         }
         Refresh();
     }

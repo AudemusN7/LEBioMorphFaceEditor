@@ -13,7 +13,8 @@ var suites = new Dictionary<string, IReadOnlyList<TestCase>>(StringComparer.Ordi
     ["materials"] = MaterialTests.All,
     ["rendering"] = RenderingTests.All,
     ["ui"] = UiSmokeTests.All.Concat(TextureRegistrySettingsTests.All)
-        .Concat(MorphTargetCatalogTests.All).Concat(CustomMeshTests.All).Concat(MaterialInterchangeTests.All).ToArray(),
+        .Concat(MorphTargetCatalogTests.All).Concat(MorphFaceCatalogTests.All)
+        .Concat(CustomMeshTests.All).Concat(MaterialInterchangeTests.All).ToArray(),
     ["package"] = PackageContextTests.All.Concat(PackageIntegrityTests.All).Concat(ActorAssignmentInventoryTests.All)
         .Concat(ActorAssignmentTransactionTests.All).Concat(CustomMaterialEvidenceTests.All)
         .Concat(RonStressTests.All).ToArray(),

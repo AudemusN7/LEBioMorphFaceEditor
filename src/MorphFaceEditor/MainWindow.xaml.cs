@@ -7,6 +7,7 @@ using MorphFaceEditor.Models;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using System.IO;
 
@@ -143,12 +144,34 @@ public partial class MainWindow : Window
 
     private void OnBoneHeaderMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (sender is DependencyObject source &&
-            ItemsControl.ContainerFromElement(BoneList, source) is ListBoxItem item)
+        if (e.OriginalSource is DependencyObject origin && FindVisualAncestor<Button>(origin) is not null)
         {
-            item.IsSelected = true;
+            return;
+        }
+        if (sender is DependencyObject source &&
+            ItemsControl.ContainerFromElement(BoneList, source) is ListBoxItem { DataContext: BoneTransformEditorViewModel transform })
+        {
+            if (_viewModel.Editor is { } editor)
+            {
+                editor.SelectedBoneTransform = ReferenceEquals(editor.SelectedBoneTransform, transform)
+                    ? null
+                    : transform;
+            }
             e.Handled = true;
         }
+    }
+
+    private static T? FindVisualAncestor<T>(DependencyObject? source) where T : DependencyObject
+    {
+        while (source is not null)
+        {
+            if (source is T match)
+            {
+                return match;
+            }
+            source = VisualTreeHelper.GetParent(source);
+        }
+        return null;
     }
 
     private void OnFaceContextMenuOpened(object sender, RoutedEventArgs e) =>

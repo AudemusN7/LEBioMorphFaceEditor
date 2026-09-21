@@ -44,6 +44,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly RecentFileService _recentFileService;
     private readonly AsyncRelayCommand _openPackageCommand;
     private readonly AsyncRelayCommand _loadSelectedFaceCommand;
+    private readonly AsyncRelayCommand _commitCommand;
     private readonly AsyncRelayCommand _saveCommand;
     private readonly AsyncRelayCommand _saveMorphToPccCommand;
     private readonly AsyncRelayCommand _closeWorkspaceCommand;
@@ -153,6 +154,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _loadSelectedFaceCommand = new AsyncRelayCommand(
             LoadSelectedFaceCommandAsync,
             () => !IsBusy && SelectedFace is not null && WorkspacePackagePath is not null);
+        _commitCommand = new AsyncRelayCommand(
+            CommitFaceCommandAsync,
+            () => !IsBusy && Editor?.IsDirty == true && _packageWorkspace?.CanCommit == true);
         _saveCommand = new AsyncRelayCommand(
             SaveExistingCommandAsync,
             () => !IsBusy && IsDirty && _packageWorkspace?.CanCommit == true);
@@ -224,6 +228,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     ];
     public ICommand OpenPackageCommand => _openPackageCommand;
     public ICommand LoadSelectedFaceCommand => _loadSelectedFaceCommand;
+    public ICommand CommitCommand => _commitCommand;
     public ICommand SaveCommand => _saveCommand;
     public ICommand SaveMorphToPccCommand => _saveMorphToPccCommand;
     public ICommand CloseWorkspaceCommand => _closeWorkspaceCommand;
@@ -275,6 +280,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public bool HasWorkspace => PackagePath is not null;
     public bool HasRecentFiles => RecentFiles.Count > 0;
     public bool IsDirty => _hasWorkspaceChanges || Editor?.IsDirty == true;
+    public bool CanCommitFace => _packageWorkspace?.CanCommit == true && Editor is not null;
     public bool CanFixMorph => Editor?.CanFixMorph == true;
     public bool IsDetachedMeshWorkspace => _detachedMeshSource is not null;
     private string? WorkspacePackagePath => _packageWorkspace?.WorkingPath;
@@ -432,6 +438,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             {
                 _openPackageCommand.RaiseCanExecuteChanged();
                 _loadSelectedFaceCommand.RaiseCanExecuteChanged();
+                _commitCommand.RaiseCanExecuteChanged();
                 _saveCommand.RaiseCanExecuteChanged();
                 _saveMorphToPccCommand.RaiseCanExecuteChanged();
                 _fixMorphCommand.RaiseCanExecuteChanged();
@@ -728,7 +735,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         var opened = false;
         try
         {
-            var catalogTask = _catalogService.ReadAsync(workspacePath);
+            var catalogProjection = MorphFaceCatalogProjectionPolicy.ForPlayerWorkspace(
+                _standaloneGame,
+                _packageWorkspace?.SourcePath,
+                _isStandaloneNpcWorkspace);
+            var catalogTask = _catalogService.ReadAsync(workspacePath, catalogProjection);
             var referencesTask = _referenceService.ReadCatalogAsync(workspacePath);
             await Task.WhenAll(catalogTask, referencesTask);
             var catalog = await catalogTask;
@@ -1071,8 +1082,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         RaiseMaterialFileCanExecuteChanged();
         OnPropertyChanged(nameof(IsDirty));
+        OnPropertyChanged(nameof(CanCommitFace));
         OnPropertyChanged(nameof(PackageDisplayName));
         OnPropertyChanged(nameof(CanFixMorph));
+        _commitCommand.RaiseCanExecuteChanged();
         _saveCommand.RaiseCanExecuteChanged();
         _fixMorphCommand.RaiseCanExecuteChanged();
     }
@@ -1405,6 +1418,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private async Task SaveExistingCommandAsync() =>
         _ = await CommitWorkspaceAsync(showConfirmation: true);
+
+    private async Task CommitFaceCommandAsync() =>
+        _ = await FlushEditorToWorkspaceAsync();
 
     private async Task<bool> FlushEditorToWorkspaceAsync()
     {

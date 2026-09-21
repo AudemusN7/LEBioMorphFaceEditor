@@ -1,11 +1,13 @@
 using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Infrastructure;
+using System.Windows.Input;
 
 namespace MorphFaceEditor.ViewModels;
 
 public sealed class BoneTransformEditorViewModel : ObservableObject
 {
     private readonly MorphFaceEditingSession _session;
+    private readonly RelayCommand _resetCommand;
     private bool _isAvailable;
 
     public BoneTransformEditorViewModel(
@@ -27,16 +29,24 @@ public sealed class BoneTransformEditorViewModel : ObservableObject
         Y = y;
         Z = z;
         _isAvailable = x.IsAvailable || y.IsAvailable || z.IsAvailable;
+        _resetCommand = new RelayCommand(ResetToLoaded, () => IsAvailable);
     }
 
     public string BoneName { get; }
     public BoneAxisEditorViewModel X { get; }
     public BoneAxisEditorViewModel Y { get; }
     public BoneAxisEditorViewModel Z { get; }
+    public ICommand ResetCommand => _resetCommand;
     public bool IsAvailable
     {
         get => _isAvailable;
-        private set => SetProperty(ref _isAvailable, value);
+        private set
+        {
+            if (SetProperty(ref _isAvailable, value))
+            {
+                _resetCommand.RaiseCanExecuteChanged();
+            }
+        }
     }
 
     public void BeginPuckEdit()
@@ -51,6 +61,8 @@ public sealed class BoneTransformEditorViewModel : ObservableObject
     {
         _session.EndBoneTranslationEdit(BoneName);
     }
+
+    private void ResetToLoaded() => _session.ResetBoneTranslation(BoneName);
 
     public void RefreshAvailability() =>
         IsAvailable = X.IsAvailable || Y.IsAvailable || Z.IsAvailable;

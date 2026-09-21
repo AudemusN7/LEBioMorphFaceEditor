@@ -726,6 +726,8 @@ public static class UiSmokeTests
             $"The {workspaceLabel} route did not expose face material interchange.");
         TestAssert.True(!viewModel.SaveCommand.CanExecute(null),
             $"The non-committable {workspaceLabel} route inherited package Save.");
+        TestAssert.True(!viewModel.CanCommitFace && !viewModel.CommitCommand.CanExecute(null),
+            $"The single-head {workspaceLabel} route exposed ordinary-package Commit.");
         TestAssert.True(!viewModel.AssignMorphToActorCommand.CanExecute(null) &&
                         !viewModel.AssignMaterialsToActorCommand.CanExecute(null),
             $"The standalone {workspaceLabel} route inherited actor-assignment commands.");
@@ -2252,6 +2254,7 @@ public static class UiSmokeTests
                 mainWindow.Opacity = 0;
                 mainWindow.Show();
                 var faceList = mainWindow.FindName("FaceList") as ListBox;
+                var commit = mainWindow.FindName("CommitFaceButton") as Button;
                 var randomise = mainWindow.FindName("GlobalRandomiseButton") as Button;
                 var setToDefaults = mainWindow.FindName("SetToDefaultsButton") as Button;
                 var morphStrength = mainWindow.FindName("MorphRandomisationStrengthSlider") as Slider;
@@ -2271,6 +2274,8 @@ public static class UiSmokeTests
                     .SingleOrDefault(binding => binding.Key == System.Windows.Input.Key.Enter);
                 TestAssert.True(enterBinding?.Command is not null,
                     "The BioMorphFace export list does not load its selection when Enter is pressed.");
+                TestAssert.True(commit?.GetBindingExpression(Button.CommandProperty) is not null,
+                    "The face editor has no bound Commit button for temporary-workspace writes.");
                 TestAssert.True(inclusionStyle is not null && inclusionStyle.TargetType == typeof(CheckBox),
                     "The filled subcategory-inclusion checkbox style is missing.");
                 TestAssert.True(inclusionStyle!.Setters.OfType<Setter>().Any(value =>
@@ -2432,6 +2437,15 @@ public static class UiSmokeTests
                         .Contains("read-only", StringComparison.OrdinalIgnoreCase),
                     "The standalone warning does not explain that the installed template is protected.");
                 standaloneUnsaved.Close();
+                var faceUnsaved = new UnsavedChangesWindow(
+                    "BIOG_MORPH_FACE.SelectedFace",
+                    UnsavedChangesScope.Face);
+                TestAssert.Equal("Commit", ((Button)faceUnsaved.FindName("SaveButton")).Content);
+                TestAssert.Equal("Don't Commit", ((Button)faceUnsaved.FindName("DiscardButton")).Content);
+                TestAssert.True(((TextBlock)faceUnsaved.FindName("SaveExplanationText")).Text
+                        .Contains("without saving the source PCC", StringComparison.OrdinalIgnoreCase),
+                    "The face warning does not distinguish Commit from saving the package.");
+                faceUnsaved.Close();
                 var morphPackage = new SaveMorphToPccWindow(
                     "Face.pcc",
                     Path.GetFullPath("fixture.pcc"));

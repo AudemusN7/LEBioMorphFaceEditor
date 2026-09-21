@@ -5,6 +5,7 @@ using MorphFaceEditor.Services;
 using MorphFaceEditor.ViewModels;
 using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.LegendaryExplorer.TextureRegistry;
+using MorphFaceEditor.Views;
 
 namespace MorphFaceEditor;
 
@@ -52,33 +53,37 @@ public partial class App : Application
             new MorphFaceInterchangeService(),
             new WpfMorphFaceClipboardService(),
             MorphRandomisationCatalog.LoadEmbedded(),
+            recentFiles: RecentFileService.CreateDefault(),
             detachedMeshPreviewLoadService: new DetachedMeshPreviewLoadService(
                 sceneFactory,
                 materialCatalog: new CustomMaterialTemplateCatalogService(packageReader, textureRegistryStore)));
         var window = new MainWindow(_viewModel);
         MainWindow = window;
         window.Show();
-        _ = RecommendTextureDatabaseBuildAsync(textureRegistrySettings, dialogs);
+        var startupPreferences = StartupPreferencesService.CreateDefault();
+        _ = Dispatcher.BeginInvoke(() =>
+            ShowFirstRunWelcome(window, startupPreferences, dialogs));
     }
 
-    private static async Task RecommendTextureDatabaseBuildAsync(
-        TextureRegistrySettingsViewModel settings,
+    private static void ShowFirstRunWelcome(
+        Window owner,
+        StartupPreferencesService preferences,
         IEditorDialogService dialogs)
     {
-        try
+        if (preferences.Current.SuppressWelcome)
         {
-            await settings.RefreshAsync();
-            var needsBuild = settings.Rows.Any(row =>
-                Directory.Exists(LegendaryExplorerCoreRuntime.GetCookedPath(row.Game)) &&
-                row.Status.State != TextureRegistryState.Ready);
-            if (needsBuild)
-            {
-                dialogs.ShowTextureRegistrySettings();
-            }
+            return;
         }
-        catch (Exception exception)
+
+        var welcome = new FirstRunWelcomeWindow { Owner = owner };
+        _ = welcome.ShowDialog();
+        if (welcome.DontShowAgain)
         {
-            AppLog.Warning($"Texture database startup check failed: {exception.Message}");
+            preferences.SetSuppressWelcome(true);
+        }
+        if (welcome.OpenTextureDatabasesRequested)
+        {
+            dialogs.ShowTextureRegistrySettings();
         }
     }
 

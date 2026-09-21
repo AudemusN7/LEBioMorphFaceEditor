@@ -83,6 +83,22 @@ public sealed class HeadPreviewHostController : IDisposable
         RequestRender(allowInactive: true);
     }
 
+    public void ClearScene()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        _resizeTimer.Stop();
+        _scene = null;
+        _renderer?.Dispose();
+        _renderer = null;
+        _bitmap = null;
+        _pixelBuffer = null;
+        _pixelWidth = 0;
+        _pixelHeight = 0;
+        _renderQueued = false;
+        _queuedRenderMayRunInactive = false;
+        _image.Source = null;
+    }
+
     public void SetOptions(HeadPreviewOptions options, bool allowInactive = false)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);

@@ -5,6 +5,7 @@ using MorphFaceEditor.LegendaryExplorer;
 public interface IEditorDialogService
 {
     string? ChoosePackage(string? initialDirectory = null);
+    string? ChooseWorkspaceFile(string? initialDirectory = null) => ChoosePackage(initialDirectory);
     MorphPackageSaveRequest? ChooseMorphPackageDestination(string suggestedFileName, string sourcePackagePath);
     string? ChooseMeshPackageDestination(string suggestedFileName, string sourceMeshPath) => null;
     MorphConversionSaveRequest? ChooseMorphConversionDestination(

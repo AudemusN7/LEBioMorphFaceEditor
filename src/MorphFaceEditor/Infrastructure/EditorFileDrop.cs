@@ -11,6 +11,12 @@ internal enum EditorFileDropKind
 
 internal static class EditorFileDrop
 {
+    internal const string WorkspaceOpenFilter =
+        "Supported package and morph files|*.pcc;*.ron;*.psk;*.pskx;*.gltf;*.glb;*.md5;*.md5mesh;*.me2headmorph;*.me3headmorph|" +
+        "Mass Effect packages (*.pcc)|*.pcc|" +
+        "Supported morph files|*.ron;*.psk;*.pskx;*.gltf;*.glb;*.md5;*.md5mesh;*.me2headmorph;*.me3headmorph|" +
+        "All files (*.*)|*.*";
+
     internal const string MorphImportFilter =
         "Supported morph files|*.ron;*.psk;*.pskx;*.gltf;*.glb;*.md5;*.md5mesh;*.me2headmorph;*.me3headmorph|" +
         "RON head morph (*.ron)|*.ron|" +

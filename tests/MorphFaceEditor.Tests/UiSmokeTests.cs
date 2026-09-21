@@ -33,6 +33,8 @@ public static class UiSmokeTests
         new("Fix Morph undo restores baked preview and UI state", FixMorphUndoRestoresBakedPreview),
         new("texture thumbnails discard alpha", TextureThumbnailsDiscardAlpha),
         new("editor file drops recognise every supported format", EditorFileDropsRecogniseSupportedFormats),
+        new("recent files persist, deduplicate, and cap at ten", RecentFilesPersistDeduplicateAndCap),
+        new("startup welcome preference persists", StartupWelcomePreferencePersists),
         new("standalone morph import is available before opening a PCC", StandaloneImportIsAvailableWithoutPackage),
         new("unrecognised mesh import publishes a detached preview workspace", UnrecognisedMeshPublishesDetachedWorkspace),
         new("glTF and GLB drops publish detached mesh workspaces", GltfAndGlbDropsPublishDetachedWorkspaces),
@@ -92,6 +94,8 @@ public static class UiSmokeTests
     private static void EditorFileDropsRecogniseSupportedFormats()
     {
         TestAssert.Equal(EditorFileDropKind.Package, EditorFileDrop.Classify("BioD_Test.PCC"));
+        TestAssert.True(EditorFileDrop.WorkspaceOpenFilter.Contains("*.pcc", StringComparison.OrdinalIgnoreCase),
+            "The unified Open Package picker omitted PCC files.");
         foreach (var extension in new[]
                  {
                      ".ron", ".psk", ".pskx", ".gltf", ".glb", ".md5", ".md5mesh",
@@ -99,9 +103,63 @@ public static class UiSmokeTests
                  })
         {
             TestAssert.Equal(EditorFileDropKind.MorphImport, EditorFileDrop.Classify($"face{extension}"));
+            TestAssert.True(EditorFileDrop.WorkspaceOpenFilter.Contains($"*{extension}", StringComparison.OrdinalIgnoreCase),
+                $"The unified Open Package picker omitted {extension} files.");
         }
         TestAssert.Equal(EditorFileDropKind.Unsupported, EditorFileDrop.Classify("notes.txt"));
         TestAssert.Equal(EditorFileDropKind.Unsupported, EditorFileDrop.Classify("folder.with.pcc\\face.txt"));
+    }
+
+    private static void RecentFilesPersistDeduplicateAndCap()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), $"MFE-Recent-{Guid.NewGuid():N}");
+        var storagePath = Path.Combine(folder, "recent-files.json");
+        try
+        {
+            var service = new RecentFileService(storagePath);
+            var paths = Enumerable.Range(0, 12)
+                .Select(index => Path.Combine(folder, $"Face-{index}.pcc"))
+                .ToArray();
+            foreach (var path in paths)
+            {
+                service.Add(path);
+            }
+            service.Add(paths[5]);
+
+            TestAssert.Equal(RecentFileService.MaximumFiles, service.Paths.Count);
+            TestAssert.Equal(Path.GetFullPath(paths[5]), service.Paths[0]);
+            TestAssert.Equal(1, service.Paths.Count(path =>
+                string.Equals(path, paths[5], StringComparison.OrdinalIgnoreCase)));
+
+            var reloaded = new RecentFileService(storagePath);
+            TestAssert.True(service.Paths.SequenceEqual(reloaded.Paths, StringComparer.OrdinalIgnoreCase),
+                "The recent-file order did not survive reloading the persisted list.");
+        }
+        finally
+        {
+            if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    private static void StartupWelcomePreferencePersists()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), $"MFE-Startup-{Guid.NewGuid():N}");
+        var storagePath = Path.Combine(folder, "startup-preferences.json");
+        try
+        {
+            var service = new StartupPreferencesService(storagePath);
+            TestAssert.True(!service.Current.SuppressWelcome,
+                "A new preferences store suppressed the startup welcome by default.");
+            service.SetSuppressWelcome(true);
+
+            var reloaded = new StartupPreferencesService(storagePath);
+            TestAssert.True(reloaded.Current.SuppressWelcome,
+                "The Don't Show Again preference did not survive reloading.");
+        }
+        finally
+        {
+            if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true);
+        }
     }
 
     private static void StandaloneImportIsAvailableWithoutPackage()
@@ -154,6 +212,8 @@ public static class UiSmokeTests
             RunWithDispatcher(() => viewModel.OpenDroppedFileAsync(sourcePath));
 
             TestAssert.True(viewModel.ErrorMessage is null, viewModel.ErrorMessage ?? "Detached mesh import failed.");
+            TestAssert.True(viewModel.RecentFiles.FirstOrDefault()?.FilePath == Path.GetFullPath(sourcePath),
+                "Opening a detached workspace did not add it to Recent.");
             TestAssert.True(viewModel.PackageName.Contains("Detached Mesh Workspace", StringComparison.Ordinal),
                 "Unrecognised mesh was not published as a detached workspace.");
             TestAssert.True(viewModel.Editor is { CanEditMorphFeatures: false, CanEditBones: false, HasMorphControls: false },
@@ -192,6 +252,24 @@ public static class UiSmokeTests
             TestAssert.Equal(namePrompts, dialogs.StandaloneNameChoiceCount);
             TestAssert.True(ReferenceEquals(editor, viewModel.Editor) && viewModel.IsDetachedMeshWorkspace,
                 "Cancelling a context material import changed the current workspace.");
+
+            var previewWasCleared = false;
+            viewModel.PreviewCleared += (_, _) => previewWasCleared = true;
+            TestAssert.True(viewModel.CloseWorkspaceCommand.CanExecute(null),
+                "An active detached workspace did not expose Close.");
+            RunWithDispatcher(viewModel.CloseWorkspaceAsync);
+            TestAssert.True(viewModel.HasWorkspace && viewModel.Editor is not null && !previewWasCleared,
+                "Cancelling Close discarded the active workspace.");
+            dialogs.ConfirmUnsavedChangesResult = UnsavedChangesChoice.Discard;
+            RunWithDispatcher(viewModel.CloseWorkspaceAsync);
+            TestAssert.True(previewWasCleared && !viewModel.HasPreview,
+                "Closing the workspace did not clear its preview.");
+            TestAssert.True(viewModel.PackagePath is null && viewModel.Editor is null && viewModel.Faces.Count == 0,
+                "Closing the workspace did not restore the empty editor state.");
+            TestAssert.True(viewModel.PackageName == "No package open" &&
+                            viewModel.Status == "Open a package to begin." &&
+                            !viewModel.CloseWorkspaceCommand.CanExecute(null),
+                "Closing the workspace did not restore the startup shell state.");
         }
         finally
         {
@@ -2296,6 +2374,22 @@ public static class UiSmokeTests
                 TestAssert.Near(new Vector3(0.2f, 0.4f, 0.6f), new Vector3(parsed.X, parsed.Y, parsed.Z), 0.0001f);
                 TestAssert.Near(0.8f, parsed.W, 0.0001f);
                 picker.Close();
+                var welcome = new FirstRunWelcomeWindow();
+                var programIcon = welcome.FindName("ProgramIconImage") as Image;
+                var databaseConsequence = welcome.FindName("DatabaseConsequenceText") as TextBlock;
+                TestAssert.True(programIcon?.Source is not null,
+                    "The startup welcome does not use the packaged program icon.");
+                TestAssert.True(programIcon!.Source.ToString()?.Contains("ico_256.png", StringComparison.Ordinal) == true &&
+                                programIcon.Width == 48 &&
+                                programIcon.Parent is Grid,
+                    "The startup welcome does not use the unboxed high-resolution 48px program icon.");
+                TestAssert.Equal("https://github.com/AudemusN7/LEBioMorphFaceEditor",
+                    FirstRunWelcomeWindow.TutorialUri.AbsoluteUri.TrimEnd('/'));
+                TestAssert.True(databaseConsequence?.Text.Contains(
+                        "installed-game texture choices", StringComparison.Ordinal) == true &&
+                    databaseConsequence.Text.Contains("indexed installed assets", StringComparison.Ordinal) == true,
+                    "The startup welcome does not explain operation without a Texture Database.");
+                welcome.Close();
                 var signedPicker = new HdrColorPickerWindow(
                     "Signed colour smoke test",
                     new Vector4(-0.5f, 0.25f, 1.5f, -0.25f));

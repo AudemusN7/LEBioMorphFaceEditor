@@ -1,3 +1,5 @@
+using MorphFaceEditor.Core.Deformation;
+using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Services;
 using MorphFaceEditor.LegendaryExplorer;
 
@@ -10,7 +12,8 @@ public static class MorphTargetCatalogTests
         new("default profiles load morph targets from embedded bundles", DefaultProfilesLoadEmbeddedBundles),
         new("bundled profiles expose authored morph LOD coverage", BundledProfilesExposeAuthoredLodCoverage),
         new("player Custom and Custom CC heads resolve explicit human profiles", PlayerHeadsResolveHumanProfiles),
-        new("HMM inert droop metadata remains distinct from the authored droop target", HmmDroopMetadataRemainsDistinct)
+        new("HMM inert droop metadata remains distinct from the authored droop target", HmmDroopMetadataRemainsDistinct),
+        new("Krogan retained race metadata stays hidden and sortable", KroganRaceMetadataStaysHidden)
     ];
 
     private static void PlayerHeadsResolveHumanProfiles()
@@ -50,6 +53,35 @@ public static class MorphTargetCatalogTests
             TestAssert.True(authoredTarget.Lods.SelectMany(lod => lod.Vertices)
                     .Any(vertex => vertex.PositionDelta.LengthSquared() > 0),
                 $"{profile.Key} eye_Shape_droop unexpectedly lost its authored geometry.");
+        }
+    }
+
+    private static void KroganRaceMetadataStaysHidden()
+    {
+        var expected = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "race_asnOld", "race_asnYoung", "race_blackOld", "race_Blackyng",
+            "race_cauOld", "race_cauYng"
+        };
+        var profiles = MorphFaceProfileRegistry.CreateDefault().Profiles
+            .Where(profile => profile.Key is "le1-krogan" or "le2-krogan")
+            .ToArray();
+        foreach (var profile in profiles)
+        {
+            TestAssert.True(profile.MetadataOnlyFeatures.SetEquals(expected),
+                $"{profile.Key} no longer treats the retained race selectors as metadata-only.");
+            foreach (var name in expected)
+            {
+                var metadata = profile.UiProfile.Describe(
+                    new ResolvedMorphFeature(
+                        new MorphFeatureValue(name, 0), null,
+                        MorphFeatureResolutionKind.MetadataOnly,
+                        "stored character-creator metadata"),
+                    sessionCanEdit: true);
+                TestAssert.True(!metadata.IsVisible && !metadata.IsEditable,
+                    $"{profile.Key} exposed retained race selector '{name}' as an editor control.");
+                TestAssert.Equal(int.MaxValue, metadata.SortOrder);
+            }
         }
     }
 

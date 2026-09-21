@@ -23,8 +23,19 @@ public sealed partial class KroganFeatureMetadataCatalog : IHeadEditorUiProfile
     private const string Surface = "surface";
     private const string Complexion = "complexion";
 
+    // These retained character-creator race selectors occur in the LE1/LE2
+    // Krogan corpus faces, but have no Krogan target or intentional editor
+    // placement. Keep them as stored metadata while hiding them from controls.
     public static IReadOnlySet<string> MetadataOnlyFeatures { get; } =
-        new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "race_asnOld",
+            "race_asnYoung",
+            "race_blackOld",
+            "race_Blackyng",
+            "race_cauOld",
+            "race_cauYng"
+        };
 
     public static IReadOnlyDictionary<string, string> FeatureAliases { get; } =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -46,17 +57,18 @@ public sealed partial class KroganFeatureMetadataCatalog : IHeadEditorUiProfile
     public MorphFeatureMetadata Describe(ResolvedMorphFeature feature, bool sessionCanEdit)
     {
         var (category, subcategory) = FeaturePlacement(feature.Feature.Name);
+        var visible = !MetadataOnlyFeatures.Contains(feature.Feature.Name);
         return new MorphFeatureMetadata(
             feature.Feature.Name,
             FeatureLabel(feature.Feature.Name),
             category,
             subcategory,
-            true,
+            visible,
             FeatureSortOrder(feature.Feature.Name),
             0,
             1,
             0.01f,
-            sessionCanEdit && feature.IsResolved,
+            visible && sessionCanEdit && feature.IsResolved,
             $"{feature.Feature.Name} · {feature.ResolutionNote ?? "resolved Krogan morph target."}");
     }
 
@@ -140,6 +152,7 @@ public sealed partial class KroganFeatureMetadataCatalog : IHeadEditorUiProfile
 
     private static int FeatureSortOrder(string name)
     {
+        if (MetadataOnlyFeatures.Contains(name)) return int.MaxValue;
         return name.ToLowerInvariant() switch
         {
             "wrex" => 0,

@@ -135,6 +135,7 @@ public sealed record ResolvedHeadMaterial(
     public DecodedTextureCubeAsset? SecondaryFixedCubeTexture { get; init; }
     public string? ParameterScopeKey { get; init; }
     public string? ParameterScopeLabel { get; init; }
+    public bool IsPreviewOnlyAttachment { get; init; }
 
     public bool Supports(string name, MaterialParameterKind kind) => kind switch
     {

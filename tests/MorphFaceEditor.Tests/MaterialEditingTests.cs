@@ -27,6 +27,8 @@ public static class MaterialEditingTests
         new("package texture reference supports None and undo", PackageTextureReferenceSupportsNone),
         new("None restores the rendered material default after replacement", NoneRestoresRenderedDefault),
         new("failed attachment replacement can restore material state", AttachmentMaterialStateRestores),
+        new("attachment Diffuseuse stays out of head material output", AttachmentTextureIsNotHeadOutput),
+        new("saved Hat preview diffuse stays out of reloaded head controls and exports", SavedHatDiffuseIsPreviewOnly),
         new("duplicate face texture overrides remain loadable", DuplicateTextureOverridesRemainLoadable)
     ];
 
@@ -240,6 +242,64 @@ public static class MaterialEditingTests
         TestAssert.True(session.CreateOverrides().Scalars.Count == 0 &&
                         session.CreateOverrides().Vectors.Count == 0,
             "An empty material paste retained values that were omitted from its override payload.");
+    }
+
+    private static void AttachmentTextureIsNotHeadOutput()
+    {
+        var overrides = new MorphFaceMaterialOverrides(null, [], [],
+            [new TextureMaterialOverride("Diffuseuse", null),
+             new TextureMaterialOverride("HED_Diff", TestFixtures.CreateIdentity("HED_Diff", "Texture2D"))]);
+        var session = new MaterialEditingSession(overrides, ResolvedHeadMaterialSet.Empty);
+
+        TestAssert.True(session.CaptureInterchangeData().Textures.All(value =>
+                !value.Name.Equals("Diffuseuse", StringComparison.OrdinalIgnoreCase)),
+            "Attachment Diffuseuse leaked into a material RON payload.");
+        TestAssert.True(session.CreateOverrides().Textures.All(value =>
+                !value.Name.Equals("Diffuseuse", StringComparison.OrdinalIgnoreCase)),
+            "Attachment Diffuseuse leaked into PCC head overrides.");
+        TestAssert.True(session.CreateOverrides().Textures.Any(value => value.Name == "HED_Diff"),
+            "The head texture was removed with the attachment texture.");
+    }
+
+    private static void SavedHatDiffuseIsPreviewOnly()
+    {
+        var face = CreateSession().Materials.Materials.Values.Single();
+        var hatIdentity = TestFixtures.CreateIdentity("HMM_HAT_Test_MAT", "MaterialInstanceConstant");
+        var hatTextureIdentity = TestFixtures.CreateIdentity("HatDiffuse", "Texture2D");
+        var hatTexture = new DecodedTextureAsset(hatTextureIdentity, 1, 1,
+            [255, 255, 255, 255], "PF_DXT1", TextureRole.Diffuse,
+            TextureColorSpace.Srgb, TextureAlphaPolicy.Ignore, false, "hat-preview");
+        var hat = new ResolvedHeadMaterial(
+            MaterialIdentityKey.Create(hatIdentity), hatIdentity, "HMM_HAT_Test_MAT",
+            HeadMaterialFamily.Accessory, HeadMaterialBlendMode.Opaque, false,
+            new Dictionary<string, float>(), new Dictionary<string, Vector4>(),
+            new Dictionary<string, MaterialTextureBinding>
+            {
+                ["Diffuse"] = new("Diffuse", hatTexture)
+            })
+        {
+            IsPreviewOnlyAttachment = true
+        };
+        var materials = new ResolvedHeadMaterialSet(new Dictionary<string, ResolvedHeadMaterial>
+        {
+            [face.Key] = face,
+            [hat.Key] = hat
+        });
+        var overrides = new MorphFaceMaterialOverrides(null, [], [],
+            [new TextureMaterialOverride("Diffuse", hatTextureIdentity)]);
+
+        // Constructing a new session reproduces closing and reopening a saved Hat face.
+        var reloaded = new MaterialEditingSession(overrides, materials, [face.Key]);
+        TestAssert.True(reloaded.TextureParameters.All(value => value.Name != "Diffuse"),
+            "The synthetic Hat diffuse returned as an editable head texture after reload.");
+        TestAssert.True(reloaded.CaptureInterchangeData().Textures.All(value => value.Name != "Diffuse"),
+            "The synthetic Hat diffuse leaked into material export after reload.");
+        TestAssert.True(reloaded.CreateOverrides().Textures.All(value => value.Name != "Diffuse"),
+            "The synthetic Hat diffuse leaked into PCC head overrides after reload.");
+        TestAssert.True(reloaded.Materials.Materials[hat.Key].Textures.ContainsKey("Diffuse"),
+            "Removing the head control also removed the Hat preview texture.");
+        TestAssert.True(reloaded.TextureParameters.Any(value => value.Name == "HED_Diff"),
+            "The Hat filter removed the actual head diffuse control.");
     }
 
     private static void DuplicateTextureOverridesRemainLoadable()

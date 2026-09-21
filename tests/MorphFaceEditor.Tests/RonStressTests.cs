@@ -26,6 +26,7 @@ internal static class RonStressTests
     internal static IReadOnlyList<TestCase> All { get; } =
     [
         new("RON provenance metadata round-trips and rejects partial headers", ProvenanceMetadata),
+        new("RON export omits attachment-only Diffuseuse", RonOmitsAttachmentTexture),
         new("RON stress corpus parses all 34 files and verifies variant structure", ParseCorpus),
         new("RON texture catalogue canonicalises occurrence package paths", CanonicalTextureCataloguePaths),
         new("RON stress primary roots classify for their intended games", ClassifyPrimaryRoots),
@@ -92,6 +93,29 @@ internal static class RonStressTests
             {
                 File.Delete(temporaryPath);
             }
+        }
+    }
+
+    private static void RonOmitsAttachmentTexture()
+    {
+        var temporaryPath = Path.Combine(Path.GetTempPath(), $"MFE-RonAttachment-{Guid.NewGuid():N}.ron");
+        try
+        {
+            var source = new TseHeadMorph("None", [], new MorphFaceMorphData([], [], [[Vector3.Zero]]),
+                new MorphFaceMaterialData([], [],
+                    [new TextureMaterialOverride("Diffuseuse", null),
+                     new TextureMaterialOverride("HED_Diff", null)]));
+            TseHeadMorphRon.Write(temporaryPath, source);
+            var roundTrip = TseHeadMorphRon.Read(temporaryPath);
+            TestAssert.True(roundTrip.MaterialData.Textures.All(value =>
+                    !value.Name.Equals("Diffuseuse", StringComparison.OrdinalIgnoreCase)),
+                "Attachment Diffuseuse leaked into a full head RON export.");
+            TestAssert.True(roundTrip.MaterialData.Textures.Any(value => value.Name == "HED_Diff"),
+                "The head texture was removed with the attachment texture.");
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
         }
     }
 

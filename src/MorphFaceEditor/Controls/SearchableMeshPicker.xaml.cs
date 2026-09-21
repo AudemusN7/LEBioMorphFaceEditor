@@ -5,11 +5,11 @@ using MorphFaceEditor.ViewModels;
 
 namespace MorphFaceEditor.Controls;
 
-public partial class SearchableTexturePicker : UserControl
+public partial class SearchableMeshPicker : UserControl
 {
     private Window? _ownerWindow;
 
-    public SearchableTexturePicker() => InitializeComponent();
+    public SearchableMeshPicker() => InitializeComponent();
 
     private void OnPopupOpened(object? sender, EventArgs e)
     {
@@ -32,7 +32,7 @@ public partial class SearchableTexturePicker : UserControl
             _ownerWindow = null;
         }
         PickerButton.IsChecked = false;
-        if (DataContext is MaterialTextureEditorViewModel { SearchText.Length: > 0 } editor)
+        if (DataContext is HairMeshEditorViewModel editor && editor.SearchText.Length > 0)
         {
             editor.SearchText = string.Empty;
         }
@@ -79,8 +79,10 @@ public partial class SearchableTexturePicker : UserControl
 
     private void OnPickerPreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
-        if (!PickerPopup.IsOpen &&
-            PickerButton.IsKeyboardFocusWithin &&
+        // Keep the closed picker consistent with focused sliders: merely hovering it
+        // must not consume the wheel or change the selected attachment. Once the
+        // picker has explicit keyboard focus, wheel selection is useful and safe.
+        if (!PickerPopup.IsOpen && PickerButton.IsKeyboardFocusWithin &&
             MoveSelection(e.Delta > 0 ? -1 : 1))
         {
             e.Handled = true;
@@ -89,16 +91,16 @@ public partial class SearchableTexturePicker : UserControl
 
     private bool MoveSelection(int offset)
     {
-        if (DataContext is not MaterialTextureEditorViewModel editor || editor.Candidates.Count == 0)
+        if (DataContext is not HairMeshEditorViewModel editor || editor.Candidates.Count == 0)
         {
             return false;
         }
         var index = -1;
-        if (editor.SelectedTexture is not null)
+        if (editor.Selected is not null)
         {
             for (var candidateIndex = 0; candidateIndex < editor.Candidates.Count; candidateIndex++)
             {
-                if (ReferenceEquals(editor.Candidates[candidateIndex], editor.SelectedTexture))
+                if (ReferenceEquals(editor.Candidates[candidateIndex], editor.Selected))
                 {
                     index = candidateIndex;
                     break;
@@ -110,7 +112,7 @@ public partial class SearchableTexturePicker : UserControl
         {
             return false;
         }
-        editor.SelectedTexture = editor.Candidates[next];
+        editor.Selected = editor.Candidates[next];
         return true;
     }
 
@@ -119,14 +121,6 @@ public partial class SearchableTexturePicker : UserControl
         if (PickerPopup.IsOpen && e.AddedItems.Count > 0)
         {
             PickerPopup.IsOpen = false;
-        }
-    }
-
-    private void OnCandidateMouseEnter(object sender, MouseEventArgs e)
-    {
-        if (sender is FrameworkElement { DataContext: MaterialTextureOption item })
-        {
-            _ = item.EnsureThumbnailAsync();
         }
     }
 }

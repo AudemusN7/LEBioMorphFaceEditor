@@ -46,6 +46,7 @@ public static class PackageContextTests
         new("standalone player RON sex detection uses per-game LOD0 topology", StandalonePlayerRonSexDetection),
         new("standalone player RON import creates a detached non-committable workspace", StandalonePlayerRonImport),
         new("standalone NPC RON import uses a detached native donor workspace", StandaloneNpcRonImport),
+        new("cancelled standalone NPC construction preserves the prior workspace and cleans PCC candidates", CancelledStandaloneNpcConstructionCleansCandidates),
         new("standalone LE1 and LE2 Asari RONs import directly in both directions", StandaloneNpcRonLe1ToLe2),
         new("standalone NPC RON rejects cross-game LE3 routing before publication", StandaloneNpcRonRejectsLe3CrossGame),
         new("standalone player PSK import proves topology and preserves its fixed bake", StandalonePlayerPskImport),
@@ -1672,6 +1673,80 @@ public static class PackageContextTests
                 {
                     File.Delete(ronPath);
                 }
+            }
+        });
+    }
+
+    private static void CancelledStandaloneNpcConstructionCleansCandidates()
+    {
+        WithPackageCopy("LE2 GlobalMorphs.pcc", donorPath =>
+        {
+            var context = new MorphFacePackageContextService();
+            var donor = ReadFaces(donorPath).First(face =>
+                face.ProfileKey.Equals("le2-human-male", StringComparison.OrdinalIgnoreCase));
+            var ronPath = Path.Combine(Path.GetTempPath(), $"MFE-StandaloneNpc-Cancel-{Guid.NewGuid():N}.ron");
+            using var priorWorkspace = new MorphFacePackageWorkspace(donorPath, canCommit: false);
+            var priorBytes = File.ReadAllBytes(priorWorkspace.WorkingPath);
+            var donorBytes = File.ReadAllBytes(donorPath);
+            var workspaceDirectory = Path.GetDirectoryName(priorWorkspace.WorkingPath)!;
+            var filesBefore = Directory.EnumerateFiles(workspaceDirectory)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            using var cancellation = new CancellationTokenSource();
+            var interruptionReached = false;
+            try
+            {
+                context.ExportRon(donorPath, donor.InstancedPath, ronPath);
+                PccPackageWorkflow.BeforeAtomicReplaceForTesting = (temporaryPath, destination) =>
+                {
+                    TestAssert.True(temporaryPath.StartsWith(workspaceDirectory, StringComparison.OrdinalIgnoreCase),
+                        "NPC cancellation did not interrupt an AppData candidate PCC.");
+                    TestAssert.True(destination.StartsWith(workspaceDirectory, StringComparison.OrdinalIgnoreCase),
+                        "NPC cancellation reached an installed PCC path.");
+                    TestAssert.True(!string.Equals(destination, priorWorkspace.WorkingPath,
+                        StringComparison.OrdinalIgnoreCase),
+                        "NPC cancellation targeted the prior workspace instead of the off-screen candidate.");
+                    interruptionReached = true;
+                    cancellation.Cancel();
+                    throw new OperationCanceledException(cancellation.Token);
+                };
+
+                var cancelled = false;
+                try
+                {
+                    _ = new StandaloneNpcMorphImportService().ImportNpcRon(
+                        new StandaloneNpcMorphImportRequest(
+                            MorphFaceGame.LE2,
+                            MorphFaceGame.LE2,
+                            "HMM",
+                            ronPath,
+                            donorPath,
+                            donor.InstancedPath,
+                            "MFE_Cancelled_Npc",
+                            IsVerifiedNativeNpcDonor: true,
+                            CancellationToken: cancellation.Token));
+                }
+                catch (OperationCanceledException)
+                {
+                    cancelled = true;
+                }
+
+                TestAssert.True(cancelled && cancellation.IsCancellationRequested,
+                    "Cancelling during NPC candidate construction did not stop the import.");
+                TestAssert.True(interruptionReached,
+                    "NPC cancellation did not reach the pre-install candidate boundary.");
+                TestAssert.True(donorBytes.SequenceEqual(File.ReadAllBytes(donorPath)),
+                    "NPC cancellation changed the installed donor PCC.");
+                TestAssert.True(priorBytes.SequenceEqual(File.ReadAllBytes(priorWorkspace.WorkingPath)),
+                    "NPC cancellation changed the prior workspace.");
+                var filesAfter = Directory.EnumerateFiles(workspaceDirectory)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                TestAssert.True(filesAfter.SetEquals(filesBefore),
+                    "NPC cancellation left a candidate workspace or temporary PCC in AppData.");
+            }
+            finally
+            {
+                PccPackageWorkflow.BeforeAtomicReplaceForTesting = null;
+                if (File.Exists(ronPath)) File.Delete(ronPath);
             }
         });
     }

@@ -57,6 +57,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly AsyncRelayCommand _copyMaterialDataCommand;
     private readonly AsyncRelayCommand _pasteMaterialDataCommand;
     private readonly AsyncRelayCommand _importMorphCommand;
+    private readonly RelayCommand _cancelNpcImportCommand;
     private readonly AsyncRelayCommand _exportMorphPskCommand;
     private readonly AsyncRelayCommand _exportMorphGltfCommand;
     private readonly AsyncRelayCommand _exportMorphMd5Command;
@@ -72,6 +73,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly HashSet<string> _relativeBakeFacePaths = new(StringComparer.OrdinalIgnoreCase);
     private bool _hasWorkspaceChanges;
     private CancellationTokenSource? _loadCancellation;
+    private CancellationTokenSource? _npcImportCancellation;
     private LoadedMorphFace? _loadedFace;
     private string? _packagePath;
     private string _faceSearchText = string.Empty;
@@ -167,6 +169,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _copyMaterialDataCommand = new AsyncRelayCommand(CopyMaterialDataAsync, CanUseMaterialContextMenu);
         _pasteMaterialDataCommand = new AsyncRelayCommand(PasteMaterialDataAsync, CanPasteMaterialData);
         _importMorphCommand = new AsyncRelayCommand(ImportMorphAsync, () => !IsBusy);
+        _cancelNpcImportCommand = new RelayCommand(CancelNpcImport, () => CanCancelNpcImport);
         _exportMorphPskCommand = new AsyncRelayCommand(
             () => ExportMorphMeshAsync(MorphMeshFormat.Psk), CanUseFaceContextMenu);
         _exportMorphGltfCommand = new AsyncRelayCommand(
@@ -224,6 +227,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public ICommand CopyMaterialDataCommand => _copyMaterialDataCommand;
     public ICommand PasteMaterialDataCommand => _pasteMaterialDataCommand;
     public ICommand ImportMorphCommand => _importMorphCommand;
+    public ICommand CancelNpcImportCommand => _cancelNpcImportCommand;
     public ICommand ExportMorphPskCommand => _exportMorphPskCommand;
     public ICommand ExportMorphGltfCommand => _exportMorphGltfCommand;
     public ICommand ExportMorphMd5Command => _exportMorphMd5Command;
@@ -576,6 +580,15 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             await OpenSourcePackagePathAsync(selectedPath);
         }
+    }
+
+    public bool CanCancelNpcImport => _npcImportCancellation is { IsCancellationRequested: false };
+
+    private void CancelNpcImport()
+    {
+        _npcImportCancellation?.Cancel();
+        _cancelNpcImportCommand.RaiseCanExecuteChanged();
+        OnPropertyChanged(nameof(CanCancelNpcImport));
     }
 
     internal bool CanOpenDroppedFile(string path) =>
@@ -1644,6 +1657,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         CancelPendingLoad();
+        _npcImportCancellation?.Cancel();
+        _npcImportCancellation?.Dispose();
+        _npcImportCancellation = null;
         SetEditor(null, null);
         _previewLoadService.Dispose();
         _packageWorkspace?.Dispose();

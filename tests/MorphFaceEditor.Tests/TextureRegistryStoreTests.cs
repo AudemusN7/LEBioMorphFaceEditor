@@ -9,6 +9,7 @@ public static class TextureRegistryStoreTests
 {
     public static IReadOnlyList<TestCase> All { get; } =
     [
+        new("texture registry paths: default root aligns with editor AppData", DefaultRootAlignsWithEditorAppData),
         new("texture registry store: snapshot round trip preserves metadata", SnapshotRoundTripPreservesMetadata),
         new("texture registry store: wrong game payload is rejected", WrongGamePayloadIsRejected),
         new("texture registry store: unsupported schema is outdated", UnsupportedSchemaIsOutdated),
@@ -24,6 +25,17 @@ public static class TextureRegistryStoreTests
         new("texture registry builder: rebuild all is sequential", BuilderRebuildAllIsSequential),
         new("texture registry runtime: reads compact file without source packages", RuntimeReadsWithoutSourcePackages)
     ];
+
+    private static void DefaultRootAlignsWithEditorAppData()
+    {
+        var expected = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "LE BioMorphFace Editor",
+            "TextureRegistries",
+            "LE1.mftr");
+
+        TestAssert.Equal(expected, TextureRegistryPaths.CreateDefault().GetPath(MorphFaceGame.LE1));
+    }
 
     private static void RuntimeReadsWithoutSourcePackages()
     {

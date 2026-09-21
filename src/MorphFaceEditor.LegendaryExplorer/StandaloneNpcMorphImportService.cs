@@ -19,7 +19,8 @@ public sealed record StandaloneNpcMorphImportRequest(
     StandalonePlayerAssetCatalog? AssetCatalog = null,
     bool IsVerifiedNativeNpcDonor = false,
     IReadOnlyList<TextureCatalogCandidate>? SourceTextureCatalog = null,
-    IReadOnlyList<TextureCatalogCandidate>? TargetTextureCatalog = null);
+    IReadOnlyList<TextureCatalogCandidate>? TargetTextureCatalog = null,
+    CancellationToken CancellationToken = default);
 
 /// <summary>Owns a detached, non-committable NPC RON workspace.</summary>
 public sealed class StandaloneNpcMorphImportResult : IDisposable
@@ -71,10 +72,12 @@ public sealed class StandaloneNpcMorphImportService
         StandaloneNpcMorphImportRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
+        request.CancellationToken.ThrowIfCancellationRequested();
         ValidateRequest(request);
 
         var donorPackagePath = Path.GetFullPath(request.DonorPackagePath);
         ValidateDonor(donorPackagePath, request.TargetGame, request.DonorFacePath);
+        request.CancellationToken.ThrowIfCancellationRequested();
         var ron = ReadRon(request.RonPath);
         var donorMorph = new MorphFacePackageContextService().CaptureMorphData(
             donorPackagePath,
@@ -82,6 +85,7 @@ public sealed class StandaloneNpcMorphImportService
         var staticLodWarnings = ValidateLodVertexCounts(
             ron.MorphData, donorMorph, request.DonorFacePath);
         var sourceFingerprint = PackageFingerprint.Capture(donorPackagePath);
+        request.CancellationToken.ThrowIfCancellationRequested();
 
         // The workspace copies the donor before the context service mutates it.
         // The installed package remains the source fingerprint and can never be
@@ -89,6 +93,7 @@ public sealed class StandaloneNpcMorphImportService
         var workspace = new MorphFacePackageWorkspace(donorPackagePath, canCommit: false);
         try
         {
+            request.CancellationToken.ThrowIfCancellationRequested();
             var saveResult = new MorphFacePackageContextService().ImportStandaloneNpcRon(
                 workspace.WorkingPath,
                 request.DonorFacePath,
@@ -100,7 +105,9 @@ public sealed class StandaloneNpcMorphImportService
                 donorPackagePath,
                 request.SourceTextureCatalog ?? [],
                 request.TargetTextureCatalog ?? [],
-                request.AssetCatalog);
+                request.AssetCatalog,
+                request.CancellationToken);
+            request.CancellationToken.ThrowIfCancellationRequested();
             saveResult = saveResult with
             {
                 Warnings = saveResult.Warnings.Concat(staticLodWarnings).ToArray()

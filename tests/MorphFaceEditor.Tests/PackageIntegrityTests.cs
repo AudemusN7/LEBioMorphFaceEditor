@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using LegendaryExplorerCore.Misc;
 using LegendaryExplorerCore.Packages;
 using LegendaryExplorerCore.Packages.CloningImportingAndRelinking;
@@ -14,6 +15,7 @@ internal static class PackageIntegrityTests
 {
     internal static IReadOnlyList<TestCase> All { get; } =
     [
+        new("interrupted PCC save preserves the source and isolates its candidate", InterruptedPccSavePreservesSource),
         new("import ancestor collision preserves original PCC bytes on save", () => SaveFailurePreservesOriginal(true)),
         new("required relink failure preserves original PCC bytes on save", () => SaveFailurePreservesOriginal(false)),
         new("relink rejects a valid destination index pointing at the wrong asset", WrongReferenceRejected),
@@ -253,6 +255,113 @@ internal static class PackageIntegrityTests
             TestAssert.True(reopened.FindExport(facePath, "BioMorphFace") is not null, "The original PCC could not be reopened.");
         }
         finally { File.Delete(sourcePath); File.Delete(donorPath); }
+    }
+
+    private static void InterruptedPccSavePreservesSource()
+    {
+        var sourcePath = Path.Combine(Path.GetTempPath(), $"MFE-InterruptedSave-{Guid.NewGuid():N}.pcc");
+        var markerPath = Path.Combine(Path.GetTempPath(), $"MFE-InterruptedSave-{Guid.NewGuid():N}.ready");
+        Process? worker = null;
+        try
+        {
+            LegendaryExplorerCoreRuntime.Initialize();
+            File.Copy(Path.GetFullPath("tests/Global Morphs/LE1 GlobalMorphs.pcc"), sourcePath);
+            var before = File.ReadAllBytes(sourcePath);
+            var candidatePrefix = $".{Path.GetFileName(sourcePath)}.";
+            var directory = Path.GetDirectoryName(sourcePath)!;
+            var candidatesBefore = Directory.EnumerateFiles(directory, $"{candidatePrefix}*.tmp")
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var workerPath = Environment.ProcessPath
+                ?? throw new InvalidOperationException("The test worker path was unavailable.");
+            var startInfo = new ProcessStartInfo(workerPath)
+            {
+                UseShellExecute = false,
+                WorkingDirectory = Environment.CurrentDirectory
+            };
+            startInfo.ArgumentList.Add("--d4-interrupted-save-worker");
+            startInfo.ArgumentList.Add(sourcePath);
+            startInfo.ArgumentList.Add(markerPath);
+            worker = Process.Start(startInfo)
+                     ?? throw new InvalidOperationException("The interrupted-save worker could not be started.");
+            var child = worker;
+
+            var started = Stopwatch.StartNew();
+            while (!File.Exists(markerPath) && !child.HasExited && started.Elapsed < TimeSpan.FromSeconds(30))
+            {
+                Thread.Sleep(50);
+            }
+
+            TestAssert.True(File.Exists(markerPath) && !child.HasExited,
+                "The save worker did not reach the pre-install interruption point.");
+            var temporaryPath = File.ReadAllText(markerPath);
+            TestAssert.True(File.Exists(temporaryPath),
+                "The hard-stopped worker did not leave its adjacent candidate PCC.");
+            child.Kill(entireProcessTree: true);
+            child.WaitForExit(10_000);
+
+            TestAssert.True(before.SequenceEqual(File.ReadAllBytes(sourcePath)),
+                "An interrupted save changed the original PCC bytes.");
+            string facePath;
+            using (var package = MEPackageHandler.OpenMEPackage(sourcePath, forceLoadFromDisk: true))
+                facePath = package.Exports.First(entry => entry.ClassName == "BioMorphFace").InstancedFullPath;
+            using (var reopened = MEPackageHandler.OpenMEPackage(sourcePath, forceLoadFromDisk: true))
+                TestAssert.True(reopened.FindExport(facePath, "BioMorphFace") is not null,
+                    "The original PCC could not be reopened after an interrupted save.");
+            TestAssert.True(Path.GetFileName(temporaryPath).StartsWith(candidatePrefix, StringComparison.OrdinalIgnoreCase),
+                "The interrupted candidate did not use the adjacent temporary naming contract.");
+            TestAssert.True(!string.Equals(temporaryPath, sourcePath, StringComparison.OrdinalIgnoreCase),
+                "The interrupted candidate path could be mistaken for the installed PCC.");
+            File.Delete(temporaryPath);
+            var candidatesAfter = Directory.EnumerateFiles(directory, $"{candidatePrefix}*.tmp")
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            TestAssert.True(candidatesAfter.SetEquals(candidatesBefore),
+                "The interrupted save candidate could not be recovered and cleaned.");
+        }
+        finally
+        {
+            if (worker is { HasExited: false })
+            {
+                worker.Kill(entireProcessTree: true);
+                worker.WaitForExit(10_000);
+            }
+            worker?.Dispose();
+            PccPackageWorkflow.BeforeAtomicReplaceForTesting = null;
+            if (File.Exists(sourcePath)) File.Delete(sourcePath);
+            if (File.Exists(markerPath))
+            {
+                var orphanedCandidate = File.ReadAllText(markerPath);
+                if (File.Exists(orphanedCandidate)) File.Delete(orphanedCandidate);
+            }
+            if (File.Exists(markerPath)) File.Delete(markerPath);
+        }
+    }
+
+    internal static int RunInterruptedSaveWorker(string sourcePath, string markerPath)
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        string facePath;
+        using (var package = MEPackageHandler.OpenMEPackage(sourcePath, forceLoadFromDisk: true))
+            facePath = package.Exports.First(entry => entry.ClassName == "BioMorphFace").InstancedFullPath;
+        var draft = new MorphFacePackageReader().Load(sourcePath, facePath).Document;
+        PccPackageWorkflow.BeforeAtomicReplaceForTesting = (temporaryPath, destination) =>
+        {
+            TestAssert.True(File.Exists(temporaryPath), "The atomic-save worker reached the hook before writing its candidate.");
+            TestAssert.Equal(sourcePath, destination);
+            File.WriteAllText(markerPath, temporaryPath);
+            while (true)
+            {
+                Thread.Sleep(1000);
+            }
+        };
+        try
+        {
+            _ = new MorphFacePackageWriter().SaveExisting(draft);
+            return 1;
+        }
+        finally
+        {
+            PccPackageWorkflow.BeforeAtomicReplaceForTesting = null;
+        }
     }
 
     private static void CreateDonor(string path, bool broken)

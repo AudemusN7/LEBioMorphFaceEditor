@@ -251,7 +251,8 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
             {
                 var inventory = PackageAssetInspector.Inventory(packagePath, ["SkeletalMesh"]);
                 foreach (var entry in inventory.Entries
-                             .Where(entry => !entry.IsDefaultObject && !IsDevelopmentLeftover(entry.InstancedPath)))
+                             .Where(entry => !entry.IsDefaultObject &&
+                                             !IsUnsafeAttachment(inventory.PackagePath, entry.InstancedPath)))
                 {
                     try
                     {
@@ -285,6 +286,22 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
     internal static bool IsDevelopmentLeftover(string path) =>
         path.Contains("_Remaster", StringComparison.OrdinalIgnoreCase) ||
         path.Contains("_Old", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Review meshes shipped in BIOG HIR packages are build/review variants and
+    /// are not safe attachment choices for an in-game workspace.
+    /// </summary>
+    internal static bool IsUnsafeAttachment(string packagePath, string meshPath) =>
+        IsDevelopmentLeftover(meshPath) ||
+        (IsBiogHirPackage(packagePath) &&
+         meshPath.Contains("Review", StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsBiogHirPackage(string packagePath)
+    {
+        var packageName = Path.GetFileNameWithoutExtension(packagePath);
+        return packageName.StartsWith("BIOG_", StringComparison.OrdinalIgnoreCase) &&
+               packageName.Contains("_HIR", StringComparison.OrdinalIgnoreCase);
+    }
 
     private static string Role(HeadMaterialFamily family) => family switch
     {

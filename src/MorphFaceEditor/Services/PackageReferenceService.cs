@@ -59,7 +59,8 @@ public sealed class PackageReferenceService(
             .Where(entry => !entry.IsDefaultObject &&
                             string.Equals(entry.ClassName, className, StringComparison.OrdinalIgnoreCase) &&
                             (!className.Equals("SkeletalMesh", StringComparison.OrdinalIgnoreCase) ||
-                             !CustomMaterialTemplateCatalogService.IsDevelopmentLeftover(entry.InstancedPath)))
+                             !CustomMaterialTemplateCatalogService.IsUnsafeAttachment(
+                                 inventory.PackagePath, entry.InstancedPath)))
             .Select(entry => new PackageAssetListItem(new AssetIdentity(
                 inventory.PackagePath,
                 entry.InstancedPath,

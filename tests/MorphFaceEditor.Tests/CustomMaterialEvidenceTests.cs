@@ -17,8 +17,25 @@ public static class CustomMaterialEvidenceTests
         new("custom material evidence enumerates used mesh slots deterministically", EnumeratesUsedMeshSlotsDeterministically),
         new("custom material evidence retains duplicate source material refs", RetainsDuplicateSourceMaterialRefs),
         new("custom material catalogue exposes only proven installed families", CatalogueExposesProvenFamilies),
+        new("HIR review meshes are excluded from attachment choices", HirReviewMeshesAreExcluded),
         new("D1 human scar and teeth support follows compiled material evidence", HumanScarAndTeethSupportFollowsEvidence)
     ];
+
+    private static void HirReviewMeshesAreExcluded()
+    {
+        TestAssert.True(CustomMaterialTemplateCatalogService.IsUnsafeAttachment(
+                @"C:\Games\LE3\BIOG_HMF_HIR_PRO.pcc",
+                "BIOG_HMF_HIR_PRO.Review.HMF_HIR_Review_MDL"),
+            "A Review mesh from a BIOG HIR package remained eligible for attachment selection.");
+        TestAssert.True(!CustomMaterialTemplateCatalogService.IsUnsafeAttachment(
+                @"C:\Games\LE3\BIOG_HMF_HED_PROMorph_R.pcc",
+                "BIOG_HMF_HED_PROMorph_R.Review.HMF_HED_Review_MDL"),
+            "The HIR Review filter was applied to a non-HIR package.");
+        TestAssert.True(!CustomMaterialTemplateCatalogService.IsUnsafeAttachment(
+                @"C:\Games\LE3\BIOG_HMF_HIR_PRO.pcc",
+                "BIOG_HMF_HIR_PRO.Hair_Cute.HMF_HIR_Cte_MDL"),
+            "A playable HIR attachment was incorrectly excluded.");
+    }
 
     private static void HumanScarAndTeethSupportFollowsEvidence()
     {
@@ -143,8 +160,9 @@ public static class CustomMaterialEvidenceTests
             TestAssert.True(result.PreviewAttachments.Count > 0,
                 $"The installed {game} catalogue exposed no preview-only hair/accessory meshes.");
             TestAssert.True(result.PreviewAttachments.All(attachment =>
-                    !CustomMaterialTemplateCatalogService.IsDevelopmentLeftover(attachment.InstancedPath)),
-                $"The installed {game} catalogue exposed a development leftover attachment.");
+                    !CustomMaterialTemplateCatalogService.IsUnsafeAttachment(
+                        attachment.PackagePath, attachment.InstancedPath)),
+                $"The installed {game} catalogue exposed an unsafe attachment.");
             foreach (var attachment in result.PreviewAttachments)
             {
                 reader.ValidateDetachedAttachment(attachment.PackagePath, attachment.InstancedPath);

@@ -72,6 +72,7 @@ public static class UiSmokeTests
         new("failed cursed randomisation rolls back its partial edit", FailedCursedRandomisationRollsBack),
         new("repeated cursed randomisation does not compound", RepeatedCursedRandomisationDoesNotCompound),
         new("embedded randomisation corpus loads all pools and excludes Broke", EmbeddedRandomisationCorpusLoads),
+        new("mesh attachment picker filters candidates by name and path", MeshAttachmentPickerFiltersCandidates),
         new("editor error banners can be dismissed", ErrorBannerCanBeDismissed),
         new("texture registry settings command opens the settings dialog", TextureRegistrySettingsCommandOpensDialog),
         new("actor assignment chooser filters evidence and scopes eligibility by operation", ActorChooserFiltersAndScopesEligibility),
@@ -1854,6 +1855,40 @@ public static class UiSmokeTests
         TestAssert.Equal(1, editor.OtherMeshes.Count);
         TestAssert.Equal(2, editor.CreateDraft().OtherMeshReferences.Count);
         TestAssert.Equal(preservedOther, editor.CreateDraft().OtherMeshReferences[1]);
+    }
+
+    private static void MeshAttachmentPickerFiltersCandidates()
+    {
+        var hair = new PackageAssetListItem(new AssetIdentity(
+            "BioA_Hair.pcc", "BIOG_HED_Hair.Meshes.HairA", 1, "SkeletalMesh"));
+        var helmet = new PackageAssetListItem(new AssetIdentity(
+            "BioB_Armour.pcc", "BIOG_HED_Helmet.Meshes.HelmetB", 2, "SkeletalMesh"));
+        using var editor = new HairMeshEditorViewModel(
+            new AssetReferenceEditingSession(null), [hair, helmet], "Hair", 0);
+
+        TestAssert.Equal(3, editor.Candidates.Count);
+        editor.Selected = editor.Options.Single(option => option.Identity == hair.Identity);
+        editor.SearchText = "helmet";
+        TestAssert.Equal(2, editor.Candidates.Count);
+        editor.Selected = null!;
+        TestAssert.Equal(hair.Identity, editor.Selected.Identity);
+        TestAssert.True(editor.Candidates.Any(option => option.Identity == helmet.Identity),
+            "Mesh search did not retain the matching object name.");
+
+        editor.SearchText = "BIOG_HED_Hair.Meshes";
+        TestAssert.Equal(2, editor.Candidates.Count);
+        TestAssert.True(editor.Candidates.Any(option => option.Identity == hair.Identity),
+            "Mesh search did not match the instanced object path.");
+
+        editor.SearchText = "BioA_Hair.pcc";
+        TestAssert.Equal(2, editor.Candidates.Count);
+        TestAssert.True(editor.Candidates.Any(option => option.Identity == hair.Identity),
+            "Mesh search did not match the source package path.");
+
+        editor.SearchText = "does-not-exist";
+        TestAssert.Equal(1, editor.Candidates.Count);
+        TestAssert.True(editor.Candidates[0].Identity is null,
+            "The None option should remain available when filtering mesh candidates.");
     }
 
     private static void ExtendedSlidersAreOptional()

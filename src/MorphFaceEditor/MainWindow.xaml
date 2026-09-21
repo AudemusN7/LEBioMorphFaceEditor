@@ -532,10 +532,7 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Text="{Binding Label}" Foreground="{StaticResource SecondaryText}"
                                                    FontSize="10" VerticalAlignment="Center" />
-                                        <ComboBox Grid.Column="1" ItemsSource="{Binding Options}"
-                                                  SelectedItem="{Binding Selected}"
-                                                  DisplayMemberPath="DisplayName"
-                                                  ToolTip="Change this explicit BioMorphFace skeletal-mesh reference" />
+                                        <controls:SearchableMeshPicker Grid.Column="1" />
                                     </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>

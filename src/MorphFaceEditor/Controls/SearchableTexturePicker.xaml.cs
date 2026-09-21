@@ -40,7 +40,8 @@ public partial class SearchableTexturePicker : UserControl
 
     private void OnOwnerPreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (!PickerButton.IsMouseOver)
+        if (!PickerButton.IsMouseOver &&
+            PickerPopup.Child is not UIElement { IsMouseOver: true })
         {
             PickerPopup.IsOpen = false;
         }
@@ -78,9 +79,10 @@ public partial class SearchableTexturePicker : UserControl
 
     private void OnPickerPreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
-        if (!PickerPopup.IsOpen && MoveSelection(e.Delta > 0 ? -1 : 1))
+        if (!PickerPopup.IsOpen &&
+            PickerButton.IsKeyboardFocusWithin &&
+            MoveSelection(e.Delta > 0 ? -1 : 1))
         {
-            PickerButton.Focus();
             e.Handled = true;
         }
     }

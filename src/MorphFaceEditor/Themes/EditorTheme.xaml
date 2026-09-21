@@ -1,5 +1,6 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
     <!-- Shared colour tokens and control styles for the dark editor chrome. -->
     <SolidColorBrush x:Key="WindowBackground" Color="#11151A" />
     <SolidColorBrush x:Key="PanelBackground" Color="#1B2129" />
@@ -332,6 +333,16 @@
                                Value="{TemplateBinding Value}"
                                ViewportSize="{TemplateBinding ViewportSize}"
                                IsDirectionReversed="True">
+                            <!--
+                                Track ignores DragThumb.MinHeight/MinWidth when ViewportSize is set and
+                                computes its own minimum from these system resource keys. Override them
+                                locally so the computed thumb remains selectable without changing the
+                                surrounding page-click repeat-button regions.
+                            -->
+                            <Track.Resources>
+                                <sys:Double x:Key="{x:Static SystemParameters.VerticalScrollBarButtonHeightKey}">68</sys:Double>
+                                <sys:Double x:Key="{x:Static SystemParameters.HorizontalScrollBarButtonWidthKey}">68</sys:Double>
+                            </Track.Resources>
                             <Track.DecreaseRepeatButton>
                                 <RepeatButton x:Name="DecreaseButton" Command="ScrollBar.PageUpCommand"
                                               Background="Transparent" BorderThickness="0" Opacity="0" />

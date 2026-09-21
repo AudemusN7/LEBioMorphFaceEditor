@@ -36,9 +36,11 @@ public partial class MainWindow : Window
         };
         _numericWheelCommitTimer.Tick += OnNumericWheelCommitTimer;
         _viewModel.PreviewSceneReady += OnPreviewSceneReady;
+        _viewModel.PreviewCleared += OnPreviewCleared;
         _viewModel.PreviewDeformationReady += OnPreviewDeformationReady;
         _viewModel.PreviewMaterialReady += OnPreviewMaterialReady;
         _viewModel.PreviewOptionsChanged += OnPreviewOptionsChanged;
+        _viewModel.ExitRequested += OnExitRequested;
         _previewHost.FramePresented += _viewModel.SetFrameStatus;
         _previewHost.PreviewFailed += _viewModel.SetPreviewError;
         Closing += OnClosing;
@@ -47,6 +49,10 @@ public partial class MainWindow : Window
 
     private void OnPreviewSceneReady(HeadPreviewScene scene, bool resetPosition) =>
         _previewHost.SetScene(scene, resetPosition);
+
+    private void OnPreviewCleared(object? sender, EventArgs e) => _previewHost.ClearScene();
+
+    private void OnExitRequested(object? sender, EventArgs e) => Close();
 
     private void OnPreviewDeformationReady(HeadPreviewDeformationUpdate update)
     {
@@ -269,9 +275,11 @@ public partial class MainWindow : Window
         Closing -= OnClosing;
         Closed -= OnClosed;
         _viewModel.PreviewSceneReady -= OnPreviewSceneReady;
+        _viewModel.PreviewCleared -= OnPreviewCleared;
         _viewModel.PreviewDeformationReady -= OnPreviewDeformationReady;
         _viewModel.PreviewMaterialReady -= OnPreviewMaterialReady;
         _viewModel.PreviewOptionsChanged -= OnPreviewOptionsChanged;
+        _viewModel.ExitRequested -= OnExitRequested;
         _previewHost.FramePresented -= _viewModel.SetFrameStatus;
         _previewHost.PreviewFailed -= _viewModel.SetPreviewError;
         _orbitInput.Dispose();

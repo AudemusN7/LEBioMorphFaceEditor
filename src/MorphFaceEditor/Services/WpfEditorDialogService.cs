@@ -87,6 +87,19 @@ public sealed class WpfEditorDialogService : IEditorDialogService
         return dialog.ShowDialog() == true ? dialog.FileName : null;
     }
 
+    public string? ChooseWorkspaceFile(string? initialDirectory = null)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "Open a package or morph workspace",
+            Filter = EditorFileDrop.WorkspaceOpenFilter,
+            CheckFileExists = true,
+            Multiselect = false,
+            InitialDirectory = Directory.Exists(initialDirectory) ? initialDirectory : null
+        };
+        return dialog.ShowDialog() == true ? dialog.FileName : null;
+    }
+
     public MorphFaceGame? ChooseStandaloneImportGame()
     {
         var window = new StandaloneImportGameWindow

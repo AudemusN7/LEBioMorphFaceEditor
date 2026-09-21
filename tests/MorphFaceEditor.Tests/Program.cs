@@ -1,5 +1,10 @@
 using MorphFaceEditor.Tests;
 
+if (args.Length >= 3 && args[0].Equals("--d4-interrupted-save-worker", StringComparison.OrdinalIgnoreCase))
+{
+    return PackageIntegrityTests.RunInterruptedSaveWorker(args[1], args[2]);
+}
+
 // Suites keep routine feature work local. The expensive/full path is always explicit.
 var suites = new Dictionary<string, IReadOnlyList<TestCase>>(StringComparer.OrdinalIgnoreCase)
 {

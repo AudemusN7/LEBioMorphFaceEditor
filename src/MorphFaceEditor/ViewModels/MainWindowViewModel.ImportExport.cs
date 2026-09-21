@@ -248,6 +248,10 @@ public sealed partial class MainWindowViewModel
         }
 
         IsBusy = true;
+        _npcImportCancellation = new CancellationTokenSource();
+        var cancellationToken = _npcImportCancellation.Token;
+        _cancelNpcImportCommand.RaiseCanExecuteChanged();
+        OnPropertyChanged(nameof(CanCancelNpcImport));
         ErrorMessage = null;
         Status = $"Preparing a native {targetGame} {archetype} NPC workspace…";
         StandaloneNpcMorphImportResult? imported = null;
@@ -255,7 +259,8 @@ public sealed partial class MainWindowViewModel
         IReadOnlyList<string> importWarnings = [];
         try
         {
-            var textureCatalog = await _referenceService.ReadTextureCatalogAsync(targetGame);
+            var textureCatalog = await _referenceService.ReadTextureCatalogAsync(targetGame, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             if (!textureCatalog.IsAvailable)
             {
                 throw new InvalidOperationException(
@@ -265,14 +270,14 @@ public sealed partial class MainWindowViewModel
                 .Resolve(targetGame, archetype, textureCatalog.MorphFaceTemplates);
             var sourceCatalog = sourceGame == targetGame
                 ? textureCatalog
-                : await _referenceService.ReadTextureCatalogAsync(sourceGame);
+                : await _referenceService.ReadTextureCatalogAsync(sourceGame, cancellationToken);
             if (!sourceCatalog.IsAvailable)
             {
                 throw new InvalidOperationException(
                     $"The {sourceGame} texture database is unavailable. Build it in Texture Databases before transferring this NPC RON.");
             }
             var assets = await Task.Run(() => StandalonePlayerAssetCatalog.ForRon(
-                targetGame, sourcePath, textureCatalog.Candidates, donor.PackagePath));
+                targetGame, sourcePath, textureCatalog.Candidates, donor.PackagePath), cancellationToken);
             imported = await Task.Run(() => new StandaloneNpcMorphImportService().ImportNpcRon(
                 new StandaloneNpcMorphImportRequest(
                     sourceGame,
@@ -285,13 +290,14 @@ public sealed partial class MainWindowViewModel
                     assets,
                     IsVerifiedNativeNpcDonor: true,
                     SourceTextureCatalog: sourceCatalog.Candidates,
-                    TargetTextureCatalog: textureCatalog.Candidates)));
+                    TargetTextureCatalog: textureCatalog.Candidates,
+                    CancellationToken: cancellationToken)), cancellationToken);
             importWarnings = imported.SaveResult.Warnings;
 
             // Read and prepare the complete candidate before replacing the active editor.
             var candidatePath = imported.Workspace.WorkingPath;
-            var catalogTask = _catalogService.ReadAsync(candidatePath);
-            var referencesTask = _referenceService.ReadCatalogAsync(candidatePath);
+            var catalogTask = _catalogService.ReadAsync(candidatePath, cancellationToken);
+            var referencesTask = _referenceService.ReadCatalogAsync(candidatePath, cancellationToken);
             await Task.WhenAll(catalogTask, referencesTask);
             var catalog = await catalogTask;
             var references = await referencesTask;
@@ -302,6 +308,7 @@ public sealed partial class MainWindowViewModel
             var preview = await _previewLoadService.LoadAsync(
                 candidatePath,
                 selected.UIndex.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                cancellationToken,
                 geometryMode: MorphFaceGeometryMode.RelativeBake);
             if (!preview.EditingSession.CanEditMorphFeatures)
             {
@@ -330,6 +337,7 @@ public sealed partial class MainWindowViewModel
                 isTextureRegistryAvailable: false,
                 ignoresAuthoredGeometry: preview.Profile.IgnoresAuthoredGeometry);
 
+            cancellationToken.ThrowIfCancellationRequested();
             CancelPendingLoad();
             SetEditor(null, null);
             DisposePackageWorkspace();
@@ -386,6 +394,11 @@ public sealed partial class MainWindowViewModel
                     string.Join("\n- ", importWarnings));
             }
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            ErrorMessage = null;
+            Status = "NPC import cancelled; the current workspace was not changed.";
+        }
         catch (Exception exception)
         {
             AppLog.Error($"Standalone NPC import failed for '{sourcePath}' as {targetGame} {archetype}.", exception);
@@ -396,6 +409,10 @@ public sealed partial class MainWindowViewModel
         {
             preparedEditor?.Dispose();
             imported?.Dispose();
+            _npcImportCancellation?.Dispose();
+            _npcImportCancellation = null;
+            _cancelNpcImportCommand.RaiseCanExecuteChanged();
+            OnPropertyChanged(nameof(CanCancelNpcImport));
             IsBusy = false;
         }
     }

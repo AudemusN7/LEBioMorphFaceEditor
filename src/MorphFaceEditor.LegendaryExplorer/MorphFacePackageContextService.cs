@@ -503,10 +503,13 @@ public sealed class MorphFacePackageContextService
         string targetTemplatePackagePath,
         IReadOnlyList<TextureCatalogCandidate> sourceTextureCatalog,
         IReadOnlyList<TextureCatalogCandidate> targetTextureCatalog,
-        StandalonePlayerAssetCatalog? assetCatalog = null)
+        StandalonePlayerAssetCatalog? assetCatalog = null,
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         ValidateObjectName(objectName);
         var ron = TseHeadMorphRon.Read(sourcePath);
+        cancellationToken.ThrowIfCancellationRequested();
         var transfer = sourceGame == targetGame ? null : new NpcRonMaterialTransfer(
             sourceGame,
             sourceProfileKey,
@@ -524,7 +527,8 @@ public sealed class MorphFacePackageContextService
             assetCatalog: assetCatalog,
             strictAssetResolution: true,
             npcMaterialTransfer: transfer,
-            allowMissingHair: true);
+            allowMissingHair: true,
+            cancellationToken: cancellationToken);
     }
 
     public MorphFaceSaveResult ImportHeadMorph(
@@ -587,8 +591,10 @@ public sealed class MorphFacePackageContextService
         StandalonePlayerAssetCatalog? assetCatalog = null,
         bool strictAssetResolution = false,
         NpcRonMaterialTransfer? npcMaterialTransfer = null,
-        bool allowMissingHair = false)
+        bool allowMissingHair = false,
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         ValidateMorphData(ron.MorphData);
         ValidateMaterialData(ron.MaterialData);
         return Mutate(packagePath, package =>
@@ -643,7 +649,7 @@ public sealed class MorphFacePackageContextService
                 morphData,
                 resolvedMaterial,
                 warnings);
-        });
+        }, cancellationToken);
     }
 
     public MorphFaceSaveResult PasteMorphData(
@@ -841,7 +847,8 @@ public sealed class MorphFacePackageContextService
 
     private static MorphFaceSaveResult Mutate(
         string packagePath,
-        Func<IMEPackage, PendingResult> mutation)
+        Func<IMEPackage, PendingResult> mutation,
+        CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(packagePath);
         ArgumentNullException.ThrowIfNull(mutation);
@@ -860,21 +867,27 @@ public sealed class MorphFacePackageContextService
             $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             File.Copy(path, temporaryPath, overwrite: false);
+            cancellationToken.ThrowIfCancellationRequested();
             PendingResult pending;
             using (var package = MEPackageHandler.OpenMEPackage(temporaryPath, forceLoadFromDisk: true))
             {
                 EnsureSupportedGame(package);
                 pending = mutation(package);
+                cancellationToken.ThrowIfCancellationRequested();
                 package.Save(temporaryPath);
             }
 
+            cancellationToken.ThrowIfCancellationRequested();
             Verify(temporaryPath, pending, integrityBaseline);
+            cancellationToken.ThrowIfCancellationRequested();
             if (PackageFingerprint.Capture(path) != originalFingerprint)
             {
                 throw new IOException("The open PCC changed while the operation was being written. Nothing was replaced.");
             }
 
+            cancellationToken.ThrowIfCancellationRequested();
             PccPackageWorkflow.AtomicReplace(temporaryPath, path);
             return new MorphFaceSaveResult(
                 path,

@@ -7,7 +7,7 @@ public sealed class TextureRegistryPaths(string directory)
 
     public static TextureRegistryPaths CreateDefault() => new(Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "BioMorphFaceEditor",
+        "LE BioMorphFace Editor",
         "TextureRegistries"));
 
     public string GetPath(MorphFaceGame game) => Path.Combine(_directory, game switch

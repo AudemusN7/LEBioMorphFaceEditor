@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Numerics;
 using System.Text;
 using MorphFaceEditor.Core.Domain;
+using MorphFaceEditor.Core.Materials;
 
 namespace MorphFaceEditor.LegendaryExplorer;
 
@@ -83,7 +84,8 @@ public static class TseHeadMorphRon
         WriteScalarMap(builder, "scalar_parameters", morph.MaterialData.Scalars,
             value => value.Name, value => value.Value);
         WriteColourMap(builder, "vector_parameters", morph.MaterialData.Vectors);
-        WriteStringMap(builder, "texture_parameters", morph.MaterialData.Textures,
+        WriteStringMap(builder, "texture_parameters", morph.MaterialData.Textures
+                .Where(value => !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(value.Name)).ToArray(),
             value => value.Name,
             value => value.TextureReference?.InstancedPath ?? "None");
         builder.AppendLine(")");

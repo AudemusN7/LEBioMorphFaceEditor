@@ -153,7 +153,9 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
     private bool IsMaterialVisible(string controlName, MaterialParameterKind kind)
     {
         var parameterName = _session.GetSourceParameterName(controlName);
-        return !IsEngineEditorOnlyParameter(parameterName) &&
+        return !(kind == MaterialParameterKind.Texture &&
+                 HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(parameterName)) &&
+               !IsEngineEditorOnlyParameter(parameterName) &&
                _uiProfile.IsMaterialVisible(parameterName, kind);
     }
 

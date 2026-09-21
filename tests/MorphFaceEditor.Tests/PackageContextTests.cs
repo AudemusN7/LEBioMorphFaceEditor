@@ -59,6 +59,7 @@ public static class PackageContextTests
         new("standalone legacy imports reject a destination-game mismatch", StandaloneLegacyImportRejectsMismatch),
         new("installed LE2 and LE3 legacy imports create detached workspaces", StandaloneLegacyImportsInstalledPlayers),
         new("broken attachment materials fall back without blocking face authoring", BrokenAttachmentMaterialFallsBack),
+        new("Hat attachment materials remain preview-only on package reload", HatMaterialIsPreviewOnly),
         new("corpus edge faces load through profile and material projection", CorpusEdgeFacesLoad),
         new("UModel staging package contains only baked mesh geometry", MeshExportStagingIsGeometryOnly),
         new("real baked mesh projects back into its profile target span", RealBakedMeshInverts)
@@ -623,6 +624,28 @@ public static class PackageContextTests
                 "BIOG_HMM_HED_PROMorph.Joker.HMM_HED_PROJoker_Scalp_Diff_Stack",
                 result.MaterialData.Textures.Single(value => value.Name == "HED_Scalp_Diff").TextureReference?.InstancedPath);
         });
+    }
+
+    private static void HatMaterialIsPreviewOnly()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        var packagePath = Path.Combine(Path.GetTempPath(), $"MFE-HatPreview-{Guid.NewGuid():N}.pcc");
+        MEPackageHandler.CreateAndSavePackage(packagePath, MEGame.LE2);
+        try
+        {
+            using var package = MEPackageHandler.OpenMEPackage(packagePath, forceLoadFromDisk: true);
+            var face = package.CreateExport("Face", "BioMorphFace", indexed: false);
+            var hat = package.CreateExport("HMM_HAT_Test_MAT", "MaterialInstanceConstant", indexed: false);
+            using var cache = new PackageCache();
+            var reader = new MorphFaceMaterialReader(cache, new GamePackageReferenceResolver(cache));
+            var material = reader.Read(face, [], [hat]).Materials.Find(MorphFacePackageReader.ToIdentity(hat)!);
+            TestAssert.True(material?.IsPreviewOnlyAttachment == true,
+                "The Hat material was not marked as preview-only during package reload.");
+        }
+        finally
+        {
+            File.Delete(packagePath);
+        }
     }
 
     private static void CorpusEdgeFacesLoad()

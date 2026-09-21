@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Text;
 using System.Threading;
 using System.Windows;
 using MorphFaceEditor.Core.Domain;
@@ -34,10 +35,12 @@ public static class UiSmokeTests
         new("editor file drops recognise every supported format", EditorFileDropsRecogniseSupportedFormats),
         new("standalone morph import is available before opening a PCC", StandaloneImportIsAvailableWithoutPackage),
         new("unrecognised mesh import publishes a detached preview workspace", UnrecognisedMeshPublishesDetachedWorkspace),
+        new("glTF and GLB drops publish detached mesh workspaces", GltfAndGlbDropsPublishDetachedWorkspaces),
         new("morph import asks for its source game with an open PCC", ImportAsksForSourceGameWithOpenPcc),
         new("NPC RON donor choices include supported game-local archetypes", NpcRonArchetypesAreGameLocal),
         new("NPC RON resolver accepts static ALN donors and rejects player donors", RonResolverAcceptsStaticAlnDonor),
         new("empty editor imports a tagged native NPC RON", EmptyEditorImportsTaggedNpcRon),
+        new("NPC import cancellation command cancels an active request", NpcImportCancellationCommandCancelsActiveRequest),
         new("tagged human RON follows the user's NPC or Player destination", TaggedHumanRonFollowsDestination),
         new("standalone Gibbed import rejects the wrong selected game before mutation", StandaloneGibbedRejectsWrongGame),
         new("standalone fixed-bake workspaces allow material clipboard commands", StandaloneFixedBakeMaterialClipboardCommands),
@@ -195,6 +198,85 @@ public static class UiSmokeTests
             if (File.Exists(sourcePath)) File.Delete(sourcePath);
         }
     }
+
+    private static void GltfAndGlbDropsPublishDetachedWorkspaces()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), $"MFE-UiGltf-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(folder);
+        try
+        {
+            foreach (var binary in new[] { false, true })
+            {
+                var extension = binary ? ".glb" : ".gltf";
+                var sourcePath = Path.Combine(folder, "DetachedFixture" + extension);
+                File.WriteAllBytes(sourcePath, CreateMinimalTriangleGltf(binary));
+                using var reader = new MorphFacePackageReader();
+                var dialogs = new StubEditorDialogs
+                {
+                    StandaloneGameChoiceResult = MorphFaceGame.LE2,
+                    StandaloneNameChoiceResult = "DetachedGltfFixture"
+                };
+                using var viewModel = CreateMainWindowViewModel(reader, dialogs);
+
+                RunWithDispatcher(() => viewModel.OpenDroppedFileAsync(sourcePath));
+
+                TestAssert.True(viewModel.ErrorMessage is null,
+                    viewModel.ErrorMessage ?? $"{extension} drop failed.");
+                TestAssert.True(viewModel.IsDetachedMeshWorkspace &&
+                                viewModel.PackageName.Contains("Detached Mesh Workspace", StringComparison.Ordinal),
+                    $"{extension} did not publish a detached mesh workspace.");
+                TestAssert.True(viewModel.Editor is { CanEditMorphFeatures: false, CanEditBones: false },
+                    $"{extension} detached mesh exposed unsupported geometry capabilities.");
+                TestAssert.True(viewModel.SaveMorphToPccCommand.CanExecute(null),
+                    $"{extension} detached mesh did not expose Save to PCC.");
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    private static byte[] CreateMinimalTriangleGltf(bool binary)
+    {
+        var buffer = new byte[42];
+        var positions = new[]
+        {
+            0f, 0f, 0f,
+            1f, 0f, 0f,
+            0f, 1f, 0f
+        };
+        for (var index = 0; index < positions.Length; index++)
+            Array.Copy(BitConverter.GetBytes(positions[index]), 0, buffer, index * sizeof(float), sizeof(float));
+        for (var index = 0; index < 3; index++)
+            Array.Copy(BitConverter.GetBytes((ushort)index), 0, buffer, 36 + index * sizeof(ushort), sizeof(ushort));
+
+        var uri = binary
+            ? string.Empty
+            : $",\"uri\":\"data:application/octet-stream;base64,{Convert.ToBase64String(buffer)}\"";
+        var json = $"{{\"asset\":{{\"version\":\"2.0\"}},\"scene\":0,\"scenes\":[{{\"nodes\":[0]}}],\"nodes\":[{{\"mesh\":0}}],\"meshes\":[{{\"primitives\":[{{\"attributes\":{{\"POSITION\":0}},\"indices\":1}}]}}],\"buffers\":[{{\"byteLength\":42{uri}}}],\"bufferViews\":[{{\"buffer\":0,\"byteOffset\":0,\"byteLength\":36}},{{\"buffer\":0,\"byteOffset\":36,\"byteLength\":6}}],\"accessors\":[{{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\",\"min\":[0,0,0],\"max\":[1,1,0]}},{{\"bufferView\":1,\"componentType\":5123,\"count\":3,\"type\":\"SCALAR\"}}]}}";
+        if (!binary) return Encoding.UTF8.GetBytes(json);
+
+        var jsonBytes = Encoding.UTF8.GetBytes(json);
+        var jsonLength = (jsonBytes.Length + 3) & ~3;
+        var binaryLength = (buffer.Length + 3) & ~3;
+        var output = new byte[12 + 8 + jsonLength + 8 + binaryLength];
+        WriteUInt32(output, 0, 0x46546C67);
+        WriteUInt32(output, 4, 2);
+        WriteUInt32(output, 8, (uint)output.Length);
+        WriteUInt32(output, 12, (uint)jsonLength);
+        WriteUInt32(output, 16, 0x4E4F534A);
+        Array.Copy(jsonBytes, 0, output, 20, jsonBytes.Length);
+        for (var index = 20 + jsonBytes.Length; index < 20 + jsonLength; index++) output[index] = 0x20;
+        var binaryChunk = 20 + jsonLength;
+        WriteUInt32(output, binaryChunk, (uint)binaryLength);
+        WriteUInt32(output, binaryChunk + 4, 0x004E4942);
+        Array.Copy(buffer, 0, output, binaryChunk + 8, buffer.Length);
+        return output;
+    }
+
+    private static void WriteUInt32(byte[] destination, int offset, uint value) =>
+        Array.Copy(BitConverter.GetBytes(value), 0, destination, offset, sizeof(uint));
 
     private static void RunWithDispatcher(Func<Task> action)
     {
@@ -362,6 +444,33 @@ public static class UiSmokeTests
         }
     }
 
+    private static void NpcImportCancellationCommandCancelsActiveRequest()
+    {
+        using var reader = new MorphFacePackageReader();
+        using var viewModel = CreateMainWindowViewModel(reader);
+        var cancellation = new CancellationTokenSource();
+        var field = typeof(MainWindowViewModel).GetField(
+            "_npcImportCancellation",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new Exception("MainWindowViewModel NPC import cancellation field was not found.");
+        field.SetValue(viewModel, cancellation);
+        try
+        {
+            TestAssert.True(viewModel.CanCancelNpcImport && viewModel.CancelNpcImportCommand.CanExecute(null),
+                "The active NPC import did not expose its cancellation command.");
+            viewModel.CancelNpcImportCommand.Execute(null);
+            TestAssert.True(cancellation.IsCancellationRequested,
+                "The NPC import cancellation command did not signal the active request.");
+            TestAssert.True(!viewModel.CanCancelNpcImport && !viewModel.CancelNpcImportCommand.CanExecute(null),
+                "The NPC import cancellation command remained available after cancellation.");
+        }
+        finally
+        {
+            field.SetValue(viewModel, null);
+            cancellation.Dispose();
+        }
+    }
+
     private static void TaggedHumanRonFollowsDestination()
     {
         var textureCatalog = new MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureCatalogService(
@@ -400,6 +509,65 @@ public static class UiSmokeTests
                 TestAssert.True(viewModel.PackageName.Contains(expectedWorkspace, StringComparison.Ordinal),
                     $"The selected {choice.Destination} route did not publish a {expectedWorkspace}.");
                 TestAssert.Equal(1, dialogs.RonImportDestinationChoiceCount);
+                AssertStandaloneFaceTransitionCapabilities(viewModel, expectedWorkspace);
+            }
+
+            // Exercise the actual Player -> NPC -> Player edge on one editor, including
+            // dirty-workspace cancellation. This catches stale route flags and command
+            // projections that independent fresh-editor imports cannot observe.
+            using (var reader = new MorphFacePackageReader())
+            {
+                var dialogs = new StubEditorDialogs
+                {
+                    StandaloneGameChoiceResult = MorphFaceGame.LE2,
+                    StandaloneNameChoiceResult = "MFE_UiHumanTransition",
+                    RonImportDestinationChoiceResult = new RonImportDestinationChoice(
+                        RonImportDestination.PlayerWorkspace, null)
+                };
+                using var viewModel = CreateMainWindowViewModel(
+                    reader, dialogs, textureCatalog: textureCatalog);
+
+                RunWithDispatcher(() => viewModel.OpenDroppedFileAsync(ronPath));
+                TestAssert.True(viewModel.ErrorMessage is null, viewModel.ErrorMessage ?? "Player transition setup failed.");
+                AssertStandaloneFaceTransitionCapabilities(viewModel, "Player Workspace");
+
+                var scalar = viewModel.Editor?.Material.Scalars.FirstOrDefault();
+                TestAssert.True(scalar is not null, "The transition fixture exposed no material scalar to dirty the workspace.");
+                viewModel.Editor!.Material.SetNumericValues(
+                    new Dictionary<string, float>
+                    {
+                        [scalar!.Name] = scalar.Value >= scalar.Maximum
+                            ? scalar.Value - MathF.Max(0.01f, (scalar.Value - scalar.Minimum) / 2f)
+                            : scalar.Value + MathF.Max(0.01f, (scalar.Maximum - scalar.Value) / 2f)
+                    },
+                    new Dictionary<string, Vector4>());
+                TestAssert.True(viewModel.Editor.IsDirty, "The Player workspace did not become dirty for transition prompting.");
+
+                dialogs.ConfirmUnsavedChangesResult = UnsavedChangesChoice.Cancel;
+                var priorEditor = viewModel.Editor;
+                var priorPath = viewModel.PackagePath;
+                dialogs.RonImportDestinationChoiceResult = new RonImportDestinationChoice(
+                    RonImportDestination.NpcFace, "HMM");
+                RunWithDispatcher(() => viewModel.OpenDroppedFileAsync(ronPath));
+                TestAssert.True(ReferenceEquals(priorEditor, viewModel.Editor),
+                    "Cancelling the dirty Player -> NPC transition replaced the active editor.");
+                TestAssert.Equal(priorPath, viewModel.PackagePath);
+                TestAssert.True(dialogs.ConfirmUnsavedChangesCount > 0,
+                    "The dirty Player -> NPC transition did not show an unsaved-changes prompt.");
+
+                dialogs.ConfirmUnsavedChangesResult = UnsavedChangesChoice.Discard;
+                RunWithDispatcher(() => viewModel.OpenDroppedFileAsync(ronPath));
+                TestAssert.True(viewModel.ErrorMessage is null, viewModel.ErrorMessage ?? "Player -> NPC transition failed.");
+                AssertStandaloneFaceTransitionCapabilities(viewModel, "NPC Workspace");
+
+                priorEditor = viewModel.Editor;
+                dialogs.RonImportDestinationChoiceResult = new RonImportDestinationChoice(
+                    RonImportDestination.PlayerWorkspace, null);
+                RunWithDispatcher(() => viewModel.OpenDroppedFileAsync(ronPath));
+                TestAssert.True(viewModel.ErrorMessage is null, viewModel.ErrorMessage ?? "NPC -> Player transition failed.");
+                TestAssert.True(!ReferenceEquals(priorEditor, viewModel.Editor),
+                    "The NPC -> Player transition retained the previous editor instance.");
+                AssertStandaloneFaceTransitionCapabilities(viewModel, "Player Workspace");
             }
 
             using (var reader = new MorphFacePackageReader())
@@ -461,6 +629,28 @@ public static class UiSmokeTests
             if (File.Exists(ronPath)) File.Delete(ronPath);
             if (File.Exists(incompatiblePath)) File.Delete(incompatiblePath);
         }
+    }
+
+    private static void AssertStandaloneFaceTransitionCapabilities(
+        MainWindowViewModel viewModel,
+        string workspaceLabel)
+    {
+        TestAssert.True(viewModel.PackageName.Contains(workspaceLabel, StringComparison.Ordinal),
+            $"The route did not publish the expected {workspaceLabel} workspace.");
+        TestAssert.True(viewModel.Editor is { CanEditMorphFeatures: true, CanEditBones: true },
+            $"The {workspaceLabel} route did not project independent morph and bone capabilities.");
+        TestAssert.True(viewModel.SaveMorphToPccCommand.CanExecute(null),
+            $"The {workspaceLabel} route did not expose PCC save.");
+        TestAssert.True(viewModel.ExportMorphRonCommand.CanExecute(null),
+            $"The {workspaceLabel} route did not expose RON export.");
+        TestAssert.True(viewModel.ExportMaterialsCommand.CanExecute(null) &&
+                        viewModel.ImportMaterialsCommand.CanExecute(null),
+            $"The {workspaceLabel} route did not expose face material interchange.");
+        TestAssert.True(!viewModel.SaveCommand.CanExecute(null),
+            $"The non-committable {workspaceLabel} route inherited package Save.");
+        TestAssert.True(!viewModel.AssignMorphToActorCommand.CanExecute(null) &&
+                        !viewModel.AssignMaterialsToActorCommand.CanExecute(null),
+            $"The standalone {workspaceLabel} route inherited actor-assignment commands.");
     }
 
     private static void StandaloneFixedBakeMaterialClipboardCommands()
@@ -1717,7 +1907,9 @@ public static class UiSmokeTests
         public int MaterialImportFileChoiceCount { get; private set; }
         public MorphFaceGame? StandaloneGameChoiceResult { get; init; }
         public string? StandaloneNameChoiceResult { get; init; }
-        public RonImportDestinationChoice? RonImportDestinationChoiceResult { get; init; }
+        public RonImportDestinationChoice? RonImportDestinationChoiceResult { get; set; }
+        public UnsavedChangesChoice ConfirmUnsavedChangesResult { get; set; } = UnsavedChangesChoice.Cancel;
+        public int ConfirmUnsavedChangesCount { get; private set; }
         public string? ChoosePackage(string? initialDirectory = null) => null;
         public MorphPackageSaveRequest? ChooseMorphPackageDestination(string suggestedFileName, string sourcePackagePath) => null;
         public MorphConversionSaveRequest? ChooseMorphConversionDestination(MorphFaceGame sourceGame, string suggestedFileName, string sourcePackagePath) => null;
@@ -1758,7 +1950,11 @@ public static class UiSmokeTests
             ActorAssignmentInventory inventory,
             ActorAssignmentMode mode) => null;
         public bool ConfirmDeleteMorph(string facePath) => false;
-        public UnsavedChangesChoice ConfirmUnsavedChanges(string assetPath, UnsavedChangesScope scope = UnsavedChangesScope.Package) => UnsavedChangesChoice.Cancel;
+        public UnsavedChangesChoice ConfirmUnsavedChanges(string assetPath, UnsavedChangesScope scope = UnsavedChangesScope.Package)
+        {
+            ConfirmUnsavedChangesCount++;
+            return ConfirmUnsavedChangesResult;
+        }
         public void ShowInformation(string title, string message) { }
         public void ShowTextureRegistrySettings() => TextureRegistrySettingsWasShown = true;
     }

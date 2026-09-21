@@ -15,6 +15,9 @@ namespace MorphFaceEditor.LegendaryExplorer;
 /// </summary>
 internal static class PccPackageWorkflow
 {
+    // Test-only interruption boundary immediately before atomic installation.
+    internal static Action<string, string>? BeforeAtomicReplaceForTesting { get; set; }
+
     internal static ExportEntry ImportDependencyGraph(
         IMEPackage destination,
         ExportEntry source,
@@ -180,6 +183,7 @@ internal static class PccPackageWorkflow
 
     internal static void AtomicReplace(string temporaryPath, string destination)
     {
+        BeforeAtomicReplaceForTesting?.Invoke(temporaryPath, destination);
         if (!File.Exists(destination))
         {
             File.Move(temporaryPath, destination);

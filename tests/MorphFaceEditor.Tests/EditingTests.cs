@@ -11,6 +11,7 @@ public static class EditingTests
     public static IReadOnlyList<TestCase> All { get; } =
     [
         new("unified history preserves interleaved editor chronology", UnifiedHistoryIsChronological),
+        new("mixed morph material and bone history round-trips in semantic order", MixedMorphMaterialBoneHistoryRoundTrips),
         new("dirty comparison tracks authored state and ignores derived LODs", DirtyComparisonTracksAuthoredState),
         new("oracle mismatch threshold tolerates visually insignificant drift", OracleMismatchThresholdToleratesSmallDrift),
         new("Fix Morph rejects unsafe repair candidates", FixMorphRejectsUnsafeCandidates),
@@ -592,6 +593,72 @@ public static class EditingTests
         TestAssert.True(geometry.Log.Contains("redo:feature"), "Geometry redo was not replayed.");
         TestAssert.True(material.Log.Contains("redo:colour"), "Material redo was not replayed.");
         TestAssert.True(hair.Log.Contains("redo:mesh"), "Hair redo was not replayed.");
+    }
+
+    private static void MixedMorphMaterialBoneHistoryRoundTrips()
+    {
+        var (mesh, document, target) = CreateRelativeBakeFixture();
+        var morph = CreateRelativeSession(mesh, document, target);
+        var materialIdentity = TestFixtures.CreateIdentity("Face.Material", "MaterialInstanceConstant");
+        var material = new ResolvedHeadMaterial(
+            MaterialIdentityKey.Create(materialIdentity),
+            materialIdentity,
+            "HMF_HED_PRO_MASTER_FACE_MAT",
+            HeadMaterialFamily.Skin,
+            HeadMaterialBlendMode.Opaque,
+            false,
+            new Dictionary<string, float> { ["HED_Norm_Blend"] = 0.25f },
+            new Dictionary<string, Vector4>(),
+            new Dictionary<string, MaterialTextureBinding>());
+        var materials = new MaterialEditingSession(
+            MorphFaceMaterialOverrides.Empty,
+            new ResolvedHeadMaterialSet(new Dictionary<string, ResolvedHeadMaterial>
+            {
+                [material.Key] = material
+            }));
+
+        using var history = new EditorUndoCoordinator(morph, materials);
+        var historyChanges = 0;
+        history.HistoryChanged += (_, _) => historyChanges++;
+
+        morph.SetFeature("Target", 1f);
+        materials.SetScalar("HED_Norm_Blend", 0.75f);
+        morph.BeginBoneTranslationEdit("root");
+        morph.SetBoneAxis("root", 0, 3f);
+        morph.EndBoneTranslationEdit("root");
+        TestAssert.True(historyChanges == 3,
+            "The three semantic actions did not produce one history step each.");
+
+        history.Undo();
+        TestAssert.Near(new Vector3(0, 2, 0), morph.FinalSkeleton.Single().Translation, 0.000001f);
+        history.Undo();
+        TestAssert.Near(0.25f, materials.GetScalar("HED_Norm_Blend"), 0.000001f);
+        history.Undo();
+        TestAssert.Near(0.5f, morph.GetFeature("Target"), 0.000001f);
+
+        history.Redo();
+        TestAssert.Near(1f, morph.GetFeature("Target"), 0.000001f);
+        history.Redo();
+        TestAssert.Near(0.75f, materials.GetScalar("HED_Norm_Blend"), 0.000001f);
+        history.Redo();
+        TestAssert.Near(new Vector3(3, 2, 0), morph.FinalSkeleton.Single().Translation, 0.000001f);
+
+        // A draft is the semantic save payload. Reopen fresh sessions from it to
+        // prove the final mixed state is persisted independently of undo stacks.
+        var draft = morph.CreateDraft(null, materials.CreateOverrides());
+        var reopenedMorph = new MorphFaceEditingSession(
+            draft,
+            mesh,
+            [target],
+            geometryMode: MorphFaceGeometryMode.RelativeBake);
+        var reopenedMaterials = new MaterialEditingSession(draft.MaterialOverrides,
+            new ResolvedHeadMaterialSet(new Dictionary<string, ResolvedHeadMaterial>
+            {
+                [material.Key] = material
+            }));
+        TestAssert.Near(1f, reopenedMorph.GetFeature("Target"), 0.000001f);
+        TestAssert.Near(new Vector3(3, 2, 0), reopenedMorph.FinalSkeleton.Single().Translation, 0.000001f);
+        TestAssert.Near(0.75f, reopenedMaterials.GetScalar("HED_Norm_Blend"), 0.000001f);
     }
 
     private static void DirtyComparisonTracksAuthoredState()

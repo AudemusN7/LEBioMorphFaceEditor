@@ -204,9 +204,17 @@
         </Setter>
     </Style>
 
+    <Style TargetType="Menu">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{StaticResource PrimaryText}" />
+        <Setter Property="Padding" Value="0" />
+    </Style>
+
     <Style TargetType="MenuItem">
         <Setter Property="Foreground" Value="{StaticResource PrimaryText}" />
         <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Padding" Value="11,7" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         <Setter Property="Template">
@@ -215,18 +223,27 @@
                     <Grid>
                         <Border x:Name="Chrome"
                                 Background="{TemplateBinding Background}"
-                                CornerRadius="2"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="3"
                                 Padding="{TemplateBinding Padding}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <ContentPresenter ContentSource="Header"
+                                <ContentPresenter x:Name="HeaderContent" ContentSource="Header"
                                                   RecognizesAccessKey="True"
                                                   VerticalAlignment="Center" />
+                                <TextBlock x:Name="InputGesture"
+                                           Grid.Column="1"
+                                           Text="{TemplateBinding InputGestureText}"
+                                           Foreground="{StaticResource SecondaryText}"
+                                           Margin="24,0,0,0"
+                                           VerticalAlignment="Center" />
                                 <Path x:Name="SubmenuArrow"
-                                      Grid.Column="1"
+                                      Grid.Column="2"
                                       Data="M 0 0 L 4 4 L 0 8 Z"
                                       Fill="{StaticResource SecondaryText}"
                                       Margin="18,0,2,0"
@@ -254,6 +271,19 @@
                     <ControlTemplate.Triggers>
                         <Trigger Property="Role" Value="SubmenuHeader">
                             <Setter TargetName="SubmenuArrow" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="Role" Value="TopLevelHeader">
+                            <Setter TargetName="PART_Popup" Property="Placement" Value="Bottom" />
+                            <Setter TargetName="InputGesture" Property="Visibility" Value="Collapsed" />
+                            <Setter Property="Background" Value="{StaticResource RaisedBackground}" />
+                            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+                            <Setter Property="BorderThickness" Value="1" />
+                            <Setter Property="Cursor" Value="Hand" />
+                            <Setter Property="Padding" Value="10,3" />
+                            <Setter TargetName="HeaderContent" Property="HorizontalAlignment" Value="Center" />
+                        </Trigger>
+                        <Trigger Property="IsSubmenuOpen" Value="True">
+                            <Setter TargetName="Chrome" Property="Background" Value="{StaticResource PressedBackground}" />
                         </Trigger>
                         <Trigger Property="IsHighlighted" Value="True">
                             <Setter TargetName="Chrome" Property="Background" Value="{StaticResource HoverBackground}" />

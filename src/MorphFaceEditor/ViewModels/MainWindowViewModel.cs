@@ -41,10 +41,13 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly StandaloneLegacyHeadMorphImportService _standaloneLegacyImportService;
     private readonly DetachedMeshPreviewLoadService _detachedMeshPreviewLoadService;
     private readonly MorphRandomisationCatalog _randomisationCatalog;
+    private readonly RecentFileService _recentFileService;
     private readonly AsyncRelayCommand _openPackageCommand;
     private readonly AsyncRelayCommand _loadSelectedFaceCommand;
     private readonly AsyncRelayCommand _saveCommand;
     private readonly AsyncRelayCommand _saveMorphToPccCommand;
+    private readonly AsyncRelayCommand _closeWorkspaceCommand;
+    private readonly RelayCommand _exitCommand;
     private readonly RelayCommand _fixMorphCommand;
     private readonly RelayCommand _editBackgroundColorCommand;
     private readonly RelayCommand _dismissErrorCommand;
@@ -122,7 +125,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         StandalonePlayerMorphImportService? standaloneImportService = null,
         StandalonePlayerMeshImportService? standaloneMeshImportService = null,
         StandaloneLegacyHeadMorphImportService? standaloneLegacyImportService = null,
-        DetachedMeshPreviewLoadService? detachedMeshPreviewLoadService = null)
+        DetachedMeshPreviewLoadService? detachedMeshPreviewLoadService = null,
+        RecentFileService? recentFiles = null)
     {
         _dialogs = dialogs;
         _catalogService = catalogService;
@@ -144,6 +148,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _standaloneLegacyImportService = standaloneLegacyImportService ?? new StandaloneLegacyHeadMorphImportService();
         _detachedMeshPreviewLoadService = detachedMeshPreviewLoadService ?? new DetachedMeshPreviewLoadService(sceneFactory);
         _randomisationCatalog = randomisationCatalog ?? MorphRandomisationCatalog.Empty;
+        _recentFileService = recentFiles ?? new RecentFileService();
         _openPackageCommand = new AsyncRelayCommand(OpenPackageAsync, () => !IsBusy);
         _loadSelectedFaceCommand = new AsyncRelayCommand(
             LoadSelectedFaceCommandAsync,
@@ -157,6 +162,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                   (_packageWorkspace is not null ||
                    IsDetachedMeshWorkspace && _standaloneGame is not null &&
                    Editor.CustomMaterials is not null));
+        _closeWorkspaceCommand = new AsyncRelayCommand(CloseWorkspaceAsync, () => !IsBusy && HasWorkspace);
+        _exitCommand = new RelayCommand(() => ExitRequested?.Invoke(this, EventArgs.Empty));
         _fixMorphCommand = new RelayCommand(FixMorph, () => !IsBusy && Editor?.CanFixMorph == true);
         _editBackgroundColorCommand = new RelayCommand(EditBackgroundColor);
         _dismissErrorCommand = new RelayCommand(() => ErrorMessage = null);
@@ -190,17 +197,21 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             CanUseMeshMaterialFiles() ? ImportMeshMaterialsAsync(false) : ImportFaceMaterialsAsync(), CanUseMaterialFiles);
         _assignMorphToActorCommand = new AsyncRelayCommand(AssignMorphToActorAsync, CanMutatePackageContext);
         _assignMaterialsToActorCommand = new AsyncRelayCommand(AssignMaterialsToActorAsync, CanMutatePackageContext);
+        RefreshRecentFiles();
         FilteredFaces = CollectionViewSource.GetDefaultView(Faces);
         FilteredFaces.Filter = item =>
             item is BioMorphFaceListItem face && BioMorphFaceSearch.Matches(face, FaceSearchText);
     }
 
     public event Action<HeadPreviewScene, bool>? PreviewSceneReady;
+    public event EventHandler? PreviewCleared;
     public event Action<HeadPreviewDeformationUpdate>? PreviewDeformationReady;
     public event Action<HeadPreviewMaterialUpdate>? PreviewMaterialReady;
     public event EventHandler? PreviewOptionsChanged;
+    public event EventHandler? ExitRequested;
 
     public ObservableCollection<BioMorphFaceListItem> Faces { get; } = [];
+    public ObservableCollection<RecentFileItem> RecentFiles { get; } = [];
     public ObservableCollection<PreviewLodChoice> PreviewLods { get; } = [];
     public ICollectionView FilteredFaces { get; }
     public IReadOnlyList<HeadPreviewRenderMode> RenderModes { get; } = Enum.GetValues<HeadPreviewRenderMode>();
@@ -215,6 +226,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public ICommand LoadSelectedFaceCommand => _loadSelectedFaceCommand;
     public ICommand SaveCommand => _saveCommand;
     public ICommand SaveMorphToPccCommand => _saveMorphToPccCommand;
+    public ICommand CloseWorkspaceCommand => _closeWorkspaceCommand;
+    public ICommand ExitCommand => _exitCommand;
     public ICommand FixMorphCommand => _fixMorphCommand;
     public ICommand EditBackgroundColorCommand => _editBackgroundColorCommand;
     public ICommand DismissErrorCommand => _dismissErrorCommand;
@@ -247,6 +260,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             {
                 OnPropertyChanged(nameof(PackageName));
                 OnPropertyChanged(nameof(PackageDisplayName));
+                OnPropertyChanged(nameof(HasWorkspace));
+                _closeWorkspaceCommand.RaiseCanExecuteChanged();
             }
         }
     }
@@ -257,6 +272,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         ? $"{_standaloneGame} Standalone {(_isStandaloneNpcWorkspace ? "NPC" : "Player")} Workspace"
         : PackagePath is null ? "No package open" : Path.GetFileName(PackagePath);
     public string PackageDisplayName => IsDirty ? $"{PackageName} *" : PackageName;
+    public bool HasWorkspace => PackagePath is not null;
+    public bool HasRecentFiles => RecentFiles.Count > 0;
     public bool IsDirty => _hasWorkspaceChanges || Editor?.IsDirty == true;
     public bool CanFixMorph => Editor?.CanFixMorph == true;
     public bool IsDetachedMeshWorkspace => _detachedMeshSource is not null;
@@ -293,6 +310,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 OnPropertyChanged(nameof(ConvertMorphHeader));
                 _loadSelectedFaceCommand.RaiseCanExecuteChanged();
                 _saveMorphToPccCommand.RaiseCanExecuteChanged();
+                _closeWorkspaceCommand.RaiseCanExecuteChanged();
                 RaiseFaceContextCanExecuteChanged();
                 OnPropertyChanged(nameof(IsMaterialFileWorkspace));
             }
@@ -570,16 +588,21 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private async Task OpenPackageAsync()
     {
-        var selectedPath = _dialogs.ChoosePackage(PackagePath is null ? null : Path.GetDirectoryName(PackagePath));
+        var selectedPath = _dialogs.ChooseWorkspaceFile(
+            PackagePath is null ? null : Path.GetDirectoryName(PackagePath));
         if (selectedPath is null)
         {
             return;
         }
 
-        if (await EnsureCanAbandonWorkspaceAsync())
+        if (EditorFileDrop.Classify(selectedPath) == EditorFileDropKind.Unsupported)
         {
-            await OpenSourcePackagePathAsync(selectedPath);
+            ErrorMessage = $"'{Path.GetExtension(selectedPath)}' is not a supported package or morph file type.";
+            Status = "The selected file could not be opened.";
+            return;
         }
+
+        await OpenDroppedFileAsync(selectedPath);
     }
 
     public bool CanCancelNpcImport => _npcImportCancellation is { IsCancellationRequested: false };
@@ -606,6 +629,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             return;
         }
 
+        RecordRecentFile(path);
+
         if (EditorFileDrop.Classify(path) == EditorFileDropKind.Package)
         {
             if (await EnsureCanAbandonWorkspaceAsync())
@@ -616,6 +641,35 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         await ImportMorphAsync(path);
+    }
+
+    private async Task OpenRecentFileAsync(string path)
+    {
+        if (!File.Exists(path))
+        {
+            _recentFileService.Remove(path);
+            RefreshRecentFiles();
+            ErrorMessage = $"The recent file no longer exists: {path}";
+            Status = "The recent file could not be opened.";
+            return;
+        }
+        await OpenDroppedFileAsync(path);
+    }
+
+    private void RecordRecentFile(string path)
+    {
+        _recentFileService.Add(path);
+        RefreshRecentFiles();
+    }
+
+    private void RefreshRecentFiles()
+    {
+        RecentFiles.Clear();
+        foreach (var path in _recentFileService.Paths)
+        {
+            RecentFiles.Add(new RecentFileItem(path, new AsyncRelayCommand(() => OpenRecentFileAsync(path))));
+        }
+        OnPropertyChanged(nameof(HasRecentFiles));
     }
 
     private async Task<bool> OpenSourcePackagePathAsync(string selectedPath, string? preferredFacePath = null)
@@ -1500,6 +1554,44 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public Task<bool> ConfirmCloseAsync() => EnsureCanAbandonWorkspaceAsync();
 
+    internal async Task CloseWorkspaceAsync()
+    {
+        if (!HasWorkspace || !await EnsureCanAbandonWorkspaceAsync())
+        {
+            return;
+        }
+
+        CancelPendingLoad();
+        _npcImportCancellation?.Cancel();
+        _npcImportCancellation?.Dispose();
+        _npcImportCancellation = null;
+        SetEditor(null, null);
+        DisposePackageWorkspace();
+        SetDetachedMeshSource(null);
+        _standaloneImportPath = null;
+        _standaloneGame = null;
+        _isStandaloneNpcWorkspace = false;
+        _fixedBakeFacePaths.Clear();
+        _relativeBakeFacePaths.Clear();
+        _hasWorkspaceChanges = false;
+        _referenceCatalog = new PackageReferenceCatalog([], []);
+        _preservedOtherMeshAssets = [];
+        _previewCameraFamily = null;
+        _loadedSpeciesKey = null;
+        SelectedFace = null;
+        Faces.Clear();
+        FaceSearchText = string.Empty;
+        FaceDetails = null;
+        LoadedFacePath = null;
+        HasPreview = false;
+        ErrorMessage = null;
+        PackagePath = null;
+        Status = "Open a package to begin.";
+        OnDirtyStateChanged();
+        RaiseFaceContextCanExecuteChanged();
+        PreviewCleared?.Invoke(this, EventArgs.Empty);
+    }
+
     private async Task SaveMorphToPccCommandAsync() => _ = await SaveMorphToPccAsync();
 
     private async Task<bool> SaveMorphToPccAsync()
@@ -1669,3 +1761,4 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
 public sealed record PreviewLightingChoice(HeadPreviewLightingPreset Preset, string Name);
 public sealed record PreviewLodChoice(int LodIndex, string Name);
+public sealed record RecentFileItem(string FilePath, ICommand OpenCommand);

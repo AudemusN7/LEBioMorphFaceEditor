@@ -14,6 +14,12 @@
         PreviewDragOver="OnFileDragOver"
         Drop="OnFileDrop"
         WindowStartupLocation="CenterScreen">
+    <Window.InputBindings>
+        <KeyBinding Key="O" Modifiers="Control" Command="{Binding OpenPackageCommand}" />
+        <KeyBinding Key="S" Modifiers="Control" Command="{Binding SaveCommand}" />
+        <KeyBinding Key="E" Modifiers="Control" Command="{Binding SaveMorphToPccCommand}" />
+        <KeyBinding Key="W" Modifiers="Control" Command="{Binding CloseWorkspaceCommand}" />
+    </Window.InputBindings>
     <!-- Window resources keep editor-specific templates local; shared primitives live in EditorTheme.xaml. -->
     <Window.Resources>
         <Style x:Key="PccContextAction" TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
@@ -171,11 +177,29 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button Content="Open PCC" Command="{Binding OpenPackageCommand}" MinWidth="96" Height="30" Padding="10,3" />
-                    <Button Content="Import Morph" Command="{Binding ImportMorphCommand}" MinWidth="108" Height="30" Padding="10,3" Margin="7,0,0,0"
-                            ToolTip="Choose the Legendary Edition game, then import a TSE RON, Gibbed head morph, or supported baked mesh. Same-game imports can target the selected PCC face." />
-                    <Button Content="Save PCC" Command="{Binding SaveCommand}" MinWidth="82" Height="30" Padding="10,3" Margin="7,0,0,0" />
-                    <Button Content="Save to PCC" Command="{Binding SaveMorphToPccCommand}" MinWidth="112" Height="30" Padding="10,3" Margin="7,0,0,0" />
+                    <Menu VerticalAlignment="Center">
+                        <MenuItem Header="_File" Height="30" MinWidth="54">
+                            <MenuItem Header="Open Package…" Command="{Binding OpenPackageCommand}" InputGestureText="Ctrl+O" />
+                            <MenuItem Header="Save Package" Command="{Binding SaveCommand}" InputGestureText="Ctrl+S" />
+                            <MenuItem Header="Export to PCC…" Command="{Binding SaveMorphToPccCommand}" InputGestureText="Ctrl+E" />
+                            <Separator />
+                            <MenuItem Header="Recent" ItemsSource="{Binding RecentFiles}" IsEnabled="{Binding HasRecentFiles}">
+                                <MenuItem.ItemContainerStyle>
+                                    <Style TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
+                                        <Setter Property="Header" Value="{Binding FilePath}" />
+                                        <Setter Property="Command" Value="{Binding OpenCommand}" />
+                                        <Setter Property="ToolTip" Value="{Binding FilePath}" />
+                                    </Style>
+                                </MenuItem.ItemContainerStyle>
+                            </MenuItem>
+                            <Separator />
+                            <MenuItem Header="Close" Command="{Binding CloseWorkspaceCommand}" InputGestureText="Ctrl+W" />
+                            <MenuItem Header="Exit" Command="{Binding ExitCommand}" />
+                        </MenuItem>
+                    </Menu>
+                    <Button Content="Texture Databases" Command="{Binding TextureRegistrySettingsCommand}"
+                            Height="30" Padding="10,3" Margin="7,0,0,0"
+                            ToolTip="Manage the game-wide Texture2D registries" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Margin="16,0" VerticalAlignment="Center">
                     <TextBlock Text="{Binding PackageDisplayName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
@@ -774,9 +798,7 @@
 
         <Border Grid.Row="2" Background="#151A20" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0">
             <Grid Margin="12,0">
-                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                 <TextBlock Text="{Binding Status}" Foreground="{StaticResource SecondaryText}" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                <Button Grid.Column="1" Content="Texture Databases…" Command="{Binding TextureRegistrySettingsCommand}" Padding="8,2" FontSize="10" VerticalAlignment="Center" ToolTip="Manage the game-wide Texture2D registries" />
             </Grid>
         </Border>
     </Grid>

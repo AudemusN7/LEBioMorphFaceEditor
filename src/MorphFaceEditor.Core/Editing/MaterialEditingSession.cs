@@ -176,8 +176,14 @@ public sealed class MaterialEditingSession : IUndoableEditSource
             vectors[name] = _vectors[name];
         }
 
+        // A few shipped faces contain duplicate texture override names. The
+        // package reader preserves those entries for authored round-tripping,
+        // while the effective editor binding uses the first occurrence. Keep
+        // that same first-wins policy when projecting the editable state.
         var textures = _originalOverrides.Textures
-            .ToDictionary(value => value.Name, value => value.TextureReference, StringComparer.OrdinalIgnoreCase);
+            .GroupBy(value => value.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First().TextureReference,
+                StringComparer.OrdinalIgnoreCase);
         foreach (var value in _textureReferences)
         {
             if (value.Value is null)

@@ -59,6 +59,7 @@ public static class PackageContextTests
         new("standalone legacy imports reject a destination-game mismatch", StandaloneLegacyImportRejectsMismatch),
         new("installed LE2 and LE3 legacy imports create detached workspaces", StandaloneLegacyImportsInstalledPlayers),
         new("broken attachment materials fall back without blocking face authoring", BrokenAttachmentMaterialFallsBack),
+        new("corpus edge faces load through profile and material projection", CorpusEdgeFacesLoad),
         new("UModel staging package contains only baked mesh geometry", MeshExportStagingIsGeometryOnly),
         new("real baked mesh projects back into its profile target span", RealBakedMeshInverts)
     ];
@@ -622,6 +623,43 @@ public static class PackageContextTests
                 "BIOG_HMM_HED_PROMorph.Joker.HMM_HED_PROJoker_Scalp_Diff_Stack",
                 result.MaterialData.Textures.Single(value => value.Name == "HED_Scalp_Diff").TextureReference?.InstancedPath);
         });
+    }
+
+    private static void CorpusEdgeFacesLoad()
+    {
+        var cases = new[]
+        {
+            (File: "LE1 GlobalMorphs.pcc", Fragment: "hench_krogan", Game: MorphFaceGame.LE1),
+            (File: "LE2 GlobalMorphs.pcc", Fragment: "hench_krogan", Game: MorphFaceGame.LE2),
+            (File: "LE3 GlobalMorphs.pcc", Fragment: "global_joker", Game: MorphFaceGame.LE3)
+        };
+        var profiles = MorphFaceProfileRegistry.CreateDefault();
+        var targets = new MorphTargetCatalog();
+        foreach (var item in cases)
+        {
+            var path = FixturePath(item.File);
+            var face = ReadFaces(path).Single(value => value.InstancedPath.Contains(
+                item.Fragment, StringComparison.OrdinalIgnoreCase));
+            using var reader = new MorphFacePackageReader();
+            var loaded = reader.Load(path, face.UIndex.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            var profile = profiles.Find(item.Game, loaded.Document.Source.InstancedPath,
+                loaded.BaseHead.Source.InstancedPath);
+            TestAssert.True(profile is not null, $"No profile resolved for {loaded.Document.Source.InstancedPath}.");
+
+            var resolution = new MorphFeatureTargetResolver().Resolve(
+                loaded.Document.MorphFeatures,
+                targets.Load(profile!, item.Game, path),
+                profile!.MetadataOnlyFeatures,
+                profile.DisplayName,
+                profile.FeatureAliases);
+            foreach (var feature in resolution.Features)
+            {
+                _ = profile.UiProfile.Describe(feature, sessionCanEdit: true);
+            }
+
+            var materialSession = new MaterialEditingSession(loaded.Document.MaterialOverrides, loaded.Materials);
+            _ = materialSession.CreateOverrides();
+        }
     }
 
     private static void ConversionRequiresTextureDatabases()

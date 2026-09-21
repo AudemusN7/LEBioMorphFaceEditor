@@ -13,6 +13,7 @@ public partial class BoneTransformControl : UserControl
     private readonly DispatcherTimer _wheelCommitTimer;
     private BoneTransformEditorViewModel? _model;
     private bool _isDragging;
+    private bool _isDepthDragging;
     private bool _isWheelEditing;
 
     public BoneTransformControl()
@@ -123,6 +124,56 @@ public partial class BoneTransformControl : UserControl
         e.Handled = true;
     }
 
+    private void OnDepthMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (_model is null || !_model.IsAvailable)
+        {
+            return;
+        }
+        EndWheelEdit();
+        EndDrag();
+        _isDepthDragging = true;
+        _model.BeginPuckEdit();
+        DepthTrack.CaptureMouse();
+        ApplyDepthPosition(e.GetPosition(DepthTrack));
+        e.Handled = true;
+    }
+
+    private void OnDepthMouseMove(object sender, MouseEventArgs e)
+    {
+        if (_isDepthDragging)
+        {
+            ApplyDepthPosition(e.GetPosition(DepthTrack));
+            e.Handled = true;
+        }
+    }
+
+    private void OnDepthMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (!_isDepthDragging)
+        {
+            return;
+        }
+        ApplyDepthPosition(e.GetPosition(DepthTrack));
+        DepthTrack.ReleaseMouseCapture();
+        EndDepthDrag();
+        e.Handled = true;
+    }
+
+    private void OnDepthLostMouseCapture(object sender, MouseEventArgs e) => EndDepthDrag();
+
+    private void ApplyDepthPosition(Point point)
+    {
+        if (_model is null || DepthTrack.ActualWidth <= 0)
+        {
+            return;
+        }
+        var thumbWidth = DepthThumb.Width;
+        var travel = Math.Max(1, DepthTrack.ActualWidth - thumbWidth);
+        var amount = Math.Clamp((point.X - thumbWidth / 2) / travel, 0, 1);
+        _model.X.Value = Interpolate(_model.X.Minimum, _model.X.Maximum, amount);
+    }
+
     private void ApplyPadPosition(Point point)
     {
         if (_model is null || PuckCanvas.ActualWidth <= 0 || PuckCanvas.ActualHeight <= 0)
@@ -170,6 +221,16 @@ public partial class BoneTransformControl : UserControl
         _model?.EndPuckEdit();
     }
 
+    private void EndDepthDrag()
+    {
+        if (!_isDepthDragging)
+        {
+            return;
+        }
+        _isDepthDragging = false;
+        _model?.EndPuckEdit();
+    }
+
     private void OnWheelCommitTimer(object? sender, EventArgs e) => EndWheelEdit();
 
     private void EndWheelEdit()
@@ -189,7 +250,12 @@ public partial class BoneTransformControl : UserControl
         {
             Pad.ReleaseMouseCapture();
         }
+        if (DepthTrack.IsMouseCaptured)
+        {
+            DepthTrack.ReleaseMouseCapture();
+        }
         EndDrag();
+        EndDepthDrag();
         EndWheelEdit();
         DetachModel();
     }

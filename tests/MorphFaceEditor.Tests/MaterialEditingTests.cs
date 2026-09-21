@@ -26,7 +26,8 @@ public static class MaterialEditingTests
         new("package texture reference updates detached bindings and undoes", PackageTextureReferenceUpdatesBindings),
         new("package texture reference supports None and undo", PackageTextureReferenceSupportsNone),
         new("None restores the rendered material default after replacement", NoneRestoresRenderedDefault),
-        new("failed attachment replacement can restore material state", AttachmentMaterialStateRestores)
+        new("failed attachment replacement can restore material state", AttachmentMaterialStateRestores),
+        new("duplicate face texture overrides remain loadable", DuplicateTextureOverridesRemainLoadable)
     ];
 
     private static void MaterialHistoryIsSemantic()
@@ -239,6 +240,21 @@ public static class MaterialEditingTests
         TestAssert.True(session.CreateOverrides().Scalars.Count == 0 &&
                         session.CreateOverrides().Vectors.Count == 0,
             "An empty material paste retained values that were omitted from its override payload.");
+    }
+
+    private static void DuplicateTextureOverridesRemainLoadable()
+    {
+        var first = TestFixtures.CreateIdentity("FirstMask", "Texture2D");
+        var second = TestFixtures.CreateIdentity("SecondMask", "Texture2D");
+        var session = new MaterialEditingSession(
+            new MorphFaceMaterialOverrides(null, [], [],
+                [new TextureMaterialOverride("HED_Mask", first),
+                 new TextureMaterialOverride("HED_Mask", second)]),
+            ResolvedHeadMaterialSet.Empty);
+
+        var overrides = session.CreateOverrides().Textures;
+        TestAssert.Equal(1, overrides.Count);
+        TestAssert.Equal(first, overrides[0].TextureReference);
     }
 
     private static void InheritedEyeEmissiveDefaultsToZero()

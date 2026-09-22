@@ -25,6 +25,7 @@ public static class MaterialEditingTests
         new("HDR picker previews live and commits once on Apply", HdrPreviewCommitsOnce),
         new("package texture reference updates detached bindings and undoes", PackageTextureReferenceUpdatesBindings),
         new("package texture reference supports None and undo", PackageTextureReferenceSupportsNone),
+        new("transient texture preview stays outside authored state and history", TransientTexturePreviewStaysOutsideAuthoredState),
         new("None restores the rendered material default after replacement", NoneRestoresRenderedDefault),
         new("failed attachment replacement can restore material state", AttachmentMaterialStateRestores),
         new("attachment Diffuseuse stays out of head material output", AttachmentTextureIsNotHeadOutput),
@@ -409,6 +410,44 @@ public static class MaterialEditingTests
         TestAssert.True(
             session.Materials.Materials.Values.Single().Textures["HED_Diff"].Texture.CacheKey == "original",
             "Redo did not restore the material default for None.");
+    }
+
+    private static void TransientTexturePreviewStaysOutsideAuthoredState()
+    {
+        var session = CreateSession();
+        var replacementIdentity = TestFixtures.CreateIdentity("PreviewDiffuse", "Texture2D");
+        var replacement = new DecodedTextureAsset(
+            replacementIdentity, 1, 1, [24, 192, 72, 255], "PF_B8G8R8A8",
+            TextureRole.Diffuse, TextureColorSpace.Srgb, TextureAlphaPolicy.Ignore, false, "preview");
+        var commits = 0;
+        var historyChanges = 0;
+        session.EditCommitted += (_, _) => commits++;
+        session.HistoryChanged += (_, _) => historyChanges++;
+
+        session.PreviewTexture("HED_Diff", replacement);
+        TestAssert.Equal("preview", session.GetPreviewTexture("HED_Diff")?.CacheKey);
+        TestAssert.Equal("original", session.GetSelectedTexture("HED_Diff")?.CacheKey);
+        TestAssert.Equal("FaceDiffuse", session.GetTextureReference("HED_Diff")?.InstancedPath);
+        TestAssert.Equal("FaceDiffuse", session.CreateOverrides().Textures.Single().TextureReference?.InstancedPath);
+        TestAssert.True(!session.CanUndo && commits == 0 && historyChanges == 0,
+            "Transient texture preview changed authored history or dirty state.");
+
+        session.PreviewTexture("HED_Diff", null);
+        TestAssert.Equal("original", session.GetPreviewTexture("HED_Diff")?.CacheKey);
+        TestAssert.Equal("original", session.GetSelectedTexture("HED_Diff")?.CacheKey);
+
+        session.PreviewTexture("HED_Diff", replacement);
+        session.SetTextureReference("HED_Diff", replacement);
+        TestAssert.Equal("preview", session.GetSelectedTexture("HED_Diff")?.CacheKey);
+        TestAssert.Equal(1, commits);
+        TestAssert.Equal(1, historyChanges);
+        TestAssert.True(session.CanUndo, "Committing a preview candidate did not create one normal edit.");
+
+        session.PreviewTexture("HED_Diff", null);
+        session.Undo();
+        TestAssert.Equal("original", session.GetSelectedTexture("HED_Diff")?.CacheKey);
+        TestAssert.Equal("original", session.GetPreviewTexture("HED_Diff")?.CacheKey);
+        TestAssert.True(!session.CanUndo, "Undo did not return to the previous committed texture.");
     }
 
     private static void NoneRestoresRenderedDefault()

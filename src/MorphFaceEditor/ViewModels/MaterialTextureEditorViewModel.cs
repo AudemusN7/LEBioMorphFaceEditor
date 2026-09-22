@@ -19,15 +19,18 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
     private readonly Action<string> _reportError;
     private readonly IReadOnlyList<PackageAssetListItem> _localCandidates;
     private IReadOnlyList<TextureCatalogCandidate> _registryCandidates;
-    private TextureCatalogProfile _registryProfile;
     private bool _isRegistryAvailable;
     private readonly List<MaterialTextureOption> _allCandidates;
+    private readonly Dictionary<string, DecodedTextureAsset> _resolvedCandidateTextures =
+        new(StringComparer.OrdinalIgnoreCase);
     private MaterialTextureOption? _selectedTexture;
     private ImageSource? _previewThumbnail;
     private bool _isBusy;
     private bool _initializing;
     private long _selectionGeneration;
     private CancellationTokenSource? _selectionCancellation;
+    private long _previewGeneration;
+    private CancellationTokenSource? _previewCancellation;
     private bool _disposed;
     private string _searchText = string.Empty;
 
@@ -49,7 +52,9 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
         _reportError = reportError;
         _localCandidates = candidates;
         _registryCandidates = registryCandidates ?? [];
-        _registryProfile = registryProfile ?? TextureCatalogProfile.Empty;
+        // Keep the profile in the constructor contract for the merged catalogue,
+        // but do not let profile relevance reorder an open picker.
+        _ = registryProfile;
         _isRegistryAvailable = isRegistryAvailable;
         var currentTexture = session.GetSelectedTexture(Name);
         var defaultTextureName = session.GetDefaultTexture(Name)?.Source.InstancedPath.Split('.').Last();
@@ -112,7 +117,12 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
         get => _selectedTexture;
         set
         {
-            if (SetProperty(ref _selectedTexture, value) && !_initializing && value is not null)
+            if (!_initializing && value is not null)
+            {
+                CancelTexturePreview();
+            }
+            var changed = SetProperty(ref _selectedTexture, value);
+            if (!_initializing && value is not null && changed)
             {
                 CancelPendingSelection();
                 if (value.IsNone)
@@ -175,7 +185,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
     {
         ArgumentNullException.ThrowIfNull(reference);
         var option = _allCandidates.FirstOrDefault(candidate => candidate.MatchesIdentity(reference));
-        var cached = option?.ResolvedTexture;
+        var cached = option is null ? null : ResolvedTexture(option);
         if (cached is not null) return cached;
         return await _references.LoadTextureAsync(
             option?.RegistryCandidate?.EffectiveOccurrence.PackagePath ?? reference.PackagePath,
@@ -212,6 +222,34 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
     public bool CanResolveInstancedPath(string instancedPath) =>
         !string.IsNullOrWhiteSpace(instancedPath) && FindResolvableOption(instancedPath) is not null;
 
+    /// <summary>Loads a hovered candidate into the live preview without changing the committed material selection.</summary>
+    public Task PreviewTextureAsync(MaterialTextureOption option)
+    {
+        ArgumentNullException.ThrowIfNull(option);
+        CancelTexturePreview();
+        var generation = _previewGeneration;
+        var cancellation = new CancellationTokenSource();
+        _previewCancellation = cancellation;
+        return PreviewAsync(option, generation, cancellation);
+    }
+
+    /// <summary>Stops a transient preview and restores the committed material state.</summary>
+    public void CancelTexturePreview()
+    {
+        _previewGeneration++;
+        var cancellation = _previewCancellation;
+        _previewCancellation = null;
+        cancellation?.Cancel();
+        _session.ClearTexturePreview(Name);
+    }
+
+    /// <summary>Commits a candidate using the normal texture-selection path.</summary>
+    public void CommitTexture(MaterialTextureOption option)
+    {
+        ArgumentNullException.ThrowIfNull(option);
+        SelectedTexture = option;
+    }
+
     /// <summary>Applies a catalogue that completed after the material editor became interactive.</summary>
     public void UpdateRegistryCandidates(
         IReadOnlyList<TextureCatalogCandidate> candidates,
@@ -221,8 +259,8 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
         ArgumentNullException.ThrowIfNull(candidates);
         ArgumentNullException.ThrowIfNull(profile);
         _registryCandidates = candidates;
-        _registryProfile = profile;
         _isRegistryAvailable = isRegistryAvailable;
+        CancelTexturePreview();
         CancelPendingSelection();
         var currentTexture = _session.GetSelectedTexture(Name);
         var defaultTextureName = _session.GetDefaultTexture(Name)?.Source.InstancedPath.Split('.').Last();
@@ -260,10 +298,10 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
         IsBusy = true;
         try
         {
-            if (selected.ResolvedTexture is not null)
+            if (ResolvedTexture(selected) is { } resolved)
             {
                 if (generation == _selectionGeneration)
-                    _session.SetTextureReference(Name, selected.ResolvedTexture);
+                    _session.SetTextureReference(Name, resolved);
                 return;
             }
             var sourcePackage = selected.RegistryCandidate?.EffectiveOccurrence.PackagePath ?? selected.Asset?.Identity.PackagePath
@@ -274,6 +312,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
                 instancedPath,
                 _definition,
                 cancellation.Token);
+            CacheResolvedTexture(selected, texture);
             selected.Asset?.SetThumbnail(texture);
             if (generation == _selectionGeneration && ReferenceEquals(selected, SelectedTexture))
             {
@@ -302,10 +341,70 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
         }
     }
 
+    private async Task PreviewAsync(
+        MaterialTextureOption selected,
+        long generation,
+        CancellationTokenSource cancellation)
+    {
+        try
+        {
+            DecodedTextureAsset? texture;
+            if (selected.IsNone)
+            {
+                texture = null;
+            }
+            else if (ResolvedTexture(selected) is { } resolved)
+            {
+                texture = resolved;
+            }
+            else
+            {
+                var sourcePackage = selected.RegistryCandidate?.EffectiveOccurrence.PackagePath ?? selected.Asset?.Identity.PackagePath
+                    ?? throw new ArgumentException("None does not identify a package texture.", nameof(selected));
+                texture = await _references.LoadTextureAsync(
+                    sourcePackage,
+                    selected.InstancedPath,
+                    _definition,
+                    cancellation.Token);
+                CacheResolvedTexture(selected, texture);
+            }
+
+            if (generation != _previewGeneration)
+            {
+                return;
+            }
+
+            if (texture is not null)
+            {
+                selected.Asset?.SetThumbnail(texture);
+            }
+            _session.PreviewTexture(Name, texture);
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            if (generation == _previewGeneration)
+            {
+                _reportError($"Texture preview could not be loaded: {exception.Message}");
+            }
+        }
+        finally
+        {
+            cancellation.Dispose();
+            if (generation == _previewGeneration)
+            {
+                _previewCancellation = null;
+            }
+        }
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
         CancelPendingSelection();
+        CancelTexturePreview();
         _disposed = true;
     }
 
@@ -321,15 +420,30 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
     private void ApplySearch()
     {
         var none = _allCandidates[0];
-        var activePath = _session.GetSelectedTexture(Name)?.Source.InstancedPath;
         var filtered = _allCandidates.Skip(1)
             .Where(option => MatchesSearch(option, SearchText))
-            .OrderBy(option => Rank(option, activePath))
-            .ThenBy(option => option.ObjectName, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(option => option.InstancedPath, StringComparer.OrdinalIgnoreCase)
             .ToArray();
         Candidates = [none, .. filtered];
         OnPropertyChanged(nameof(Candidates));
+    }
+
+    private DecodedTextureAsset? ResolvedTexture(MaterialTextureOption option) =>
+        option.ResolvedTexture ??
+        (_resolvedCandidateTextures.TryGetValue(CandidateCacheKey(option), out var cached) ? cached : null);
+
+    private void CacheResolvedTexture(MaterialTextureOption option, DecodedTextureAsset texture)
+    {
+        if (!option.IsNone)
+        {
+            _resolvedCandidateTextures[CandidateCacheKey(option)] = texture;
+        }
+    }
+
+    private static string CandidateCacheKey(MaterialTextureOption option)
+    {
+        var packagePath = option.RegistryCandidate?.EffectiveOccurrence.PackagePath ??
+                          option.Asset?.Identity.PackagePath ?? string.Empty;
+        return $"{packagePath}|{option.InstancedPath}";
     }
 
     private IReadOnlyList<MaterialTextureOption> BuildOptions(DecodedTextureAsset? currentTexture)
@@ -386,19 +500,6 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
                option.SourceDescription.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                option.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase);
     }
-
-    private int Rank(MaterialTextureOption option, string? activePath)
-    {
-        if (!string.IsNullOrWhiteSpace(activePath) &&
-            option.InstancedPath.Equals(activePath, StringComparison.OrdinalIgnoreCase)) return 0;
-        if (ContainsAny(option.InstancedPath, _registryProfile.PreferredPathFragments)) return 1;
-        if (ContainsAny(option.InstancedPath, _registryProfile.SharedPathFragments)) return 2;
-        return option.RegistryCandidate is null ? 3 : 4;
-    }
-
-    private static bool ContainsAny(string path, IReadOnlyList<string> fragments) =>
-        fragments.Any(fragment => !string.IsNullOrWhiteSpace(fragment) &&
-            path.Contains(fragment, StringComparison.OrdinalIgnoreCase));
 
     private MaterialTextureOption? FindResolvableOption(string instancedPath)
     {

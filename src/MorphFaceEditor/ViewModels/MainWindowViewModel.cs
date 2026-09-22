@@ -98,6 +98,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private Vector4 _backgroundColor = new(0.035f, 0.043f, 0.055f, 1);
     private PackageReferenceCatalog _referenceCatalog = new([], []);
     private int _attachmentChangeVersion;
+    private CancellationTokenSource? _attachmentPreviewCancellation;
     private bool _suppressMaterialPreview;
     private IReadOnlyList<SkeletalMeshAsset> _preservedOtherMeshAssets = [];
     private string? _previewCameraFamily;
@@ -979,6 +980,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private void SetEditor(FaceEditorViewModel? editor, LoadedMorphFace? loaded)
     {
+        CancelAttachmentPreviewLoad();
+        _attachmentChangeVersion++;
         if (Editor is not null)
         {
             _lastCategoryKey = Editor.SelectedCategory?.Key;
@@ -989,6 +992,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             foreach (var attachment in Editor.AttachmentMeshes)
             {
                 attachment.SelectionChanged -= OnAttachmentMeshChanged;
+                attachment.PreviewChanged -= OnAttachmentMeshPreviewChanged;
             }
             Editor.Dispose();
         }
@@ -1034,6 +1038,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             foreach (var attachment in Editor.AttachmentMeshes)
             {
                 attachment.SelectionChanged += OnAttachmentMeshChanged;
+                attachment.PreviewChanged += OnAttachmentMeshPreviewChanged;
             }
         }
         OnDirtyStateChanged();
@@ -1221,6 +1226,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             return;
         }
 
+        CancelAttachmentPreviewLoad();
         var version = ++_attachmentChangeVersion;
         var editor = Editor;
         var loadedFace = _loadedFace;
@@ -1324,6 +1330,116 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             _suppressMaterialPreview = false;
         }
+    }
+
+    private async void OnAttachmentMeshPreviewChanged(object? sender, EventArgs e)
+    {
+        if (Editor is null || _loadedFace is null ||
+            sender is not HairMeshEditorViewModel changedSlot ||
+            !IsDetachedMeshWorkspace && WorkspacePackagePath is null)
+        {
+            return;
+        }
+
+        CancelAttachmentPreviewLoad();
+        var version = ++_attachmentChangeVersion;
+        var editor = Editor;
+        var loadedFace = _loadedFace;
+        var previewSelection = changedSlot.PreviewSelection;
+        if (previewSelection is null)
+        {
+            PreviewSceneReady?.Invoke(CreateCurrentPreviewScene(), false);
+            return;
+        }
+
+        var cancellation = new CancellationTokenSource();
+        _attachmentPreviewCancellation = cancellation;
+        var packagePath = WorkspacePackagePath;
+        var detachedPreview = IsDetachedMeshWorkspace;
+        var references = editor.AttachmentMeshes
+            .Select(mesh => ReferenceEquals(mesh, changedSlot)
+                ? previewSelection.Identity
+                : mesh.Value)
+            .ToArray();
+        try
+        {
+            var attachments = new LoadedAttachment?[references.Length];
+            for (var index = 0; index < references.Length; index++)
+            {
+                if (references[index] is not { } reference)
+                {
+                    continue;
+                }
+                attachments[index] = detachedPreview
+                    ? await _referenceService.LoadDetachedAttachmentAsync(
+                        reference.PackagePath, reference.InstancedPath, cancellation.Token)
+                    : await _referenceService.LoadAttachmentAsync(
+                        packagePath!, loadedFace.Document.Source.InstancedPath,
+                        reference.InstancedPath, cancellation.Token);
+            }
+
+            if (version != _attachmentChangeVersion || Editor != editor || _loadedFace != loadedFace ||
+                !ReferenceEquals(changedSlot.PreviewSelection, previewSelection))
+            {
+                return;
+            }
+
+            var preservedOtherMeshes = _preservedOtherMeshAssets;
+            var attachmentMaterials = attachments
+                .Where(attachment => attachment is not null)
+                .Select(attachment => attachment!.Materials)
+                .Append(ResolveMeshMaterials(preservedOtherMeshes, loadedFace.Materials))
+                .Aggregate(
+                    new ResolvedHeadMaterialSet(
+                        new Dictionary<string, ResolvedHeadMaterial>(StringComparer.OrdinalIgnoreCase)),
+                    MergeMaterials);
+            var otherMeshes = attachments.Skip(1)
+                .Where(attachment => attachment is not null)
+                .Select(attachment => attachment!.Mesh)
+                .Concat(preservedOtherMeshes)
+                .ToArray();
+            var previewMaterials = detachedPreview
+                ? MergeMaterials(
+                    editor.Material.Materials,
+                    ApplyDetachedAttachmentHairColour(attachmentMaterials, editor.Material.Materials))
+                : MergeMaterials(editor.Material.Materials, attachmentMaterials);
+            var previewFace = loadedFace with
+            {
+                HairMesh = attachments[0]?.Mesh,
+                OtherMeshes = otherMeshes,
+                Materials = previewMaterials
+            };
+            var scene = editor.UsesLiveDeformationPreview
+                ? _sceneFactory.CreateEditable(previewFace, editor.Evaluation, PreviewLod)
+                : _sceneFactory.Create(previewFace, PreviewLod);
+            PreviewSceneReady?.Invoke(scene, false);
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            if (version == _attachmentChangeVersion)
+            {
+                AppLog.Error($"Attachment preview failed for {changedSlot.Label}.", exception);
+                PreviewSceneReady?.Invoke(CreateCurrentPreviewScene(), false);
+            }
+        }
+        finally
+        {
+            if (ReferenceEquals(_attachmentPreviewCancellation, cancellation))
+            {
+                _attachmentPreviewCancellation = null;
+            }
+            cancellation.Dispose();
+        }
+    }
+
+    private void CancelAttachmentPreviewLoad()
+    {
+        var cancellation = _attachmentPreviewCancellation;
+        _attachmentPreviewCancellation = null;
+        cancellation?.Cancel();
     }
 
     private HeadPreviewScene CreateCurrentPreviewScene()

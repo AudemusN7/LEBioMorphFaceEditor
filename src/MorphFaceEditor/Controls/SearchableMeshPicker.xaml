@@ -71,12 +71,13 @@
                     </Grid.RowDefinitions>
                     <TextBox x:Name="SearchBox"
                              Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                             TextChanged="OnSearchTextChanged"
                              ToolTip="Search by mesh name, path, or source package"
                              Margin="0,0,0,6" />
                     <ListBox Grid.Row="1"
+                             x:Name="CandidateList"
                              ItemsSource="{Binding Candidates}"
-                             SelectedItem="{Binding Selected}"
-                             SelectionChanged="OnSelectionChanged"
+                             MouseLeave="OnCandidateListMouseLeave"
                              MaxHeight="390"
                              ScrollViewer.CanContentScroll="True"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -90,7 +91,8 @@
                         </ListBox.ItemsPanel>
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <Grid>
+                                <Grid MouseEnter="OnCandidateMouseEnter"
+                                      PreviewMouseLeftButtonUp="OnCandidateMouseLeftButtonUp">
                                     <StackPanel Margin="4,3">
                                         <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" />
                                         <TextBlock Text="{Binding Identity.InstancedPath}" Foreground="{StaticResource MutedText}"

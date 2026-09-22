@@ -16,6 +16,7 @@ public sealed class MaterialEditingSession : IUndoableEditSource
     private readonly Dictionary<string, float> _scalars;
     private readonly Dictionary<string, Vector4> _vectors;
     private readonly Dictionary<string, DecodedTextureAsset?> _textureReferences = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, DecodedTextureAsset?> _previewTextureReferences = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _editedScalars = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _editedVectors = new(StringComparer.OrdinalIgnoreCase);
     private readonly MaterialEditHistory _history = new();
@@ -151,6 +152,24 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         .Where(material => AppliesTo(material, name, MaterialParameterKind.Texture))
         .Select(material => material.Textures.GetValueOrDefault(GetSourceParameterName(name))?.Texture)
         .FirstOrDefault(texture => texture is not null);
+
+    /// <summary>Applies a non-authored texture to the live material preview without changing edit state.</summary>
+    public void PreviewTexture(string name, DecodedTextureAsset? texture)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        _previewTextureReferences[name] = texture;
+        RefreshPreview(MaterialChangeKind.Texture, name);
+    }
+
+    /// <summary>Restores the committed material state after a transient texture preview.</summary>
+    public void ClearTexturePreview(string name)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        if (_previewTextureReferences.Remove(name))
+        {
+            RefreshPreview(MaterialChangeKind.Texture, name);
+        }
+    }
 
     public DecodedTextureAsset? GetDefaultTexture(string name) => _originalMaterials.Materials.Values
         .Where(material => AppliesTo(material, name, MaterialParameterKind.Texture))
@@ -471,9 +490,11 @@ public sealed class MaterialEditingSession : IUndoableEditSource
 
     public void SetTextureReference(string name, DecodedTextureAsset? texture)
     {
+        var hadPreview = _previewTextureReferences.Remove(name);
         var before = new MaterialTextureState(_textureReferences.GetValueOrDefault(name), _textureReferences.ContainsKey(name));
         if (GetTextureReference(name) == texture?.Source)
         {
+            if (hadPreview) RefreshPreview(MaterialChangeKind.Texture, name);
             return;
         }
         _textureReferences[name] = texture;
@@ -678,8 +699,17 @@ public sealed class MaterialEditingSession : IUndoableEditSource
             preserveUnspecifiedTextures: true);
     }
 
-    public void Undo() => Replay(_history.PopUndo(), useAfter: false);
-    public void Redo() => Replay(_history.PopRedo(), useAfter: true);
+    public void Undo()
+    {
+        _previewTextureReferences.Clear();
+        Replay(_history.PopUndo(), useAfter: false);
+    }
+
+    public void Redo()
+    {
+        _previewTextureReferences.Clear();
+        Replay(_history.PopRedo(), useAfter: true);
+    }
     public void ClearRedo() => _history.ClearRedo();
 
     private void Refresh(MaterialChangeKind kind, string? parameterName = null)
@@ -687,6 +717,12 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         Materials = BuildMaterials();
         MaterialsChanged?.Invoke(this, new MaterialChangedEventArgs(kind, parameterName));
         HistoryChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void RefreshPreview(MaterialChangeKind kind, string? parameterName = null)
+    {
+        Materials = BuildMaterials();
+        MaterialsChanged?.Invoke(this, new MaterialChangedEventArgs(kind, parameterName));
     }
 
     private ResolvedHeadMaterialSet BuildMaterials()
@@ -704,7 +740,9 @@ public sealed class MaterialEditingSession : IUndoableEditSource
             {
                 vectors[GetSourceParameterName(value.Key)] = value.Value;
             }
-            foreach (var value in _textureReferences.Where(value => AppliesTo(material, value.Key, MaterialParameterKind.Texture)))
+            foreach (var value in _textureReferences
+                         .Concat(_previewTextureReferences)
+                         .Where(value => AppliesTo(material, value.Key, MaterialParameterKind.Texture)))
             {
                 var parameterName = GetSourceParameterName(value.Key);
                 if (value.Value is null)

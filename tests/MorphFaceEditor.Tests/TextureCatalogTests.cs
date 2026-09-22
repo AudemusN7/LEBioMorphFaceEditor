@@ -28,7 +28,9 @@ public static class TextureCatalogTests
         new("texture catalogue: selected display text does not become a search filter", SelectedDisplayTextDoesNotFilterPicker),
         new("texture catalogue: missing registry preserves every package texture", MissingRegistryPreservesEveryPackageTexture),
         new("texture catalogue: local path suppresses installed duplicate", LocalPathSuppressesInstalledDuplicate),
-        new("texture catalogue: merged picker ranks by relevance and source", MergedPickerRanksByRelevanceAndSource),
+        new("texture catalogue: merged picker preserves candidate order and source", MergedPickerPreservesCandidateOrderAndSource),
+        new("texture picker: hover preview stays outside committed selection", HoverPreviewStaysOutsideCommittedSelection),
+        new("texture picker: stale hover preview cannot win", StaleHoverPreviewCannotWin),
         new("texture catalogue: texture editor resolves installed paths without guessing", TextureEditorResolvesInstalledPathsWithoutGuessing),
         new("randomisation texture: required decode failure reports family signature", RequiredDecodeFailureReportsFamilySignature),
         new("texture registry: discovery admits morph HIR and shared-eye paths", DiscoveryAdmitsSupportedPaths),
@@ -174,7 +176,7 @@ public static class TextureCatalogTests
             "An installed duplicate displaced or accompanied its authoritative package-local texture.");
     }
 
-    private static void MergedPickerRanksByRelevanceAndSource()
+    private static void MergedPickerPreservesCandidateOrderAndSource()
     {
         var session = MaterialTestFixtures.CreateSession();
         var current = session.GetSelectedTexture("HED_Diff")!;
@@ -183,19 +185,98 @@ public static class TextureCatalogTests
         var preferred = Candidate("BIOG_HMM_HED_PROMorph.Add.HMM_HED_A", "preferred.pcc");
         var shared = Candidate("BIOG_HED_EYE.Textures.HED_EYE_A", "eyes.pcc");
         var general = Candidate("BIOG_SAL_HED_PROMorph.Add.SAL_HED_A", "general.pcc");
+        var loader = new ControlledTextureLoader();
         using var reader = new MorphFacePackageReader();
         var editor = CreateTextureEditor(session, reader,
-            [new PackageAssetListItem(current.Source), localOther], [general, shared, preferred],
-            new TextureCatalogProfile("le3-human-male", ["HMM_HED"], ["HED_EYE"]), true);
+            [localOther, new PackageAssetListItem(current.Source)], [general, shared, preferred],
+            new TextureCatalogProfile("le3-human-male", ["HMM_HED"], ["HED_EYE"]), true, loader);
 
         var ordered = editor.Candidates.Where(option => !option.IsNone).Select(option => option.InstancedPath).ToArray();
         TestAssert.True(ordered.SequenceEqual(
-                [current.Source.InstancedPath, preferred.InstancedPath, shared.InstancedPath,
-                 localOther.Identity.InstancedPath, general.InstancedPath]),
-            "The merged picker did not rank active, preferred, shared, other local, and other installed textures in order.");
+                [localOther.Identity.InstancedPath, current.Source.InstancedPath,
+                 general.InstancedPath, shared.InstancedPath, preferred.InstancedPath]),
+            "The merged picker reordered candidates instead of preserving local and installed source order.");
+
+        var beforeSelection = ordered;
+        editor.SelectedTexture = editor.Candidates.Single(option => option.Asset == localOther);
+        loader.Complete(localOther.Identity.InstancedPath, CreateDecoded(localOther.Identity));
+        TestAssert.True(SpinWait.SpinUntil(() => !editor.IsBusy, TimeSpan.FromSeconds(2)),
+            "The test texture selection did not finish.");
+        var afterSelection = editor.Candidates.Where(option => !option.IsNone)
+            .Select(option => option.InstancedPath)
+            .ToArray();
+        TestAssert.True(afterSelection.SequenceEqual(beforeSelection),
+            "Selecting a texture reordered the related candidates in the open picker.");
+
         var installedOption = editor.Candidates.Single(option => option.RegistryCandidate == preferred);
         TestAssert.True(installedOption.Asset is not null && installedOption.Asset.Thumbnail is null,
             "An installed texture was not given a lazy thumbnail source.");
+    }
+
+    private static void HoverPreviewStaysOutsideCommittedSelection()
+    {
+        var session = MaterialTestFixtures.CreateSession();
+        var current = session.GetSelectedTexture("HED_Diff")!;
+        var candidate = new PackageAssetListItem(new AssetIdentity(
+            current.Source.PackagePath, "WorkingPackage.Textures.Hover_Diff", 103, "Texture2D"));
+        var loader = new ControlledTextureLoader();
+        using var reader = new MorphFacePackageReader();
+        var editor = CreateTextureEditor(session, reader,
+            [new PackageAssetListItem(current.Source), candidate],
+            available: false,
+            references: loader);
+        var option = editor.Candidates.Single(value => value.Asset == candidate);
+
+        var preview = editor.PreviewTextureAsync(option);
+        loader.Complete(candidate.Identity.InstancedPath, CreateDecoded(candidate.Identity));
+        preview.GetAwaiter().GetResult();
+
+        TestAssert.Equal(current.Source.InstancedPath, session.GetSelectedTexture("HED_Diff")?.Source.InstancedPath);
+        TestAssert.Equal(candidate.Identity.InstancedPath, session.GetPreviewTexture("HED_Diff")?.Source.InstancedPath);
+        TestAssert.True(!session.CanUndo, "Hover preview created an undo entry before the candidate was clicked.");
+
+        editor.CancelTexturePreview();
+        TestAssert.Equal(current.Source.InstancedPath, session.GetPreviewTexture("HED_Diff")?.Source.InstancedPath);
+
+        editor.PreviewTextureAsync(editor.Candidates[0]).GetAwaiter().GetResult();
+        TestAssert.Equal(current.Source.InstancedPath, session.GetPreviewTexture("HED_Diff")?.Source.InstancedPath);
+        editor.CancelTexturePreview();
+
+        editor.PreviewTextureAsync(option).GetAwaiter().GetResult();
+        editor.CommitTexture(option);
+        loader.Complete(candidate.Identity.InstancedPath, CreateDecoded(candidate.Identity));
+        TestAssert.True(SpinWait.SpinUntil(() => !editor.IsBusy, TimeSpan.FromSeconds(2)),
+            "The committed texture selection did not finish.");
+        TestAssert.Equal(candidate.Identity.InstancedPath, session.GetSelectedTexture("HED_Diff")?.Source.InstancedPath);
+        TestAssert.True(session.CanUndo, "Clicking a candidate did not create a normal undo entry.");
+        session.Undo();
+        TestAssert.Equal(current.Source.InstancedPath, session.GetSelectedTexture("HED_Diff")?.Source.InstancedPath);
+    }
+
+    private static void StaleHoverPreviewCannotWin()
+    {
+        var session = MaterialTestFixtures.CreateSession();
+        var current = session.GetSelectedTexture("HED_Diff")!;
+        var first = new PackageAssetListItem(new AssetIdentity(
+            current.Source.PackagePath, "WorkingPackage.Textures.Hover_First", 104, "Texture2D"));
+        var second = new PackageAssetListItem(new AssetIdentity(
+            current.Source.PackagePath, "WorkingPackage.Textures.Hover_Second", 105, "Texture2D"));
+        var loader = new ControlledTextureLoader();
+        using var reader = new MorphFacePackageReader();
+        var editor = CreateTextureEditor(session, reader,
+            [new PackageAssetListItem(current.Source), first, second],
+            available: false,
+            references: loader);
+
+        var firstPreview = editor.PreviewTextureAsync(editor.Candidates.Single(value => value.Asset == first));
+        var secondPreview = editor.PreviewTextureAsync(editor.Candidates.Single(value => value.Asset == second));
+        loader.Complete(first.Identity.InstancedPath, CreateDecoded(first.Identity));
+        loader.Complete(second.Identity.InstancedPath, CreateDecoded(second.Identity));
+        Task.WaitAll(firstPreview, secondPreview);
+
+        TestAssert.Equal(second.Identity.InstancedPath, session.GetPreviewTexture("HED_Diff")?.Source.InstancedPath);
+        TestAssert.Equal(current.Source.InstancedPath, session.GetSelectedTexture("HED_Diff")?.Source.InstancedPath);
+        TestAssert.True(!session.CanUndo, "A stale hover preview created an undo entry.");
     }
 
     private static MaterialTextureEditorViewModel CreateTextureEditor(
@@ -204,12 +285,13 @@ public static class TextureCatalogTests
         IReadOnlyList<PackageAssetListItem> local,
         IReadOnlyList<TextureCatalogCandidate>? installed = null,
         TextureCatalogProfile? profile = null,
-        bool available = false) => new(
+        bool available = false,
+        ITextureReferenceLoader? references = null) => new(
         session,
         new MaterialParameterDefinition("HED_Diff", "Diffuse", "skin", MaterialParameterKind.Texture,
             HeadMaterialFamily.Skin, TextureRole: TextureRole.Diffuse,
             ColorSpace: TextureColorSpace.Srgb, AlphaPolicy: TextureAlphaPolicy.Ignore),
-        new PackageReferenceService(reader, TestFixtures.CreateMissingTextureCatalogService()),
+        references ?? new PackageReferenceService(reader, TestFixtures.CreateMissingTextureCatalogService()),
         session.GetSelectedTexture("HED_Diff")!.Source.PackagePath,
         local,
         message => throw new Exception(message),
@@ -569,7 +651,7 @@ public static class TextureCatalogTests
         {
             var request = new TaskCompletionSource<DecodedTextureAsset>(
                 TaskCreationOptions.RunContinuationsAsynchronously);
-            _requests.Add(texturePath, request);
+            _requests[texturePath] = request;
             cancellationToken.Register(() => request.TrySetCanceled(cancellationToken));
             return request.Task;
         }

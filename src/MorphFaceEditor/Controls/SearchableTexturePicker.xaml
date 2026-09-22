@@ -71,12 +71,13 @@
                     </Grid.RowDefinitions>
                     <TextBox x:Name="SearchBox"
                              Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                             TextChanged="OnSearchTextChanged"
                              ToolTip="Search by texture name, path, source package, or origin"
                              Margin="0,0,0,6" />
                     <ListBox Grid.Row="1"
+                             x:Name="CandidateList"
                              ItemsSource="{Binding Candidates}"
-                             SelectedItem="{Binding SelectedTexture}"
-                             SelectionChanged="OnSelectionChanged"
+                             MouseLeave="OnCandidateListMouseLeave"
                              MaxHeight="390"
                              ScrollViewer.CanContentScroll="True"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -90,7 +91,8 @@
                         </ListBox.ItemsPanel>
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <Grid MouseEnter="OnCandidateMouseEnter">
+                                <Grid MouseEnter="OnCandidateMouseEnter"
+                                      PreviewMouseLeftButtonUp="OnCandidateMouseLeftButtonUp">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="30" />
                                         <ColumnDefinition Width="*" />

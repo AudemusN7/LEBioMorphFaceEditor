@@ -73,6 +73,7 @@ public static class UiSmokeTests
         new("repeated cursed randomisation does not compound", RepeatedCursedRandomisationDoesNotCompound),
         new("embedded randomisation corpus loads all pools and excludes Broke", EmbeddedRandomisationCorpusLoads),
         new("mesh attachment picker filters candidates by name and path", MeshAttachmentPickerFiltersCandidates),
+        new("mesh attachment picker previews without committing history", MeshAttachmentPickerPreviewDoesNotCommit),
         new("editor error banners can be dismissed", ErrorBannerCanBeDismissed),
         new("texture registry settings command opens the settings dialog", TextureRegistrySettingsCommandOpensDialog),
         new("actor assignment chooser filters evidence and scopes eligibility by operation", ActorChooserFiltersAndScopesEligibility),
@@ -1889,6 +1890,33 @@ public static class UiSmokeTests
         TestAssert.Equal(1, editor.Candidates.Count);
         TestAssert.True(editor.Candidates[0].Identity is null,
             "The None option should remain available when filtering mesh candidates.");
+    }
+
+    private static void MeshAttachmentPickerPreviewDoesNotCommit()
+    {
+        var first = new PackageAssetListItem(new AssetIdentity(
+            "BioA_Hair.pcc", "BIOG_HED_Hair.Meshes.HairA", 1, "SkeletalMesh"));
+        var second = new PackageAssetListItem(new AssetIdentity(
+            "BioB_Hair.pcc", "BIOG_HED_Hair.Meshes.HairB", 2, "SkeletalMesh"));
+        var session = new AssetReferenceEditingSession(first.Identity);
+        using var editor = new HairMeshEditorViewModel(session, [first, second], "Hair", 0);
+        var previewEvents = 0;
+        editor.PreviewChanged += (_, _) => previewEvents++;
+        var candidate = editor.Options.Single(option => option.Identity == second.Identity);
+
+        editor.Preview(candidate);
+        TestAssert.Equal(first.Identity, editor.Value);
+        TestAssert.Equal(candidate, editor.PreviewSelection);
+        TestAssert.True(!session.CanUndo, "A mesh hover preview entered attachment history.");
+
+        editor.CancelPreview();
+        TestAssert.Equal(first.Identity, editor.Value);
+        TestAssert.True(editor.PreviewSelection is null && previewEvents == 2,
+            "Cancelling a mesh preview did not restore the committed selection.");
+
+        editor.Commit(candidate);
+        TestAssert.Equal(second.Identity, editor.Value);
+        TestAssert.True(session.CanUndo, "A committed mesh choice did not enter attachment history.");
     }
 
     private static void ExtendedSlidersAreOptional()

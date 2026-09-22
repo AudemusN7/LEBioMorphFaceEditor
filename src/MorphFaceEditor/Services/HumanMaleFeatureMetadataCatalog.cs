@@ -243,16 +243,33 @@ public class HumanMaleFeatureMetadataCatalog : IHeadEditorUiProfile
         };
     }
 
-    public virtual bool IsMaterialVisible(string parameterName, MaterialParameterKind kind) =>
-        !(kind == MaterialParameterKind.Texture &&
-          (parameterName.Equals("Diffuseuse", StringComparison.OrdinalIgnoreCase) ||
-           parameterName.Equals("CubeMap", StringComparison.OrdinalIgnoreCase) ||
-           parameterName.StartsWith("__", StringComparison.Ordinal)));
+    public virtual bool IsMaterialVisible(string parameterName, MaterialParameterKind kind)
+    {
+        if (kind != MaterialParameterKind.Texture) return true;
+        // Player scar alignment textures are selected by Paragon/Renegade at runtime.
+        return !parameterName.Equals("Diffuseuse", StringComparison.OrdinalIgnoreCase) &&
+               !parameterName.Equals("CubeMap", StringComparison.OrdinalIgnoreCase) &&
+               !parameterName.Equals("HED_Face_Alignment_Emis", StringComparison.OrdinalIgnoreCase) &&
+               !parameterName.Equals("HED_Face_Alignment_Norm", StringComparison.OrdinalIgnoreCase) &&
+               !parameterName.StartsWith("__", StringComparison.Ordinal);
+    }
 
     public virtual string GetMaterialCategory(string parameterName, MaterialParameterKind kind)
     {
         var definition = HumanMaterialProfiles.Describe(parameterName, kind);
         var name = parameterName.ToLowerInvariant();
+        // The packed teeth selector belongs in Mouth despite using the scalp material family.
+        if (kind == MaterialParameterKind.Texture && name == "hed_teeth_diff")
+        {
+            return Mouth;
+        }
+        // Human scalp textures belong with the base head surface. Other scalp
+        // controls (colours and scalars) retain their existing taxonomy.
+        if (kind == MaterialParameterKind.Texture &&
+            definition.Family == HeadMaterialFamily.Scalp)
+        {
+            return Head;
+        }
         if (name == "mask" && kind == MaterialParameterKind.Scalar)
         {
             return Additions;
@@ -271,7 +288,7 @@ public class HumanMaleFeatureMetadataCatalog : IHeadEditorUiProfile
         {
             return Mouth;
         }
-        if (definition.Family is HeadMaterialFamily.Scalp or HeadMaterialFamily.Hair ||
+        if (definition.Family is HeadMaterialFamily.Hair ||
             name.Contains("hair") || name.Contains("scalp") || name.Contains("frek") ||
             name.Contains("scar") || name.Contains("addn") || name.Contains("brow") ||
             name.Contains("blonde"))
@@ -645,6 +662,10 @@ public class HumanMaleFeatureMetadataCatalog : IHeadEditorUiProfile
         "HED_Addn_Spec_Add_Scalar" => "Addition Specular Colour Strength",
         "HED_Custom_Scar_Scalar" => "Scar Normal Strength",
         "HED_Scar_Diffuse_Scalar" => "Scar Colour Strength",
+        "HED_Scar_Colour_Vector" => "Scar Emissive Color",
+        "Light_Scar_Color" or "Light_Scar_Colour" or
+        "Light_Scar_Color_Vector" or "Light_Scar_Colour_Vector" or
+        "LightScarColor" or "LightScarColour" => "Scar Emissive Color",
         "HED_Scar_Vector" => "Scar Colour",
         "blonde" => "Secondary Addition Colour",
         "HED_TClr_Vector" => "Skin Transmission Colour",

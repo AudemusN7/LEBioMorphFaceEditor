@@ -16,6 +16,7 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
     private HairMeshOption _selected;
     private IReadOnlyList<HairMeshOption> _options;
     private string _searchText = string.Empty;
+    private HairMeshOption? _previewSelection;
 
     public HairMeshEditorViewModel(
         AssetReferenceEditingSession session,
@@ -40,11 +41,14 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
     }
 
     public event EventHandler? SelectionChanged;
+    public event EventHandler? PreviewChanged;
 
     public string Label { get; }
     public int SlotIndex { get; }
     public IReadOnlyList<HairMeshOption> Options => _options;
     public IReadOnlyList<HairMeshOption> Candidates { get; private set; }
+    /// <summary>Candidate currently shown as a transient preview, without changing the authored reference.</summary>
+    public HairMeshOption? PreviewSelection => _previewSelection;
     public string SearchText
     {
         get => _searchText;
@@ -52,6 +56,7 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
         {
             if (SetProperty(ref _searchText, value))
             {
+                CancelPreview();
                 ApplySearch();
             }
         }
@@ -68,6 +73,7 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
             {
                 return;
             }
+            CancelPreview();
             if (SetProperty(ref _selected, value))
             {
                 _session.Set(value.Identity);
@@ -85,6 +91,44 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
             ApplySearch();
         }
         _session.Set(value);
+    }
+
+    /// <summary>Requests a non-authored attachment preview for the picker highlight.</summary>
+    public void Preview(HairMeshOption candidate)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+        if (Same(candidate.Identity, _selected.Identity))
+        {
+            CancelPreview();
+            return;
+        }
+        if (ReferenceEquals(_previewSelection, candidate))
+        {
+            return;
+        }
+        _previewSelection = candidate;
+        OnPropertyChanged(nameof(PreviewSelection));
+        PreviewChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Restores the committed attachment after a cancelled picker preview.</summary>
+    public void CancelPreview()
+    {
+        if (_previewSelection is null)
+        {
+            return;
+        }
+        _previewSelection = null;
+        OnPropertyChanged(nameof(PreviewSelection));
+        PreviewChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Commits an explicit picker choice through the normal authored session.</summary>
+    public void Commit(HairMeshOption candidate)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+        CancelPreview();
+        Selected = candidate;
     }
 
     private HairMeshOption Find(AssetIdentity? value) => Options.First(option => Same(option.Identity, value));
@@ -114,6 +158,7 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
 
     private void OnValueChanged(object? sender, EventArgs e)
     {
+        CancelPreview();
         SetProperty(ref _selected, Find(_session.Value), nameof(Selected));
         SelectionChanged?.Invoke(this, EventArgs.Empty);
     }

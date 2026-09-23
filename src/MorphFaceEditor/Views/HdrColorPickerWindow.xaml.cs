@@ -12,6 +12,7 @@ public partial class HdrColorPickerWindow : Window
 {
     private readonly bool _allowHdr;
     private bool _updating;
+    private Vector4 _value;
 
     public HdrColorPickerWindow(
         string title,
@@ -22,76 +23,53 @@ public partial class HdrColorPickerWindow : Window
         InitializeComponent();
         DarkTitleBar.Apply(this);
         _allowHdr = allowHdr;
+        _value = allowHdr ? initial : initial with { W = 1 };
         Title = title;
+        _updating = true;
         if (!allowHdr)
         {
             Height = 550;
             MinHeight = 520;
             IntensityRow.Height = new GridLength(0);
             AlphaRow.Height = new GridLength(0);
-            RedSlider.Maximum = 1;
-            GreenSlider.Maximum = 1;
-            BlueSlider.Maximum = 1;
+            HdrIntensityPanel.Visibility = Visibility.Collapsed;
             PreviewCaption.Text = "Preview background colour";
         }
-        ConfigureChannelRange(RedSlider, initial.X, allowHdr, extendedSliders);
-        ConfigureChannelRange(GreenSlider, initial.Y, allowHdr, extendedSliders);
-        ConfigureChannelRange(BlueSlider, initial.Z, allowHdr, extendedSliders);
-        ConfigureChannelRange(AlphaSlider, allowHdr ? initial.W : 1, allowHdr, extendedSliders);
-        _updating = true;
-        RedSlider.Value = initial.X;
-        GreenSlider.Value = initial.Y;
-        BlueSlider.Value = initial.Z;
-        AlphaSlider.Value = allowHdr ? initial.W : 1;
-        UpdateWheelFromRgb();
+        var channelMinimum = extendedSliders ? -1 : 0;
+        RedSlider.Minimum = channelMinimum;
+        GreenSlider.Minimum = channelMinimum;
+        BlueSlider.Minimum = channelMinimum;
+        AlphaSlider.Minimum = channelMinimum;
+        BrightnessSlider.Minimum = channelMinimum;
+        LoadRgbControls(_value.X, _value.Y, _value.Z);
+        AlphaSlider.Value = Math.Clamp(_value.W, channelMinimum, 1);
         _updating = false;
         UpdateSwatch();
         UpdateHexText();
     }
 
-    private static void ConfigureChannelRange(
-        System.Windows.Controls.Slider slider,
-        float initial,
-        bool allowHdr,
-        bool extendedSliders)
-    {
-        var authoredMaximum = allowHdr ? 8d : 1d;
-        if (extendedSliders)
-        {
-            var extent = Math.Max(authoredMaximum, Math.Abs(initial));
-            slider.Minimum = -extent;
-            slider.Maximum = extent;
-            return;
-        }
-
-        // Keep legacy ranges by default without silently changing an existing
-        // out-of-range value when an old extended edit is opened again.
-        slider.Minimum = Math.Min(0, initial);
-        slider.Maximum = Math.Max(authoredMaximum, initial);
-    }
-
     public event EventHandler? ValueChanged;
 
-    public Vector4 Value => new(
-        (float)RedSlider.Value,
-        (float)GreenSlider.Value,
-        (float)BlueSlider.Value,
-        (float)AlphaSlider.Value);
+    public Vector4 Value => _value;
 
     private void OnWheelChanged(object sender, EventArgs e)
     {
-        if (_updating || Wheel is null || ValueSlider is null || IntensitySlider is null ||
+        if (_updating || Wheel is null || BrightnessSlider is null || IntensitySlider is null ||
             RedSlider is null || GreenSlider is null || BlueSlider is null || AlphaSlider is null ||
             PreviewSwatch is null)
         {
             return;
         }
         _updating = true;
-        var color = ColorWheelControl.FromHsv(Wheel.Hue, Wheel.Saturation, ValueSlider.Value);
-        var intensity = _allowHdr ? IntensitySlider.Value : 1;
-        RedSlider.Value = color.R / 255d * intensity;
-        GreenSlider.Value = color.G / 255d * intensity;
-        BlueSlider.Value = color.B / 255d * intensity;
+        if (ReferenceEquals(sender, Wheel))
+        {
+            var color = ColorWheelControl.FromHsv(Wheel.Hue, Wheel.Saturation, 1);
+            RedSlider.Value = color.R / 255d;
+            GreenSlider.Value = color.G / 255d;
+            BlueSlider.Value = color.B / 255d;
+        }
+        UpdateWheelBrightness();
+        UpdateRgbValue();
         _updating = false;
         Publish();
     }
@@ -103,23 +81,53 @@ public partial class HdrColorPickerWindow : Window
             return;
         }
         _updating = true;
-        UpdateWheelFromRgb();
+        if (ReferenceEquals(sender, AlphaSlider))
+        {
+            _value.W = (float)AlphaSlider.Value;
+        }
+        else
+        {
+            UpdateWheelFromRgb();
+            UpdateRgbValue();
+        }
         _updating = false;
         Publish();
     }
 
-    private void UpdateWheelFromRgb()
+    private void LoadRgbControls(float red, float green, float blue)
     {
-        var maximum = Math.Max(RedSlider.Value, Math.Max(GreenSlider.Value, BlueSlider.Value));
+        var maximum = Math.Max(Math.Abs(red), Math.Max(Math.Abs(green), Math.Abs(blue)));
         var intensity = _allowHdr ? Math.Clamp(maximum, 1, 8) : 1;
         IntensitySlider.Value = intensity;
+        BrightnessSlider.Value = Math.Clamp(maximum / intensity, 0, 1);
+        UpdateWheelBrightness();
+        var divisor = maximum > 0 ? maximum : 1;
+        RedSlider.Value = maximum > 0 ? Math.Clamp(red / divisor, RedSlider.Minimum, 1) : 1;
+        GreenSlider.Value = maximum > 0 ? Math.Clamp(green / divisor, GreenSlider.Minimum, 1) : 1;
+        BlueSlider.Value = maximum > 0 ? Math.Clamp(blue / divisor, BlueSlider.Minimum, 1) : 1;
+        UpdateWheelFromRgb();
+    }
+
+    private void UpdateRgbValue()
+    {
+        var multiplier = RgbMultiplier;
+        _value.X = (float)(RedSlider.Value * multiplier);
+        _value.Y = (float)(GreenSlider.Value * multiplier);
+        _value.Z = (float)(BlueSlider.Value * multiplier);
+    }
+
+    private double RgbMultiplier => BrightnessSlider.Value * (_allowHdr ? IntensitySlider.Value : 1);
+
+    private void UpdateWheelBrightness() => Wheel.Brightness = Math.Clamp(RgbMultiplier, 0, 1);
+
+    private void UpdateWheelFromRgb()
+    {
         var hsv = ColorWheelControl.ToHsv(
-            Math.Clamp(RedSlider.Value / intensity, 0, 1),
-            Math.Clamp(GreenSlider.Value / intensity, 0, 1),
-            Math.Clamp(BlueSlider.Value / intensity, 0, 1));
+            Math.Clamp(RedSlider.Value, 0, 1),
+            Math.Clamp(GreenSlider.Value, 0, 1),
+            Math.Clamp(BlueSlider.Value, 0, 1));
         Wheel.Hue = hsv.Hue;
         Wheel.Saturation = hsv.Saturation;
-        ValueSlider.Value = Math.Clamp(hsv.Value, 0, 1);
     }
 
     private void Publish()
@@ -163,14 +171,15 @@ public partial class HdrColorPickerWindow : Window
         }
 
         _updating = true;
-        RedSlider.Value = color.X;
-        GreenSlider.Value = color.Y;
-        BlueSlider.Value = color.Z;
+        LoadRgbControls(color.X, color.Y, color.Z);
         if (color.W >= 0)
         {
             AlphaSlider.Value = color.W;
+            _value.W = color.W;
         }
-        UpdateWheelFromRgb();
+        _value.X = color.X;
+        _value.Y = color.Y;
+        _value.Z = color.Z;
         _updating = false;
         Publish();
     }

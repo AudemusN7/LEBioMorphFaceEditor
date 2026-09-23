@@ -14,13 +14,27 @@
         </Grid.RowDefinitions>
         <Grid>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="260" />
-                <ColumnDefinition Width="34" />
+                <ColumnDefinition Width="245" />
+                <ColumnDefinition Width="82" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
-            <controls:ColorWheelControl x:Name="Wheel" Width="245" Height="245" ColourChanged="OnWheelChanged" />
-            <Slider x:Name="ValueSlider" Grid.Column="1" Orientation="Vertical" Minimum="0" Maximum="1"
-                    ValueChanged="OnWheelChanged" Margin="5,8" />
+            <controls:ColorWheelControl x:Name="Wheel" Width="245" Height="245"
+                                        ColourChanged="OnWheelChanged" />
+            <Grid x:Name="HdrIntensityPanel" Grid.Column="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Slider x:Name="IntensitySlider" Orientation="Vertical" Minimum="1" Maximum="8"
+                        HorizontalAlignment="Center" Width="24"
+                        ValueChanged="OnWheelChanged" Margin="0,8,0,2"
+                        ToolTip="HDR Intensity multiplier (1–8×)"
+                        AutomationProperties.Name="HDR Intensity" />
+                <TextBlock x:Name="HdrIntensityLabel" Grid.Row="1"
+                           Text="{Binding ElementName=IntensitySlider, Path=Value, StringFormat='HDR: {0:F3}x'}"
+                           HorizontalAlignment="Center" TextAlignment="Center"
+                           Foreground="{StaticResource SecondaryText}" FontSize="10" />
+            </Grid>
             <Border x:Name="PreviewSwatch" Grid.Column="2" Margin="16,8,0,8" BorderBrush="{StaticResource BorderBrush}"
                     BorderThickness="1" CornerRadius="4">
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -35,10 +49,10 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="72" />
             </Grid.ColumnDefinitions>
-            <TextBlock Text="HDR INTENSITY" Style="{StaticResource FieldLabel}" VerticalAlignment="Center" />
-            <Slider x:Name="IntensitySlider" Grid.Column="1" Minimum="1" Maximum="8"
+            <TextBlock Text="BRIGHTNESS" Style="{StaticResource FieldLabel}" VerticalAlignment="Center" />
+            <Slider x:Name="BrightnessSlider" Grid.Column="1" Minimum="0" Maximum="1"
                     VerticalAlignment="Center" ValueChanged="OnWheelChanged" />
-            <TextBlock Grid.Column="2" Text="{Binding ElementName=IntensitySlider, Path=Value, StringFormat={}{0:F3}×}"
+            <TextBlock Grid.Column="2" Text="{Binding ElementName=BrightnessSlider, Path=Value, StringFormat={}{0:F3}}"
                        HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{StaticResource SecondaryText}" />
         </Grid>
         <Grid Grid.Row="2" Margin="0,4,0,14">
@@ -53,19 +67,19 @@
                 <RowDefinition Height="42" />
             </Grid.RowDefinitions>
             <TextBlock Text="R" VerticalAlignment="Center" Foreground="#FF786F" />
-            <Slider x:Name="RedSlider" Grid.Column="1" Minimum="0" Maximum="8"
+            <Slider x:Name="RedSlider" Grid.Column="1" Minimum="0" Maximum="1"
                     VerticalAlignment="Center" ValueChanged="OnRgbChanged" />
             <TextBox Grid.Column="2" Text="{Binding ElementName=RedSlider, Path=Value, StringFormat={}{0:F4}, UpdateSourceTrigger=PropertyChanged}" Margin="8,7,0,7" />
             <TextBlock Grid.Row="1" Text="G" VerticalAlignment="Center" Foreground="#65D98B" />
-            <Slider x:Name="GreenSlider" Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="8"
+            <Slider x:Name="GreenSlider" Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="1"
                     VerticalAlignment="Center" ValueChanged="OnRgbChanged" />
             <TextBox Grid.Row="1" Grid.Column="2" Text="{Binding ElementName=GreenSlider, Path=Value, StringFormat={}{0:F4}, UpdateSourceTrigger=PropertyChanged}" Margin="8,7,0,7" />
             <TextBlock Grid.Row="2" Text="B" VerticalAlignment="Center" Foreground="#68A8FF" />
-            <Slider x:Name="BlueSlider" Grid.Row="2" Grid.Column="1" Minimum="0" Maximum="8"
+            <Slider x:Name="BlueSlider" Grid.Row="2" Grid.Column="1" Minimum="0" Maximum="1"
                     VerticalAlignment="Center" ValueChanged="OnRgbChanged" />
             <TextBox Grid.Row="2" Grid.Column="2" Text="{Binding ElementName=BlueSlider, Path=Value, StringFormat={}{0:F4}, UpdateSourceTrigger=PropertyChanged}" Margin="8,7,0,7" />
             <TextBlock Grid.Row="3" Text="A" VerticalAlignment="Center" Foreground="{StaticResource SecondaryText}" />
-            <Slider x:Name="AlphaSlider" Grid.Row="3" Grid.Column="1" Minimum="0" Maximum="8"
+            <Slider x:Name="AlphaSlider" Grid.Row="3" Grid.Column="1" Minimum="0" Maximum="1"
                     VerticalAlignment="Center" ValueChanged="OnRgbChanged" />
             <TextBox Grid.Row="3" Grid.Column="2" Text="{Binding ElementName=AlphaSlider, Path=Value, StringFormat={}{0:F4}, UpdateSourceTrigger=PropertyChanged}" Margin="8,7,0,7" />
             <TextBlock Grid.Row="4" Text="HEX" Style="{StaticResource FieldLabel}" VerticalAlignment="Center" />

@@ -19,6 +19,12 @@ changes the MFTR input or requires the user's game files. The JSON includes
 every indexed texture and attachment mesh, their occurrences, and the chosen
 effective occurrence.
 
+Custom additions are stored separately per game as `LE1.manual.mftr`,
+`LE2.manual.mftr`, or `LE3.manual.mftr` beside the installed database. Pass a
+manual file to the same `unpack-mftr` command to inspect its selected assets and
+occurrences. A failed relink also writes `<game>.manual.missing.log` beside it,
+listing the original PCC paths and exports to restore or select again.
+
 Audit an existing installed texture registry without rebuilding it:
 
 ```powershell

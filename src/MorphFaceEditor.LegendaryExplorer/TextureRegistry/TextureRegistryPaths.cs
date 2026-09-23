@@ -18,4 +18,13 @@ public sealed class TextureRegistryPaths(string directory)
         _ => throw new ArgumentOutOfRangeException(nameof(game), game,
             "Texture registries are available only for Legendary Edition games.")
     });
+
+    public string GetManualPath(MorphFaceGame game) => Path.Combine(_directory, game switch
+    {
+        MorphFaceGame.LE1 => "LE1.manual.mftr",
+        MorphFaceGame.LE2 => "LE2.manual.mftr",
+        MorphFaceGame.LE3 => "LE3.manual.mftr",
+        _ => throw new ArgumentOutOfRangeException(nameof(game), game,
+            "Texture registries are available only for Legendary Edition games.")
+    });
 }

@@ -203,7 +203,7 @@ public sealed class MorphFaceConversionService(
         if (!result.IsAvailable)
         {
             throw new InvalidOperationException(
-                $"The {game} texture database is unavailable. Build it in Texture Databases before converting across games.");
+                $"The {game} mesh/texture database is unavailable. Build it in Mesh/Texture Databases before converting across games.");
         }
         return result;
     }

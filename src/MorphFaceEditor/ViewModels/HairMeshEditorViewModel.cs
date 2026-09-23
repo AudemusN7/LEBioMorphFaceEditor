@@ -120,6 +120,9 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
                     .FirstOrDefault();
                 if (mod is not null) Add(mod, candidate.CanonicalPath);
             }
+            foreach (var manual in candidate.Occurrences.Where(value =>
+                         value.Origin == TextureCatalogOrigin.Manual))
+                Add(manual, candidate.CanonicalPath);
         }
         if (_session.Value is { } current && !options.Any(option => Same(option.Identity, current)))
             options.Add(new HairMeshOption($"{current.InstancedPath} (current reference)", current));
@@ -139,6 +142,7 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
                 TextureCatalogOrigin.BaseGame => "Base game",
                 TextureCatalogOrigin.OfficialDlc => "Official DLC",
                 TextureCatalogOrigin.Mod => "Mod",
+                TextureCatalogOrigin.Manual => "Custom",
                 _ => occurrence.Origin.ToString()
             };
             options.Add(new HairMeshOption(canonicalPath, identity,

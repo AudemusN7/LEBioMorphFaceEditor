@@ -82,6 +82,19 @@ internal sealed class LecTextureRegistryPackageScanner : ITextureRegistryPackage
                 !CrossGameAssetReconciliationCatalog.IsReviewedTexturePath(canonicalTexturePath))
                 continue;
 
+            var occurrence = ReadTextureOccurrence(export, packagePath, mountPriority, origin);
+            results.Add(new TextureRegistryScannedTexture(export.InstancedFullPath, occurrence));
+        }
+
+        return new TextureRegistryPackageScan(results, templates)
+        {
+            AttachmentMeshes = meshes
+        };
+    }
+
+    internal static TextureCatalogOccurrence ReadTextureOccurrence(
+        ExportEntry export, string packagePath, int mountPriority, TextureCatalogOrigin origin)
+    {
             var texture = new Texture2D(export);
             var topMip = texture.GetTopMip();
             var mips = texture.Mips
@@ -113,16 +126,10 @@ internal sealed class LecTextureRegistryPackageScanner : ITextureRegistryPackage
             {
                 Mips = mips
             };
-            results.Add(new TextureRegistryScannedTexture(export.InstancedFullPath, occurrence));
-        }
-
-        return new TextureRegistryPackageScan(results, templates)
-        {
-            AttachmentMeshes = meshes
-        };
+            return occurrence;
     }
 
-    private static int TryGetBoneCount(ExportEntry export)
+    internal static int TryGetBoneCount(ExportEntry export)
     {
         try
         {

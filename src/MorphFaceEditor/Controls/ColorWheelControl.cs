@@ -14,6 +14,10 @@ public sealed class ColorWheelControl : FrameworkElement
         nameof(Saturation), typeof(double), typeof(ColorWheelControl),
         new FrameworkPropertyMetadata(0d, FrameworkPropertyMetadataOptions.AffectsRender, OnColourChanged, CoerceUnit));
 
+    public static readonly DependencyProperty BrightnessProperty = DependencyProperty.Register(
+        nameof(Brightness), typeof(double), typeof(ColorWheelControl),
+        new FrameworkPropertyMetadata(1d, FrameworkPropertyMetadataOptions.AffectsRender));
+
     public event EventHandler? ColourChanged;
 
     public double Hue
@@ -28,6 +32,12 @@ public sealed class ColorWheelControl : FrameworkElement
         set => SetValue(SaturationProperty, value);
     }
 
+    public double Brightness
+    {
+        get => (double)GetValue(BrightnessProperty);
+        set => SetValue(BrightnessProperty, value);
+    }
+
     protected override Size MeasureOverride(Size availableSize)
     {
         var size = Math.Min(availableSize.Width, availableSize.Height);
@@ -40,6 +50,7 @@ public sealed class ColorWheelControl : FrameworkElement
         base.OnRender(drawingContext);
         var center = new Point(ActualWidth / 2, ActualHeight / 2);
         var radius = Math.Max(0, Math.Min(ActualWidth, ActualHeight) / 2 - 3);
+        var displayBrightness = Math.Clamp(Brightness, 0, 1);
         for (var degree = 0; degree < 360; degree += 2)
         {
             var start = PointOnCircle(center, radius, degree - 1);
@@ -52,8 +63,9 @@ public sealed class ColorWheelControl : FrameworkElement
                 context.ArcTo(end, new Size(radius, radius), 0, false, SweepDirection.Clockwise, true, false);
             }
             geometry.Freeze();
-            var edge = FromHsv(degree, 1, 1);
-            var brush = new LinearGradientBrush(Colors.White, edge, center, PointOnCircle(center, radius, degree))
+            var edge = FromHsv(degree, 1, displayBrightness);
+            var centerColor = FromHsv(degree, 0, displayBrightness);
+            var brush = new LinearGradientBrush(centerColor, edge, center, PointOnCircle(center, radius, degree))
             {
                 // The points above are device coordinates. Relative mapping interprets
                 // values such as 122 as 12,200%, producing the white pinwheel wedges.

@@ -1,5 +1,6 @@
 using LegendaryExplorerCore.GameFilesystem;
 using MorphFaceEditor.Core.Materials;
+using MorphFaceEditor.LegendaryExplorer;
 
 namespace MorphFaceEditor.LegendaryExplorer.TextureRegistry;
 
@@ -95,6 +96,8 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
         var occurrencesByPath = new Dictionary<string, List<TextureCatalogOccurrence>>(
             StringComparer.OrdinalIgnoreCase);
         var morphFaceTemplates = new List<MorphFaceTemplateCandidate>();
+        var meshesByPath = new Dictionary<string, List<AttachmentMeshOccurrence>>(
+            StringComparer.OrdinalIgnoreCase);
         progress?.Report(new TextureRegistryBuildProgress(
             game, TextureRegistryBuildPhase.ScanningPackages, 0, files.Count, null, 0));
 
@@ -113,6 +116,14 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
                 occurrences.Add(texture.Occurrence);
             }
             morphFaceTemplates.AddRange(scan.MorphFaceTemplates);
+            foreach (var mesh in scan.AttachmentMeshes)
+            {
+                var canonicalPath = PccAssetPathPolicy.FromDonorOccurrence(
+                    mesh.InstancedPath, mesh.PackagePath);
+                if (!meshesByPath.TryGetValue(canonicalPath, out var occurrences))
+                    meshesByPath.Add(canonicalPath, occurrences = []);
+                occurrences.Add(mesh);
+            }
             progress?.Report(new TextureRegistryBuildProgress(
                 game, TextureRegistryBuildPhase.ScanningPackages, index + 1, files.Count,
                 Path.GetFileName(packagePath), occurrencesByPath.Count));
@@ -123,7 +134,9 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
             .Select(pair =>
             {
                 var occurrences = pair.Value
-                    .OrderByDescending(value => value.MountPriority)
+                    .OrderByDescending(value => Path.GetFileNameWithoutExtension(value.PackagePath)
+                        .StartsWith("BIOG", StringComparison.OrdinalIgnoreCase))
+                    .ThenByDescending(value => value.MountPriority)
                     .ThenByDescending(value => value.Origin)
                     .ThenBy(value => value.PackagePath, StringComparer.OrdinalIgnoreCase)
                     .ToArray();
@@ -138,6 +151,18 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
             files.Count,
             candidates)
         {
+            AttachmentMeshes = meshesByPath.Select(pair =>
+                {
+                    var occurrences = pair.Value
+                        .OrderByDescending(value => Path.GetFileNameWithoutExtension(value.PackagePath)
+                            .StartsWith("BIOG", StringComparison.OrdinalIgnoreCase))
+                        .ThenByDescending(value => value.MountPriority)
+                        .ThenBy(value => value.PackagePath, StringComparer.OrdinalIgnoreCase)
+                        .ToArray();
+                    return new AttachmentMeshCandidate(pair.Key, occurrences[0], occurrences);
+                })
+                .OrderBy(value => value.CanonicalPath, StringComparer.OrdinalIgnoreCase)
+                .ToArray(),
             MorphFaceTemplates = morphFaceTemplates
                 .OrderBy(value => value.Origin)
                 .ThenByDescending(value => value.MountPriority)

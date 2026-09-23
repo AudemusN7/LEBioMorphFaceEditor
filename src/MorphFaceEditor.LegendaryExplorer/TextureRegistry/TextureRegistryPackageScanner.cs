@@ -2,7 +2,9 @@ using LegendaryExplorerCore.GameFilesystem;
 using LegendaryExplorerCore.Packages;
 using LegendaryExplorerCore.Unreal;
 using LegendaryExplorerCore.Unreal.Classes;
+using LegendaryExplorerCore.Unreal.BinaryConverters;
 using MorphFaceEditor.Core.Materials;
+using MorphFaceEditor.Core.Domain;
 
 namespace MorphFaceEditor.LegendaryExplorer.TextureRegistry;
 
@@ -12,7 +14,10 @@ internal sealed record TextureRegistryScannedTexture(
 
 internal sealed record TextureRegistryPackageScan(
     IReadOnlyList<TextureRegistryScannedTexture> Textures,
-    IReadOnlyList<MorphFaceTemplateCandidate> MorphFaceTemplates);
+    IReadOnlyList<MorphFaceTemplateCandidate> MorphFaceTemplates)
+{
+    public IReadOnlyList<AttachmentMeshOccurrence> AttachmentMeshes { get; init; } = [];
+}
 
 internal interface ITextureRegistryPackageScanner
 {
@@ -36,15 +41,21 @@ internal sealed class LecTextureRegistryPackageScanner : ITextureRegistryPackage
         using var package = MEPackageHandler.OpenMEPackage(packagePath, forceLoadFromDisk: true);
         var results = new List<TextureRegistryScannedTexture>();
         var templates = new List<MorphFaceTemplateCandidate>();
+        var meshes = new List<AttachmentMeshOccurrence>();
         var origin = GetOrigin(packagePath, meGame);
         var mountPriority = GetMountPriority(packagePath, meGame);
-        var packageName = Path.GetFileNameWithoutExtension(packagePath);
-        var isCharacterCreatorPackage =
-            packageName.StartsWith("BioP_Char", StringComparison.OrdinalIgnoreCase) ||
-            packageName.StartsWith("EntryMenu", StringComparison.OrdinalIgnoreCase);
         foreach (var export in package.Exports)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (!export.IsDefaultObject &&
+                export.ClassName.Equals("SkeletalMesh", StringComparison.OrdinalIgnoreCase) &&
+                AttachmentMeshNamePolicy.IsInstalledHeadAttachment(export.InstancedFullPath))
+            {
+                meshes.Add(new AttachmentMeshOccurrence(
+                    Path.GetFullPath(packagePath), export.InstancedFullPath,
+                    export.UIndex, mountPriority, origin,
+                    TryGetBoneCount(export)));
+            }
             if (!export.IsDefaultObject &&
                 export.ClassName.Equals("BioMorphFace", StringComparison.OrdinalIgnoreCase))
             {
@@ -58,13 +69,18 @@ internal sealed class LecTextureRegistryPackageScanner : ITextureRegistryPackage
                     origin));
             }
             if (export.IsDefaultObject ||
-                !export.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase) ||
-                (!isCharacterCreatorPackage &&
-                 !TextureRegistryDiscovery.IsRelevantPath(export.InstancedFullPath) &&
-                 !CrossGameAssetReconciliationCatalog.IsReviewedTexturePath(export.InstancedFullPath)))
+                !export.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
+            var canonicalTexturePath = PccAssetPathPolicy.FromDonorOccurrence(
+                export.InstancedFullPath, packagePath);
+            if (TextureRegistryDiscovery.IsExcludedPath(canonicalTexturePath) ||
+                !TextureRegistryDiscovery.IsRelevantPath(export.InstancedFullPath) &&
+                !TextureRegistryDiscovery.IsExplicitPlayerMaterialPath(canonicalTexturePath) &&
+                !CrossGameAssetReconciliationCatalog.IsReviewedTexturePath(export.InstancedFullPath) &&
+                !CrossGameAssetReconciliationCatalog.IsReviewedTexturePath(canonicalTexturePath))
+                continue;
 
             var texture = new Texture2D(export);
             var topMip = texture.GetTopMip();
@@ -100,7 +116,23 @@ internal sealed class LecTextureRegistryPackageScanner : ITextureRegistryPackage
             results.Add(new TextureRegistryScannedTexture(export.InstancedFullPath, occurrence));
         }
 
-        return new TextureRegistryPackageScan(results, templates);
+        return new TextureRegistryPackageScan(results, templates)
+        {
+            AttachmentMeshes = meshes
+        };
+    }
+
+    private static int TryGetBoneCount(ExportEntry export)
+    {
+        try
+        {
+            return export.GetBinaryData<SkeletalMesh>().RefSkeleton?.Length ?? 0;
+        }
+        catch (Exception)
+        {
+            // One malformed mod mesh should not suppress every asset in its package.
+            return 0;
+        }
     }
 
     private static TextureCatalogOrigin GetOrigin(string packagePath, MEGame game)

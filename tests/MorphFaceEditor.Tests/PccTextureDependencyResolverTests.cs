@@ -16,6 +16,7 @@ public static class PccTextureDependencyResolverTests
     public static IReadOnlyList<TestCase> All { get; } =
     [
         new("PCC texture resolver: human prefers exact BIOG donor", HumanPrefersBiog),
+        new("PCC texture resolver: BIOG alias beats cooked-level path", BiogAliasBeatsCookedLevel),
         new("PCC texture resolver: package-relative BIOG paths become PCC identities", RelativeBiogPathBecomesPccIdentity),
         new("D1 installed non-corpus BIOG texture becomes a package-qualified PCC export", InstalledNonCorpusTextureUsesDonorIdentity),
         new("D1 arbitrary custom texture materialises without corpus knowledge", ArbitraryCustomTextureUsesDonorIdentity),
@@ -39,6 +40,20 @@ public static class PccTextureDependencyResolverTests
             preferBiog: true);
 
         TestAssert.Equal(Path.GetFileName("BIOG_HMF_HED_PROMorph_R.pcc"), resolved.Occurrence.PackageName);
+    }
+
+    private static void BiogAliasBeatsCookedLevel()
+    {
+        const string shortPath = "Hair.HMF_HIR_Test_Diff";
+        const string fullPath = "BIOG_HMF_HIR_PRO.Hair.HMF_HIR_Test_Diff";
+        var biog = Candidate(shortPath, Occurrence("BIOG_HMF_HIR_PRO.pcc", 0));
+        var level = Candidate(fullPath, Occurrence("BIOA_TEST.pcc", 9000));
+
+        var resolved = PccTextureDependencyResolver.Resolve(
+            new AssetIdentity("BIOA_TEST.pcc", fullPath, 2, "Texture2D"),
+            [level, biog], preferBiog: true);
+        TestAssert.Equal("BIOG_HMF_HIR_PRO.pcc", resolved.Occurrence.PackagePath);
+        TestAssert.Equal(fullPath, resolved.InstancedPath);
     }
 
     private static void HumanFallsBackToCharacterCreator()

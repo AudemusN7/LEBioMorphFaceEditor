@@ -4,6 +4,50 @@ This console keeps reverse-engineering code out of the production reader and ren
 
 ## Pass-1 commands
 
+Unpack one MFTR file into a readable JSON file, without an installed game or
+registry rebuild:
+
+```powershell
+dotnet run --project tools/MorphFaceEditor.Research -c Release -- unpack-mftr "C:\path\to\LE1.mftr"
+```
+
+This writes `LE1.json` beside the input. Pass an explicit output path as a
+second argument if preferred: `unpack-mftr "C:\path\to\LE1.mftr" "C:\path\to\report.json"`.
+The command reads the MFTR header and compressed JSON directly, so it can also
+unpack an older schema that the current editor can no longer load. It never
+changes the MFTR input or requires the user's game files. The JSON includes
+every indexed texture and attachment mesh, their occurrences, and the chosen
+effective occurrence.
+
+Audit an existing installed texture registry without rebuilding it:
+
+```powershell
+dotnet run --project tools/MorphFaceEditor.Research -c Release -- texture-registry-audit LE1 .codex-temp/texture-registry-audit
+```
+
+Repeat with `LE2` and `LE3`. For each game the command writes a readable
+`*-registry.json` copy of the complete registry, a compact `*-summary.json`,
+and tab-separated `*-included.tsv`, `*-missing-paths.tsv`, `*-omitted.tsv`,
+and `*-hir-meshes.tsv` tables. Start with `missing-paths` in a spreadsheet:
+it has one row per texture path absent from the registry, with an example
+package. `included` lists every stored occurrence and identifies the effective
+one. `omitted` lists every current installed Texture2D export absent from the
+saved registry, including duplicate paths and possible intentional exclusions.
+Its path-rule column
+shows only the public name filter; character-creator and reviewed-reconciliation
+exceptions are also part of the scanner. `hir-meshes` lists installed
+SkeletalMesh exports whose object name contains `HIR`. The command does not change the registry or
+installed packages. If the game installation changed since the registry was
+built, rebuild it first through the editor settings before interpreting
+omissions as discovery-rule gaps.
+
+To inspect a rebuilt registry without replacing the editor's installed MFTRs,
+pass an output directory to the builder:
+
+```powershell
+dotnet run --project tools/MorphFaceEditor.Research -c Release -- build-texture-registries LE1 .codex-temp/texture-registry-calibration
+```
+
 Audit the nine canonical native and cross-game `GlobalMorphs` corpora without
 including nested or unrelated fixture packages:
 

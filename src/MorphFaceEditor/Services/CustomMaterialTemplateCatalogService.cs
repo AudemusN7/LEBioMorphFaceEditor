@@ -288,20 +288,10 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
         path.Contains("_Old", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Review meshes shipped in BIOG HIR packages are build/review variants and
-    /// are not safe attachment choices for an in-game workspace.
+    /// Excludes only the audited literal object-name suffixes from attachment choices.
     /// </summary>
     internal static bool IsUnsafeAttachment(string packagePath, string meshPath) =>
-        IsDevelopmentLeftover(meshPath) ||
-        (IsBiogHirPackage(packagePath) &&
-         meshPath.Contains("Review", StringComparison.OrdinalIgnoreCase));
-
-    private static bool IsBiogHirPackage(string packagePath)
-    {
-        var packageName = Path.GetFileNameWithoutExtension(packagePath);
-        return packageName.StartsWith("BIOG_", StringComparison.OrdinalIgnoreCase) &&
-               packageName.Contains("_HIR", StringComparison.OrdinalIgnoreCase);
-    }
+        AttachmentMeshNamePolicy.HasExcludedSuffix(meshPath);
 
     private static string Role(HeadMaterialFamily family) => family switch
     {

@@ -28,6 +28,7 @@ public static class MaterialEditingTests
         new("transient texture preview stays outside authored state and history", TransientTexturePreviewStaysOutsideAuthoredState),
         new("None restores the rendered material default after replacement", NoneRestoresRenderedDefault),
         new("failed attachment replacement can restore material state", AttachmentMaterialStateRestores),
+        new("multi-slot attachment keeps each material's own hair diffuse", MultiSlotAttachmentKeepsOwnDiffuse),
         new("attachment Diffuseuse stays out of head material output", AttachmentTextureIsNotHeadOutput),
         new("saved Hat preview diffuse stays out of reloaded head controls and exports", SavedHatDiffuseIsPreviewOnly),
         new("duplicate face texture overrides remain loadable", DuplicateTextureOverridesRemainLoadable)
@@ -511,5 +512,47 @@ public static class MaterialEditingTests
         TestAssert.Equal(original.Materials.Count, session.Materials.Materials.Count);
         TestAssert.Equal(original.Materials.Keys.Single(), session.Materials.Materials.Keys.Single());
         TestAssert.Equal(snapshot.TextureReferences.Count, session.ChangedTextureCount);
+    }
+
+    private static void MultiSlotAttachmentKeepsOwnDiffuse()
+    {
+        var firstTexture = new DecodedTextureAsset(TestFixtures.CreateIdentity("HairA", "Texture2D"),
+            1, 1, [255, 0, 0, 255], "PF_B8G8R8A8", TextureRole.Diffuse,
+            TextureColorSpace.Srgb, TextureAlphaPolicy.Ignore, false, "hair-a");
+        var secondTexture = firstTexture with
+        {
+            Source = TestFixtures.CreateIdentity("HairB", "Texture2D"),
+            CacheKey = "hair-b"
+        };
+        ResolvedHeadMaterial Hair(string name, DecodedTextureAsset texture)
+        {
+            var identity = TestFixtures.CreateIdentity(name, "MaterialInstanceConstant");
+            var binding = new MaterialTextureBinding("HAIR_Diff", texture);
+            var textures = new Dictionary<string, MaterialTextureBinding>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["HAIR_Diff"] = binding
+            };
+            return new ResolvedHeadMaterial(MaterialIdentityKey.Create(identity), identity, name,
+                HeadMaterialFamily.Hair, HeadMaterialBlendMode.Masked, false,
+                new Dictionary<string, float>(), new Dictionary<string, Vector4>(), textures)
+            { DefaultTextures = textures };
+        }
+        var first = Hair("HairMaterialA", firstTexture);
+        var second = Hair("HairMaterialB", secondTexture);
+        var materials = new ResolvedHeadMaterialSet(new Dictionary<string, ResolvedHeadMaterial>
+        {
+            [first.Key] = first,
+            [second.Key] = second
+        });
+        var session = new MaterialEditingSession(MorphFaceMaterialOverrides.Empty, materials);
+        session.SetTextureReference("HAIR_Diff", firstTexture);
+        session.ReplaceAttachmentMaterials(materials, materials, hasMultiMaterialAttachment: true);
+
+        TestAssert.True(session.GetTextureReference("HAIR_Diff") is null,
+            "The shared Hair Diffuse picker was not reset to None.");
+        TestAssert.Equal(firstTexture.Source,
+            session.Materials.Materials[first.Key].Textures["HAIR_Diff"].Texture.Source);
+        TestAssert.Equal(secondTexture.Source,
+            session.Materials.Materials[second.Key].Textures["HAIR_Diff"].Texture.Source);
     }
 }

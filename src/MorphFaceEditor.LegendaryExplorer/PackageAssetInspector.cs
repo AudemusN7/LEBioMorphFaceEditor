@@ -1,4 +1,5 @@
 using LegendaryExplorerCore.Packages;
+using LegendaryExplorerCore.Unreal.BinaryConverters;
 using MorphFaceEditor.Core.Domain;
 
 namespace MorphFaceEditor.LegendaryExplorer;
@@ -21,7 +22,14 @@ public static class PackageAssetInspector
                 export.InstancedFullPath,
                 export.ObjectName.Instanced,
                 export.ClassName,
-                export.IsDefaultObject))
+                export.IsDefaultObject)
+            {
+                BoneCount = classSet?.Contains("SkeletalMesh") == true &&
+                            export.ClassName.Equals("SkeletalMesh", StringComparison.OrdinalIgnoreCase) &&
+                            !export.IsDefaultObject
+                    ? TryGetBoneCount(export)
+                    : null
+            })
             .OrderBy(entry => entry.UIndex)
             .ToArray();
 
@@ -30,6 +38,19 @@ public static class PackageAssetInspector
             package.Game.ToString(),
             PackageFingerprint.Capture(fullPath),
             entries);
+    }
+
+    private static int? TryGetBoneCount(ExportEntry export)
+    {
+        try
+        {
+            return export.GetBinaryData<SkeletalMesh>().RefSkeleton?.Length;
+        }
+        catch (Exception)
+        {
+            // A broken mesh should not hide the rest of the package inventory.
+            return null;
+        }
     }
 
     public static AssetDiscoveryResult Discover(

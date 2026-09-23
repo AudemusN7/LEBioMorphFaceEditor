@@ -2,6 +2,7 @@ using LegendaryExplorerCore.GameFilesystem;
 using LegendaryExplorerCore.Packages;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
+using MorphFaceEditor.LegendaryExplorer.TextureRegistry;
 
 namespace MorphFaceEditor.LegendaryExplorer;
 
@@ -52,7 +53,8 @@ public sealed record StandalonePlayerAssetCatalog(
         MorphFaceGame game,
         string ronPath,
         IReadOnlyList<TextureCatalogCandidate> textures,
-        string? referencePackagePath = null)
+        string? referencePackagePath = null,
+        IReadOnlyList<AttachmentMeshCandidate>? attachmentMeshes = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(ronPath);
         ArgumentNullException.ThrowIfNull(textures);
@@ -108,6 +110,12 @@ public sealed record StandalonePlayerAssetCatalog(
         var meshes = new List<AssetIdentity>();
         foreach (var requestedPath in requestedMeshes)
         {
+            if (attachmentMeshes is not null &&
+                AttachmentMeshCatalogResolver.Resolve(attachmentMeshes, requestedPath) is { } indexedMesh)
+            {
+                meshes.Add(indexedMesh);
+                continue;
+            }
             if ((FindInstalledExport(loadedFiles, requestedPath, "SkeletalMesh") ??
                  FindReferencedExport(referencePackage, referenceResolver, requestedPath, "SkeletalMesh")) is { } mesh)
             {

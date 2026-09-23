@@ -1,6 +1,7 @@
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.LegendaryExplorer.TextureRegistry;
+using MorphFaceEditor.Services;
 
 namespace MorphFaceEditor.Tests;
 
@@ -28,6 +29,7 @@ public static class TextureRegistryStoreTests
         ,new("custom assets: sidecar merges without changing installed registry", ManualSidecarMergesWithoutChangingInstalled)
         ,new("custom assets: missing PCC remains recorded with a relink report", MissingManualPccProducesRelinkReport)
         ,new("custom assets: selected export appends to sidecar", SelectedExportAppendsToSidecar)
+        ,new("custom assets: preview attachments require and use merged database", PreviewAttachmentsUseMergedDatabase)
     ];
 
     private static void DefaultRootAlignsWithEditorAppData()
@@ -79,6 +81,43 @@ public static class TextureRegistryStoreTests
         TestAssert.Equal(2, catalog.Candidates.Count);
         TestAssert.True(catalog.Candidates.Any(value => value.InstancedPath == manualPath),
             "An explicitly added texture excluded by automatic discovery was hidden.");
+    }
+
+    private static void PreviewAttachmentsUseMergedDatabase()
+    {
+        using var fixture = RegistryFixture.Create();
+        var sourcePath = Path.Combine(Path.GetTempPath(), "MFE-custom-hair.pcc");
+        const string canonicalPath = "MFE-custom-hair.Hair.HMM_HIR_Custom_MDL";
+        var occurrence = new AttachmentMeshOccurrence(sourcePath, "Hair.HMM_HIR_Custom_MDL",
+            7, 0, TextureCatalogOrigin.Manual, 42);
+        fixture.Store.WriteManualAtomic(new TextureRegistrySnapshot(
+            TextureRegistrySnapshot.CurrentSchemaVersion, TextureCatalogGame.LE1,
+            DateTimeOffset.UtcNow, 0, [])
+        {
+            AttachmentMeshes = [new AttachmentMeshCandidate(canonicalPath, occurrence, [occurrence])],
+            ManualAssets = [new ManualRegistryAsset(sourcePath, 7, occurrence.InstancedPath, "SkeletalMesh")]
+        });
+        using var reader = new MorphFacePackageReader();
+        var references = new PackageReferenceService(reader, new TextureCatalogService(fixture.Store));
+        try
+        {
+            _ = references.ResolveInstalledSkeletalMeshesAsync(MorphFaceGame.LE1, [canonicalPath])
+                .GetAwaiter().GetResult();
+            throw new Exception("Preview attachment discovery succeeded without an installed database.");
+        }
+        catch (InvalidOperationException)
+        {
+            // The manual sidecar cannot stand in for the required installed database.
+        }
+
+        fixture.Store.WriteAtomic(Snapshot(TextureCatalogGame.LE1));
+        var resolved = references.ResolveInstalledSkeletalMeshesAsync(MorphFaceGame.LE1,
+            [canonicalPath, occurrence.InstancedPath, "missing.Hair.HMM_HIR_NoSuchMesh_MDL"])
+            .GetAwaiter().GetResult();
+        TestAssert.Equal(2, resolved.Count);
+        TestAssert.Equal(sourcePath, resolved[canonicalPath].PackagePath);
+        TestAssert.Equal(7, resolved[canonicalPath].UIndex);
+        TestAssert.Equal(sourcePath, resolved[occurrence.InstancedPath].PackagePath);
     }
 
     private static void MissingManualPccProducesRelinkReport()

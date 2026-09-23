@@ -37,15 +37,17 @@ public sealed partial class VorchaFeatureMetadataCatalog : IHeadEditorUiProfile
         var source = feature.Kind == MorphFeatureResolutionKind.MetadataOnly
             ? "preserved inert LE3 metadata."
             : "reconstructed from the six available LE2 baked-face oracles.";
-        return new MorphFeatureMetadata(feature.Feature.Name, Label(feature.Feature.Name), category, group,
+        var metadata = new MorphFeatureMetadata(feature.Feature.Name, Label(feature.Feature.Name), category, group,
             false, Sort(feature.Feature.Name), 0, 1, 0.01f, false,
-            $"{feature.Feature.Name} · hidden dormant reconstruction; {source}");
+            $"Hidden dormant reconstruction; {source}");
+        return MetadataTextCatalog.Apply(MorphFaceMetadataCatalogRegistry.Vorcha, metadata);
     }
 
-    public MaterialParameterDefinition DescribeMaterial(MaterialParameterDefinition definition) => definition with
+    public MaterialParameterDefinition DescribeMaterial(MaterialParameterDefinition definition) =>
+        MetadataTextCatalog.Apply(MorphFaceMetadataCatalogRegistry.Vorcha, definition with
     {
-        Label = MaterialLabel(definition.Name), Group = GetMaterialCategory(definition.Name, definition.Kind)
-    };
+        Label = Label(definition.Name), Group = GetMaterialCategory(definition.Name, definition.Kind)
+    });
 
     public string GetMaterialCategory(string parameterName, MaterialParameterKind kind) =>
         IsEyeMaterialParameter(parameterName)
@@ -88,34 +90,6 @@ public sealed partial class VorchaFeatureMetadataCatalog : IHeadEditorUiProfile
             .Replace('_', ' ');
         return WordBoundary().Replace(trimmed, " $1").Trim();
     }
-
-    private static string MaterialLabel(string name) => name.ToLowerInvariant() switch
-    {
-        "tur_hed_diff" => "Diffuse Texture",
-        "aln_hed_norm" => "Normal Texture",
-        "aln_hed_tint" => "Region Mask",
-        "aln_hed_tatt" => "Tattoo Texture",
-        "aln_hed_diff" or "eye_diff" => "Eye Diffuse Texture",
-        "eye_norm" => "Eye Normal Texture",
-        "skintone" => "Skin Colour",
-        "aln_hed_diff_tint_muzzle" => "Muzzle Colour",
-        "aln_hed_diff_tint_muzzle2" => "Secondary Muzzle Colour",
-        "aln_hed_diff_tint_teeth" => "Teeth / Bone Colour",
-        "tattoo_chooser" => "Tattoo Pattern",
-        "tattoo_color" => "Tattoo Colour",
-        "aln_hed_spec_colour" => "Specular Colour",
-        "tmissive" => "Transmission Colour",
-        "skinlightscattering" => "Subsurface Scattering Colour",
-        "aln_hed_spwr_skin_scalar" => "Skin Specular Power",
-        "aln_hed_spwr_muzzle_scalar" => "Muzzle Specular Power",
-        "eye_spec" or "eye_specular" => "Eye Specular Strength",
-        "eye_spec_power" => "Eye Specular Power",
-        "eye_glow_intensity" => "Eye Glow Intensity",
-        "eye_tint_iris" or "eye_tint" => "Iris Colour",
-        "eye_glow" => "Eye Glow Colour",
-        "cubemap_intensity" => "Eye Reflection Strength",
-        _ => Label(name)
-    };
 
     private static bool IsEyeMaterialParameter(string name) => name.ToLowerInvariant() switch
     {

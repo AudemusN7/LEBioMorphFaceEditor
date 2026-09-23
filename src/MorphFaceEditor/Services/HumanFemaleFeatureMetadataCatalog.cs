@@ -7,6 +7,8 @@ namespace MorphFaceEditor.Services;
 /// <summary>Extends the human taxonomy with female-only morph, makeup and hair semantics.</summary>
 public class HumanFemaleFeatureMetadataCatalog : HumanMaleFeatureMetadataCatalog
 {
+    protected override string TextArchetype => MorphFaceMetadataCatalogRegistry.HumanFemale;
+
     private const string Character = "character";
     private const string Brows = "brows";
     private const string Sockets = "sockets";
@@ -50,47 +52,6 @@ public class HumanFemaleFeatureMetadataCatalog : HumanMaleFeatureMetadataCatalog
         "neck_apple"
     };
 
-    private static readonly IReadOnlyDictionary<string, string> FeatureLabels =
-        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["Ashley"] = "Ashley — Head",
-            ["Iconic"] = "Iconic Shepard — Head",
-            ["eyes_ashleyShape"] = "Ashley Shape",
-            ["eyeShape_Ashley"] = "Ashley",
-            ["eyeShape_flatTop"] = "Eye Shape Flat Top",
-            ["eyeShape_highInside"] = "Eye Shape High Inner Corner",
-            ["eyeShape_iconic"] = "Iconic Shepard",
-            ["eyeShape_liara"] = "Liara",
-            ["eyeShape_oldBlk"] = "Black — Old",
-            ["eyeShape_SlantUp"] = "Eye Shape Slant Up",
-            ["eyeShape_sleepy"] = "Eye Shape Sleepy",
-            ["eyeShape_wide"] = "Eye Shape Wide",
-            ["eyeShape_yngAsn"] = "Asian — Young",
-            ["HAIR_centerPart"] = "Centre Part",
-            ["HAIR_pulledBackBig"] = "Pulled Back — Full",
-            ["HAIR_pulledBackSlick"] = "Pulled Back — Slick",
-            ["HAIR_sidePart"] = "Side Part",
-            ["HAIR_slickWidowsPeak"] = "Slick Widow's Peak",
-            ["eyes_lashAngle"] = "Lash Angle",
-            ["eyes_lashLength"] = "Lash Length",
-            ["eyes_RotateIn"] = "Eyeballs Narrow",
-            ["eyes_RotateOut"] = "Eyeballs Wide",
-            ["mouth_cheekMass"] = "Cheeks Mass",
-            ["pupil_Small"] = "Pupil Size",
-            ["race_Ashley"] = "Ashley — Blend",
-            ["race_iconic"] = "Iconic Shepard — Blend",
-            ["race_liara"] = "Liara — Blend",
-            ["mouthShape_ashley"] = "Ashley",
-            ["mouthShape_iconic"] = "Iconic Shepard",
-            ["mouthShape_liara"] = "Liara",
-            ["mouthShape_oldAsn"] = "Asian — Old",
-            ["mouthShape_yngAsn"] = "Asian — Young",
-            ["mouthShape_oldBlk"] = "Black — Old",
-            ["mouthShape_yngBlk"] = "Black — Young",
-            ["mouthShape_oldCauc"] = "Caucasian — Old",
-            ["mouthShape_yngCauc"] = "Caucasian — Young"
-        };
-
     public override IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
         CreateFemaleCategories();
 
@@ -99,65 +60,27 @@ public class HumanFemaleFeatureMetadataCatalog : HumanMaleFeatureMetadataCatalog
         var metadata = base.Describe(feature, sessionCanEdit);
         var name = feature.Feature.Name;
         var (category, subcategory) = GetFemalePlacement(name, metadata.CategoryKey, metadata.SubcategoryKey);
-        return metadata with
+        var described = metadata with
         {
-            Label = FeatureLabels.GetValueOrDefault(name) ?? HumaniseFemaleFeature(name, metadata.Label),
+            Label = HumaniseFemaleFeature(name, metadata.Label),
             CategoryKey = category,
             SubcategoryKey = subcategory,
             IsVisible = !HiddenFeatures.Contains(name),
             SortOrder = GetFemaleSortOrder(name, metadata.SortOrder),
             Description = feature.Kind == MorphFeatureResolutionKind.MetadataOnly
-                ? $"{name} · stored Human Female creator metadata with no direct target delta."
+                ? "Stored Human Female creator metadata with no direct target delta."
                 : metadata.Description
         };
+        return MetadataTextCatalog.Apply(TextArchetype, described, TextGame);
     }
 
     public override MaterialParameterDefinition DescribeMaterial(MaterialParameterDefinition definition)
     {
-        var described = base.DescribeMaterial(definition);
-        var label = definition.Name switch
+        var described = base.DescribeMaterial(definition) with
         {
-            "HED_Makeup_Mask" => "Makeup Mask Texture",
-            "HED_Blush_Scalar" => "Blush Strength",
-            "HED_Blush_Vector" => "Blush Colour",
-            "HED_Brow_Tint_Scalar" => "Eyeshadow Strength",
-            "HED_Brow_Tint_Vector" => "Eyeshadow Colour",
-            "HED_EyeShadow_Tint_Scalar" => "Makeup Strength",
-            "HED_EyeShadow_Tint_Vector" => "Makeup Colour",
-            "HED_Lips_Tint_Scalar" => "Lip Tint Strength",
-            "HED_Lips_Tint_Vector" => "Lip Tint Colour",
-            "HED_Addn_Blowout_Scalar" => "Primary Brow Colour Strength",
-            "HED_Addn_Colour_02_Scalar" => "Secondary Brow Colour Strength",
-            "HED_Addn_Colour_Vector" => "Primary Brow Colour",
-            "blonde" => "Secondary Brow Colour",
-            "HED_Spec_NoBrow" => "Addition Specular Suppression",
-            "HED_Addn_Spec_Lips_Scalar" => "Lip Specular Strength",
-            "HED_Addn_SPwr_Lips_Scalar" => "Lip Specular Power",
-            "Highlight1SpecExp_Scalar" => "Highlight 1 Specular Exponent",
-            "Highlight2SpecExp_Scalar" => "Highlight 2 Specular Exponent",
-            "Highlight1Intensity" or "Hightlight1Intensity" => "Highlight 1 Intensity",
-            "Highlight2Intensity" or "Hightlight2Intensity" => "Highlight 2 Intensity",
-            "Highlight1Color" => "Highlight 1 Colour",
-            "Highlight2Color" => "Highlight 2 Colour",
-            _ => described.Label
+            Group = GetMaterialCategory(definition.Name, definition.Kind)
         };
-        var description = definition.Name switch
-        {
-            "HED_Brow_Tint_Scalar" or "HED_Brow_Tint_Vector" =>
-                "The stock HMF makeup mask routes this nominal Brow parameter to the eyeshadow region.",
-            "HED_EyeShadow_Tint_Scalar" or "HED_EyeShadow_Tint_Vector" =>
-                "The stock HMF makeup mask uses this parameter for the broader eye and mouth makeup layer.",
-            "HED_Addn_Blowout_Scalar" or "HED_Addn_Colour_02_Scalar" or
-            "HED_Addn_Colour_Vector" or "blonde" =>
-                "Colours the eyebrow layer selected by the packed HMF addition texture.",
-            _ => described.Description
-        };
-        return described with
-        {
-            Label = label,
-            Group = GetMaterialCategory(definition.Name, definition.Kind),
-            Description = description
-        };
+        return MetadataTextCatalog.Apply(TextArchetype, described, TextGame);
     }
 
     public override string GetMaterialCategory(string parameterName, MaterialParameterKind kind)

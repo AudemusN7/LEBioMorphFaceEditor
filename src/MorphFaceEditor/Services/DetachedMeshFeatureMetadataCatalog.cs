@@ -11,13 +11,15 @@ namespace MorphFaceEditor.Services;
 public sealed class DetachedMeshFeatureMetadataCatalog : IHeadEditorUiProfile
 {
     private readonly CustomMaterialWorkspace? _workspace;
-    private readonly HumanFemaleFeatureMetadataCatalog _human = new();
-    private readonly AsariFeatureMetadataCatalog _asari = new();
-    private readonly SalarianFeatureMetadataCatalog _salarian = new();
-    private readonly TurianFeatureMetadataCatalog _turian = new();
-    private readonly KroganFeatureMetadataCatalog _krogan = new();
-    private readonly BatarianFeatureMetadataCatalog _batarian = new();
-    private readonly VorchaFeatureMetadataCatalog _vorcha = new();
+    private readonly HumanMaleFeatureMetadataCatalog _humanMale = MorphFaceMetadataCatalogRegistry.HumanMaleParent;
+    private readonly HumanFemaleFeatureMetadataCatalog _human = MorphFaceMetadataCatalogRegistry.HumanFemaleParent;
+    private readonly AsariFeatureMetadataCatalog _asari = MorphFaceMetadataCatalogRegistry.AsariParent;
+    private readonly SalarianFeatureMetadataCatalog _salarian = MorphFaceMetadataCatalogRegistry.SalarianParent;
+    private readonly TurianFeatureMetadataCatalog _turian = MorphFaceMetadataCatalogRegistry.TurianParent;
+    private readonly FemaleTurianFeatureMetadataCatalog _femaleTurian = MorphFaceMetadataCatalogRegistry.FemaleTurianParent;
+    private readonly KroganFeatureMetadataCatalog _krogan = MorphFaceMetadataCatalogRegistry.KroganParent;
+    private readonly BatarianFeatureMetadataCatalog _batarian = MorphFaceMetadataCatalogRegistry.BatarianParent;
+    private readonly VorchaFeatureMetadataCatalog _vorcha = MorphFaceMetadataCatalogRegistry.VorchaParent;
 
     public DetachedMeshFeatureMetadataCatalog(CustomMaterialWorkspace? workspace = null)
     {
@@ -86,6 +88,8 @@ public sealed class DetachedMeshFeatureMetadataCatalog : IHeadEditorUiProfile
         {
             HeadMaterialFamily.AsariSkin => _asari,
             HeadMaterialFamily.SalarianSkin or HeadMaterialFamily.SalarianEyes => _salarian,
+            HeadMaterialFamily.TurianSkin or HeadMaterialFamily.TurianEyes
+                when parameterName.StartsWith("TUF_", StringComparison.OrdinalIgnoreCase) => _femaleTurian,
             HeadMaterialFamily.TurianSkin or HeadMaterialFamily.TurianEyes => _turian,
             HeadMaterialFamily.KroganSkin or HeadMaterialFamily.KroganEyes => _krogan,
             HeadMaterialFamily.BatarianSkin => _batarian,
@@ -100,10 +104,13 @@ public sealed class DetachedMeshFeatureMetadataCatalog : IHeadEditorUiProfile
         {
             "asari" => _asari,
             "salarian" => _salarian,
+            "female-turian" => _femaleTurian,
             "turian" => _turian,
             "krogan" => _krogan,
             "batarian" => _batarian,
             "vorcha" => _vorcha,
+            "human-male" => _humanMale,
+            "human-female" => _human,
             "human" => _human,
             _ => CatalogForPrefix(parameterName)
         };
@@ -112,6 +119,7 @@ public sealed class DetachedMeshFeatureMetadataCatalog : IHeadEditorUiProfile
     {
         if (parameterName.StartsWith("ASA_", StringComparison.OrdinalIgnoreCase)) return _asari;
         if (parameterName.StartsWith("SAL_", StringComparison.OrdinalIgnoreCase)) return _salarian;
+        if (parameterName.StartsWith("TUF_", StringComparison.OrdinalIgnoreCase)) return _femaleTurian;
         if (parameterName.StartsWith("TUR_", StringComparison.OrdinalIgnoreCase)) return _turian;
         if (parameterName.StartsWith("KRO_", StringComparison.OrdinalIgnoreCase) ||
             parameterName.StartsWith("Wrex_", StringComparison.OrdinalIgnoreCase)) return _krogan;

@@ -1,6 +1,7 @@
 using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.Infrastructure;
+using MorphFaceEditor.Services;
 
 namespace MorphFaceEditor.ViewModels;
 
@@ -19,7 +20,7 @@ public sealed class MaterialScalarEditorViewModel(
     public string Label => definition.Label;
     public string Group => definition.Group;
     public string CategoryKey => definition.Group;
-    public string Description => definition.Description;
+    public string Description => MetadataTooltipFormatter.Format(Label, definition.Description);
     public float Minimum => _extendedSliders ? -RangeExtent : _defaultMinimum;
     public float Maximum => _extendedSliders ? RangeExtent : _defaultMaximum;
     public float Step => definition.Step;

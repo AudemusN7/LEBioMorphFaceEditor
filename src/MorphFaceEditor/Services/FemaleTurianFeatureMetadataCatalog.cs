@@ -9,7 +9,10 @@ namespace MorphFaceEditor.Services;
 /// </summary>
 public sealed class FemaleTurianFeatureMetadataCatalog : IHeadEditorUiProfile
 {
-    private readonly TurianFeatureMetadataCatalog _turian = new();
+    private readonly TurianFeatureMetadataCatalog _turian;
+
+    public FemaleTurianFeatureMetadataCatalog(TurianFeatureMetadataCatalog? turian = null) =>
+        _turian = turian ?? MorphFaceMetadataCatalogRegistry.TurianParent;
 
     public static IReadOnlySet<string> MetadataOnlyFeatures { get; } =
         TurianFeatureMetadataCatalog.AllFeatureNames;
@@ -32,16 +35,18 @@ public sealed class FemaleTurianFeatureMetadataCatalog : IHeadEditorUiProfile
                 0.01f,
                 false,
                 string.Empty);
-        return metadata with
+        var described = metadata with
         {
             IsVisible = false,
             IsEditable = false,
-            Description = $"{feature.Feature.Name} · reserved Female Turian placeholder; no TUF morph target is currently available."
+            Description = "Reserved Female Turian placeholder; no TUF morph target is currently available."
         };
+        return MetadataTextCatalog.Apply(MorphFaceMetadataCatalogRegistry.FemaleTurian, described);
     }
 
     public MaterialParameterDefinition DescribeMaterial(MaterialParameterDefinition definition) =>
-        _turian.DescribeMaterial(definition);
+        MetadataTextCatalog.Apply(MorphFaceMetadataCatalogRegistry.FemaleTurian,
+            _turian.DescribeMaterial(definition));
 
     public string GetMaterialCategory(string parameterName, MaterialParameterKind kind) =>
         _turian.GetMaterialCategory(parameterName, kind);

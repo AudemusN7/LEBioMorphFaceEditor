@@ -20,6 +20,7 @@ public static class TextureRegistryStoreTests
         new("texture registry builder: adds only shadowed physical base packages", BuilderAddsOnlyShadowedPhysicalBasePackages),
         new("texture registry builder: retains native templates beneath mod overrides", BuilderRetainsNativeTemplatesBeneathModOverrides),
         new("texture registry builder: groups paths by mount precedence", BuilderGroupsPathsByMountPrecedence),
+        new("texture registry builder: groups HIR meshes under canonical paths", BuilderGroupsAttachmentMeshes),
         new("texture registry builder: reports scan write verify phases", BuilderReportsEveryPhase),
         new("texture registry builder: cancelled rebuild preserves active file", CancelledBuildPreservesActiveFile),
         new("texture registry builder: rebuild all is sequential", BuilderRebuildAllIsSequential),
@@ -47,6 +48,7 @@ public static class TextureRegistryStoreTests
 
         TestAssert.True(result.IsAvailable, "A verified compact registry was reported unavailable.");
         TestAssert.Equal(1, result.Candidates.Count);
+        TestAssert.Equal(1, result.AttachmentMeshes.Count);
         TestAssert.Equal("DLC_MOD_Custom\\CookedPCConsole\\BioG_Sal.pcc",
             result.Candidates.Single().EffectiveOccurrence.PackagePath);
     }
@@ -155,6 +157,28 @@ public static class TextureRegistryStoreTests
         TestAssert.Equal(2, candidate.Occurrences.Count);
     }
 
+    private static void BuilderGroupsAttachmentMeshes()
+    {
+        using var fixture = RegistryFixture.Create();
+        const string shortPath = "Hair.HMF_HIR_Custom_MDL";
+        const string fullPath = "BIOG_HMF_HIR_PRO.Hair.HMF_HIR_Custom_MDL";
+        const string biogPackage = "BIOG_HMF_HIR_PRO.pcc";
+        const string levelPackage = "BIOA_TEST.pcc";
+        var scanner = new FakePackageScanner(meshes: new Dictionary<string, IReadOnlyList<AttachmentMeshOccurrence>>
+        {
+            [biogPackage] = [new(biogPackage, shortPath, 7, 0, TextureCatalogOrigin.BaseGame)],
+            [levelPackage] = [new(levelPackage, fullPath, 10, 0, TextureCatalogOrigin.BaseGame)]
+        });
+        var builder = fixture.CreateBuilder(scanner, _ => [biogPackage, levelPackage]);
+
+        _ = builder.RebuildAsync(MorphFaceGame.LE3).GetAwaiter().GetResult();
+        var mesh = fixture.Store.Read(MorphFaceGame.LE3).AttachmentMeshes.Single();
+        TestAssert.Equal(fullPath, mesh.CanonicalPath);
+        TestAssert.Equal(2, mesh.Occurrences.Count);
+        TestAssert.Equal(biogPackage, mesh.EffectiveOccurrence.PackagePath);
+        TestAssert.Equal(shortPath, mesh.EffectiveOccurrence.InstancedPath);
+    }
+
     private static void BuilderReportsEveryPhase()
     {
         using var fixture = RegistryFixture.Create();
@@ -220,6 +244,7 @@ public static class TextureRegistryStoreTests
         TestAssert.Equal(37, reopened.InstalledPackageCount);
         TestAssert.Equal(1, reopened.Candidates.Count);
         TestAssert.Equal(1, reopened.MorphFaceTemplates.Count);
+        TestAssert.Equal(1, reopened.AttachmentMeshes.Count);
         TestAssert.Equal("HMF.BioFace_Test", reopened.MorphFaceTemplates.Single().FacePath);
         var occurrence = reopened.Candidates.Single().EffectiveOccurrence;
         TestAssert.Equal(9021, occurrence.MountPriority);
@@ -342,6 +367,15 @@ public static class TextureRegistryStoreTests
             37,
             [new TextureCatalogCandidate(game, "BIOG_SAL_HED_PROMorph_R.Add.SAL_HED_PRO_Add1", occurrence, [occurrence])])
         {
+            AttachmentMeshes =
+            [
+                new AttachmentMeshCandidate(
+                    "BIOG_HMF_HIR_PRO.Hair.HMF_HIR_Test_MDL",
+                    new AttachmentMeshOccurrence("BIOG_HMF_HIR_PRO.pcc", "Hair.HMF_HIR_Test_MDL",
+                        8, 0, TextureCatalogOrigin.BaseGame),
+                    [new AttachmentMeshOccurrence("BIOG_HMF_HIR_PRO.pcc", "Hair.HMF_HIR_Test_MDL",
+                        8, 0, TextureCatalogOrigin.BaseGame)])
+            ],
             MorphFaceTemplates =
             [
                 new MorphFaceTemplateCandidate(
@@ -405,12 +439,15 @@ public static class TextureRegistryStoreTests
     private sealed class FakePackageScanner(
         IReadOnlyDictionary<string, IReadOnlyList<TextureRegistryScannedTexture>>? results = null,
         Action? onScan = null,
-        IReadOnlyDictionary<string, IReadOnlyList<MorphFaceTemplateCandidate>>? templates = null) : ITextureRegistryPackageScanner
+        IReadOnlyDictionary<string, IReadOnlyList<MorphFaceTemplateCandidate>>? templates = null,
+        IReadOnlyDictionary<string, IReadOnlyList<AttachmentMeshOccurrence>>? meshes = null) : ITextureRegistryPackageScanner
     {
         private readonly IReadOnlyDictionary<string, IReadOnlyList<TextureRegistryScannedTexture>> _results =
             results ?? new Dictionary<string, IReadOnlyList<TextureRegistryScannedTexture>>();
         private readonly IReadOnlyDictionary<string, IReadOnlyList<MorphFaceTemplateCandidate>> _templates =
             templates ?? new Dictionary<string, IReadOnlyList<MorphFaceTemplateCandidate>>();
+        private readonly IReadOnlyDictionary<string, IReadOnlyList<AttachmentMeshOccurrence>> _meshes =
+            meshes ?? new Dictionary<string, IReadOnlyList<AttachmentMeshOccurrence>>();
 
         public List<string> Paths { get; } = [];
         public List<MorphFaceGame> Games { get; } = [];
@@ -425,7 +462,10 @@ public static class TextureRegistryStoreTests
             onScan?.Invoke();
             return new TextureRegistryPackageScan(
                 _results.GetValueOrDefault(packagePath) ?? [],
-                _templates.GetValueOrDefault(packagePath) ?? []);
+                _templates.GetValueOrDefault(packagePath) ?? [])
+            {
+                AttachmentMeshes = _meshes.GetValueOrDefault(packagePath) ?? []
+            };
         }
     }
 

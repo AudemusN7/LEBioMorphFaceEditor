@@ -7,7 +7,10 @@ public sealed record PackageEntrySummary(
     string InstancedPath,
     string ObjectName,
     string ClassName,
-    bool IsDefaultObject);
+    bool IsDefaultObject)
+{
+    public int? BoneCount { get; init; }
+}
 
 public sealed record PackageInventory(
     string PackagePath,

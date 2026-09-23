@@ -197,7 +197,7 @@ public sealed class MorphFacePackageReader : IDisposable
         var fullPath = RequireFile(packagePath);
         var package = _packageCache.GetCachedPackage(fullPath)
             ?? throw new InvalidDataException($"Legendary Explorer Core could not open '{fullPath}'.");
-        var meshExport = ExportSelector.Find(package, meshSelector, "SkeletalMesh");
+        var meshExport = FindDetachedAttachmentExport(package, meshSelector);
         var materialExports = new List<ExportEntry>();
         var mesh = ReadSkeletalMesh(meshExport, materialExports);
         var materials = materialExports
@@ -221,8 +221,24 @@ public sealed class MorphFacePackageReader : IDisposable
         var fullPath = RequireFile(packagePath);
         var package = _packageCache.GetCachedPackage(fullPath)
             ?? throw new InvalidDataException($"Legendary Explorer Core could not open '{fullPath}'.");
-        var meshExport = ExportSelector.Find(package, meshSelector, "SkeletalMesh");
+        var meshExport = FindDetachedAttachmentExport(package, meshSelector);
         _ = ReadSkeletalMesh(meshExport, new List<ExportEntry>());
+    }
+
+    private static ExportEntry FindDetachedAttachmentExport(IMEPackage package, string meshSelector)
+    {
+        var matches = package.Exports.Where(export =>
+                !export.IsDefaultObject &&
+                export.ClassName.Equals("SkeletalMesh", StringComparison.OrdinalIgnoreCase) &&
+                (export.InstancedFullPath.Equals(meshSelector, StringComparison.OrdinalIgnoreCase) ||
+                 PccAssetPathPolicy.FromDonorOccurrence(export.InstancedFullPath, package.FilePath)
+                     .Equals(meshSelector, StringComparison.OrdinalIgnoreCase)))
+            .Take(2)
+            .ToArray();
+        return matches.Length == 1
+            ? matches[0]
+            : throw new InvalidDataException(
+                $"SkeletalMesh '{meshSelector}' was {(matches.Length == 0 ? "not found" : "ambiguous")} in '{package.FilePath}'.");
     }
 
     /// <summary>

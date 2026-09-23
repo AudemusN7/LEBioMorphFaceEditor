@@ -17,6 +17,7 @@ public sealed class PackageAssetListItem : ObservableObject
     public PackageAssetListItem(AssetIdentity identity) => Identity = identity;
 
     public AssetIdentity Identity { get; }
+    public int? BoneCount { get; init; }
     public string DisplayName => Identity.InstancedPath;
     public string ObjectName => Identity.InstancedPath.Split('.').Last();
     public ImageSource? Thumbnail

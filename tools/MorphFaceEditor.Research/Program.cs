@@ -11,13 +11,58 @@ using LegendaryExplorerCore.Unreal.BinaryConverters;
 using LegendaryExplorerCore.Unreal.BinaryConverters.Shaders;
 using LegendaryExplorerCore.Unreal.ObjectInfo;
 using MorphFaceEditor.Core.Domain;
+using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.LegendaryExplorer.TextureRegistry;
 
-if (args.Length is 1 or 2 && args[0].Equals("build-texture-registries", StringComparison.OrdinalIgnoreCase))
+if (args.Length is 2 or 3 && args[0].Equals("unpack-mftr", StringComparison.OrdinalIgnoreCase))
+{
+    TextureRegistryUnpacker.Run(args[1], args.Length == 3 ? args[2] : null);
+    return 0;
+}
+
+if (args.Length == 3 && args[0].Equals("texture-registry-audit", StringComparison.OrdinalIgnoreCase))
+{
+    TextureRegistryAudit.Run(args[1], args[2]);
+    return 0;
+}
+
+if (args.Length == 2 && args[0].Equals("verify-texture-registries", StringComparison.OrdinalIgnoreCase))
+{
+    var store = new TextureRegistryStore(new TextureRegistryPaths(args[1]));
+    foreach (var game in new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 })
+    {
+        var snapshot = store.Read(game);
+        var excluded = snapshot.Candidates.Where(candidate =>
+            candidate.Occurrences.Any(occurrence => TextureRegistryDiscovery.IsExcludedPath(
+                TextureCatalogPicker.CanonicalPath(candidate.InstancedPath, occurrence.PackagePath)))).ToArray();
+        var unsafeMeshes = snapshot.AttachmentMeshes.Where(candidate =>
+            !AttachmentMeshNamePolicy.IsInstalledHeadAttachment(candidate.EffectiveOccurrence.InstancedPath)).ToArray();
+        var duplicateMeshes = snapshot.AttachmentMeshes.GroupBy(candidate => candidate.CanonicalPath,
+                StringComparer.OrdinalIgnoreCase).Where(group => group.Count() > 1).ToArray();
+        var nonBiogWinners = snapshot.Candidates.Where(candidate =>
+            candidate.Occurrences.Any(occurrence => Path.GetFileNameWithoutExtension(occurrence.PackagePath)
+                .StartsWith("BIOG", StringComparison.OrdinalIgnoreCase)) &&
+            !Path.GetFileNameWithoutExtension(candidate.EffectiveOccurrence.PackagePath)
+                .StartsWith("BIOG", StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (excluded.Length > 0 || unsafeMeshes.Length > 0 || duplicateMeshes.Length > 0 ||
+            nonBiogWinners.Length > 0)
+            throw new InvalidDataException($"{game} calibration failed: {excluded.Length} excluded textures, " +
+                $"{unsafeMeshes.Length} invalid meshes, {duplicateMeshes.Length} duplicate meshes, " +
+                $"{nonBiogWinners.Length} non-BIOG effective textures with BIOG occurrences.");
+        Console.WriteLine($"{game}: verified {snapshot.Candidates.Count} texture paths and " +
+            $"{snapshot.AttachmentMeshes.Count} HIR mesh paths; no exclusion, duplicate, or BIOG-priority violations.");
+    }
+    return 0;
+}
+
+if (args.Length is >= 1 and <= 3 && args[0].Equals("build-texture-registries", StringComparison.OrdinalIgnoreCase))
 {
     LegendaryExplorerCoreRuntime.Initialize();
-    var builder = new TextureRegistryBuilder(new TextureRegistryStore(TextureRegistryPaths.CreateDefault()));
+    var paths = args.Length == 3
+        ? new TextureRegistryPaths(args[2])
+        : TextureRegistryPaths.CreateDefault();
+    var builder = new TextureRegistryBuilder(new TextureRegistryStore(paths));
     MorphFaceGame[] games = args.Length == 1
         ? new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 }
         : args[1].ToUpperInvariant() switch
@@ -35,7 +80,9 @@ if (args.Length is 1 or 2 && args[0].Equals("build-texture-registries", StringCo
         {
             throw new InvalidDataException($"{game} texture database build failed: {status.ErrorMessage}");
         }
-        Console.WriteLine($"{game}: {status.TextureCount} indexed textures.");
+        var snapshot = new TextureRegistryStore(paths).Read(game);
+        Console.WriteLine($"{game}: {status.TextureCount} indexed textures; " +
+                          $"{snapshot.AttachmentMeshes.Count} indexed HIR meshes.");
     }
     return 0;
 }
@@ -375,7 +422,10 @@ if (args.Length == 6 && args[0].Equals("dump-shaders", StringComparison.OrdinalI
 
 if (args.Length is not 4 || !args[0].Equals("trace-material", StringComparison.OrdinalIgnoreCase))
 {
-    Console.Error.WriteLine("Usage: build-texture-registries [LE1|LE2|LE3]");
+    Console.Error.WriteLine("Usage: build-texture-registries [LE1|LE2|LE3] [output-directory]");
+    Console.Error.WriteLine("   or: unpack-mftr <input.mftr> [output.json]");
+    Console.Error.WriteLine("   or: texture-registry-audit <LE1|LE2|LE3> <output-directory>");
+    Console.Error.WriteLine("   or: verify-texture-registries <registry-directory>");
     Console.Error.WriteLine("   or: corpus-audit <corpus-directory> <output.json>");
     Console.Error.WriteLine("   or: corpus-reconciliation <corpus-directory> <output.json>");
     Console.Error.WriteLine("   or: material-oracle <corpus-directory> <output.json>");

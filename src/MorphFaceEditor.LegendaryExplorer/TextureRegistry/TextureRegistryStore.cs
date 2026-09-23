@@ -123,6 +123,7 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
                 verified.Game != snapshot.Game ||
                 verified.InstalledPackageCount != snapshot.InstalledPackageCount ||
                 verified.Candidates.Count != snapshot.Candidates.Count ||
+                verified.AttachmentMeshes.Count != snapshot.AttachmentMeshes.Count ||
                 verified.MorphFaceTemplates.Count != snapshot.MorphFaceTemplates.Count)
             {
                 throw new InvalidDataException("The written texture registry failed verification.");
@@ -189,7 +190,7 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
             throw new InvalidDataException("The registry header and payload games do not match.");
         }
         if (snapshot.InstalledPackageCount < 0 || snapshot.Candidates is null ||
-            snapshot.MorphFaceTemplates is null)
+            snapshot.MorphFaceTemplates is null || snapshot.AttachmentMeshes is null)
         {
             throw new InvalidDataException("The texture registry payload is incomplete.");
         }
@@ -209,6 +210,15 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
             {
                 throw new InvalidDataException("The texture registry contains an incomplete morph-face template.");
             }
+        }
+        foreach (var mesh in snapshot.AttachmentMeshes)
+        {
+            if (mesh is null || string.IsNullOrWhiteSpace(mesh.CanonicalPath) ||
+                mesh.EffectiveOccurrence is null || mesh.Occurrences is null ||
+                mesh.Occurrences.Count == 0 || mesh.Occurrences.Any(occurrence =>
+                    occurrence is null || string.IsNullOrWhiteSpace(occurrence.PackagePath) ||
+                    string.IsNullOrWhiteSpace(occurrence.InstancedPath) || occurrence.ExportUIndex <= 0))
+                throw new InvalidDataException("The texture registry contains an incomplete attachment mesh candidate.");
         }
     }
 

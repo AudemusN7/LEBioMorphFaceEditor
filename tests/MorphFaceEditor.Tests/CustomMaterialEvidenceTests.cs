@@ -17,24 +17,49 @@ public static class CustomMaterialEvidenceTests
         new("custom material evidence enumerates used mesh slots deterministically", EnumeratesUsedMeshSlotsDeterministically),
         new("custom material evidence retains duplicate source material refs", RetainsDuplicateSourceMaterialRefs),
         new("custom material catalogue exposes only proven installed families", CatalogueExposesProvenFamilies),
-        new("HIR review meshes are excluded from attachment choices", HirReviewMeshesAreExcluded),
+        new("attachment picker excludes only audited literal mesh suffixes", HirReviewMeshesAreExcluded),
+        new("BIOG attachment preview loads package-qualified registry identity", BiogAttachmentPreviewLoadsCanonicalIdentity),
         new("D1 human scar and teeth support follows compiled material evidence", HumanScarAndTeethSupportFollowsEvidence)
     ];
 
     private static void HirReviewMeshesAreExcluded()
     {
+        foreach (var suffix in new[] { "_CC", "_Copy", "_old", "_Remaster", "_Review", "_Test" })
+            TestAssert.True(AttachmentMeshNamePolicy.HasExcludedSuffix(
+                    $"BIOG_HMF_HIR_PRO.Hair.HMF_HIR_Custom{suffix}"),
+                $"The {suffix} mesh suffix was not excluded.");
         TestAssert.True(CustomMaterialTemplateCatalogService.IsUnsafeAttachment(
                 @"C:\Games\LE3\BIOG_HMF_HIR_PRO.pcc",
+                "BIOG_HMF_HIR_PRO.Review.HMF_HIR_Review"),
+            "A mesh with a literal Review suffix remained eligible for attachment selection.");
+        TestAssert.True(!CustomMaterialTemplateCatalogService.IsUnsafeAttachment(
+                @"C:\Games\LE3\BIOG_HMF_HIR_PRO.pcc",
                 "BIOG_HMF_HIR_PRO.Review.HMF_HIR_Review_MDL"),
-            "A Review mesh from a BIOG HIR package remained eligible for attachment selection.");
+            "A Review tag before MDL was treated as a literal trailing suffix.");
         TestAssert.True(!CustomMaterialTemplateCatalogService.IsUnsafeAttachment(
                 @"C:\Games\LE3\BIOG_HMF_HED_PROMorph_R.pcc",
                 "BIOG_HMF_HED_PROMorph_R.Review.HMF_HED_Review_MDL"),
-            "The HIR Review filter was applied to a non-HIR package.");
+            "A non-HIR mesh was rejected without a trailing suffix.");
         TestAssert.True(!CustomMaterialTemplateCatalogService.IsUnsafeAttachment(
                 @"C:\Games\LE3\BIOG_HMF_HIR_PRO.pcc",
                 "BIOG_HMF_HIR_PRO.Hair_Cute.HMF_HIR_Cte_MDL"),
             "A playable HIR attachment was incorrectly excluded.");
+    }
+
+    private static void BiogAttachmentPreviewLoadsCanonicalIdentity()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        var cookedPath = LegendaryExplorerCoreRuntime.DefaultLe3CookedPath;
+        var packagePath = string.IsNullOrWhiteSpace(cookedPath)
+            ? null
+            : Path.Combine(cookedPath, "BIOG_HMF_HIR_PRO.pcc");
+        if (packagePath is null || !File.Exists(packagePath)) return;
+
+        using var reader = new MorphFacePackageReader();
+        var attachment = reader.LoadDetachedAttachment(packagePath,
+            "BIOG_HMF_HIR_PRO.Hair_PROShepard.HMF_HIR_PROShepard_MDL");
+        TestAssert.True(attachment.Mesh.Positions.Length > 0,
+            "The package-qualified BIOG attachment did not decode for preview.");
     }
 
     private static void HumanScarAndTeethSupportFollowsEvidence()

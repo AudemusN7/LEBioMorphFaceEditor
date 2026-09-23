@@ -263,6 +263,13 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         TextureCatalogProfile profile,
         bool isRegistryAvailable) =>
         Material.UpdateRegistryCandidates(candidates, profile, isRegistryAvailable);
+    public void UpdateRegistryAttachmentMeshes(
+        IReadOnlyList<AttachmentMeshCandidate> candidates,
+        bool isPlayerWorkspace)
+    {
+        foreach (var attachment in AttachmentMeshes)
+            attachment.UpdateRegistryCandidates(candidates, isPlayerWorkspace);
+    }
     public HairMeshEditorViewModel HairMesh { get; }
     public IReadOnlyList<HairMeshEditorViewModel> OtherMeshes { get; }
     public IReadOnlyList<HairMeshEditorViewModel> AttachmentMeshes { get; }

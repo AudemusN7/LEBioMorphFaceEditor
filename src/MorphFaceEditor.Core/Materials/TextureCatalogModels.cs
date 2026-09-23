@@ -59,6 +59,63 @@ public sealed record TextureCatalogCandidate(
     public string SourcePackagePath => EffectiveOccurrence.PackagePath;
 }
 
+/// <summary>Picker-only projection; registry occurrences retain their exact export paths.</summary>
+public static class TextureCatalogPicker
+{
+    public static string CanonicalPath(string instancedPath, string packagePath)
+    {
+        var packageName = Path.GetFileNameWithoutExtension(packagePath);
+        return !IsBiogPackage(packagePath) ||
+               instancedPath.StartsWith("BIO", StringComparison.OrdinalIgnoreCase) ||
+               instancedPath.StartsWith($"{packageName}.", StringComparison.OrdinalIgnoreCase)
+            ? instancedPath
+            : $"{packageName}.{instancedPath}";
+    }
+
+    public static IReadOnlyList<TextureCatalogCandidate> Select(
+        IEnumerable<TextureCatalogCandidate> candidates)
+    {
+        ArgumentNullException.ThrowIfNull(candidates);
+        return candidates
+            .SelectMany(candidate => candidate.Occurrences
+                .DefaultIfEmpty(candidate.EffectiveOccurrence)
+                .Select(occurrence => (Candidate: candidate, Occurrence: occurrence,
+                    Canonical: CanonicalPath(candidate.InstancedPath, occurrence.PackagePath))))
+            .GroupBy(value => value.Canonical, StringComparer.OrdinalIgnoreCase)
+            .SelectMany(group =>
+            {
+                var biog = group.Where(value => IsBiogPackage(value.Occurrence.PackagePath))
+                    .OrderByDescending(value => value.Occurrence.MountPriority)
+                    .ThenBy(value => value.Occurrence.PackagePath, StringComparer.OrdinalIgnoreCase)
+                    .FirstOrDefault();
+                var primary = biog.Candidate is not null
+                    ? biog
+                    : group.OrderByDescending(value => value.Occurrence.MountPriority)
+                        .ThenBy(value => value.Occurrence.PackagePath, StringComparer.OrdinalIgnoreCase)
+                        .First();
+                var result = new List<TextureCatalogCandidate>
+                    { primary.Candidate with { EffectiveOccurrence = primary.Occurrence } };
+                if (biog.Candidate is not null)
+                {
+                    var modOverride = group
+                        .Where(value => value.Occurrence.Origin == TextureCatalogOrigin.Mod &&
+                                        !IsBiogPackage(value.Occurrence.PackagePath) &&
+                                        value.Occurrence.MountPriority > biog.Occurrence.MountPriority)
+                        .OrderByDescending(value => value.Occurrence.MountPriority)
+                        .ThenBy(value => value.Occurrence.PackagePath, StringComparer.OrdinalIgnoreCase)
+                        .FirstOrDefault();
+                    if (modOverride.Candidate is not null)
+                        result.Add(modOverride.Candidate with { EffectiveOccurrence = modOverride.Occurrence });
+                }
+                return result;
+            })
+            .ToArray();
+    }
+
+    private static bool IsBiogPackage(string packagePath) =>
+        Path.GetFileNameWithoutExtension(packagePath).StartsWith("BIOG", StringComparison.OrdinalIgnoreCase);
+}
+
 /// <summary>Profile-owned discovery and ordering signals. They promote but never hide valid textures.</summary>
 public sealed record TextureCatalogProfile(
     string Key,

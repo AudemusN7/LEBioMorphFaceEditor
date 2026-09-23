@@ -65,7 +65,7 @@ public sealed class PackageReferenceService(
                 inventory.PackagePath,
                 entry.InstancedPath,
                 entry.UIndex,
-                entry.ClassName)))
+                entry.ClassName)) { BoneCount = entry.BoneCount })
             .OrderBy(entry => entry.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ToArray();
         var textures = Select("Texture2D");

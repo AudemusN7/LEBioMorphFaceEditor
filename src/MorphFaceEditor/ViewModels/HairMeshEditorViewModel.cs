@@ -1,11 +1,13 @@
+using System.IO;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Editing;
+using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.Models;
 
 namespace MorphFaceEditor.ViewModels;
 
-public sealed record HairMeshOption(string DisplayName, AssetIdentity? Identity)
+public sealed record HairMeshOption(string DisplayName, AssetIdentity? Identity, string SourceDescription = "")
 {
     public override string ToString() => DisplayName;
 }
@@ -15,6 +17,7 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
     private readonly AssetReferenceEditingSession _session;
     private HairMeshOption _selected;
     private IReadOnlyList<HairMeshOption> _options;
+    private readonly IReadOnlyList<HairMeshOption> _localOptions;
     private string _searchText = string.Empty;
     private HairMeshOption? _previewSelection;
 
@@ -28,12 +31,15 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
         Label = label;
         SlotIndex = slotIndex;
         var options = new List<HairMeshOption> { new("None", null) };
-        options.AddRange(candidates.Select(candidate => new HairMeshOption(candidate.DisplayName, candidate.Identity)));
+        options.AddRange(candidates.Select(candidate => new HairMeshOption(
+            candidate.DisplayName, candidate.Identity,
+            $"Open package · {BoneLabel(candidate.BoneCount)}")));
         if (session.Value is { } current && !options.Any(option => Same(option.Identity, current)))
         {
             options.Add(new HairMeshOption($"{current.InstancedPath} (current reference)", current));
         }
         _options = options.ToArray();
+        _localOptions = _options;
         Candidates = [];
         _selected = Find(session.Value);
         ApplySearch();
@@ -81,6 +87,66 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
         }
     }
     public AssetIdentity? Value => _session.Value;
+
+    public void UpdateRegistryCandidates(
+        IReadOnlyList<AttachmentMeshCandidate> candidates,
+        bool isPlayerWorkspace)
+    {
+        ArgumentNullException.ThrowIfNull(candidates);
+        CancelPreview();
+        var options = _localOptions.ToList();
+        var localPaths = _localOptions.Skip(1).Where(value => value.Identity is not null)
+            .Select(value => TextureCatalogPicker.CanonicalPath(
+                value.Identity!.InstancedPath, value.Identity.PackagePath))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var candidate in candidates)
+        {
+            if (localPaths.Contains(candidate.CanonicalPath) ||
+                isPlayerWorkspace && !candidate.CanonicalPath.StartsWith("BIOG_", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            Add(candidate.EffectiveOccurrence, candidate.CanonicalPath);
+            var biog = candidate.Occurrences.FirstOrDefault(value =>
+                Path.GetFileNameWithoutExtension(value.PackagePath)
+                    .StartsWith("BIOG", StringComparison.OrdinalIgnoreCase));
+            if (biog is not null)
+            {
+                var mod = candidate.Occurrences
+                    .Where(value => value.Origin == TextureCatalogOrigin.Mod &&
+                                    !Path.GetFileNameWithoutExtension(value.PackagePath)
+                                        .StartsWith("BIOG", StringComparison.OrdinalIgnoreCase) &&
+                                    value.MountPriority > biog.MountPriority)
+                    .OrderByDescending(value => value.MountPriority)
+                    .FirstOrDefault();
+                if (mod is not null) Add(mod, candidate.CanonicalPath);
+            }
+        }
+        if (_session.Value is { } current && !options.Any(option => Same(option.Identity, current)))
+            options.Add(new HairMeshOption($"{current.InstancedPath} (current reference)", current));
+        _options = options;
+        _selected = Find(_session.Value);
+        OnPropertyChanged(nameof(Options));
+        OnPropertyChanged(nameof(Selected));
+        ApplySearch();
+
+        void Add(AttachmentMeshOccurrence occurrence, string canonicalPath)
+        {
+            var identity = new AssetIdentity(occurrence.PackagePath, canonicalPath,
+                occurrence.ExportUIndex, "SkeletalMesh");
+            if (options.Any(option => Same(option.Identity, identity))) return;
+            var origin = occurrence.Origin switch
+            {
+                TextureCatalogOrigin.BaseGame => "Base game",
+                TextureCatalogOrigin.OfficialDlc => "Official DLC",
+                TextureCatalogOrigin.Mod => "Mod",
+                _ => occurrence.Origin.ToString()
+            };
+            options.Add(new HairMeshOption(canonicalPath, identity,
+                $"{origin} · {Path.GetFileName(occurrence.PackagePath)} · {BoneLabel(occurrence.BoneCount)}"));
+        }
+    }
+
+    private static string BoneLabel(int? count) => count is > 0 ? $"{count} bones" : "Bones unavailable";
 
     public void SetImportedPreview(AssetIdentity? value)
     {
@@ -154,7 +220,8 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
 
     private static bool Same(AssetIdentity? left, AssetIdentity? right) =>
         left is null && right is null || left is not null && right is not null &&
-        string.Equals(left.InstancedPath, right.InstancedPath, StringComparison.OrdinalIgnoreCase);
+        string.Equals(left.InstancedPath, right.InstancedPath, StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(left.PackagePath, right.PackagePath, StringComparison.OrdinalIgnoreCase);
 
     private void OnValueChanged(object? sender, EventArgs e)
     {

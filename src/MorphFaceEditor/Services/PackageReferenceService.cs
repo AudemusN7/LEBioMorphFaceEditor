@@ -120,12 +120,27 @@ public sealed class PackageReferenceService(
         return true;
     }, cancellationToken);
 
-    public Task<IReadOnlyDictionary<string, AssetIdentity>> ResolveInstalledSkeletalMeshesAsync(
+    public async Task<IReadOnlyDictionary<string, AssetIdentity>> ResolveInstalledSkeletalMeshesAsync(
         MorphFaceGame game,
         IEnumerable<string> requestedPaths,
-        CancellationToken cancellationToken = default) => Task.Run(
-            () => StandalonePlayerAssetCatalog.ResolveInstalledSkeletalMeshes(game, requestedPaths),
-            cancellationToken);
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(requestedPaths);
+        var catalog = await _textureCatalogService.ReadAsync(game, cancellationToken);
+        if (!catalog.IsAvailable)
+            throw new InvalidOperationException(
+                $"The {game} mesh/texture database is unavailable. Build it in Mesh/Texture Databases to preview installed attachments.");
+
+        var resolved = new Dictionary<string, AssetIdentity>(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in requestedPaths.Where(path => !string.IsNullOrWhiteSpace(path) &&
+                     !path.Equals("None", StringComparison.OrdinalIgnoreCase))
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (AttachmentMeshCatalogResolver.Resolve(catalog.AttachmentMeshes, path) is { } identity)
+                resolved.Add(path, identity);
+        }
+        return resolved;
+    }
 
     private async Task<T> ReadAsync<T>(Func<T> operation, CancellationToken cancellationToken)
     {

@@ -22,18 +22,21 @@ public static class TextureCatalogTests
         new("texture catalogue: malformed RON parent does not hide its valid repair candidate", MalformedRonParentKeepsRepairCandidate),
         new("player workspace: pickers admit only seek-free qualified BIOG references", PlayerPickerRequiresSeekFreePaths),
         new("texture catalogue: duplicate paths keep the highest mounted occurrence", DuplicatePathsKeepEffectiveOccurrence),
+        new("texture catalogue: BIOG and cooked aliases collapse with mod override preserved", PickerCollapsesAliasesAndPreservesOverride),
         new("texture catalogue: current local texture remains local when its path is indexed", CurrentLocalTextureRemainsLocal),
         new("texture catalogue: picker accepts registry candidates after the editor is already open", PickerAcceptsRegistryCandidatesAfterOpen),
         new("texture catalogue: stale failed selection cannot discard a newer choice", StaleFailureCannotDiscardNewSelection),
         new("texture catalogue: selected display text does not become a search filter", SelectedDisplayTextDoesNotFilterPicker),
         new("texture catalogue: missing registry preserves every package texture", MissingRegistryPreservesEveryPackageTexture),
         new("texture catalogue: local path suppresses installed duplicate", LocalPathSuppressesInstalledDuplicate),
+        new("texture catalogue: local hat textures stay out of the texture picker", LocalHatTextureIsNotPickable),
         new("texture catalogue: merged picker preserves candidate order and source", MergedPickerPreservesCandidateOrderAndSource),
         new("texture picker: hover preview stays outside committed selection", HoverPreviewStaysOutsideCommittedSelection),
         new("texture picker: stale hover preview cannot win", StaleHoverPreviewCannotWin),
         new("texture catalogue: texture editor resolves installed paths without guessing", TextureEditorResolvesInstalledPathsWithoutGuessing),
         new("randomisation texture: required decode failure reports family signature", RequiredDecodeFailureReportsFamilySignature),
         new("texture registry: discovery admits morph HIR and shared-eye paths", DiscoveryAdmitsSupportedPaths),
+        new("texture registry: audit exclusions override broad head and HIR matching", DiscoveryAppliesAuditExclusions),
         new("texture registry: installed scans include GBL_Norm_Alpha across games", InstalledScansIncludeGlobalNormalAlpha),
         new("texture registry: occurrence retains mip storage metadata", OccurrenceRetainsMipStorageMetadata),
         new("texture registry: availability resolves installed and local paths", AvailabilityResolvesMergedPaths),
@@ -174,6 +177,18 @@ public static class TextureCatalogTests
         TestAssert.Equal(1, matches.Length);
         TestAssert.True(matches[0].Asset == local && matches[0].RegistryCandidate is null,
             "An installed duplicate displaced or accompanied its authoritative package-local texture.");
+    }
+
+    private static void LocalHatTextureIsNotPickable()
+    {
+        var session = MaterialTestFixtures.CreateSession();
+        var hat = new PackageAssetListItem(new AssetIdentity(
+            "BIOG_HMM_HIR_PRO_R.pcc", "Cap.HMM_HAT_Cap_Diff_Stack", 45, "Texture2D"));
+        using var reader = new MorphFacePackageReader();
+        var editor = CreateTextureEditor(session, reader, [hat], [],
+            TextureCatalogProfile.Empty, false);
+        TestAssert.True(editor.Candidates.All(option => option.Asset != hat),
+            "A package-local hat texture was offered as a new texture choice.");
     }
 
     private static void MergedPickerPreservesCandidateOrderAndSource()
@@ -324,13 +339,51 @@ public static class TextureCatalogTests
             "BIOG_HMM_EYE.Eye.EYE_Iris_Norm",
             "BIOG_ASA_EYE.Materials.ASA_EYE_Diff",
             "BIOG_KRO_EYE.Materials.KRO_EYE_Norm",
-            "BIOG_Humanoid_MASTER_MTR_R.GBL_Norm_Alpha"
+            "BIOG_Humanoid_MASTER_MTR_R.GBL_Norm_Alpha",
+            "BIOG_Humanoid_MASTER_MTR_R.Skin_HumanScalp_SpecMulitplier_Mask",
+            "BIOG_Humanoid_MASTER_MTR_R.Human.Teeth.HED_PRO_Teeth"
         ];
 
         TestAssert.True(admitted.All(TextureRegistryDiscovery.IsRelevantPath),
             "A supported morph, HIR, or shared-eye path was excluded from registry discovery.");
         TestAssert.True(!TextureRegistryDiscovery.IsRelevantPath("EngineResources.WhiteSquareTexture"),
             "An unrelated engine texture was admitted to the installed registry.");
+    }
+
+    private static void DiscoveryAppliesAuditExclusions()
+    {
+        string[] excluded =
+        [
+            "BIOG_GTH_HED_PROMorph_R.Head.GTH_HED_Diff",
+            "BIOG_HMF_HED_PROJack_ALT_R.Visor.CM_ChromeJackVisor",
+            "BIOG_TUF_HED_PROMorph_R.NYR_HED.NYR_HED_Diff",
+            "BIOG_HMM_HIR_PRO_R.Cap.HMM_HAT_Cap_Diff_Stack",
+            "BIOG_HMF_HIR_PRO_R.Cap.HMF_HGR_Cap_Diff_Stack",
+            "BIOG_HMF_HED_PROMorph_R.GUI_HMF_HED_Diff",
+            "BIOG_HMM_HIR_PRO_R.Hair.HMM_HIR_Long_Diff_CC",
+            "BIOG_TUR_HED_PROGarrus.Visor.TUR_HED_Visor_Diff",
+            "BIOG_HMM_HED_PROKaiLang.HMM_HGR_Hair_Diff",
+            "biog_hmm_hed_gnr_r.Textures.Cube_EyesBlue",
+            "BIOG_HMM_HED_PROHackett.Textures.HMM_HGR_Hair_Diff",
+            "BIOG_HMF_HED_PROJack_ALT_R.Visor.HMF_HED_Visor_Diff"
+        ];
+        TestAssert.True(excluded.All(TextureRegistryDiscovery.IsExcludedPath),
+            "An audited exclusion still reaches the texture picker.");
+        TestAssert.True(excluded.All(path => !TextureRegistryDiscovery.IsRelevantPath(path)),
+            "An audited exclusion was re-admitted by a broad discovery fragment.");
+        TestAssert.True(!TextureRegistryDiscovery.IsExcludedPath(
+                "BIOG_HMF_HIR_PRO_R.Hair.HMF_HIR_Diff"),
+            "An ordinary HIR hair texture was excluded.");
+        TestAssert.True(!TextureRegistryDiscovery.IsExcludedPath(
+                "BIOG_HMM_HIR_PRO_R.Hair.HMM_HIR_Long_CC_Diff"),
+            "The literal _CC ending rule excluded a different HIR texture.");
+        TestAssert.True(TextureRegistryDiscovery.IsExcludedPath(
+                TextureCatalogPicker.CanonicalPath("Cap.HMM_HAT_Cap_Diff_Stack",
+                    "BIOG_HMM_HIR_PRO_R.pcc")),
+            "A short export path inside a BIOG HIR package bypassed the hat exclusion.");
+        TestAssert.True(!TextureRegistryDiscovery.IsExcludedPath(
+                "BIOG_HMF_HAT_Standalone.HMF_HAT_Cap_Diff"),
+            "The HAT exclusion escaped its BIOG human HIR scope.");
     }
 
     private static void AvailabilityResolvesMergedPaths()
@@ -479,6 +532,26 @@ public static class TextureCatalogTests
 
         TestAssert.Equal(modOccurrence, candidate.EffectiveOccurrence);
         TestAssert.Equal(2, candidate.Occurrences.Count);
+    }
+
+    private static void PickerCollapsesAliasesAndPreservesOverride()
+    {
+        const string biogPath = "Hair.HMF_HIR_Test_Diff";
+        const string qualifiedPath = "BIOG_HMF_HIR_PRO.Hair.HMF_HIR_Test_Diff";
+        var biogOccurrence = Occurrence("BIOG_HMF_HIR_PRO.pcc", 0, TextureCatalogOrigin.BaseGame);
+        var levelOccurrence = Occurrence("BIOA_TEST.pcc", 0, TextureCatalogOrigin.BaseGame);
+        var modOccurrence = Occurrence("DLC_MOD_Test\\CookedPCConsole\\ModHair.pcc", 9000, TextureCatalogOrigin.Mod);
+        var biog = new TextureCatalogCandidate(TextureCatalogGame.LE3, biogPath,
+            biogOccurrence, [biogOccurrence]);
+        var level = new TextureCatalogCandidate(TextureCatalogGame.LE3, qualifiedPath,
+            modOccurrence, [levelOccurrence, modOccurrence]);
+
+        var choices = TextureCatalogPicker.Select([level, biog]);
+        TestAssert.Equal(2, choices.Count);
+        TestAssert.Equal(biogOccurrence, choices[0].EffectiveOccurrence);
+        TestAssert.Equal(modOccurrence, choices[1].EffectiveOccurrence);
+        TestAssert.Equal(qualifiedPath, TextureCatalogPicker.CanonicalPath(
+            choices[0].InstancedPath, choices[0].EffectiveOccurrence.PackagePath));
     }
 
     private static void CurrentLocalTextureRemainsLocal()

@@ -30,28 +30,28 @@ internal static class PccTextureDependencyResolver
         ArgumentException.ThrowIfNullOrWhiteSpace(identity.InstancedPath);
 
         var requestedPath = identity.InstancedPath;
-        var candidate = catalog.FirstOrDefault(value =>
-            value.InstancedPath.Equals(identity.InstancedPath, StringComparison.OrdinalIgnoreCase));
-
-        if (candidate is null)
-        {
-            var canonicalMatches = catalog.Where(value => value.Occurrences
-                    .Append(value.EffectiveOccurrence)
+        var matches = catalog.Where(value =>
+                value.InstancedPath.Equals(requestedPath, StringComparison.OrdinalIgnoreCase) ||
+                value.Occurrences.Append(value.EffectiveOccurrence)
                     .Any(occurrence => PccAssetPathPolicy.FromDonorOccurrence(
-                            value.InstancedPath,
-                            occurrence.PackagePath)
-                        .Equals(identity.InstancedPath, StringComparison.OrdinalIgnoreCase)))
-                .Distinct()
-                .Take(2)
-                .ToArray();
-            candidate = canonicalMatches.Length switch
-            {
-                0 => null,
-                1 => canonicalMatches[0],
-                _ => throw new InvalidDataException(
-                    $"Texture2D '{identity.InstancedPath}' maps to multiple exact package-qualified catalogue identities.")
-            };
-        }
+                            value.InstancedPath, occurrence.PackagePath)
+                        .Equals(requestedPath, StringComparison.OrdinalIgnoreCase)))
+            .ToArray();
+        var candidate = preferBiog
+            ? matches.Where(value => value.Occurrences.Append(value.EffectiveOccurrence)
+                    .Any(occurrence => IsSeekfreePackage(occurrence.PackagePath) &&
+                        (value.InstancedPath.Equals(requestedPath, StringComparison.OrdinalIgnoreCase) ||
+                         PccAssetPathPolicy.FromDonorOccurrence(value.InstancedPath, occurrence.PackagePath)
+                             .Equals(requestedPath, StringComparison.OrdinalIgnoreCase))))
+                .OrderByDescending(value => value.EffectiveOccurrence.MountPriority)
+                .FirstOrDefault()
+            : null;
+        candidate ??= matches.FirstOrDefault(value =>
+            value.InstancedPath.Equals(requestedPath, StringComparison.OrdinalIgnoreCase));
+        candidate ??= matches.Length == 1 ? matches[0] : null;
+        if (candidate is null && matches.Length > 1)
+            throw new InvalidDataException(
+                $"Texture2D '{requestedPath}' maps to multiple exact package-qualified catalogue identities.");
 
         if (candidate is null)
         {

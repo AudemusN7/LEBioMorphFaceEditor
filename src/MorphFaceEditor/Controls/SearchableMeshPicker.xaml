@@ -95,7 +95,7 @@
                                       PreviewMouseLeftButtonUp="OnCandidateMouseLeftButtonUp">
                                     <StackPanel Margin="4,3">
                                         <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" />
-                                        <TextBlock Text="{Binding Identity.InstancedPath}" Foreground="{StaticResource MutedText}"
+                                        <TextBlock Text="{Binding SourceDescription}" Foreground="{StaticResource MutedText}"
                                                    FontSize="9" TextTrimming="CharacterEllipsis" />
                                     </StackPanel>
                                 </Grid>

@@ -73,6 +73,7 @@ public static class UiSmokeTests
         new("repeated cursed randomisation does not compound", RepeatedCursedRandomisationDoesNotCompound),
         new("embedded randomisation corpus loads all pools and excludes Broke", EmbeddedRandomisationCorpusLoads),
         new("mesh attachment picker filters candidates by name and path", MeshAttachmentPickerFiltersCandidates),
+        new("mesh attachment picker merges installed HIR meshes and preserves mod override", MeshAttachmentPickerMergesRegistry),
         new("mesh attachment picker previews without committing history", MeshAttachmentPickerPreviewDoesNotCommit),
         new("editor error banners can be dismissed", ErrorBannerCanBeDismissed),
         new("texture registry settings command opens the settings dialog", TextureRegistrySettingsCommandOpensDialog),
@@ -1862,13 +1863,15 @@ public static class UiSmokeTests
     private static void MeshAttachmentPickerFiltersCandidates()
     {
         var hair = new PackageAssetListItem(new AssetIdentity(
-            "BioA_Hair.pcc", "BIOG_HED_Hair.Meshes.HairA", 1, "SkeletalMesh"));
+            "BioA_Hair.pcc", "BIOG_HED_Hair.Meshes.HairA", 1, "SkeletalMesh")) { BoneCount = 42 };
         var helmet = new PackageAssetListItem(new AssetIdentity(
             "BioB_Armour.pcc", "BIOG_HED_Helmet.Meshes.HelmetB", 2, "SkeletalMesh"));
         using var editor = new HairMeshEditorViewModel(
             new AssetReferenceEditingSession(null), [hair, helmet], "Hair", 0);
 
         TestAssert.Equal(3, editor.Candidates.Count);
+        TestAssert.Equal("Open package · 42 bones",
+            editor.Candidates.Single(option => option.Identity == hair.Identity).SourceDescription);
         editor.Selected = editor.Options.Single(option => option.Identity == hair.Identity);
         editor.SearchText = "helmet";
         TestAssert.Equal(2, editor.Candidates.Count);
@@ -1891,6 +1894,30 @@ public static class UiSmokeTests
         TestAssert.Equal(1, editor.Candidates.Count);
         TestAssert.True(editor.Candidates[0].Identity is null,
             "The None option should remain available when filtering mesh candidates.");
+    }
+
+    private static void MeshAttachmentPickerMergesRegistry()
+    {
+        const string canonical = "BIOG_HMF_HIR_PRO.Hair.HMF_HIR_Custom_MDL";
+        var biog = new AttachmentMeshOccurrence("BIOG_HMF_HIR_PRO.pcc",
+            "Hair.HMF_HIR_Custom_MDL", 7, 0, TextureCatalogOrigin.BaseGame, 42);
+        var mod = new AttachmentMeshOccurrence("DLC_MOD_Test/ModHair.pcc",
+            canonical, 8, 9000, TextureCatalogOrigin.Mod, 47);
+        using var editor = new HairMeshEditorViewModel(
+            new AssetReferenceEditingSession(null), [], "Hair", 0);
+
+        editor.UpdateRegistryCandidates([new AttachmentMeshCandidate(canonical, biog, [biog, mod])],
+            isPlayerWorkspace: false);
+        TestAssert.Equal(3, editor.Candidates.Count);
+        TestAssert.Equal(biog.PackagePath, editor.Candidates[1].Identity?.PackagePath);
+        TestAssert.Equal(mod.PackagePath, editor.Candidates[2].Identity?.PackagePath);
+        TestAssert.Equal(canonical, editor.Candidates[2].DisplayName);
+        TestAssert.True(editor.Candidates[1].SourceDescription.Contains("Base game · BIOG_HMF_HIR_PRO.pcc · 42 bones"),
+            "The BIOG mesh row omitted its source and bone count.");
+        TestAssert.True(editor.Candidates[2].SourceDescription.Contains("Mod · ModHair.pcc · 47 bones"),
+            "The mod mesh row omitted its source and bone count.");
+        editor.Selected = editor.Candidates[2];
+        TestAssert.Equal(mod.PackagePath, editor.Selected.Identity?.PackagePath);
     }
 
     private static void MeshAttachmentPickerPreviewDoesNotCommit()

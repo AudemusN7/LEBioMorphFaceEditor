@@ -8,6 +8,7 @@ public sealed record TextureCatalogReadResult(
     IReadOnlyList<MorphFaceTemplateCandidate> MorphFaceTemplates)
 {
     public bool IsAvailable => RegistryStatus.State == TextureRegistryState.Ready;
+    public IReadOnlyList<AttachmentMeshCandidate> AttachmentMeshes { get; init; } = [];
 }
 
 /// <summary>Loads and caches the compact registry without opening an installed package.</summary>
@@ -25,7 +26,8 @@ public sealed class TextureCatalogService(TextureRegistryStore store)
         lock (_cacheLock)
         {
             if (_cache.TryGetValue(game, out var cached) && cached.Fingerprint == fingerprint)
-                return new TextureCatalogReadResult(cached.Status, cached.Candidates, cached.MorphFaceTemplates);
+                return new TextureCatalogReadResult(cached.Status, cached.Candidates, cached.MorphFaceTemplates)
+                    { AttachmentMeshes = cached.AttachmentMeshes };
         }
 
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -35,7 +37,8 @@ public sealed class TextureCatalogService(TextureRegistryStore store)
             lock (_cacheLock)
             {
                 if (_cache.TryGetValue(game, out var cached) && cached.Fingerprint == fingerprint)
-                    return new TextureCatalogReadResult(cached.Status, cached.Candidates, cached.MorphFaceTemplates);
+                    return new TextureCatalogReadResult(cached.Status, cached.Candidates, cached.MorphFaceTemplates)
+                        { AttachmentMeshes = cached.AttachmentMeshes };
             }
 
             var stored = await Task.Run(() => store.ReadWithStatus(game), cancellationToken).ConfigureAwait(false);
@@ -45,8 +48,10 @@ public sealed class TextureCatalogService(TextureRegistryStore store)
             cancellationToken.ThrowIfCancellationRequested();
             fingerprint = store.GetFileFingerprint(game);
             lock (_cacheLock) _cache[game] = new CachedCatalog(
-                fingerprint, status, snapshot.Candidates, snapshot.MorphFaceTemplates);
-            return new TextureCatalogReadResult(status, snapshot.Candidates, snapshot.MorphFaceTemplates);
+                fingerprint, status, snapshot.Candidates, snapshot.MorphFaceTemplates,
+                snapshot.AttachmentMeshes);
+            return new TextureCatalogReadResult(status, snapshot.Candidates, snapshot.MorphFaceTemplates)
+                { AttachmentMeshes = snapshot.AttachmentMeshes };
         }
         finally
         {
@@ -63,5 +68,6 @@ public sealed class TextureCatalogService(TextureRegistryStore store)
         (string Path, long Length, DateTime LastWriteTimeUtc)? Fingerprint,
         TextureRegistryStatus Status,
         IReadOnlyList<TextureCatalogCandidate> Candidates,
-        IReadOnlyList<MorphFaceTemplateCandidate> MorphFaceTemplates);
+        IReadOnlyList<MorphFaceTemplateCandidate> MorphFaceTemplates,
+        IReadOnlyList<AttachmentMeshCandidate> AttachmentMeshes);
 }

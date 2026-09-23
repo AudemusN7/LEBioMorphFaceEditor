@@ -232,7 +232,8 @@ public sealed class MaterialEditingSession : IUndoableEditSource
 
     public void ReplaceAttachmentMaterials(
         ResolvedHeadMaterialSet attachmentMaterials,
-        ResolvedHeadMaterialSet? replacementTextureMaterials = null)
+        ResolvedHeadMaterialSet? replacementTextureMaterials = null,
+        bool hasMultiMaterialAttachment = false)
     {
         ArgumentNullException.ThrowIfNull(attachmentMaterials);
         _attachmentMaterials = attachmentMaterials;
@@ -247,6 +248,15 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         if (replacementTextureMaterials is not null)
         {
             RebaseAttachmentTextures(replacementTextureMaterials);
+        }
+        if (hasMultiMaterialAttachment)
+        {
+            // A face-wide diffuse selection would paint one hair map over every
+            // material slot. Null restores each slot's own material default.
+            foreach (var name in TextureParameters.Select(parameter => parameter.Name)
+                         .Where(name => GetSourceParameterName(name).Equals("HAIR_Diff", StringComparison.OrdinalIgnoreCase) ||
+                                        GetSourceParameterName(name).Equals("HAIR_ADDN_Diff", StringComparison.OrdinalIgnoreCase)))
+                _textureReferences[name] = null;
         }
         Refresh(MaterialChangeKind.Surface);
     }

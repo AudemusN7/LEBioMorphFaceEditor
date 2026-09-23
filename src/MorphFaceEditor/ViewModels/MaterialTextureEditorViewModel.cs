@@ -449,6 +449,9 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
     private IReadOnlyList<MaterialTextureOption> BuildOptions(DecodedTextureAsset? currentTexture)
     {
         var options = _localCandidates
+            .Where(asset => !TextureRegistryDiscovery.IsExcludedPath(
+                TextureCatalogPicker.CanonicalPath(
+                    asset.Identity.InstancedPath, asset.Identity.PackagePath)))
             .GroupBy(asset => asset.Identity.InstancedPath, StringComparer.OrdinalIgnoreCase)
             .Select(group => group.First())
             .Select(asset =>
@@ -460,12 +463,15 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
                 return new MaterialTextureOption(asset, resolved);
             })
             .ToList();
-        var localPaths = options.Select(option => option.InstancedPath)
+        var localPaths = options.Where(option => option.Asset is not null)
+            .Select(option => TextureCatalogPicker.CanonicalPath(
+                option.InstancedPath, option.Asset!.Identity.PackagePath))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (_isRegistryAvailable)
         {
-            options.AddRange(_registryCandidates
-                .Where(candidate => !localPaths.Contains(candidate.InstancedPath))
+            options.AddRange(TextureCatalogPicker.Select(_registryCandidates)
+                .Where(candidate => !localPaths.Contains(TextureCatalogPicker.CanonicalPath(
+                    candidate.InstancedPath, candidate.EffectiveOccurrence.PackagePath)))
                 .Select(candidate =>
                 {
                     var occurrence = candidate.EffectiveOccurrence;

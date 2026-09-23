@@ -964,6 +964,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 candidates,
                 catalogProfile,
                 catalog.IsAvailable);
+            editor.UpdateRegistryAttachmentMeshes(catalog.AttachmentMeshes, IsPlayerWorkspace);
             AppLog.Information(catalog.IsAvailable
                 ? $"Texture registry loaded for {profile.DisplayName}: {catalog.Candidates.Count:N0} verified candidates in {System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalSeconds:F1}s."
                 : $"Texture registry is unavailable for {profile.DisplayName}; build the {game} registry in Texture Databases.");
@@ -1243,7 +1244,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 {
                     continue;
                 }
-                attachments[index] = detachedPreview
+                attachments[index] = detachedPreview ||
+                                     !Path.GetFullPath(reference.PackagePath).Equals(
+                                         Path.GetFullPath(packagePath!), StringComparison.OrdinalIgnoreCase)
                     ? await _referenceService.LoadDetachedAttachmentAsync(
                         reference.PackagePath, reference.InstancedPath)
                     : await _referenceService.LoadAttachmentAsync(
@@ -1300,7 +1303,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 materialState = editor.Material.CaptureAttachmentState();
                 editor.Material.ReplaceAttachmentMaterials(
                     attachmentMaterials,
-                    attachments.ElementAtOrDefault(changedSlot.SlotIndex)?.Materials);
+                    attachments.ElementAtOrDefault(changedSlot.SlotIndex)?.Materials,
+                    attachments.Any(attachment => attachment?.Mesh.Topology.MaterialCount > 1));
             }
             var committedLoadedFace = detachedPreview
                 ? stagedLoadedFace
@@ -1370,7 +1374,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 {
                     continue;
                 }
-                attachments[index] = detachedPreview
+                attachments[index] = detachedPreview ||
+                                     !Path.GetFullPath(reference.PackagePath).Equals(
+                                         Path.GetFullPath(packagePath!), StringComparison.OrdinalIgnoreCase)
                     ? await _referenceService.LoadDetachedAttachmentAsync(
                         reference.PackagePath, reference.InstancedPath, cancellation.Token)
                     : await _referenceService.LoadAttachmentAsync(

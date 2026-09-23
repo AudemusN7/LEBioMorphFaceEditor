@@ -1918,6 +1918,15 @@ public static class UiSmokeTests
             "The mod mesh row omitted its source and bone count.");
         editor.Selected = editor.Candidates[2];
         TestAssert.Equal(mod.PackagePath, editor.Selected.Identity?.PackagePath);
+        var manual = new AttachmentMeshOccurrence("C:\\Custom\\BIOG_HMF_HIR_Custom.pcc",
+            "Hair.HMF_HIR_Custom_MDL", 2, 0, TextureCatalogOrigin.Manual, 48);
+        editor.UpdateRegistryCandidates(
+            [new AttachmentMeshCandidate(canonical, biog, [biog, mod]),
+             new AttachmentMeshCandidate("BIOG_HMF_HIR_Custom.Hair.HMF_HIR_Custom_MDL", manual, [manual])],
+            isPlayerWorkspace: true);
+        TestAssert.True(editor.Candidates.Any(option => option.Identity?.PackagePath == manual.PackagePath &&
+                option.SourceDescription.Contains("Custom · BIOG_HMF_HIR_Custom.pcc · 48 bones")),
+            "A manually added seek-free BIOG HIR mesh was hidden from the player workspace.");
     }
 
     private static void MeshAttachmentPickerPreviewDoesNotCommit()

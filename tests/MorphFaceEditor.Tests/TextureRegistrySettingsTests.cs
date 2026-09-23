@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.LegendaryExplorer.TextureRegistry;
 using MorphFaceEditor.ViewModels;
@@ -12,7 +13,9 @@ public static class TextureRegistrySettingsTests
         new("texture registry settings: traffic lights distinguish outdated and failed", TrafficLightsDistinguishStates),
         new("texture registry settings: payload validation is deferred", PayloadValidationIsDeferred),
         new("texture registry settings: progress labels expose every phase", ProgressLabelsExposeEveryPhase),
-        new("texture registry settings: individual build hides unrelated actions", IndividualBuildHidesUnrelatedActions)
+        new("texture registry settings: individual build hides unrelated actions", IndividualBuildHidesUnrelatedActions),
+        new("custom assets: rebuild keep retains and reports missing sources", RebuildKeepRetainsManualAssets),
+        new("custom assets: rebuild discard removes the sidecar", RebuildDiscardRemovesManualAssets)
     ];
 
     private static void RowExposesUserFacingState()
@@ -84,14 +87,21 @@ public static class TextureRegistrySettingsTests
     {
         var builder = new FakeBuilder(block: true);
         var settings = CreateSettings(builder);
+        var activeRow = settings.Rows.Single(row => row.Game == MorphFaceGame.LE1);
+        activeRow.Update(new TextureRegistryStatus(MorphFaceGame.LE1, TextureRegistryState.Ready,
+            "LE1.mftr", 1, DateTimeOffset.UtcNow, 1, null));
+        TestAssert.True(activeRow.IsAddCustomAssetVisible && activeRow.CanAddCustomAsset,
+            "A ready database did not offer Add Custom Asset before rebuilding.");
 
         var build = settings.RebuildAsync(MorphFaceGame.LE1);
         TestAssert.True(settings.IsBuilding, "The settings view did not enter building state.");
         TestAssert.True(!settings.CanClose,
             "The settings view allowed its only progress authority to close during a build.");
         TestAssert.True(!settings.IsRebuildAllActionVisible, "Rebuild All remained visible during an individual build.");
-        TestAssert.True(settings.Rows.Single(row => row.Game == MorphFaceGame.LE1).IsBuildActionVisible,
+        TestAssert.True(activeRow.IsBuildActionVisible,
             "The active game's Cancel action was hidden.");
+        TestAssert.True(settings.Rows.All(row => !row.IsAddCustomAssetVisible && !row.CanAddCustomAsset),
+            "Add Custom Asset remained visible or enabled during a build.");
         TestAssert.True(settings.Rows.Where(row => row.Game != MorphFaceGame.LE1)
                 .All(row => !row.IsBuildActionVisible),
             "An unrelated game's action remained visible during the active build.");
@@ -100,6 +110,60 @@ public static class TextureRegistrySettingsTests
         builder.Release();
         try { build.GetAwaiter().GetResult(); } catch (OperationCanceledException) { }
         TestAssert.True(settings.CanClose, "The settings view remained locked after its build ended.");
+        TestAssert.True(settings.Rows.All(row => row.IsAddCustomAssetVisible),
+            "Add Custom Asset remained hidden after the build ended.");
+    }
+
+    private static void RebuildKeepRetainsManualAssets()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"MFE-ManualSettings-{Guid.NewGuid():N}");
+        try
+        {
+            var store = CreateManualStore(root);
+            var settings = new TextureRegistrySettingsViewModel(store, new FakeBuilder());
+            settings.RebuildAsync(MorphFaceGame.LE1, keepManualAssets: true).GetAwaiter().GetResult();
+            TestAssert.True(store.HasManual(MorphFaceGame.LE1),
+                "Keep removed the custom MFTR.");
+            TestAssert.True(store.ReadManual(MorphFaceGame.LE1).ManualAssets.Single().IsMissing,
+                "The missing source was not marked for relinking.");
+            TestAssert.True(File.Exists(store.GetManualReportPath(MorphFaceGame.LE1)),
+                "Keep did not write a missing-source report.");
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static void RebuildDiscardRemovesManualAssets()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"MFE-ManualSettings-{Guid.NewGuid():N}");
+        try
+        {
+            var store = CreateManualStore(root);
+            var settings = new TextureRegistrySettingsViewModel(store, new FakeBuilder());
+            settings.RebuildAsync(MorphFaceGame.LE1, keepManualAssets: false).GetAwaiter().GetResult();
+            TestAssert.True(!store.HasManual(MorphFaceGame.LE1),
+                "Discard left the custom MFTR in place.");
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static TextureRegistryStore CreateManualStore(string root)
+    {
+        var store = new TextureRegistryStore(new TextureRegistryPaths(root));
+        var missing = Path.Combine(root, "missing.pcc");
+        store.WriteManualAtomic(new TextureRegistrySnapshot(
+            TextureRegistrySnapshot.CurrentSchemaVersion, TextureCatalogGame.LE1,
+            DateTimeOffset.UtcNow, 0, [])
+        {
+            ManualAssets = [new ManualRegistryAsset(missing, 2,
+                "Hair.HMM_HIR_Custom_MDL", "SkeletalMesh")]
+        });
+        return store;
     }
 
     private static TextureRegistrySettingsRowViewModel Row(TextureRegistryState state) => new(

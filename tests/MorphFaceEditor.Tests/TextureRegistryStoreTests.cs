@@ -25,6 +25,9 @@ public static class TextureRegistryStoreTests
         new("texture registry builder: cancelled rebuild preserves active file", CancelledBuildPreservesActiveFile),
         new("texture registry builder: rebuild all is sequential", BuilderRebuildAllIsSequential),
         new("texture registry runtime: reads compact file without source packages", RuntimeReadsWithoutSourcePackages)
+        ,new("custom assets: sidecar merges without changing installed registry", ManualSidecarMergesWithoutChangingInstalled)
+        ,new("custom assets: missing PCC remains recorded with a relink report", MissingManualPccProducesRelinkReport)
+        ,new("custom assets: selected export appends to sidecar", SelectedExportAppendsToSidecar)
     ];
 
     private static void DefaultRootAlignsWithEditorAppData()
@@ -51,6 +54,89 @@ public static class TextureRegistryStoreTests
         TestAssert.Equal(1, result.AttachmentMeshes.Count);
         TestAssert.Equal("DLC_MOD_Custom\\CookedPCConsole\\BioG_Sal.pcc",
             result.Candidates.Single().EffectiveOccurrence.PackagePath);
+    }
+
+    private static void ManualSidecarMergesWithoutChangingInstalled()
+    {
+        using var fixture = RegistryFixture.Create();
+        var installed = Snapshot(TextureCatalogGame.LE1);
+        fixture.Store.WriteAtomic(installed);
+        var manualPath = "BIOG_HMM_HIR_PRO_R.Hair.HMM_HIR_Explicit_CC";
+        var packagePath = "C:\\Custom\\Explicit.pcc";
+        var occurrence = new TextureCatalogOccurrence(packagePath, 3, 0,
+            TextureCatalogOrigin.Manual, 256, 256, "PF_DXT5", "Character", false, null);
+        var manual = new TextureRegistrySnapshot(TextureRegistrySnapshot.CurrentSchemaVersion,
+            TextureCatalogGame.LE1, DateTimeOffset.UtcNow, 0,
+            [new TextureCatalogCandidate(TextureCatalogGame.LE1, manualPath, occurrence, [occurrence])])
+        {
+            ManualAssets = [new ManualRegistryAsset(packagePath, 3, manualPath, "Texture2D")]
+        };
+        fixture.Store.WriteManualAtomic(manual);
+
+        TestAssert.Equal(1, fixture.Store.Read(MorphFaceGame.LE1).Candidates.Count);
+        var catalog = new TextureCatalogService(fixture.Store)
+            .ReadAsync(MorphFaceGame.LE1).GetAwaiter().GetResult();
+        TestAssert.Equal(2, catalog.Candidates.Count);
+        TestAssert.True(catalog.Candidates.Any(value => value.InstancedPath == manualPath),
+            "An explicitly added texture excluded by automatic discovery was hidden.");
+    }
+
+    private static void MissingManualPccProducesRelinkReport()
+    {
+        using var fixture = RegistryFixture.Create();
+        var path = Path.Combine(Path.GetDirectoryName(fixture.Paths.GetManualPath(MorphFaceGame.LE1))!,
+            "missing-custom.pcc");
+        var occurrence = new AttachmentMeshOccurrence(path, "Hair.HMM_HIR_Custom_MDL", 3, 0,
+            TextureCatalogOrigin.Manual, 42);
+        var manual = new TextureRegistrySnapshot(TextureRegistrySnapshot.CurrentSchemaVersion,
+            TextureCatalogGame.LE1, DateTimeOffset.UtcNow, 0, [])
+        {
+            AttachmentMeshes = [new AttachmentMeshCandidate("missing-custom.Hair.HMM_HIR_Custom_MDL",
+                occurrence, [occurrence])],
+            ManualAssets = [new ManualRegistryAsset(path, 3, occurrence.InstancedPath, "SkeletalMesh")]
+        };
+        fixture.Store.WriteManualAtomic(manual);
+
+        var failures = new TextureRegistryManualAssetService(fixture.Store).Revalidate(MorphFaceGame.LE1);
+        TestAssert.True(failures.Count == 1,
+            $"Expected one missing-PCC failure; got {failures.Count}: {string.Join(" | ", failures)}");
+        TestAssert.True(File.Exists(fixture.Store.GetManualReportPath(MorphFaceGame.LE1)),
+            "The missing manual PCC was not written to a relink report.");
+        TestAssert.True(fixture.Store.ReadManual(MorphFaceGame.LE1).ManualAssets.Single().IsMissing,
+            "The missing selection was discarded instead of retained for relinking.");
+        TestAssert.True(fixture.Store.ReadManual(MorphFaceGame.LE1).AttachmentMeshes.Count == 1,
+            "The missing mesh occurrence was not retained in the manual MFTR.");
+    }
+
+    private static void SelectedExportAppendsToSidecar()
+    {
+        using var fixture = RegistryFixture.Create();
+        fixture.Store.WriteAtomic(Snapshot(TextureCatalogGame.LE1));
+        var path = Path.GetFullPath("tests/Global Morphs/LE1 GlobalMorphs.pcc");
+        var export = PackageAssetInspector.Inventory(path, ["Texture2D", "SkeletalMesh"]).Entries
+            .First(value => !value.IsDefaultObject);
+        var selected = new ManualRegistryAsset(path, export.UIndex,
+            export.InstancedPath, export.ClassName);
+        var missingPath = Path.Combine(Path.GetDirectoryName(fixture.Paths.GetManualPath(MorphFaceGame.LE1))!,
+            "old-location.pcc");
+        fixture.Store.WriteManualAtomic(new TextureRegistrySnapshot(
+            TextureRegistrySnapshot.CurrentSchemaVersion, TextureCatalogGame.LE1,
+            DateTimeOffset.UtcNow, 0, [])
+        {
+            ManualAssets = [selected with { PackagePath = missingPath, IsMissing = true }]
+        });
+
+        new TextureRegistryManualAssetService(fixture.Store).Append(MorphFaceGame.LE1, [selected]);
+
+        var manual = fixture.Store.ReadManual(MorphFaceGame.LE1);
+        TestAssert.Equal(1, manual.ManualAssets.Count);
+        TestAssert.Equal(export.InstancedPath, manual.ManualAssets[0].InstancedPath);
+        TestAssert.Equal(path, manual.ManualAssets[0].PackagePath);
+        TestAssert.True(!manual.ManualAssets[0].IsMissing,
+            "Selecting the export at its new PCC path did not relink the missing asset.");
+        TestAssert.Equal(1, fixture.Store.Read(MorphFaceGame.LE1).Candidates.Count);
+        TestAssert.True(manual.Candidates.Count + manual.AttachmentMeshes.Count == 1,
+            "The selected export was not stored in its custom MFTR.");
     }
 
     private static void BuilderScansEachPackageOnce()

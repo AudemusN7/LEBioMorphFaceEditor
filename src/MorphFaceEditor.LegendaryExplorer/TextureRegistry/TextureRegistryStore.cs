@@ -15,10 +15,22 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
     };
 
     public TextureRegistryStatus GetStatus(MorphFaceGame game) => ReadWithStatus(game).Status;
-
-    internal TextureRegistryReadResult ReadWithStatus(MorphFaceGame game)
+    public TextureRegistryStatus GetManualStatus(MorphFaceGame game)
     {
-        var path = paths.GetPath(game);
+        var status = ReadManualWithStatus(game).Status;
+        return status.State == TextureRegistryState.Ready && status.ErrorMessage is not null
+            ? status with { ErrorMessage = $"{status.ErrorMessage} {GetManualReportPath(game)}" }
+            : status;
+    }
+
+    internal TextureRegistryReadResult ReadWithStatus(MorphFaceGame game) =>
+        ReadWithStatus(game, paths.GetPath(game));
+
+    internal TextureRegistryReadResult ReadManualWithStatus(MorphFaceGame game) =>
+        ReadWithStatus(game, paths.GetManualPath(game));
+
+    private static TextureRegistryReadResult ReadWithStatus(MorphFaceGame game, string path)
+    {
         if (!File.Exists(path))
         {
             return new TextureRegistryReadResult(
@@ -50,9 +62,13 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
 
             var snapshot = ReadFile(path, game);
             var file = new FileInfo(path);
+            var missing = snapshot.ManualAssets.Count(asset => asset.IsMissing);
             return new TextureRegistryReadResult(
                 new TextureRegistryStatus(game, TextureRegistryState.Ready, path,
-                    file.Length, snapshot.BuiltAtUtc, snapshot.Candidates.Count, null),
+                    file.Length, snapshot.BuiltAtUtc, snapshot.Candidates.Count,
+                    missing > 0
+                        ? $"{missing} custom asset(s) could not be found. See the manual asset error log."
+                        : null),
                 snapshot);
         }
         catch (Exception exception)
@@ -67,10 +83,29 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
     }
 
     public TextureRegistrySnapshot Read(MorphFaceGame game) => ReadFile(paths.GetPath(game), game);
+    public TextureRegistrySnapshot ReadManual(MorphFaceGame game) => ReadFile(paths.GetManualPath(game), game);
+    public bool HasManual(MorphFaceGame game) => File.Exists(paths.GetManualPath(game));
+    public string GetManualReportPath(MorphFaceGame game) =>
+        Path.ChangeExtension(paths.GetManualPath(game), ".missing.log");
+
+    public void DeleteManual(MorphFaceGame game)
+    {
+        var path = paths.GetManualPath(game);
+        if (File.Exists(path)) File.Delete(path);
+        var report = GetManualReportPath(game);
+        if (File.Exists(report)) File.Delete(report);
+    }
 
     internal (string Path, long Length, DateTime LastWriteTimeUtc)? GetFileFingerprint(MorphFaceGame game)
     {
         var path = paths.GetPath(game);
+        var file = new FileInfo(path);
+        return file.Exists ? (path, file.Length, file.LastWriteTimeUtc) : null;
+    }
+
+    internal (string Path, long Length, DateTime LastWriteTimeUtc)? GetManualFileFingerprint(MorphFaceGame game)
+    {
+        var path = paths.GetManualPath(game);
         var file = new FileInfo(path);
         return file.Exists ? (path, file.Length, file.LastWriteTimeUtc) : null;
     }
@@ -83,13 +118,23 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
     internal void WriteAtomic(
         TextureRegistrySnapshot snapshot,
         CancellationToken cancellationToken,
+        Action? beforeVerification) =>
+        WriteAtomic(snapshot, paths.GetPath(ToMorphFaceGame(snapshot.Game)), cancellationToken, beforeVerification);
+
+    public void WriteManualAtomic(TextureRegistrySnapshot snapshot,
+        CancellationToken cancellationToken = default) =>
+        WriteAtomic(snapshot, paths.GetManualPath(ToMorphFaceGame(snapshot.Game)), cancellationToken, null);
+
+    private static void WriteAtomic(
+        TextureRegistrySnapshot snapshot,
+        string targetPath,
+        CancellationToken cancellationToken,
         Action? beforeVerification)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         cancellationToken.ThrowIfCancellationRequested();
         var game = ToMorphFaceGame(snapshot.Game);
         Validate(snapshot, game);
-        var targetPath = paths.GetPath(game);
         var temporaryPath = $"{targetPath}.{Guid.NewGuid():N}.tmp";
         Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
 
@@ -124,6 +169,7 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
                 verified.InstalledPackageCount != snapshot.InstalledPackageCount ||
                 verified.Candidates.Count != snapshot.Candidates.Count ||
                 verified.AttachmentMeshes.Count != snapshot.AttachmentMeshes.Count ||
+                verified.ManualAssets.Count != snapshot.ManualAssets.Count ||
                 verified.MorphFaceTemplates.Count != snapshot.MorphFaceTemplates.Count)
             {
                 throw new InvalidDataException("The written texture registry failed verification.");
@@ -190,7 +236,8 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
             throw new InvalidDataException("The registry header and payload games do not match.");
         }
         if (snapshot.InstalledPackageCount < 0 || snapshot.Candidates is null ||
-            snapshot.MorphFaceTemplates is null || snapshot.AttachmentMeshes is null)
+            snapshot.MorphFaceTemplates is null || snapshot.AttachmentMeshes is null ||
+            snapshot.ManualAssets is null)
         {
             throw new InvalidDataException("The texture registry payload is incomplete.");
         }
@@ -219,6 +266,13 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
                     occurrence is null || string.IsNullOrWhiteSpace(occurrence.PackagePath) ||
                     string.IsNullOrWhiteSpace(occurrence.InstancedPath) || occurrence.ExportUIndex <= 0))
                 throw new InvalidDataException("The texture registry contains an incomplete attachment mesh candidate.");
+        }
+        foreach (var asset in snapshot.ManualAssets)
+        {
+            if (asset is null || string.IsNullOrWhiteSpace(asset.PackagePath) ||
+                asset.ExportUIndex <= 0 || string.IsNullOrWhiteSpace(asset.InstancedPath) ||
+                asset.ClassName is not ("Texture2D" or "SkeletalMesh"))
+                throw new InvalidDataException("The texture registry contains an incomplete manual asset.");
         }
     }
 

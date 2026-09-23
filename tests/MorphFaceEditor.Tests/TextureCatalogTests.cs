@@ -541,15 +541,17 @@ public static class TextureCatalogTests
         var biogOccurrence = Occurrence("BIOG_HMF_HIR_PRO.pcc", 0, TextureCatalogOrigin.BaseGame);
         var levelOccurrence = Occurrence("BIOA_TEST.pcc", 0, TextureCatalogOrigin.BaseGame);
         var modOccurrence = Occurrence("DLC_MOD_Test\\CookedPCConsole\\ModHair.pcc", 9000, TextureCatalogOrigin.Mod);
+        var manualOccurrence = Occurrence("C:\\Custom\\ChosenHair.pcc", 0, TextureCatalogOrigin.Manual);
         var biog = new TextureCatalogCandidate(TextureCatalogGame.LE3, biogPath,
             biogOccurrence, [biogOccurrence]);
         var level = new TextureCatalogCandidate(TextureCatalogGame.LE3, qualifiedPath,
-            modOccurrence, [levelOccurrence, modOccurrence]);
+            modOccurrence, [levelOccurrence, modOccurrence, manualOccurrence]);
 
         var choices = TextureCatalogPicker.Select([level, biog]);
-        TestAssert.Equal(2, choices.Count);
+        TestAssert.Equal(3, choices.Count);
         TestAssert.Equal(biogOccurrence, choices[0].EffectiveOccurrence);
         TestAssert.Equal(modOccurrence, choices[1].EffectiveOccurrence);
+        TestAssert.Equal(manualOccurrence, choices[2].EffectiveOccurrence);
         TestAssert.Equal(qualifiedPath, TextureCatalogPicker.CanonicalPath(
             choices[0].InstancedPath, choices[0].EffectiveOccurrence.PackagePath));
     }

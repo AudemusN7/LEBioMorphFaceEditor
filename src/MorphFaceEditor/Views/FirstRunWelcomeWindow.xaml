@@ -59,7 +59,7 @@
                     <TextBlock Grid.Row="1" Margin="0,8,0,0"
                                Foreground="{StaticResource SecondaryText}"
                                FontSize="13" TextWrapping="Wrap"
-                               Text="Texture Databases let the editor find and use textures and compatible templates outside of the currently opened package" />
+                               Text="Mesh/Texture Databases let the editor find and use textures, attachment meshes, and compatible templates outside of the currently opened package" />
                     <TextBlock x:Name="DatabaseConsequenceText" Grid.Row="2" Margin="0,9,0,0"
                                Foreground="{StaticResource MutedText}"
                                FontSize="12" TextWrapping="Wrap"
@@ -68,7 +68,7 @@
             </Border>
 
             <Button Margin="0,14,0,0" HorizontalAlignment="Right"
-                    Content="Build Texture Databases" MinWidth="184"
+                    Content="Build Mesh/Texture Databases" MinWidth="220"
                     Click="OnBuildTextureDatabases" />
         </StackPanel>
 

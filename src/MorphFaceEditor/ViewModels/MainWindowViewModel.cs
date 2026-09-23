@@ -79,6 +79,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private CancellationTokenSource? _loadCancellation;
     private CancellationTokenSource? _npcImportCancellation;
     private LoadedMorphFace? _loadedFace;
+    private MorphFaceProfile? _activeRegistryProfile;
+    private TextureCatalogProfile? _activeRegistryCatalogProfile;
     private string? _packagePath;
     private string _faceSearchText = string.Empty;
     private BioMorphFaceListItem? _selectedFace;
@@ -892,6 +894,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             }
             _loadedSpeciesKey = speciesKey;
             SetEditor(editor, result.Loaded);
+            _activeRegistryProfile = result.Profile;
+            _activeRegistryCatalogProfile = textureCatalogProfile;
             HasPreview = true;
             var cameraFamily = PreviewCameraGrouping.ForProfile(result.Profile.Key);
             var resetCameraPosition = _previewCameraFamily is not null &&
@@ -967,7 +971,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             editor.UpdateRegistryAttachmentMeshes(catalog.AttachmentMeshes, IsPlayerWorkspace);
             AppLog.Information(catalog.IsAvailable
                 ? $"Texture registry loaded for {profile.DisplayName}: {catalog.Candidates.Count:N0} verified candidates in {System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalSeconds:F1}s."
-                : $"Texture registry is unavailable for {profile.DisplayName}; build the {game} registry in Texture Databases.");
+                : $"Mesh/texture database is unavailable for {profile.DisplayName}; build the {game} database in Mesh/Texture Databases.");
         }
         catch (OperationCanceledException)
         {
@@ -979,8 +983,19 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
+    public void RefreshTextureRegistry(MorphFaceGame game)
+    {
+        if (Editor is not { } editor || _loadedFace?.Game != game ||
+            _activeRegistryProfile is not { } profile ||
+            _activeRegistryCatalogProfile is not { } catalogProfile)
+            return;
+        _ = LoadTextureRegistryAsync(editor, game, profile, catalogProfile, CancellationToken.None);
+    }
+
     private void SetEditor(FaceEditorViewModel? editor, LoadedMorphFace? loaded)
     {
+        _activeRegistryProfile = null;
+        _activeRegistryCatalogProfile = null;
         CancelAttachmentPreviewLoad();
         _attachmentChangeVersion++;
         if (Editor is not null)

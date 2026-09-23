@@ -1,3 +1,4 @@
+using System.IO;
 using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.LegendaryExplorer.TextureRegistry;
@@ -8,6 +9,7 @@ namespace MorphFaceEditor.ViewModels;
 public sealed class TextureRegistrySettingsViewModel : ObservableObject
 {
     private readonly TextureRegistryStore _store;
+    private readonly TextureRegistryManualAssetService _manualAssets;
     private readonly ITextureRegistryBuilder _builder;
     private readonly Action<MorphFaceGame>? _catalogInvalidator;
     private CancellationTokenSource? _buildCancellation;
@@ -23,6 +25,7 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
         Action<MorphFaceGame>? catalogInvalidator = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
+        _manualAssets = new TextureRegistryManualAssetService(_store);
         _builder = builder ?? throw new ArgumentNullException(nameof(builder));
         _catalogInvalidator = catalogInvalidator;
         Rows =
@@ -34,6 +37,7 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
     }
 
     public IReadOnlyList<TextureRegistrySettingsRowViewModel> Rows { get; }
+    public event Action<MorphFaceGame>? DatabaseChanged;
 
     public bool IsBuilding
     {
@@ -64,9 +68,28 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
         cancellationToken.ThrowIfCancellationRequested();
         foreach (var status in statuses)
             Rows.Single(row => row.Game == status.Game).Update(status);
+        foreach (var row in Rows)
+            row.UpdateManual(_store.GetManualStatus(row.Game));
     }
 
-    public async Task RebuildAsync(MorphFaceGame game, CancellationToken cancellationToken = default)
+    public bool HasManualAssets(MorphFaceGame game) => _store.HasManual(game);
+    public IReadOnlyList<MorphFaceEditor.Core.Materials.ManualRegistryAsset> GetManualAssets(
+        MorphFaceGame game) => _store.GetManualStatus(game).State == TextureRegistryState.Ready
+        ? _store.ReadManual(game).ManualAssets
+        : [];
+
+    public async Task AppendManualAsync(MorphFaceGame game,
+        IReadOnlyList<MorphFaceEditor.Core.Materials.ManualRegistryAsset> selections)
+    {
+        if (IsBuilding) throw new InvalidOperationException("Wait for the database build to finish.");
+        var status = await Task.Run(() => _manualAssets.Append(game, selections));
+        Rows.Single(row => row.Game == game).UpdateManual(status);
+        _catalogInvalidator?.Invoke(game);
+        DatabaseChanged?.Invoke(game);
+    }
+
+    public async Task RebuildAsync(MorphFaceGame game, CancellationToken cancellationToken = default,
+        bool keepManualAssets = true)
     {
         if (IsBuilding)
         {
@@ -81,8 +104,14 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
         try
         {
             var status = await _builder.RebuildAsync(game, CreateProgress(), _buildCancellation!.Token);
+            if (status.State == TextureRegistryState.Ready)
+                status = await FinishManualRebuildAsync(game, status, keepManualAssets,
+                    _buildCancellation.Token);
             row.Update(status);
+            row.UpdateManual(_store.GetManualStatus(game));
             _catalogInvalidator?.Invoke(game);
+            if (status.State == TextureRegistryState.Ready)
+                DatabaseChanged?.Invoke(game);
         }
         catch (OperationCanceledException)
         {
@@ -99,7 +128,8 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
         }
     }
 
-    public async Task RebuildAllAsync(CancellationToken cancellationToken = default)
+    public async Task RebuildAllAsync(CancellationToken cancellationToken = default,
+        bool keepManualAssets = true)
     {
         if (IsBuilding)
         {
@@ -117,8 +147,14 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
                 try
                 {
                     var status = await _builder.RebuildAsync(row.Game, CreateProgress(), _buildCancellation!.Token);
+                    if (status.State == TextureRegistryState.Ready)
+                        status = await FinishManualRebuildAsync(row.Game, status, keepManualAssets,
+                            _buildCancellation.Token);
                     row.Update(status);
+                    row.UpdateManual(_store.GetManualStatus(row.Game));
                     _catalogInvalidator?.Invoke(row.Game);
+                    if (status.State == TextureRegistryState.Ready)
+                        DatabaseChanged?.Invoke(row.Game);
                 }
                 catch (OperationCanceledException)
                 {
@@ -140,6 +176,27 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
     }
 
     public void CancelBuild() => _buildCancellation?.Cancel();
+
+    private async Task<TextureRegistryStatus> FinishManualRebuildAsync(MorphFaceGame game,
+        TextureRegistryStatus status, bool keep, CancellationToken cancellationToken)
+    {
+        if (!_store.HasManual(game)) return status;
+        if (!keep)
+        {
+            _store.DeleteManual(game);
+            return status;
+        }
+        var failures = await Task.Run(() => _manualAssets.Revalidate(game, cancellationToken),
+            cancellationToken);
+        if (failures.Count == 0) return status;
+        var report = _store.GetManualReportPath(game);
+        AppLog.Error($"{game} custom asset relink failures: {string.Join(" | ", failures)}",
+            new FileNotFoundException($"See {report}"));
+        return status with
+        {
+            ErrorMessage = $"{failures.Count} custom asset(s) could not be found. Details: {report}"
+        };
+    }
 
     internal void UpdateProgress(TextureRegistryBuildProgress progress)
     {
@@ -187,7 +244,7 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
     private void SetBuildActionVisibility(MorphFaceGame? activeGame, bool building)
     {
         foreach (var row in Rows)
-            row.SetBuildActionVisible(!building || row.Game == activeGame);
+            row.SetBuildActionVisible(!building || row.Game == activeGame, building);
     }
 
     private IProgress<TextureRegistryBuildProgress> CreateProgress() =>
@@ -202,7 +259,9 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
 public sealed class TextureRegistrySettingsRowViewModel : ObservableObject
 {
     private TextureRegistryStatus _status;
+    private TextureRegistryStatus? _manualStatus;
     private bool _isBuildActionVisible = true;
+    private bool _isBuildInProgress;
 
     public TextureRegistrySettingsRowViewModel(MorphFaceGame game, TextureRegistryStatus status)
     {
@@ -213,6 +272,16 @@ public sealed class TextureRegistrySettingsRowViewModel : ObservableObject
     public MorphFaceGame Game { get; }
     public string GameLabel => Game.ToString();
     public TextureRegistryStatus Status => _status;
+    public bool CanAddCustomAsset => _status.State == TextureRegistryState.Ready && !_isBuildInProgress;
+    public bool IsAddCustomAssetVisible => !_isBuildInProgress;
+    public string ManualStatusLabel => _manualStatus?.State switch
+    {
+        TextureRegistryState.Ready => "Custom assets available",
+        TextureRegistryState.Missing => "No custom assets",
+        null => "Checking custom assets…",
+        _ => $"Custom database: {_manualStatus.State} — {_manualStatus.ErrorMessage}"
+    };
+    public string? WarningLabel => _status.ErrorMessage ?? _manualStatus?.ErrorMessage;
     public bool IsBuildActionVisible
     {
         get => _isBuildActionVisible;
@@ -246,7 +315,22 @@ public sealed class TextureRegistrySettingsRowViewModel : ObservableObject
         OnPropertyChanged(nameof(StatusLabel));
         OnPropertyChanged(nameof(StatusColour));
         OnPropertyChanged(nameof(LastBuiltLabel));
+        OnPropertyChanged(nameof(CanAddCustomAsset));
+        OnPropertyChanged(nameof(WarningLabel));
     }
 
-    public void SetBuildActionVisible(bool visible) => IsBuildActionVisible = visible;
+    public void UpdateManual(TextureRegistryStatus status)
+    {
+        _manualStatus = status;
+        OnPropertyChanged(nameof(ManualStatusLabel));
+        OnPropertyChanged(nameof(WarningLabel));
+    }
+
+    public void SetBuildActionVisible(bool visible, bool building)
+    {
+        _isBuildInProgress = building;
+        IsBuildActionVisible = visible;
+        OnPropertyChanged(nameof(CanAddCustomAsset));
+        OnPropertyChanged(nameof(IsAddCustomAssetVisible));
+    }
 }

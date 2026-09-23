@@ -19,11 +19,19 @@ public sealed record TextureRegistrySnapshot(
     int InstalledPackageCount,
     IReadOnlyList<TextureCatalogCandidate> Candidates)
 {
-    public const int CurrentSchemaVersion = 9;
+    public const int CurrentSchemaVersion = 10;
 
     public IReadOnlyList<MorphFaceTemplateCandidate> MorphFaceTemplates { get; init; } = [];
     public IReadOnlyList<AttachmentMeshCandidate> AttachmentMeshes { get; init; } = [];
+    public IReadOnlyList<ManualRegistryAsset> ManualAssets { get; init; } = [];
 }
+
+public sealed record ManualRegistryAsset(
+    string PackagePath,
+    int ExportUIndex,
+    string InstancedPath,
+    string ClassName,
+    bool IsMissing = false);
 
 public sealed record AttachmentMeshOccurrence(
     string PackagePath,

@@ -60,12 +60,24 @@ if (tests.Length == 0)
 }
 
 var failures = new List<string>();
+var skipped = 0;
+var partial = 0;
 foreach (var test in tests)
 {
     try
     {
         test.Run();
         Console.WriteLine($"PASS {test.Name}");
+    }
+    catch (TestSkippedException exception)
+    {
+        skipped++;
+        Console.WriteLine($"SKIP {test.Name}: {exception.Message}");
+    }
+    catch (TestPartialException exception)
+    {
+        partial++;
+        Console.WriteLine($"PARTIAL {test.Name}: {exception.Message}");
     }
     catch (Exception exception)
     {
@@ -74,5 +86,13 @@ foreach (var test in tests)
     }
 }
 
-Console.WriteLine($"{tests.Length - failures.Count}/{tests.Length} tests passed.");
+if (skipped == 0 && partial == 0)
+{
+    Console.WriteLine($"{tests.Length - failures.Count}/{tests.Length} tests passed.");
+}
+else
+{
+    Console.WriteLine($"{tests.Length - failures.Count - skipped - partial} passed, {partial} partial, {skipped} skipped, " +
+                      $"{failures.Count} failed ({tests.Length} tests).");
+}
 return failures.Count == 0 ? 0 : 1;

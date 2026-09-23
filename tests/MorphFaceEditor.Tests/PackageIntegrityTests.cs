@@ -19,6 +19,7 @@ internal static class PackageIntegrityTests
         new("import ancestor collision preserves original PCC bytes on save", () => SaveFailurePreservesOriginal(true)),
         new("required relink failure preserves original PCC bytes on save", () => SaveFailurePreservesOriginal(false)),
         new("relink rejects a valid destination index pointing at the wrong asset", WrongReferenceRejected),
+        new("relink reuses an existing export without rewriting its destination references", ExistingExportIsNotRelinked),
         new("relink rejects retained binary failure reports even with valid references", BinaryReportRejected),
         new("package integrity rejects duplicate identities and imported parents", InvalidHierarchyRejected),
         new("package integrity permits only pre-existing structural issues", ExistingIssuesAreBaselined),
@@ -90,6 +91,33 @@ internal static class PackageIntegrityTests
         Relinker.RelinkAll(options);
         MaterialisationVerifier.Verify(root, source.Game, options);
         root.WriteProperty(new ObjectProperty(donorDependency.UIndex, "Required"));
+        Reject(() => MaterialisationVerifier.Verify(root, source.Game, options), "Required relink failed");
+    }
+
+    private static void ExistingExportIsNotRelinked()
+    {
+        using var source = Empty("Donor");
+        using var destination = Empty("Destination");
+        var donorDependency = source.CreateExport("Dependency", "Object", indexed: false);
+        donorDependency.WriteProperty(new ObjectProperty(donorDependency, "Marker"));
+        var donorRoot = source.CreateExport("Asset", "Object", indexed: false);
+        donorRoot.WriteProperty(new ObjectProperty(donorDependency, "Required"));
+
+        for (var index = 0; index < 20; index++)
+            destination.CreateExport($"Filler{index}", "Object", indexed: false);
+        var existing = destination.CreateExport("Dependency", "Object", indexed: false);
+        existing.WriteProperty(new ObjectProperty(existing, "Marker"));
+        var preexisting = destination.Exports.ToHashSet();
+
+        var options = new RelinkerOptionsPackage();
+        var root = (ExportEntry)EntryImporter.ImportExport(destination, donorRoot, 0, options);
+        options.CrossPackageMap[donorDependency] = existing;
+        MaterialisationVerifier.Relink(options, preexisting);
+        MaterialisationVerifier.Verify(root, source.Game, options);
+
+        TestAssert.Equal(existing.UIndex, PackageIntegrity.References(root)["property.Required[0]"]);
+        TestAssert.Equal(existing.UIndex, PackageIntegrity.References(existing)["property.Marker[0]"]);
+        existing.WriteProperty(new ObjectProperty(destination.Exports[0], "Marker"));
         Reject(() => MaterialisationVerifier.Verify(root, source.Game, options), "Required relink failed");
     }
 

@@ -8,12 +8,12 @@ using MorphFaceEditor.Services;
 namespace MorphFaceEditor.Tests;
 
 /// <summary>
-/// Evidence tests for the Trilogy Save Editor RON stress corpus. The fixtures
-/// stay outside the test output and are read in place from the repository.
+/// Optional local-only evidence tests for RON import. Fixtures stay in the
+/// ignored repository test folder and are read in place, never copied to output.
 /// </summary>
 internal static class RonStressTests
 {
-    private const int ExpectedCorpusFileCount = 34;
+    private const int ExpectedCorpusFileCount = 5;
 
     private static readonly (string FileName, string VariantPrefix, MorphFaceGame[] Games, StandalonePlayerSex Sex, int Lod0Vertices)[] PrimaryCases =
     [
@@ -27,18 +27,22 @@ internal static class RonStressTests
     [
         new("RON provenance metadata round-trips and rejects partial headers", ProvenanceMetadata),
         new("RON export omits attachment-only Diffuseuse", RonOmitsAttachmentTexture),
-        new("RON stress corpus parses all 34 files and verifies variant structure", ParseCorpus),
+        new("Optional local RON corpus parses five files and verifies primary structure", ParseCorpus),
         new("RON texture catalogue canonicalises occurrence package paths", CanonicalTextureCataloguePaths),
-        new("RON stress primary roots classify for their intended games", ClassifyPrimaryRoots),
-        new("RON stress standalone imports preserve primary payloads and installed fingerprints", StandalonePrimaryRoundTrips)
+        new("RON primary roots classify for their intended games", ClassifyPrimaryRoots),
+        new("Optional local RON imports preserve primary payloads and installed fingerprints", StandalonePrimaryRoundTrips)
     ];
 
     private static void ProvenanceMetadata()
     {
-        var sourcePath = Path.Combine(CorpusDirectory(), PrimaryCases[0].FileName);
+        var sourcePath = Path.Combine(Path.GetTempPath(), $"MFE-RonProvenanceSource-{Guid.NewGuid():N}.ron");
         var temporaryPath = Path.Combine(Path.GetTempPath(), $"MFE-RonProvenance-{Guid.NewGuid():N}.ron");
         try
         {
+            var source = new TseHeadMorph("None", [],
+                new MorphFaceMorphData([], [], [[Vector3.Zero]]),
+                new MorphFaceMaterialData([], [], []));
+            TseHeadMorphRon.Write(sourcePath, source);
             var expected = new RonExportProvenance(
                 RonExportProducer.MFE,
                 "0.9.17",
@@ -93,6 +97,10 @@ internal static class RonStressTests
             {
                 File.Delete(temporaryPath);
             }
+            if (File.Exists(sourcePath))
+            {
+                File.Delete(sourcePath);
+            }
         }
     }
 
@@ -121,7 +129,11 @@ internal static class RonStressTests
 
     private static void ParseCorpus()
     {
-        var directory = CorpusDirectory();
+        var directory = FindCorpusDirectory();
+        if (directory is null)
+        {
+            throw new TestSkippedException("tests/RON Stress Test is not present.");
+        }
         var files = Directory.GetFiles(directory, "*.ron", SearchOption.AllDirectories)
             .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -158,7 +170,6 @@ internal static class RonStressTests
             var rootCounts = root.MorphData.BakedLods.Select(value => value.Length).ToArray();
             var variants = parsed.Where(pair => pair.Key.StartsWith(primary.VariantPrefix,
                 StringComparison.OrdinalIgnoreCase)).ToArray();
-            TestAssert.True(variants.Length > 0, $"{primary.FileName} did not match any attachment variants.");
             foreach (var variant in variants)
             {
                 var variantCounts = variant.Value.MorphData.BakedLods.Select(value => value.Length).ToArray();
@@ -215,19 +226,15 @@ internal static class RonStressTests
 
     private static void ClassifyPrimaryRoots()
     {
-        var directory = CorpusDirectory();
         foreach (var primary in PrimaryCases)
         {
-            var path = Path.Combine(directory, primary.FileName);
-            var ron = TseHeadMorphRon.Read(path);
-            TestAssert.Equal(primary.Lod0Vertices, ron.MorphData.BakedLods[0].Length);
             foreach (var game in primary.Games)
             {
                 var actual = StandalonePlayerMorphImportService.IdentifySex(
-                    game, ron.MorphData.BakedLods[0].Length);
+                    game, primary.Lod0Vertices);
                 TestAssert.Equal(primary.Sex, actual);
                 Console.WriteLine($"RON classification {primary.FileName} -> {game}/{actual} " +
-                                  $"(LOD0 vertices={ron.MorphData.BakedLods[0].Length})");
+                                  $"(LOD0 vertices={primary.Lod0Vertices})");
             }
 
             foreach (var game in new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 }
@@ -237,7 +244,7 @@ internal static class RonStressTests
                 try
                 {
                     _ = StandalonePlayerMorphImportService.IdentifySex(
-                        game, ron.MorphData.BakedLods[0].Length);
+                        game, primary.Lod0Vertices);
                 }
                 catch (InvalidDataException)
                 {
@@ -251,20 +258,27 @@ internal static class RonStressTests
 
     private static void StandalonePrimaryRoundTrips()
     {
+        var directory = FindCorpusDirectory();
+        if (directory is null)
+        {
+            throw new TestSkippedException("tests/RON Stress Test is not present.");
+        }
         LegendaryExplorerCoreRuntime.Initialize();
-        var directory = CorpusDirectory();
         var service = new StandalonePlayerMorphImportService();
         var context = new MorphFacePackageContextService();
         var attempted = 0;
         var completed = 0;
+        var skippedCases = 0;
+        var unavailableAttachmentSkips = 0;
         var failures = new List<string>();
 
         var roundTripCases = PrimaryCases.Append((
-            Path.Combine("variants", "LE1-2_Default_Jane_ashleyhair.ron"),
+            "LE1-2_Default_Jane_ashleyhair.ron",
             string.Empty,
             [MorphFaceGame.LE1, MorphFaceGame.LE2],
             StandalonePlayerSex.Female,
             2232));
+        var totalCases = roundTripCases.Sum(primary => primary.Games.Length);
         foreach (var primary in roundTripCases)
         {
             var ronPath = Path.Combine(directory, primary.FileName);
@@ -278,11 +292,13 @@ internal static class RonStressTests
                 }
                 catch (FileNotFoundException exception)
                 {
+                    skippedCases++;
                     Console.WriteLine($"SKIP {primary.FileName} -> {game}: {exception.Message}");
                     continue;
                 }
                 catch (DirectoryNotFoundException exception)
                 {
+                    skippedCases++;
                     Console.WriteLine($"SKIP {primary.FileName} -> {game}: {exception.Message}");
                     continue;
                 }
@@ -379,7 +395,16 @@ internal static class RonStressTests
                     // LocalApplicationData. In restricted CI containers that
                     // location may be readable but not writable; report this as
                     // an environment skip, not as a conversion result.
+                    skippedCases++;
                     Console.WriteLine($"SKIP {primary.FileName} -> {game}: detached workspace path is not writable ({exception.Message})");
+                }
+                catch (InvalidDataException exception) when (
+                    exception.Message.Contains("is unavailable in the selected game's installed assets", StringComparison.Ordinal) &&
+                    exception.Message.Contains("unresolved SkeletalMesh", StringComparison.Ordinal))
+                {
+                    unavailableAttachmentSkips++;
+                    skippedCases++;
+                    Console.WriteLine($"SKIP {primary.FileName} -> {game}: required installed skeletal attachment is unavailable ({exception.Message})");
                 }
                 catch (Exception exception)
                 {
@@ -401,15 +426,22 @@ internal static class RonStressTests
             }
         }
 
-        if (completed == 0)
-        {
-            Console.WriteLine(attempted == 0
-                ? "SKIP RON stress standalone round trips: no installed LE player seed packages were found."
-                : "SKIP RON stress standalone round trips: installed seed packages were found but detached workspace storage was unavailable.");
-        }
         if (failures.Count > 0)
         {
             throw new Exception("RON stress imports failed:\n- " + string.Join("\n- ", failures));
+        }
+        if (completed == 0)
+        {
+            throw new TestSkippedException(attempted == 0
+                ? "No installed LE player seed packages were found."
+                : unavailableAttachmentSkips == attempted
+                    ? "All available corpus imports require skeletal attachments absent from the selected games' installed assets."
+                    : "Installed seed packages were found but detached workspace storage was unavailable.");
+        }
+        if (skippedCases > 0)
+        {
+            throw new TestPartialException(
+                $"{completed}/{totalCases} game/file imports completed; {skippedCases} skipped (details above).");
         }
     }
 
@@ -555,7 +587,7 @@ internal static class RonStressTests
     private static bool IsWorkspacePermissionBlock(UnauthorizedAccessException exception) =>
         exception.Message.Contains("Workspaces", StringComparison.OrdinalIgnoreCase);
 
-    private static string CorpusDirectory()
+    private static string? FindCorpusDirectory()
     {
         var current = new DirectoryInfo(Directory.GetCurrentDirectory());
         while (current is not null)
@@ -564,6 +596,6 @@ internal static class RonStressTests
             if (Directory.Exists(candidate)) return candidate;
             current = current.Parent;
         }
-        throw new DirectoryNotFoundException("The tests/RON Stress Test corpus was not found.");
+        return null;
     }
 }

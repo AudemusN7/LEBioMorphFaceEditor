@@ -58,7 +58,7 @@ public sealed partial class KroganFeatureMetadataCatalog : IHeadEditorUiProfile
     {
         var (category, subcategory) = FeaturePlacement(feature.Feature.Name);
         var visible = !MetadataOnlyFeatures.Contains(feature.Feature.Name);
-        return new MorphFeatureMetadata(
+        var metadata = new MorphFeatureMetadata(
             feature.Feature.Name,
             FeatureLabel(feature.Feature.Name),
             category,
@@ -69,14 +69,18 @@ public sealed partial class KroganFeatureMetadataCatalog : IHeadEditorUiProfile
             1,
             0.01f,
             visible && sessionCanEdit && feature.IsResolved,
-            $"{feature.Feature.Name} · {feature.ResolutionNote ?? "resolved Krogan morph target."}");
+            feature.Kind == MorphFeatureResolutionKind.MetadataOnly
+                ? "Preserved creator metadata with no Krogan target delta."
+                : string.Empty);
+        return MetadataTextCatalog.Apply(MorphFaceMetadataCatalogRegistry.Krogan, metadata);
     }
 
-    public MaterialParameterDefinition DescribeMaterial(MaterialParameterDefinition definition) => definition with
+    public MaterialParameterDefinition DescribeMaterial(MaterialParameterDefinition definition) =>
+        MetadataTextCatalog.Apply(MorphFaceMetadataCatalogRegistry.Krogan, definition with
     {
-        Label = MaterialLabel(definition.Name, definition.Label),
+        Label = ExpandKroganMaterialLabel(definition.Name, definition.Label),
         Group = GetMaterialCategory(definition.Name, definition.Kind)
-    };
+    });
 
     public string GetMaterialCategory(string parameterName, MaterialParameterKind kind)
     {
@@ -187,15 +191,6 @@ public sealed partial class KroganFeatureMetadataCatalog : IHeadEditorUiProfile
 
     private static string FeatureLabel(string name)
     {
-        if (name.Equals("Wrex", StringComparison.OrdinalIgnoreCase)) return "Wrex";
-        if (name.Equals("head_thin", StringComparison.OrdinalIgnoreCase)) return "Outer Plates — Thin";
-        if (name.Equals("shell_thin", StringComparison.OrdinalIgnoreCase)) return "Inner Plates — Thin";
-        if (name.Equals("shell_Down", StringComparison.OrdinalIgnoreCase)) return "Plate Rim Down";
-        if (name.Equals("shell_Up", StringComparison.OrdinalIgnoreCase)) return "Plate Rim Up";
-        if (name.Equals("shell_forwardSlant", StringComparison.OrdinalIgnoreCase)) return "Plate Rim Forward Slant";
-        if (name.Equals("spike_erode", StringComparison.OrdinalIgnoreCase)) return "Plate Erode";
-        if (name.Equals("spike_Smooth", StringComparison.OrdinalIgnoreCase)) return "Spikes Smooth";
-        if (name.Equals("spike_flare", StringComparison.OrdinalIgnoreCase)) return "Spikes Flare";
         var separator = name.IndexOf('_');
         var leaf = separator < 0 ? name : name[(separator + 1)..];
         var label = WordBoundary().Replace(leaf.Replace('_', ' '), " $1");
@@ -212,43 +207,6 @@ public sealed partial class KroganFeatureMetadataCatalog : IHeadEditorUiProfile
             _ => normalized
         };
     }
-
-    private static string MaterialLabel(string name, string fallback) => name switch
-    {
-        "SkinTone" => "Skin Tone",
-        "SkinLightScattering" => "Skin Light Scattering",
-        "KRO_HED_Diff" => "Diffuse Texture",
-        "KRO_HED_Norm" => "Normal Texture",
-        "KRO_HED_Mask" => "Complexion Region Mask",
-        "KRO_HED_Addn" => "Complexion Texture",
-        "KRO_HED_Tint" => "Surface Selector Texture",
-        "KRO_HED_Tnt2" => "Gradient Selector Texture",
-        "KRO_HED_Mask_Vector" => "Complexion Mask Channels",
-        "KRO_HED_Addn_Colour_Vector" => "Complexion Colour",
-        "KRO_HED_Addn_Colour_Scalar" => "Complexion Strength",
-        "KRO_HED_Face_Grad_Vector" => "Face Gradient Colour",
-        "KRO_HED_Face_Grad_Scalar" => "Face Gradient Strength",
-        "KRO_HED_Shell_Grad_Vector" => "Head Plate Gradient Colour",
-        "KRO_HED_Shell_Grad_Scalar" => "Head Plate Gradient Strength",
-        "KRO_HED_Lips_Grad_Vector" => "Lip Gradient Colour",
-        "KRO_HED_Lips_Grad_Scalar" => "Lip Gradient Strength",
-        "KRO_HED_Helmet_Tint" => "Head Plate Tint",
-        "KRO_HED_Teeth_Vector" => "Teeth Colour",
-        "KRO_HED_Shell_Spec_Add" => "Head Plate Specular Colour",
-        "KRO_HED_Spec_Add" => "Skin Specular Colour",
-        "KRO_HED_Spec_Scalar" => "Specular Strength",
-        "KRO_HED_SPwr_Scalar" => "Specular Power",
-        "Wrex_Spec_Scalar" => "Wrex Specular Blend",
-        "KRO_HED_Tmis_Scalar" => "Transmission Strength",
-        "KRO_EYE_Diff" => "Eye Diffuse Texture",
-        "KRO_Eye_Mask" => "Eye and Pupil Mask",
-        "KRO_Eye_Spec" => "Eye Specular Texture",
-        "KRO_EYE_Iris_Norm" => "Iris Normal Texture",
-        "KRO_EYE_Lens_Norm" => "Lens Normal Texture",
-        "EYE_Tint" => "Eye Tint",
-        "Krogan_Pupil" => "Pupil Scale",
-        _ => ExpandKroganMaterialLabel(name, fallback)
-    };
 
     private static string ExpandKroganMaterialLabel(string name, string fallback)
     {

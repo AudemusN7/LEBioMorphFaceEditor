@@ -59,7 +59,7 @@ public sealed partial class SalarianFeatureMetadataCatalog : IHeadEditorUiProfil
     public MorphFeatureMetadata Describe(ResolvedMorphFeature feature, bool sessionCanEdit)
     {
         var (category, subcategory) = FeaturePlacement(feature.Feature.Name);
-        return new MorphFeatureMetadata(
+        var metadata = new MorphFeatureMetadata(
             feature.Feature.Name,
             FeatureLabel(feature.Feature.Name),
             category,
@@ -71,15 +71,17 @@ public sealed partial class SalarianFeatureMetadataCatalog : IHeadEditorUiProfil
             0.01f,
             sessionCanEdit && feature.IsResolved,
             feature.Kind == MorphFeatureResolutionKind.MetadataOnly
-                ? $"{feature.Feature.Name} · preserved front-end metadata with no SAL target delta."
-                : $"{feature.Feature.Name} · {feature.ResolutionNote ?? "resolved Salarian morph target."}");
+                ? "Preserved front-end metadata with no SAL target delta."
+                : string.Empty);
+        return MetadataTextCatalog.Apply(MorphFaceMetadataCatalogRegistry.Salarian, metadata);
     }
 
-    public MaterialParameterDefinition DescribeMaterial(MaterialParameterDefinition definition) => definition with
+    public MaterialParameterDefinition DescribeMaterial(MaterialParameterDefinition definition) =>
+        MetadataTextCatalog.Apply(MorphFaceMetadataCatalogRegistry.Salarian, definition with
     {
-        Label = MaterialLabel(definition.Name, definition.Label),
+        Label = ExpandSalarianMaterialLabel(definition.Name, definition.Label),
         Group = GetMaterialCategory(definition.Name, definition.Kind)
-    };
+    });
 
     public string GetMaterialCategory(string parameterName, MaterialParameterKind kind)
     {
@@ -239,44 +241,6 @@ public sealed partial class SalarianFeatureMetadataCatalog : IHeadEditorUiProfil
             _ => normalized
         };
     }
-
-    private static string MaterialLabel(string name, string fallback) => name switch
-    {
-        "SkinTone" => "Skin Tone",
-        "SkinLightScattering" => "Skin Light Scattering",
-        "SAL_HED_Diff" => "Diffuse Texture",
-        "SAL_HED_Norm" => "Normal Texture",
-        "SAL_HED_Mask" => "Complexion and Tattoo Mask",
-        "SAL_HED_Tint" => "Surface Tint Mask",
-        "SAL_HED_Diff_02_Colour" => "Secondary Skin Colour",
-        "SAL_HED_Diffuse02_Scalar" => "Secondary Skin Blend",
-        "SAL_HED_Addn" => "Complexion Texture",
-        "SAL_HED_Addn_Mask_Vector" => "Complexion Mask Channels",
-        "SAL_HED_Addn_Mask_Scalar" => "Complexion Mask Alpha",
-        "SAL_HED_Addn_Colour" => "Complexion Colour",
-        "SAL_HED_Addn_Blend_Scalar" => "Complexion Strength",
-        "SAL_HED_Addn_Spec_Colour" => "Complexion Specular Colour",
-        "SAL_HED_Addn_Spec_Scalar" => "Complexion Specular Strength",
-        "SAL_HED_Tatt" => "Tattoo Pattern Texture",
-        "SAL_HED_Tatt_Colour" => "Tattoo Colour",
-        "SAL_HED_Tatt_01" => "Tattoo 1 Pattern Channels",
-        "SAL_HED_Tatt_01_Vector" => "Tattoo 1 Region Channels",
-        "SAL_HED_Tatt_01_Scalar" => "Tattoo 1 Region Alpha",
-        "SAL_HED_Tatt_02" => "Tattoo 2 Pattern Channels",
-        "SAL_HED_Tatt_02_Vector" => "Tattoo 2 Region Channels",
-        "SAL_HED_Tatt_02_Scalar" => "Tattoo 2 Region Alpha",
-        "SAL_HED_SpecMap" => "Specular Texture",
-        "SAL_HED_Spec_Colour" => "Specular Colour",
-        "SAL_HED_Spec_Scalar" => "Specular Power",
-        "SAL_HED_Tmis_COLOUR" => "Transmission Colour",
-        "SAL_HED_EYE_Diff" => "Eye Diffuse Texture",
-        "SAL_HED_EYE_Norm" => "Eye Normal Texture",
-        "SAL_HED_EYE_Spec" => "Eye Mask and Specular Texture",
-        "SAL_HED_EYE_Iris_Vector" => "Iris Colour",
-        "SAL_HED_EYE_Pupil_Vector" => "Pupil Colour",
-        "SAL_HED_EYE_Emis" => "Eye Emissive Strength",
-        _ => ExpandSalarianMaterialLabel(name, fallback)
-    };
 
     private static string ExpandSalarianMaterialLabel(string name, string fallback)
     {

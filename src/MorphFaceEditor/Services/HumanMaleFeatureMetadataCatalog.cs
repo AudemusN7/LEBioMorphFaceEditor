@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using MorphFaceEditor.Core.Deformation;
 using MorphFaceEditor.Core.Materials;
+using MorphFaceEditor.LegendaryExplorer;
 
 namespace MorphFaceEditor.Services;
 
@@ -42,6 +43,9 @@ public interface IHeadEditorUiProfile
 
 public class HumanMaleFeatureMetadataCatalog : IHeadEditorUiProfile
 {
+    protected virtual string TextArchetype => MorphFaceMetadataCatalogRegistry.HumanMale;
+    protected virtual MorphFaceGame? TextGame => null;
+
     public const string FacialStructure = "facial-structure";
     public const string Head = "head";
     public const string Eyes = "eyes";
@@ -90,102 +94,6 @@ public class HumanMaleFeatureMetadataCatalog : IHeadEditorUiProfile
         "teeth_canineExtend", "teeth_Narrow", "teeth_Wide"
     };
 
-    private static readonly IReadOnlyDictionary<string, string> FeatureLabels =
-        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["averageHead"] = "Average Head",
-            ["baseHead"] = "Base Head",
-            ["BONE_blinkFix"] = "Blink Fix",
-            ["DEBUG_capCorrector"] = "Scalp Cap Corrector",
-            ["DEBUG_EyeLidCorrector"] = "Eyelid Corrector",
-            ["DEBUG_InnerEyeCorrector"] = "Inner Eye Corrector",
-            ["Kaiden"] = "Kaidan",
-            ["BuzzCut"] = "Buzz Cut",
-            ["BuzzCut_WidowsPeak"] = "Buzz Cut — Widow's Peak",
-            ["flatTop"] = "Flat Top",
-            ["flatTop_WidowsPeak"] = "Flat Top — Widow's Peak",
-            ["straightHairLine"] = "Straight Hairline",
-            ["widowsPeak"] = "Widow's Peak",
-            ["HIR_Beard"] = "Beard",
-            ["HIR_BeardTipMorph"] = "Beard Tip",
-            ["HIR_TimSelect"] = "Moustache",
-            ["jaw_doublechin"] = "Double Chin",
-            ["shape_chubby"] = "Face Full",
-            ["shape_skinny"] = "Face Thin",
-            ["eyes_BallBack"] = "Eyeballs Back",
-            ["eyes_BallForward"] = "Eyeballs Forward",
-            ["eyes_BallDown"] = "Eyeballs Down",
-            ["eyes_BallUp"] = "Eyeballs Up",
-            ["eyes_Back"] = "Eyes Back",
-            ["eyes_Forward"] = "Eyes Forward",
-            ["eyes_PosDown"] = "Eyes Down",
-            ["eyes_PosUp"] = "Eyes Up",
-            ["eyes_browBack"] = "Brows Back",
-            ["eyes_browForward"] = "Brows Forward",
-            ["eyes_browDown"] = "Brows Down",
-            ["eyes_browUp"] = "Brows Up",
-            ["eyes_bagsIn"] = "Eye Bags In",
-            ["eyes_bagsOut"] = "Eye Bags Out",
-            ["eyes_lidLower"] = "Eyelid Lower",
-            ["eyes_lidUpper"] = "Eyelid Upper",
-            ["eyes_lashAngle"] = "Lashes Angle",
-            ["eyes_lashLength"] = "Lashes Length",
-            ["eyes_small"] = "Eyes Small",
-            ["eyes_Big"] = "Eyes Large",
-            ["eyes_narrow"] = "Eyes Narrow",
-            ["eyes_Wide"] = "Eyes Wide",
-            ["eyes_RotateIn"] = "Eyes Rotate In",
-            ["eyes_RotateOut"] = "Eyes Rotate Out",
-            ["eyes_SlantDown"] = "Eye Corners Down",
-            ["eyes_SlantUp"] = "Eye Corners Up",
-            ["eyes_Shape_droop"] = "Shape Droop",
-            ["eyes_Shape_flatTop"] = "Shape Flat Top",
-            ["eyes_Shape_outerPoint"] = "Shape Outer Point",
-            ["eyes_Shape_sleepy"] = "Shape Sleepy",
-            ["eyes_Shape_squint"] = "Shape Squint",
-            ["eyes_Shape_wide"] = "Shape Wide",
-            ["pupil_Small"] = "Pupil Small (Vestigial)",
-            ["pupil_Large"] = "Pupil Large (Vestigial)",
-            ["mouth_lipsFat"] = "Lips Full",
-            ["mouth_lipsThin"] = "Lips Thin",
-            ["mouthShape_thin"] = "Mouth Thin",
-            ["mouthShape_overBite"] = "Lips Overbite",
-            ["mouthShape_underBite"] = "Lips Underbite",
-            ["mouth_overBite"] = "Mouth Overbite",
-            ["mouth_underBite"] = "Mouth Underbite",
-            ["mouthShape_centerKleft"] = "Mouth Centre Cleft",
-            ["MouthShape_Diddy"] = "Mouth Diddy",
-            ["mouthShape_Philtrum"] = "Mouth Philtrum",
-            ["mouthShape_pinchedSides"] = "Mouth Pinched Sides",
-            ["mouth_LowerLipFat"] = "Lower Lip Full",
-            ["mouth_upperLipFat"] = "Upper Lip Full",
-            ["neck_apple"] = "Adam's Apple",
-            ["nose_nostrilsnarrow"] = "Nostrils Narrow",
-            ["nose_nostrilsWide"] = "Nostrils Wide",
-            ["nose_BendLeft"] = "Nose Bend Left",
-            ["nose_BendRight"] = "Nose Bend Right",
-            ["nose_BottomIn"] = "Nose Bottom In",
-            ["nose_BottomOut"] = "Nose Bottom Out",
-            ["nose_topIn"] = "Nose Top In",
-            ["nose_topOut"] = "Nose Top Out",
-            ["nose_Down"] = "Nose Down",
-            ["nose_Up"] = "Nose Up",
-            ["race_oldAsn"] = "Asian — Old",
-            ["race_yngAsn"] = "Asian — Young",
-            ["race_oldBlk"] = "Black — Old",
-            ["race_yngBlk"] = "Black — Young",
-            ["race_oldCauc"] = "Caucasian — Old",
-            ["race_yngCauc"] = "Caucasian — Young",
-            ["teeth_Chiptoothleft"] = "Teeth Chipped — Left",
-            ["teeth_Chiptoothright"] = "Teeth Chipped — Right",
-            ["teeth_frontTeeth"] = "Teeth Front",
-            ["teeth_MissingLeft"] = "Teeth Missing — Left",
-            ["teeth_NoFront"] = "Teeth Missing — Front",
-            ["teeth_Seperate"] = "Teeth Separate",
-            ["objobjWillis"] = "Willis Variant",
-            ["Willis01"] = "Willis 01"
-        };
-
     public virtual IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
     [
         new(FacialStructure, "Facial Structure", "Character likeness, race, and geometry-based hairstyles.",
@@ -209,9 +117,9 @@ public class HumanMaleFeatureMetadataCatalog : IHeadEditorUiProfile
         var (category, subcategory) = GetFeaturePlacement(feature.Feature.Name);
         var editable = sessionCanEdit && feature.IsResolved;
         var description = feature.Kind == MorphFeatureResolutionKind.MetadataOnly
-            ? $"{feature.Feature.Name} · stored character-creator metadata with no direct vertex or bone delta."
-            : $"{feature.Feature.Name} · {feature.ResolutionNote ?? "resolved morph target."}";
-        return new MorphFeatureMetadata(
+            ? "Stored character-creator metadata with no direct vertex or bone delta."
+            : string.Empty;
+        var metadata = new MorphFeatureMetadata(
             feature.Feature.Name,
             HumaniseFeatureName(feature.Feature.Name),
             category,
@@ -223,24 +131,19 @@ public class HumanMaleFeatureMetadataCatalog : IHeadEditorUiProfile
             0.01f,
             editable,
             description);
+        return MetadataTextCatalog.Apply(TextArchetype, metadata, TextGame);
     }
 
     public virtual MaterialParameterDefinition DescribeMaterial(MaterialParameterDefinition definition)
     {
         var category = GetMaterialCategory(definition.Name, definition.Kind);
-        return definition with
+        var described = definition with
         {
-            Label = HumaniseMaterialName(definition.Name, definition.Label),
+            Label = HumaniseMaterialIdentifier(definition.Name, definition.Label),
             Group = category,
-            Description = definition.Name switch
-            {
-                "HED_Mask_Scalar" =>
-                    "Weights the alpha channel of the packed face mask used by addition, scar, normal, and specular layers.",
-                "Mask" when definition.Kind == MaterialParameterKind.Scalar =>
-                    "Controls the masked scalp material's cutout. Zero follows the red channel of the scalp/teeth selector; one keeps the complete material opaque.",
-                _ => definition.Description
-            }
+            Description = definition.Description
         };
+        return MetadataTextCatalog.Apply(TextArchetype, described, TextGame);
     }
 
     public virtual bool IsMaterialVisible(string parameterName, MaterialParameterKind kind)
@@ -575,11 +478,6 @@ public class HumanMaleFeatureMetadataCatalog : IHeadEditorUiProfile
 
     private static string HumaniseFeatureName(string name)
     {
-        if (FeatureLabels.TryGetValue(name, out var mapped))
-        {
-            return AddAnatomyPrefix(name, mapped);
-        }
-
         var text = Regex.Replace(name, "^(mouthShape|eyeShape|eyes|eye|cheeks|cheek|ears|jaw|neck|nose|pupil|race|shape|teeth|HIR)_?", string.Empty, RegexOptions.IgnoreCase);
         text = SplitIdentifier(text);
         var words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries)
@@ -622,87 +520,6 @@ public class HumanMaleFeatureMetadataCatalog : IHeadEditorUiProfile
 
     private static string PrefixUnlessPresent(string prefix, string label, string existingPrefix) =>
         label.StartsWith(existingPrefix, StringComparison.OrdinalIgnoreCase) ? label : $"{prefix} {label}";
-
-    private static string HumaniseMaterialName(string name, string fallback) => name switch
-    {
-        "SkinTone" => "Skin Tone",
-        "SkinLightScattering" => "Skin Light Scattering",
-        "EyeLightScattering" => "Eye Light Scattering",
-        "U_Offset" => "Horizontal Offset",
-        "V_Offset" => "Vertical Offset",
-        "X_Tile" => "Horizontal Tiling",
-        "Y_Tile" => "Vertical Tiling",
-        "Iris_Colour_Multiplier" => "Iris Colour Strength",
-        "Sclera_Darken" => "Sclera Darkening",
-        "Primary_Reflection_Multiplier" => "Primary Reflection Strength",
-        "Secondary_Reflection_Multiplier" => "Secondary Reflection Strength",
-        "Emis_Scalar" => "Eye Emissive Strength",
-        "Emis_Color" => "Eye Emissive Colour",
-        "HED_EYE_FX_Scalar" => "Eye Effects Strength",
-        "HED_EYE_FX_Vector" => "Eye Effects Colour",
-        "Mask" => "Scalp Opacity",
-        "Tmission_Color" => "Eye Transmission Colour",
-        "HED_Diff" => "Face Diffuse Texture",
-        "HED_Mask" => "Face Mask Texture",
-        "HED_Mask_Scalar" => "Face Mask Alpha Strength",
-        "HED_Mask_Vector" => "Face Mask Channel Weights",
-        "HED_Frek" => "Freckles Texture",
-        "HED_Norm" => "Face Normal Texture",
-        "HED_Norm_02" => "Secondary Face Normal Texture",
-        "HED_Addn" => "Facial Hair / Addition Texture",
-        "HED_Brow" => "Brow Texture",
-        "HED_Scar" => "Scar Texture",
-        "HED_Addn_Blend_Scalar" => "Addition Normal Strength",
-        "HED_Addn_Add_Scalar" => "Addition Additive Blend",
-        "HED_Addn_Multiply_Scalar" => "Addition Multiplicative Blend",
-        "HED_Addn_Blowout_Scalar" => "Primary Addition Colour Strength",
-        "HED_Addn_Colour_02_Scalar" => "Secondary Addition Colour Strength",
-        "HED_Addn_Colour_Vector" => "Primary Addition Colour",
-        "HED_Addn_SPwr_Add_Scalar" => "Addition Specular Power",
-        "HED_Addn_Spec_Add_Scalar" => "Addition Specular Colour Strength",
-        "HED_Custom_Scar_Scalar" => "Scar Normal Strength",
-        "HED_Scar_Diffuse_Scalar" => "Scar Colour Strength",
-        "HED_Scar_Colour_Vector" => "Scar Emissive Color",
-        "Light_Scar_Color" or "Light_Scar_Colour" or
-        "Light_Scar_Color_Vector" or "Light_Scar_Colour_Vector" or
-        "LightScarColor" or "LightScarColour" => "Scar Emissive Color",
-        "HED_Scar_Vector" => "Scar Colour",
-        "blonde" => "Secondary Addition Colour",
-        "HED_TClr_Vector" => "Skin Transmission Colour",
-        "HED_TMis_Scalar" => "Skin Transmission Strength",
-        "HED_SPwr_Scalar" => "Specular Power",
-        "HED_Spec_Add_Vector" => "Skin Specular Colour",
-        "HED_Hair_Colour_Vector" => "Hair Colour",
-        "HED_Teeth_Vector" => "Teeth Colour",
-        "HED_Teeth_Scalar" => "Teeth Material Strength",
-        "HED_Teeth_Diff" => "Teeth Texture",
-        "EYE_Diff" => "Eye Diffuse Texture",
-        "EYE_Iris_Colour_Vector" => "Iris Colour",
-        "EYE_White_Colour_Vector" => "Sclera Colour",
-        "EYE_Iris_Norm" => "Iris Normal Texture",
-        "EYE_Lens_Norm" => "Lens Normal Texture",
-        "EYE_Mask" => "Eye Mask / Specular Texture",
-        "HAIR_Diff" => "Hair Diffuse / Opacity Texture",
-        "HAIR_ADDN_Diff" => "Hair Diffuse",
-        "HAIR_Mask" => "Hair Mask Texture",
-        "HAIR_Norm" => "Hair Normal Texture",
-        "HAIR_Tang" => "Hair Tangent Texture",
-        "HAIR_SpecShift" => "Primary Hair Specular Shift Texture",
-        "HAIR_SpecShift2" => "Secondary Hair Specular Shift Texture",
-        "HAIR_Spec_Contribution_Scalar" => "Hair Specular Strength",
-        "Hair_Spec_Aniso_Exp_Scalar" => "Hair Anisotropic Specular Strength",
-        "Highlight1SpecExp_Scalar" => "Highlight 1 Specular Exponent",
-        "Highlight2SpecExp_Scalar" => "Highlight 2 Specular Exponent",
-        "Highlight1Intensity" or "Hightlight1Intensity" => "Highlight 1 Intensity",
-        "Highlight2Intensity" or "Hightlight2Intensity" => "Highlight 2 Intensity",
-        "Highlight1Color" => "Highlight 1 Colour",
-        "Highlight2Color" => "Highlight 2 Colour",
-        "HED_Tang" => "Scalp Tangent Texture",
-        "HED_Scalp_SpecShift" => "Primary Scalp Specular Shift Texture",
-        "HED_Scalp_SpecShift2" => "Secondary Scalp Specular Shift Texture",
-        "HED_Spec_Aniso_Exp_Scalar" => "Scalp Anisotropic Specular Strength",
-        _ => HumaniseMaterialIdentifier(name, fallback)
-    };
 
     private static string HumaniseMaterialIdentifier(string name, string fallback)
     {

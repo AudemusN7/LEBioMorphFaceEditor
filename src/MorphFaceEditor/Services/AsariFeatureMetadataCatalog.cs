@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using MorphFaceEditor.Core.Deformation;
 using MorphFaceEditor.Core.Materials;
+using MorphFaceEditor.LegendaryExplorer;
 
 namespace MorphFaceEditor.Services;
 
@@ -61,11 +62,11 @@ public sealed partial class AsariFeatureMetadataCatalog : IHeadEditorUiProfile
             "lashes"
         };
 
-    private readonly bool _mouthForwardIsVestigial;
+    private readonly MorphFaceGame? _textGame;
 
-    public AsariFeatureMetadataCatalog(bool mouthForwardIsVestigial = false)
+    public AsariFeatureMetadataCatalog(MorphFaceGame? textGame = null)
     {
-        _mouthForwardIsVestigial = mouthForwardIsVestigial;
+        _textGame = textGame;
     }
 
     public IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
@@ -87,7 +88,7 @@ public sealed partial class AsariFeatureMetadataCatalog : IHeadEditorUiProfile
     public MorphFeatureMetadata Describe(ResolvedMorphFeature feature, bool sessionCanEdit)
     {
         var (category, subcategory) = FeaturePlacement(feature.Feature.Name);
-        return new MorphFeatureMetadata(
+        var metadata = new MorphFeatureMetadata(
             feature.Feature.Name,
             FeatureLabel(feature.Feature.Name),
             category,
@@ -99,21 +100,23 @@ public sealed partial class AsariFeatureMetadataCatalog : IHeadEditorUiProfile
             0.01f,
             sessionCanEdit && feature.IsResolved,
             feature.Kind == MorphFeatureResolutionKind.MetadataOnly
-                ? $"{feature.Feature.Name} · preserved front-end metadata with no ASA target delta."
-                : $"{feature.Feature.Name} · {feature.ResolutionNote ?? "resolved Asari morph target."}");
+                ? "Preserved front-end metadata with no ASA target delta."
+                : string.Empty);
+        return MetadataTextCatalog.Apply(MorphFaceMetadataCatalogRegistry.Asari, metadata, _textGame);
     }
 
     public MaterialParameterDefinition DescribeMaterial(MaterialParameterDefinition definition)
     {
         var label = definition.Family is HeadMaterialFamily.Eyes or HeadMaterialFamily.Lashes
             ? HumanUi.DescribeMaterial(definition).Label
-            : MaterialLabel(definition.Name, definition.Label);
-        return definition with
+            : ExpandAsariMaterialLabel(definition.Name, definition.Label);
+        var described = definition with
         {
             Label = label,
             Group = GetMaterialCategory(definition.Name, definition.Kind),
-            Description = MaterialDescription(definition.Name, definition.Description)
+            Description = definition.Description
         };
+        return MetadataTextCatalog.Apply(MorphFaceMetadataCatalogRegistry.Asari, described, _textGame);
     }
 
     public string GetMaterialCategory(string parameterName, MaterialParameterKind kind)
@@ -280,22 +283,6 @@ public sealed partial class AsariFeatureMetadataCatalog : IHeadEditorUiProfile
     private string FeatureLabel(string name)
     {
         var lower = name.ToLowerInvariant();
-        var explicitLabel = lower switch
-        {
-            "nose_nostrilsnarrow" => "Nostrils Narrow",
-            "nose_nostrilswide" => "Nostrils Wide",
-            "mouth_forward" => _mouthForwardIsVestigial ? "Mouth Forward (Vestigial)" : "Mouth Forward",
-            "mouth_upperlipfat" => "Upper Lip Full",
-            "mouth_lowerlipfat" => "Lower Lip Full",
-            "jaw_forward" => "Jaw Forward",
-            "jaw_wide" => "Jaw Wide",
-            _ => null
-        };
-        if (explicitLabel is not null)
-        {
-            return explicitLabel;
-        }
-
         var leaf = name[(name.IndexOf('_') + 1)..];
         var label = WordBoundary().Replace(leaf.Replace('_', ' '), " $1");
         label = string.Join(' ', label.Split(' ', StringSplitOptions.RemoveEmptyEntries)
@@ -320,60 +307,6 @@ public sealed partial class AsariFeatureMetadataCatalog : IHeadEditorUiProfile
             _ => normalized
         };
     }
-
-    private static string MaterialLabel(string name, string fallback) => name switch
-    {
-        "SkinTone" => "Skin Tone",
-        "SkinLightScattering" => "Skin Light Scattering",
-        "ASA_HED_Diff" => "Diffuse Texture",
-        "ASA_HED_Norm" => "Normal Texture",
-        "ASA_HED_Mask" => "Mask Texture",
-        "Mask" => "Teeth Opacity Mask",
-        "ASA_HED_Diffuse_02_Colour" => "Secondary Skin Colour",
-        "ASA_HED_Diffuse_02_Colour_Scalar" => "Secondary Skin Blend",
-        "ASA_HED_Addn" => "Complexion Texture",
-        "ASA_HED_Addn_Mask_Vector" => "Addition Mask Channels",
-        "ASA_HED_Addn_Mask_Scalar" => "Addition Mask Alpha",
-        "ASA_HED_Addn_Colour" => "Addition Colour",
-        "ASA_HED_Addn_Colour_Scalar" => "Addition Colour Strength",
-        "ASA_HED_MakeUp" => "Makeup Texture",
-        "ASA_HED_MakeUp_Switch_Scalar" => "Makeup Strength",
-        "ASA_HED_MakeUp_Eyes" => "Makeup Eyes Colour",
-        "ASA_HED_MakeUp_Lips" => "Makeup Lips Colour",
-        "ASA_HED_Makeup_Blender_Vector" => "Makeup Region Weights (R Lips, G Eyes, B Teeth)",
-        "ASA_HED_Tatt" => "Tattoo Texture",
-        "ASA_HED_Tatt_Colour" => "Tattoo Colour",
-        "ASA_HED_Tatt_01_Scalar" => "Tattoo 1 Region Alpha",
-        "ASA_HED_Tatt_01_Vector" => "Tattoo 1 Region Channels",
-        "ASA_HED_Tatt_01" => "Tattoo 1 Pattern Channels",
-        "ASA_HED_Tatt_02_Scalar" => "Tattoo 2 Region Alpha",
-        "ASA_HED_Tatt_02_Vector" => "Tattoo 2 Region Channels",
-        "ASA_HED_Tatt_02" => "Tattoo 2 Pattern Channels",
-        "ASA_HED_Tatt_Blender_Scalar" => "Tattoo Blend",
-        "ASA_HED_Lip_Gloss_Scalar" or "ASA_HED_Lip_Gloss" => "Lip Gloss",
-        "ASA_HED_Face_Fresnel_Scalar" => "Face Fresnel Strength",
-        "ASA_HED_Spec_Add" => "Specular Addition Colour",
-        "ASA_HED_SPwr_Add_Scalar" => "Specular Power Addition",
-        "ASA_HED_SPwr_Multiplier_Scalar" => "Specular Power Multiplier",
-        "ASA_HED_TMis_Switch" => "Transmission Strength",
-        "ASA_HED_TClr_Tint" => "Transmission Colour",
-        "ASA_HED_Teeth_Colour_Vector" => "Teeth Colour",
-        _ => ExpandAsariMaterialLabel(name, fallback)
-    };
-
-    private static string MaterialDescription(string name, string fallback) => name switch
-    {
-        "Mask" => "Controls teeth visibility. Any value under 0.33 will hide the teeth.",
-        "ASA_HED_MakeUp_Switch_Scalar" =>
-            "Overall makeup strength. The relevant Makeup Region Weight must also be above zero.",
-        "ASA_HED_MakeUp_Eyes" =>
-            "Eye-makeup colour. Its effect is selected by the makeup texture's green channel and the green Region Weight.",
-        "ASA_HED_MakeUp_Lips" =>
-            "Lip-makeup colour. Its effect is selected by the makeup texture's red channel and the red Region Weight.",
-        "ASA_HED_Makeup_Blender_Vector" =>
-            "Per-region makeup weights: red enables lips, green enables eyes, and blue enables the teeth selector. These weights multiply Makeup Strength.",
-        _ => fallback
-    };
 
     private static string ExpandAsariMaterialLabel(string name, string fallback)
     {

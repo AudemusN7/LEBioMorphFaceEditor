@@ -56,7 +56,7 @@ public sealed class MorphFeatureEditorViewModel : ObservableObject, IContinuousE
         get => _isEditable;
         private set => SetProperty(ref _isEditable, value);
     }
-    public string Description => Metadata.Description;
+    public string Description => MetadataTooltipFormatter.Format(Label, Metadata.Description);
 
     public float Value
     {

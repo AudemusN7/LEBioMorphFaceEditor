@@ -1,4 +1,5 @@
 using MorphFaceEditor.Core.Deformation;
+using MorphFaceEditor.LegendaryExplorer;
 
 namespace MorphFaceEditor.Services;
 
@@ -9,6 +10,8 @@ namespace MorphFaceEditor.Services;
 /// </summary>
 public sealed class Le3HumanFemaleFeatureMetadataCatalog : HumanFemaleFeatureMetadataCatalog
 {
+    protected override MorphFaceGame? TextGame => MorphFaceGame.LE3;
+
     public override MorphFeatureMetadata Describe(ResolvedMorphFeature feature, bool sessionCanEdit)
     {
         var metadata = base.Describe(feature, sessionCanEdit);
@@ -16,12 +19,12 @@ public sealed class Le3HumanFemaleFeatureMetadataCatalog : HumanFemaleFeatureMet
             feature.Target?.Lods.Any(lod => lod.LodIndex == 0 && lod.Vertices.Count == 0) == true &&
             feature.Target.Lods.Any(lod => lod.LodIndex > 0 && lod.Vertices.Count > 0))
         {
-            return metadata with
+            metadata = metadata with
             {
                 IsVisible = false,
-                Description = $"{feature.Feature.Name} · hidden stock LE3 target; the six nominal hair controls contain near-identical whole-face sag deltas rather than useful hair geometry."
+                Description = "Hidden stock LE3 target; the six nominal hair controls contain near-identical whole-face sag deltas rather than useful hair geometry."
             };
         }
-        return metadata;
+        return MetadataTextCatalog.Apply(TextArchetype, metadata, TextGame);
     }
 }

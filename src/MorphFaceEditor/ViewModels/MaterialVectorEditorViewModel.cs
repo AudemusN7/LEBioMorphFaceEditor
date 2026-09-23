@@ -29,7 +29,7 @@ public sealed class MaterialVectorEditorViewModel : ObservableObject
     public string Label => _definition.Label;
     public string Group => _definition.Group;
     public string CategoryKey => _definition.Group;
-    public string Description => _definition.Description;
+    public string Description => MetadataTooltipFormatter.Format(Label, _definition.Description);
     public ICommand EditCommand { get; }
     public Vector4 Value => _session.GetVector(Name);
     public string ValueSummary => $"R {Value.X:F3}  G {Value.Y:F3}  B {Value.Z:F3}  A {Value.W:F3}";

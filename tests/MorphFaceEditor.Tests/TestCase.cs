@@ -5,6 +5,10 @@ namespace MorphFaceEditor.Tests;
 // Minimal runner contract: tests remain ordinary methods without a framework dependency.
 public sealed record TestCase(string Name, Action Run);
 
+public sealed class TestSkippedException(string message) : Exception(message);
+
+public sealed class TestPartialException(string message) : Exception(message);
+
 // Assertions throw concise failures for the console runner to collect.
 public static class TestAssert
 {

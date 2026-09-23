@@ -1274,12 +1274,12 @@ public sealed class MorphFacePackageContextService
             .ToArray() ?? [];
         if (candidates.Length != 1)
         {
-            throw new InvalidDataException(
+            throw new UnresolvedRonAttachmentException(
                 $"RON SkeletalMesh '{instancedPath}' is not present in the standalone seed and does not have exactly one exact installed-game donor candidate.");
         }
         if (existingImport is not null)
         {
-            throw new InvalidDataException(
+            throw new UnresolvedRonAttachmentException(
                 $"RON SkeletalMesh '{instancedPath}' has an import placeholder in the destination; " +
                 "its exact donor cannot be materialised without replacing an import ancestry.");
         }
@@ -1311,7 +1311,7 @@ public sealed class MorphFacePackageContextService
                 {
                     hair = ResolveMeshCandidate(package, ron.HairMesh, assetCatalog, existing as ImportEntry);
                 }
-                catch (Exception exception) when (strictAssetResolution && exception is InvalidDataException or FileNotFoundException)
+                catch (UnresolvedRonAttachmentException exception) when (strictAssetResolution)
                 {
                     if (allowMissingHair)
                     {
@@ -1346,7 +1346,7 @@ public sealed class MorphFacePackageContextService
                 {
                     entry = ResolveMeshCandidate(package, path, assetCatalog, existing as ImportEntry);
                 }
-                catch (Exception exception) when (strictAssetResolution && exception is InvalidDataException or FileNotFoundException)
+                catch (UnresolvedRonAttachmentException exception) when (strictAssetResolution)
                 {
                     throw new InvalidDataException(
                         $"RON attachment '{path}' is unavailable in the selected game's installed assets; " +
@@ -1366,6 +1366,8 @@ public sealed class MorphFacePackageContextService
         }
         face.WriteProperties(properties);
     }
+
+    private sealed class UnresolvedRonAttachmentException(string message) : IOException(message);
 
     private static IEntry EnsureImport(IMEPackage destination, string instancedPath, string className)
     {

@@ -77,8 +77,7 @@ public static class UiSmokeTests
         new("editor error banners can be dismissed", ErrorBannerCanBeDismissed),
         new("texture registry settings command opens the settings dialog", TextureRegistrySettingsCommandOpensDialog),
         new("actor assignment chooser filters evidence and scopes eligibility by operation", ActorChooserFiltersAndScopesEligibility),
-        new("WPF resources construct and nested menus expose their popup", HdrPickerConstructs),
-        new("HDR picker controls preserve and scale colour vectors", HdrPickerControlsPreserveAndScale),
+        new("WPF resources, nested menus, and HDR colour controls work", HdrPickerConstructs),
         new("Human Male UI profile orders, groups, and filters features", HumanMaleProfileOrganizesFeatures),
         new("material editor hides Unreal selection colour parameters", MaterialEditorHidesSelectionColor),
         new("LE3 Human Male UI hides inert eye metadata and marks vestigial pupils", Le3HumanMaleProfileOrganizesFeatures),
@@ -2312,6 +2311,7 @@ public static class UiSmokeTests
             {
                 application = new App();
                 application.InitializeComponent();
+                HdrPickerControlsPreserveAndScale();
                 using var reader = new MorphFacePackageReader();
                 using var viewModel = CreateMainWindowViewModel(reader);
                 var mainWindow = new MainWindow(viewModel);
@@ -2450,14 +2450,15 @@ public static class UiSmokeTests
                 TestAssert.True(programIcon?.Source is not null,
                     "The startup welcome does not use the packaged program icon.");
                 TestAssert.True(programIcon!.Source.ToString()?.Contains("ico_256.png", StringComparison.Ordinal) == true &&
-                                programIcon.Width == 48 &&
+                                programIcon.Width == 64 &&
+                                programIcon.Height == 64 &&
                                 programIcon.Parent is Grid,
-                    "The startup welcome does not use the unboxed high-resolution 48px program icon.");
+                    "The startup welcome does not use the unboxed high-resolution 64px program icon.");
                 TestAssert.Equal("https://github.com/AudemusN7/LEBioMorphFaceEditor",
                     FirstRunWelcomeWindow.TutorialUri.AbsoluteUri.TrimEnd('/'));
                 TestAssert.True(databaseConsequence?.Text.Contains(
-                        "installed-game texture choices", StringComparison.Ordinal) == true &&
-                    databaseConsequence.Text.Contains("indexed installed assets", StringComparison.Ordinal) == true,
+                        "installed game texture choices", StringComparison.Ordinal) == true &&
+                    databaseConsequence.Text.Contains("index game assets", StringComparison.Ordinal) == true,
                     "The startup welcome does not explain operation without a Texture Database.");
                 welcome.Close();
                 var signedPicker = new HdrColorPickerWindow(
@@ -2558,98 +2559,74 @@ public static class UiSmokeTests
 
     private static void HdrPickerControlsPreserveAndScale()
     {
-        Exception? failure = null;
-        var thread = new Thread(() =>
-        {
-            App? application = null;
-            try
-            {
-                application = new App();
-                application.InitializeComponent();
-                var picker = new HdrColorPickerWindow("HDR colour", new Vector4(2, 0.5f, 0.25f, 1));
-                TestAssert.Equal(new Vector4(2, 0.5f, 0.25f, 1), picker.Value);
-                var red = (Slider)picker.FindName("RedSlider")!;
-                var brightness = (Slider)picker.FindName("BrightnessSlider")!;
-                var intensity = (Slider)picker.FindName("IntensitySlider")!;
-                var wheel = (MorphFaceEditor.Controls.ColorWheelControl)picker.FindName("Wheel")!;
-                var hdrLabel = (TextBlock)picker.FindName("HdrIntensityLabel")!;
-                var hdrPanel = (Grid)picker.FindName("HdrIntensityPanel")!;
-                picker.ShowInTaskbar = false;
-                picker.Opacity = 0;
-                picker.Show();
-                picker.UpdateLayout();
-                var labelBounds = hdrLabel.TransformToAncestor(hdrPanel)
-                    .TransformBounds(new Rect(new Point(0, 0), hdrLabel.RenderSize));
-                var sliderBounds = intensity.TransformToAncestor(hdrPanel)
-                    .TransformBounds(new Rect(new Point(0, 0), intensity.RenderSize));
-                TestAssert.True(labelBounds.Left >= 0 && labelBounds.Right <= hdrPanel.ActualWidth,
-                    "The HDR label extends into the wheel or preview column.");
-                TestAssert.Near((float)(sliderBounds.Left + sliderBounds.Width / 2),
-                    (float)(labelBounds.Left + labelBounds.Width / 2), 0.5f);
-                TestAssert.Equal(HorizontalAlignment.Center, intensity.HorizontalAlignment);
-                TestAssert.Equal(HorizontalAlignment.Center, hdrLabel.HorizontalAlignment);
-                TestAssert.Equal(1d, red.Maximum);
-                TestAssert.Equal(1d, brightness.Maximum);
-                TestAssert.Equal(8d, intensity.Maximum);
-                TestAssert.Near(2, (float)intensity.Value, 0.0001f);
-                intensity.Value = 4;
-                hdrLabel.GetBindingExpression(TextBlock.TextProperty)!.UpdateTarget();
-                TestAssert.Equal("HDR: 4.000x", hdrLabel.Text);
-                TestAssert.Near(new Vector3(4, 1, 0.5f),
-                    new Vector3(picker.Value.X, picker.Value.Y, picker.Value.Z), 0.0001f);
-                brightness.Value = 0.5;
-                TestAssert.Near(1, (float)wheel.Brightness, 0.0001f);
-                TestAssert.Near(new Vector3(2, 0.5f, 0.25f),
-                    new Vector3(picker.Value.X, picker.Value.Y, picker.Value.Z), 0.0001f);
-                brightness.Value = 0.1;
-                intensity.Value = 8;
-                TestAssert.Near(0.8f, (float)wheel.Brightness, 0.0001f);
-                TestAssert.Near(new Vector3(0.8f, 0.2f, 0.1f),
-                    new Vector3(picker.Value.X, picker.Value.Y, picker.Value.Z), 0.0001f);
-                brightness.Value = 0;
-                TestAssert.Near(0, (float)wheel.Brightness, 0.0001f);
-                picker.Close();
+        var picker = new HdrColorPickerWindow("HDR colour", new Vector4(2, 0.5f, 0.25f, 1));
+        TestAssert.Equal(new Vector4(2, 0.5f, 0.25f, 1), picker.Value);
+        var red = (Slider)picker.FindName("RedSlider")!;
+        var brightness = (Slider)picker.FindName("BrightnessSlider")!;
+        var intensity = (Slider)picker.FindName("IntensitySlider")!;
+        var wheel = (MorphFaceEditor.Controls.ColorWheelControl)picker.FindName("Wheel")!;
+        var hdrLabel = (TextBlock)picker.FindName("HdrIntensityLabel")!;
+        var hdrPanel = (Grid)picker.FindName("HdrIntensityPanel")!;
+        picker.ShowInTaskbar = false;
+        picker.Opacity = 0;
+        picker.Show();
+        picker.UpdateLayout();
+        var labelBounds = hdrLabel.TransformToAncestor(hdrPanel)
+            .TransformBounds(new Rect(new Point(0, 0), hdrLabel.RenderSize));
+        var sliderBounds = intensity.TransformToAncestor(hdrPanel)
+            .TransformBounds(new Rect(new Point(0, 0), intensity.RenderSize));
+        TestAssert.True(labelBounds.Left >= 0 && labelBounds.Right <= hdrPanel.ActualWidth,
+            "The HDR label extends into the wheel or preview column.");
+        TestAssert.Near((float)(sliderBounds.Left + sliderBounds.Width / 2),
+            (float)(labelBounds.Left + labelBounds.Width / 2), 0.5f);
+        TestAssert.Equal(HorizontalAlignment.Center, intensity.HorizontalAlignment);
+        TestAssert.Equal(HorizontalAlignment.Center, hdrLabel.HorizontalAlignment);
+        TestAssert.Equal(1d, red.Maximum);
+        TestAssert.Equal(1d, brightness.Maximum);
+        TestAssert.Equal(8d, intensity.Maximum);
+        TestAssert.Near(2, (float)intensity.Value, 0.0001f);
+        intensity.Value = 4;
+        hdrLabel.GetBindingExpression(TextBlock.TextProperty)!.UpdateTarget();
+        TestAssert.Equal("HDR: 4.000x", hdrLabel.Text);
+        TestAssert.Near(new Vector3(4, 1, 0.5f),
+            new Vector3(picker.Value.X, picker.Value.Y, picker.Value.Z), 0.0001f);
+        brightness.Value = 0.5;
+        TestAssert.Near(1, (float)wheel.Brightness, 0.0001f);
+        TestAssert.Near(new Vector3(2, 0.5f, 0.25f),
+            new Vector3(picker.Value.X, picker.Value.Y, picker.Value.Z), 0.0001f);
+        brightness.Value = 0.1;
+        intensity.Value = 8;
+        TestAssert.Near(0.8f, (float)wheel.Brightness, 0.0001f);
+        TestAssert.Near(new Vector3(0.8f, 0.2f, 0.1f),
+            new Vector3(picker.Value.X, picker.Value.Y, picker.Value.Z), 0.0001f);
+        brightness.Value = 0;
+        TestAssert.Near(0, (float)wheel.Brightness, 0.0001f);
+        picker.Close();
 
-                var extended = new HdrColorPickerWindow("Signed colour",
-                    new Vector4(-0.5f, 0.25f, 1.5f, -0.25f), extendedSliders: true);
-                TestAssert.Equal(new Vector4(-0.5f, 0.25f, 1.5f, -0.25f), extended.Value);
-                TestAssert.Equal(-1d, ((Slider)extended.FindName("RedSlider")!).Minimum);
-                var signedBrightness = (Slider)extended.FindName("BrightnessSlider")!;
-                TestAssert.Equal(-1d, signedBrightness.Minimum);
-                signedBrightness.Value = -1;
-                TestAssert.Near(new Vector3(0.5f, -0.25f, -1.5f),
-                    new Vector3(extended.Value.X, extended.Value.Y, extended.Value.Z), 0.0001f);
-                TestAssert.Equal(-0.25f, extended.Value.W);
-                extended.Close();
+        var extended = new HdrColorPickerWindow("Signed colour",
+            new Vector4(-0.5f, 0.25f, 1.5f, -0.25f), extendedSliders: true);
+        TestAssert.Equal(new Vector4(-0.5f, 0.25f, 1.5f, -0.25f), extended.Value);
+        TestAssert.Equal(-1d, ((Slider)extended.FindName("RedSlider")!).Minimum);
+        var signedBrightness = (Slider)extended.FindName("BrightnessSlider")!;
+        TestAssert.Equal(-1d, signedBrightness.Minimum);
+        signedBrightness.Value = -1;
+        TestAssert.Near(new Vector3(0.5f, -0.25f, -1.5f),
+            new Vector3(extended.Value.X, extended.Value.Y, extended.Value.Z), 0.0001f);
+        TestAssert.Equal(-0.25f, extended.Value.W);
+        extended.Close();
 
-                var overRange = new HdrColorPickerWindow("Older vector", new Vector4(9, -2, 1, 1.5f));
-                TestAssert.Equal(new Vector4(9, -2, 1, 1.5f), overRange.Value);
-                ((Slider)overRange.FindName("AlphaSlider")!).Value = 0.5;
-                TestAssert.Equal(new Vector4(9, -2, 1, 0.5f), overRange.Value);
-                overRange.Close();
+        var overRange = new HdrColorPickerWindow("Older vector", new Vector4(9, -2, 1, 1.5f));
+        TestAssert.Equal(new Vector4(9, -2, 1, 1.5f), overRange.Value);
+        ((Slider)overRange.FindName("AlphaSlider")!).Value = 0.5;
+        TestAssert.Equal(new Vector4(9, -2, 1, 0.5f), overRange.Value);
+        overRange.Close();
 
-                var background = new HdrColorPickerWindow("Background",
-                    new Vector4(0.2f, 0.4f, 0.6f, 0.25f), allowHdr: false);
-                TestAssert.Equal(new Vector4(0.2f, 0.4f, 0.6f, 1), background.Value);
-                TestAssert.Equal(Visibility.Collapsed,
-                    ((FrameworkElement)background.FindName("HdrIntensityPanel")!).Visibility);
-                background.Close();
-            }
-            catch (Exception exception)
-            {
-                failure = exception;
-            }
-            finally
-            {
-                application?.Shutdown();
-            }
-        });
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-        if (!thread.Join(TimeSpan.FromSeconds(10)))
-            throw new TimeoutException("HDR colour control test did not finish within ten seconds.");
-        if (failure is not null)
-            throw new Exception($"HDR colour controls failed: {failure.Message}", failure);
+        var background = new HdrColorPickerWindow("Background",
+            new Vector4(0.2f, 0.4f, 0.6f, 0.25f), allowHdr: false);
+        TestAssert.Equal(new Vector4(0.2f, 0.4f, 0.6f, 1), background.Value);
+        TestAssert.Equal(Visibility.Collapsed,
+            ((FrameworkElement)background.FindName("HdrIntensityPanel")!).Visibility);
+        background.Close();
     }
 
     private static void MaterialVectorSubcategoriesRandomiseIndependently()

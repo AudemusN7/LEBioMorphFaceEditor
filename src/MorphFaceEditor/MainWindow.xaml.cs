@@ -29,6 +29,9 @@ public partial class MainWindow : Window
         DarkTitleBar.Apply(this);
         _viewModel = viewModel;
         DataContext = viewModel;
+        FaceList.InputBindings.Add(new KeyBinding(
+            _viewModel.LoadSelectedFaceCommand,
+            new KeyGesture(Key.Enter)));
         _previewHost = new HeadPreviewHostController(this, PreviewHost, PreviewImage);
         _orbitInput = new OrbitInputController(PreviewHost, _previewHost.Camera, () => _previewHost.RequestRender());
         _numericWheelCommitTimer = new DispatcherTimer

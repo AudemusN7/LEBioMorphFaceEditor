@@ -10,9 +10,40 @@ namespace MorphFaceEditor.LegendaryExplorer;
 /// </summary>
 internal static class MaterialisationVerifier
 {
-    internal static void Relink(RelinkerOptionsPackage options)
+    internal static void Relink(
+        RelinkerOptionsPackage options,
+        IReadOnlySet<ExportEntry>? preexistingExports = null)
     {
-        try { Relinker.RelinkAll(options); }
+        try
+        {
+            if (preexistingExports is null ||
+                !options.CrossPackageMap.Any(pair => pair.Value is ExportEntry target &&
+                                                     preexistingExports.Contains(target)))
+            {
+                Relinker.RelinkAll(options);
+            }
+            else
+            {
+                // Keep mappings to existing exports for references in new objects, but
+                // never relink an existing destination binary as if it still held donor indices.
+                var processedSources = new HashSet<IEntry>();
+                while (true)
+                {
+                    var next = options.CrossPackageMap.FirstOrDefault(pair =>
+                        pair.Key is ExportEntry && pair.Value is ExportEntry &&
+                        !processedSources.Contains(pair.Key));
+                    if (next.Key is not ExportEntry source || next.Value is not ExportEntry target)
+                    {
+                        break;
+                    }
+                    processedSources.Add(source);
+                    if (!preexistingExports.Contains(target))
+                    {
+                        Relinker.Relink(source, target, options);
+                    }
+                }
+            }
+        }
         catch (Exception exception)
         {
             var rootPair = options.CrossPackageMap.FirstOrDefault(pair => pair.Key is ExportEntry && pair.Value is ExportEntry);

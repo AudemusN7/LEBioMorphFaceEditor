@@ -220,6 +220,8 @@ internal static class PccPackageWorkflow
         private readonly bool _preferBiogTextures;
         private readonly ICollection<string>? _warnings;
         private readonly bool _applyCorpusMaterialPolicy;
+        private readonly IReadOnlySet<CorpusRoleIssue> _baselineCorpusRoleIssues;
+        private readonly IReadOnlySet<ExportEntry> _preexistingExports;
         private readonly PackageCache _cache = new() { CacheMaxSize = 64 };
         private readonly GamePackageReferenceResolver _resolver;
         private readonly RelinkerOptionsPackage _relinker;
@@ -238,6 +240,10 @@ internal static class PccPackageWorkflow
             _preferBiogTextures = preferBiogTextures;
             _warnings = warnings;
             _applyCorpusMaterialPolicy = applyCorpusMaterialPolicy;
+            _baselineCorpusRoleIssues = applyCorpusMaterialPolicy
+                ? CaptureCorpusRoleIssues(destination)
+                : new HashSet<CorpusRoleIssue>(CorpusRoleIssueComparer.Instance);
+            _preexistingExports = destination.Exports.ToHashSet();
             _resolver = new GamePackageReferenceResolver(_cache);
             _relinker = new RelinkerOptionsPackage(_cache)
             {
@@ -264,7 +270,7 @@ internal static class PccPackageWorkflow
             var root = MaterializeExport(source, targetPath, destinationParent, forceExport: true) as ExportEntry
                        ?? throw new InvalidDataException(
                            $"The authored {source.ClassName} '{source.InstancedFullPath}' was not staged as an export.");
-            MaterialisationVerifier.Relink(_relinker);
+            MaterialisationVerifier.Relink(_relinker, _preexistingExports);
             MaterialisationVerifier.Verify(root, source.Game, _relinker, _warnings);
             foreach (var (textureSource, textureDestination) in _textures)
             {
@@ -272,7 +278,7 @@ internal static class PccPackageWorkflow
             }
             if (_applyCorpusMaterialPolicy)
             {
-                VerifyCorpusRoles(_destination);
+                VerifyCorpusRoles(_destination, _baselineCorpusRoleIssues);
             }
             return root;
         }
@@ -532,7 +538,11 @@ internal static class PccPackageWorkflow
     }
 
     private static void VerifyCorpusRoles(IMEPackage package)
+        => VerifyCorpusRoles(package, new HashSet<CorpusRoleIssue>(CorpusRoleIssueComparer.Instance));
+
+    private static HashSet<CorpusRoleIssue> CaptureCorpusRoleIssues(IMEPackage package)
     {
+        var issues = new HashSet<CorpusRoleIssue>(CorpusRoleIssueComparer.Instance);
         foreach (var entry in package.Exports.Cast<IEntry>().Concat(package.Imports))
         {
             if (entry.ClassName.Equals("Package", StringComparison.OrdinalIgnoreCase))
@@ -552,11 +562,42 @@ internal static class PccPackageWorkflow
                 : MaterialOracleEntryKind.Import;
             if (actual != expected)
             {
-                throw new InvalidDataException(
-                    $"Native corpus role mismatch for {entry.ClassName} '{CanonicalPath(entry)}': " +
-                    $"expected {expected}, saved {actual}.");
+                issues.Add(new CorpusRoleIssue(entry.ClassName, CanonicalPath(entry), expected, actual));
             }
         }
+        return issues;
+    }
+
+    private static void VerifyCorpusRoles(IMEPackage package, IReadOnlySet<CorpusRoleIssue> baselineIssues)
+    {
+        foreach (var issue in CaptureCorpusRoleIssues(package).Except(baselineIssues, CorpusRoleIssueComparer.Instance))
+        {
+            throw new InvalidDataException(
+                $"Native corpus role mismatch for {issue.ClassName} '{issue.Path}': " +
+                $"expected {issue.Expected}, saved {issue.Actual}.");
+        }
+    }
+
+    private readonly record struct CorpusRoleIssue(
+        string ClassName,
+        string Path,
+        MaterialOracleEntryKind Expected,
+        MaterialOracleEntryKind Actual);
+
+    private sealed class CorpusRoleIssueComparer : IEqualityComparer<CorpusRoleIssue>
+    {
+        internal static CorpusRoleIssueComparer Instance { get; } = new();
+
+        public bool Equals(CorpusRoleIssue left, CorpusRoleIssue right) =>
+            StringComparer.OrdinalIgnoreCase.Equals(left.ClassName, right.ClassName) &&
+            StringComparer.OrdinalIgnoreCase.Equals(left.Path, right.Path) &&
+            left.Expected == right.Expected && left.Actual == right.Actual;
+
+        public int GetHashCode(CorpusRoleIssue issue) => HashCode.Combine(
+            StringComparer.OrdinalIgnoreCase.GetHashCode(issue.ClassName),
+            StringComparer.OrdinalIgnoreCase.GetHashCode(issue.Path),
+            issue.Expected,
+            issue.Actual);
     }
 
     private static IEntry EnsureImport(IMEPackage destination, string path, string className)

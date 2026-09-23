@@ -276,9 +276,6 @@
                              MouseDoubleClick="OnFaceListDoubleClick"
                              PreviewMouseRightButtonDown="OnFaceListRightButtonDown"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                        <ListBox.InputBindings>
-                            <KeyBinding Key="Enter" Command="{Binding LoadSelectedFaceCommand}" />
-                        </ListBox.InputBindings>
                         <ListBox.ContextMenu>
                             <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}"
                                          Opened="OnFaceContextMenuOpened">

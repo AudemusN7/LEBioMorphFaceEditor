@@ -202,6 +202,14 @@ public partial class MainWindow : Window
         }
     }
 
+    private void OnCommittedTextureMouseEnter(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: MaterialTextureEditorViewModel editor })
+        {
+            _ = editor.SelectedTexture?.EnsureThumbnailAsync();
+        }
+    }
+
     private void OnNumericValueKeyDown(object sender, KeyEventArgs e)
     {
         if (sender is not TextBox textBox)

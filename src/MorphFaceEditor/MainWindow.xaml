@@ -147,8 +147,23 @@
                             <ColumnDefinition Width="46" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <Border Width="40" Height="40" Background="#0B0E12" BorderBrush="#88939CA7" BorderThickness="1" CornerRadius="3">
+                        <Border Width="40" Height="40" Background="#0B0E12" BorderBrush="#88939CA7" BorderThickness="1" CornerRadius="3"
+                                MouseEnter="OnCommittedTextureMouseEnter">
                             <Image Source="{Binding PreviewThumbnail}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" />
+                            <Border.ToolTip>
+                                <Border Background="{StaticResource PanelBackground}"
+                                        BorderBrush="{StaticResource BorderBrush}"
+                                        BorderThickness="1" Padding="8">
+                                    <StackPanel>
+                                        <Image Source="{Binding PreviewThumbnail}" Width="192" Height="192"
+                                               Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" />
+                                        <TextBlock Text="{Binding SourceName}" Foreground="{StaticResource SecondaryText}"
+                                                   FontSize="10" Margin="0,6,0,0" MaxWidth="260" TextWrapping="Wrap" />
+                                        <TextBlock Text="{Binding Details}" Foreground="{StaticResource MutedText}"
+                                                   FontSize="10" Margin="0,3,0,0" MaxWidth="260" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+                            </Border.ToolTip>
                         </Border>
                         <StackPanel Grid.Column="1" Margin="7,0,0,0" VerticalAlignment="Center">
                             <TextBlock Text="{Binding Label}" Foreground="{StaticResource PrimaryText}" FontSize="12" />

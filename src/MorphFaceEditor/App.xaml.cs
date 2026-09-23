@@ -57,6 +57,7 @@ public partial class App : Application
             detachedMeshPreviewLoadService: new DetachedMeshPreviewLoadService(
                 sceneFactory,
                 materialCatalog: new CustomMaterialTemplateCatalogService(packageReader, textureRegistryStore)));
+        textureRegistrySettings.DatabaseChanged += _viewModel.RefreshTextureRegistry;
         var window = new MainWindow(_viewModel);
         MainWindow = window;
         window.Show();

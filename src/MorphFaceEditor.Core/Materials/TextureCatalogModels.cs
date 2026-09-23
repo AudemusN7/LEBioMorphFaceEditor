@@ -13,7 +13,8 @@ public enum TextureCatalogOrigin
 {
     BaseGame,
     OfficialDlc,
-    Mod
+    Mod,
+    Manual
 }
 
 /// <summary>
@@ -39,6 +40,7 @@ public sealed record TextureCatalogOccurrence(
         TextureCatalogOrigin.BaseGame => "Base game",
         TextureCatalogOrigin.OfficialDlc => "Official DLC",
         TextureCatalogOrigin.Mod => "Mod",
+        TextureCatalogOrigin.Manual => "Custom",
         _ => Origin.ToString()
     };
 }
@@ -84,13 +86,15 @@ public static class TextureCatalogPicker
             .GroupBy(value => value.Canonical, StringComparer.OrdinalIgnoreCase)
             .SelectMany(group =>
             {
-                var biog = group.Where(value => IsBiogPackage(value.Occurrence.PackagePath))
+                var biog = group.Where(value => value.Occurrence.Origin != TextureCatalogOrigin.Manual &&
+                                                IsBiogPackage(value.Occurrence.PackagePath))
                     .OrderByDescending(value => value.Occurrence.MountPriority)
                     .ThenBy(value => value.Occurrence.PackagePath, StringComparer.OrdinalIgnoreCase)
                     .FirstOrDefault();
                 var primary = biog.Candidate is not null
                     ? biog
-                    : group.OrderByDescending(value => value.Occurrence.MountPriority)
+                    : group.OrderBy(value => value.Occurrence.Origin == TextureCatalogOrigin.Manual)
+                        .ThenByDescending(value => value.Occurrence.MountPriority)
                         .ThenBy(value => value.Occurrence.PackagePath, StringComparer.OrdinalIgnoreCase)
                         .First();
                 var result = new List<TextureCatalogCandidate>
@@ -106,6 +110,12 @@ public static class TextureCatalogPicker
                         .FirstOrDefault();
                     if (modOverride.Candidate is not null)
                         result.Add(modOverride.Candidate with { EffectiveOccurrence = modOverride.Occurrence });
+                }
+                foreach (var manual in group.Where(value => value.Occurrence.Origin == TextureCatalogOrigin.Manual)
+                             .DistinctBy(value => (value.Occurrence.PackagePath, value.Occurrence.ExportUIndex)))
+                {
+                    if (!ReferenceEquals(manual.Occurrence, primary.Occurrence))
+                        result.Add(manual.Candidate with { EffectiveOccurrence = manual.Occurrence });
                 }
                 return result;
             })

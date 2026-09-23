@@ -82,7 +82,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
     public bool HasExternalRegistrySelection => SelectedTexture?.RegistryCandidate is not null;
     public string RegistryStatusLabel => _isRegistryAvailable
         ? $"{_registryCandidates.Count:N0} installed choices · {_localCandidates.Count:N0} open-package choices"
-        : $"{_localCandidates.Count:N0} open-package choices · installed choices unavailable — build the active game's registry in Texture Databases.";
+        : $"{_localCandidates.Count:N0} open-package choices · installed choices unavailable — build the active game's database in Mesh/Texture Databases.";
     public string SearchText
     {
         get => _searchText;

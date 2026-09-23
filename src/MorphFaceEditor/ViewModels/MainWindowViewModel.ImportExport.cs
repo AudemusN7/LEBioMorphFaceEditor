@@ -264,7 +264,7 @@ public sealed partial class MainWindowViewModel
             if (!textureCatalog.IsAvailable)
             {
                 throw new InvalidOperationException(
-                    $"The {targetGame} texture database is unavailable. Build it in Texture Databases before importing an NPC RON.");
+                    $"The {targetGame} mesh/texture database is unavailable. Build it in Mesh/Texture Databases before importing an NPC RON.");
             }
             var donor = new RonNpcDonorResolver(MorphFaceProfileRegistry.CreateDefault())
                 .Resolve(targetGame, archetype, textureCatalog.MorphFaceTemplates);
@@ -274,7 +274,7 @@ public sealed partial class MainWindowViewModel
             if (!sourceCatalog.IsAvailable)
             {
                 throw new InvalidOperationException(
-                    $"The {sourceGame} texture database is unavailable. Build it in Texture Databases before transferring this NPC RON.");
+                    $"The {sourceGame} mesh/texture database is unavailable. Build it in Mesh/Texture Databases before transferring this NPC RON.");
             }
             var assets = await Task.Run(() => StandalonePlayerAssetCatalog.ForRon(
                 targetGame, sourcePath, textureCatalog.Candidates, donor.PackagePath), cancellationToken);

@@ -212,7 +212,7 @@
                             <MenuItem Header="Exit" Command="{Binding ExitCommand}" />
                         </MenuItem>
                     </Menu>
-                    <Button Content="Texture Databases" Command="{Binding TextureRegistrySettingsCommand}"
+                    <Button Content="Mesh/Texture Databases" Command="{Binding TextureRegistrySettingsCommand}"
                             Height="30" Padding="10,3" Margin="7,0,0,0"
                             ToolTip="Manage the game-wide Texture2D registries" />
                 </StackPanel>

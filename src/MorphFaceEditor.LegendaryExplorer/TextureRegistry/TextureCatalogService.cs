@@ -22,7 +22,8 @@ public sealed class TextureCatalogService(TextureRegistryStore store)
         MorphFaceGame game,
         CancellationToken cancellationToken = default)
     {
-        var fingerprint = store.GetFileFingerprint(game);
+        var fingerprint = (Installed: store.GetFileFingerprint(game),
+            Manual: store.GetManualFileFingerprint(game));
         lock (_cacheLock)
         {
             if (_cache.TryGetValue(game, out var cached) && cached.Fingerprint == fingerprint)
@@ -33,7 +34,8 @@ public sealed class TextureCatalogService(TextureRegistryStore store)
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            fingerprint = store.GetFileFingerprint(game);
+            fingerprint = (Installed: store.GetFileFingerprint(game),
+                Manual: store.GetManualFileFingerprint(game));
             lock (_cacheLock)
             {
                 if (_cache.TryGetValue(game, out var cached) && cached.Fingerprint == fingerprint)
@@ -45,8 +47,17 @@ public sealed class TextureCatalogService(TextureRegistryStore store)
             var status = stored.Status;
             if (stored.Snapshot is not { } snapshot)
                 return new TextureCatalogReadResult(status, [], []);
+            var manual = store.ReadManualWithStatus(game);
+            if (manual.Status.State == TextureRegistryState.Ready && manual.Snapshot is not null)
+                snapshot = TextureRegistryManualAssetService.Combine(snapshot, manual.Snapshot);
+            else if (manual.Status.State is not TextureRegistryState.Missing)
+                status = status with
+                {
+                    ErrorMessage = $"Custom asset database is {manual.Status.State}: {manual.Status.ErrorMessage}"
+                };
             cancellationToken.ThrowIfCancellationRequested();
-            fingerprint = store.GetFileFingerprint(game);
+            fingerprint = (Installed: store.GetFileFingerprint(game),
+                Manual: store.GetManualFileFingerprint(game));
             lock (_cacheLock) _cache[game] = new CachedCatalog(
                 fingerprint, status, snapshot.Candidates, snapshot.MorphFaceTemplates,
                 snapshot.AttachmentMeshes);
@@ -65,7 +76,8 @@ public sealed class TextureCatalogService(TextureRegistryStore store)
     }
 
     private sealed record CachedCatalog(
-        (string Path, long Length, DateTime LastWriteTimeUtc)? Fingerprint,
+        ((string Path, long Length, DateTime LastWriteTimeUtc)? Installed,
+            (string Path, long Length, DateTime LastWriteTimeUtc)? Manual) Fingerprint,
         TextureRegistryStatus Status,
         IReadOnlyList<TextureCatalogCandidate> Candidates,
         IReadOnlyList<MorphFaceTemplateCandidate> MorphFaceTemplates,

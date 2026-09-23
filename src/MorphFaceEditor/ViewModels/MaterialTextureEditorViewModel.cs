@@ -76,7 +76,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
     public string Label => _definition.Label;
     public string Group => _definition.Group;
     public string CategoryKey => _definition.Group;
-    public string Description => _definition.Description;
+    public string Description => MetadataTooltipFormatter.Format(Label, _definition.Description);
     public IReadOnlyList<MaterialTextureOption> Candidates { get; private set; }
     public bool IsRegistryAvailable => _isRegistryAvailable;
     public bool HasExternalRegistrySelection => SelectedTexture?.RegistryCandidate is not null;

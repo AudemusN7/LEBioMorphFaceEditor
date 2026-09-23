@@ -96,7 +96,7 @@ public sealed partial class TurianFeatureMetadataCatalog : IHeadEditorUiProfile
     public MorphFeatureMetadata Describe(ResolvedMorphFeature feature, bool sessionCanEdit)
     {
         var (category, subcategory) = FeaturePlacement(feature.Feature.Name);
-        return new MorphFeatureMetadata(
+        var metadata = new MorphFeatureMetadata(
             feature.Feature.Name,
             FeatureLabel(feature.Feature.Name),
             category,
@@ -108,15 +108,17 @@ public sealed partial class TurianFeatureMetadataCatalog : IHeadEditorUiProfile
             0.01f,
             sessionCanEdit && feature.IsResolved,
             feature.Kind == MorphFeatureResolutionKind.MetadataOnly
-                ? $"{feature.Feature.Name} · preserved front-end metadata with no TUR target delta."
-                : $"{feature.Feature.Name} · {feature.ResolutionNote ?? "resolved Turian morph target."}");
+                ? "Preserved front-end metadata with no TUR target delta."
+                : string.Empty);
+        return MetadataTextCatalog.Apply(MorphFaceMetadataCatalogRegistry.Turian, metadata);
     }
 
-    public MaterialParameterDefinition DescribeMaterial(MaterialParameterDefinition definition) => definition with
+    public MaterialParameterDefinition DescribeMaterial(MaterialParameterDefinition definition) =>
+        MetadataTextCatalog.Apply(MorphFaceMetadataCatalogRegistry.Turian, definition with
     {
-        Label = MaterialLabel(definition.Name, definition.Label),
+        Label = ExpandTurianMaterialLabel(definition.Name, definition.Label),
         Group = GetMaterialCategory(definition.Name, definition.Kind)
-    };
+    });
 
     public string GetMaterialCategory(string parameterName, MaterialParameterKind kind)
     {
@@ -210,7 +212,6 @@ public sealed partial class TurianFeatureMetadataCatalog : IHeadEditorUiProfile
 
     private static string FeatureLabel(string name)
     {
-        if (name.Equals("head_ScaleUp", StringComparison.OrdinalIgnoreCase)) return "Head Scale Up";
         var leaf = name[(name.IndexOf('_') + 1)..];
         var label = WordBoundary().Replace(leaf.Replace('_', ' '), " $1");
         var normalized = string.Join(' ', label.Split(' ', StringSplitOptions.RemoveEmptyEntries)
@@ -229,58 +230,6 @@ public sealed partial class TurianFeatureMetadataCatalog : IHeadEditorUiProfile
             _ => normalized
         };
     }
-
-    private static string MaterialLabel(string name, string fallback) => name switch
-    {
-        "SkinTone" => "Skin Tone",
-        "SkinLightScattering" => "Skin Light Scattering",
-        "TUR_HED_Diff" => "Diffuse Texture",
-        "TUR_HED_Norm" => "Normal Texture",
-        "TUR_HED_Mask" => "Face Region Mask",
-        "TUR_HED_Tint" => "Surface Tint Mask",
-        "Mask" => "Teeth Opacity Mask",
-        "TUR_HED_Diff_02_Colour" => "Secondary Skin Colour",
-        "TUR_HED_Diffuse02_Scalar" => "Secondary Skin Blend",
-        "TUR_HED_Addn" => "Complexion Texture",
-        "TUR_HED_Addn_Mask_Vector" => "Complexion Region Channels",
-        "TUR_HED_Addn_Colour" => "Complexion Colour",
-        "TUR_HED_Addn_Spec_Colour" => "Complexion Specular Colour",
-        "TUR_HED_Tatt" => "Tattoo Pattern Texture",
-        "TUR_HED_Tatt_Colour" => "Tattoo Colour",
-        "TUR_HED_Tatt_01" => "Tattoo 1 Pattern Channels",
-        "TUR_HED_Tatt_01_Vector" => "Tattoo 1 Region Channels",
-        "TUR_HED_Tatt_01_Scalar" => "Tattoo 1 Region Alpha",
-        "TUR_HED_Tatt_02" => "Tattoo 2 Pattern Channels",
-        "TUR_HED_Tatt_02_Vector" => "Tattoo 2 Region Channels",
-        "TUR_HED_Tatt_02_Scalar" => "Tattoo 2 Region Alpha",
-        "TUR_HED_Tatt_Spec_Colour" => "Tattoo Specular Colour",
-        "TUR_HED_Diff_Tint_Bone" => "Bone Plate Tint",
-        "TUR_HED_Diff_Tint_Socket" => "Eye Socket Tint",
-        "TUR_HED_Diff_Tint_Teeth" => "Teeth Colour",
-        "TUR_HED_Spec_Colour" => "Skin Specular Colour",
-        "TUR_HED_Spwr_Skin_Scalar" => "Skin Specular Power",
-        "TUR_HED_Spwr_Bone_Scalar" => "Bone Specular Power",
-        "TUR_HED_TMis_Multiplier" => "Transmission Strength",
-        "TUR_EYE_Diff" => "Eye Diffuse Texture",
-        "TUR_EYE_Mask" => "Sclera and Iris Mask",
-        "TUR_Eye_Spec" => "Eye Specular Texture",
-        "TUR_EYE_Iris_Norm" => "Iris Normal Texture",
-        "TUR_EYE_Lens_Norm" => "Lens Normal Texture",
-        "EYE_Tint" => "Eye Tint",
-        "Eye_Pupil" => "Pupil Scale",
-        "TUR_EYE_Iris_Spec_Colour_Vector" => "Iris Specular Colour",
-        "TUR_EYE_Lens_Spec_Colour_Vector" => "Lens Specular Colour",
-        "TUR_EYE_White_Spec_Colour_Vector" => "Sclera Specular Colour",
-        "TUR_EYE_Iris_SPwr_Scalar" => "Iris Specular Power",
-        "TUR_EYE_Lens_SPwr_Scalar" => "Lens Specular Power",
-        "TUR_EYE_White_SPwr_Scalar" => "Sclera Specular Power",
-        "EYE_Diff" => "Eye Diffuse Texture",
-        "Eye_Norm" => "Eye Normal Texture",
-        "CubeMap_Intensity" => "Eye Reflection Strength",
-        "Eye_Specular" => "Eye Specular Strength",
-        "EYE_Spec_Power" => "Eye Specular Power",
-        _ => ExpandTurianMaterialLabel(name, fallback)
-    };
 
     private static string ExpandTurianMaterialLabel(string name, string fallback)
     {

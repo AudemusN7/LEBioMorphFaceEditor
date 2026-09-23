@@ -90,7 +90,8 @@ public static class UiSmokeTests
         new("Krogan UI profile separates head plates and Wrex character controls", KroganProfileOrganizesFeatures),
         new("Vorcha UI keeps reconstructed morphs hidden and bones editable", VorchaProfileIsMaterialAndBoneOnly),
         new("Female Turian UI exposes Turian materials without inherited geometry controls", FemaleTurianProfileIsMaterialOnly),
-        new("detached mesh UI reuses racial material presentation", DetachedMeshProfileUsesRacialMaterialPresentation)
+        new("detached mesh UI reuses racial material presentation", DetachedMeshProfileUsesRacialMaterialPresentation),
+        new("metadata text inherits shared archetype and game variants", MetadataTextInheritsAcrossProfiles)
     ];
 
     private static void EditorFileDropsRecogniseSupportedFormats()
@@ -2806,7 +2807,7 @@ public static class UiSmokeTests
         TestAssert.Equal("Face Mask Alpha Strength", faceMask.Label);
         TestAssert.Equal("Scalp Opacity", scalpMask.Label);
         TestAssert.Equal("scalp", profile.GetMaterialSubcategory("Mask", MaterialParameterKind.Scalar));
-        TestAssert.Equal("Hair Diffuse", profile.DescribeMaterial(HumanMaterialProfiles.Describe(
+        TestAssert.Equal("Hair Diffuse Texture", profile.DescribeMaterial(HumanMaterialProfiles.Describe(
             "HAIR_ADDN_Diff", MaterialParameterKind.Texture)).Label);
         TestAssert.Equal("surface", profile.GetMaterialSubcategory(
             "Iris_Colour_Multiplier", MaterialParameterKind.Scalar));
@@ -2831,7 +2832,7 @@ public static class UiSmokeTests
         var hair = profile.Describe(new MorphFaceEditor.Core.Deformation.ResolvedMorphFeature(
             new MorphFeatureValue("HAIR_pulledBackSlick", 0), target,
             MorphFaceEditor.Core.Deformation.MorphFeatureResolutionKind.DirectTarget, null), true);
-        TestAssert.Equal("Pulled Back — Slick", hair.Label);
+        TestAssert.Equal("Pulled Back · Slick", hair.Label);
         TestAssert.Equal("facial-structure", hair.CategoryKey);
         TestAssert.Equal("hair", hair.SubcategoryKey);
         TestAssert.True(hair.IsVisible, "The HMF pulled-back hair morph was hidden.");
@@ -2839,13 +2840,13 @@ public static class UiSmokeTests
         var iconic = profile.Describe(new MorphFaceEditor.Core.Deformation.ResolvedMorphFeature(
             new MorphFeatureValue("race_iconic", 0), target,
             MorphFaceEditor.Core.Deformation.MorphFeatureResolutionKind.DirectTarget, null), true);
-        TestAssert.Equal("Iconic Shepard — Blend", iconic.Label);
+        TestAssert.Equal("Iconic Shepard · Blend", iconic.Label);
         TestAssert.Equal("character", iconic.SubcategoryKey);
 
         var headIconic = profile.Describe(new MorphFaceEditor.Core.Deformation.ResolvedMorphFeature(
             new MorphFeatureValue("Iconic", 0), target,
             MorphFaceEditor.Core.Deformation.MorphFeatureResolutionKind.DirectTarget, null), true);
-        TestAssert.Equal("Iconic Shepard — Head", headIconic.Label);
+        TestAssert.Equal("Iconic Shepard · Head", headIconic.Label);
         TestAssert.Equal("character", headIconic.SubcategoryKey);
 
         var sleepy = profile.Describe(new MorphFaceEditor.Core.Deformation.ResolvedMorphFeature(
@@ -2870,7 +2871,7 @@ public static class UiSmokeTests
         var mouthRace = profile.Describe(new MorphFaceEditor.Core.Deformation.ResolvedMorphFeature(
             new MorphFeatureValue("mouthShape_yngAsn", 0), target,
             MorphFaceEditor.Core.Deformation.MorphFeatureResolutionKind.DirectTarget, null), true);
-        TestAssert.Equal("Asian — Young", mouthRace.Label);
+        TestAssert.Equal("Asian · Young", mouthRace.Label);
         TestAssert.Equal("race-mouth", mouthRace.SubcategoryKey);
         TestAssert.Equal("CHARACTER SHAPES,RACE SHAPES,SHAPE",
             string.Join(',', profile.Categories.Single(category => category.Key == "mouth")
@@ -3026,6 +3027,32 @@ public static class UiSmokeTests
             .Single(group => group.Key == "hair").Label);
     }
 
+    private static void MetadataTextInheritsAcrossProfiles()
+    {
+        var skinTone = HumanMaterialProfiles.Describe("SkinTone", MaterialParameterKind.Vector);
+        TestAssert.Equal("Skin Tone", new HumanMaleFeatureMetadataCatalog().DescribeMaterial(skinTone).Label);
+        TestAssert.Equal("Skin Tone", new HumanFemaleFeatureMetadataCatalog().DescribeMaterial(skinTone).Label);
+        TestAssert.Equal("Skin Colour", new VorchaFeatureMetadataCatalog().DescribeMaterial(skinTone).Label);
+
+        var detachedVorcha = new DetachedMeshFeatureMetadataCatalog().DescribeMaterial(
+            skinTone with { Name = MaterialParameterControlKey.Create("vorcha", "SkinTone") });
+        TestAssert.Equal("Skin Colour", detachedVorcha.Label);
+
+        var profiles = MorphFaceProfileRegistry.CreateDefault().Profiles;
+        MorphFeatureMetadata Describe(string profileKey, string name) =>
+            profiles.Single(profile => profile.Key == profileKey).UiProfile.Describe(
+                new MorphFaceEditor.Core.Deformation.ResolvedMorphFeature(
+                    new MorphFeatureValue(name, 0), TestFixtures.CreateTarget(),
+                    MorphFaceEditor.Core.Deformation.MorphFeatureResolutionKind.DirectTarget, null), true);
+
+        TestAssert.Equal("mouth_Forward", Describe("le2-asari", "mouth_Forward").Description);
+        TestAssert.Equal("mouth_Forward · Has almost no visible effect, recommended to leave this value alone",
+            Describe("le3-asari", "mouth_Forward").Description);
+        TestAssert.Equal("HAIR_centerPart", Describe("le2-human-female", "HAIR_centerPart").Description);
+        TestAssert.Equal("HAIR_centerPart · LE3 slider hidden due to this target being broken",
+            Describe("le3-human-female", "HAIR_centerPart").Description);
+    }
+
     private static void DetachedMeshProfileUsesRacialMaterialPresentation()
     {
         var detached = new DetachedMeshFeatureMetadataCatalog();
@@ -3157,7 +3184,7 @@ public static class UiSmokeTests
             "ASA_HED_MakeUp_Eyes", MaterialParameterKind.Vector));
         TestAssert.Equal("markings", profile.GetMaterialCategory(
             "ASA_HED_MakeUp_Lips", MaterialParameterKind.Vector));
-        TestAssert.Equal("Makeup Region Weights (R Lips, G Eyes, B Teeth)",
+        TestAssert.Equal("Makeup Region",
             profile.DescribeMaterial(HumanMaterialProfiles.Describe(
                 "ASA_HED_Makeup_Blender_Vector", MaterialParameterKind.Vector)).Label);
         TestAssert.Equal("eyes", profile.GetMaterialCategory("U_Offset", MaterialParameterKind.Scalar));
@@ -3196,10 +3223,10 @@ public static class UiSmokeTests
             "ASA_HED_Addn_Colour_Scalar", MaterialParameterKind.Scalar));
         var teethMask = profile.DescribeMaterial(HumanMaterialProfiles.Describe(
             "Mask", MaterialParameterKind.Scalar));
-        TestAssert.Equal("Teeth Opacity Mask", teethMask.Label);
+        TestAssert.Equal("Teeth Opacity", teethMask.Label);
         TestAssert.Equal("mouth", profile.GetMaterialCategory("Mask", MaterialParameterKind.Scalar));
         TestAssert.Equal("teeth", profile.GetMaterialSubcategory("Mask", MaterialParameterKind.Scalar));
-        TestAssert.True(teethMask.Description.Contains("under 0.33", StringComparison.Ordinal),
+        TestAssert.True(teethMask.Description.Contains("below 0.33", StringComparison.Ordinal),
             "The Asari teeth-mask tooltip did not explain its threshold.");
 
         var humanUi = new HumanMaleFeatureMetadataCatalog();
@@ -3397,7 +3424,7 @@ public static class UiSmokeTests
             "TUR_HED_Diff_Tint_Teeth", MaterialParameterKind.Vector));
         var teethOpacity = profile.DescribeMaterial(HumanMaterialProfiles.Definitions.Single(definition =>
             definition.Family == HeadMaterialFamily.TurianSkin && definition.Name == "Mask"));
-        TestAssert.Equal("Teeth Opacity Mask", teethOpacity.Label);
+        TestAssert.Equal("Teeth Opacity", teethOpacity.Label);
         foreach (var definition in HumanMaterialProfiles.Definitions.Where(value =>
                      value.Family is HeadMaterialFamily.TurianSkin or HeadMaterialFamily.TurianEyes))
         {
@@ -3462,8 +3489,8 @@ public static class UiSmokeTests
         var nose = profile.Describe(new MorphFaceEditor.Core.Deformation.ResolvedMorphFeature(
             new MorphFeatureValue("nose_Narrow", 0), target,
             MorphFaceEditor.Core.Deformation.MorphFeatureResolutionKind.DirectTarget, null), true);
-        TestAssert.Equal("Outer Plates — Thin", outerThin.Label);
-        TestAssert.Equal("Inner Plates — Thin", innerThin.Label);
+        TestAssert.Equal("Outer Plates · Thin", outerThin.Label);
+        TestAssert.Equal("Inner Plates · Thin", innerThin.Label);
         TestAssert.Equal("head-plates", outerThin.SubcategoryKey);
         TestAssert.Equal("head-plates", innerThin.SubcategoryKey);
         TestAssert.Equal("shape", neck.SubcategoryKey);
@@ -3482,7 +3509,7 @@ public static class UiSmokeTests
             MorphFaceEditor.Core.Deformation.MorphFeatureResolutionKind.DirectTarget, null), true)).ToArray();
         AssertGroup("facial-structure", "character", "Wrex");
         AssertGroup("facial-structure", "head-plates",
-            "Outer Plates — Thin,Inner Plates — Thin,Plate Rim Down,Plate Rim Up,Plate Rim Forward Slant,Plate Erode,Spikes Smooth,Spikes Flare");
+            "Outer Plates · Thin,Inner Plates · Thin,Plate Rim Down,Plate Rim Up,Plate Rim Forward Slant,Plate Erode,Spikes Smooth,Spikes Flare");
         AssertGroup("head", "shape", "Face Thin,Face Full");
         AssertGroup("head", "nose", "Nose Narrow");
         AssertGroup("eyes", "position", "Eyes Back,Eyes Forward,Eyes Down,Eyes Up");

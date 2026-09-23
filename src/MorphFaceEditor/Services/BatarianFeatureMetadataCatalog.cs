@@ -63,7 +63,7 @@ public sealed partial class BatarianFeatureMetadataCatalog : IHeadEditorUiProfil
         var (category, subcategory) = FeaturePlacement(name);
         var visible = !name.Equals("teeth_correction", StringComparison.OrdinalIgnoreCase) &&
                       !MetadataOnlyFeatures.Contains(name);
-        return new MorphFeatureMetadata(
+        var metadata = new MorphFeatureMetadata(
             name,
             FeatureLabel(name),
             category,
@@ -74,14 +74,18 @@ public sealed partial class BatarianFeatureMetadataCatalog : IHeadEditorUiProfil
             1,
             0.01f,
             visible && sessionCanEdit && feature.IsResolved,
-            $"{name} · {feature.ResolutionNote ?? "resolved Batarian morph target."}");
+            feature.Kind == MorphFeatureResolutionKind.MetadataOnly
+                ? "Stored creator metadata with no direct target delta."
+                : string.Empty);
+        return MetadataTextCatalog.Apply(MorphFaceMetadataCatalogRegistry.Batarian, metadata);
     }
 
-    public MaterialParameterDefinition DescribeMaterial(MaterialParameterDefinition definition) => definition with
+    public MaterialParameterDefinition DescribeMaterial(MaterialParameterDefinition definition) =>
+        MetadataTextCatalog.Apply(MorphFaceMetadataCatalogRegistry.Batarian, definition with
     {
-        Label = MaterialLabel(definition.Name, definition.Label),
+        Label = definition.Label,
         Group = GetMaterialCategory(definition.Name, definition.Kind)
-    };
+    });
 
     public string GetMaterialCategory(string parameterName, MaterialParameterKind kind)
     {
@@ -199,17 +203,6 @@ public sealed partial class BatarianFeatureMetadataCatalog : IHeadEditorUiProfil
 
     private static string FeatureLabel(string name)
     {
-        if (name.Equals("back head", StringComparison.OrdinalIgnoreCase)) return "Rear Profile";
-        if (name.Equals("eyes_Narow", StringComparison.Ordinal)) return "Eye Shape Narrow";
-        if (name.Equals("eyes_narrow", StringComparison.Ordinal)) return "Eyes Narrow";
-        if (name.Equals("eyes_Wide", StringComparison.Ordinal)) return "Eyes Wide";
-        if (name.Equals("eyes_Big", StringComparison.OrdinalIgnoreCase)) return "Eyes Large";
-        if (name.Equals("eyes_small", StringComparison.OrdinalIgnoreCase)) return "Eyes Small";
-        if (name.Equals("head_ScaleUp", StringComparison.OrdinalIgnoreCase)) return "Scale Up";
-        if (name.Equals("shape_chubby", StringComparison.OrdinalIgnoreCase)) return "Head Full";
-        if (name.Equals("neck_wide", StringComparison.OrdinalIgnoreCase)) return "Neck Wide";
-        if (name.Equals("neck_Thin", StringComparison.OrdinalIgnoreCase)) return "Neck Thin";
-        if (name.Equals("jaw_doublechin", StringComparison.OrdinalIgnoreCase)) return "Double Chin";
         var separator = name.IndexOf('_');
         var leaf = separator < 0 ? name : name[(separator + 1)..];
         var label = WordBoundary().Replace(leaf.Replace('_', ' '), " $1");
@@ -229,34 +222,6 @@ public sealed partial class BatarianFeatureMetadataCatalog : IHeadEditorUiProfil
             _ => normalized
         };
     }
-
-    private static string MaterialLabel(string name, string fallback) => name switch
-    {
-        "SkinTone" => "Skin Tone",
-        "SkinLightScattering" => "Skin Light Scattering",
-        "Blowout_Scalar" => "Diffuse Gain",
-        "BAT_HED_Diff" => "Diffuse Texture",
-        "BAT_HED_Norm" => "Normal Texture",
-        "BAT_HED_Spec" => "Specular and Teeth Selector",
-        "BAT_HED_Tint" => "Gradient Selector Texture",
-        "BAT_HED_Mask" => "Complexion Region Mask",
-        "BAT_HED_Addn" => "Complexion Texture",
-        "BAT_HED_Mask_Vector" => "Complexion Mask Channels",
-        "BAT_HED_Neck_Grad_Vector" => "Neck Gradient Colour",
-        "BAT_HED_Neck_Grad_Scalar" => "Neck Gradient Strength",
-        "BAT_HED_Face_Grad_Vector" => "Face Gradient Colour",
-        "BAT_HED_Face_Grad_Scalar" => "Face Gradient Strength",
-        "BAT_HED_TopHead_Grad_Vector" => "Top Head Gradient Colour",
-        "BAT_HED_TopHead_Grad_Scalar" => "Top Head Gradient Strength",
-        "BAT_HED_Teeth_Vector" => "Teeth Colour",
-        "BAT_HED_Addn_Colour_Vector" => "Complexion Colour",
-        "BAT_HED_Addn_Colour_Scalar" => "Complexion Strength",
-        "BAT_HED_Addn_Diffuse_Blend_Scalar" => "Complexion Diffuse Blend",
-        "BAT_HED_Addn_Spec_Vector" => "Complexion Specular Colour",
-        "BAT_HED_SPwr_Scalar" => "Specular Power",
-        "BAT_HED_Tmis_Scalar" => "Transmission Strength",
-        _ => fallback
-    };
 
     [GeneratedRegex("(?<!^)([A-Z])")]
     private static partial Regex WordBoundary();

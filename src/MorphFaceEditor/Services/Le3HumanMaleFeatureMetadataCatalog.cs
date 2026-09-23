@@ -1,4 +1,5 @@
 using MorphFaceEditor.Core.Deformation;
+using MorphFaceEditor.LegendaryExplorer;
 
 namespace MorphFaceEditor.Services;
 
@@ -9,6 +10,8 @@ namespace MorphFaceEditor.Services;
 /// </summary>
 public sealed class Le3HumanMaleFeatureMetadataCatalog : HumanMaleFeatureMetadataCatalog
 {
+    protected override MorphFaceGame? TextGame => MorphFaceGame.LE3;
+
     private static readonly IReadOnlySet<string> HiddenMetadata =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -22,20 +25,22 @@ public sealed class Le3HumanMaleFeatureMetadataCatalog : HumanMaleFeatureMetadat
         var metadata = base.Describe(feature, sessionCanEdit);
         if (HiddenMetadata.Contains(feature.Feature.Name))
         {
-            return metadata with { IsVisible = false };
+            metadata = metadata with { IsVisible = false };
+            return MetadataTextCatalog.Apply(TextArchetype, metadata, TextGame);
         }
 
-        return feature.Feature.Name.ToLowerInvariant() switch
+        metadata = feature.Feature.Name.ToLowerInvariant() switch
         {
             "pupil_small" => DescribeVestigialPupil(metadata),
             "pupil_large" => DescribeVestigialPupil(metadata),
             _ => metadata
         };
+        return MetadataTextCatalog.Apply(TextArchetype, metadata, TextGame);
     }
 
     private static MorphFeatureMetadata DescribeVestigialPupil(
         MorphFeatureMetadata metadata) => metadata with
     {
-        Description = $"{metadata.Name} · stock LE3 target retained for package fidelity; it visibly affects the lower jaw rather than pupil size."
+        Description = "Stock LE3 target retained for package fidelity; it visibly affects the lower jaw rather than pupil size."
     };
 }

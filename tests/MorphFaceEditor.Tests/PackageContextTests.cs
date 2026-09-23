@@ -1584,6 +1584,18 @@ public static class PackageContextTests
         try
         {
             context.ExportRon(seedPath, templatePath, ronPath);
+            var seedRon = TseHeadMorphRon.Read(ronPath);
+            const string customHairPath = "MFE_Custom_Hair.Hair.HMM_HIR_Custom_MDL";
+            var customPackagePath = Path.Combine(Path.GetTempPath(), "MFE_Custom_Hair.pcc");
+            var customOccurrence = new AttachmentMeshOccurrence(customPackagePath,
+                "Hair.HMM_HIR_Custom_MDL", 17, 0, TextureCatalogOrigin.Manual, 42);
+            TseHeadMorphRon.Write(ronPath, seedRon with { HairMesh = customHairPath });
+            var customAssets = StandalonePlayerAssetCatalog.ForRon(MorphFaceGame.LE1, ronPath,
+                [], attachmentMeshes: [new AttachmentMeshCandidate(customHairPath,
+                    customOccurrence, [customOccurrence])]);
+            TestAssert.Equal(customPackagePath, customAssets.SkeletalMeshes.Single(value =>
+                value.InstancedPath == customHairPath).PackagePath);
+            TseHeadMorphRon.Write(ronPath, seedRon);
             var expectedMorph = context.CaptureMorphData(seedPath, templatePath);
             var expectedMaterial = context.CaptureMaterialData(seedPath, templatePath);
             TestAssert.True(expectedMorph.BakedLods.Count > 1,

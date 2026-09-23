@@ -505,10 +505,19 @@ public sealed partial class MainWindowViewModel
             if (isRon)
             {
                 var textureCatalog = await _referenceService.ReadTextureCatalogAsync(game);
-                assetCatalog = await Task.Run(() => StandalonePlayerAssetCatalog.ForRon(
-                    game,
-                    sourcePath,
-                    textureCatalog.Candidates));
+                if (textureCatalog.IsAvailable)
+                {
+                    assetCatalog = await Task.Run(() => StandalonePlayerAssetCatalog.ForRon(
+                        game,
+                        sourcePath,
+                        textureCatalog.Candidates,
+                        attachmentMeshes: textureCatalog.AttachmentMeshes));
+                }
+                else
+                {
+                    AppLog.Information($"The {game} mesh/texture database is unavailable; " +
+                        "Player RON import will use only assets already present in its staged player package.");
+                }
             }
 
             string importedFacePath;

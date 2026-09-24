@@ -27,9 +27,19 @@ public sealed record RandomisationProfileDefinition(
 }
 
 public sealed record RandomisationDonorExclusion(
-    MorphFaceGame Game,
+    MorphFaceGame SourceGame,
     string FacePath,
-    string Reason);
+    string Reason)
+{
+    public RandomisationDonorExclusionScope Scope { get; init; } = RandomisationDonorExclusionScope.Both;
+}
+
+public enum RandomisationDonorExclusionScope
+{
+    Both,
+    Morph,
+    Material
+}
 
 public sealed record RandomisationAuditRow(
     MorphRandomisationPoolKey PoolKey,
@@ -50,7 +60,10 @@ public sealed record RandomisationAuditFace(
     string? ProfileKey,
     MorphRandomisationPoolKey? PoolKey,
     bool DonorEligible,
-    string? ExclusionReason);
+    string? ExclusionReason)
+{
+    public bool MaterialEligible { get; init; }
+}
 
 public sealed record RandomisationMaterialAuditRow(
     MorphRandomisationPoolKey PoolKey,
@@ -96,11 +109,16 @@ public static class RandomisationCorpusCompiler
                     .ToArray());
         var donors = Enum.GetValues<MorphRandomisationPoolKey>()
             .ToDictionary(value => value, _ => new List<MorphRandomisationDonor>());
+        var donorsByFace = new Dictionary<string, List<MorphRandomisationDonor>>(StringComparer.OrdinalIgnoreCase);
         var faces = new List<RandomisationAuditFace>();
         var rows = new List<RandomisationAuditRow>();
         var materialRows = new List<RandomisationMaterialAuditRow>();
 
-        foreach (var raw in rawFaces.OrderBy(value => value.Game).ThenBy(value => value.FacePath, StringComparer.Ordinal))
+        foreach (var raw in rawFaces.OrderBy(value => value.Game)
+                     .ThenBy(value => value.FacePath, StringComparer.Ordinal)
+                     .ThenBy(value => SourceGame(value) == value.Game ? 0 : 1)
+                     .ThenBy(SourceGame)
+                     .ThenBy(value => Path.GetFileName(value.PackagePath), StringComparer.Ordinal))
         {
             var matches = profiles.Where(profile =>
                     profile.Game == raw.Game && profile.Matches(raw.FacePath, raw.BaseHeadPath))
@@ -111,7 +129,7 @@ public static class RandomisationCorpusCompiler
                     ? "No supported morph profile matched the face."
                     : $"The face matched {matches.Length} morph profiles.";
                 faces.Add(new RandomisationAuditFace(
-                    raw.Game, raw.PackagePath, raw.FacePath, null, null, false, reason));
+                    raw.Game, Path.GetFileName(raw.PackagePath), raw.FacePath, null, null, false, reason));
                 continue;
             }
 
@@ -138,9 +156,10 @@ public static class RandomisationCorpusCompiler
                     break;
                 }
             }
+            var invalidFeatureReason = exclusionReason;
 
             var reviewed = reviewedExclusions.FirstOrDefault(value =>
-                value.Game == raw.Game &&
+                value.SourceGame == SourceGame(raw) &&
                 string.Equals(value.FacePath, raw.FacePath, StringComparison.OrdinalIgnoreCase));
             if (reviewed is not null)
             {
@@ -154,32 +173,77 @@ public static class RandomisationCorpusCompiler
                     ? "Morph sliders are intentionally unavailable for this profile; this face is a material donor only."
                     : "The face has no non-zero visible editable morph sliders.";
             }
-            var eligible = exclusionReason is null;
-            var materialEligible = materialOnlyProfile
-                ? string.IsNullOrWhiteSpace(raw.MaterialEvidenceError)
-                : eligible;
+            var eligible = reviewed?.Scope switch
+            {
+                RandomisationDonorExclusionScope.Both or RandomisationDonorExclusionScope.Morph => false,
+                RandomisationDonorExclusionScope.Material =>
+                    invalidFeatureReason is null && !materialOnlyProfile &&
+                    canonicalValues.Values.Any(value => value != 0),
+                _ => exclusionReason is null
+            };
+            var materialEligible = reviewed?.Scope switch
+            {
+                RandomisationDonorExclusionScope.Both or RandomisationDonorExclusionScope.Material => false,
+                RandomisationDonorExclusionScope.Morph =>
+                    string.IsNullOrWhiteSpace(raw.MaterialEvidenceError),
+                _ => materialOnlyProfile
+                    ? string.IsNullOrWhiteSpace(raw.MaterialEvidenceError)
+                    : eligible
+            };
             var sourceFile = Path.GetFileName(raw.PackagePath);
-            faces.Add(new RandomisationAuditFace(
-                raw.Game, sourceFile, raw.FacePath, profile.ProfileKey, profile.PoolKey,
-                eligible, exclusionReason));
-
             var nonZero = canonicalValues
                 .Where(value => value.Value != 0)
                 .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase);
+            var textureFamilies = BuildTextureFamilies(profile.ProfileKey, raw.MaterialTextures);
             if (eligible || materialEligible)
             {
-                var textureFamilies = BuildTextureFamilies(profile.ProfileKey, raw.MaterialTextures);
-                donors[profile.PoolKey].Add(new MorphRandomisationDonor(
-                    $"{raw.Game}:{raw.FacePath}",
+                var candidate = new MorphRandomisationDonor(
+                    $"{SourceGame(raw)}:{raw.Game}:{raw.FacePath}",
                     profile.ProfileKey,
-                    new HashSet<string>(profile.AvailableFeatures, StringComparer.OrdinalIgnoreCase),
-                    nonZero)
+                    eligible
+                        ? new HashSet<string>(profile.AvailableFeatures, StringComparer.OrdinalIgnoreCase)
+                        : new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                    eligible ? nonZero : new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase))
                 {
-                    MaterialScalars = new Dictionary<string, float>(raw.MaterialScalars, StringComparer.OrdinalIgnoreCase),
-                    MaterialVectors = new Dictionary<string, Vector4>(raw.MaterialVectors, StringComparer.OrdinalIgnoreCase),
-                    MaterialTextureFamilies = textureFamilies
-                });
+                    MaterialScalars = materialEligible
+                        ? new Dictionary<string, float>(raw.MaterialScalars, StringComparer.OrdinalIgnoreCase)
+                        : new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase),
+                    MaterialVectors = materialEligible
+                        ? new Dictionary<string, Vector4>(raw.MaterialVectors, StringComparer.OrdinalIgnoreCase)
+                        : new Dictionary<string, Vector4>(StringComparer.OrdinalIgnoreCase),
+                    MaterialTextureFamilies = materialEligible
+                        ? textureFamilies
+                        : new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.OrdinalIgnoreCase)
+                };
+                var faceKey = $"{raw.Game}:{raw.FacePath}";
+                if (!donorsByFace.TryGetValue(faceKey, out var retained))
+                {
+                    retained = [];
+                    donorsByFace.Add(faceKey, retained);
+                }
+                var identical = retained.FirstOrDefault(value => SameRandomisedData(value, candidate));
+                if (identical is not null)
+                {
+                    exclusionReason = $"Identical randomised data to retained donor {identical.Id}.";
+                    eligible = false;
+                    materialEligible = false;
+                }
+                else
+                {
+                    if (retained.Any(value => value.Id.Equals(candidate.Id, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        throw new InvalidDataException($"Distinct randomisation donors share ID '{candidate.Id}'.");
+                    }
+                    retained.Add(candidate);
+                    donors[profile.PoolKey].Add(candidate);
+                }
             }
+            faces.Add(new RandomisationAuditFace(
+                raw.Game, sourceFile, raw.FacePath, profile.ProfileKey, profile.PoolKey,
+                eligible, exclusionReason)
+            {
+                MaterialEligible = materialEligible
+            });
 
             foreach (var value in raw.MaterialScalars.OrderBy(value => value.Key, StringComparer.OrdinalIgnoreCase))
             {
@@ -195,7 +259,7 @@ public static class RandomisationCorpusCompiler
                     MaterialParameterKind.Vector, value.Key, null, value.Value, null, null,
                     materialEligible, raw.MaterialEvidenceError));
             }
-            var familyLookup = BuildTextureFamilies(profile.ProfileKey, raw.MaterialTextures)
+            var familyLookup = textureFamilies
                 .SelectMany(family => family.Value.Keys.Select(parameter => (parameter, family.Key)))
                 .ToDictionary(value => value.parameter, value => value.Key, StringComparer.OrdinalIgnoreCase);
             foreach (var value in raw.MaterialTextures.OrderBy(value => value.Key, StringComparer.OrdinalIgnoreCase))
@@ -224,12 +288,15 @@ public static class RandomisationCorpusCompiler
             value => value.Key,
             value => (IReadOnlyList<MorphRandomisationDonor>)value.Value
                 .OrderBy(donor => donor.Id, StringComparer.Ordinal).ToArray());
-        var stableFaces = faces.OrderBy(value => value.Game).ThenBy(value => value.FacePath, StringComparer.Ordinal).ToArray();
+        var stableFaces = faces.OrderBy(value => value.Game).ThenBy(value => value.FacePath, StringComparer.Ordinal)
+            .ThenBy(value => value.PackagePath, StringComparer.Ordinal).ToArray();
         var stableRows = rows.OrderBy(value => value.PoolKey).ThenBy(value => value.Game)
             .ThenBy(value => value.FacePath, StringComparer.Ordinal)
+            .ThenBy(value => value.PackagePath, StringComparer.Ordinal)
             .ThenBy(value => value.FeatureName, StringComparer.OrdinalIgnoreCase).ToArray();
         var stableMaterialRows = materialRows.OrderBy(value => value.ProfileKey, StringComparer.Ordinal)
             .ThenBy(value => value.FacePath, StringComparer.Ordinal)
+            .ThenBy(value => value.PackagePath, StringComparer.Ordinal)
             .ThenBy(value => value.Kind)
             .ThenBy(value => value.ParameterName, StringComparer.OrdinalIgnoreCase).ToArray();
         var materialProfiles = BuildMaterialProfiles(stablePools);
@@ -243,6 +310,46 @@ public static class RandomisationCorpusCompiler
             BuildCsv(stableRows, stableMaterialRows));
     }
 
+    private static MorphFaceGame SourceGame(RawMorphRandomisationFace face)
+    {
+        var fileName = Path.GetFileNameWithoutExtension(face.PackagePath);
+        var parts = fileName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 3 && parts[1].Equals("to", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!Enum.TryParse<MorphFaceGame>(parts[0], true, out var source) ||
+                !Enum.TryParse<MorphFaceGame>(parts[2], true, out var target) ||
+                target != face.Game)
+            {
+                throw new InvalidDataException(
+                    $"Port package '{fileName}' does not have a valid source and target game.");
+            }
+            return source;
+        }
+        return face.Game;
+    }
+
+    private static bool SameRandomisedData(MorphRandomisationDonor first, MorphRandomisationDonor second) =>
+        first.SourceProfileKey.Equals(second.SourceProfileKey, StringComparison.OrdinalIgnoreCase) &&
+        first.AvailableFeatures.SetEquals(second.AvailableFeatures) &&
+        SameValues(first.NonZeroValues, second.NonZeroValues) &&
+        SameValues(first.MaterialScalars, second.MaterialScalars) &&
+        SameValues(first.MaterialVectors, second.MaterialVectors) &&
+        first.MaterialTextureFamilies.Count == second.MaterialTextureFamilies.Count &&
+        first.MaterialTextureFamilies.All(family =>
+            second.MaterialTextureFamilies.TryGetValue(family.Key, out var members) &&
+            SameValues(family.Value, members, StringComparer.OrdinalIgnoreCase));
+
+    private static bool SameValues<T>(
+        IReadOnlyDictionary<string, T> first,
+        IReadOnlyDictionary<string, T> second,
+        IEqualityComparer<T>? valueComparer = null)
+    {
+        if (first.Count != second.Count) return false;
+        valueComparer ??= EqualityComparer<T>.Default;
+        return first.All(item =>
+            second.TryGetValue(item.Key, out var value) && valueComparer.Equals(item.Value, value));
+    }
+
     private static string BuildMarkdown(
         IReadOnlyList<RawMorphRandomisationFace> rawFaces,
         IReadOnlyList<RandomisationAuditFace> faces,
@@ -254,7 +361,8 @@ public static class RandomisationCorpusCompiler
         var text = new StringBuilder();
         text.AppendLine("# Morph Randomiser GlobalMorphs Corpus Audit");
         text.AppendLine();
-        text.AppendLine($"Faces accounted for: {faces.Count.ToString(CultureInfo.InvariantCulture)}. Eligible donors: {faces.Count(value => value.DonorEligible).ToString(CultureInfo.InvariantCulture)}. Excluded: {faces.Count(value => !value.DonorEligible).ToString(CultureInfo.InvariantCulture)}.");
+        text.AppendLine($"Faces accounted for: {faces.Count.ToString(CultureInfo.InvariantCulture)}. Morph-eligible: {faces.Count(value => value.DonorEligible).ToString(CultureInfo.InvariantCulture)}. Material-eligible: {faces.Count(value => value.MaterialEligible).ToString(CultureInfo.InvariantCulture)}. Fully excluded: {faces.Count(value => !value.DonorEligible && !value.MaterialEligible).ToString(CultureInfo.InvariantCulture)}.");
+        text.AppendLine($"Identical copies collapsed: {faces.Count(value => value.ExclusionReason?.StartsWith("Identical randomised data", StringComparison.Ordinal) == true).ToString(CultureInfo.InvariantCulture)}.");
         text.AppendLine();
         text.AppendLine("## Sources");
         text.AppendLine();
@@ -262,7 +370,8 @@ public static class RandomisationCorpusCompiler
         text.AppendLine("|---|---|---:|---|");
         foreach (var source in rawFaces.GroupBy(value => value.PackagePath, StringComparer.OrdinalIgnoreCase)
                      .Select(group => (Path: group.Key, Game: group.First().Game))
-                     .OrderBy(value => value.Game))
+                     .OrderBy(value => value.Game)
+                     .ThenBy(value => Path.GetFileName(value.Path), StringComparer.Ordinal))
         {
             var file = new FileInfo(source.Path);
             var hash = file.Exists ? Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(source.Path))) : "unavailable";
@@ -280,10 +389,34 @@ public static class RandomisationCorpusCompiler
         text.AppendLine();
         text.AppendLine("## Exclusions");
         text.AppendLine();
-        foreach (var face in faces.Where(value => !value.DonorEligible))
+        foreach (var face in faces.Where(value => !value.DonorEligible || !value.MaterialEligible))
         {
-            text.AppendLine($"- `{face.Game}:{face.FacePath}` — {face.ExclusionReason}");
+            var retained = face.DonorEligible ? "morph only" : face.MaterialEligible ? "material only" : "neither";
+            text.AppendLine($"- `{face.Game}:{face.FacePath}` ({face.PackagePath}) [{retained}] — {face.ExclusionReason}");
         }
+        text.AppendLine();
+        text.AppendLine("## Material texture redirects");
+        text.AppendLine();
+        var scalpSpecRedirects = materialRows.Where(value => value.DonorEligible &&
+            ShouldRedirectHmfScalpSpec(value.ProfileKey, value.ParameterName, value.TexturePath)).ToArray();
+        text.AppendLine($"LE1/LE2 HMF scalp specular White → Black: {scalpSpecRedirects.Length.ToString(CultureInfo.InvariantCulture)} eligible source faces.");
+        foreach (var value in scalpSpecRedirects.OrderBy(value => value.Game)
+                     .ThenBy(value => value.PackagePath, StringComparer.OrdinalIgnoreCase)
+                     .ThenBy(value => value.FacePath, StringComparer.OrdinalIgnoreCase))
+            text.AppendLine($"- `{value.Game}:{value.FacePath}` ({value.PackagePath})");
+        text.AppendLine();
+        text.AppendLine("## Rejected scalp texture families");
+        text.AppendLine();
+        var conflictingScalps = rawFaces
+            .Where(value => value.FacePath.StartsWith("HMM.", StringComparison.OrdinalIgnoreCase) &&
+                            HasConflictingHmmHairScalpDiffuseAndNormal(value.MaterialTextures))
+            .OrderBy(value => value.Game)
+            .ThenBy(value => value.PackagePath, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(value => value.FacePath, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        text.AppendLine($"HMM_HIR diffuse/normal style conflicts: {conflictingScalps.Length.ToString(CultureInfo.InvariantCulture)}. Other material families and morph data remain eligible.");
+        foreach (var face in conflictingScalps)
+            text.AppendLine($"- `{face.Game}:{face.FacePath}` ({Path.GetFileName(face.PackagePath)})");
         text.AppendLine();
         text.AppendLine("## Feature statistics");
         text.AppendLine();
@@ -391,7 +524,7 @@ public static class RandomisationCorpusCompiler
         var result = new List<FeatureRelationship>();
         foreach (var pool in rows.Where(value => value.DonorEligible).GroupBy(value => value.PoolKey))
         {
-            var faces = pool.GroupBy(value => (value.Game, value.FacePath))
+            var faces = pool.GroupBy(value => (value.Game, value.PackagePath, value.FacePath))
                 .Select(group => group.ToDictionary(value => value.FeatureName, StringComparer.OrdinalIgnoreCase))
                 .ToArray();
             var features = pool.Select(value => value.FeatureName)
@@ -480,8 +613,14 @@ public static class RandomisationCorpusCompiler
                 value.Key.Equals("HED_Mask", StringComparison.OrdinalIgnoreCase)), "HED_Mask");
             var scalp = textures.Where(value =>
                 value.Key.Contains("scalp", StringComparison.OrdinalIgnoreCase) ||
-                value.Key.Equals("HED_Tang", StringComparison.OrdinalIgnoreCase));
-            Add("human-scalp", scalp, "HED_Scalp_Diff", "HED_Scalp_Norm");
+                value.Key.Equals("HED_Tang", StringComparison.OrdinalIgnoreCase))
+                .Select(value => ShouldRedirectHmfScalpSpec(profileKey, value.Key, value.Value)
+                    ? new KeyValuePair<string, string>(value.Key,
+                        "BIOG_Humanoid_MASTER_MTR_R.GBL_ARM_ALL_Black")
+                    : value);
+            if (!profileKey.Contains("human-male", StringComparison.OrdinalIgnoreCase) ||
+                !HasConflictingHmmHairScalpDiffuseAndNormal(textures))
+                Add("human-scalp", scalp, "HED_Scalp_Diff", "HED_Scalp_Norm");
         }
         else if (profileKey.EndsWith("-vorcha", StringComparison.OrdinalIgnoreCase))
         {
@@ -505,6 +644,32 @@ public static class RandomisationCorpusCompiler
                 value.Key.Contains("EYE", StringComparison.OrdinalIgnoreCase)));
         }
         return result;
+    }
+
+    private static bool ShouldRedirectHmfScalpSpec(string profileKey, string parameterName, string? path) =>
+        (profileKey.Equals("le1-human-female", StringComparison.OrdinalIgnoreCase) ||
+         profileKey.Equals("le2-human-female", StringComparison.OrdinalIgnoreCase)) &&
+        parameterName.Equals("HED_Scalp_Spec", StringComparison.OrdinalIgnoreCase) &&
+        path?.EndsWith(".GBL_ARM_ALL_White", StringComparison.OrdinalIgnoreCase) == true;
+
+    private static bool HasConflictingHmmHairScalpDiffuseAndNormal(
+        IReadOnlyDictionary<string, string> textures)
+    {
+        if (!textures.TryGetValue("HED_Scalp_Diff", out var diffuse) ||
+            !textures.TryGetValue("HED_Scalp_Norm", out var normal)) return false;
+        static string? Style(string path, string suffix)
+        {
+            var name = path[(path.LastIndexOf('.') + 1)..];
+            const string prefix = "HMM_HIR_";
+            return name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) &&
+                   name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)
+                ? name[prefix.Length..^suffix.Length]
+                : null;
+        }
+        var diffuseStyle = Style(diffuse, "_Diff");
+        var normalStyle = Style(normal, "_Norm");
+        return diffuseStyle is not null && normalStyle is not null &&
+               !diffuseStyle.Equals(normalStyle, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool TryGetSpeciesTexturePrefix(

@@ -65,9 +65,10 @@ public static class UiSmokeTests
         new("exhausted texture randomisation is reported without discarding numeric values", ExhaustedTextureRandomisationIsReported),
         new("LE3 HMM scalp randomisation preserves its required texture pair", Le3HmmScalpRandomisationAppliesCorePair),
         new("cursed mode randomises morph bones and materials as one undo step", CursedModeRandomisesOneUndoStep),
+        new("Cursed material-only rolls leave morphs and bones unchanged", CursedMaterialOnlyLeavesBonesUnchanged),
         new("fixed-bake Cursed mode cannot mutate morph sliders", FixedBakeCursedModePreservesMorphs),
         new("relative-bake Player RON exposes live morph controls", RelativeBakeExposesMorphControls),
-        new("cursed mode ignores global randomisation exclusions", CursedModeIgnoresGlobalExclusions),
+        new("cursed mode respects global randomisation exclusions", CursedModeRespectsGlobalExclusions),
         new("cursed mode can be enabled without a donor corpus", CursedModeBypassesDonorAvailability),
         new("failed cursed randomisation rolls back its partial edit", FailedCursedRandomisationRollsBack),
         new("repeated cursed randomisation does not compound", RepeatedCursedRandomisationDoesNotCompound),
@@ -1303,6 +1304,31 @@ public static class UiSmokeTests
             "Set to Defaults did not remove the complete cursed state.");
     }
 
+    private static void CursedMaterialOnlyLeavesBonesUnchanged()
+    {
+        using var reader = new MorphFacePackageReader();
+        using var editor = CreateRandomisationEditor(reader);
+        editor.CursedMode = true;
+        editor.RandomiseMorphs = false;
+        editor.RandomiseMaterials = true;
+        editor.MaterialRandomisationStrength = 100;
+
+        var before = editor.CreateDraft();
+        TestAssert.True(editor.RandomiseCommand.CanExecute(null),
+            "Material-only Cursed randomisation was disabled.");
+        editor.RandomiseCommand.Execute(null);
+        var after = editor.CreateDraft();
+        TestAssert.True(after.MorphFeatures.SequenceEqual(before.MorphFeatures) &&
+                        after.FinalSkeleton.SequenceEqual(before.FinalSkeleton),
+            "Cursed material-only randomisation changed morphs or bones.");
+        TestAssert.True(after.MaterialOverrides.Scalars.Count + after.MaterialOverrides.Vectors.Count > 0,
+            "Cursed material-only randomisation did not change materials.");
+
+        editor.RandomiseMaterials = false;
+        TestAssert.True(!editor.RandomiseCommand.CanExecute(null),
+            "Bone-only Cursed randomisation remained enabled while Morph was off.");
+    }
+
     private static void DetachedMaterialRandomisationUsesCompatibleProfile()
     {
         using var reader = new MorphFacePackageReader();
@@ -1380,14 +1406,16 @@ public static class UiSmokeTests
             "Fixed-bake mode disabled its independently editable hair and accessory references.");
 
         editor.CursedMode = true;
-        TestAssert.True(!editor.RandomiseMorphs && editor.AllowsCursedRandomisation && editor.CanRandomise,
-            "Fixed-bake Cursed mode re-enabled morph randomisation or disabled valid bone randomisation.");
+        TestAssert.True(!editor.RandomiseMorphs && !editor.AllowsCursedRandomisation && !editor.CanRandomise,
+            "Fixed-bake mode exposed bone-only Cursed randomisation without morph or material controls.");
         editor.RandomisationStrength = 100;
         editor.RandomiseCommand.Execute(null);
 
         var after = editor.CreateDraft();
         TestAssert.True(before.MorphFeatures.SequenceEqual(after.MorphFeatures),
             "Fixed-bake Cursed mode changed authored morph slider values.");
+        TestAssert.True(before.FinalSkeleton.SequenceEqual(after.FinalSkeleton),
+            "Fixed-bake Cursed mode changed bones while morph randomisation was unavailable.");
         TestAssert.True(before.BakedLods.SelectMany(value => value)
                 .SequenceEqual(after.BakedLods.SelectMany(value => value)),
             "Fixed-bake Cursed mode replaced the imported baked geometry.");
@@ -1429,18 +1457,18 @@ public static class UiSmokeTests
             "Subcategory commands were not notified when cursed mode became available.");
     }
 
-    private static void CursedModeIgnoresGlobalExclusions()
+    private static void CursedModeRespectsGlobalExclusions()
     {
         using var reader = new MorphFacePackageReader();
         using var editor = CreateRandomisationEditor(reader);
-        foreach (var inclusion in editor.Categories.SelectMany(category =>
-                     category.SliderGroups.Select(group => group.Inclusion)
-                         .Concat(category.ColourGroups.Select(group => group.Inclusion))
-                         .Append(category.TextureInclusion))
-                     .Where(value => value is not null))
-        {
-            inclusion!.IsIncluded = false;
-        }
+        editor.Categories.Single(value => value.Key == "nose")
+            .SliderGroups.Single(value => value.Key == "bridge").Inclusion!.IsIncluded = false;
+        editor.Categories.SelectMany(value => value.SliderGroups)
+            .Single(value => value.Scalars.Any(scalar => scalar.Name == "HED_Norm_Blend"))
+            .Inclusion!.IsIncluded = false;
+        editor.Categories.SelectMany(value => value.ColourGroups)
+            .Single(value => value.Values.Any(vector => vector.Name == "SkinTone"))
+            .Inclusion!.IsIncluded = false;
         editor.CursedMode = true;
         editor.MorphRandomisationStrength = 100;
         editor.MaterialRandomisationStrength = 100;
@@ -1448,13 +1476,30 @@ public static class UiSmokeTests
         editor.RandomiseCommand.Execute(null);
 
         var cursed = editor.CreateDraft();
-        TestAssert.True(cursed.MorphFeatures.All(value => value.Offset != 0),
-            "Cursed Mode respected an excluded morph category.");
-        TestAssert.True(cursed.MaterialOverrides.Scalars.Count > 0 && cursed.MaterialOverrides.Vectors.Count > 0,
-            "Cursed Mode respected an excluded material category.");
+        TestAssert.Near(0, cursed.GetFeatureOffset("nose_BridgeIn"), 0);
+        TestAssert.True(cursed.GetFeatureOffset("eyes_Big") != 0,
+            "Cursed Mode skipped an included morph category.");
+        TestAssert.True(cursed.MaterialOverrides.Scalars.All(value => value.Name != "HED_Norm_Blend") &&
+                        cursed.MaterialOverrides.Vectors.All(value => value.Name != "SkinTone"),
+            "Cursed Mode changed excluded material subcategories.");
         TestAssert.True(cursed.MaterialOverrides.Scalars.Any(value => value.Name == "Emis_Scalar") &&
                         cursed.MaterialOverrides.Vectors.Any(value => value.Name == "Emis_Color"),
-            "Cursed Mode retained the normal randomiser's visual-safety exclusions.");
+            "Cursed Mode stopped randomising included material subcategories.");
+
+        using var bonesOnly = CreateRandomisationEditor(reader);
+        foreach (var group in bonesOnly.Categories.SelectMany(value => value.SliderGroups))
+            if (group.Inclusion is { } inclusion) inclusion.IsIncluded = false;
+        bonesOnly.CursedMode = true;
+        bonesOnly.RandomiseMaterials = false;
+        bonesOnly.MorphRandomisationStrength = 100;
+        TestAssert.True(bonesOnly.RandomiseCommand.CanExecute(null),
+            "Excluding every morph subcategory incorrectly disabled global Cursed bones.");
+        var beforeBones = bonesOnly.CreateDraft();
+        bonesOnly.RandomiseCommand.Execute(null);
+        var afterBones = bonesOnly.CreateDraft();
+        TestAssert.True(beforeBones.MorphFeatures.SequenceEqual(afterBones.MorphFeatures) &&
+                        !beforeBones.FinalSkeleton.SequenceEqual(afterBones.FinalSkeleton),
+            "Excluded morph sliders changed or global Cursed bones stopped randomising.");
     }
 
     private static void FailedCursedRandomisationRollsBack()
@@ -1502,9 +1547,9 @@ public static class UiSmokeTests
     {
         var catalog = MorphRandomisationCatalog.LoadEmbedded();
         TestAssert.Equal(10, catalog.Corpus.Pools.Count(value => value.Value.Count > 0));
-        TestAssert.Equal(1570, catalog.Corpus.Pools.Sum(value => value.Value.Count));
+        TestAssert.Equal(4418, catalog.Corpus.Pools.Sum(value => value.Value.Count));
         TestAssert.True(catalog.Corpus.Pools.Values.SelectMany(value => value).All(donor =>
-                !donor.Id.EndsWith("Human Male.LE3_HMM_Morphs.Broke", StringComparison.OrdinalIgnoreCase)),
+                !donor.Id.EndsWith(".Broke", StringComparison.OrdinalIgnoreCase)),
             "The known broken LE3 HMM donor remained in the embedded corpus.");
     }
 

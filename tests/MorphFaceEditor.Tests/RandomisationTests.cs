@@ -18,6 +18,7 @@ public static class RandomisationTests
 {
     public static IReadOnlyList<TestCase> Runtime { get; } =
     [
+        new("HMM scalp textures expose only their compatible hair morphs", HmmScalpMorphCompatibility),
         new("randomisation pools follow approved game and species grouping", PoolsFollowApprovedGrouping),
         new("zero strength reproduces donor and preserves its zero mask", ZeroStrengthReproducesDonor),
         new("strength expands nonzero donors toward metadata bounds", StrengthExpandsTowardBounds),
@@ -25,6 +26,7 @@ public static class RandomisationTests
         new("randomisation rejects invalid strength and metadata bounds", InvalidInputsAreRejected),
         new("material zero strength reproduces the donor including texture families", MaterialZeroStrengthReproducesDonor),
         new("material scalars use safe and experimental envelopes", MaterialScalarsUseTwoEnvelopes),
+        new("LE1 Batarian specular power stays between 0.4 and 0.7", Le1BatarianSpecularPowerIsBounded),
         new("material colours interpolate perceptually while selectors stay discrete", MaterialVectorsRespectSemantics),
         new("material safety policy constrains or excludes hazardous numeric parameters", MaterialSafetyPolicyProtectsNumericParameters),
         new("material texture selection balances variants and rejects unsafe families", MaterialTextureSelectionIsCurated),
@@ -33,6 +35,9 @@ public static class RandomisationTests
         new("LE1 Batarian material randomisation falls back to compatible pooled donors", Le1BatarianUsesCompatibleMaterialDonors),
         new("material donor compatibility follows cross-game species and human pools", MaterialDonorsUseApprovedCrossGamePools),
         new("embedded randomisation corpus exposes face and eye texture families", EmbeddedCorpusExposesFaceAndEyeFamilies),
+        new("embedded LE1 to LE3 Rollins ports retain other data but not mixed scalp textures", EmbeddedCorpusRejectsMixedScalpPorts),
+        new("embedded reviewed Asari faces retain only material donor data", EmbeddedAsariMorphExclusions),
+        new("embedded LE1 and LE2 HMF scalp specular avoids White", EmbeddedHmfScalpSpecAvoidsWhite),
         new("embedded texture families remain eligible under registry discovery", EmbeddedFamiliesMatchRegistryDiscovery),
         new("installed texture randomisation keeps only complete resolvable families", InstalledTextureRandomisationFiltersFamilies),
         new("texture family scope honours disabled texture categories", TextureFamilyScopeHonoursDisabledCategories),
@@ -46,6 +51,96 @@ public static class RandomisationTests
         new("invalid feature batches do not partially mutate the session", InvalidFeatureBatchIsAtomic),
         new("unchanged feature batches create no history", UnchangedFeatureBatchCreatesNoHistory)
     ];
+
+    private static void HmmScalpMorphCompatibility()
+    {
+        var pairings = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Afr"] = ["Afro", "deiter", "widowsPeak"],
+            ["Gez"] = ["Geezer"],
+            ["Rol"] = ["rollins", "flatTop"],
+            ["Wil"] = ["Willis"],
+            ["Spa"] = ["widowsPeak"]
+        };
+        foreach (var (texture, morphs) in pairings)
+        {
+            var actual = HumanMaleHairScalpPolicy.CompatibleMorphsForDiffuse(
+                $"BIOG_HMM_HIR_PRO_R.Hair.HMM_HIR_{texture}_Diff");
+            TestAssert.True(actual is not null && actual.SequenceEqual(morphs),
+                $"HMM_HIR_{texture} has incorrect compatible morphs.");
+        }
+        TestAssert.True(HumanMaleHairScalpPolicy.CompatibleMorphsForDiffuse(
+                "BIOG_HMM_HIR_PRO_R.Hair.HMM_HIR_Cru_Diff")?.Count == 0,
+            "An unmatched HMM hair scalp must clear hair morphs.");
+        TestAssert.True(HumanMaleHairScalpPolicy.CompatibleMorphsForDiffuse(
+                "BIOG_HMM_HED_PROMorph.Diffuse.HMM_HED_PROBase_Scalp_Diff_Stack")?.Count == 0,
+            "The HMM_HED base scalp must clear hair morphs.");
+        var hair = new[] { "Afro", "deiter", "widowsPeak", "Geezer", "rollins", "flatTop", "Willis" };
+        var afr = HumanMaleHairScalpPolicy.CreateMorphOverrides(
+            "BIOG_HMM_HIR_PRO_R.TheAfro.HMM_HIR_Afr_Diff", hair, 17)!;
+        TestAssert.Equal(1, afr.Count(value => value.Value == 1));
+        TestAssert.True(afr.Where(value => value.Value == 1)
+                .All(value => pairings["Afr"].Contains(value.Key)),
+            "An Afro scalp roll must activate one compatible hair morph only.");
+        var bald = HumanMaleHairScalpPolicy.CreateMorphOverrides(
+            "BIOG_HMM_HED_PROMorph.Diffuse.HMM_HED_PROBald_Scalp_Diff_Stack", hair, 17)!;
+        TestAssert.True(bald.Values.All(value => value == 0),
+            "Bald scalp rolls must clear all hair morphs.");
+        var crewCut = HumanMaleHairScalpPolicy.CreateMorphOverrides(
+            "BIOG_HMM_HIR_PRO_R.CrewCut.HMM_HIR_Cru_Diff", hair, 17)!;
+        TestAssert.True(crewCut.Values.All(value => value == 0),
+            "Unpaired HMM hair scalp rolls must clear all hair morphs.");
+    }
+
+    private static void EmbeddedCorpusRejectsMixedScalpPorts()
+    {
+        var donor = MorphRandomisationCatalog.LoadEmbedded().Corpus.Pools.Values
+            .SelectMany(value => value)
+            .Single(value => value.Id.Equals("LE1:LE3:HMM.FRE32_ChairmanBurns", StringComparison.OrdinalIgnoreCase));
+        TestAssert.True(!donor.MaterialTextureFamilies.ContainsKey("human-scalp") &&
+                        donor.MaterialTextureFamilies.ContainsKey("human-face") &&
+                        donor.AvailableFeatures.Count > 0 && donor.HasMaterialEvidence,
+            "The known Rollins-to-Willis port must retain its other donor data without a mixed scalp.");
+    }
+
+    private static void EmbeddedAsariMorphExclusions()
+    {
+        var donors = MorphRandomisationCatalog.LoadEmbedded().Corpus.Pools.Values
+            .SelectMany(value => value).ToArray();
+        foreach (var (sourceGame, face) in new[]
+                 {
+                     ("LE1", "ASA.war30_thorianasari"),
+                     ("LE2", "ASA.BioFace_tests_shiala")
+                 })
+        {
+            foreach (var targetGame in new[] { "LE1", "LE2", "LE3" })
+            {
+                var donor = donors.Single(value => value.Id.Equals(
+                    $"{sourceGame}:{targetGame}:{face}", StringComparison.OrdinalIgnoreCase));
+                TestAssert.True(donor.AvailableFeatures.Count == 0 && donor.NonZeroValues.Count == 0 &&
+                                donor.HasMaterialEvidence,
+                    $"{donor.Id} should be material-only after review.");
+            }
+        }
+    }
+
+    private static void EmbeddedHmfScalpSpecAvoidsWhite()
+    {
+        var donors = MorphRandomisationCatalog.LoadEmbedded().Corpus.Pools.Values
+            .SelectMany(value => value)
+            .Where(value => value.SourceProfileKey is "le1-human-female" or "le2-human-female")
+            .Where(value => value.MaterialTextureFamilies.TryGetValue("human-scalp", out var family) &&
+                            family.ContainsKey("HED_Scalp_Spec"))
+            .ToArray();
+        TestAssert.True(donors.Length > 0, "No LE1/LE2 HMF scalp families were embedded.");
+        TestAssert.True(donors.All(value =>
+                !value.MaterialTextureFamilies["human-scalp"]["HED_Scalp_Spec"]
+                    .EndsWith(".GBL_ARM_ALL_White", StringComparison.OrdinalIgnoreCase)),
+            "An embedded LE1/LE2 HMF scalp family still has White specular.");
+        TestAssert.True(donors.Any(value => value.MaterialTextureFamilies["human-scalp"]["HED_Scalp_Spec"]
+                .EndsWith(".GBL_ARM_ALL_Black", StringComparison.OrdinalIgnoreCase)),
+            "The intended Black specular redirect was not embedded.");
+    }
 
     private static void MaterialRandomisationExcludesFailedSignature()
     {
@@ -254,7 +349,11 @@ public static class RandomisationTests
         new("randomisation bundle round-trips deterministically", BundleRoundTripsDeterministically),
         new("corpus compilation distinguishes unavailable zero and nonzero features", CompilationPreservesFeatureStates),
         new("corpus compilation reports and excludes empty and reviewed donors", CompilationReportsExclusions),
+        new("corpus audit keeps same-path faces from separate packages distinct", CompilationReportsOverlappingPackages),
+        new("reviewed exclusions follow source faces into ports and preserve material-only seeds", ReviewedExclusionsFollowSource),
         new("corpus compilation classifies material vectors and atomic texture families", CompilationClassifiesMaterials),
+        new("LE1 and LE2 HMF scalp specular White is redirected to Black", CompilationRedirectsHmfScalpSpec),
+        new("corpus drops mismatched HMM scalp families without losing other donor data", CompilationRejectsConflictingScalps),
         new("corpus compilation groups face and eye textures for every species", CompilationGroupsFaceAndEyeTextures),
         new("Vorcha compilation retains material-only donors", CompilationRetainsVorchaMaterialDonors),
         new("default compiler profiles expose all approved donor pools", DefaultDefinitionsExposeApprovedPools)
@@ -402,6 +501,32 @@ public static class RandomisationTests
         var experimental = Sample(100).Scalars["Roughness"];
         TestAssert.True(safe is >= 2 and <= 6, "The 50% scalar escaped its audited P10/P90 envelope.");
         TestAssert.True(experimental is >= 0 and <= 10, "The 100% scalar escaped its metadata bounds.");
+    }
+
+    private static void Le1BatarianSpecularPowerIsBounded()
+    {
+        const string name = "BAT_HED_SPwr_Scalar";
+        float Sample(string profileKey, int strength, int seed)
+        {
+            var donor = PolicyDonor(profileKey, (name, 0.6f));
+            var profile = PolicyProfile(profileKey, [(name, 0, 1, 0.6f, 0.6f)], []);
+            return MaterialRandomiser.CreateProposal(
+                donor, [donor], profile, Values((name, 0.6f)),
+                new Dictionary<string, Vector4>(), [new(name, 0, 1)],
+                new HashSet<string>([name], StringComparer.OrdinalIgnoreCase),
+                new HashSet<string>(), new HashSet<string>(), strength, seed).Scalars[name];
+        }
+
+        TestAssert.Near(0.6f, Sample("le1-batarian", 0, 1), 0);
+        var le1Rolls = Enumerable.Range(0, 64).Select(seed => Sample("le1-batarian", 100, seed)).ToArray();
+        TestAssert.True(le1Rolls.All(value => value is >= 0.4f and <= 0.7f) &&
+                        le1Rolls.Any(value => value < 0.6f) &&
+                        le1Rolls.Any(value => value > 0.6f),
+            "LE1 Batarian specular power escaped or stopped varying inside its requested interval.");
+        TestAssert.True(Enumerable.Range(0, 64)
+                .Select(seed => Sample("le2-batarian", 100, seed))
+                .Any(value => value is < 0.4f or > 0.7f),
+            "The LE1-only rule changed another game's material randomisation.");
     }
 
     private static void MaterialVectorsRespectSemantics()
@@ -974,6 +1099,101 @@ public static class RandomisationTests
         TestAssert.Equal(first.Csv, second.Csv);
     }
 
+    private static void CompilationReportsOverlappingPackages()
+    {
+        var profile = Definition("le1-human-male", MorphFaceGame.LE1, new HashSet<string>(["A"]));
+        var native = RawFace(MorphFaceGame.LE1, "HMM.Shared", ("A", 0.25f)) with
+        {
+            PackagePath = "LE1 GlobalMorphs.pcc",
+            MaterialScalars = Values(("Skin", 0.25f))
+        };
+        var duplicate = native with
+        {
+            PackagePath = "LE2 to LE1 GlobalMorphs.pcc"
+        };
+        var materialVariant = native with
+        {
+            PackagePath = "LE3 to LE1 GlobalMorphs.pcc",
+            MaterialScalars = Values(("Skin", 0.75f))
+        };
+
+        var result = RandomisationCorpusCompiler.Compile(
+            [materialVariant, duplicate, native], [profile], []);
+        var reordered = RandomisationCorpusCompiler.Compile(
+            [native, duplicate, materialVariant], [profile], []);
+
+        TestAssert.Equal(3, result.Faces.Count);
+        TestAssert.Equal(2, result.Corpus.Pools[MorphRandomisationPoolKey.HumanMaleLe12].Count);
+        TestAssert.True(result.Corpus.Pools[MorphRandomisationPoolKey.HumanMaleLe12]
+                .Select(donor => donor.Id)
+                .ToHashSet(StringComparer.Ordinal)
+                .SetEquals(["LE1:LE1:HMM.Shared", "LE3:LE1:HMM.Shared"]),
+            "Source/target IDs or the material-distinct port were lost.");
+        TestAssert.True(result.Faces.Single(face => face.PackagePath == "LE2 to LE1 GlobalMorphs.pcc")
+                .ExclusionReason!.Contains("Identical randomised data", StringComparison.Ordinal),
+            "An identical port was not accounted for as a duplicate.");
+        TestAssert.True(result.Markdown.Contains("LE2 to LE1 GlobalMorphs.pcc", StringComparison.Ordinal),
+            "The port source was omitted from the audit.");
+        TestAssert.Equal(result.Markdown, reordered.Markdown);
+        TestAssert.Equal(result.Csv, reordered.Csv);
+    }
+
+    private static void ReviewedExclusionsFollowSource()
+    {
+        var profiles = new[]
+        {
+            Definition("le1-human-male", MorphFaceGame.LE1, new HashSet<string>(["A"])),
+            Definition("le2-human-male", MorphFaceGame.LE2, new HashSet<string>(["A"]))
+        };
+        RawMorphRandomisationFace Face(MorphFaceGame game, string package, string path) =>
+            RawFace(game, path, ("A", 0.5f)) with
+            {
+                PackagePath = package,
+                MaterialScalars = Values(("Skin", 0.75f))
+            };
+        var faces = new[]
+        {
+            Face(MorphFaceGame.LE1, "LE1 GlobalMorphs.pcc", "HMM.Bad"),
+            Face(MorphFaceGame.LE2, "LE1 to LE2 GlobalMorphs.pcc", "HMM.Bad"),
+            Face(MorphFaceGame.LE1, "LE1 GlobalMorphs.pcc", "HMM.Sparse"),
+            Face(MorphFaceGame.LE2, "LE1 to LE2 GlobalMorphs.pcc", "HMM.Sparse"),
+            Face(MorphFaceGame.LE2, "LE2 GlobalMorphs.pcc", "HMM.Sparse"),
+            Face(MorphFaceGame.LE1, "LE1 GlobalMorphs.pcc", "HMM.MaterialBad"),
+            Face(MorphFaceGame.LE2, "LE1 to LE2 GlobalMorphs.pcc", "HMM.MaterialBad")
+        };
+        var exclusions = new[]
+        {
+            new RandomisationDonorExclusion(MorphFaceGame.LE1, "HMM.Bad", "Reviewed full exclusion."),
+            new RandomisationDonorExclusion(MorphFaceGame.LE1, "HMM.Sparse", "Reviewed morph exclusion.")
+            {
+                Scope = RandomisationDonorExclusionScope.Morph
+            },
+            new RandomisationDonorExclusion(MorphFaceGame.LE1, "HMM.MaterialBad", "Reviewed material exclusion.")
+            {
+                Scope = RandomisationDonorExclusionScope.Material
+            }
+        };
+
+        var result = RandomisationCorpusCompiler.Compile(faces, profiles, exclusions);
+        var donors = result.Corpus.Pools[MorphRandomisationPoolKey.HumanMaleLe12];
+
+        TestAssert.Equal(5, donors.Count);
+        TestAssert.True(donors.All(donor => !donor.Id.EndsWith("HMM.Bad", StringComparison.Ordinal)),
+            "The fully excluded source or its port remained a donor.");
+        TestAssert.True(donors.Where(donor => donor.Id.StartsWith("LE1:", StringComparison.Ordinal) &&
+                                              donor.Id.EndsWith("HMM.Sparse", StringComparison.Ordinal))
+                .All(donor => donor.AvailableFeatures.Count == 0 &&
+                              donor.NonZeroValues.Count == 0 && donor.MaterialScalars.Count > 0),
+            "A reviewed morph-only source or port retained morph data or lost its materials.");
+        TestAssert.True(donors.Single(donor => donor.Id == "LE2:LE2:HMM.Sparse")
+                .AvailableFeatures.Count > 0,
+            "A native face with the same path was excluded by the port's source rule.");
+        TestAssert.True(donors.Where(donor => donor.Id.EndsWith("HMM.MaterialBad", StringComparison.Ordinal))
+                .All(donor => donor.AvailableFeatures.Count > 0 &&
+                              donor.NonZeroValues.Count > 0 && !donor.HasMaterialEvidence),
+            "A reviewed material-only exclusion lost morph data or retained materials.");
+    }
+
     private static void CompilationClassifiesMaterials()
     {
         var profile = Definition("le1-human-male", MorphFaceGame.LE1, new HashSet<string>(["A"]));
@@ -1009,6 +1229,65 @@ public static class RandomisationTests
             donor.MaterialTextureFamilies["human-face-mask"]["HED_Mask"]);
         TestAssert.Equal("HMM_Beard_Diff",
             donor.MaterialTextureFamilies["addition:HED_Addn"]["HED_Addn"]);
+    }
+
+    private static void CompilationRedirectsHmfScalpSpec()
+    {
+        const string white = "BIOG_Humanoid_MASTER_MTR_R.GBL_ARM_ALL_White";
+        const string black = "BIOG_Humanoid_MASTER_MTR_R.GBL_ARM_ALL_Black";
+        var profiles = new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 }
+            .Select(game => Definition($"{game.ToString().ToLowerInvariant()}-human-female", game,
+                new HashSet<string>(["A"]))).ToArray();
+        var faces = profiles.Select(profile => RawFace(profile.Game,
+                $"HMF.Test_{profile.Game}", ("A", 0.5f)) with
+            {
+                MaterialTextures = new Dictionary<string, string>
+                {
+                    ["HED_Scalp_Diff"] = "Scalp_Diff",
+                    ["HED_Scalp_Norm"] = "Scalp_Norm",
+                    ["HED_Scalp_Spec"] = white
+                }
+            }).ToArray();
+        var compilation = RandomisationCorpusCompiler.Compile(faces, profiles, []);
+        var donors = compilation.Corpus.Pools[MorphRandomisationPoolKey.HumanMaleLe12];
+        foreach (var game in new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 })
+        {
+            var donor = donors.Single(value => value.Id.EndsWith($"HMF.Test_{game}", StringComparison.Ordinal));
+            TestAssert.Equal(game == MorphFaceGame.LE3 ? white : black,
+                donor.MaterialTextureFamilies["human-scalp"]["HED_Scalp_Spec"]);
+        }
+    }
+
+    private static void CompilationRejectsConflictingScalps()
+    {
+        var profile = Definition("le3-human-male", MorphFaceGame.LE3, new HashSet<string>(["A"]));
+        RawMorphRandomisationFace Face(string name, string diffuse) =>
+            RawFace(MorphFaceGame.LE3, $"HMM.{name}", ("A", 0.5f)) with
+            {
+                MaterialScalars = Values(("Skin", 0.4f)),
+                MaterialTextures = new Dictionary<string, string>
+                {
+                    ["HED_Diff"] = "Face_Diff",
+                    ["HED_Norm"] = "Face_Norm",
+                    ["HED_Scalp_Diff"] = $"BIOG_HMM_HIR_PRO_R.Hair.HMM_HIR_{diffuse}_Diff",
+                    ["HED_Scalp_Norm"] = "BIOG_HMM_HIR_PRO_R.Hair.HMM_HIR_Rol_Norm",
+                    ["HED_Scalp_Spec"] = "BIOG_HMM_HIR_PRO_R.Hair.HMM_HIR_Rol_Mask"
+                }
+            };
+        var compilation = RandomisationCorpusCompiler.Compile(
+            [Face("Mixed", "Wil"), Face("Coherent", "Rol")], [profile], []);
+        var donors = compilation.Corpus.Pools[MorphRandomisationPoolKey.HumanMaleLe12];
+        var mixed = donors.Single(value => value.Id.EndsWith("HMM.Mixed", StringComparison.Ordinal));
+        var coherent = donors.Single(value => value.Id.EndsWith("HMM.Coherent", StringComparison.Ordinal));
+        TestAssert.True(!mixed.MaterialTextureFamilies.ContainsKey("human-scalp") &&
+                        mixed.MaterialTextureFamilies.ContainsKey("human-face") &&
+                        mixed.MaterialScalars["Skin"] == 0.4f && mixed.NonZeroValues["A"] == 0.5f,
+            "The mixed scalp family must be dropped without excluding the donor's other data.");
+        TestAssert.True(coherent.MaterialTextureFamilies.ContainsKey("human-scalp"),
+            "A coherent Rollins scalp family was dropped.");
+        TestAssert.True(compilation.Markdown.Contains("HMM.Mixed", StringComparison.Ordinal) &&
+                        compilation.Markdown.Contains("HMM_HIR diffuse/normal style conflicts: 1", StringComparison.Ordinal),
+            "The rejected family was omitted from the audit.");
     }
 
     private static void CursedRandomisationWakesZeroExtraChannels()

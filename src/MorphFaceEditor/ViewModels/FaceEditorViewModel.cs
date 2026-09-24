@@ -145,8 +145,8 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         _redoCommand = new RelayCommand(_history.Redo, () => _history.CanRedo);
         _setToDefaultsCommand = new RelayCommand(SetToDefaults, CanSetToDefaults);
         _randomiseCommand = new RelayCommand(
-            () => Randomise(GlobalRandomisationScope(CursedMode), includeCursedBones: true),
-            () => CanRandomiseScope(GlobalRandomisationScope(CursedMode)));
+            () => Randomise(GlobalRandomisationScope(), includeCursedBones: true),
+            () => CanRandomiseScope(GlobalRandomisationScope()));
         HairMesh = new HairMeshEditorViewModel(
             hairSession, meshCandidates, previewOnlyAttachments ? "Hair mesh (preview only)" : "m_oHairMesh", 0);
         OtherMeshes = otherMeshSessions
@@ -292,12 +292,12 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     public bool CanFixMorph => _session.CanFixMorph;
     public bool HasPendingRepair => _session.HasPendingRepair;
     public string? EditBlockReason => _session.EditBlockReason;
-    public bool CanRandomise => CanRandomiseScope(GlobalRandomisationScope(CursedMode));
+    public bool CanRandomise => CanRandomiseScope(GlobalRandomisationScope());
     public bool AllowsMorphRandomisation => CanEditMorphFeatures && _allowsMorphRandomisation;
     public bool AllowsMaterialRandomisation =>
         Material.Scalars.Count + Material.Vectors.Count + Material.Textures.Count > 0;
     public bool AllowsCursedRandomisation =>
-        AllowsMorphRandomisation || CanEditBones || AllowsMaterialRandomisation;
+        AllowsMorphRandomisation || AllowsMaterialRandomisation;
     public bool CursedMode
     {
         get => _cursedMode;
@@ -479,7 +479,10 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
 
             using (var aggregate = _history.BeginAggregate())
             {
-                if (morphProposal is not null) _session.SetFeatures(morphProposal.Values);
+                var morphValues = WithSelectedScalpHairMorphs(
+                    morphProposal?.Values ?? new Dictionary<string, float>(), preparedMaterial,
+                    materialSeed ?? morphSeed ?? 0);
+                if (morphValues.Count > 0) _session.SetFeatures(morphValues);
                 if (preparedMaterial is not null) Material.ApplyRandomisation(preparedMaterial);
                 aggregate.Commit();
             }
@@ -564,8 +567,9 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
 
         using (var aggregate = _history.BeginAggregate())
         {
-            if (featureValues.Count > 0) _session.SetFeatures(featureValues);
-            if (includeBones && CanEditBones)
+            var morphValues = WithSelectedScalpHairMorphs(featureValues, preparedMaterial, seed);
+            if (morphValues.Count > 0) _session.SetFeatures(morphValues);
+            if (includeBones && RandomiseMorphs && CanEditBones)
             {
                 var postMorphBones = _session.FinalSkeleton.Select(bone => bone with
                 {
@@ -612,17 +616,17 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         return otherSeed is not null && seed == otherSeed.Value ? unchecked(seed + 1) : seed;
     }
 
-    private EditorRandomisationScope GlobalRandomisationScope(bool includeExcluded) => new(
+    private EditorRandomisationScope GlobalRandomisationScope() => new(
         Categories.SelectMany(category => category.SliderGroups)
-            .Where(group => includeExcluded || group.Inclusion?.IsIncluded != false)
+            .Where(group => group.Inclusion?.IsIncluded != false)
             .SelectMany(group => group.MorphFeatures).Distinct().ToArray(),
         Categories.SelectMany(category => category.SliderGroups)
-            .Where(group => includeExcluded || group.Inclusion?.IsIncluded != false)
+            .Where(group => group.Inclusion?.IsIncluded != false)
             .SelectMany(group => group.Scalars).Distinct().ToArray(),
         Categories.SelectMany(category => category.ColourGroups)
-            .Where(group => includeExcluded || group.Inclusion?.IsIncluded != false)
+            .Where(group => group.Inclusion?.IsIncluded != false)
             .SelectMany(group => group.Values).Distinct().ToArray(),
-        Categories.Where(category => includeExcluded || category.TextureInclusion?.IsIncluded != false)
+        Categories.Where(category => category.TextureInclusion?.IsIncluded != false)
             .SelectMany(category => category.Textures).Distinct().ToArray());
 
     internal static bool IsTextureFamilyInScope(
@@ -652,7 +656,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         var hasEligibleTexture = RandomiseMaterials &&
                                  scope.Textures.Any(value => eligibleTextures.Contains(value.Name)) &&
                                  materialProfiles.Count > 0;
-        var hasCursedBones = CursedMode && CanEditBones;
+        var hasCursedBones = CursedMode && RandomiseMorphs && CanEditBones;
         if (CursedMode) return hasMorph || hasCursedBones || hasRawNumericMaterial || hasEligibleTexture;
         var hasEligibleMorph = hasMorph && _randomisationCatalog.HasDonors(_profileKey);
         var hasEligibleMaterial = RandomiseMaterials && materialProfiles.Count > 0 &&
@@ -943,6 +947,35 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
 
         return new PreparedMaterialRandomisation(
             resultScalars, resultVectors, resultTextures, appliedFamilies, failures);
+    }
+
+    private IReadOnlyDictionary<string, float> WithSelectedScalpHairMorphs(
+        IReadOnlyDictionary<string, float> proposed,
+        PreparedMaterialRandomisation? preparedMaterial,
+        int seed)
+    {
+        if (!RandomiseMorphs || !_profileKey.Contains("human-male", StringComparison.OrdinalIgnoreCase) ||
+            preparedMaterial is null) return proposed;
+        var selectedScalp = preparedMaterial.Textures.FirstOrDefault(value =>
+            Material.SourceParameterName(value.Key).Equals("HED_Scalp_Diff", StringComparison.OrdinalIgnoreCase));
+        if (selectedScalp.Value is null) return proposed;
+        var selectedPath = selectedScalp.Value.Source.InstancedPath;
+        var currentPath = Material.Textures.FirstOrDefault(value =>
+            value.Name.Equals(selectedScalp.Key, StringComparison.OrdinalIgnoreCase))?.SourceName;
+        if (string.Equals(selectedPath, currentPath, StringComparison.OrdinalIgnoreCase)) return proposed;
+        var includedMorphNames = Categories.SelectMany(category => category.SliderGroups)
+            .Where(group => group.Inclusion?.IsIncluded != false)
+            .SelectMany(group => group.MorphFeatures)
+            .Select(value => value.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var editableHair = Features.Where(value => value.IsEditable &&
+                HumanMaleHairScalpPolicy.IsHairMorph(value.Name) && includedMorphNames.Contains(value.Name))
+            .Select(value => value.Name).ToArray();
+        var overrides = HumanMaleHairScalpPolicy.CreateMorphOverrides(selectedPath, editableHair, seed);
+        if (overrides is null || overrides.Count == 0) return proposed;
+        var result = new Dictionary<string, float>(proposed, StringComparer.OrdinalIgnoreCase);
+        foreach (var (name, value) in overrides) result[name] = value;
+        return result;
     }
 
     private void RefreshDirtyState() =>

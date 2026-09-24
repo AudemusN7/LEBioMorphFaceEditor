@@ -75,7 +75,13 @@ public static class MaterialRandomiser
             {
                 limit = new MaterialRandomisationScalarBounds(name, statistics.P10, statistics.P90);
             }
-            scalars[name] = SampleScalar(seedValue, statistics, limit, strengthPercent, numericRandom);
+            var le1BatarianSpecularPower =
+                profile.ProfileKey.Equals("le1-batarian", StringComparison.OrdinalIgnoreCase) &&
+                name.Equals("BAT_HED_SPwr_Scalar", StringComparison.OrdinalIgnoreCase);
+            if (le1BatarianSpecularPower)
+                limit = new MaterialRandomisationScalarBounds(name, 0.4f, 0.7f);
+            var sampled = SampleScalar(seedValue, statistics, limit, strengthPercent, numericRandom);
+            scalars[name] = le1BatarianSpecularPower ? Math.Clamp(sampled, 0.4f, 0.7f) : sampled;
             randomisedScalars.Add(name);
         }
 

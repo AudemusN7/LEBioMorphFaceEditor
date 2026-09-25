@@ -40,6 +40,7 @@ public partial class App : Application
         var targets = new MorphTargetCatalog();
         var packageWriter = new MorphFacePackageWriter();
         var packageContext = new MorphFacePackageContextService();
+        var startupPreferences = StartupPreferencesService.CreateDefault();
         _viewModel = new MainWindowViewModel(
             dialogs,
             new MorphFaceCatalogService(profiles),
@@ -54,6 +55,7 @@ public partial class App : Application
             new WpfMorphFaceClipboardService(),
             MorphRandomisationCatalog.LoadEmbedded(),
             recentFiles: RecentFileService.CreateDefault(),
+            startupPreferences: startupPreferences,
             detachedMeshPreviewLoadService: new DetachedMeshPreviewLoadService(
                 sceneFactory,
                 materialCatalog: new CustomMaterialTemplateCatalogService(packageReader, textureRegistryStore)));
@@ -61,7 +63,6 @@ public partial class App : Application
         var window = new MainWindow(_viewModel);
         MainWindow = window;
         window.Show();
-        var startupPreferences = StartupPreferencesService.CreateDefault();
         _ = Dispatcher.BeginInvoke(() =>
             ShowFirstRunWelcome(window, startupPreferences, dialogs));
     }

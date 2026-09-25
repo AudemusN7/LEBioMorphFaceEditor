@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Controls.Primitives;
 using System.Windows.Threading;
 using MorphFaceEditor.ViewModels;
 
@@ -13,6 +14,9 @@ public partial class SearchableMeshPicker : UserControl
     private bool _suppressHighlight;
 
     public SearchableMeshPicker() => InitializeComponent();
+
+    private void OnResizeDragDelta(object sender, DragDeltaEventArgs e) =>
+        CandidateList.Height = Math.Clamp(CandidateList.Height + e.VerticalChange, 80, 900);
 
     private void OnPopupOpened(object? sender, EventArgs e)
     {

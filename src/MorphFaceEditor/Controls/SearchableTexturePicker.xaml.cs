@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Controls.Primitives;
 using System.Windows.Threading;
 using MorphFaceEditor.ViewModels;
 
@@ -12,6 +13,9 @@ public partial class SearchableTexturePicker : UserControl
     private MaterialTextureOption? _highlighted;
 
     public SearchableTexturePicker() => InitializeComponent();
+
+    private void OnResizeDragDelta(object sender, DragDeltaEventArgs e) =>
+        CandidateList.Height = Math.Clamp(CandidateList.Height - e.VerticalChange, 80, 900);
 
     private void OnPopupOpened(object? sender, EventArgs e)
     {

@@ -28,6 +28,7 @@ public static class RandomisationTests
         new("material scalars use safe and experimental envelopes", MaterialScalarsUseTwoEnvelopes),
         new("LE1 Batarian specular power stays between 0.4 and 0.7", Le1BatarianSpecularPowerIsBounded),
         new("material colours interpolate perceptually while selectors stay discrete", MaterialVectorsRespectSemantics),
+        new("LE3 HMF highlight colours share one complete donor and interpolation", Le3FemaleHighlightsStayPaired),
         new("material safety policy constrains or excludes hazardous numeric parameters", MaterialSafetyPolicyProtectsNumericParameters),
         new("material texture selection balances variants and rejects unsafe families", MaterialTextureSelectionIsCurated),
         new("texture-dependent selector rules remain valid", TextureDependentSelectorsRemainValid),
@@ -727,6 +728,62 @@ public static class RandomisationTests
             new Dictionary<string, Vector4> { ["TUR_HED_Addn_Mask_Vector"] = Vector4.One }, [],
             new HashSet<string>(), new HashSet<string>(), new HashSet<string>(["addition:TUR_HED_Addn"]), 100, 4);
         TestAssert.Equal(new Vector4(0, 0, 0, 1), turianProposal.Vectors["TUR_HED_Addn_Mask_Vector"]);
+    }
+
+    private static void Le3FemaleHighlightsStayPaired()
+    {
+        static MaterialVectorStatistics Stats(string name) => new(
+            name, MaterialVectorRandomisationKind.PerceptualColour,
+            Vector4.Zero, Vector4.One, []);
+        MorphRandomisationDonor Donor(string id, Vector4? first, Vector4? second) =>
+            PolicyDonor("le3-human-female") with
+            {
+                Id = id,
+                MaterialVectors = new Dictionary<string, Vector4>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Highlight1Color"] = first ?? Vector4.Zero,
+                    ["Highlight2Colour_Vector"] = second ?? Vector4.Zero
+                }.Where((_, index) => index == 0 ? first.HasValue : second.HasValue)
+                 .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase)
+            };
+
+        var seedValue = new Vector4(0.12f, 0.22f, 0.32f, 1);
+        var targetValue = new Vector4(0.82f, 0.62f, 0.42f, 1);
+        var seed = Donor("seed", seedValue, null);
+        var pairedTarget = Donor("paired-target", targetValue, targetValue);
+        var alternateValue = new Vector4(0.42f, 0.72f, 0.22f, 1);
+        var alternatePair = Donor("alternate-pair", alternateValue, alternateValue);
+        var incomplete = Donor("incomplete", new Vector4(0.95f, 0.05f, 0.7f, 1), null);
+        var profile = PolicyProfile("le3-human-female", [],
+            [Stats("Highlight1Color"), Stats("Highlight2Colour_Vector")]);
+        var current = new Dictionary<string, Vector4>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Highlight1Color"] = seedValue,
+            ["Highlight2Colour_Vector"] = seedValue
+        };
+
+        MaterialRandomisationProposal Roll(int randomSeed) => MaterialRandomiser.CreateProposal(
+            seed, [pairedTarget, alternatePair, incomplete], profile, Values(), current, [],
+            new HashSet<string>(),
+            new HashSet<string>(["Highlight1Color", "Highlight2Colour_Vector"], StringComparer.OrdinalIgnoreCase),
+            new HashSet<string>(), 50, randomSeed);
+        var paired = Roll(438);
+        TestAssert.Equal(paired.Vectors["Highlight1Color"], paired.Vectors["Highlight2Colour_Vector"]);
+        var recoveredRoll = Enumerable.Range(0, 128).Select(Roll).FirstOrDefault(value =>
+            value.Vectors["Highlight1Color"] != seedValue ||
+            value.Vectors["Highlight2Colour_Vector"] != seedValue);
+        TestAssert.True(recoveredRoll is not null,
+            "An incomplete selected donor prevented a roll despite complete compatible pairs.");
+        TestAssert.Equal(recoveredRoll!.Vectors["Highlight1Color"],
+            recoveredRoll.Vectors["Highlight2Colour_Vector"]);
+
+        var single = MaterialRandomiser.CreateProposal(
+            pairedTarget, [pairedTarget], profile, Values(), current, [],
+            new HashSet<string>(), new HashSet<string>(["Highlight1Color"], StringComparer.OrdinalIgnoreCase),
+            new HashSet<string>(), 50, 438);
+        TestAssert.Equal(seedValue, single.Vectors["Highlight2Colour_Vector"]);
+        TestAssert.True(single.Vectors["Highlight1Color"] != seedValue,
+            "The in-scope highlight did not randomise by itself.");
     }
 
     private static void Le1BatarianUsesCompatibleMaterialDonors()

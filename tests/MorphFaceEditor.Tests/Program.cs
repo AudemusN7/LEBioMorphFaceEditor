@@ -9,10 +9,16 @@ if (args.Length >= 3 && args[0].Equals("--d4-interrupted-save-worker", StringCom
 var suites = new Dictionary<string, IReadOnlyList<TestCase>>(StringComparer.OrdinalIgnoreCase)
 {
     ["core"] = DeformationTests.All.Concat(EditingTests.All).Concat(DetachedMeshPreviewTests.All)
-        .Concat(CustomMaterialWorkspaceTests.All).Concat(RandomisationTests.Runtime).ToArray(),
+        .Concat(CustomMaterialWorkspaceTests.All).Concat(RandomisationTests.Runtime)
+        .Concat(PlayerFacialDetailTexturePolicyTests.All)
+        .Concat(PlayerHairStyleCatalogTests.All)
+        .Concat(PlayerFaceScarTexturePolicyTests.All)
+        .Concat(Player2DaRandomisationPolicyTests.All).ToArray(),
     ["materials"] = MaterialTests.All,
     ["rendering"] = RenderingTests.All,
     ["ui"] = UiSmokeTests.All.Concat(TextureRegistrySettingsTests.All)
+        .Concat(HairMeshManualSelectionTests.All)
+        .Concat(PlayerWorkspaceReferencePolicyTests.All)
         .Concat(MorphTargetCatalogTests.All).Concat(MorphFaceCatalogTests.All)
         .Concat(CustomMeshTests.All).Concat(MaterialInterchangeTests.All).ToArray(),
     ["package"] = PackageContextTests.All.Concat(PackageIntegrityTests.All).Concat(ActorAssignmentInventoryTests.All)

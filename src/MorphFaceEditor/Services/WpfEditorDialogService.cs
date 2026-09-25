@@ -219,6 +219,17 @@ public sealed class WpfEditorDialogService : IEditorDialogService
         return window.Choice;
     }
 
+    public bool ConfirmHairScalpTextureSwitch(string hairMeshPath) =>
+        new EditorMessageWindow(
+            "Match Scalp Textures",
+            $"The selected hair mesh uses a matching scalp texture set. Switch the scalp textures to match {hairMeshPath}?\n\nChoose No to keep the current scalp textures.",
+            confirmation: true,
+            primaryLabel: "Switch Scalp",
+            secondaryLabel: "Keep Current")
+        {
+            Owner = Application.Current.MainWindow
+        }.ShowDialog() == true;
+
     public void ShowInformation(string title, string message) =>
         _ = new EditorMessageWindow(title, message)
         {

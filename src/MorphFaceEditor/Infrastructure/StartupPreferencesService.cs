@@ -1,11 +1,16 @@
 using System.IO;
+using System.Numerics;
 using System.Text.Json;
 
 namespace MorphFaceEditor.Infrastructure;
 
-internal sealed record StartupPreferences(bool SuppressWelcome = false);
+internal sealed record BackgroundColourPreference(float Red, float Green, float Blue);
 
-internal sealed class StartupPreferencesService
+internal sealed record StartupPreferences(
+    bool SuppressWelcome = false,
+    BackgroundColourPreference? BackgroundColour = null);
+
+public sealed class StartupPreferencesService
 {
     private readonly string _storagePath;
 
@@ -25,6 +30,27 @@ internal sealed class StartupPreferencesService
     internal void SetSuppressWelcome(bool suppressWelcome)
     {
         Current = Current with { SuppressWelcome = suppressWelcome };
+        Save();
+    }
+
+    internal Vector4? BackgroundColor
+    {
+        get
+        {
+            var colour = Current.BackgroundColour;
+            return colour is not null &&
+                   float.IsFinite(colour.Red) && float.IsFinite(colour.Green) && float.IsFinite(colour.Blue)
+                ? new Vector4(colour.Red, colour.Green, colour.Blue, 1)
+                : null;
+        }
+    }
+
+    internal void SetBackgroundColor(Vector4 color)
+    {
+        Current = Current with
+        {
+            BackgroundColour = new BackgroundColourPreference(color.X, color.Y, color.Z)
+        };
         Save();
     }
 

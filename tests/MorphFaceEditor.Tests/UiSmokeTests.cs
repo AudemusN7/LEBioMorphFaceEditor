@@ -162,10 +162,12 @@ public static class UiSmokeTests
             TestAssert.True(!service.Current.SuppressWelcome,
                 "A new preferences store suppressed the startup welcome by default.");
             service.SetSuppressWelcome(true);
+            service.SetBackgroundColor(new Vector4(0.2f, 0.4f, 0.6f, 1));
 
             var reloaded = new StartupPreferencesService(storagePath);
             TestAssert.True(reloaded.Current.SuppressWelcome,
                 "The Don't Show Again preference did not survive reloading.");
+            TestAssert.Equal(new Vector4(0.2f, 0.4f, 0.6f, 1), reloaded.BackgroundColor!.Value);
         }
         finally
         {
@@ -2905,6 +2907,16 @@ public static class UiSmokeTests
         TestAssert.Equal(Visibility.Collapsed,
             ((FrameworkElement)background.FindName("HdrIntensityPanel")!).Visibility);
         background.Close();
+
+        var resettableBackground = new HdrColorPickerWindow("Background",
+            new Vector4(0.2f, 0.4f, 0.6f, 1), allowHdr: false,
+            resetColor: WpfHdrColorDialogService.DefaultBackgroundColor);
+        TestAssert.True(resettableBackground.Height >= 620,
+            "The background picker is too short to show brightness, RGB, and HEX controls.");
+        ((Button)resettableBackground.FindName("ResetBackgroundButton")!).RaiseEvent(
+            new RoutedEventArgs(Button.ClickEvent));
+        TestAssert.Equal(WpfHdrColorDialogService.DefaultBackgroundColor, resettableBackground.Value);
+        resettableBackground.Close();
     }
 
     private static void MaterialVectorSubcategoriesRandomiseIndependently()

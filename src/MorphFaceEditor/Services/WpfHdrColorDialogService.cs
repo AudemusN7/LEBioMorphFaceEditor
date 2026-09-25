@@ -6,6 +6,7 @@ namespace MorphFaceEditor.Services;
 
 public sealed class WpfHdrColorDialogService : IHdrColorDialogService
 {
+    public static readonly Vector4 DefaultBackgroundColor = new(0.035f, 0.043f, 0.055f, 1);
     public bool ExtendedSliders { get; set; }
 
     public Vector4? Edit(string title, Vector4 value, Action<Vector4> livePreview)
@@ -20,7 +21,8 @@ public sealed class WpfHdrColorDialogService : IHdrColorDialogService
         Action<Vector4> livePreview,
         bool allowHdr)
     {
-        var window = new HdrColorPickerWindow(title, value, allowHdr, ExtendedSliders)
+        var window = new HdrColorPickerWindow(title, value, allowHdr, ExtendedSliders,
+            allowHdr ? null : DefaultBackgroundColor)
         {
             Owner = Application.Current.MainWindow
         };

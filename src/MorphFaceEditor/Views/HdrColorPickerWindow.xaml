@@ -2,13 +2,13 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:MorphFaceEditor.Controls"
-        Title="HDR colour" Width="650" Height="690" MinWidth="610" MinHeight="650" ResizeMode="CanResize"
+        Title="HDR colour" Width="650" Height="740" MinWidth="610" MinHeight="700" ResizeMode="CanResize"
         WindowStartupLocation="CenterOwner"
         Background="{StaticResource WindowBackground}" Foreground="{StaticResource PrimaryText}">
     <Grid Margin="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="260" />
-            <RowDefinition x:Name="IntensityRow" Height="64" />
+            <RowDefinition Height="64" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
@@ -88,6 +88,8 @@
                      ToolTip="#RRGGBB or #RRGGBBAA. HDR components are clipped to the displayable HEX range." />
         </Grid>
         <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button x:Name="ResetBackgroundButton" Content="Reset to default" MinWidth="116"
+                    Margin="0,0,16,0" Click="OnResetBackground" Visibility="Collapsed" />
             <Button Content="Cancel" IsCancel="True" MinWidth="84" Margin="0,0,8,0" />
             <Button Content="Apply" IsDefault="True" MinWidth="84" Click="OnApply" />
         </StackPanel>

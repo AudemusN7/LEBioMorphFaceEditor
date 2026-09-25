@@ -49,6 +49,8 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
 
     public event EventHandler? SelectionChanged;
     public event EventHandler? PreviewChanged;
+    /// <summary>Raised only after a user commits a mesh through the picker control.</summary>
+    public event EventHandler? ManualSelectionCommitted;
 
     public string Label { get; }
     public int SlotIndex { get; }
@@ -83,7 +85,12 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
             CancelPreview();
             if (SetProperty(ref _selected, value))
             {
+                var previous = _session.Value;
                 _session.Set(value.Identity);
+                if (!Same(previous, _session.Value))
+                {
+                    ManualSelectionCommitted?.Invoke(this, EventArgs.Empty);
+                }
             }
         }
     }
@@ -169,6 +176,22 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
             ApplySearch();
         }
         _session.Set(value);
+    }
+
+    /// <summary>Applies an installed hairstyle choice unless this slot is protected.</summary>
+    public bool TrySetRandomisedSelection(AssetIdentity? value)
+    {
+        if (IsRandomisationLocked) return false;
+        if (value is not null && !_options.Any(option => Same(option.Identity, value)))
+        {
+            _options = [.. _options, new HairMeshOption(value.InstancedPath, value,
+                $"Randomised · {Path.GetFileName(value.PackagePath)}")];
+            OnPropertyChanged(nameof(Options));
+            ApplySearch();
+        }
+        var changed = !Same(_session.Value, value);
+        if (changed) _session.Set(value);
+        return changed;
     }
 
     /// <summary>Requests a non-authored attachment preview for the picker highlight.</summary>

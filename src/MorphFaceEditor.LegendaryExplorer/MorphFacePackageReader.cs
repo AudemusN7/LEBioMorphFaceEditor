@@ -406,6 +406,14 @@ public sealed class MorphFacePackageReader : IDisposable
         var materialSlots = mesh.Materials?
             .Select((index, slot) =>
             {
+                // Some stock attachment meshes retain an empty material slot that no LOD
+                // section uses (LE3 HMM Ssk_02 is one example). Keep the slot so section
+                // indices remain stable, but do not try to resolve a package entry for UIndex 0.
+                if (index == 0)
+                {
+                    return null;
+                }
+
                 var reference = export.FileRef.GetEntry(index)
                     ?? throw new InvalidDataException(
                         $"SkeletalMesh '{export.InstancedFullPath}' has invalid material UIndex {index}.");
@@ -429,6 +437,19 @@ public sealed class MorphFacePackageReader : IDisposable
             .Select((model, index) => ReadSkeletalMeshLod(
                 export, mesh, model, index, skeleton, materialSlots, lodMaterialMaps[index]))
             .ToArray();
+        foreach (var candidateLod in lods)
+        {
+            foreach (var section in candidateLod.Topology.Sections)
+            {
+                if (materialSlots[section.MaterialIndex] is null)
+                {
+                    throw new InvalidDataException(
+                        $"SkeletalMesh '{export.InstancedFullPath}' LOD {candidateLod.LodIndex} section " +
+                        $"references null material slot {section.MaterialIndex}.");
+                }
+            }
+        }
+
         var lod = lods[0];
         return new SkeletalMeshAsset(
             ToIdentity(export)!,

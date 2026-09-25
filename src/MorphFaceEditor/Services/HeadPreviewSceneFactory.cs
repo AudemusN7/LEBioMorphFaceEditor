@@ -386,8 +386,12 @@ public sealed class HeadPreviewSceneFactory
                 value.Texture.HasMeaningfulAlpha,
                 value.Texture.Mips),
             StringComparer.OrdinalIgnoreCase);
-        var family = attachment && resolved.Family is not HeadMaterialFamily.Hair and not HeadMaterialFamily.Lashes
-            ? HeadMaterialClassifier.Classify(identity.InstancedPath, attachment: true)
+        // A resolved family's material parameters and blend mode are authoritative. The
+        // package path can identify a hair package without telling us whether this is a
+        // scalp material; reclassifying it as Hair would make masked scalp materials
+        // translucent when a mesh attachment happens to use them.
+        var family = resolved.Family == HeadMaterialFamily.Unknown
+            ? HeadMaterialClassifier.Classify(identity.InstancedPath, attachment)
             : resolved.Family;
         return new HeadPreviewMaterial(
             resolved.Key,

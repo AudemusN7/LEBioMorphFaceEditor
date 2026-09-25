@@ -55,6 +55,11 @@ public static class UiSmokeTests
         new("pasted morph and material data remain live unsaved edits", PastedDataRemainsLiveAndDirty),
         new("face editor category selection can be restored by key", FaceEditorCategoryRestoresByKey),
         new("randomisation commands honour global and subcategory morph scopes", RandomisationCommandsHonorScopes),
+        new("locked Player hair morph group cannot randomise without another eligible scope", LockedPlayerHairMorphGroupCannotRandomise),
+        new("Player Character morph randomisation keeps only scalp-safe exceptions", PlayerCharacterMorphScopeKeepsExceptions),
+        new("HMF mesh rolls clear only unlocked hair morphs", FemaleMeshRollClearsUnlockedHairMorphs),
+        new("Player colour randomisation applies linked 2DA rows and Cursed variation", PlayerColourRandomisationUses2Da),
+        new("Player hair and addition colours randomise for HMM in all games", PlayerHairAndAdditionColoursRandomiseAcrossGames),
         new("Set to Defaults restores stock morph and material values atomically", SetToDefaultsRestoresStockState),
         new("global morph and material randomisation uses separate donors", GlobalRandomisationUsesSeparateDonors),
         new("subcategory padlocks protect randomisation and persist in-session", SubcategoryInclusionsFilterGlobalScope),
@@ -64,6 +69,7 @@ public static class UiSmokeTests
         new("material vector subcategories expose independent randomise commands", MaterialVectorSubcategoriesRandomiseIndependently),
         new("exhausted texture randomisation is reported without discarding numeric values", ExhaustedTextureRandomisationIsReported),
         new("LE3 HMM scalp randomisation preserves its required texture pair", Le3HmmScalpRandomisationAppliesCorePair),
+        new("manual hair scalp prompt survives an optional Mask decode failure", ManualHairScalpPromptKeepsRequiredPairWhenOptionalMapFails),
         new("cursed mode randomises morph bones and materials as one undo step", CursedModeRandomisesOneUndoStep),
         new("Cursed material-only rolls leave morphs and bones unchanged", CursedMaterialOnlyLeavesBonesUnchanged),
         new("fixed-bake Cursed mode cannot mutate morph sliders", FixedBakeCursedModePreservesMorphs),
@@ -1109,6 +1115,149 @@ public static class UiSmokeTests
         TestAssert.Equal(0, editor.RandomisationStrength);
     }
 
+    private static void LockedPlayerHairMorphGroupCannotRandomise()
+    {
+        using var reader = new MorphFacePackageReader();
+        using var editor = CreateRandomisationEditor(reader, includePlayerHairMorph: true);
+        var hairGroup = editor.Categories.SelectMany(category => category.SliderGroups)
+            .Single(group => group.MorphFeatures.Any(feature => feature.Name == "Afro"));
+        TestAssert.True(hairGroup.RandomiseCommand?.CanExecute(null) == true,
+            "An unlocked Player hair morph group was not eligible for randomisation.");
+
+        editor.HairMesh.IsRandomisationLocked = true;
+        TestAssert.True(hairGroup.RandomiseCommand?.CanExecute(null) == false,
+            "A locked Player hair morph group remained enabled without another eligible value.");
+        TestAssert.True(editor.RandomiseCommand.CanExecute(null),
+            "Locking Player hair disabled unrelated global morph randomisation.");
+
+        editor.CursedMode = true;
+        TestAssert.True(hairGroup.RandomiseCommand?.CanExecute(null) == false,
+            "Cursed mode enabled a locked, hair-only targeted roll.");
+    }
+
+    private static void PlayerCharacterMorphScopeKeepsExceptions()
+    {
+        foreach (var name in new[] { "anderson", "joker", "kaiden", "jacob", "shepard" })
+            TestAssert.True(!FaceEditorViewModel.IsPlayerRandomisableMorph(
+                    name, "facial-structure", "character", PlayerHairSex.Male),
+                $"HMM Character target '{name}' still enters Player randomisation.");
+        TestAssert.True(FaceEditorViewModel.IsPlayerRandomisableMorph(
+                "eastwood", "facial-structure", "character", PlayerHairSex.Male),
+            "HMM Eastwood was excluded from Player randomisation.");
+
+        foreach (var name in new[]
+                 { "ashley", "jack", "kasumi", "miranda", "race_ashley", "race_liara" })
+            TestAssert.True(!FaceEditorViewModel.IsPlayerRandomisableMorph(
+                    name, "facial-structure", "character", PlayerHairSex.Female),
+                $"HMF Character target '{name}' still enters Player randomisation.");
+        foreach (var name in new[] { "iconic", "race_iconic" })
+            TestAssert.True(FaceEditorViewModel.IsPlayerRandomisableMorph(
+                    name, "facial-structure", "character", PlayerHairSex.Female),
+                $"HMF Iconic Shepard target '{name}' was excluded from Player randomisation.");
+        TestAssert.True(FaceEditorViewModel.IsPlayerRandomisableMorph(
+                "Afro", "facial-structure", "hair", PlayerHairSex.Male),
+            "The Character exclusion also removed the separate hair morph group.");
+
+        var bothProposed = FaceEditorViewModel.ResolveExclusivePlayerIconicMorphs(
+            new Dictionary<string, float> { ["iconic"] = 1f, ["race_iconic"] = 1f },
+            0f, 0f, 41);
+        TestAssert.True((bothProposed["iconic"] > 0f) !=
+                        (bothProposed["race_iconic"] > 0f),
+            "The two additive Iconic Shepard morphs were enabled together.");
+        var oneLockedIn = FaceEditorViewModel.ResolveExclusivePlayerIconicMorphs(
+            new Dictionary<string, float> { ["iconic"] = 1f }, 0f, 1f, 41);
+        TestAssert.True(oneLockedIn["iconic"] == 0f,
+            "An Iconic roll doubled a previously selected race_iconic value.");
+    }
+
+    private static void PlayerColourRandomisationUses2Da()
+    {
+        const int seed = 781;
+        var paletteRequest = new Player2DaRandomisationRequest(
+            Player2DaSex.Male,
+            new HashSet<Player2DaPalette> { Player2DaPalette.SkinTone },
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "SkinTone" },
+            new Dictionary<string, Player2DaValue>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["SkinTone"] = Player2DaValue.FromVector(Vector4.One)
+            });
+        var palette = Player2DaRandomisationPolicy.Roll(paletteRequest,
+            new Random(unchecked(seed ^ 0x32444150))).Values["SkinTone"].Vector;
+
+        using var reader = new MorphFacePackageReader();
+        using (var editor = CreateRandomisationEditor(reader,
+                   randomSeedFactory: () => seed, includePlayerHairMorph: true))
+        {
+            editor.RandomiseMorphs = false;
+            editor.RandomiseMaterials = true;
+            editor.RandomiseCommand.Execute(null);
+            var actual = editor.Material.Vectors.Single(value => value.Name == "SkinTone").Value;
+            TestAssert.True(actual == palette,
+                "Normal Player material randomisation did not use the selected 2DA skin row.");
+        }
+
+        using (var editor = CreateRandomisationEditor(reader,
+                   randomSeedFactory: () => seed, includePlayerHairMorph: true))
+        {
+            editor.RandomiseMorphs = false;
+            editor.RandomiseMaterials = true;
+            editor.CursedMode = true;
+            editor.MaterialRandomisationStrength = 100;
+            editor.RandomiseCommand.Execute(null);
+            var variation = CursedMorphRandomiser.CreateExtrasProposal(
+                [], new Dictionary<string, float>(),
+                new Dictionary<string, Vector4> { ["SkinTone"] = palette },
+                100, unchecked(seed ^ 0x32444143)).VectorValues["SkinTone"];
+            var expected = new Vector4(variation.X, variation.Y, variation.Z, palette.W);
+            var actual = editor.Material.Vectors.Single(value => value.Name == "SkinTone").Value;
+            TestAssert.True(actual == expected,
+                "Cursed Player colour lost either its 2DA base row or its variation.");
+        }
+    }
+
+    private static void PlayerHairAndAdditionColoursRandomiseAcrossGames()
+    {
+        using var reader = new MorphFacePackageReader();
+        foreach (var game in new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 })
+        {
+            using var editor = CreateRandomisationEditor(reader,
+                randomSeedFactory: () => 123,
+                includePlayerHairColours: true,
+                playerGame: game);
+            editor.RandomiseMorphs = false;
+            editor.RandomiseMaterials = true;
+            var hairGroup = editor.Categories.SelectMany(category => category.ColourGroups)
+                .Single(group => group.Values.Any(value => value.Name == "HED_Hair_Colour_Vector"));
+            hairGroup.RandomiseCommand!.Execute(null);
+            var additionGroup = editor.Categories.SelectMany(category => category.ColourGroups)
+                .Single(group => group.Values.Any(value => value.Name == "HED_Addn_Colour_Vector"));
+            additionGroup.RandomiseCommand!.Execute(null);
+
+            var hair = editor.Material.Vectors.Single(value => value.Name == "HED_Hair_Colour_Vector").Value;
+            var addition = editor.Material.Vectors.Single(value => value.Name == "HED_Addn_Colour_Vector").Value;
+            TestAssert.True(hair != new Vector4(0.13f, 0.27f, 0.39f, 0.7f),
+                $"Player HMM hair colour did not randomise for {game}.");
+            TestAssert.True(addition != new Vector4(0.17f, 0.31f, 0.43f, 0.6f),
+                $"Player HMM addition colour did not randomise for {game}.");
+        }
+    }
+
+    private static void FemaleMeshRollClearsUnlockedHairMorphs()
+    {
+        var proposed = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["hairShape"] = 1f,
+            ["otherFeature"] = 0.6f
+        };
+        var unlocked = FaceEditorViewModel.ClearFemaleHairMorphsForMesh(
+            proposed, ["hairShape"]);
+        TestAssert.True(unlocked["hairShape"] == 0f && unlocked["otherFeature"] == 0.6f,
+            "An HMF hair mesh retained an unlocked hair morph or changed an unrelated feature.");
+        var locked = FaceEditorViewModel.ClearFemaleHairMorphsForMesh(proposed, []);
+        TestAssert.True(locked["hairShape"] == 1f,
+            "An HMF hair mesh overrode the locked hair-morph subcategory.");
+    }
+
     private static void MaterialRandomisationObeysToggle()
     {
         using var reader = new MorphFacePackageReader();
@@ -1664,7 +1813,10 @@ public static class UiSmokeTests
         bool includeSecondDonor = false,
         string profileKey = "le1-human-male",
         string? materialRandomisationProfileKey = null,
-        bool mixedCustomMaterials = false)
+        bool mixedCustomMaterials = false,
+        bool includePlayerHairMorph = false,
+        bool includePlayerHairColours = false,
+        MorphFaceGame? playerGame = null)
     {
         var sourceMesh = TestFixtures.CreateMesh();
         var mesh = sourceMesh with
@@ -1694,20 +1846,40 @@ public static class UiSmokeTests
             new PackageFingerprint(1, DateTime.UnixEpoch, new string('0', 64)),
             mesh.Source,
             null,
-            [new MorphFeatureValue("nose_BridgeIn", 0), new MorphFeatureValue("eyes_Big", 0)],
+            includePlayerHairMorph
+                ? [new MorphFeatureValue("nose_BridgeIn", 0), new MorphFeatureValue("eyes_Big", 0),
+                    new MorphFeatureValue("Afro", 0)]
+                : [new MorphFeatureValue("nose_BridgeIn", 0), new MorphFeatureValue("eyes_Big", 0)],
             [new BoneTranslation("root", Vector3.Zero), new BoneTranslation("nose_tip", new Vector3(2, 4, 6))],
             MorphFaceMaterialOverrides.Empty,
             [mesh.Positions.ToArray()],
             []);
         var session = new MorphFaceEditor.Core.Editing.MorphFaceEditingSession(
-            document, mesh, [Target("nose_BridgeIn"), Target("eyes_Big")]);
+            document, mesh, includePlayerHairMorph
+                ? [Target("nose_BridgeIn"), Target("eyes_Big"), Target("Afro")]
+                : [Target("nose_BridgeIn"), Target("eyes_Big")]);
         var materialIdentity = TestFixtures.CreateIdentity("HeadMaterial", "MaterialInstanceConstant");
+        var materialVectors = new Dictionary<string, Vector4>
+        {
+            ["SkinTone"] = Vector4.One,
+            ["Emis_Color"] = Vector4.One
+        };
+        var materialTextures = new Dictionary<string, MaterialTextureBinding>();
+        if (includePlayerHairColours)
+        {
+            materialVectors["HED_Hair_Colour_Vector"] = new Vector4(0.13f, 0.27f, 0.39f, 0.7f);
+            materialVectors["HED_Addn_Colour_Vector"] = new Vector4(0.17f, 0.31f, 0.43f, 0.6f);
+            materialVectors["blonde"] = new Vector4(0.19f, 0.33f, 0.47f, 0.5f);
+            const string texturePackagePath = "fixture.pcc";
+            materialTextures["HED_Addn"] = new MaterialTextureBinding("HED_Addn",
+                CreateTestTexture(texturePackagePath, "Working.PlayerBeard", "HED_Addn"));
+        }
         var resolvedMaterial = new ResolvedHeadMaterial(
             MaterialIdentityKey.Create(materialIdentity), materialIdentity, "BIOG_HMM_HED_PROMorph",
             HeadMaterialFamily.Skin, HeadMaterialBlendMode.Opaque, false,
             new Dictionary<string, float> { ["HED_Norm_Blend"] = 2, ["Emis_Scalar"] = 1 },
-            new Dictionary<string, Vector4> { ["SkinTone"] = Vector4.One, ["Emis_Color"] = Vector4.One },
-            new Dictionary<string, MaterialTextureBinding>());
+            materialVectors,
+            materialTextures);
         var kroganIdentity = TestFixtures.CreateIdentity("KroganMaterial", "MaterialInstanceConstant");
         var kroganMaterial = new ResolvedHeadMaterial(
             MaterialIdentityKey.Create(kroganIdentity), kroganIdentity, "BIOG_KRO_HED_PROMorph",
@@ -1749,7 +1921,9 @@ public static class UiSmokeTests
                 new Dictionary<string, ResolvedHeadMaterial> { [resolvedMaterial.Key] = resolvedMaterial }));
         var donor = new MorphRandomisationDonor(
             "LE1:Seed", "le1-human-male",
-            new HashSet<string>(["nose_BridgeIn", "eyes_Big"], StringComparer.OrdinalIgnoreCase),
+            new HashSet<string>(includePlayerHairMorph
+                ? ["nose_BridgeIn", "eyes_Big", "Afro"]
+                : ["nose_BridgeIn", "eyes_Big"], StringComparer.OrdinalIgnoreCase),
             new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase)
             {
                 ["nose_BridgeIn"] = 0.6f,
@@ -1859,7 +2033,8 @@ public static class UiSmokeTests
             randomisationInclusionState,
             customMaterialWorkspace: customWorkspace,
             customMaterialOptions: customOptions,
-            materialRandomisationProfileKey: materialRandomisationProfileKey);
+            materialRandomisationProfileKey: materialRandomisationProfileKey,
+            playerRandomisationGame: playerGame ?? (includePlayerHairMorph ? MorphFaceGame.LE1 : null));
     }
 
     private static void NumericWheelIncrementsAreSafe()
@@ -1932,6 +2107,14 @@ public static class UiSmokeTests
         editor.Selected = editor.Options.Single(option => option.Identity == hair.Identity);
         TestAssert.True(editor.IsRandomisationLocked,
             "Manually choosing an attachment unexpectedly released its randomisation lock.");
+        TestAssert.True(!editor.TrySetRandomisedSelection(helmet.Identity),
+            "Attachment randomisation bypassed the locked selection.");
+        TestAssert.Equal(hair.Identity, editor.Value);
+        editor.IsRandomisationLocked = false;
+        TestAssert.True(editor.TrySetRandomisedSelection(helmet.Identity),
+            "An unlocked attachment did not accept an eligible randomised mesh.");
+        TestAssert.Equal(helmet.Identity, editor.Value);
+        editor.Selected = editor.Options.Single(option => option.Identity == hair.Identity);
         editor.SearchText = "helmet";
         TestAssert.Equal(2, editor.Candidates.Count);
         editor.Selected = null!;
@@ -2806,6 +2989,58 @@ public static class UiSmokeTests
             "LE3 HMM scalp randomisation discarded its required Diff/Norm pair.");
     }
 
+    private static void ManualHairScalpPromptKeepsRequiredPairWhenOptionalMapFails()
+    {
+        var family = MorphRandomisationCatalog.LoadEmbedded()
+            .CompatibleMaterialDonors("le3-human-male")
+            .Select(value => value.MaterialTextureFamilies.GetValueOrDefault("human-scalp"))
+            .First(value => value is not null && value.TryGetValue("HED_Scalp_Spec", out var spec) &&
+                            spec.Contains("GBL_ARM_ALL_Black", StringComparison.OrdinalIgnoreCase))!;
+        const string packagePath = "working.pcc";
+        var currentTextures = family.Keys.ToDictionary(
+            name => name,
+            name => new MaterialTextureBinding(name, CreateTestTexture(packagePath, $"Current.{name}", name)),
+            StringComparer.OrdinalIgnoreCase);
+        var materialIdentity = new AssetIdentity(packagePath, "Working.ScalpMaterial", 1, "MaterialInstanceConstant");
+        var material = new ResolvedHeadMaterial(
+            MaterialIdentityKey.Create(materialIdentity), materialIdentity, "HMM_HED_PRONPC_MASTER_FACE_MAT",
+            HeadMaterialFamily.Skin, HeadMaterialBlendMode.Opaque, false,
+            new Dictionary<string, float>(), new Dictionary<string, Vector4>(), currentTextures)
+        {
+            SupportedTextures = family.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase)
+        };
+        var session = new MorphFaceEditor.Core.Editing.MaterialEditingSession(
+            MorphFaceMaterialOverrides.Empty,
+            new ResolvedHeadMaterialSet(new Dictionary<string, ResolvedHeadMaterial> { [material.Key] = material }));
+        var candidates = family.Values.Select(path =>
+        {
+            var occurrence = new TextureCatalogOccurrence(
+                "installed.pcc", 42, 0, TextureCatalogOrigin.BaseGame, 1, 1,
+                "PF_B8G8R8A8", "TEXTUREGROUP_Character", false, null);
+            return new TextureCatalogCandidate(TextureCatalogGame.LE3, path, occurrence, [occurrence]);
+        }).ToArray();
+        using var editor = new MaterialEditorViewModel(
+            session, new StubColorDialog(), new ImmediateTextureLoader("GBL_ARM_ALL_Black"), packagePath, [],
+            message => throw new Exception(message), new HumanMaleFeatureMetadataCatalog(),
+            candidates, TextureCatalogProfile.Empty, true);
+
+        var prepared = editor.PrepareRandomisationAsync(
+                new Dictionary<string, float>(),
+                new Dictionary<string, Vector4>(),
+                new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.OrdinalIgnoreCase)
+                    { ["manual|human-scalp"] = family })
+            .GetAwaiter().GetResult();
+
+        TestAssert.Equal(1, prepared.AppliedTextureFamilies);
+        TestAssert.True(prepared.FailedTextureFamilySignatures.Count == 0,
+            "An unresolved optional scalp map rejected the manual prompt family.");
+        TestAssert.True(prepared.Textures.ContainsKey("HED_Scalp_Diff") &&
+                        prepared.Textures.ContainsKey("HED_Scalp_Norm"),
+            "The manual prompt must still apply the required Diff/Norm pair.");
+        TestAssert.True(!prepared.Textures.ContainsKey("HED_Scalp_Spec"),
+            "The unresolved optional Mask should be omitted from the prompt result.");
+    }
+
     private static void ExhaustedTextureRandomisationIsReported()
     {
         TestAssert.True(FaceEditorViewModel.WereAllTextureFamiliesRejected(
@@ -2826,14 +3061,19 @@ public static class UiSmokeTests
                 : TextureRole.Normal,
             TextureColorSpace.Linear, TextureAlphaPolicy.Ignore, false, path);
 
-    private sealed class ImmediateTextureLoader : ITextureReferenceLoader
+    private sealed class ImmediateTextureLoader(string? failInstancedPathSubstring = null) : ITextureReferenceLoader
     {
         public Task<DecodedTextureAsset> LoadTextureAsync(
             string packagePath,
             string texturePath,
             MaterialParameterDefinition definition,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(CreateTestTexture(packagePath, texturePath, definition.Name));
+            CancellationToken cancellationToken = default)
+        {
+            if (failInstancedPathSubstring is not null && texturePath.Contains(
+                    failInstancedPathSubstring, StringComparison.OrdinalIgnoreCase))
+                throw new FileNotFoundException($"Test texture '{texturePath}' is unavailable.");
+            return Task.FromResult(CreateTestTexture(packagePath, texturePath, definition.Name));
+        }
     }
 
     private static void MaterialEditorHidesSelectionColor()
@@ -2914,6 +3154,22 @@ public static class UiSmokeTests
 
         TestAssert.Equal("scalp", profile.GetMaterialSubcategory(
             "HED_Scalp_Mask_Scalar", MaterialParameterKind.Scalar));
+        TestAssert.Equal("scalp", profile.GetMaterialSubcategory(
+            "Highlight1Color", MaterialParameterKind.Vector));
+        TestAssert.Equal("scalp", profile.GetMaterialSubcategory(
+            "Highlight2Colour_Vector", MaterialParameterKind.Vector));
+        var highlightSession = new MorphFaceEditor.Core.Editing.MaterialEditingSession(
+            MorphFaceMaterialOverrides.Empty, ResolvedHeadMaterialSet.Empty);
+        var highlightVector = new MaterialVectorEditorViewModel(
+            highlightSession,
+            new MaterialParameterDefinition("Highlight1Color", "Hair Highlight 1", "Additions",
+                MaterialParameterKind.Vector, HeadMaterialFamily.Hair),
+            new StubColorDialog());
+        var additionsCategory = new EditorFeatureCategoryViewModel(
+            profile.Categories.Single(value => value.Key == HumanMaleFeatureMetadataCatalog.Additions),
+            [], [], [highlightVector], [], profile,
+            _ => new RelayCommand(() => { }));
+        TestAssert.Equal("HAIR COLOURS", additionsCategory.ColourGroups.Single().Label);
         TestAssert.Equal("additions", profile.GetMaterialCategory(
             "HED_Mask", MaterialParameterKind.Texture));
         TestAssert.Equal("additions", profile.GetMaterialCategory(
@@ -3068,7 +3324,9 @@ public static class UiSmokeTests
         TestAssert.Equal("additions", profile.GetMaterialCategory("HED_Brow_Tint_Scalar", MaterialParameterKind.Scalar));
         TestAssert.Equal("makeup", profile.GetMaterialSubcategory("HED_Lips_Tint_Vector", MaterialParameterKind.Vector));
         TestAssert.Equal("material-hair", profile.GetMaterialSubcategory("Hightlight1Intensity", MaterialParameterKind.Scalar));
-        TestAssert.Equal("material-hair", profile.GetMaterialSubcategory("Highlight2Color", MaterialParameterKind.Vector));
+        TestAssert.Equal("scalp", profile.GetMaterialSubcategory("Highlight2Color", MaterialParameterKind.Vector));
+        TestAssert.Equal("scalp", profile.GetMaterialSubcategory("Highlight1Colour_Vector", MaterialParameterKind.Vector));
+        TestAssert.Equal("material-hair", profile.GetMaterialSubcategory("Highlight2Intensity", MaterialParameterKind.Scalar));
         TestAssert.Equal("material-hair", profile.GetMaterialSubcategory("Highlight1SpecExp_Scalar", MaterialParameterKind.Scalar));
         TestAssert.Equal("Eyeshadow Strength", profile.DescribeMaterial(HumanMaterialProfiles.Describe(
             "HED_Brow_Tint_Scalar", MaterialParameterKind.Scalar)).Label);

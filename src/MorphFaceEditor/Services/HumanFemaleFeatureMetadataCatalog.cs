@@ -101,6 +101,7 @@ public class HumanFemaleFeatureMetadataCatalog : HumanMaleFeatureMetadataCatalog
     {
         var name = parameterName.ToLowerInvariant();
         if (IsMakeupParameter(name)) return Makeup;
+        if (IsHairHighlightColourVector(name, kind)) return "scalp";
         if (IsHairHighlightParameter(name)) return MaterialHair;
         if (name.Contains("spec_lips") || name.Contains("spwr_lips")) return "lips";
         if (name == "hed_lash_opac_scalar") return Surface;
@@ -258,6 +259,11 @@ public class HumanFemaleFeatureMetadataCatalog : HumanMaleFeatureMetadataCatalog
 
     private static bool IsHairHighlightParameter(string name) =>
         name.Contains("highlight") || name.Contains("hightlight");
+
+    private static bool IsHairHighlightColourVector(string name, MaterialParameterKind kind) =>
+        kind == MaterialParameterKind.Vector && name is
+            "highlight1color" or "highlight2color" or
+            "highlight1colour_vector" or "highlight2colour_vector";
 
     private static bool IsRaceShape(string name) =>
         name.Contains("asn") || name.Contains("blk") || name.Contains("cauc");

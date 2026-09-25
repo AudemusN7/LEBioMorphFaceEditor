@@ -207,6 +207,10 @@ public class HumanMaleFeatureMetadataCatalog : IHeadEditorUiProfile
         var name = parameterName.ToLowerInvariant();
         if (GetMaterialCategory(parameterName, kind) == Additions)
         {
+            if (kind == MaterialParameterKind.Vector && IsHairHighlightColourVector(name))
+            {
+                return Scalp;
+            }
             if (name == "mask" && kind == MaterialParameterKind.Scalar)
             {
                 return Scalp;
@@ -235,6 +239,10 @@ public class HumanMaleFeatureMetadataCatalog : IHeadEditorUiProfile
         }
         return Face;
     }
+
+    private static bool IsHairHighlightColourVector(string name) => name is
+        "highlight1color" or "highlight2color" or
+        "highlight1colour_vector" or "highlight2colour_vector";
 
     public virtual int GetMaterialSortOrder(string parameterName, MaterialParameterKind kind)
     {

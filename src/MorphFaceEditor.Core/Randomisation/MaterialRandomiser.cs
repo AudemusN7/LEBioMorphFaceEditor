@@ -14,6 +14,8 @@ public static class MaterialRandomiser
         "HED_EyeShadow_Tint_Scalar",
         "HED_Lips_Tint_Scalar"
     };
+    private static readonly string[] Highlight1Names = ["Highlight1Color", "Highlight1Colour_Vector"];
+    private static readonly string[] Highlight2Names = ["Highlight2Color", "Highlight2Colour_Vector"];
 
     public static MaterialRandomisationProposal CreateProposal(
         MorphRandomisationDonor donor,
@@ -96,9 +98,20 @@ public static class MaterialRandomiser
             textures,
             excludedTextureSignatures);
         var vectors = new Dictionary<string, Vector4>(currentVectors, StringComparer.OrdinalIgnoreCase);
+        var processedHighlightPairs = new HashSet<int>();
         foreach (var name in vectorScope.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
         {
             if (IsExcludedVector(profile.ProfileKey, name)) continue;
+            if (IsLe3FemaleProfile(profile.ProfileKey) && TryGetHighlightIndex(name, out var highlightIndex))
+            {
+                if (processedHighlightPairs.Add(highlightIndex))
+                {
+                    ApplyLe3FemaleHighlightPair(
+                        highlightIndex, donor, compatibleDonors, profile, currentVectors, vectorScope,
+                        strengthPercent, numericRandom, vectors);
+                }
+                continue;
+            }
             if (!vectors.ContainsKey(name) || !donor.MaterialVectors.TryGetValue(name, out var seedValue) ||
                 !profile.Vectors.TryGetValue(name, out var statistics))
             {
@@ -112,6 +125,108 @@ public static class MaterialRandomiser
         ApplyTextureDependencies(profile.ProfileKey, textures, currentTextures, vectors, numericRandom);
 
         return new MaterialRandomisationProposal(donor.Id, randomSeed, scalars, vectors, textures);
+    }
+
+    private static void ApplyLe3FemaleHighlightPair(
+        int requestedHighlight,
+        MorphRandomisationDonor donor,
+        IReadOnlyList<MorphRandomisationDonor> compatibleDonors,
+        MaterialRandomisationProfile profile,
+        IReadOnlyDictionary<string, Vector4> currentVectors,
+        IReadOnlySet<string> vectorScope,
+        int strength,
+        MorphRandomiser.StableRandom random,
+        IDictionary<string, Vector4> result)
+    {
+        var slot1 = FindScopedHighlightName(Highlight1Names, currentVectors, vectorScope);
+        var slot2 = FindScopedHighlightName(Highlight2Names, currentVectors, vectorScope);
+        var targetNames = new[] { slot1, slot2 };
+        if (targetNames[requestedHighlight - 1] is null) return;
+
+        // Match FindColourTarget's per-vector eligibility, but require both members of the pair.
+        var pairedDonors = compatibleDonors.Where(value =>
+            TryGetVector(value.MaterialVectors, Highlight1Names, out _) &&
+            TryGetVector(value.MaterialVectors, Highlight2Names, out _)).ToArray();
+        if (pairedDonors.Length == 0) return;
+        var seedDonor = TryGetVector(donor.MaterialVectors, Highlight1Names, out _) &&
+                        TryGetVector(donor.MaterialVectors, Highlight2Names, out _)
+            ? donor
+            : pairedDonors[random.NextIndex(pairedDonors.Length)];
+        if (!TryGetVector(seedDonor.MaterialVectors, Highlight1Names, out var seed1) ||
+            !TryGetVector(seedDonor.MaterialVectors, Highlight2Names, out var seed2)) return;
+        var pairedTarget = pairedDonors[random.NextIndex(pairedDonors.Length)];
+        if (!TryGetVector(pairedTarget.MaterialVectors, Highlight1Names, out var target1) ||
+            !TryGetVector(pairedTarget.MaterialVectors, Highlight2Names, out var target2)) return;
+
+        var seeds = new[] { seed1, seed2 };
+        var targets = new[] { target1, target2 };
+        var active = new List<(int Index, string Name, MaterialVectorStatistics Statistics)>();
+        for (var index = 0; index < targetNames.Length; index++)
+        {
+            var name = targetNames[index];
+            if (name is null) continue;
+            var aliases = index == 0 ? Highlight1Names : Highlight2Names;
+            var statisticsName = profile.Vectors.ContainsKey(name)
+                ? name
+                : FindAlias(profile.Vectors.Keys, aliases);
+            if (statisticsName is null || !profile.Vectors.TryGetValue(statisticsName, out var statistics)) continue;
+            active.Add((index, name, statistics));
+        }
+        if (active.Count == 0) return;
+
+        var amount = strength == 0 ? 0 : Math.Min(strength / 50f, 1) * (float)random.NextUnitDouble();
+        var expansion = strength > 50
+            ? ((strength - 50) / 50f) * (float)random.NextUnitDouble() * 0.5f
+            : 0;
+        var alphaAmount = strength == 0 ? 0 : strength / 100f * (float)random.NextUnitDouble();
+        foreach (var item in active)
+        {
+            result[item.Name] = SampleColourAt(
+                seeds[item.Index], targets[item.Index], item.Statistics, strength,
+                amount, expansion, alphaAmount);
+        }
+    }
+
+    private static string? FindScopedHighlightName(
+        IReadOnlyList<string> aliases,
+        IReadOnlyDictionary<string, Vector4> currentVectors,
+        IReadOnlySet<string> vectorScope)
+    {
+        var actual = FindAlias(vectorScope, aliases);
+        return actual is not null && currentVectors.ContainsKey(actual) ? actual : null;
+    }
+
+    private static bool TryGetVector(
+        IReadOnlyDictionary<string, Vector4> values,
+        IReadOnlyList<string> aliases,
+        out Vector4 value)
+    {
+        var name = FindAlias(values.Keys, aliases);
+        if (name is not null && values.TryGetValue(name, out value)) return true;
+        value = default;
+        return false;
+    }
+
+    private static string? FindAlias(IEnumerable<string> names, IReadOnlyList<string> aliases) =>
+        aliases.FirstOrDefault(alias => names.Contains(alias, StringComparer.OrdinalIgnoreCase));
+
+    private static bool IsLe3FemaleProfile(string profileKey) =>
+        profileKey.Equals("le3-human-female", StringComparison.OrdinalIgnoreCase);
+
+    private static bool TryGetHighlightIndex(string name, out int index)
+    {
+        if (Highlight1Names.Contains(name, StringComparer.OrdinalIgnoreCase))
+        {
+            index = 1;
+            return true;
+        }
+        if (Highlight2Names.Contains(name, StringComparer.OrdinalIgnoreCase))
+        {
+            index = 2;
+            return true;
+        }
+        index = 0;
+        return false;
     }
 
     private static IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> ApplyRequiredTextures(
@@ -357,16 +472,28 @@ public static class MaterialRandomiser
     {
         if (strength == 0) return seed;
         var safeAmount = Math.Min(strength / 50f, 1) * (float)random.NextUnitDouble();
+        var expansion = strength > 50
+            ? ((strength - 50) / 50f) * (float)random.NextUnitDouble() * 0.5f
+            : 0;
+        var alphaAmount = strength / 100f * (float)random.NextUnitDouble();
+        return SampleColourAt(seed, target, statistics, strength, safeAmount, expansion, alphaAmount);
+    }
+
+    private static Vector4 SampleColourAt(
+        Vector4 seed,
+        Vector4 target,
+        MaterialVectorStatistics statistics,
+        int strength,
+        float safeAmount,
+        float expansion,
+        float alphaAmount)
+    {
+        if (strength == 0) return seed;
         var from = LinearRgbToOklab(seed);
         var to = LinearRgbToOklab(target);
         var lab = Vector3.Lerp(from, to, safeAmount);
-        if (strength > 50)
-        {
-            var expansion = ((strength - 50) / 50f) * (float)random.NextUnitDouble() * 0.5f;
-            lab += (to - from) * expansion;
-        }
+        lab += (to - from) * expansion;
         var rgb = OklabToLinearRgb(lab);
-        var alphaAmount = strength / 100f * (float)random.NextUnitDouble();
         var alpha = seed.W + ((target.W - seed.W) * alphaAmount);
         return Clamp(new Vector4(rgb, alpha), statistics.Minimum, statistics.Maximum, strength);
     }

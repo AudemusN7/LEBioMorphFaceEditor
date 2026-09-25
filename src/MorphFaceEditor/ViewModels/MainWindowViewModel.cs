@@ -882,7 +882,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 registryTextureCandidates: [],
                 textureCatalogProfile: textureCatalogProfile,
                 isTextureRegistryAvailable: false,
-                ignoresAuthoredGeometry: result.Profile.IgnoresAuthoredGeometry);
+                ignoresAuthoredGeometry: result.Profile.IgnoresAuthoredGeometry,
+                playerRandomisationGame: IsPlayerWorkspace ? result.Profile.Game : null);
             var speciesKey = PreviewCameraGrouping.SpeciesForProfile(result.Profile.Key);
             if (string.Equals(_loadedSpeciesKey, speciesKey, StringComparison.OrdinalIgnoreCase))
             {
@@ -1009,6 +1010,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             {
                 attachment.SelectionChanged -= OnAttachmentMeshChanged;
                 attachment.PreviewChanged -= OnAttachmentMeshPreviewChanged;
+                attachment.ManualSelectionCommitted -= OnManualAttachmentMeshSelectionCommitted;
             }
             Editor.Dispose();
         }
@@ -1055,6 +1057,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             {
                 attachment.SelectionChanged += OnAttachmentMeshChanged;
                 attachment.PreviewChanged += OnAttachmentMeshPreviewChanged;
+                attachment.ManualSelectionCommitted += OnManualAttachmentMeshSelectionCommitted;
             }
         }
         OnDirtyStateChanged();
@@ -1064,6 +1067,35 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     private void OnEditorDirtyStateChanged(object? sender, EventArgs e) => OnDirtyStateChanged();
+
+    private async void OnManualAttachmentMeshSelectionCommitted(object? sender, EventArgs e)
+    {
+        if (sender is not HairMeshEditorViewModel { SlotIndex: 0, Value: { } mesh } changedSlot ||
+            Editor is not { } editor)
+        {
+            return;
+        }
+
+        try
+        {
+            var prepared = await editor.PrepareManualHairScalpPairAsync(mesh);
+            if (prepared is null || Editor != editor || changedSlot.Value != mesh)
+            {
+                return;
+            }
+
+            if (_dialogs.ConfirmHairScalpTextureSwitch(mesh.InstancedPath) &&
+                Editor == editor && changedSlot.Value == mesh)
+            {
+                editor.ApplyManualHairScalpPair(prepared);
+            }
+        }
+        catch (Exception exception)
+        {
+            AppLog.Error($"Could not prepare scalp textures for manually selected hair '{mesh.InstancedPath}'.", exception);
+            SetEditorError($"Matching scalp textures could not be prepared: {exception.Message}");
+        }
+    }
 
     private void OnEditorPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {

@@ -713,7 +713,8 @@ public sealed partial class MainWindowViewModel
             customMaterialWorkspace: result.CustomMaterials,
             customMaterialOptions: result.MaterialOptions,
             materialRandomisationProfileKey: $"{game.ToString().ToLowerInvariant()}-human-female",
-            previewOnlyAttachments: true);
+            previewOnlyAttachments: true,
+            playerRandomisationGame: game);
         SetEditor(editor, result.Preview.Loaded);
         FaceDetails = $"{topology.VertexCount:N0} vertices · {topology.IndexCount / 3:N0} triangles · " +
                       $"{topology.Sections.Count} sections · {topology.ReferenceSkeleton.Count} verified bones · " +

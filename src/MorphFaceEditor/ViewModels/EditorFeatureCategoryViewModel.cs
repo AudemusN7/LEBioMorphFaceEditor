@@ -153,7 +153,11 @@ public sealed class EditorFeatureCategoryViewModel
                 var inclusionKey = $"{definition.Key}:colours:{group.Key}";
                 var command = createRandomiseCommand?.Invoke(new EditorRandomisationScope([], [], values, [], inclusionKey));
                 return new EditorVectorGroupViewModel(
-                    group.Key, $"{group.Label} COLOURS", values, command,
+                    group.Key,
+                    definition.Key == HumanMaleFeatureMetadataCatalog.Additions && group.Key == "scalp"
+                        ? "HAIR COLOURS"
+                        : $"{group.Label} COLOURS",
+                    values, command,
                     CreateInclusion(inclusionKey, command,
                         inclusionState, inclusionChanged));
             })

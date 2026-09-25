@@ -19,6 +19,8 @@ public static class CustomMaterialEvidenceTests
         new("custom material catalogue exposes only proven installed families", CatalogueExposesProvenFamilies),
         new("attachment picker excludes only audited literal mesh suffixes", HirReviewMeshesAreExcluded),
         new("BIOG attachment preview loads package-qualified registry identity", BiogAttachmentPreviewLoadsCanonicalIdentity),
+        new("LE3 Ssk 02 preview preserves its unused null material slot", Ssk02RetainsUnusedNullMaterialSlot),
+        new("used null attachment material slots remain invalid", UsedNullAttachmentMaterialSlotsRemainInvalid),
         new("D1 human scar and teeth support follows compiled material evidence", HumanScarAndTeethSupportFollowsEvidence)
     ];
 
@@ -60,6 +62,57 @@ public static class CustomMaterialEvidenceTests
             "BIOG_HMF_HIR_PRO.Hair_PROShepard.HMF_HIR_PROShepard_MDL");
         TestAssert.True(attachment.Mesh.Positions.Length > 0,
             "The package-qualified BIOG attachment did not decode for preview.");
+    }
+
+    private static void Ssk02RetainsUnusedNullMaterialSlot()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        var cookedPath = LegendaryExplorerCoreRuntime.DefaultLe3CookedPath;
+        var packagePath = string.IsNullOrWhiteSpace(cookedPath)
+            ? null
+            : Path.Combine(cookedPath, "BIOG_HMM_HIR_PRO_R.pcc");
+        if (packagePath is null || !File.Exists(packagePath)) return;
+
+        using var reader = new MorphFacePackageReader();
+        var attachment = reader.LoadDetachedAttachment(
+            packagePath, "Hair_SargeSpike.HMM_HIR_Ssk_02_MDL");
+
+        TestAssert.True(attachment.Mesh.RenderData!.MaterialSlots.Count == 2,
+            "Ssk_02 material slots were compacted and section indices would shift.");
+        TestAssert.True(attachment.Mesh.RenderData.MaterialSlots[0] is null,
+            "The source null slot was not preserved at material index 0.");
+        TestAssert.True(attachment.Mesh.RenderData.MaterialSlots[1] is not null,
+            "Ssk_02's active material slot did not resolve.");
+        TestAssert.True(attachment.Materials.Materials.Count > 0,
+            "The valid Ssk_02 material evidence was not loaded.");
+        TestAssert.True(attachment.Mesh.AvailableLods.All(lod =>
+                lod.Topology.Sections.All(section => section.MaterialIndex == 1)),
+            "A Ssk_02 LOD section no longer points at the active slot 1 material.");
+    }
+
+    private static void UsedNullAttachmentMaterialSlotsRemainInvalid()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        var cookedPath = LegendaryExplorerCoreRuntime.DefaultLe2CookedPath;
+        var packagePath = string.IsNullOrWhiteSpace(cookedPath)
+            ? null
+            : Path.Combine(cookedPath, "BIOG_HMF_HIR_PRO.pcc");
+        if (packagePath is null || !File.Exists(packagePath)) return;
+
+        using var reader = new MorphFacePackageReader();
+        var rejected = false;
+        try
+        {
+            reader.ValidateDetachedAttachment(packagePath, "Mira.HMF_HIR_MIR_LOD0");
+        }
+        catch (InvalidDataException exception)
+        {
+            rejected = exception.Message.Contains("references null material slot 0",
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        TestAssert.True(rejected,
+            "A section that uses a null material slot was accepted as a loadable attachment.");
     }
 
     private static void HumanScarAndTeethSupportFollowsEvidence()

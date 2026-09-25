@@ -39,6 +39,7 @@ public static class RenderingTests
         new("scene factory falls back to base geometry for an unmatched baked LOD", SceneFactoryHandlesUnmatchedBakedLod),
         new("lower LOD sections use their authored material remap", LowerLodSectionsUseMaterialRemap),
         new("custom mesh sections use the mesh material-slot order", CustomMeshUsesAuthoredMaterialOrder),
+        new("attachment preview preserves resolved scalp material family", AttachmentPreviewPreservesResolvedScalpFamily),
         new("custom mesh preview ignores BioMorphFace geometry and skeleton", CustomMeshIgnoresMorphFaceGeometry),
         new("detached attachments retain their native bind placement", DetachedAttachmentsRetainNativeBindPlacement),
         new("fixed-bake preview skins preserved imported geometry", FixedBakePreviewSkinsPreservedGeometry),
@@ -195,6 +196,66 @@ public static class RenderingTests
                 new Dictionary<string, float>(),
                 new Dictionary<string, Vector4>(),
                 new Dictionary<string, MaterialTextureBinding>());
+    }
+
+    private static void AttachmentPreviewPreservesResolvedScalpFamily()
+    {
+        var materialIdentity = new AssetIdentity(
+            "BIOG_HMM_HIR_PRO.pcc",
+            "Materials.BIOG_HMM_HIR_PROCustomShortAfro_MAT",
+            1,
+            "MaterialInstanceConstant");
+        var baseMesh = TestFixtures.CreateRenderableTwoLodMesh();
+        var renderData = baseMesh.RenderData! with { MaterialSlots = [materialIdentity] };
+        var lods = baseMesh.AvailableLods
+            .Select(lod => lod with
+            {
+                RenderData = lod.RenderData with { MaterialSlots = [materialIdentity] }
+            })
+            .ToArray();
+        var headMesh = baseMesh with { RenderData = renderData, Lods = lods };
+        var attachmentMesh = headMesh with
+        {
+            Source = new AssetIdentity(
+                "BIOG_HMM_HIR_PRO.pcc",
+                "Hair.HMM_HIR_PROCustomShortAfro_MDL",
+                2,
+                "SkeletalMesh")
+        };
+        var document = new MorphFaceDocument(
+            TestFixtures.CreateIdentity("Custom.PlayerHead", "ImportedMesh"),
+            new PackageFingerprint(1, DateTime.UnixEpoch, new string('0', 64)),
+            headMesh.Source,
+            null,
+            [],
+            [],
+            MorphFaceMaterialOverrides.Empty,
+            headMesh.AvailableLodPositions,
+            []);
+        var resolvedScalp = new ResolvedHeadMaterial(
+            MaterialIdentityKey.Create(materialIdentity),
+            materialIdentity,
+            "HMM Scalp Master",
+            HeadMaterialFamily.Scalp,
+            HeadMaterialBlendMode.Masked,
+            false,
+            new Dictionary<string, float>(),
+            new Dictionary<string, Vector4>(),
+            new Dictionary<string, MaterialTextureBinding>());
+        var loaded = new LoadedMorphFace(
+            document,
+            headMesh,
+            attachmentMesh,
+            new ResolvedHeadMaterialSet(new Dictionary<string, ResolvedHeadMaterial>
+            {
+                [resolvedScalp.Key] = resolvedScalp
+            }),
+            MorphFaceEditor.Core.Diagnostics.TopologyDiagnostics.Analyze(headMesh, document));
+
+        var material = new HeadPreviewSceneFactory().Create(loaded).Meshes[1].Sections[0].Material;
+
+        TestAssert.Equal(HeadMaterialFamily.Scalp, material.Family);
+        TestAssert.Equal(HeadMaterialBlendMode.Masked, material.BlendMode);
     }
 
     private static void CustomMeshIgnoresMorphFaceGeometry()

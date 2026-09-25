@@ -42,6 +42,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly DetachedMeshPreviewLoadService _detachedMeshPreviewLoadService;
     private readonly MorphRandomisationCatalog _randomisationCatalog;
     private readonly RecentFileService _recentFileService;
+    private readonly StartupPreferencesService? _startupPreferences;
     private readonly AsyncRelayCommand _openPackageCommand;
     private readonly AsyncRelayCommand _loadSelectedFaceCommand;
     private readonly AsyncRelayCommand _commitCommand;
@@ -97,7 +98,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private HeadPreviewRenderMode _renderMode = HeadPreviewRenderMode.Shaded;
     private HeadPreviewLightingPreset _lightingPreset = HeadPreviewLightingPreset.Studio;
     private int _previewLod;
-    private Vector4 _backgroundColor = new(0.035f, 0.043f, 0.055f, 1);
+    private Vector4 _backgroundColor = WpfHdrColorDialogService.DefaultBackgroundColor;
     private PackageReferenceCatalog _referenceCatalog = new([], []);
     private int _attachmentChangeVersion;
     private CancellationTokenSource? _attachmentPreviewCancellation;
@@ -130,7 +131,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         StandalonePlayerMeshImportService? standaloneMeshImportService = null,
         StandaloneLegacyHeadMorphImportService? standaloneLegacyImportService = null,
         DetachedMeshPreviewLoadService? detachedMeshPreviewLoadService = null,
-        RecentFileService? recentFiles = null)
+        RecentFileService? recentFiles = null,
+        StartupPreferencesService? startupPreferences = null)
     {
         _dialogs = dialogs;
         _catalogService = catalogService;
@@ -153,6 +155,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _detachedMeshPreviewLoadService = detachedMeshPreviewLoadService ?? new DetachedMeshPreviewLoadService(sceneFactory);
         _randomisationCatalog = randomisationCatalog ?? MorphRandomisationCatalog.Empty;
         _recentFileService = recentFiles ?? new RecentFileService();
+        _startupPreferences = startupPreferences;
+        if (startupPreferences?.BackgroundColor is { } savedBackground)
+        {
+            _backgroundColor = Vector4.Clamp(savedBackground, Vector4.Zero, Vector4.One);
+        }
         _openPackageCommand = new AsyncRelayCommand(OpenPackageAsync, () => !IsBusy);
         _loadSelectedFaceCommand = new AsyncRelayCommand(
             LoadSelectedFaceCommandAsync,
@@ -576,6 +583,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             before,
             value => BackgroundColor = value);
         BackgroundColor = applied ?? before;
+        if (applied is not null)
+        {
+            _startupPreferences?.SetBackgroundColor(BackgroundColor);
+        }
     }
 
     private static byte ToColorByte(float value) =>

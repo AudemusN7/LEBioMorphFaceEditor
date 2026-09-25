@@ -50,7 +50,7 @@
 
         <Popup x:Name="PickerPopup"
                PlacementTarget="{Binding ElementName=PickerButton}"
-               Placement="Bottom"
+               Placement="Top"
                IsOpen="{Binding IsChecked, ElementName=PickerButton, Mode=TwoWay}"
                AllowsTransparency="True"
                StaysOpen="True"
@@ -58,7 +58,6 @@
                Closed="OnPopupClosed">
             <Border Width="{Binding ActualWidth, ElementName=Root}"
                     MinWidth="360"
-                    MaxHeight="440"
                     Padding="6"
                     PreviewKeyDown="OnPopupPreviewKeyDown"
                     Background="{StaticResource PanelBackground}"
@@ -67,18 +66,34 @@
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
-                    <TextBox x:Name="SearchBox"
+                    <Thumb Height="12" Margin="0,0,0,5"
+                           Cursor="SizeNS" DragDelta="OnResizeDragDelta"
+                           ToolTip="Drag to resize texture list"
+                           AutomationProperties.Name="Resize texture list">
+                        <Thumb.Template>
+                            <ControlTemplate TargetType="Thumb">
+                                <Border Background="Transparent">
+                                    <Border Width="42" Height="3" CornerRadius="2"
+                                            Background="{StaticResource MutedText}"
+                                            HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                            </ControlTemplate>
+                        </Thumb.Template>
+                    </Thumb>
+                    <TextBox Grid.Row="1" x:Name="SearchBox"
                              Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
                              TextChanged="OnSearchTextChanged"
                              ToolTip="Search by texture name, path, source package, or origin"
                              Margin="0,0,0,6" />
-                    <ListBox Grid.Row="1"
+                    <ListBox Grid.Row="2"
                              x:Name="CandidateList"
                              ItemsSource="{Binding Candidates}"
                              MouseLeave="OnCandidateListMouseLeave"
-                             MaxHeight="390"
+                             Height="390"
+                             MinHeight="80"
                              ScrollViewer.CanContentScroll="True"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                              ScrollViewer.VerticalScrollBarVisibility="Auto"

@@ -58,7 +58,6 @@
                Closed="OnPopupClosed">
             <Border Width="{Binding ActualWidth, ElementName=Root}"
                     MinWidth="360"
-                    MaxHeight="440"
                     Padding="6"
                     PreviewKeyDown="OnPopupPreviewKeyDown"
                     Background="{StaticResource PanelBackground}"
@@ -68,6 +67,7 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <TextBox x:Name="SearchBox"
                              Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
@@ -78,7 +78,8 @@
                              x:Name="CandidateList"
                              ItemsSource="{Binding Candidates}"
                              MouseLeave="OnCandidateListMouseLeave"
-                             MaxHeight="390"
+                             Height="390"
+                             MinHeight="80"
                              ScrollViewer.CanContentScroll="True"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                              ScrollViewer.VerticalScrollBarVisibility="Auto"
@@ -102,6 +103,20 @@
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
+                    <Thumb Grid.Row="2" Height="12" Margin="0,5,0,0"
+                           Cursor="SizeNS" DragDelta="OnResizeDragDelta"
+                           ToolTip="Drag to resize mesh list"
+                           AutomationProperties.Name="Resize mesh list">
+                        <Thumb.Template>
+                            <ControlTemplate TargetType="Thumb">
+                                <Border Background="Transparent">
+                                    <Border Width="42" Height="3" CornerRadius="2"
+                                            Background="{StaticResource MutedText}"
+                                            HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                            </ControlTemplate>
+                        </Thumb.Template>
+                    </Thumb>
                 </Grid>
             </Border>
         </Popup>

@@ -11,6 +11,7 @@ namespace MorphFaceEditor.Views;
 public partial class HdrColorPickerWindow : Window
 {
     private readonly bool _allowHdr;
+    private readonly Vector4? _resetColor;
     private bool _updating;
     private Vector4 _value;
 
@@ -18,22 +19,24 @@ public partial class HdrColorPickerWindow : Window
         string title,
         Vector4 initial,
         bool allowHdr = true,
-        bool extendedSliders = false)
+        bool extendedSliders = false,
+        Vector4? resetColor = null)
     {
         InitializeComponent();
         DarkTitleBar.Apply(this);
         _allowHdr = allowHdr;
+        _resetColor = resetColor;
         _value = allowHdr ? initial : initial with { W = 1 };
         Title = title;
         _updating = true;
         if (!allowHdr)
         {
-            Height = 550;
-            MinHeight = 520;
-            IntensityRow.Height = new GridLength(0);
+            Height = 650;
+            MinHeight = 620;
             AlphaRow.Height = new GridLength(0);
             HdrIntensityPanel.Visibility = Visibility.Collapsed;
             PreviewCaption.Text = "Preview background colour";
+            ResetBackgroundButton.Visibility = resetColor is null ? Visibility.Collapsed : Visibility.Visible;
         }
         var channelMinimum = extendedSliders ? -1 : 0;
         RedSlider.Minimum = channelMinimum;
@@ -218,5 +221,15 @@ public partial class HdrColorPickerWindow : Window
     }
 
     private void OnApply(object sender, RoutedEventArgs e) => DialogResult = true;
+
+    private void OnResetBackground(object sender, RoutedEventArgs e)
+    {
+        if (_resetColor is not { } color) return;
+        _updating = true;
+        LoadRgbControls(color.X, color.Y, color.Z);
+        _value = color;
+        _updating = false;
+        Publish();
+    }
     private static byte ToByte(float value) => (byte)Math.Round(Math.Clamp(value, 0, 1) * byte.MaxValue);
 }

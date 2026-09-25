@@ -20,6 +20,7 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
     private readonly IReadOnlyList<HairMeshOption> _localOptions;
     private string _searchText = string.Empty;
     private HairMeshOption? _previewSelection;
+    private bool _isRandomisationLocked;
 
     public HairMeshEditorViewModel(
         AssetReferenceEditingSession session,
@@ -87,6 +88,13 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
         }
     }
     public AssetIdentity? Value => _session.Value;
+
+    /// <summary>Protects this attachment selection during future randomisation rolls.</summary>
+    public bool IsRandomisationLocked
+    {
+        get => _isRandomisationLocked;
+        set => SetProperty(ref _isRandomisationLocked, value);
+    }
 
     public void UpdateRegistryCandidates(
         IReadOnlyList<AttachmentMeshCandidate> candidates,

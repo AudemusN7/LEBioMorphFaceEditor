@@ -420,6 +420,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     {
         try
         {
+            if (requested.InclusionKey is { } key && !_randomisationInclusionState.IsIncluded(key)) return;
             if (CursedMode)
             {
                 await RandomiseCursedAsync(requested, includeCursedBones);
@@ -648,6 +649,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
 
     private bool CanRandomiseScope(EditorRandomisationScope scope)
     {
+        if (scope.InclusionKey is { } key && !_randomisationInclusionState.IsIncluded(key)) return false;
         var hasMorph = CanEditMorphFeatures && RandomiseMorphs && scope.MorphFeatures.Any(value => value.IsEditable);
         var hasRawNumericMaterial = RandomiseMaterials &&
                                     (scope.Scalars.Count + scope.Vectors.Count > 0);

@@ -78,7 +78,7 @@
         </Setter>
     </Style>
 
-    <Style x:Key="RandomisationIncludeToggle" TargetType="CheckBox">
+    <Style x:Key="RandomisationPadlock" TargetType="CheckBox">
         <Setter Property="Width" Value="20" />
         <Setter Property="Height" Value="20" />
         <Setter Property="Cursor" Value="Hand" />
@@ -86,16 +86,30 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="CheckBox">
-                    <Border x:Name="Fill" Width="20" Height="20" CornerRadius="3"
+                    <Border x:Name="Chrome" Width="20" Height="20" CornerRadius="3"
                             Background="#151A20" BorderBrush="{StaticResource BorderBrush}"
-                            BorderThickness="1" />
+                            BorderThickness="1">
+                        <Grid>
+                            <Path x:Name="OpenShackle" Data="M 8,9 L 8,6 C 8,2 15,2 15,6"
+                                  Stroke="{StaticResource SecondaryText}" StrokeThickness="1.6"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                            <Path x:Name="ClosedShackle" Data="M 6,9 L 6,6 C 6,2 14,2 14,6 L 14,9"
+                                  Stroke="{StaticResource Accent}" StrokeThickness="1.6"
+                                  Visibility="Collapsed" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                            <Border x:Name="LockBody" Width="11" Height="8" Margin="0,6,0,0"
+                                    Background="{StaticResource SecondaryText}" CornerRadius="1.5" />
+                        </Grid>
+                    </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="Fill" Property="Background" Value="{StaticResource Accent}" />
-                            <Setter TargetName="Fill" Property="BorderBrush" Value="{StaticResource Accent}" />
+                            <Setter TargetName="OpenShackle" Property="Visibility" Value="Collapsed" />
+                            <Setter TargetName="ClosedShackle" Property="Visibility" Value="Visible" />
+                            <Setter TargetName="LockBody" Property="Background" Value="{StaticResource Accent}" />
+                            <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource Accent}" />
+                            <Setter TargetName="Chrome" Property="Background" Value="{StaticResource PressedBackground}" />
                         </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Fill" Property="BorderBrush" Value="{StaticResource Accent}" />
+                            <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource Accent}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.45" />

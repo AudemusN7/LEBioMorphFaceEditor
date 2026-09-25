@@ -10,7 +10,8 @@ public sealed record EditorRandomisationScope(
     IReadOnlyList<MorphFeatureEditorViewModel> MorphFeatures,
     IReadOnlyList<MaterialScalarEditorViewModel> Scalars,
     IReadOnlyList<MaterialVectorEditorViewModel> Vectors,
-    IReadOnlyList<MaterialTextureEditorViewModel> Textures)
+    IReadOnlyList<MaterialTextureEditorViewModel> Textures,
+    string? InclusionKey = null)
 {
     public bool HasValues => MorphFeatures.Count + Scalars.Count + Vectors.Count + Textures.Count > 0;
 }
@@ -56,6 +57,12 @@ public sealed class RandomisationInclusionViewModel(
     RandomisationInclusionState state,
     Action changed) : ObservableObject
 {
+    public bool IsLocked
+    {
+        get => !IsIncluded;
+        set => IsIncluded = !value;
+    }
+
     public bool IsIncluded
     {
         get => state.IsIncluded(key);
@@ -63,6 +70,7 @@ public sealed class RandomisationInclusionViewModel(
         {
             if (!state.SetIncluded(key, value)) return;
             OnPropertyChanged();
+            OnPropertyChanged(nameof(IsLocked));
             changed();
         }
     }
@@ -97,15 +105,16 @@ public sealed class EditorFeatureCategoryViewModel
                     .OrderBy(value => uiProfile.GetMaterialSortOrder(value.Name, MaterialParameterKind.Scalar))
                     .ThenBy(value => value.Label, StringComparer.OrdinalIgnoreCase)
                     .ToArray();
+                var inclusionKey = $"{definition.Key}:values:{group.Key}";
                 var command = createRandomiseCommand?.Invoke(new EditorRandomisationScope(
-                    groupMorphs, groupScalars, [], []));
+                    groupMorphs, groupScalars, [], [], inclusionKey));
                 return new EditorSliderGroupViewModel(
                     group.Key,
                     group.Label,
                     groupMorphs,
                     groupScalars,
                     command,
-                    CreateInclusion($"{definition.Key}:values:{group.Key}", command,
+                    CreateInclusion(inclusionKey, command,
                         inclusionState, inclusionChanged));
             })
             .Where(group => group.MorphFeatures.Count > 0 || group.Scalars.Count > 0)
@@ -122,11 +131,12 @@ public sealed class EditorFeatureCategoryViewModel
             .ToArray();
         if (remainingScalars.Length > 0)
         {
+            var inclusionKey = $"{definition.Key}:values:surface";
             var command = createRandomiseCommand?.Invoke(new EditorRandomisationScope(
-                [], remainingScalars, [], []));
+                [], remainingScalars, [], [], inclusionKey));
             sliderGroups.Add(new EditorSliderGroupViewModel(
                 "surface", "SURFACE", [], remainingScalars, command,
-                CreateInclusion($"{definition.Key}:values:surface", command,
+                CreateInclusion(inclusionKey, command,
                     inclusionState, inclusionChanged)));
         }
 
@@ -140,10 +150,11 @@ public sealed class EditorFeatureCategoryViewModel
                 var values = Colours.Where(value =>
                         uiProfile.GetMaterialSubcategory(value.Name, MaterialParameterKind.Vector) == group.Key)
                     .ToArray();
-                var command = createRandomiseCommand?.Invoke(new EditorRandomisationScope([], [], values, []));
+                var inclusionKey = $"{definition.Key}:colours:{group.Key}";
+                var command = createRandomiseCommand?.Invoke(new EditorRandomisationScope([], [], values, [], inclusionKey));
                 return new EditorVectorGroupViewModel(
                     group.Key, $"{group.Label} COLOURS", values, command,
-                    CreateInclusion($"{definition.Key}:colours:{group.Key}", command,
+                    CreateInclusion(inclusionKey, command,
                         inclusionState, inclusionChanged));
             })
             .Where(group => group.Values.Count > 0)
@@ -153,10 +164,11 @@ public sealed class EditorFeatureCategoryViewModel
         var remainingVectors = Colours.Where(value => !assignedVectorNames.Contains(value.Name)).ToArray();
         if (remainingVectors.Length > 0)
         {
-            var command = createRandomiseCommand?.Invoke(new EditorRandomisationScope([], [], remainingVectors, []));
+            var inclusionKey = $"{definition.Key}:colours:colours";
+            var command = createRandomiseCommand?.Invoke(new EditorRandomisationScope([], [], remainingVectors, [], inclusionKey));
             vectorGroups.Add(new EditorVectorGroupViewModel(
                 "colours", "COLOURS", remainingVectors, command,
-                CreateInclusion($"{definition.Key}:colours:colours", command,
+                CreateInclusion(inclusionKey, command,
                     inclusionState, inclusionChanged)));
         }
         ColourGroups = vectorGroups;
@@ -166,9 +178,10 @@ public sealed class EditorFeatureCategoryViewModel
             .ToArray();
         ColourRandomiseCommand = createRandomiseCommand?.Invoke(new EditorRandomisationScope(
             [], [], Colours, []));
+        var textureInclusionKey = $"{definition.Key}:textures";
         TextureRandomiseCommand = createRandomiseCommand?.Invoke(new EditorRandomisationScope(
-            [], [], [], Textures));
-        TextureInclusion = CreateInclusion($"{definition.Key}:textures", TextureRandomiseCommand,
+            [], [], [], Textures, textureInclusionKey));
+        TextureInclusion = CreateInclusion(textureInclusionKey, TextureRandomiseCommand,
             inclusionState, inclusionChanged);
     }
 

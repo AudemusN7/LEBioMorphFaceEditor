@@ -541,10 +541,16 @@
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="124" />
                                             <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Text="{Binding Label}" Foreground="{StaticResource SecondaryText}"
                                                    FontSize="10" VerticalAlignment="Center" />
                                         <controls:SearchableMeshPicker Grid.Column="1" />
+                                        <CheckBox Grid.Column="2" Style="{StaticResource RandomisationPadlock}"
+                                                  IsChecked="{Binding IsRandomisationLocked, Mode=TwoWay}"
+                                                  Margin="5,0,0,0"
+                                                  ToolTip="Toggle this attachment's randomisation lock. When locked, this category will not be included in randomisation."
+                                                  AutomationProperties.Name="Toggle attachment randomisation lock. When locked, this category will not be included in randomisation." />
                                     </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
@@ -635,11 +641,12 @@
                                                                                 Visibility="{Binding HasRandomisableValues, Converter={StaticResource BooleanToVisibilityConverter}}"
                                                                                 Padding="7,2" FontSize="9" MinWidth="58"
                                                                                 ToolTip="Randomise only the morph sliders in this subcategory" />
-                                                                        <CheckBox Grid.Column="2" Style="{StaticResource RandomisationIncludeToggle}"
-                                                                                  IsChecked="{Binding Inclusion.IsIncluded, Mode=TwoWay}"
+                                                                        <CheckBox Grid.Column="2" Style="{StaticResource RandomisationPadlock}"
+                                                                                  IsChecked="{Binding Inclusion.IsLocked, Mode=TwoWay}"
                                                                                   Visibility="{Binding HasRandomisableValues, Converter={StaticResource BooleanToVisibilityConverter}}"
                                                                                   Margin="5,0,0,0"
-                                                                                  ToolTip="Include this subcategory when using the global Randomise button" />
+                                                                                  ToolTip="Toggle this subcategory's randomisation lock. When locked, this category will not be included in randomisation."
+                                                                                  AutomationProperties.Name="Toggle subcategory randomisation lock" />
                                                                     </Grid>
                                                                     <ItemsControl ItemsSource="{Binding MorphFeatures}" ItemTemplate="{StaticResource MorphFeatureEditorTemplate}" />
                                                                     <ItemsControl ItemsSource="{Binding Scalars}" ItemTemplate="{StaticResource MaterialScalarEditorTemplate}" />
@@ -664,11 +671,12 @@
                                                                                     Visibility="{Binding HasRandomisableValues, Converter={StaticResource BooleanToVisibilityConverter}}"
                                                                                     Padding="7,2" FontSize="9" MinWidth="58"
                                                                                     ToolTip="Randomise only these audited colours and selector channels" />
-                                                                            <CheckBox Grid.Column="2" Style="{StaticResource RandomisationIncludeToggle}"
-                                                                                      IsChecked="{Binding Inclusion.IsIncluded, Mode=TwoWay}"
+                                                                            <CheckBox Grid.Column="2" Style="{StaticResource RandomisationPadlock}"
+                                                                                      IsChecked="{Binding Inclusion.IsLocked, Mode=TwoWay}"
                                                                                       Visibility="{Binding HasRandomisableValues, Converter={StaticResource BooleanToVisibilityConverter}}"
                                                                                       Margin="5,0,0,0"
-                                                                                      ToolTip="Include this subcategory when using the global Randomise button" />
+                                                                                      ToolTip="Toggle these colours' randomisation lock. When locked, this category will not be included in randomisation."
+                                                                                      AutomationProperties.Name="Toggle colour randomisation lock" />
                                                                         </Grid>
                                                                         <ItemsControl ItemsSource="{Binding Values}" ItemTemplate="{StaticResource MaterialColourEditorTemplate}" />
                                                                     </StackPanel>
@@ -689,11 +697,12 @@
                                                                     Visibility="{Binding CanRandomiseTextures, Converter={StaticResource BooleanToVisibilityConverter}}"
                                                                     Padding="7,2" FontSize="9" MinWidth="58"
                                                                     ToolTip="Randomise only eligible paired texture families in this category" />
-                                                            <CheckBox Grid.Column="2" Style="{StaticResource RandomisationIncludeToggle}"
-                                                                      IsChecked="{Binding TextureInclusion.IsIncluded, Mode=TwoWay}"
+                                                            <CheckBox Grid.Column="2" Style="{StaticResource RandomisationPadlock}"
+                                                                      IsChecked="{Binding TextureInclusion.IsLocked, Mode=TwoWay}"
                                                                       Visibility="{Binding CanRandomiseTextures, Converter={StaticResource BooleanToVisibilityConverter}}"
                                                                       Margin="5,0,0,0"
-                                                                      ToolTip="Include this subcategory when using the global Randomise button" />
+                                                                      ToolTip="Toggle these textures' randomisation lock. When locked, this category will not be included in randomisation."
+                                                                      AutomationProperties.Name="Toggle texture randomisation lock" />
                                                         </Grid>
                                                         <ItemsControl ItemsSource="{Binding Textures}" ItemTemplate="{StaticResource MaterialTextureEditorTemplate}" />
                                                     </StackPanel>

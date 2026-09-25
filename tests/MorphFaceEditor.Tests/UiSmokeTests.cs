@@ -57,7 +57,7 @@ public static class UiSmokeTests
         new("randomisation commands honour global and subcategory morph scopes", RandomisationCommandsHonorScopes),
         new("Set to Defaults restores stock morph and material values atomically", SetToDefaultsRestoresStockState),
         new("global morph and material randomisation uses separate donors", GlobalRandomisationUsesSeparateDonors),
-        new("subcategory inclusion toggles filter only global randomisation and persist in-session", SubcategoryInclusionsFilterGlobalScope),
+        new("subcategory padlocks protect randomisation and persist in-session", SubcategoryInclusionsFilterGlobalScope),
         new("normal material randomisation obeys its independent toggle and undo", MaterialRandomisationObeysToggle),
         new("detached material randomisation uses its compatible human donor profile", DetachedMaterialRandomisationUsesCompatibleProfile),
         new("detached mixed-species materials randomise from each assigned profile", DetachedMixedSpeciesMaterialsRandomiseByProfile),
@@ -1223,7 +1223,11 @@ public static class UiSmokeTests
                 .SliderGroups.Single(value => value.Key == "bridge");
             TestAssert.True(bridge.Inclusion?.IsIncluded == true,
                 "A randomisable subcategory was not included by default.");
-            bridge.Inclusion!.IsIncluded = false;
+            TestAssert.True(bridge.Inclusion!.IsLocked == false,
+                "A randomisable subcategory was locked by default.");
+            bridge.Inclusion.IsLocked = true;
+            TestAssert.True(bridge.Inclusion.IsIncluded == false,
+                "Locking a subcategory did not exclude it from global randomisation.");
         }
 
         using var second = CreateRandomisationEditor(reader, randomisationInclusionState: inclusionState);
@@ -1232,12 +1236,17 @@ public static class UiSmokeTests
             .SliderGroups.Single(value => value.Key == "bridge");
         TestAssert.True(restoredBridge.Inclusion?.IsIncluded == false,
             "The subcategory exclusion was lost when the editor was recreated.");
+        TestAssert.True(restoredBridge.Inclusion?.IsLocked == true,
+            "The subcategory padlock was lost when the editor was recreated.");
 
         second.RandomiseCommand.Execute(null);
         TestAssert.Near(0, second.CreateDraft().GetFeatureOffset("nose_BridgeIn"), 0);
         TestAssert.Near(0.7f, second.CreateDraft().GetFeatureOffset("eyes_Big"), 0);
 
         restoredBridge.RandomiseCommand!.Execute(null);
+        TestAssert.Near(0, second.CreateDraft().GetFeatureOffset("nose_BridgeIn"), 0);
+        restoredBridge.Inclusion!.IsLocked = false;
+        restoredBridge.RandomiseCommand.Execute(null);
         TestAssert.Near(0.6f, second.CreateDraft().GetFeatureOffset("nose_BridgeIn"), 0);
     }
 
@@ -1914,10 +1923,15 @@ public static class UiSmokeTests
         using var editor = new HairMeshEditorViewModel(
             new AssetReferenceEditingSession(null), [hair, helmet], "Hair", 0);
 
+        TestAssert.True(!editor.IsRandomisationLocked,
+            "Attachment randomisation was locked by default.");
+        editor.IsRandomisationLocked = true;
         TestAssert.Equal(3, editor.Candidates.Count);
         TestAssert.Equal("Open package · 42 bones",
             editor.Candidates.Single(option => option.Identity == hair.Identity).SourceDescription);
         editor.Selected = editor.Options.Single(option => option.Identity == hair.Identity);
+        TestAssert.True(editor.IsRandomisationLocked,
+            "Manually choosing an attachment unexpectedly released its randomisation lock.");
         editor.SearchText = "helmet";
         TestAssert.Equal(2, editor.Candidates.Count);
         editor.Selected = null!;
@@ -2414,7 +2428,7 @@ public static class UiSmokeTests
                 var materialStrengthLabel = mainWindow.FindName("MaterialRandomisationStrengthLabel") as TextBlock;
                 var materialStrengthValue = mainWindow.FindName("MaterialRandomisationStrengthValue") as TextBlock;
                 var hairLabel = mainWindow.FindName("HairAccessoryMeshesLabel") as TextBlock;
-                var inclusionStyle = application.TryFindResource("RandomisationIncludeToggle") as Style;
+                var inclusionStyle = application.TryFindResource("RandomisationPadlock") as Style;
                 var enterBinding = faceList?.InputBindings
                     .OfType<System.Windows.Input.KeyBinding>()
                     .SingleOrDefault(binding => binding.Key == System.Windows.Input.Key.Enter);
@@ -2423,12 +2437,12 @@ public static class UiSmokeTests
                 TestAssert.True(commit?.GetBindingExpression(Button.CommandProperty) is not null,
                     "The face editor has no bound Commit button for temporary-workspace writes.");
                 TestAssert.True(inclusionStyle is not null && inclusionStyle.TargetType == typeof(CheckBox),
-                    "The filled subcategory-inclusion checkbox style is missing.");
+                    "The randomisation padlock checkbox style is missing.");
                 TestAssert.True(inclusionStyle!.Setters.OfType<Setter>().Any(value =>
                                         value.Property == FrameworkElement.WidthProperty && Equals(value.Value, 20d)) &&
                                     inclusionStyle.Setters.OfType<Setter>().Any(value =>
                                         value.Property == FrameworkElement.HeightProperty && Equals(value.Value, 20d)),
-                    "The filled subcategory-inclusion checkbox is not sized alongside its Randomise button.");
+                    "The randomisation padlock checkbox is not sized alongside its Randomise button.");
                 TestAssert.True(randomise is not null,
                     "The main editor header has no named global Randomise button.");
                 TestAssert.True(randomise!.GetBindingExpression(Button.CommandProperty) is not null,

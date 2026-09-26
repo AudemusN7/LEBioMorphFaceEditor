@@ -2796,16 +2796,19 @@ public static class UiSmokeTests
                     "Face.pcc",
                     Path.GetFullPath("fixture.pcc"));
                 morphPackage.Close();
-                var le3Conversion = new ConvertMorphWindow(
-                    MorphFaceGame.LE3,
-                    "Face_Converted.pcc",
-                    Path.GetFullPath("fixture.pcc"));
-                le3Conversion.Close();
-                var le2Conversion = new ConvertMorphWindow(
-                    MorphFaceGame.LE2,
-                    "Face_Converted.pcc",
-                    Path.GetFullPath("fixture.pcc"));
-                le2Conversion.Close();
+                foreach (var sourceGame in new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 })
+                {
+                    var conversion = new ConvertMorphWindow(
+                        sourceGame, "Face_Converted.pcc", Path.GetFullPath("fixture.pcc"));
+                    var targetGames = (ComboBox)conversion.FindName("TargetGameBox");
+                    var choices = targetGames.Items.Cast<object>()
+                        .Select(choice => (MorphFaceGame)choice.GetType().GetProperty("Game")!.GetValue(choice)!)
+                        .ToArray();
+                    TestAssert.True(choices.Length == 2 && !choices.Contains(sourceGame) &&
+                                    choices.Distinct().Count() == 2 && targetGames.IsEnabled,
+                        $"Conversion from {sourceGame} must offer both other games.");
+                    conversion.Close();
+                }
                 var actorInventory = new ActorAssignmentInventory(
                     MorphFaceGame.LE2, 1, "SelectedFace", "le2-human-male",
                     [ActorChoiceFixture(10, "NormandyGarrus", "BioPawn_10", true, true)]);

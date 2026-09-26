@@ -32,6 +32,7 @@ public static class PackageContextTests
         new("all six cross-game directions preserve canonical hair donors", PreserveCanonicalHairAcrossAllDirections),
         new("LE2 human attachment to LE1 preserves material graph", Le2HumanAttachmentToLe1),
         new("installed LE1 Asari template survives a shadowing mod", InstalledLe1AsariTemplateSurvivesMod),
+        new("installed conversion templates materialise required Asari Krogan and Human dependencies", InstalledConversionDependencies),
         new("D1 corpus conversion matrix preserves attachment semantics", D1CorpusConversionMatrix),
         new("reviewed cross-game texture policy aliases donors and omits inert overrides", ApplyReviewedTextureTransferPolicy),
         new("reviewed cross-game texture paths are admitted to the local registry", ReviewedTexturePathsAreRegistryEligible),
@@ -830,6 +831,79 @@ public static class PackageContextTests
         {
             if (File.Exists(destination)) File.Delete(destination);
         }
+    }
+
+    private static void InstalledConversionDependencies()
+    {
+        var profiles = MorphFaceProfileRegistry.CreateDefault();
+        var service = new MorphFaceConversionService(profiles, new MorphTargetCatalog(),
+            new MorphFacePackageContextService(),
+            new TextureCatalogService(new TextureRegistryStore(TextureRegistryPaths.CreateDefault())));
+        var cases = new[]
+        {
+            (MorphFaceGame.LE1, MorphFaceGame.LE2, "asari", "Texture2D", "BIOG_Humanoid_MASTER_MTR_R.Eye.HMF_EYE_MASTER_Diffuse"),
+            (MorphFaceGame.LE3, MorphFaceGame.LE2, "asari", "Texture2D", "BIOG_Humanoid_MASTER_MTR_R.Eye.HMF_EYE_MASTER_Diffuse"),
+            (MorphFaceGame.LE1, MorphFaceGame.LE3, "krogan", "Texture2D", "BioVFX_Z_TEXTURES.Distortion.fx_Distort"),
+            (MorphFaceGame.LE2, MorphFaceGame.LE3, "krogan", "Texture2D", "BioVFX_Z_TEXTURES.Distortion.fx_Distort"),
+            (MorphFaceGame.LE1, MorphFaceGame.LE2, "human-female", "RvrEffectsMaterialUser", "EffectsMaterials.Users.Human.HMN_HED_PRO_MASTER_HAIR_MAT_USER"),
+            (MorphFaceGame.LE3, MorphFaceGame.LE2, "human-female", "RvrEffectsMaterialUser", "EffectsMaterials.Users.Human.HMN_HED_PRO_MASTER_HAIR_MAT_USER"),
+            (MorphFaceGame.LE1, MorphFaceGame.LE3, "human-male", "Texture2D", "BIOG_Humanoid_MASTER_MTR_R.GBL_ARM_ALL_Black"),
+            (MorphFaceGame.LE2, MorphFaceGame.LE3, "human-male", "Texture2D", "BIOG_Humanoid_MASTER_MTR_R.GBL_ARM_ALL_Black")
+        };
+        var failures = new List<string>();
+        foreach (var (sourceGame, targetGame, species, dependencyClass, dependencyPath) in cases)
+        {
+            var sourcePath = FixturePath($"{sourceGame} GlobalMorphs.pcc");
+            var family = species switch
+            {
+                "asari" => "ASA",
+                "krogan" => "KRO",
+                "human-female" => "HMF",
+                "human-male" => "HMM",
+                _ => throw new InvalidOperationException(species)
+            };
+            var sourceFace = MorphFaceReferenceInspector.Inspect(sourcePath).First(face =>
+                face.FacePath.StartsWith($"{family}.", StringComparison.OrdinalIgnoreCase) &&
+                (!species.StartsWith("human", StringComparison.Ordinal) || face.HairMeshPath is not null) &&
+                profiles.Find(sourceGame, face.FacePath, face.BaseHeadPath)?.Key ==
+                $"{sourceGame.ToString().ToLowerInvariant()}-{species}");
+            var destination = Path.Combine(Path.GetTempPath(), $"MFE-installed-dependencies-{Guid.NewGuid():N}.pcc");
+            var label = $"{sourceGame}->{targetGame} {species}";
+            try
+            {
+                var result = service.Convert(new MorphFaceConversionRequest(sourcePath, sourceFace.FacePath,
+                    targetGame, destination, CreateNewPackage: true, TemplatePackagePath: null));
+                using var reopened = MEPackageHandler.OpenMEPackage(destination, forceLoadFromDisk: true);
+                var convertedFace = reopened.FindExport(result.SaveResult.FaceInstancedPath, "BioMorphFace");
+                TestAssert.Equal("MorphFaceEditor", convertedFace?.Parent?.InstancedFullPath);
+                TestAssert.True(reopened.FindExport(result.SaveResult.MaterialOverrideInstancedPath, "BioMaterialOverride") is not null,
+                    $"{label}: the relocated face lost its material override.");
+                var head = convertedFace!.GetProperty<ObjectProperty>("m_oBaseHead")?.ResolveToEntry(reopened);
+                TestAssert.True(head is ExportEntry && head.ClassName == "SkeletalMesh",
+                    $"{label}: base head '{head?.InstancedFullPath}' was not saved as a SkeletalMesh export.");
+                TestAssert.True(ObjectBinary.From<SkeletalMesh>((ExportEntry)head!) is { LODModels.Length: > 0 },
+                    $"{label}: the exported base head has no readable mesh LODs.");
+                TestAssert.True(!reopened.Imports.Any(entry => entry.ClassName == "SkeletalMesh" &&
+                                    entry.InstancedFullPath.Equals(head!.InstancedFullPath, StringComparison.OrdinalIgnoreCase)),
+                    $"{label}: the exported base head also survived as an import.");
+                TestAssert.True(reopened.FindExport(dependencyPath, dependencyClass) is not null,
+                    $"{label}: required {dependencyClass} '{dependencyPath}' was not saved as an export.");
+                TestAssert.True(!reopened.Imports.Any(entry => entry.InstancedFullPath.Equals(
+                    dependencyPath, StringComparison.OrdinalIgnoreCase) && entry.ClassName == dependencyClass),
+                    $"{label}: the required dependency also survived as an import.");
+                PackageIntegrity.Verify(reopened);
+                Console.WriteLine($"Verified {label}: {result.SaveResult.FaceInstancedPath}");
+            }
+            catch (Exception exception)
+            {
+                failures.Add($"{label}: {exception.Message}");
+            }
+            finally
+            {
+                if (File.Exists(destination)) File.Delete(destination);
+            }
+        }
+        TestAssert.True(failures.Count == 0, string.Join("\n", failures));
     }
 
     private static void D1CorpusConversionMatrix()

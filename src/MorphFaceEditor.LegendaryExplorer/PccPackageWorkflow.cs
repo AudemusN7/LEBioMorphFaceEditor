@@ -25,7 +25,8 @@ internal static class PccPackageWorkflow
         IReadOnlyList<TextureCatalogCandidate>? textureCatalog,
         bool preferBiogTextures,
         ICollection<string>? warnings = null,
-        bool applyCorpusMaterialPolicy = true)
+        bool applyCorpusMaterialPolicy = true,
+        IReadOnlyList<IEntry>? requiredExportReferences = null)
     {
         ArgumentNullException.ThrowIfNull(destination);
         ArgumentNullException.ThrowIfNull(source);
@@ -39,7 +40,8 @@ internal static class PccPackageWorkflow
             textureCatalog ?? [],
             preferBiogTextures,
             warnings,
-            applyCorpusMaterialPolicy);
+            applyCorpusMaterialPolicy,
+            requiredExportReferences ?? []);
         return session.ImportRoot(source, destinationParent);
     }
 
@@ -220,6 +222,7 @@ internal static class PccPackageWorkflow
         private readonly bool _preferBiogTextures;
         private readonly ICollection<string>? _warnings;
         private readonly bool _applyCorpusMaterialPolicy;
+        private readonly IReadOnlySet<string> _requiredExportIdentities;
         private readonly IReadOnlySet<CorpusRoleIssue> _baselineCorpusRoleIssues;
         private readonly IReadOnlySet<ExportEntry> _preexistingExports;
         private readonly PackageCache _cache = new() { CacheMaxSize = 64 };
@@ -233,13 +236,17 @@ internal static class PccPackageWorkflow
             IReadOnlyList<TextureCatalogCandidate> catalog,
             bool preferBiogTextures,
             ICollection<string>? warnings,
-            bool applyCorpusMaterialPolicy)
+            bool applyCorpusMaterialPolicy,
+            IReadOnlyList<IEntry> requiredExportReferences)
         {
             _destination = destination;
             _catalog = catalog;
             _preferBiogTextures = preferBiogTextures;
             _warnings = warnings;
             _applyCorpusMaterialPolicy = applyCorpusMaterialPolicy;
+            _requiredExportIdentities = requiredExportReferences
+                .Select(entry => $"{entry.ClassName}|{CanonicalPath(entry)}")
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
             _baselineCorpusRoleIssues = applyCorpusMaterialPolicy
                 ? CaptureCorpusRoleIssues(destination)
                 : new HashSet<CorpusRoleIssue>(CorpusRoleIssueComparer.Instance);
@@ -291,6 +298,17 @@ internal static class PccPackageWorkflow
             }
 
             var canonicalPath = DependencyPath(reference);
+            // Callers can require an authored dependency (such as a converted
+            // face's base mesh) to be embedded even when its donor uses an import
+            // and the stock corpus has no role entry for that exact identity.
+            if (_requiredExportIdentities.Contains($"{reference.ClassName}|{canonicalPath}"))
+            {
+                var requiredSource = _resolver.Require(reference, "required authored export dependency");
+                var requiredExport = MaterializeExport(
+                    requiredSource, canonicalPath, destinationParent: null, forceExport: true);
+                _relinker.CrossPackageMap[reference] = requiredExport;
+                return requiredExport;
+            }
             if (reference.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase))
             {
                 return PlanTexture(reference, canonicalPath);

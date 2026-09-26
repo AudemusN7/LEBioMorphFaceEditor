@@ -16,8 +16,32 @@ public static class MaterialSchemaTests
     public static IReadOnlyList<TestCase> All { get; } =
     [
         new("LE1 human material schema contains male and female masters", SchemaContainsRecoveredFamilies),
-        new("human material controls hide runtime alignment textures and place teeth in Mouth", HumanMaterialMetadataTaxonomy)
+        new("human material controls hide runtime alignment textures and place teeth in Mouth", HumanMaterialMetadataTaxonomy),
+        new("human face and scalp textures use the requested head ordering", HumanFaceAndScalpTextureOrdering)
     ];
+
+    private static void HumanFaceAndScalpTextureOrdering()
+    {
+        IHeadEditorUiProfile[] profiles =
+        [
+            new HumanMaleFeatureMetadataCatalog(),
+            new HumanFemaleFeatureMetadataCatalog()
+        ];
+        var orderedTextures = new[]
+        {
+            "HED_Diff", "HED_Norm", "HED_Norm_02", "HED_Scalp_Diff", "HED_Scalp_Norm",
+            "HED_Scalp_Spec", "HED_Tang", "HED_Scalp_SpecShift", "HED_Scalp_SpecShift2"
+        };
+
+        foreach (var profile in profiles)
+        {
+            for (var index = 0; index < orderedTextures.Length; index++)
+            {
+                TestAssert.Equal(index, profile.GetMaterialSortOrder(
+                    orderedTextures[index], MaterialParameterKind.Texture));
+            }
+        }
+    }
 
     private static void HumanMaterialMetadataTaxonomy()
     {

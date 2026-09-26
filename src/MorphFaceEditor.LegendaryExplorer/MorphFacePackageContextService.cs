@@ -91,11 +91,21 @@ public sealed class MorphFacePackageContextService
                 var templateFace = FindFace(template, targetTemplateFacePath);
                 NormalizeInvalidHmmMorphPackageAliases(template);
                 var stagingMessages = new List<string>();
-                var face = PccPackageWorkflow.ImportRootPreservingStructure(
+                var templateBaseHead = templateFace.GetProperty<ObjectProperty>("m_oBaseHead")?.ResolveToEntry(template)
+                                       ?? throw new InvalidDataException("The conversion template has no base head.");
+                // Plan the template graph before importing it. The recursive LEC
+                // exporter can otherwise create imports for identities which the
+                // destination game's native material graph requires as exports.
+                // Only the authored face container is relocated; dependencies
+                // continue to use the shared workflow's canonical native paths.
+                var face = PccPackageWorkflow.ImportDependencyGraph(
                     package,
                     templateFace,
-                    stagingMessages,
-                    checkImportsWhenExportingToPackage: false);
+                    package.CreatePackageExport("MorphFaceEditor"),
+                    targetTextureCatalog,
+                    preferBiogTextures: sourceProfileKey.Contains("human", StringComparison.OrdinalIgnoreCase),
+                    warnings: stagingMessages,
+                    requiredExportReferences: [templateBaseHead]);
                 stagingWarnings = stagingMessages;
                 EnsureNoExportParentsAreImports(package, "target-template staging");
                 face.ObjectName = new NameReference(objectName);
@@ -128,7 +138,7 @@ public sealed class MorphFacePackageContextService
 
                 var baseHead = draft.BaseHeadReference
                                ?? throw new InvalidDataException("The converted face has no target-game base head.");
-                var stagedBaseHead = package.FindEntry(baseHead.InstancedPath, "SkeletalMesh")
+                var stagedBaseHead = package.FindExport(baseHead.InstancedPath, "SkeletalMesh")
                                      ?? ExternalSkeletalMeshMaterializer.Materialize(
                                          package,
                                          baseHead,
@@ -790,7 +800,12 @@ public sealed class MorphFacePackageContextService
     {
         using var package = OpenPackage(packagePath);
         PackageIntegrity.Verify(package);
-        _ = FindFace(package, facePath);
+        var face = FindFace(package, facePath);
+        if (face.GetProperty<ObjectProperty>("m_oBaseHead")?.ResolveToEntry(package) is not ExportEntry
+            { ClassName: "SkeletalMesh" })
+        {
+            throw new InvalidDataException("The converted base head was not saved as a SkeletalMesh export.");
+        }
         _ = package.FindExport(materialPath, "BioMaterialOverride")
             ?? throw new InvalidDataException("The converted material override was not saved.");
         PccPackageWorkflow.VerifyDependencyGraph(package, dependencyGraph, verifyCorpusRoles: false);

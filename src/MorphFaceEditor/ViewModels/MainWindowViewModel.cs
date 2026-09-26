@@ -172,10 +172,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             () => !IsBusy && IsDirty && _packageWorkspace?.CanCommit == true);
         _saveMorphToPccCommand = new AsyncRelayCommand(
             SaveMorphToPccCommandAsync,
-            () => !IsBusy && Editor is not null && _loadedFace is not null &&
-                  (_packageWorkspace is not null ||
-                   IsDetachedMeshWorkspace && _standaloneGame is not null &&
-                   Editor.CustomMaterials is not null));
+            () => CanUseFaceContextMenu() ||
+                  !IsBusy && IsDetachedMeshWorkspace && SelectedFace is not null &&
+                  _standaloneGame is not null && Editor?.CustomMaterials is not null);
         _closeWorkspaceCommand = new AsyncRelayCommand(CloseWorkspaceAsync, () => !IsBusy && HasWorkspace);
         _exitCommand = new RelayCommand(() => ExitRequested?.Invoke(this, EventArgs.Empty));
         _fixMorphCommand = new RelayCommand(FixMorph, () => !IsBusy && Editor?.CanFixMorph == true);
@@ -262,9 +261,6 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public ICommand ExportMorphRonCommand => _exportMorphRonCommand;
     public ICommand AssignMorphToActorCommand => _assignMorphToActorCommand;
     public ICommand AssignMaterialsToActorCommand => _assignMaterialsToActorCommand;
-    public string ConvertMorphHeader => SelectedFace?.ProfileKey.StartsWith("le3-", StringComparison.OrdinalIgnoreCase) == true
-        ? "Convert to LE1/LE2 Morph…"
-        : "Convert to LE3 Morph…";
 
     public string? PackagePath
     {
@@ -323,7 +319,6 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             if (SetProperty(ref _selectedFace, value))
             {
-                OnPropertyChanged(nameof(ConvertMorphHeader));
                 _loadSelectedFaceCommand.RaiseCanExecuteChanged();
                 _saveMorphToPccCommand.RaiseCanExecuteChanged();
                 _closeWorkspaceCommand.RaiseCanExecuteChanged();
@@ -1788,7 +1783,15 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         PreviewCleared?.Invoke(this, EventArgs.Empty);
     }
 
-    private async Task SaveMorphToPccCommandAsync() => _ = await SaveMorphToPccAsync();
+    private async Task SaveMorphToPccCommandAsync()
+    {
+        if (SelectedFace is not { } source ||
+            !IsDetachedMeshWorkspace && !await EnsureContextTargetLoadedAsync(source))
+        {
+            return;
+        }
+        _ = await SaveMorphToPccAsync();
+    }
 
     private async Task<bool> SaveMorphToPccAsync()
     {

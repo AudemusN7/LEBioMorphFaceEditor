@@ -21,9 +21,10 @@ public partial class ConvertMorphWindow : Window
         DarkTitleBar.Apply(this);
         _sourcePackagePath = sourcePackagePath;
         _suggestedFileName = suggestedFileName;
-        TargetGameBox.ItemsSource = sourceGame == MorphFaceGame.LE3
-            ? new[] { new GameChoice(MorphFaceGame.LE1, "LE1"), new GameChoice(MorphFaceGame.LE2, "LE2") }
-            : new[] { new GameChoice(MorphFaceGame.LE3, "LE3") };
+        TargetGameBox.ItemsSource = new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 }
+            .Where(game => game != sourceGame)
+            .Select(game => new GameChoice(game, game.ToString()))
+            .ToArray();
         TargetGameBox.SelectedIndex = 0;
         TargetGameBox.IsEnabled = TargetGameBox.Items.Count > 1;
         DestinationBox.Focus();

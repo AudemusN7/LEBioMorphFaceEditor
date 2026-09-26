@@ -17,7 +17,6 @@
     <Window.InputBindings>
         <KeyBinding Key="O" Modifiers="Control" Command="{Binding OpenPackageCommand}" />
         <KeyBinding Key="S" Modifiers="Control" Command="{Binding SaveCommand}" />
-        <KeyBinding Key="E" Modifiers="Control" Command="{Binding SaveMorphToPccCommand}" />
         <KeyBinding Key="W" Modifiers="Control" Command="{Binding CloseWorkspaceCommand}" />
     </Window.InputBindings>
     <!-- Window resources keep editor-specific templates local; shared primitives live in EditorTheme.xaml. -->
@@ -196,7 +195,6 @@
                         <MenuItem Header="_File" Height="30" MinWidth="54">
                             <MenuItem Header="Open Package…" Command="{Binding OpenPackageCommand}" InputGestureText="Ctrl+O" />
                             <MenuItem Header="Save Package" Command="{Binding SaveCommand}" InputGestureText="Ctrl+S" />
-                            <MenuItem Header="Export to PCC…" Command="{Binding SaveMorphToPccCommand}" InputGestureText="Ctrl+E" />
                             <Separator />
                             <MenuItem Header="Recent" ItemsSource="{Binding RecentFiles}" IsEnabled="{Binding HasRecentFiles}">
                                 <MenuItem.ItemContainerStyle>
@@ -283,17 +281,18 @@
                                           Visibility="{Binding IsDetachedMeshWorkspace, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                 <MenuItem Header="Import TSE RON" Command="{Binding ImportTseMaterialsCommand}"
                                           Visibility="{Binding IsDetachedMeshWorkspace, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                                <MenuItem Header="Clone Morph…" Style="{StaticResource PccContextAction}" Command="{Binding CloneMorphCommand}" />
-                                <MenuItem Header="{Binding ConvertMorphHeader}" Style="{StaticResource PccContextAction}" Command="{Binding ConvertMorphCommand}" />
+                                <MenuItem Header="Clone Morph" Style="{StaticResource PccContextAction}" Command="{Binding CloneMorphCommand}" />
+                                <MenuItem Header="Convert Morph" Style="{StaticResource PccContextAction}" Command="{Binding ConvertMorphCommand}" />
+                                <MenuItem Header="Export to PCC" Command="{Binding SaveMorphToPccCommand}" />
                                 <MenuItem Header="Export Morph as Mesh" Style="{StaticResource PccContextAction}">
-                                    <MenuItem Header="PSK…" Command="{Binding ExportMorphPskCommand}" />
-                                    <MenuItem Header="glTF…" Command="{Binding ExportMorphGltfCommand}" />
-                                    <MenuItem Header="MD5…" Command="{Binding ExportMorphMd5Command}" />
+                                    <MenuItem Header="PSK" Command="{Binding ExportMorphPskCommand}" />
+                                    <MenuItem Header="glTF" Command="{Binding ExportMorphGltfCommand}" />
+                                    <MenuItem Header="MD5" Command="{Binding ExportMorphMd5Command}" />
                                 </MenuItem>
                                 <MenuItem Header="Export Morph as RON" Style="{StaticResource PccContextAction}" Command="{Binding ExportMorphRonCommand}" />
                                 <Separator Style="{StaticResource PccContextSeparator}" />
-                                <MenuItem Header="Assign Morph to Actor…" Style="{StaticResource PccContextAction}" Command="{Binding AssignMorphToActorCommand}" />
-                                <MenuItem Header="Assign Materials to Actor…" Style="{StaticResource PccContextAction}" Command="{Binding AssignMaterialsToActorCommand}" />
+                                <MenuItem Header="Assign Morph to Actor" Style="{StaticResource PccContextAction}" Command="{Binding AssignMorphToActorCommand}" />
+                                <MenuItem Header="Assign Materials to Actor" Style="{StaticResource PccContextAction}" Command="{Binding AssignMaterialsToActorCommand}" />
                                 <Separator Visibility="{Binding IsMaterialFileWorkspace, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                 <MenuItem Header="Export Materials" Command="{Binding ExportMaterialsCommand}"
                                           Visibility="{Binding IsMaterialFileWorkspace, Converter={StaticResource BooleanToVisibilityConverter}}" />

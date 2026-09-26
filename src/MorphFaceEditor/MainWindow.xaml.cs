@@ -91,6 +91,14 @@ public partial class MainWindow : Window
 
     private void OnThreeQuarterClick(object sender, RoutedEventArgs e) => _previewHost.ResetThreeQuarter();
 
+    private void OnCopyErrorClick(object sender, RoutedEventArgs e)
+    {
+        if (!string.IsNullOrWhiteSpace(_viewModel.ErrorMessage))
+        {
+            Clipboard.SetText(_viewModel.ErrorMessage);
+        }
+    }
+
     private void OnFileDragOver(object sender, DragEventArgs e)
     {
         e.Effects = TryGetSingleDroppedFile(e.Data, out var path) &&

@@ -410,12 +410,25 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="{Binding ErrorMessage}" Foreground="#FFE2E4" TextWrapping="Wrap" VerticalAlignment="Center" />
-                        <Button Grid.Column="1" Content="×" Command="{Binding DismissErrorCommand}"
-                                Margin="10,0,0,0" Padding="5,0" MinWidth="24" Height="24"
-                                HorizontalAlignment="Right" VerticalAlignment="Top"
-                                Background="Transparent" BorderBrush="Transparent"
-                                FontSize="16" FontWeight="SemiBold"
-                                ToolTip="Dismiss error" />
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="10,0,0,0"
+                                    HorizontalAlignment="Right" VerticalAlignment="Center">
+                            <Button Click="OnCopyErrorClick" Padding="2" MinWidth="24" Height="24"
+                                    VerticalAlignment="Center"
+                                    Background="Transparent" BorderBrush="Transparent"
+                                    ToolTip="Copy error message">
+                                <Viewbox Width="14" Height="14">
+                                    <Path Data="M 5,2 H 12 V 9 H 5 Z M 2,5 H 9 V 12 H 2 Z"
+                                          Stroke="#FFE2E4" StrokeThickness="1.5"
+                                          StrokeLineJoin="Round" Fill="Transparent" />
+                                </Viewbox>
+                            </Button>
+                            <Button Content="×" Command="{Binding DismissErrorCommand}"
+                                    Margin="4,0,0,0" Padding="5,0" MinWidth="24" Height="24"
+                                    VerticalAlignment="Center"
+                                    Background="Transparent" BorderBrush="Transparent"
+                                    FontSize="16" FontWeight="SemiBold"
+                                    ToolTip="Dismiss error" />
+                        </StackPanel>
                     </Grid>
                 </Border>
                 <Border Background="#99090C10" Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}">

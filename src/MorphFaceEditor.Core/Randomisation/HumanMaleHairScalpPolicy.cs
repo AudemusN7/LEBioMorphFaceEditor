@@ -12,7 +12,8 @@ public static class HumanMaleHairScalpPolicy
     private static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> CompatibleMorphs =
         new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
         {
-            ["Afr"] = ["Afro", "deiter", "widowsPeak"],
+            ["Afr"] = ["Afro", "deiter"],
+            ["For"] = ["flatTop"],
             ["Gez"] = ["Geezer"],
             ["Rol"] = ["rollins", "flatTop"],
             ["Wil"] = ["Willis"],
@@ -41,6 +42,22 @@ public static class HumanMaleHairScalpPolicy
     }
 
     public static bool IsHairMorph(string name) => HairMorphNames.Contains(name);
+
+    /// <summary>Applies audited native HMM exceptions without changing Player hairstyle rules.</summary>
+    public static PlayerHairStyleOption ApplyNpcStyleMorphCompatibility(PlayerHairStyleOption style)
+    {
+        ArgumentNullException.ThrowIfNull(style);
+        if (style.Sex != PlayerHairSex.Male ||
+            !style.Id.Equals("hmm-rol", StringComparison.OrdinalIgnoreCase))
+            return style;
+        return style with
+        {
+            HairMorphNames = style.HairMorphNames
+                .Append("flatTop")
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray()
+        };
+    }
 
     public static IReadOnlyDictionary<string, float>? CreateMorphOverrides(
         string? scalpDiffusePath,

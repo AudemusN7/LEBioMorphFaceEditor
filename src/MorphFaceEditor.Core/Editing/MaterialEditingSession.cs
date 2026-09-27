@@ -245,6 +245,14 @@ public sealed class MaterialEditingSession : IUndoableEditSource
             merged[material.Key] = material.Value;
         }
         _originalMaterials = new ResolvedHeadMaterialSet(merged);
+        _hasScopedMaterials = HasScopedMaterials(_baseMaterials);
+
+        var previousScalars = new Dictionary<string, float>(_scalars, StringComparer.OrdinalIgnoreCase);
+        var previousVectors = new Dictionary<string, Vector4>(_vectors, StringComparer.OrdinalIgnoreCase);
+        _defaultScalars = BuildDefaultScalars(_originalMaterials, firstWins: _hasScopedMaterials);
+        _defaultVectors = BuildDefaultVectors(_originalMaterials, firstWins: _hasScopedMaterials);
+        RebaseNumericValues(previousScalars, previousVectors);
+        TextureParameters = BuildTextureParameters(_originalMaterials, _originalOverrides.Textures);
         if (replacementTextureMaterials is not null)
         {
             RebaseAttachmentTextures(replacementTextureMaterials);
@@ -280,7 +288,60 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         _hasScopedMaterials = HasScopedMaterials(_baseMaterials);
         _defaultScalars = BuildDefaultScalars(_originalMaterials, firstWins: true);
         _defaultVectors = BuildDefaultVectors(_originalMaterials, firstWins: true);
+        RebaseNumericValues(previousScalars, previousVectors);
 
+        TextureParameters = BuildTextureParameters(_originalMaterials, _originalOverrides.Textures);
+        _textureReferences.Clear();
+        foreach (var value in previousTextures) _textureReferences[value.Key] = value.Value;
+        Refresh(MaterialChangeKind.Surface);
+    }
+
+    /// <summary>Convenience overload that makes custom lowest-slot ordering explicit.</summary>
+    public void RebaseMaterialSurface(MorphFaceEditor.Core.Materials.CustomMaterialWorkspace workspace)
+    {
+        ArgumentNullException.ThrowIfNull(workspace);
+        RebaseMaterialSurface(workspace.ActiveMaterials);
+    }
+
+    public AttachmentMaterialState CaptureAttachmentState() => new(
+        _baseMaterials,
+        _attachmentMaterials,
+        _originalMaterials,
+        new Dictionary<string, float>(_defaultScalars, StringComparer.OrdinalIgnoreCase),
+        new Dictionary<string, Vector4>(_defaultVectors, StringComparer.OrdinalIgnoreCase),
+        new Dictionary<string, float>(_scalars, StringComparer.OrdinalIgnoreCase),
+        new Dictionary<string, Vector4>(_vectors, StringComparer.OrdinalIgnoreCase),
+        TextureParameters.ToArray(),
+        new Dictionary<string, DecodedTextureAsset?>(_textureReferences, StringComparer.OrdinalIgnoreCase),
+        Materials);
+
+    public void RestoreAttachmentState(AttachmentMaterialState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        _baseMaterials = state.BaseMaterials;
+        _attachmentMaterials = state.AttachmentMaterials;
+        _originalMaterials = state.OriginalMaterials;
+        _hasScopedMaterials = HasScopedMaterials(_baseMaterials);
+        _defaultScalars = state.DefaultScalars;
+        _defaultVectors = state.DefaultVectors;
+        _scalars.Clear();
+        foreach (var value in state.Scalars) _scalars[value.Key] = value.Value;
+        _vectors.Clear();
+        foreach (var value in state.Vectors) _vectors[value.Key] = value.Value;
+        TextureParameters = state.TextureParameters;
+        _textureReferences.Clear();
+        foreach (var value in state.TextureReferences)
+        {
+            _textureReferences[value.Key] = value.Value;
+        }
+        Materials = state.Materials;
+        MaterialsChanged?.Invoke(this, new MaterialChangedEventArgs(MaterialChangeKind.Surface, null));
+    }
+
+    private void RebaseNumericValues(
+        IReadOnlyDictionary<string, float> previousScalars,
+        IReadOnlyDictionary<string, Vector4> previousVectors)
+    {
         _scalars.Clear();
         foreach (var value in _defaultScalars)
         {
@@ -290,8 +351,8 @@ public sealed class MaterialEditingSession : IUndoableEditSource
                 ? previousScalars[value.Key]
                 : value.Value;
         }
-        // Unsupported source overrides are intentionally retained for a later
-        // RON/output path even when the new active surface cannot preview them.
+        // Unsupported source overrides remain available for later reapplication
+        // even when the active attachment does not expose their controls.
         foreach (var value in _originalOverrides.Scalars)
         {
             if (!_scalars.ContainsKey(value.Name)) _scalars[value.Name] = value.Value;
@@ -318,47 +379,6 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         {
             if (previousVectors.TryGetValue(name, out var value)) _vectors[name] = value;
         }
-
-        TextureParameters = BuildTextureParameters(_originalMaterials, _originalOverrides.Textures);
-        _textureReferences.Clear();
-        foreach (var value in previousTextures) _textureReferences[value.Key] = value.Value;
-        Refresh(MaterialChangeKind.Surface);
-    }
-
-    /// <summary>Convenience overload that makes custom lowest-slot ordering explicit.</summary>
-    public void RebaseMaterialSurface(MorphFaceEditor.Core.Materials.CustomMaterialWorkspace workspace)
-    {
-        ArgumentNullException.ThrowIfNull(workspace);
-        RebaseMaterialSurface(workspace.ActiveMaterials);
-    }
-
-    public AttachmentMaterialState CaptureAttachmentState() => new(
-        _baseMaterials,
-        _attachmentMaterials,
-        _originalMaterials,
-        new Dictionary<string, float>(_defaultScalars, StringComparer.OrdinalIgnoreCase),
-        new Dictionary<string, Vector4>(_defaultVectors, StringComparer.OrdinalIgnoreCase),
-        TextureParameters.ToArray(),
-        new Dictionary<string, DecodedTextureAsset?>(_textureReferences, StringComparer.OrdinalIgnoreCase),
-        Materials);
-
-    public void RestoreAttachmentState(AttachmentMaterialState state)
-    {
-        ArgumentNullException.ThrowIfNull(state);
-        _baseMaterials = state.BaseMaterials;
-        _attachmentMaterials = state.AttachmentMaterials;
-        _originalMaterials = state.OriginalMaterials;
-        _hasScopedMaterials = HasScopedMaterials(_baseMaterials);
-        _defaultScalars = state.DefaultScalars;
-        _defaultVectors = state.DefaultVectors;
-        TextureParameters = state.TextureParameters;
-        _textureReferences.Clear();
-        foreach (var value in state.TextureReferences)
-        {
-            _textureReferences[value.Key] = value.Value;
-        }
-        Materials = state.Materials;
-        MaterialsChanged?.Invoke(this, new MaterialChangedEventArgs(MaterialChangeKind.Surface, null));
     }
 
     private void RebaseAttachmentTextures(ResolvedHeadMaterialSet replacementMaterials)
@@ -1113,6 +1133,8 @@ public sealed record AttachmentMaterialState(
     ResolvedHeadMaterialSet OriginalMaterials,
     IReadOnlyDictionary<string, float> DefaultScalars,
     IReadOnlyDictionary<string, Vector4> DefaultVectors,
+    IReadOnlyDictionary<string, float> Scalars,
+    IReadOnlyDictionary<string, Vector4> Vectors,
     IReadOnlyList<TextureMaterialOverride> TextureParameters,
     IReadOnlyDictionary<string, DecodedTextureAsset?> TextureReferences,
     ResolvedHeadMaterialSet Materials);

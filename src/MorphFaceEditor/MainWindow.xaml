@@ -544,7 +544,7 @@
 
                     <StackPanel x:Name="AttachmentMeshPanel" Grid.Row="1" Margin="0,0,0,10"
                                 IsEnabled="{Binding Editor.CanEditAttachments}">
-                        <TextBlock x:Name="HairAccessoryMeshesLabel" Text="HAIR / ACCESSORY MESHES"
+                        <TextBlock x:Name="HairAccessoryMeshesLabel" Text="{Binding Editor.AttachmentMeshesHeading}"
                                    Style="{StaticResource FieldLabel}" Margin="2,0,0,5" />
                         <ItemsControl ItemsSource="{Binding Editor.AttachmentMeshes}">
                             <ItemsControl.ItemTemplate>
@@ -554,11 +554,17 @@
                                             <ColumnDefinition Width="124" />
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Text="{Binding Label}" Foreground="{StaticResource SecondaryText}"
                                                    FontSize="10" VerticalAlignment="Center" />
                                         <controls:SearchableMeshPicker Grid.Column="1" />
-                                        <CheckBox Grid.Column="2" Style="{StaticResource RandomisationPadlock}"
+                                        <Button Grid.Column="2" Content="Randomise" Command="{Binding RandomiseCommand}"
+                                                Visibility="{Binding HasRandomiseCommand, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                                Margin="5,0,0,0" Padding="8,2" VerticalAlignment="Center"
+                                                ToolTip="Randomise the hair mesh and its eligible scalp pairing."
+                                                AutomationProperties.Name="Randomise hair mesh" />
+                                        <CheckBox Grid.Column="3" Style="{StaticResource RandomisationPadlock}"
                                                   IsChecked="{Binding IsRandomisationLocked, Mode=TwoWay}"
                                                   Margin="5,0,0,0"
                                                   ToolTip="Toggle this attachment's randomisation lock. When locked, this category will not be included in randomisation."

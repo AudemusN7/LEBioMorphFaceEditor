@@ -1,4 +1,5 @@
 using System.IO;
+using System.Windows.Input;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Core.Materials;
@@ -21,6 +22,7 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
     private string _searchText = string.Empty;
     private HairMeshOption? _previewSelection;
     private bool _isRandomisationLocked;
+    private ICommand? _randomiseCommand;
 
     public HairMeshEditorViewModel(
         AssetReferenceEditingSession session,
@@ -54,6 +56,9 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
 
     public string Label { get; }
     public int SlotIndex { get; }
+    /// <summary>Command supplied by the face editor for hair-specific randomisation.</summary>
+    public ICommand? RandomiseCommand => _randomiseCommand;
+    public bool HasRandomiseCommand => _randomiseCommand is not null;
     public IReadOnlyList<HairMeshOption> Options => _options;
     public IReadOnlyList<HairMeshOption> Candidates { get; private set; }
     /// <summary>Candidate currently shown as a transient preview, without changing the authored reference.</summary>
@@ -95,6 +100,16 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
         }
     }
     public AssetIdentity? Value => _session.Value;
+
+    /// <summary>Sets the hair-specific randomisation command supplied by the owning face editor.</summary>
+    public void SetRandomiseCommand(ICommand command)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        if (ReferenceEquals(_randomiseCommand, command)) return;
+        _randomiseCommand = command;
+        OnPropertyChanged(nameof(RandomiseCommand));
+        OnPropertyChanged(nameof(HasRandomiseCommand));
+    }
 
     /// <summary>Protects this attachment selection during future randomisation rolls.</summary>
     public bool IsRandomisationLocked

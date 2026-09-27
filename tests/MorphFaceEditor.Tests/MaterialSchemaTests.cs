@@ -16,9 +16,23 @@ public static class MaterialSchemaTests
     public static IReadOnlyList<TestCase> All { get; } =
     [
         new("LE1 human material schema contains male and female masters", SchemaContainsRecoveredFamilies),
+        new("human hair shader intensity misspellings are described by the material schema", HairHighlightIntensityAliasesAreSchemaParameters),
         new("human material controls hide runtime alignment textures and place teeth in Mouth", HumanMaterialMetadataTaxonomy),
         new("human face and scalp textures use the requested head ordering", HumanFaceAndScalpTextureOrdering)
     ];
+
+    private static void HairHighlightIntensityAliasesAreSchemaParameters()
+    {
+        foreach (var name in new[] { "Hightlight1Intensity", "Hightlight2Intensity" })
+        {
+            var definition = HumanMaterialProfiles.Describe(name, MaterialParameterKind.Scalar);
+            TestAssert.Equal(HeadMaterialFamily.Hair, definition.Family);
+            TestAssert.Near(0f, definition.Minimum, 1e-6f);
+            TestAssert.Near(4f, definition.Maximum, 1e-6f);
+            TestAssert.True(!definition.Description!.Contains("not in the recovered", StringComparison.OrdinalIgnoreCase),
+                $"{name} fell through to the unknown-parameter fallback instead of its compiled hair shader schema.");
+        }
+    }
 
     private static void HumanFaceAndScalpTextureOrdering()
     {

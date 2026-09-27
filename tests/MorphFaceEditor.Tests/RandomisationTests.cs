@@ -57,7 +57,8 @@ public static class RandomisationTests
     {
         var pairings = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
         {
-            ["Afr"] = ["Afro", "deiter", "widowsPeak"],
+            ["Afr"] = ["Afro", "deiter"],
+            ["For"] = ["flatTop"],
             ["Gez"] = ["Geezer"],
             ["Rol"] = ["rollins", "flatTop"],
             ["Wil"] = ["Willis"],
@@ -82,7 +83,13 @@ public static class RandomisationTests
         TestAssert.Equal(1, afr.Count(value => value.Value == 1));
         TestAssert.True(afr.Where(value => value.Value == 1)
                 .All(value => pairings["Afr"].Contains(value.Key)),
-            "An Afro scalp roll must activate one compatible hair morph only.");
+            "An Afro scalp roll must activate one compatible Afro/Deiter morph only.");
+        TestAssert.True(afr["widowsPeak"] == 0,
+            "The native NPC scalp corpus did not support Widow's Peak on Afr.");
+        var formal = HumanMaleHairScalpPolicy.CreateMorphOverrides(
+            "BIOG_HMM_HIR_PRO_R.Formal.HMM_HIR_For_Diff", hair, 17)!;
+        TestAssert.True(formal["flatTop"] == 1,
+            "The native HMM Formal scalp should support Flat Top.");
         var bald = HumanMaleHairScalpPolicy.CreateMorphOverrides(
             "BIOG_HMM_HED_PROMorph.Diffuse.HMM_HED_PROBald_Scalp_Diff_Stack", hair, 17)!;
         TestAssert.True(bald.Values.All(value => value == 0),

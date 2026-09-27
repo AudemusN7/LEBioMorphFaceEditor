@@ -13,7 +13,9 @@ public static class PlayerHairStyleCatalogTests
         new("HMF LE2 Cru scalp uses the shared player normal fallback", HmfLe2CruUsesSharedNormalFallback),
         new("Mhk and braided scalp use their scalp maps, not the mesh maps", PairedScalpsPreferDedicatedMaps),
         new("manual HMF scalp prompts recognize installed mesh overrides", ManualHmfPairRecognizesPackageOverride),
-        new("paired scalp lock lookup requires the resolved matching mesh", PairedScalpLockLookupUsesInstalledPair),
+        new("paired scalp lock lookup follows the reviewed selected mesh", PairedScalpLockLookupUsesInstalledPair),
+        new("paired scalp lock classification follows reviewed mesh across games and sexes", PairedMeshClassificationIsGameAndSexScoped),
+        new("NPC HMF Afr prefers the native mesh when custom and native variants exist", NpcHmfAfrPrefersNativeMesh),
         new("HMF Mom scalp uses its own diffuse and normal with shared mask", HmfMomScalpUsesDedicatedMaps),
         new("official DLC hair styles are eligible but mod-only styles are not", OfficialDlcIsEligibleAndModsAreNot),
         new("locked Player hair mesh retains independent scalp styles only", MeshLockKeepsIndependentScalps),
@@ -97,7 +99,7 @@ public static class PlayerHairStyleCatalogTests
         TestAssert.Equal("HMM_HIR_Mhk_Scalp_Norm", ObjectName(mhk.ScalpTextures["HED_Scalp_Norm"]));
         TestAssert.Equal("HMM_HIR_Mhk_Scalp_Mask", ObjectName(mhk.ScalpTextures["HED_Scalp_Spec"]));
         TestAssert.Equal("HMM_HIR_PROCustomBraids01_Scalp_Diff", ObjectName(braids.ScalpTextures["HED_Scalp_Diff"]));
-        TestAssert.Equal("GBL_ARM_ALL_Norm", ObjectName(mhk.ScalpTextures["HED_Scalp_Tang"]));
+        TestAssert.Equal("GBL_ARM_ALL_Norm", ObjectName(mhk.ScalpTextures["HED_Tang"]));
     }
 
     private static void ManualHmfPairRecognizesPackageOverride()
@@ -177,7 +179,7 @@ public static class PlayerHairStyleCatalogTests
         TestAssert.Equal("HMF_HIR_Mom_Scalp_Diff", ObjectName(mom.ScalpTextures["HED_Scalp_Diff"]));
         TestAssert.Equal("HMF_HIR_Mom_Scalp_Norm", ObjectName(mom.ScalpTextures["HED_Scalp_Norm"]));
         TestAssert.Equal("GBL_ARM_ALL_Black", ObjectName(mom.ScalpTextures["HED_Scalp_Spec"]));
-        TestAssert.Equal("GBL_ARM_ALL_Norm", ObjectName(mom.ScalpTextures["HED_Scalp_Tang"]));
+        TestAssert.Equal("GBL_ARM_ALL_Norm", ObjectName(mom.ScalpTextures["HED_Tang"]));
     }
 
     private static void HmfLe2CruUsesSharedNormalFallback()
@@ -207,6 +209,10 @@ public static class PlayerHairStyleCatalogTests
         TestAssert.True(PlayerHairStyleCatalog.IsCurrentScalpPairedStyle(
                 TextureCatalogGame.LE1, PlayerHairSex.Male, textures, [mhk], mhkPath, mhkMeshIdentity),
             "Mhk scalp must be considered paired when the matching reviewed mesh is selected.");
+        TestAssert.True(PlayerHairStyleCatalog.IsCurrentScalpPairedStyle(
+                TextureCatalogGame.LE1, PlayerHairSex.Male, textures, [mhk], mhkPath,
+                mhkMeshIdentity with { PackagePath = "patched-copy.pcc", UIndex = 99 }),
+            "A copied or patched instance of the reviewed paired mesh was not recognized by its canonical path.");
         TestAssert.True(!PlayerHairStyleCatalog.IsCurrentScalpPairedStyle(
                 TextureCatalogGame.LE1, PlayerHairSex.Male, textures, [mhk], mhkPath, null),
             "Mhk scalp alone must not be lock-protected when no mesh is selected.");
@@ -214,14 +220,14 @@ public static class PlayerHairStyleCatalogTests
                 TextureCatalogGame.LE1, PlayerHairSex.Male, textures, [mhk], mhkPath,
                 new AssetIdentity("other.pcc", "Other.Mohawk.HMM_HIR_Mhk_MDL", 7, "SkeletalMesh")),
             "A same-named mesh from another package must not be treated as the installed paired attachment.");
-        TestAssert.True(!PlayerHairStyleCatalog.IsCurrentScalpPairedStyle(
+        TestAssert.True(PlayerHairStyleCatalog.IsCurrentScalpPairedStyle(
                 TextureCatalogGame.LE1, PlayerHairSex.Male, textures, [mhk],
                 "BIOG_HMM_HIR_PRO_R.CrewCut.HMM_HIR_Cru_Diff", mhkMeshIdentity),
-            "Independent scalp styles must remain randomisable under a mesh lock.");
-        TestAssert.True(!PlayerHairStyleCatalog.IsCurrentScalpPairedStyle(
+            "A reviewed paired mesh must protect its scalp despite a different native diffuse path.");
+        TestAssert.True(PlayerHairStyleCatalog.IsCurrentScalpPairedStyle(
                 TextureCatalogGame.LE1, PlayerHairSex.Male, textures, [mhk],
                 "DLC_MOD_ThirdParty.Hair.HMM_HIR_Mhk_Scalp_Diff", mhkMeshIdentity),
-            "A third-party asset with a matching leaf must not be mistaken for the installed paired scalp.");
+            "Paired-mesh protection must not depend on the current diffuse resolving in the core texture registry.");
 
         var sarTextures = ScalpFamily(TextureCatalogGame.LE1, "HMM", "Sar")
             .Concat(ScalpTexture(TextureCatalogGame.LE1, "HMM_HIR_Sar_Tang"))
@@ -236,6 +242,92 @@ public static class PlayerHairStyleCatalogTests
         TestAssert.True(!PlayerHairStyleCatalog.IsCurrentScalpPairedStyle(
                 TextureCatalogGame.LE1, PlayerHairSex.Male, sarTextures, [ssk01], sarPath, null),
             "The same Sar scalp is independent while no Ssk mesh is selected.");
+    }
+
+    private static void PairedMeshClassificationIsGameAndSexScoped()
+    {
+        var cases = new[]
+        {
+            (PlayerHairSex.Male, "Mhk", "hmm-mhk"),
+            (PlayerHairSex.Male, "PROCustomBraids01", "hmm-braids"),
+            (PlayerHairSex.Male, "PROCustomShortAfro", "hmm-short-afro"),
+            (PlayerHairSex.Female, "Mhk", "hmf-mhk"),
+            (PlayerHairSex.Female, "PROCustomBraids01", "hmf-braids"),
+            (PlayerHairSex.Female, "PROCustomShortAfro", "hmf-short-afro")
+        };
+
+        foreach (var game in new[] { TextureCatalogGame.LE1, TextureCatalogGame.LE2, TextureCatalogGame.LE3 })
+        foreach (var (sex, stem, id) in cases)
+        {
+            var prefix = sex == PlayerHairSex.Male ? "HMM" : "HMF";
+            var meshName = $"{prefix}_HIR_{stem}_MDL";
+            var candidate = Mesh(meshName, TextureCatalogOrigin.BaseGame, prefix);
+            var selected = new AssetIdentity(candidate.EffectiveOccurrence.PackagePath,
+                TextureCatalogPicker.CanonicalPath(candidate.EffectiveOccurrence.InstancedPath,
+                    candidate.EffectiveOccurrence.PackagePath),
+                candidate.EffectiveOccurrence.ExportUIndex, "SkeletalMesh");
+
+            // Copies and package overrides preserve the canonical reviewed instance path while
+            // changing package/export identity. Lock classification must follow that path.
+            var copiedIdentity = selected with { PackagePath = "copied-package.pcc", UIndex = 987 };
+            TestAssert.True(PlayerHairStyleCatalog.IsCurrentHairMeshPairedStyle(
+                    game, sex, [candidate], copiedIdentity),
+                $"{game} {sex} did not classify the copied {id} mesh as scalp-paired.");
+
+            var foreignMesh = new AssetIdentity("other.pcc", $"Unrelated.Hair.{prefix}_HIR_{stem}_MDL",
+                987, "SkeletalMesh");
+            TestAssert.True(!PlayerHairStyleCatalog.IsCurrentHairMeshPairedStyle(
+                    game, sex, [candidate], foreignMesh),
+                $"{game} {sex} treated an unrelated same-named {id} mesh as the reviewed pair.");
+        }
+
+        var hmmCruMesh = Mesh("HMM_HIR_Fsk_MDL", TextureCatalogOrigin.BaseGame);
+        var hmfCruMesh = Mesh("HMF_HIR_Afr_MDL", TextureCatalogOrigin.BaseGame, "HMF");
+        foreach (var (sex, candidate) in new[]
+                 {
+                     (PlayerHairSex.Male, hmmCruMesh),
+                     (PlayerHairSex.Female, hmfCruMesh)
+                 })
+        {
+            var package = candidate.EffectiveOccurrence.PackagePath;
+            var selected = new AssetIdentity(package,
+                TextureCatalogPicker.CanonicalPath(candidate.EffectiveOccurrence.InstancedPath, package),
+                candidate.EffectiveOccurrence.ExportUIndex, "SkeletalMesh");
+            var copied = selected with { PackagePath = "copied-package.pcc", UIndex = 987 };
+            TestAssert.True(!PlayerHairStyleCatalog.IsCurrentHairMeshPairedStyle(
+                    TextureCatalogGame.LE1, sex, [candidate], copied),
+                $"The {sex} Cru-paired mesh was incorrectly classified as requiring its scalp.");
+        }
+    }
+
+    private static void NpcHmfAfrPrefersNativeMesh()
+    {
+        var textures = ScalpFamily(TextureCatalogGame.LE1, "HMF", "Cru");
+        var variants = new[]
+        {
+            (Id: "hmf-afr-mesh", Native: "HMF_HIR_Afr_MDL", Custom: "HMF_HIR_PROCustom_Afr_MDL"),
+            (Id: "hmf-cte-mesh", Native: "HMF_HIR_Cte_MDL", Custom: "HMF_HIR_PROCustom_Cute_MDL"),
+            (Id: "hmf-sxy-mesh", Native: "HMF_HIR_Sxy_MDL", Custom: "HMF_HIR_PROCustom_Sexy_MDL")
+        };
+        foreach (var variant in variants)
+        {
+            var native = Mesh(variant.Native, TextureCatalogOrigin.BaseGame, "HMF");
+            var custom = Mesh(variant.Custom, TextureCatalogOrigin.BaseGame, "HMF");
+            var playerOptions = PlayerHairStyleCatalog.Resolve(TextureCatalogGame.LE1,
+                PlayerHairSex.Female, textures, [custom, native]);
+            var playerStyle = playerOptions.Single(value => value.Id == variant.Id);
+            TestAssert.Equal(variant.Custom, ObjectName(playerStyle.MeshVariants.Single().InstancedPath));
+
+            var npcOptions = PlayerHairStyleCatalog.Resolve(TextureCatalogGame.LE1,
+                PlayerHairSex.Female, textures, [custom, native], preferNativeNpcMeshVariants: true);
+            var npcStyle = npcOptions.Single(value => value.Id == variant.Id);
+            TestAssert.Equal(variant.Native, ObjectName(npcStyle.MeshVariants.Single().InstancedPath));
+
+            var fallbackOptions = PlayerHairStyleCatalog.Resolve(TextureCatalogGame.LE1,
+                PlayerHairSex.Female, textures, [custom], preferNativeNpcMeshVariants: true);
+            var fallbackStyle = fallbackOptions.Single(value => value.Id == variant.Id);
+            TestAssert.Equal(variant.Custom, ObjectName(fallbackStyle.MeshVariants.Single().InstancedPath));
+        }
     }
 
     private static void MeshLockKeepsIndependentScalps()

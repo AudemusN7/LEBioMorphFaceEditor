@@ -411,6 +411,10 @@ public static class HumanMaterialProfiles
             "LE3 HMF additional-hair packed map: red selects the two highlight lobes, green supplies base colour, and alpha supplies opacity.");
         AddScalars(result, HeadMaterialFamily.Hair, "Hair", 0, 4,
             "Highlight1Intensity", "Highlight2Intensity", "HAIR_Spec_Contribution_Scalar");
+        // The compiled trilogy human hair master and authored HMM/HMF hair
+        // instances use this spelling for the intensity uniforms.
+        AddScalars(result, HeadMaterialFamily.Hair, "Hair", 0, 4,
+            "Hightlight1Intensity", "Hightlight2Intensity");
         AddScalar(result, HeadMaterialFamily.Hair, "Hair_Spec_Aniso_Exp_Scalar", "Hair", 0.1f, 8, 0.02f,
             "Authored HMF hair override retained for material round-tripping; optimized out of the shared LE1 hair master permutation.");
         AddTexture(result, HeadMaterialFamily.Hair, "HAIR_Mask", "Hair mask", "Hair", TextureRole.Mask, TextureColorSpace.Linear);

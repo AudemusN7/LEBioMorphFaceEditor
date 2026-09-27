@@ -44,7 +44,7 @@ public static class PlayerHairStyleCatalog
     private const string ScalpDiffuseParameter = "HED_Scalp_Diff";
     private const string ScalpNormalParameter = "HED_Scalp_Norm";
     private const string ScalpMaskParameter = "HED_Scalp_Spec";
-    private const string ScalpTangentParameter = "HED_Scalp_Tang";
+    private const string ScalpTangentParameter = "HED_Tang";
 
     private static readonly IReadOnlySet<TextureCatalogGame> AllGames =
         new HashSet<TextureCatalogGame> { TextureCatalogGame.LE1, TextureCatalogGame.LE2, TextureCatalogGame.LE3 };
@@ -68,7 +68,8 @@ public static class PlayerHairStyleCatalog
         PlayerHairSex sex,
         IEnumerable<TextureCatalogCandidate> textures,
         IEnumerable<AttachmentMeshCandidate> meshes,
-        bool meshLocked = false)
+        bool meshLocked = false,
+        bool preferNativeNpcMeshVariants = false)
     {
         ArgumentNullException.ThrowIfNull(textures);
         ArgumentNullException.ThrowIfNull(meshes);
@@ -98,7 +99,7 @@ public static class PlayerHairStyleCatalog
 
             var meshVariants = definition.MeshNames.Count == 0
                 ? Array.Empty<AssetIdentity>()
-                : ResolveMeshes(gameMeshes, definition.MeshNames);
+                : ResolveMeshes(gameMeshes, MeshNamesForResolution(definition, sex, preferNativeNpcMeshVariants));
             if (definition.MeshNames.Count > 0 && meshVariants.Length == 0) continue;
 
             result.Add(new PlayerHairStyleOption(
@@ -122,10 +123,25 @@ public static class PlayerHairStyleCatalog
         return result;
     }
 
+    private static IReadOnlyList<IReadOnlyList<string>> MeshNamesForResolution(
+        StyleDefinition definition,
+        PlayerHairSex sex,
+        bool preferNativeNpcMeshVariants)
+    {
+        if (preferNativeNpcMeshVariants && sex == PlayerHairSex.Female &&
+            definition.Id is "hmf-afr-mesh" or "hmf-cte-mesh" or "hmf-sxy-mesh")
+            return definition.MeshNames
+                .Where(group => !group.Any(name => name.Contains("PROCustom", StringComparison.OrdinalIgnoreCase)))
+                .Concat(definition.MeshNames.Where(group =>
+                    group.Any(name => name.Contains("PROCustom", StringComparison.OrdinalIgnoreCase))))
+                .ToArray();
+        return definition.MeshNames;
+    }
+
     /// <summary>
-    /// Returns true when the current scalp diffuse resolves to a reviewed style whose matching
-    /// mesh is also installed for this game and sex. Used to preserve both sides of a paired
-    /// style when hair-mesh randomisation is locked.
+    /// Compatibility overload for callers that already supply scalp state. Pair protection is
+    /// determined by the selected reviewed mesh; the scalp path and texture inventory do not
+    /// participate because native games can expose equivalent scalp aliases differently.
     /// </summary>
     public static bool IsCurrentScalpPairedStyle(
         TextureCatalogGame game,
@@ -137,22 +153,36 @@ public static class PlayerHairStyleCatalog
     {
         ArgumentNullException.ThrowIfNull(textures);
         ArgumentNullException.ThrowIfNull(meshes);
+        return IsCurrentHairMeshPairedStyle(game, sex, meshes, currentMeshIdentity);
+    }
+
+    /// <summary>
+    /// Returns true when the selected mesh is a reviewed member of a style whose scalp requires
+    /// that mesh. Classification uses the exact reviewed mesh variants and canonical instance
+    /// path; it does not depend on which native scalp texture alias is currently assigned.
+    /// </summary>
+    public static bool IsCurrentHairMeshPairedStyle(
+        TextureCatalogGame game,
+        PlayerHairSex sex,
+        IEnumerable<AttachmentMeshCandidate> meshes,
+        AssetIdentity? currentMeshIdentity)
+    {
+        ArgumentNullException.ThrowIfNull(meshes);
         if (!Enum.IsDefined(game)) throw new ArgumentOutOfRangeException(nameof(game));
         if (!Enum.IsDefined(sex)) throw new ArgumentOutOfRangeException(nameof(sex));
-        if (string.IsNullOrWhiteSpace(currentScalpDiffusePath) || currentMeshIdentity is null) return false;
+        if (currentMeshIdentity is null ||
+            !currentMeshIdentity.ClassName.Equals("SkeletalMesh", StringComparison.OrdinalIgnoreCase)) return false;
 
-        var gameTextures = textures.Where(value => value.Game == game).ToArray();
         var gameMeshes = meshes.ToArray();
         var definitions = sex == PlayerHairSex.Male ? HmmStyles : HmfStyles;
         foreach (var definition in definitions)
         {
-            if (!definition.Games.Contains(game) || definition.Scalp is null || definition.MeshNames.Count == 0)
+            if (!definition.Games.Contains(game) || definition.Scalp is null || definition.MeshNames.Count == 0 ||
+                definition.Scalp.Stem.Equals("Cru", StringComparison.OrdinalIgnoreCase))
                 continue;
-            var scalp = ResolveScalp(gameTextures, definition.Scalp);
             var pairedMeshes = ResolveMeshes(gameMeshes, definition.MeshNames);
-            if (scalp is null || !pairedMeshes.Any(mesh => IdentityMatches(mesh, currentMeshIdentity))) continue;
-            var resolvedPath = scalp[ScalpDiffuseParameter];
-            if (resolvedPath.Equals(currentScalpDiffusePath, StringComparison.OrdinalIgnoreCase))
+            if (pairedMeshes.Any(mesh => CanonicalMeshPath(mesh)
+                    .Equals(CanonicalMeshPath(currentMeshIdentity), StringComparison.OrdinalIgnoreCase)))
                 return true;
         }
 
@@ -180,13 +210,8 @@ public static class PlayerHairStyleCatalog
                 .Equals(selectedPath, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static bool IdentityMatches(AssetIdentity left, AssetIdentity right) =>
-        left.UIndex == right.UIndex &&
-        left.ClassName.Equals(right.ClassName, StringComparison.OrdinalIgnoreCase) &&
-        left.PackagePath.Equals(right.PackagePath, StringComparison.OrdinalIgnoreCase) &&
-        TextureCatalogPicker.CanonicalPath(left.InstancedPath, left.PackagePath)
-            .Equals(TextureCatalogPicker.CanonicalPath(right.InstancedPath, right.PackagePath),
-                StringComparison.OrdinalIgnoreCase);
+    private static string CanonicalMeshPath(AssetIdentity identity) =>
+        TextureCatalogPicker.CanonicalPath(identity.InstancedPath, identity.PackagePath);
 
     private static readonly IReadOnlyDictionary<string, string> EmptyScalp =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

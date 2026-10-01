@@ -125,34 +125,18 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
         ArgumentNullException.ThrowIfNull(candidates);
         CancelPreview();
         var options = _localOptions.ToList();
-        var localPaths = _localOptions.Skip(1).Where(value => value.Identity is not null)
-            .Select(value => TextureCatalogPicker.CanonicalPath(
-                value.Identity!.InstancedPath, value.Identity.PackagePath))
+        var physicalOccurrences = options.Where(option => option.Identity is not null)
+            .Select(option => PhysicalOccurrenceKey(option.Identity!))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var candidate in candidates)
         {
-            if (localPaths.Contains(candidate.CanonicalPath) ||
-                isPlayerWorkspace && !candidate.CanonicalPath.StartsWith("BIOG_", StringComparison.OrdinalIgnoreCase))
+            if (isPlayerWorkspace &&
+                !candidate.CanonicalPath.StartsWith("BIOG_", StringComparison.OrdinalIgnoreCase))
                 continue;
 
             Add(candidate.EffectiveOccurrence, candidate.CanonicalPath);
-            var biog = candidate.Occurrences.FirstOrDefault(value =>
-                Path.GetFileNameWithoutExtension(value.PackagePath)
-                    .StartsWith("BIOG", StringComparison.OrdinalIgnoreCase));
-            if (biog is not null)
-            {
-                var mod = candidate.Occurrences
-                    .Where(value => value.Origin == TextureCatalogOrigin.Mod &&
-                                    !Path.GetFileNameWithoutExtension(value.PackagePath)
-                                        .StartsWith("BIOG", StringComparison.OrdinalIgnoreCase) &&
-                                    value.MountPriority > biog.MountPriority)
-                    .OrderByDescending(value => value.MountPriority)
-                    .FirstOrDefault();
-                if (mod is not null) Add(mod, candidate.CanonicalPath);
-            }
-            foreach (var manual in candidate.Occurrences.Where(value =>
-                         value.Origin == TextureCatalogOrigin.Manual))
-                Add(manual, candidate.CanonicalPath);
+            foreach (var occurrence in candidate.Occurrences)
+                Add(occurrence, candidate.CanonicalPath);
         }
         if (_session.Value is { } current && !options.Any(option => Same(option.Identity, current)))
             options.Add(new HairMeshOption($"{current.InstancedPath} (current reference)", current));
@@ -166,7 +150,7 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
         {
             var identity = new AssetIdentity(occurrence.PackagePath, canonicalPath,
                 occurrence.ExportUIndex, "SkeletalMesh");
-            if (options.Any(option => Same(option.Identity, identity))) return;
+            if (!physicalOccurrences.Add(PhysicalOccurrenceKey(identity))) return;
             var origin = occurrence.Origin switch
             {
                 TextureCatalogOrigin.BaseGame => "Base game",
@@ -272,6 +256,9 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
         left is null && right is null || left is not null && right is not null &&
         string.Equals(left.InstancedPath, right.InstancedPath, StringComparison.OrdinalIgnoreCase) &&
         string.Equals(left.PackagePath, right.PackagePath, StringComparison.OrdinalIgnoreCase);
+
+    private static string PhysicalOccurrenceKey(AssetIdentity identity) =>
+        $"{Path.GetFullPath(identity.PackagePath)}|{identity.UIndex}";
 
     private void OnValueChanged(object? sender, EventArgs e)
     {

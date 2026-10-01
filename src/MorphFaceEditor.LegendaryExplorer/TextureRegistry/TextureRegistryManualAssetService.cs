@@ -284,17 +284,21 @@ public sealed class TextureRegistryManualAssetService(TextureRegistryStore store
             StringComparison.OrdinalIgnoreCase);
 
     private static TextureCatalogOccurrence ChooseTexture(IReadOnlyList<TextureCatalogOccurrence> occurrences) =>
-        occurrences.OrderByDescending(value => IsBiog(value.PackagePath))
-            .ThenByDescending(value => value.Origin == TextureCatalogOrigin.Manual)
-            .ThenByDescending(value => value.MountPriority).First();
+        occurrences.OrderBy(value => SourceRank(value.Origin))
+            .ThenByDescending(value => value.MountPriority)
+            .ThenBy(value => value.PackagePath, StringComparer.OrdinalIgnoreCase).First();
 
     private static AttachmentMeshOccurrence ChooseMesh(IReadOnlyList<AttachmentMeshOccurrence> occurrences) =>
-        occurrences.OrderByDescending(value => IsBiog(value.PackagePath))
-            .ThenByDescending(value => value.Origin == TextureCatalogOrigin.Manual)
-            .ThenByDescending(value => value.MountPriority).First();
+        occurrences.OrderBy(value => SourceRank(value.Origin))
+            .ThenByDescending(value => value.MountPriority)
+            .ThenBy(value => value.PackagePath, StringComparer.OrdinalIgnoreCase).First();
 
-    private static bool IsBiog(string path) =>
-        Path.GetFileNameWithoutExtension(path).StartsWith("BIOG", StringComparison.OrdinalIgnoreCase);
+    private static int SourceRank(TextureCatalogOrigin origin) => origin switch
+    {
+        TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc => 0,
+        TextureCatalogOrigin.Manual => 1,
+        _ => 2
+    };
 
     private static TextureCatalogGame ToCatalogGame(MorphFaceGame game) => game switch
     {

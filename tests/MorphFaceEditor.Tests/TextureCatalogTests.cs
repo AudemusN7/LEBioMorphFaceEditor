@@ -21,19 +21,23 @@ public static class TextureCatalogTests
         new("texture catalogue: search matches path package and origin", SearchMatchesUserFacingProvenance),
         new("texture catalogue: malformed RON parent does not hide its valid repair candidate", MalformedRonParentKeepsRepairCandidate),
         new("player workspace: pickers admit only seek-free qualified BIOG references", PlayerPickerRequiresSeekFreePaths),
-        new("texture catalogue: duplicate paths keep the highest mounted occurrence", DuplicatePathsKeepEffectiveOccurrence),
-        new("texture catalogue: BIOG and cooked aliases collapse with mod override preserved", PickerCollapsesAliasesAndPreservesOverride),
-        new("texture catalogue: current local texture remains local when its path is indexed", CurrentLocalTextureRemainsLocal),
+        new("texture catalogue: duplicate paths default to the official occurrence", DuplicatePathsKeepOfficialOccurrenceAsDefault),
+        new("texture catalogue: BIOG and cooked aliases collapse to official defaults", PickerCollapsesAliasesAndPreservesOverride),
+        new("texture catalogue: path-only lookup chooses highest official while retaining physical choices", PathOnlyLookupPrefersHighestOfficial),
+        new("texture catalogue: shadowed official occurrence is not a path default", ShadowedOfficialIsNotPathDefault),
+        new("texture catalogue: unique mod-only paths remain explicitly selectable", UniqueModOnlyPathRemainsSelectable),
+        new("texture catalogue: mod-only identity does not replace the current local picker copy", CurrentLocalTextureRemainsLocal),
         new("texture catalogue: picker accepts registry candidates after the editor is already open", PickerAcceptsRegistryCandidatesAfterOpen),
         new("texture catalogue: stale failed selection cannot discard a newer choice", StaleFailureCannotDiscardNewSelection),
         new("texture catalogue: selected display text does not become a search filter", SelectedDisplayTextDoesNotFilterPicker),
         new("texture catalogue: missing registry preserves every package texture", MissingRegistryPreservesEveryPackageTexture),
-        new("texture catalogue: local path suppresses installed duplicate", LocalPathSuppressesInstalledDuplicate),
+        new("texture catalogue: mod-only duplicate remains separately discoverable", LocalPathSuppressesInstalledDuplicate),
         new("texture catalogue: local hat textures stay out of the texture picker", LocalHatTextureIsNotPickable),
         new("texture catalogue: merged picker preserves candidate order and source", MergedPickerPreservesCandidateOrderAndSource),
         new("texture picker: hover preview stays outside committed selection", HoverPreviewStaysOutsideCommittedSelection),
         new("texture picker: stale hover preview cannot win", StaleHoverPreviewCannotWin),
         new("texture catalogue: texture editor resolves installed paths without guessing", TextureEditorResolvesInstalledPathsWithoutGuessing),
+        new("texture catalogue: reviewed human eye root resolves despite duplicate object names", HumanEyeCorpusRootResolvesExactInstalledPath),
         new("randomisation texture: required decode failure reports family signature", RequiredDecodeFailureReportsFamilySignature),
         new("texture registry: discovery admits morph HIR and shared-eye paths", DiscoveryAdmitsSupportedPaths),
         new("texture registry: audit exclusions override broad head and HIR matching", DiscoveryAppliesAuditExclusions),
@@ -146,6 +150,25 @@ public static class TextureCatalogTests
             "An ambiguous object name was treated as a resolvable randomisation texture.");
     }
 
+    private static void HumanEyeCorpusRootResolvesExactInstalledPath()
+    {
+        var session = MaterialTestFixtures.CreateSession();
+        var current = session.GetSelectedTexture("HED_Diff")!;
+        var official = Candidate("BIOG_HMM_HED_PROMorph.Eye.EYE_Diff", "BIOG_HMM_HED_PROMorph.pcc");
+        var duplicate = Candidate("BIOG_HMM_ICONIC.Eye.EYE_Diff", "DLC_MOD_Iconic.pcc", TextureCatalogOrigin.Mod);
+        var loader = new RecordingTextureLoader();
+        using var reader = new MorphFacePackageReader();
+        using var editor = CreateTextureEditor(session, reader, [new PackageAssetListItem(current.Source)],
+            [official, duplicate], TextureCatalogProfile.Empty, true, loader);
+        const string alias = "BIOG_HMM_HED_PROMorph_R.Eye.EYE_Diff";
+        TestAssert.True(editor.CanResolveInstancedPath(alias), "Reviewed corpus root failed when the object name was ambiguous.");
+        TestAssert.True(!editor.CanResolveInstancedPath("EYE_Diff"), "The alias fix weakened ambiguous-name rejection.");
+        var texture = editor.ResolveInstancedPathAsync(alias).GetAwaiter().GetResult();
+        TestAssert.Equal(official.InstancedPath, texture.Source.InstancedPath);
+        TestAssert.Equal(official.EffectiveOccurrence.PackagePath, loader.Calls.Single().PackagePath);
+        TestAssert.Equal(official.InstancedPath, loader.Calls.Single().TexturePath);
+    }
+
     private static void MissingRegistryPreservesEveryPackageTexture()
     {
         var session = MaterialTestFixtures.CreateSession();
@@ -165,18 +188,22 @@ public static class TextureCatalogTests
         var session = MaterialTestFixtures.CreateSession();
         var current = session.GetSelectedTexture("HED_Diff")!;
         var local = new PackageAssetListItem(new AssetIdentity(
-            current.Source.PackagePath, "WorkingPackage.Textures.Custom_Diff", 99, "Texture2D"));
-        var installed = Candidate(local.Identity.InstancedPath, "DLC_MOD_Custom\\external.pcc", TextureCatalogOrigin.Mod);
+            current.Source.PackagePath, "BIOG_Custom.Textures.Custom_Diff", 99, "Texture2D"));
+        var installed = Candidate(local.Identity.InstancedPath,
+            "DLC_MOD_Custom\\external.pcc", TextureCatalogOrigin.Mod);
         using var reader = new MorphFacePackageReader();
         var editor = CreateTextureEditor(session, reader,
             [new PackageAssetListItem(current.Source), local], [installed],
             new TextureCatalogProfile("le3-human-male", ["HMM_HED"], ["HED_EYE"]), true);
+        editor.ShowAllPhysicalSources = true;
 
         var matches = editor.Candidates.Where(option =>
             option.InstancedPath.Equals(local.Identity.InstancedPath, StringComparison.OrdinalIgnoreCase)).ToArray();
-        TestAssert.Equal(1, matches.Length);
-        TestAssert.True(matches[0].Asset == local && matches[0].RegistryCandidate is null,
-            "An installed duplicate displaced or accompanied its authoritative package-local texture.");
+        TestAssert.Equal(2, matches.Length);
+        TestAssert.True(matches.Any(option => option.Asset?.Identity == local.Identity),
+            "The local copy disappeared from the chooser.");
+        TestAssert.True(matches.Any(option => option.RegistryCandidate == installed),
+            "The mod-only installed occurrence was hidden instead of remaining explicitly selectable.");
     }
 
     private static void LocalHatTextureIsNotPickable()
@@ -205,6 +232,7 @@ public static class TextureCatalogTests
         var editor = CreateTextureEditor(session, reader,
             [localOther, new PackageAssetListItem(current.Source)], [general, shared, preferred],
             new TextureCatalogProfile("le3-human-male", ["HMM_HED"], ["HED_EYE"]), true, loader);
+        editor.ShowAllPhysicalSources = true;
 
         var ordered = editor.Candidates.Where(option => !option.IsNone).Select(option => option.InstancedPath).ToArray();
         TestAssert.True(ordered.SequenceEqual(
@@ -513,13 +541,24 @@ public static class TextureCatalogTests
         var byObjectName = TextureCatalogSearch.FilterAndRank([vanilla, modded], profile, null, "custom");
         var byPackage = TextureCatalogSearch.FilterAndRank([vanilla, modded], profile, null, "moddedtextures");
         var byOrigin = TextureCatalogSearch.FilterAndRank([vanilla, modded], profile, null, "mod");
+        var officialDefaultWithModOccurrence = vanilla with
+        {
+            Occurrences =
+            [
+                vanilla.EffectiveOccurrence,
+                Occurrence("DLC_MOD_Custom\\CookedPCConsole\\ModdedTextures.pcc", 9000, TextureCatalogOrigin.Mod)
+            ]
+        };
+        var byShadowedPackage = TextureCatalogSearch.FilterAndRank(
+            [officialDefaultWithModOccurrence], profile, null, "moddedtextures");
 
         TestAssert.Equal(modded.InstancedPath, byObjectName.Single().InstancedPath);
         TestAssert.Equal(modded.InstancedPath, byPackage.Single().InstancedPath);
         TestAssert.Equal(modded.InstancedPath, byOrigin.Single().InstancedPath);
+        TestAssert.Equal(officialDefaultWithModOccurrence.InstancedPath, byShadowedPackage.Single().InstancedPath);
     }
 
-    private static void DuplicatePathsKeepEffectiveOccurrence()
+    private static void DuplicatePathsKeepOfficialOccurrenceAsDefault()
     {
         var path = "BIOG_ASA_HED_PROMorph_R.Adds.ASA_HED_PRO_Add1";
         var baseOccurrence = Occurrence("base.pcc", mountPriority: 0, TextureCatalogOrigin.BaseGame);
@@ -527,10 +566,10 @@ public static class TextureCatalogTests
         var candidate = new TextureCatalogCandidate(
             TextureCatalogGame.LE3,
             path,
-            modOccurrence,
+            baseOccurrence,
             [baseOccurrence, modOccurrence]);
 
-        TestAssert.Equal(modOccurrence, candidate.EffectiveOccurrence);
+        TestAssert.Equal(baseOccurrence, candidate.EffectiveOccurrence);
         TestAssert.Equal(2, candidate.Occurrences.Count);
     }
 
@@ -543,17 +582,144 @@ public static class TextureCatalogTests
         var modOccurrence = Occurrence("DLC_MOD_Test\\CookedPCConsole\\ModHair.pcc", 9000, TextureCatalogOrigin.Mod);
         var manualOccurrence = Occurrence("C:\\Custom\\ChosenHair.pcc", 0, TextureCatalogOrigin.Manual);
         var biog = new TextureCatalogCandidate(TextureCatalogGame.LE3, biogPath,
-            biogOccurrence, [biogOccurrence]);
+            biogOccurrence, [biogOccurrence])
+        {
+            IsEligibleOfficialDefault = true
+        };
         var level = new TextureCatalogCandidate(TextureCatalogGame.LE3, qualifiedPath,
-            modOccurrence, [levelOccurrence, modOccurrence, manualOccurrence]);
+            manualOccurrence, [levelOccurrence, modOccurrence, manualOccurrence]);
 
         var choices = TextureCatalogPicker.Select([level, biog]);
-        TestAssert.Equal(3, choices.Count);
+        TestAssert.Equal(1, choices.Count);
         TestAssert.Equal(biogOccurrence, choices[0].EffectiveOccurrence);
-        TestAssert.Equal(modOccurrence, choices[1].EffectiveOccurrence);
-        TestAssert.Equal(manualOccurrence, choices[2].EffectiveOccurrence);
+        TestAssert.Equal(4, choices[0].Occurrences.Count);
+        TestAssert.Equal(qualifiedPath, choices[0].InstancedPath);
         TestAssert.Equal(qualifiedPath, TextureCatalogPicker.CanonicalPath(
             choices[0].InstancedPath, choices[0].EffectiveOccurrence.PackagePath));
+    }
+
+    private static void PathOnlyLookupPrefersHighestOfficial()
+    {
+        var session = MaterialTestFixtures.CreateSession();
+        var current = session.GetSelectedTexture("HED_Diff")!;
+        const string path = "BIOG_HMF_HED_PROMorph_R.Textures.Shared_Diff";
+        var local = new PackageAssetListItem(new AssetIdentity(
+            current.Source.PackagePath, path, 77, "Texture2D"));
+        var mod = Occurrence("DLC_MOD_Texture\\CookedPCConsole\\Override.pcc", 9000, TextureCatalogOrigin.Mod);
+        var officialLow = Occurrence("BIOG_HMF_HED_PROMorph_R.pcc", 0, TextureCatalogOrigin.BaseGame);
+        var officialHigh = Occurrence("DLC_CON_CORE_HMF_HED_PROMorph_R\\CookedPCConsole\\BIOG_HMF_HED_PROMorph_R.pcc",
+            500, TextureCatalogOrigin.OfficialDlc);
+        var installed = new TextureCatalogCandidate(TextureCatalogGame.LE3, path, officialHigh,
+            [mod, officialLow, officialHigh])
+        {
+            IsEligibleOfficialDefault = true
+        };
+        var loader = new RecordingTextureLoader();
+        using var editor = new MaterialTextureEditorViewModel(
+            session,
+            new MaterialParameterDefinition("HED_Diff", "Diffuse", "skin", MaterialParameterKind.Texture,
+                HeadMaterialFamily.Skin, TextureRole: TextureRole.Diffuse,
+                ColorSpace: TextureColorSpace.Srgb, AlphaPolicy: TextureAlphaPolicy.Ignore),
+            loader,
+            current.Source.PackagePath,
+            [local],
+            _ => { },
+            [installed],
+            isRegistryAvailable: true);
+
+        editor.ShowAllPhysicalSources = true;
+        var physicalChoices = editor.Candidates.Where(option =>
+            option.InstancedPath.Equals(path, StringComparison.OrdinalIgnoreCase)).ToArray();
+        TestAssert.Equal(4, physicalChoices.Length);
+        TestAssert.True(physicalChoices.Any(option => option.Asset?.Identity == local.Identity),
+            "The local occurrence disappeared from the picker.");
+        TestAssert.True(physicalChoices.Any(option => option.RegistryCandidate?.EffectiveOccurrence.PackagePath == mod.PackagePath),
+            "The mod occurrence disappeared from the picker.");
+        TestAssert.True(physicalChoices.Any(option => option.RegistryCandidate?.EffectiveOccurrence.PackagePath == officialLow.PackagePath),
+            "The lower official occurrence disappeared from the picker.");
+        TestAssert.True(physicalChoices.Any(option => option.RegistryCandidate?.EffectiveOccurrence.PackagePath == officialHigh.PackagePath),
+            "The highest official occurrence disappeared from the picker.");
+
+        _ = editor.ResolveInstancedPathAsync(path).GetAwaiter().GetResult();
+        TestAssert.True(officialHigh.PackagePath.Equals(loader.Calls.Last().PackagePath,
+                StringComparison.OrdinalIgnoreCase),
+            "Path-only lookup did not select the highest-mounted official occurrence.");
+        _ = editor.ResolveExactInstancedPathAsync(path).GetAwaiter().GetResult();
+        TestAssert.True(officialHigh.PackagePath.Equals(loader.Calls.Last().PackagePath,
+                StringComparison.OrdinalIgnoreCase),
+            "Exact path lookup did not select the highest-mounted official occurrence.");
+        var explicitTexture = editor.ResolveReferenceAsync(local.Identity with { IsExplicitTextureDonor = true })
+            .GetAwaiter().GetResult();
+        TestAssert.True(local.Identity.PackagePath.Equals(loader.Calls.Last().PackagePath,
+                StringComparison.OrdinalIgnoreCase),
+            "An explicit physical identity was redirected to the official occurrence.");
+        TestAssert.True(explicitTexture.Source.IsExplicitTextureDonor,
+            "Resolving an explicit physical identity discarded its donor selection flag.");
+    }
+
+    private static void ShadowedOfficialIsNotPathDefault()
+    {
+        var session = MaterialTestFixtures.CreateSession();
+        const string path = "BIOG_MFE_Test.Textures.Shadowed_Diff";
+        var manual = Occurrence("C:\\Custom\\ManualTexture.pcc", 0, TextureCatalogOrigin.Manual);
+        var shadowedOfficial = Occurrence(
+            "DLC_CON_Shadowed\\CookedPCConsole\\BIOG_MFE_Test.pcc", 9000, TextureCatalogOrigin.OfficialDlc);
+        var mod = Occurrence("DLC_MOD_Shadowed\\CookedPCConsole\\BIOG_MFE_Test.pcc", 9000,
+            TextureCatalogOrigin.Mod);
+        var candidate = new TextureCatalogCandidate(TextureCatalogGame.LE3, path, shadowedOfficial,
+            [shadowedOfficial, mod, manual]);
+        var loader = new RecordingTextureLoader();
+        using var editor = new MaterialTextureEditorViewModel(
+            session,
+            new MaterialParameterDefinition("HED_Diff", "Diffuse", "skin", MaterialParameterKind.Texture,
+                HeadMaterialFamily.Skin, TextureRole: TextureRole.Diffuse,
+                ColorSpace: TextureColorSpace.Srgb, AlphaPolicy: TextureAlphaPolicy.Ignore),
+            loader,
+            session.GetSelectedTexture("HED_Diff")!.Source.PackagePath,
+            [],
+            _ => { },
+            [candidate],
+            isRegistryAvailable: true);
+
+        editor.ShowAllPhysicalSources = true;
+        var visible = editor.Candidates.Where(option =>
+            option.InstancedPath.Equals(path, StringComparison.OrdinalIgnoreCase)).ToArray();
+        TestAssert.True(visible.Any(option => option.RegistryCandidate?.EffectiveOccurrence.PackagePath == shadowedOfficial.PackagePath),
+            "The shadowed official physical occurrence was removed from discovery.");
+        _ = editor.ResolveInstancedPathAsync(path).GetAwaiter().GetResult();
+        TestAssert.True(manual.PackagePath.Equals(loader.Calls.Last().PackagePath, StringComparison.OrdinalIgnoreCase),
+            "A shadowed official occurrence displaced the explicit manual default.");
+        _ = editor.ResolveReferenceAsync(new AssetIdentity(shadowedOfficial.PackagePath, path,
+            shadowedOfficial.ExportUIndex, "Texture2D")).GetAwaiter().GetResult();
+        TestAssert.True(shadowedOfficial.PackagePath.Equals(loader.Calls.Last().PackagePath,
+                StringComparison.OrdinalIgnoreCase),
+            "Explicit physical selection was redirected away from the shadowed occurrence.");
+    }
+
+    private static void UniqueModOnlyPathRemainsSelectable()
+    {
+        var session = MaterialTestFixtures.CreateSession();
+        const string path = "BIOG_MFE_Test.Textures.CustomModOnly";
+        var first = Candidate(path, @"DLC_MOD_A\CookedPCConsole\BIOG_MFE_Test.pcc", TextureCatalogOrigin.Mod);
+        var secondOccurrence = Occurrence(
+            @"DLC_MOD_Z\CookedPCConsole\BIOG_MFE_Test.pcc", 99, TextureCatalogOrigin.Mod) with { ExportUIndex = 43 };
+        var second = new TextureCatalogCandidate(TextureCatalogGame.LE3, path, secondOccurrence, [secondOccurrence]);
+        var loader = new RecordingTextureLoader();
+        using var reader = new MorphFacePackageReader();
+        using var editor = CreateTextureEditor(session, reader, [], [second, first],
+            TextureCatalogProfile.Empty, true, loader);
+
+        var visible = editor.Candidates.Where(option => option.InstancedPath.Equals(
+            path, StringComparison.OrdinalIgnoreCase)).ToArray();
+        TestAssert.True(visible.Length == 1,
+            "A unique mod-only path should remain represented by one deterministic default row.");
+        TestAssert.Equal(first.EffectiveOccurrence.PackagePath,
+            visible[0].RegistryCandidate?.EffectiveOccurrence.PackagePath);
+
+        _ = editor.ResolveExactInstancedPathAsync(path).GetAwaiter().GetResult();
+        TestAssert.Equal(first.EffectiveOccurrence.PackagePath, loader.Calls.Last().PackagePath);
+        _ = editor.ResolveInstancedPathAsync(path).GetAwaiter().GetResult();
+        TestAssert.Equal(first.EffectiveOccurrence.PackagePath, loader.Calls.Last().PackagePath);
     }
 
     private static void CurrentLocalTextureRemainsLocal()
@@ -580,9 +746,9 @@ public static class TextureCatalogTests
             isRegistryAvailable: true);
 
         TestAssert.True(editor.SelectedTexture?.Asset?.Identity == current.Source,
-            "The current local texture was replaced by a registry option solely because its instanced path matched.");
+            "A mod-only registry source replaced the current local choice without explicit selection.");
         TestAssert.True(!editor.HasExternalRegistrySelection,
-            "A current local texture sharing a registry path was incorrectly treated as an external selection.");
+            "A mod-only registry source was implicitly selected as the external source.");
     }
 
     private static void PickerAcceptsRegistryCandidatesAfterOpen()
@@ -605,6 +771,7 @@ public static class TextureCatalogTests
             [registryCandidate],
             new TextureCatalogProfile("le3-human-male", ["HMM_HED"], []),
             isRegistryAvailable: true);
+        editor.ShowAllPhysicalSources = true;
 
         TestAssert.True(editor.IsRegistryAvailable, "The already-open picker did not adopt the ready registry state.");
         TestAssert.True(editor.Candidates.Any(option => option.RegistryCandidate == registryCandidate),
@@ -641,7 +808,8 @@ public static class TextureCatalogTests
         loader.Complete(second.Identity.InstancedPath, CreateDecoded(second.Identity));
 
         TestAssert.True(SpinWait.SpinUntil(() =>
-                session.GetSelectedTexture("HED_Diff")?.Source == second.Identity && !editor.IsBusy,
+                session.GetSelectedTexture("HED_Diff")?.Source == (second.Identity with
+                    { IsExplicitTextureDonor = true }) && !editor.IsBusy,
                 TimeSpan.FromSeconds(2)),
             "The newer texture selection was discarded after an older request failed.");
         TestAssert.Equal(0, errors.Count);
@@ -665,6 +833,7 @@ public static class TextureCatalogTests
             [registryCandidate],
             new TextureCatalogProfile("le3-human-male", ["HMM_HED"], []),
             true);
+        editor.ShowAllPhysicalSources = true;
 
         editor.SearchText = "FaceD";
         TestAssert.True(!editor.Candidates.Any(option => option.RegistryCandidate == registryCandidate),
@@ -687,11 +856,14 @@ public static class TextureCatalogTests
     private static TextureCatalogCandidate Candidate(
         string path,
         string packagePath,
-        TextureCatalogOrigin origin = TextureCatalogOrigin.BaseGame) => new(
-        TextureCatalogGame.LE3,
-        path,
-        Occurrence(packagePath, 0, origin),
-        [Occurrence(packagePath, 0, origin)]);
+        TextureCatalogOrigin origin = TextureCatalogOrigin.BaseGame)
+    {
+        var occurrence = Occurrence(packagePath, 0, origin);
+        return new TextureCatalogCandidate(TextureCatalogGame.LE3, path, occurrence, [occurrence])
+        {
+            IsEligibleOfficialDefault = origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc
+        };
+    }
 
     private static TextureCatalogOccurrence Occurrence(
         string packagePath,
@@ -736,6 +908,21 @@ public static class TextureCatalogTests
 
         public void Fail(string texturePath, Exception exception) =>
             _requests[texturePath].TrySetException(exception);
+    }
+
+    private sealed class RecordingTextureLoader : ITextureReferenceLoader
+    {
+        public List<(string PackagePath, string TexturePath)> Calls { get; } = [];
+
+        public Task<DecodedTextureAsset> LoadTextureAsync(
+            string packagePath,
+            string texturePath,
+            MaterialParameterDefinition definition,
+            CancellationToken cancellationToken = default)
+        {
+            Calls.Add((packagePath, texturePath));
+            return Task.FromResult(CreateDecoded(new AssetIdentity(packagePath, texturePath, 1, "Texture2D")));
+        }
     }
 
 }

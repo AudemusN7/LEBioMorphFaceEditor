@@ -8,10 +8,11 @@ public static class PlayerFaceScarTexturePolicyTests
     public static IReadOnlyList<TestCase> All { get; } =
     [
         new("Player face pool combines distinct NPC and base-game Custom Diff/Norm sets", FacePoolIsDistinctAndGameSexScoped),
+        new("Player face pair uses eligible official occurrences for exact Diff and Norm identities", FacePairUsesOfficialDefault),
         new("HMF Player Rough face Diff/Norm set is included across all games", HmfRoughSetIsIncluded),
         new("Player face selection always keeps its diffuse and normal paired", FaceSelectionRemainsAtomic),
         new("Player scars include no-scar and use explicit scalar strengths", ScarSelectionIncludesNoScar),
-        new("Player scar assets require exact base-game HMM or HMF identities", ScarSelectionUsesBaseGameOccurrences),
+        new("Player scar assets use the highest eligible official identity under mod override", ScarSelectionUsesOfficialDefault),
         new("Nested Player face and scar paths retain exact package-local identities", NestedPathsRemainExactIdentities),
         new("HMF Player scars are available in LE1 only", HmfScarSupportIsLe1Only),
         new("Unsupported scar parameter suppresses the scar proposal", UnsupportedScarParameterIsNoOp)
@@ -76,6 +77,35 @@ public static class PlayerFaceScarTexturePolicyTests
         }
     }
 
+    private static void FacePairUsesOfficialDefault()
+    {
+        var baseDiffuse = Occurrence("BIOG_HMF_HED_PROMorph_R.pcc", TextureCatalogOrigin.BaseGame, 61, 1);
+        var dlcDiffuse = Occurrence("DLC_CON_HMF_HED_PROMorph_R/BIOG_HMF_HED_PROMorph_R.pcc",
+            TextureCatalogOrigin.OfficialDlc, 71, 500);
+        var modDiffuse = Occurrence("DLC_MOD_Override/BIOG_HMF_HED_PROMorph_R.pcc",
+            TextureCatalogOrigin.Mod, 81, 9000);
+        var baseNormal = Occurrence("BIOG_HMF_HED_PROMorph_R.pcc", TextureCatalogOrigin.BaseGame, 62, 1);
+        var dlcNormal = Occurrence("DLC_CON_HMF_HED_PROMorph_R/BIOG_HMF_HED_PROMorph_R.pcc",
+            TextureCatalogOrigin.OfficialDlc, 72, 500);
+        var candidates = new[]
+        {
+            new TextureCatalogCandidate(TextureCatalogGame.LE3,
+                "BIOG_HMF_HED_PROMorph_R.Diffuse.HMF_HED_PROCustom_Official_Diff",
+                dlcDiffuse, [baseDiffuse, dlcDiffuse, modDiffuse]) { IsEligibleOfficialDefault = true },
+            new TextureCatalogCandidate(TextureCatalogGame.LE3,
+                "BIOG_HMF_HED_PROMorph_R.Normal.HMF_HED_PROCustom_Official_Norm",
+                dlcNormal, [baseNormal, dlcNormal]) { IsEligibleOfficialDefault = true }
+        };
+
+        var result = PlayerFaceScarTexturePolicy.CreateFacePool("le3-human-female", [], candidates)
+            .Single();
+
+        TestAssert.Equal(dlcDiffuse.PackagePath, result.PlayerDiffuseAsset?.PackagePath);
+        TestAssert.Equal(dlcDiffuse.ExportUIndex, result.PlayerDiffuseAsset?.UIndex);
+        TestAssert.Equal(dlcNormal.PackagePath, result.PlayerNormalAsset?.PackagePath);
+        TestAssert.Equal(dlcNormal.ExportUIndex, result.PlayerNormalAsset?.UIndex);
+    }
+
     private static void HmfRoughSetIsIncluded()
     {
         foreach (var game in Enum.GetValues<TextureCatalogGame>())
@@ -133,14 +163,17 @@ public static class PlayerFaceScarTexturePolicyTests
             "The scar pool should make both no-scar and active scar outcomes reachable.");
     }
 
-    private static void ScarSelectionUsesBaseGameOccurrences()
+    private static void ScarSelectionUsesOfficialDefault()
     {
         var baseGame = Occurrence("BIOG_HMM_HED_PROMorph.pcc", TextureCatalogOrigin.BaseGame, 31, 1);
+        var officialDlc = Occurrence("DLC_CON_HMM_HED_PROMorph/BIOG_HMM_HED_PROMorph.pcc",
+            TextureCatalogOrigin.OfficialDlc, 42, 420);
         var mod = Occurrence("ThirdParty.pcc", TextureCatalogOrigin.Mod, 99, 99);
         var candidates = new[]
         {
             new TextureCatalogCandidate(TextureCatalogGame.LE2,
-                "BIOG_HMM_HED_PROMorph.Scars.HMM_HED_PROCustom_Scr7", mod, [mod, baseGame]),
+                "BIOG_HMM_HED_PROMorph.Scars.HMM_HED_PROCustom_Scr7", officialDlc,
+                [mod, baseGame, officialDlc]) { IsEligibleOfficialDefault = true },
             Candidate(TextureCatalogGame.LE2, "BIOG_HMM_HED_PROMorph.Scars.HMM_HED_PROCustom_Scr8", "ThirdParty.pcc", TextureCatalogOrigin.Mod, 32),
             Candidate(TextureCatalogGame.LE2, "BIOG_HMM_HED_PROMorph.Scars.HMM_HED_PROCustom_Scr9_extra", "BIOG_HMM_HED_PROMorph.pcc", TextureCatalogOrigin.BaseGame, 33)
         };
@@ -152,10 +185,15 @@ public static class PlayerFaceScarTexturePolicyTests
 
         TestAssert.True(selected.Length > 0, "No base-game scar candidate was selectable.");
         TestAssert.True(selected.All(value =>
-                value.TextureAsset!.PackagePath == baseGame.PackagePath &&
-                value.TextureAsset.UIndex == baseGame.ExportUIndex &&
+                value.TextureAsset!.PackagePath == officialDlc.PackagePath &&
+                value.TextureAsset.UIndex == officialDlc.ExportUIndex &&
                 value.TextureAsset.InstancedPath.EndsWith("HMM_HED_PROCustom_Scr7", StringComparison.OrdinalIgnoreCase)),
-            "The scar selection did not retain the exact base-game asset identity.");
+            "The scar selection did not retain the highest eligible official asset identity.");
+
+        var unprojected = candidates[0] with { IsEligibleOfficialDefault = false };
+        var noScar = PlayerFaceScarTexturePolicy.SelectScar("le2-human-male", [unprojected], 1);
+        TestAssert.True(noScar is { HasScar: false },
+            "A physical occurrence without eligible official-default provenance was selected as a scar.");
     }
 
     private static void HmfScarSupportIsLe1Only()
@@ -194,11 +232,11 @@ public static class PlayerFaceScarTexturePolicyTests
         var candidates = new[]
         {
             new TextureCatalogCandidate(TextureCatalogGame.LE2, diffusePath,
-                diffuseOccurrence, [diffuseOccurrence]),
+                diffuseOccurrence, [diffuseOccurrence]) { IsEligibleOfficialDefault = true },
             new TextureCatalogCandidate(TextureCatalogGame.LE2, normalPath,
-                normalOccurrence, [normalOccurrence]),
+                normalOccurrence, [normalOccurrence]) { IsEligibleOfficialDefault = true },
             new TextureCatalogCandidate(TextureCatalogGame.LE2, scarPath,
-                scarOccurrence, [scarOccurrence])
+                scarOccurrence, [scarOccurrence]) { IsEligibleOfficialDefault = true }
         };
 
         var face = PlayerFaceScarTexturePolicy.CreateFacePool("le2-human-male", [], candidates)
@@ -236,7 +274,10 @@ public static class PlayerFaceScarTexturePolicyTests
         int exportUIndex)
     {
         var occurrence = Occurrence(package, origin, exportUIndex, exportUIndex);
-        return new TextureCatalogCandidate(game, path, occurrence, [occurrence]);
+        return new TextureCatalogCandidate(game, path, occurrence, [occurrence])
+        {
+            IsEligibleOfficialDefault = origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc
+        };
     }
 
     private static TextureCatalogOccurrence Occurrence(

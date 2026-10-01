@@ -11,7 +11,7 @@ public static class PlayerFacialDetailTexturePolicyTests
     [
         new("Player detail pools separate HMM brows from beards and exclude NPC additions", HmmPoolsAreSeparated),
         new("Player detail pool uses HMF brows and never invents HED_Addn", HmfSupportsOnlyBrow),
-        new("Player detail selection requires base-game candidates and uses their exact identity", BaseGameOccurrenceWins),
+        new("Player detail selection uses the highest eligible official identity under mod override", OfficialOccurrenceWins),
         new("Nested Player detail paths retain exact package-local identities", NestedPathsRemainExactIdentities),
         new("Player detail parameters no-op independently when a pool is unavailable", ParametersNoOpIndependently),
         new("Player detail selection no-ops for unsupported profiles", UnsupportedProfileIsNoOp)
@@ -91,15 +91,20 @@ public static class PlayerFacialDetailTexturePolicyTests
         TestAssert.Equal("HMF_HED_PROCustom_AngularBrow", proposal["HED_Brow"].Candidate.ObjectName);
     }
 
-    private static void BaseGameOccurrenceWins()
+    private static void OfficialOccurrenceWins()
     {
         var baseGame = Occurrence("BIOG_HMM_HED_PROMorph.pcc", TextureCatalogOrigin.BaseGame, 17);
+        var officialDlc = new TextureCatalogOccurrence(
+            "DLC_CON_HMM_HED_PROMorph\\CookedPCConsole\\BIOG_HMM_HED_PROMorph.pcc",
+            29, 450, TextureCatalogOrigin.OfficialDlc, 1024, 1024, "PF_DXT5",
+            "TEXTUREGROUP_Character", false, null);
         var mod = Occurrence("AThirdPartyHairMod.pcc", TextureCatalogOrigin.Mod, 99);
         var candidate = new TextureCatalogCandidate(
             TextureCatalogGame.LE1,
             "BIOG_HMM_HED_PROMorph.Beard.Custom.HMM_HED_PROCustom_5oclock",
-            mod,
-            [mod, baseGame]);
+            officialDlc,
+            [mod, baseGame, officialDlc])
+        { IsEligibleOfficialDefault = true };
         var current = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["HED_Addn"] = "existing"
@@ -109,10 +114,14 @@ public static class PlayerFacialDetailTexturePolicyTests
             "le1-human-male", current, [candidate], 789);
 
         var selected = proposal["HED_Addn"];
-        TestAssert.Equal(baseGame.PackagePath, selected.Asset.PackagePath);
-        TestAssert.Equal(baseGame.ExportUIndex, selected.Asset.UIndex);
+        TestAssert.Equal(officialDlc.PackagePath, selected.Asset.PackagePath);
+        TestAssert.Equal(officialDlc.ExportUIndex, selected.Asset.UIndex);
         TestAssert.Equal("Texture2D", selected.Asset.ClassName);
-        TestAssert.Equal(TextureCatalogOrigin.BaseGame, selected.Candidate.EffectiveOccurrence.Origin);
+        TestAssert.Equal(TextureCatalogOrigin.OfficialDlc, selected.Candidate.EffectiveOccurrence.Origin);
+
+        var unprojected = PlayerFacialDetailTexturePolicy.CreateProposal(
+            "le1-human-male", current, [candidate with { IsEligibleOfficialDefault = false }], 789);
+        TestAssert.Equal(0, unprojected.Count);
     }
 
     private static void ParametersNoOpIndependently()
@@ -146,8 +155,10 @@ public static class PlayerFacialDetailTexturePolicyTests
             "le2-human-male",
             new Dictionary<string, string> { ["HED_Addn"] = "current beard", ["HED_Brow"] = "current brow" },
             [
-                new TextureCatalogCandidate(TextureCatalogGame.LE2, beardPath, beardOccurrence, [beardOccurrence]),
+                new TextureCatalogCandidate(TextureCatalogGame.LE2, beardPath, beardOccurrence, [beardOccurrence])
+                    { IsEligibleOfficialDefault = true },
                 new TextureCatalogCandidate(TextureCatalogGame.LE2, browPath, browOccurrence, [browOccurrence])
+                    { IsEligibleOfficialDefault = true }
             ],
             1337);
 
@@ -193,7 +204,10 @@ public static class PlayerFacialDetailTexturePolicyTests
         var occurrence = Occurrence(sex == "HMF"
             ? "BIOG_HMF_HED_PROMorph_R.pcc"
             : "BIOG_HMM_HED_PROMorph.pcc", TextureCatalogOrigin.BaseGame, 7);
-        return new TextureCatalogCandidate(game, path, occurrence, [occurrence]);
+        return new TextureCatalogCandidate(game, path, occurrence, [occurrence])
+        {
+            IsEligibleOfficialDefault = true
+        };
     }
 
     private static TextureCatalogOccurrence Occurrence(

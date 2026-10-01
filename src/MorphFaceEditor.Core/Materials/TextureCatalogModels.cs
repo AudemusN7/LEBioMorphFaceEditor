@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace MorphFaceEditor.Core.Materials;
 
 /// <summary>Legendary Edition game identity kept independent of package-library types.</summary>
@@ -47,8 +49,8 @@ public sealed record TextureCatalogOccurrence(
 
 /// <summary>
 /// A single UE3-facing Texture2D path with all installed verified occurrences.
-/// The effective occurrence is chosen by mount precedence; duplicate paths are
-/// never exposed as misleading independent picker entries.
+/// The effective occurrence is the canonical official default. Pickers can
+/// expose each physical occurrence with its donor provenance.
 /// </summary>
 public sealed record TextureCatalogCandidate(
     TextureCatalogGame Game,
@@ -56,6 +58,10 @@ public sealed record TextureCatalogCandidate(
     TextureCatalogOccurrence EffectiveOccurrence,
     IReadOnlyList<TextureCatalogOccurrence> Occurrences)
 {
+    /// <summary>True only when the effective official donor is from its filename-winning package.</summary>
+    [JsonIgnore]
+    public bool IsEligibleOfficialDefault { get; init; }
+
     public string ObjectName => InstancedPath.Split('.').Last();
     public string DisplayOrigin => EffectiveOccurrence.OriginLabel;
     public string SourcePackagePath => EffectiveOccurrence.PackagePath;
@@ -79,48 +85,55 @@ public static class TextureCatalogPicker
     {
         ArgumentNullException.ThrowIfNull(candidates);
         return candidates
-            .SelectMany(candidate => candidate.Occurrences
-                .DefaultIfEmpty(candidate.EffectiveOccurrence)
-                .Select(occurrence => (Candidate: candidate, Occurrence: occurrence,
-                    Canonical: CanonicalPath(candidate.InstancedPath, occurrence.PackagePath))))
+            .Select(candidate => (Candidate: candidate, Occurrence: candidate.EffectiveOccurrence,
+                Canonical: CanonicalPath(candidate.InstancedPath, candidate.EffectiveOccurrence.PackagePath)))
             .GroupBy(value => value.Canonical, StringComparer.OrdinalIgnoreCase)
-            .SelectMany(group =>
+            .Select(group =>
             {
-                var biog = group.Where(value => value.Occurrence.Origin != TextureCatalogOrigin.Manual &&
-                                                IsBiogPackage(value.Occurrence.PackagePath))
-                    .OrderByDescending(value => value.Occurrence.MountPriority)
+                var values = group.ToArray();
+                if (values.Length == 1) return values[0].Candidate;
+                var primary = values.OrderByDescending(value => value.Candidate.IsEligibleOfficialDefault &&
+                                                                  IsOfficial(value.Occurrence.Origin))
+                    .ThenBy(value => value.Occurrence.Origin switch
+                    {
+                        TextureCatalogOrigin.Manual => 0,
+                        TextureCatalogOrigin.Mod => 1,
+                        _ => 2
+                    })
+                    .ThenByDescending(value => value.Occurrence.MountPriority)
                     .ThenBy(value => value.Occurrence.PackagePath, StringComparer.OrdinalIgnoreCase)
-                    .FirstOrDefault();
-                var primary = biog.Candidate is not null
-                    ? biog
-                    : group.OrderBy(value => value.Occurrence.Origin == TextureCatalogOrigin.Manual)
-                        .ThenByDescending(value => value.Occurrence.MountPriority)
-                        .ThenBy(value => value.Occurrence.PackagePath, StringComparer.OrdinalIgnoreCase)
-                        .First();
-                var result = new List<TextureCatalogCandidate>
-                    { primary.Candidate with { EffectiveOccurrence = primary.Occurrence } };
-                if (biog.Candidate is not null)
+                    .First();
+                var occurrences = values
+                    .SelectMany(value => value.Candidate.Occurrences.Append(value.Occurrence))
+                    .DistinctBy(value => $"{Path.GetFullPath(value.PackagePath)}|{value.ExportUIndex}",
+                        StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(value => SourceRank(value.Origin))
+                    .ThenByDescending(value => value.MountPriority)
+                    .ThenBy(value => value.PackagePath, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                var rawPaths = values.Select(value => value.Candidate.InstancedPath)
+                    .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+                return primary.Candidate with
                 {
-                    var modOverride = group
-                        .Where(value => value.Occurrence.Origin == TextureCatalogOrigin.Mod &&
-                                        !IsBiogPackage(value.Occurrence.PackagePath) &&
-                                        value.Occurrence.MountPriority > biog.Occurrence.MountPriority)
-                        .OrderByDescending(value => value.Occurrence.MountPriority)
-                        .ThenBy(value => value.Occurrence.PackagePath, StringComparer.OrdinalIgnoreCase)
-                        .FirstOrDefault();
-                    if (modOverride.Candidate is not null)
-                        result.Add(modOverride.Candidate with { EffectiveOccurrence = modOverride.Occurrence });
-                }
-                foreach (var manual in group.Where(value => value.Occurrence.Origin == TextureCatalogOrigin.Manual)
-                             .DistinctBy(value => (value.Occurrence.PackagePath, value.Occurrence.ExportUIndex)))
-                {
-                    if (!ReferenceEquals(manual.Occurrence, primary.Occurrence))
-                        result.Add(manual.Candidate with { EffectiveOccurrence = manual.Occurrence });
-                }
-                return result;
+                    InstancedPath = rawPaths.Length > 1 ? group.Key : primary.Candidate.InstancedPath,
+                    EffectiveOccurrence = primary.Occurrence,
+                    Occurrences = occurrences,
+                    IsEligibleOfficialDefault = primary.Candidate.IsEligibleOfficialDefault &&
+                                                IsOfficial(primary.Occurrence.Origin)
+                };
             })
             .ToArray();
     }
+
+    private static bool IsOfficial(TextureCatalogOrigin origin) =>
+        origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc;
+
+    private static int SourceRank(TextureCatalogOrigin origin) => origin switch
+    {
+        TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc => 0,
+        TextureCatalogOrigin.Manual => 1,
+        _ => 2
+    };
 
     private static bool IsBiogPackage(string packagePath) =>
         Path.GetFileNameWithoutExtension(packagePath).StartsWith("BIOG", StringComparison.OrdinalIgnoreCase);
@@ -159,8 +172,9 @@ public static class TextureCatalogSearch
         query.Length == 0 ||
         candidate.ObjectName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
         candidate.InstancedPath.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-        candidate.EffectiveOccurrence.PackagePath.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-        candidate.DisplayOrigin.Contains(query, StringComparison.OrdinalIgnoreCase);
+        candidate.Occurrences.Any(occurrence =>
+            occurrence.PackagePath.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+            occurrence.OriginLabel.Contains(query, StringComparison.OrdinalIgnoreCase));
 
     private static int Rank(
         TextureCatalogCandidate candidate,

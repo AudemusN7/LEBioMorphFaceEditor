@@ -59,7 +59,7 @@ public static class PlayerFaceScarTexturePolicy
     }
 
     /// <summary>
-    /// Selects a base-game Player scar texture or the explicit no-scar result. HMF
+    /// Selects an eligible official Player scar texture or the explicit no-scar result. HMF
     /// supports this packed scar slot in LE1 only. A selected scar sets both blend
     /// strengths to 1; no-scar sets both to 0.
     /// </summary>
@@ -92,7 +92,7 @@ public static class PlayerFaceScarTexturePolicy
         var prefix = isHumanMale ? HmmFacePrefix : HmfFacePrefix;
         var bySuffix = installedCandidates
             .Where(candidate => candidate.Game == game)
-            .SelectMany(candidate => BaseGameOccurrences(candidate)
+            .SelectMany(candidate => EligibleOfficialOccurrences(candidate)
                 .Select(occurrence => new
                 {
                     Candidate = candidate,
@@ -161,7 +161,7 @@ public static class PlayerFaceScarTexturePolicy
             .Where(candidate => candidate.Game == game &&
                                 candidate.ObjectName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) &&
                                 IsScarObject(candidate.ObjectName[prefix.Length..]))
-            .SelectMany(candidate => BaseGameOccurrences(candidate)
+            .SelectMany(candidate => EligibleOfficialOccurrences(candidate)
                 .Select(occurrence => new
                 {
                     Candidate = candidate,
@@ -192,11 +192,12 @@ public static class PlayerFaceScarTexturePolicy
         return int.TryParse(suffix[marker.Length..], NumberStyles.None, CultureInfo.InvariantCulture, out _);
     }
 
-    private static IEnumerable<TextureCatalogOccurrence> BaseGameOccurrences(
+    private static IEnumerable<TextureCatalogOccurrence> EligibleOfficialOccurrences(
         TextureCatalogCandidate candidate) =>
-        candidate.Occurrences
-            .DefaultIfEmpty(candidate.EffectiveOccurrence)
-            .Where(occurrence => occurrence.Origin == TextureCatalogOrigin.BaseGame);
+        candidate.IsEligibleOfficialDefault && candidate.EffectiveOccurrence.Origin is
+            TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc
+            ? [candidate.EffectiveOccurrence]
+            : [];
 
     private static bool IsCompletePair(PlayerFaceTextureSet value) =>
         !string.IsNullOrWhiteSpace(value.DiffusePath) &&

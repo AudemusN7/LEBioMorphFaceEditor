@@ -1,6 +1,7 @@
-using LegendaryExplorerCore.GameFilesystem;
 using LegendaryExplorerCore.Packages;
 using LegendaryExplorerCore.Unreal;
+using LegendaryExplorerCore.Unreal.Classes;
+using LegendaryExplorerCore.Unreal.BinaryConverters;
 using MorphFaceEditor.Core.Domain;
 
 namespace MorphFaceEditor.LegendaryExplorer;
@@ -12,12 +13,6 @@ internal sealed record AttachmentTransferResult(
 
 internal static class MorphFaceAttachmentTransferEngine
 {
-    private static readonly string[] CommonDonorPackages =
-    [
-        "BIOG_HMM_HIR_PRO_R.pcc",
-        "BIOG_HMF_HIR_PRO.pcc"
-    ];
-
     internal static AttachmentTransferResult Transfer(
         IMEPackage destination,
         AssetIdentity? sourceHair,
@@ -66,74 +61,8 @@ internal static class MorphFaceAttachmentTransferEngine
                 destination, reviewedPath, targetTemplatePackagePath, donors, warnings);
         }
 
-        var resolvedPath = ResolveTargetPath(
-            destination, requestedPath, targetTemplatePackagePath, donors);
-        if (resolvedPath is null)
-        {
-            warnings.Add(
-                $"{kind} mesh '{source.InstancedPath}' has no unique {destination.Game} donor and was omitted.");
-            return null;
-        }
         return MaterializeTargetMesh(
-            destination, resolvedPath, targetTemplatePackagePath, donors, warnings);
-    }
-
-    private static string? ResolveTargetPath(
-        IMEPackage destination,
-        string requestedPath,
-        string? targetTemplatePackagePath,
-        DonorPackages donors)
-    {
-        if (destination.FindEntry(requestedPath, "SkeletalMesh") is not null)
-        {
-            return requestedPath;
-        }
-        var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var path in DonorPaths(destination.Game, requestedPath, targetTemplatePackagePath))
-        {
-            if (!File.Exists(path) || SamePath(path, destination.FilePath))
-            {
-                continue;
-            }
-            var donor = donors.Open(path);
-            if (donor.Game != destination.Game)
-            {
-                continue;
-            }
-            foreach (var entry in donor.Exports.Cast<IEntry>().Concat(donor.Imports).Where(entry =>
-                         entry.ClassName.Equals("SkeletalMesh", StringComparison.OrdinalIgnoreCase)))
-            {
-                candidates.Add(CanonicalPath(donor, entry));
-            }
-        }
-        if (candidates.Contains(requestedPath))
-        {
-            return requestedPath;
-        }
-        var objectName = requestedPath.Split('.').Last();
-        var matches = candidates.Where(path =>
-            path.Split('.').Last().Equals(objectName, StringComparison.OrdinalIgnoreCase)).Take(2).ToArray();
-        return matches.Length == 1 ? matches[0] : null;
-    }
-
-    private static IEnumerable<string> DonorPaths(
-        MEGame game,
-        string requestedPath,
-        string? targetTemplatePackagePath)
-    {
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        if (!string.IsNullOrWhiteSpace(targetTemplatePackagePath))
-        {
-            var template = Path.GetFullPath(targetTemplatePackagePath);
-            if (seen.Add(template)) yield return template;
-        }
-        var loadedFiles = MELoadedFiles.GetFilesLoadedInGame(game, forceUseCached: true);
-        var root = requestedPath.Split('.')[0] + ".pcc";
-        if (loadedFiles.TryGetValue(root, out var rootPath) && seen.Add(rootPath)) yield return rootPath;
-        foreach (var fileName in CommonDonorPackages)
-        {
-            if (loadedFiles.TryGetValue(fileName, out var path) && seen.Add(path)) yield return path;
-        }
+            destination, requestedPath, targetTemplatePackagePath, donors, warnings);
     }
 
     internal static IEntry EnsureImport(IMEPackage destination, string path)
@@ -164,71 +93,140 @@ internal static class MorphFaceAttachmentTransferEngine
         DonorPackages donors,
         ICollection<string> warnings)
     {
-        if (destination.FindExport(canonicalPath, "SkeletalMesh") is { } existing)
+        if (donors.ResolveOfficial(destination.Game, canonicalPath, "SkeletalMesh") is { } installed)
         {
-            return existing;
-        }
-        foreach (var path in DonorPaths(destination.Game, canonicalPath, targetTemplatePackagePath))
-        {
-            if (!File.Exists(path) || SamePath(path, destination.FilePath)) continue;
-            var donor = donors.Open(path);
-            if (donor.Game != destination.Game) continue;
-            var export = donor.FindExport(canonicalPath, "SkeletalMesh")
-                         ?? donor.Exports.FirstOrDefault(entry =>
-                             entry.ClassName.Equals("SkeletalMesh", StringComparison.OrdinalIgnoreCase) &&
-                             CanonicalPath(donor, entry).Equals(
-                                 canonicalPath, StringComparison.OrdinalIgnoreCase));
-            export ??= FindUniqueExportByObjectName(donor, canonicalPath);
-            if (export is null) continue;
+            if (!HasSupportedMaterials(installed.FileRef, installed, out var unsupported))
+            {
+                warnings.Add(
+                    $"Optional attachment '{canonicalPath}' was omitted because it requires unsupported material '{unsupported}'.");
+                return null;
+            }
             return ExternalSkeletalMeshMaterializer.Materialize(
                 destination,
-                path,
+                installed.FileRef.FilePath,
                 canonicalPath,
                 "SkeletalMesh",
-                export.UIndex,
+                installed.UIndex,
                 warnings);
         }
+
+        var existingMatches = FindExactExports(destination, canonicalPath);
+        if (existingMatches.Length > 1)
+        {
+            warnings.Add($"Target SkeletalMesh '{canonicalPath}' is ambiguous in the destination and was omitted.");
+            return null;
+        }
+        if (existingMatches.SingleOrDefault() is { } existing)
+        {
+            if (!HasSupportedMaterials(destination, existing, out var unsupported))
+            {
+                warnings.Add(
+                    $"Optional attachment '{canonicalPath}' was omitted because it requires unsupported material '{unsupported}'.");
+                return null;
+            }
+            return existing;
+        }
+
+        if (!string.IsNullOrWhiteSpace(targetTemplatePackagePath) &&
+            File.Exists(targetTemplatePackagePath) &&
+            !SamePath(targetTemplatePackagePath, destination.FilePath))
+        {
+            var template = donors.Open(targetTemplatePackagePath);
+            if (template.Game == destination.Game)
+            {
+                var templateMatches = FindExactExports(template, canonicalPath);
+                if (templateMatches.Length > 1)
+                {
+                    warnings.Add(
+                        $"Target SkeletalMesh '{canonicalPath}' has ambiguous exact exports in the template and was omitted.");
+                    return null;
+                }
+                if (templateMatches.SingleOrDefault() is { } templateExport)
+                {
+                    if (!HasSupportedMaterials(template, templateExport, out var unsupported))
+                    {
+                        warnings.Add(
+                            $"Optional attachment '{canonicalPath}' was omitted because it requires unsupported material '{unsupported}'.");
+                        return null;
+                    }
+                    return ExternalSkeletalMeshMaterializer.Materialize(
+                        destination,
+                        template.FilePath,
+                        canonicalPath,
+                        "SkeletalMesh",
+                        templateExport.UIndex,
+                        warnings);
+                }
+            }
+        }
+
         warnings.Add(
-            $"Target SkeletalMesh '{canonicalPath}' was identified but could not be materialised; it was omitted.");
+            $"Target SkeletalMesh '{canonicalPath}' has no exact {destination.Game} installed or template donor and was omitted.");
         return null;
     }
 
-    private static ExportEntry? FindUniqueExportByObjectName(IMEPackage package, string canonicalPath)
+    private static ExportEntry[] FindExactExports(IMEPackage package, string canonicalPath) =>
+        package.Exports.Where(export =>
+                export.ClassName.Equals("SkeletalMesh", StringComparison.OrdinalIgnoreCase) &&
+                (export.InstancedFullPath.Equals(canonicalPath, StringComparison.OrdinalIgnoreCase) ||
+                 PccAssetPathPolicy.FromExport(export).Equals(canonicalPath, StringComparison.OrdinalIgnoreCase)))
+            .Take(2)
+            .ToArray();
+
+    internal static bool HasSupportedMaterials(IMEPackage package, ExportEntry mesh, out string unsupported)
     {
-        var objectName = canonicalPath.Split('.').Last();
-        var matches = package.Exports.Where(export =>
-            export.ClassName.Equals("SkeletalMesh", StringComparison.OrdinalIgnoreCase) &&
-            export.ObjectName.Instanced.Equals(objectName, StringComparison.OrdinalIgnoreCase)).Take(2).ToArray();
-        return matches.Length == 1 ? matches[0] : null;
+        var materialIndexes = mesh.GetBinaryData<SkeletalMesh>().Materials;
+        if (materialIndexes is null || materialIndexes.Length == 0)
+        {
+            unsupported = string.Empty;
+            return true;
+        }
+
+        using var cache = new PackageCache { CacheMaxSize = 8 };
+        var referenceResolver = new GamePackageReferenceResolver(cache);
+        foreach (var materialIndex in materialIndexes)
+        {
+            if (materialIndex == 0)
+            {
+                continue;
+            }
+            var materialReference = package.GetEntry(materialIndex);
+            var material = materialReference is null ? null :
+                CanonicalAttachmentMaterialPolicy.ResolveReplacement(mesh, materialReference, cache)
+                ?? referenceResolver.Resolve(materialReference);
+            if (material is null)
+            {
+                unsupported = $"unresolved material reference {materialIndex}";
+                return false;
+            }
+
+            if (SupportedMaterialGraphPolicy.IsSupported(
+                    package.Game, material, referenceResolver, out var graphFailure))
+            {
+                continue;
+            }
+
+            unsupported = $"{material.ClassName} '{PccAssetPathPolicy.FromExport(material)}': {graphFailure}";
+            return false;
+        }
+
+        unsupported = string.Empty;
+        return true;
     }
 
     private static bool SamePath(string left, string right) => string.Equals(
         Path.GetFullPath(left), Path.GetFullPath(right), StringComparison.OrdinalIgnoreCase);
 
-    private static string CanonicalPath(IMEPackage package, IEntry entry)
-    {
-        if (entry is ImportEntry || entry.InstancedFullPath.StartsWith("BIO", StringComparison.OrdinalIgnoreCase))
-        {
-            return entry.InstancedFullPath;
-        }
-        return $"{Path.GetFileNameWithoutExtension(package.FilePath)}.{entry.InstancedFullPath}";
-    }
-
     private sealed class DonorPackages : IDisposable
     {
-        private readonly Dictionary<string, IMEPackage> _packages = new(StringComparer.OrdinalIgnoreCase);
+        private readonly PackageCache _cache = new() { CacheMaxSize = 8 };
+        private readonly InstalledGameAssetResolver _installedAssets = new();
 
-        internal IMEPackage Open(string path)
-        {
-            var fullPath = Path.GetFullPath(path);
-            return _packages.TryGetValue(fullPath, out var package)
-                ? package
-                : _packages[fullPath] = MEPackageHandler.OpenMEPackage(fullPath, forceLoadFromDisk: true);
-        }
+        internal IMEPackage Open(string path) => _cache.GetCachedPackage(Path.GetFullPath(path))!;
 
-        public void Dispose()
-        {
-            foreach (var package in _packages.Values) package.Dispose();
-        }
+        internal ExportEntry? ResolveOfficial(MEGame game, string path, string className) =>
+            _installedAssets.Resolve(game, path, className, _cache);
+
+        public void Dispose() => _cache.Dispose();
     }
 }

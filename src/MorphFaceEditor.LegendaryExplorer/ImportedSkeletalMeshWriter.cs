@@ -435,6 +435,7 @@ public sealed class ImportedSkeletalMeshPackageWriter : ICustomMeshBinaryWriter
             "SkeletalMesh",
             packageRoot,
             indexed: false);
+        mesh.ExportFlags |= UnrealFlags.EExportFlags.ForcedExport;
         mesh.WriteBinary(build.Binary);
         mesh.WriteProperty(build.LodInfo);
         return mesh;

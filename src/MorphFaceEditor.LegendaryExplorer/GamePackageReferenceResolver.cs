@@ -7,14 +7,18 @@ namespace MorphFaceEditor.LegendaryExplorer;
 /// Resolves cross-package Unreal imports, with a deterministic cooked-package
 /// fallback for files whose import table cannot be resolved by the object DB.
 /// </summary>
-internal sealed class GamePackageReferenceResolver(PackageCache packageCache)
+internal sealed class GamePackageReferenceResolver(PackageCache packageCache, InstalledGameAssetResolver? installedAssets = null)
 {
-    public ExportEntry? Resolve(IEntry? entry) => entry switch
+    private readonly InstalledGameAssetResolver _installedAssets = installedAssets ?? new();
+
+    public ExportEntry? Resolve(IEntry? entry) => entry is null ? null :
+        entry is ExportEntry instance && MaterialInstanceSourcePolicy.IsInstance(instance) ? instance :
+        _installedAssets.Resolve(entry, packageCache) ?? (entry switch
     {
         ExportEntry export => export,
         ImportEntry import => TryResolveImport(import),
         _ => null
-    };
+    });
 
     public ExportEntry Require(IEntry entry, string purpose)
     {
@@ -38,20 +42,6 @@ internal sealed class GamePackageReferenceResolver(PackageCache packageCache)
 
     private ExportEntry? TryResolveImport(ImportEntry import)
     {
-        try
-        {
-            if (EntryImporter.ResolveImport(import, packageCache) is { } resolved)
-            {
-                return resolved;
-            }
-        }
-        catch
-        {
-            // Some valid LE packages have incomplete import metadata. The
-            // deterministic package/path lookup below remains auditable and
-            // produces a useful error at the required call site if it fails.
-        }
-
         foreach (var packagePath in CandidatePackagePaths(import))
         {
             if (!File.Exists(packagePath))
@@ -68,7 +58,7 @@ internal sealed class GamePackageReferenceResolver(PackageCache packageCache)
                 }
                 if (package.FindEntry(import.InstancedFullPath, import.ClassName) is ExportEntry exact)
                 {
-                    return exact;
+                    return _installedAssets.Resolve(exact, packageCache) ?? exact;
                 }
             }
             catch
@@ -77,10 +67,20 @@ internal sealed class GamePackageReferenceResolver(PackageCache packageCache)
                 // every attempted path if no usable export can be recovered.
             }
         }
+        try
+        {
+            if (EntryImporter.ResolveImport(import, packageCache) is { } resolved)
+                return _installedAssets.Resolve(resolved, packageCache) ?? resolved;
+        }
+        catch
+        {
+            // Legacy metadata can be incomplete. Require() reports the exact
+            // bounded search after native import resolution also fails.
+        }
         return null;
     }
 
-    private static IEnumerable<string> CandidatePackagePaths(ImportEntry import)
+    private IEnumerable<string> CandidatePackagePaths(ImportEntry import)
     {
         var packageRoot = import.InstancedFullPath.Split('.', 2)[0];
         var fileNames = new List<string> { packageRoot + ".pcc" };
@@ -116,9 +116,10 @@ internal sealed class GamePackageReferenceResolver(PackageCache packageCache)
             Path.GetDirectoryName(import.FileRef.FilePath),
             LegendaryExplorerCoreRuntime.GetCookedPath(import.FileRef.Game)
         };
-        return directories
+        var official = _installedAssets.GetPackageFiles(import.Game);
+        return fileNames.Where(official.ContainsKey).Select(fileName => official[fileName]).Concat(directories
             .Where(directory => !string.IsNullOrWhiteSpace(directory))
-            .SelectMany(directory => fileNames.Select(fileName => Path.GetFullPath(Path.Combine(directory!, fileName))))
+            .SelectMany(directory => fileNames.Select(fileName => Path.GetFullPath(Path.Combine(directory!, fileName)))))
             .Distinct(StringComparer.OrdinalIgnoreCase);
     }
 }

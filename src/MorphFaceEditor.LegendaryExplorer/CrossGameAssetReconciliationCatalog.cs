@@ -29,12 +29,7 @@ internal static class CrossGameAssetReconciliationCatalog
 
     internal static string? NormalizeTargetPath(MEGame targetGame, string? path)
     {
-        if (path?.StartsWith(
-                "BIOG_HMM_HED_PROMorph_R.", StringComparison.OrdinalIgnoreCase) == true)
-        {
-            return "BIOG_HMM_HED_PROMorph." + path["BIOG_HMM_HED_PROMorph_R.".Length..];
-        }
-        return path;
+        return string.IsNullOrWhiteSpace(path) ? path : ReviewedTexturePathPolicy.Normalize(path);
     }
 
     internal static bool IsReviewedTexturePath(string path) => Decisions.Value.Values.Any(decision =>

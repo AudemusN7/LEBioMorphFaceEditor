@@ -2,6 +2,9 @@ using LegendaryExplorerCore.Misc;
 using LegendaryExplorerCore.Packages;
 using LegendaryExplorerCore.Packages.CloningImportingAndRelinking;
 using LegendaryExplorerCore.Unreal;
+using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
+using System.Text;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.LegendaryExplorer.TextureRegistry;
@@ -15,6 +18,9 @@ namespace MorphFaceEditor.LegendaryExplorer;
 /// </summary>
 internal static class PccPackageWorkflow
 {
+    private static readonly ConditionalWeakTable<IMEPackage, ExplicitTextureLeafState> ExplicitTextureLeaves = new();
+    private static readonly ConditionalWeakTable<IMEPackage, HashSet<string>> PersistedTextureLeafNames = new();
+    private const string ExplicitTextureNamePrefix = "MFE_ExplicitTexture2D_";
     // Test-only interruption boundary immediately before atomic installation.
     internal static Action<string, string>? BeforeAtomicReplaceForTesting { get; set; }
 
@@ -26,7 +32,10 @@ internal static class PccPackageWorkflow
         bool preferBiogTextures,
         ICollection<string>? warnings = null,
         bool applyCorpusMaterialPolicy = true,
-        IReadOnlyList<IEntry>? requiredExportReferences = null)
+        IReadOnlyList<IEntry>? requiredExportReferences = null,
+        string? targetPathOverride = null,
+        InstalledGameAssetResolver? installedAssets = null,
+        IReadOnlyList<ExportEntry>? authoredMaterialDonors = null)
     {
         ArgumentNullException.ThrowIfNull(destination);
         ArgumentNullException.ThrowIfNull(source);
@@ -35,18 +44,27 @@ internal static class PccPackageWorkflow
             throw new InvalidDataException(
                 $"Cannot import {source.ClassName} '{source.InstancedFullPath}' from {source.Game} into {destination.Game}.");
         }
+        var preexistingExports = destination.Exports.ToHashSet();
         using var session = new GraphImportSession(
             destination,
             textureCatalog ?? [],
             preferBiogTextures,
             warnings,
             applyCorpusMaterialPolicy,
-            requiredExportReferences ?? []);
-        return session.ImportRoot(source, destinationParent);
+            requiredExportReferences ?? [],
+            installedAssets,
+            authoredMaterialDonors ?? []);
+        var imported = session.ImportRoot(source, destinationParent, targetPathOverride);
+        NormalizeNewSupportedAssets(destination, preexistingExports);
+        return imported;
     }
 
-    internal static PccDependencyGraphSnapshot CaptureDependencyGraph(ExportEntry root) =>
-        PccDependencyGraphSnapshot.Capture(root);
+    internal static PccDependencyGraphSnapshot CaptureDependencyGraph(ExportEntry root)
+    {
+        var explicitLeaves = GetExplicitTextureLeaves(root.FileRef);
+        VerifyExplicitTextureLeaves(root.FileRef, explicitLeaves);
+        return PccDependencyGraphSnapshot.Capture(root, explicitLeaves);
+    }
 
     /// <summary>
     /// Ports an ordinary PCC root using Legendary Explorer's mature parent and
@@ -57,21 +75,50 @@ internal static class PccPackageWorkflow
         IMEPackage destination,
         ExportEntry source,
         ICollection<string>? warnings = null,
-        bool checkImportsWhenExportingToPackage = true)
+        bool checkImportsWhenExportingToPackage = true,
+        IReadOnlyList<ExportEntry>? explicitTextureDonors = null,
+        InstalledGameAssetResolver? installedAssets = null)
     {
         ArgumentNullException.ThrowIfNull(destination);
         ArgumentNullException.ThrowIfNull(source);
-        ExternalSkeletalMeshMaterializer.PrepareReferencedPackagePaths(destination, source);
+        using var preparationCache = new PackageCache();
+        using var preparedMesh = CanonicalAttachmentMaterialPolicy.PrepareMesh(source, preparationCache, installedAssets);
+        source = preparedMesh?.Mesh ?? source;
+        var preexistingExports = destination.Exports.ToHashSet();
+        var relinker = new RelinkerOptionsPackage
+        {
+            ImportExportDependencies = true,
+            GenerateImportsForGlobalFiles = false,
+            CheckImportsWhenExportingToPackage = checkImportsWhenExportingToPackage
+        };
+        var plannedMappings = new Dictionary<IEntry, IEntry>();
+        PrestageExplicitTextureDonors(destination, source, explicitTextureDonors ?? [], plannedMappings);
+        PreseedOfficialSupportedReferences(destination, source, plannedMappings, installedAssets);
+        relinker.CustomRelinkUIndex = (
+            IMEPackage importingPackage,
+            ExportEntry relinkingExport,
+            ref int uIndex,
+            string propertyName,
+            string prefix,
+            RelinkerOptionsPackage options,
+            out EntryStringPair result) =>
+        {
+            if (importingPackage.GetEntry(uIndex) is { } original &&
+                plannedMappings.TryGetValue(original, out var selected))
+            {
+                uIndex = selected.UIndex;
+                result = null!;
+                return true;
+            }
+            result = null!;
+            return false;
+        };
+        ExternalSkeletalMeshMaterializer.PrepareReferencedPackagePaths(destination, source, plannedMappings);
         var issues = EntryExporter.ExportExportToPackage(
             source,
             destination,
             out var staged,
-            customROP: new RelinkerOptionsPackage
-            {
-                ImportExportDependencies = true,
-                GenerateImportsForGlobalFiles = false,
-                CheckImportsWhenExportingToPackage = checkImportsWhenExportingToPackage
-            });
+            customROP: relinker);
         if (warnings is not null)
         {
             foreach (var issue in issues)
@@ -79,8 +126,278 @@ internal static class PccPackageWorkflow
                 warnings.Add(issue.Message);
             }
         }
-        return staged as ExportEntry ?? throw new InvalidDataException(
+        var root = staged as ExportEntry ?? throw new InvalidDataException(
             $"LEC did not stage {source.ClassName} '{source.InstancedFullPath}' as an export.");
+        NormalizeNewSupportedAssets(destination, preexistingExports);
+        VerifyExplicitTextureLeaves(destination, GetExplicitTextureLeaves(destination));
+        return root;
+    }
+
+    private static void PrestageExplicitTextureDonors(
+        IMEPackage destination,
+        ExportEntry source,
+        IReadOnlyList<ExportEntry> donors,
+        IDictionary<IEntry, IEntry> plannedMappings)
+    {
+        if (donors.Count == 0) return;
+        var uniqueDonors = donors.GroupBy(PccAssetPathPolicy.FromExport, StringComparer.OrdinalIgnoreCase)
+            .Select(group =>
+            {
+                var distinct = group.GroupBy(donor =>
+                        $"{Path.GetFullPath(donor.FileRef.FilePath)}|{donor.UIndex}",
+                        StringComparer.OrdinalIgnoreCase)
+                    .Select(entries => entries.First()).ToArray();
+                if (distinct.Length > 1)
+                    throw new InvalidDataException(
+                        $"Multiple explicit Texture2D donors have the same canonical identity '{group.Key}'.");
+                return distinct[0];
+            }).ToArray();
+        var sourceTextures = ReachableReferences(source)
+            .Where(entry => entry.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase))
+            .Distinct()
+            .ToArray();
+        foreach (var donor in uniqueDonors)
+        {
+            if (!donor.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase) || donor.Game != destination.Game)
+                throw new InvalidDataException("An explicit texture donor must be a same-game Texture2D export.");
+            var path = PccAssetPathPolicy.FromExport(donor);
+            var matchingSources = sourceTextures.Where(entry =>
+                    entry.InstancedFullPath.Equals(path, StringComparison.OrdinalIgnoreCase) ||
+                    CanonicalPath(entry).Equals(path, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (matchingSources.Length > 1)
+                throw new InvalidDataException($"Explicit Texture2D donor '{path}' matches multiple authored reference identities.");
+            if (!path.Contains('.'))
+                throw new InvalidDataException($"Explicit Texture2D donor '{path}' has no package parent path.");
+            var existing = PackageIntegrity.FindExactEntry(destination, path, "Texture2D");
+            if (existing is ImportEntry)
+                throw new InvalidDataException($"Cannot stage explicitly selected Texture2D '{path}': an import occupies the required export identity.");
+            if (existing is ExportEntry existingExport)
+            {
+                if (ReferenceEquals(existingExport, donor))
+                {
+                    RegisterExplicitTextureLeaf(destination, path);
+                    if (matchingSources.Length == 1) plannedMappings[matchingSources[0]] = existingExport;
+                    continue;
+                }
+                throw new InvalidDataException(
+                    $"Cannot stage explicitly selected Texture2D '{path}': a different export already occupies the required identity.");
+            }
+
+            RegisterExplicitTextureLeaf(destination, path);
+            var embedded = ImportDependencyGraph(
+                destination,
+                donor,
+                destinationParent: null,
+                textureCatalog: null,
+                preferBiogTextures: false,
+                applyCorpusMaterialPolicy: true,
+                targetPathOverride: path);
+            if (!embedded.InstancedFullPath.Equals(path, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException($"Explicit Texture2D donor '{path}' was staged as '{embedded.InstancedFullPath}'.");
+            if (matchingSources.Length == 1) plannedMappings[matchingSources[0]] = embedded;
+        }
+    }
+
+    internal static IReadOnlyList<ExportEntry> ResolveExplicitTextureDonors(
+        IEnumerable<AssetIdentity?> identities, MEGame game, PackageCache cache)
+    {
+        var selected = identities.Where(identity => identity is { IsImport: false, IsExplicitTextureDonor: true }).ToArray();
+        if (selected.Length == 0) return [];
+        var officialPaths = InstalledGameAssetResolver.GetOfficialPackageFiles(game).Values
+            .Select(Path.GetFullPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return selected
+            .Where(identity => !officialPaths.Contains(Path.GetFullPath(identity!.PackagePath)))
+            .Select(identity => InstalledGameAssetResolver.RequireExact(cache, identity!.PackagePath,
+                identity.InstancedPath, "Texture2D", identity.UIndex))
+            .DistinctBy(export => $"{export.FileRef.FilePath}|{export.UIndex}", StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    internal static void StageExplicitTextureDonors(
+        IMEPackage destination,
+        ExportEntry sourceRoot,
+        IReadOnlyList<ExportEntry> donors)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
+        ArgumentNullException.ThrowIfNull(sourceRoot);
+        ArgumentNullException.ThrowIfNull(donors);
+        PrestageExplicitTextureDonors(destination, sourceRoot, donors, new Dictionary<IEntry, IEntry>());
+    }
+
+    private static void PreseedOfficialSupportedReferences(
+        IMEPackage destination,
+        ExportEntry source,
+        IDictionary<IEntry, IEntry> plannedMappings,
+        InstalledGameAssetResolver? installedAssets)
+    {
+        using var cache = new PackageCache { CacheMaxSize = 64 };
+        var resolver = installedAssets ?? new InstalledGameAssetResolver();
+        var pending = new Queue<ExportEntry>();
+        var visited = new HashSet<int>();
+        pending.Enqueue(source);
+        while (pending.TryDequeue(out var current))
+        {
+            if (!visited.Add(current.UIndex)) continue;
+            foreach (var reference in PackageIntegrity.References(current).Values
+                         .Where(index => index != 0).Distinct()
+                         .Select(current.FileRef.GetEntry).Where(entry => entry is not null).Cast<IEntry>())
+            {
+                if (reference.ClassName.Equals("Package", StringComparison.OrdinalIgnoreCase)) continue;
+                if (plannedMappings.ContainsKey(reference)) continue;
+                if (reference is ExportEntry instance && MaterialInstanceSourcePolicy.IsInstance(instance) &&
+                    (MaterialDependencyOracle.Instance.GetKind(destination.Game, instance.ClassName, CanonicalPath(instance)) !=
+                         MaterialOracleEntryKind.Import ||
+                     MaterialInstanceSourcePolicy.OverridesOfficialInstance(instance, resolver, cache)))
+                {
+                    var renamed = ImportDependencyGraph(destination, instance, destinationParent: null,
+                        textureCatalog: null, preferBiogTextures: false, applyCorpusMaterialPolicy: true,
+                        targetPathOverride: CanonicalPath(instance), installedAssets: resolver);
+                    plannedMappings[reference] = renamed;
+                    continue;
+                }
+                if (InstalledAssetOccurrence.IsSupportedClass(reference.ClassName))
+                {
+                    var nativePath = CanonicalPath(reference);
+                    if (MaterialDependencyOracle.Instance.GetKind(destination.Game, reference.ClassName, nativePath) ==
+                        MaterialOracleEntryKind.Import)
+                    {
+                        if (reference.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase) &&
+                            IsRegisteredExplicitTexture(destination, nativePath) &&
+                            PackageIntegrity.FindExactEntry(destination, nativePath, "Texture2D") is ExportEntry selectedLeaf)
+                        {
+                            plannedMappings[reference] = selectedLeaf;
+                        }
+                        else
+                        {
+                            plannedMappings[reference] = EnsureImport(destination, nativePath, reference.ClassName);
+                        }
+                        continue;
+                    }
+                    if (reference is ImportEntry &&
+                        MaterialDependencyOracle.Instance.GetKind(destination.Game, reference.ClassName, nativePath) ==
+                            MaterialOracleEntryKind.Unknown)
+                    {
+                        // Installed resolution supplies content for an identity;
+                        // it does not change the source package's import role.
+                        // Preserve unknown-role imports instead of embedding the
+                        // resolved official export as a side effect of preseed.
+                        plannedMappings[reference] = EnsureImport(destination, nativePath, reference.ClassName);
+                        continue;
+                    }
+                    var selected = resolver.Resolve(reference, cache);
+                    if (selected is not null)
+                    {
+                        var path = PccAssetPathPolicy.FromExport(selected);
+                        if (IsRegisteredExplicitTexture(destination, path) &&
+                            PackageIntegrity.FindExactEntry(destination, path, "Texture2D") is ExportEntry selectedLeaf)
+                        {
+                            plannedMappings[reference] = selectedLeaf;
+                            continue;
+                        }
+                        {
+                            var existing = PackageIntegrity.FindExactEntry(destination, path, selected.ClassName);
+                            if (existing is ExportEntry existingExport)
+                            {
+                                plannedMappings[reference] = existingExport;
+                                continue;
+                            }
+                            if (existing is ImportEntry)
+                                throw new InvalidDataException(
+                                    $"Cannot stage official {selected.ClassName} '{path}': an import occupies the required export identity.");
+                            var embedded = ImportDependencyGraph(
+                                destination,
+                                selected,
+                                destinationParent: null,
+                                textureCatalog: null,
+                                preferBiogTextures: false,
+                                applyCorpusMaterialPolicy: true,
+                                targetPathOverride: path,
+                                authoredMaterialDonors: AuthoredMeshMaterials(reference));
+                            plannedMappings[reference] = embedded;
+                            continue; // The staged official graph supplies its own dependencies.
+                        }
+                    }
+                }
+                if (reference is ExportEntry export) pending.Enqueue(export);
+            }
+        }
+    }
+
+    private static IEnumerable<IEntry> ReachableReferences(ExportEntry root)
+    {
+        var pending = new Queue<ExportEntry>();
+        var visited = new HashSet<int>();
+        pending.Enqueue(root);
+        while (pending.TryDequeue(out var current))
+        {
+            if (!visited.Add(current.UIndex)) continue;
+            foreach (var index in PackageIntegrity.References(current).Values.Where(value => value != 0).Distinct())
+            {
+                if (current.FileRef.GetEntry(index) is not { } reference) continue;
+                yield return reference;
+                if (reference is ExportEntry export) pending.Enqueue(export);
+            }
+        }
+    }
+
+    private static IReadOnlyList<ExportEntry> AuthoredMeshMaterials(IEntry entry) =>
+        entry is ExportEntry mesh && mesh.ClassName.Equals("SkeletalMesh", StringComparison.OrdinalIgnoreCase)
+            ? mesh.GetBinaryData<LegendaryExplorerCore.Unreal.BinaryConverters.SkeletalMesh>().Materials
+                .Select(mesh.FileRef.GetEntry).OfType<ExportEntry>()
+                .Where(MaterialInstanceSourcePolicy.IsInstance).Distinct().ToArray()
+            : [];
+
+    private static void RegisterExplicitTextureLeaf(IMEPackage package, string path)
+    {
+        ExplicitTextureLeaves.GetValue(package, _ => new ExplicitTextureLeafState())
+            .Paths.Add(ExplicitLeafKey("Texture2D", path));
+        // A new PCC must retain the distinction between a deliberately embedded
+        // stock-path leaf and an ordinary stock reference after it is reopened.
+        // An unused name-table entry records only that intent; no game-facing
+        // export, property, reference or texture payload is altered.
+        var name = ExplicitTextureName(path);
+        package.FindNameOrAdd(name);
+        if (PersistedTextureLeafNames.TryGetValue(package, out var names)) names.Add(name);
+    }
+
+    internal static bool HasPersistedExplicitTextureLeaf(IMEPackage package, string path) =>
+        PersistedTextureLeafNames.GetValue(package, static value => value.Names
+                .Where(name => name.StartsWith(ExplicitTextureNamePrefix, StringComparison.OrdinalIgnoreCase))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase))
+            .Contains(ExplicitTextureName(path));
+
+    private static string ExplicitTextureName(string path) =>
+        ExplicitTextureNamePrefix + Convert.ToHexString(
+            SHA256.HashData(Encoding.UTF8.GetBytes(path.ToUpperInvariant())));
+
+    private static IReadOnlySet<string> GetExplicitTextureLeaves(IMEPackage package) =>
+        ExplicitTextureLeaves.TryGetValue(package, out var state)
+            ? state.Paths.ToHashSet(StringComparer.OrdinalIgnoreCase)
+            : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    private static bool IsRegisteredExplicitTexture(IMEPackage package, string path) =>
+        GetExplicitTextureLeaves(package).Contains(ExplicitLeafKey("Texture2D", path));
+
+    private static string ExplicitLeafKey(string className, string path) => $"{className}|{path}";
+
+    private static void VerifyExplicitTextureLeaves(IMEPackage package, IReadOnlySet<string> paths)
+    {
+        foreach (var key in paths)
+        {
+            var split = key.IndexOf('|');
+            var className = key[..split];
+            var path = key[(split + 1)..];
+            var matches = package.Exports.Cast<IEntry>().Concat(package.Imports)
+                .Where(entry => entry.ClassName.Equals(className, StringComparison.OrdinalIgnoreCase) &&
+                                entry.InstancedFullPath.Equals(path, StringComparison.OrdinalIgnoreCase)).ToArray();
+            if (matches.Length != 1 || matches[0] is not ExportEntry)
+                throw new InvalidDataException($"Explicitly selected {className} '{path}' must be exactly one export.");
+        }
+    }
+
+    private sealed class ExplicitTextureLeafState
+    {
+        internal HashSet<string> Paths { get; } = new(StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -97,7 +414,6 @@ internal static class PccPackageWorkflow
     {
         ArgumentNullException.ThrowIfNull(destination);
         ArgumentNullException.ThrowIfNull(source);
-        ReserveReferencePackagePaths(destination, source);
         ExternalSkeletalMeshMaterializer.PrepareReferencedPackagePaths(destination, source);
         var relinker = new RelinkerOptionsPackage
         {
@@ -118,7 +434,19 @@ internal static class PccPackageWorkflow
                 $"LEC did not stage {source.ClassName} '{source.InstancedFullPath}' for package-storage conversion.");
         }
         MaterialisationVerifier.Verify(root, source.Game, relinker, warnings);
+        foreach (var export in relinker.CrossPackageMap.Values.OfType<ExportEntry>())
+        {
+            PccAssetPathPolicy.NormalizeMaterializedAsset(export);
+        }
         return root;
+    }
+
+    private static void NormalizeNewSupportedAssets(IMEPackage package, IReadOnlySet<ExportEntry> preexistingExports)
+    {
+        foreach (var export in package.Exports.Where(export => !preexistingExports.Contains(export)))
+        {
+            PccAssetPathPolicy.NormalizeMaterializedAsset(export);
+        }
     }
 
     internal static IEntry ResolveTextureReference(
@@ -146,6 +474,9 @@ internal static class PccPackageWorkflow
         }
         var path = resolved?.InstancedPath ??
                    PccAssetPathPolicy.FromDonorOccurrence(identity.InstancedPath, identity.PackagePath);
+        if (IsRegisteredExplicitTexture(destination, path) &&
+            PackageIntegrity.FindExactEntry(destination, path, "Texture2D") is ExportEntry explicitLeaf)
+            return explicitLeaf;
         var oracleKind = MaterialDependencyOracle.Instance.GetKind(destination.Game, "Texture2D", path);
         if (oracleKind == MaterialOracleEntryKind.Import)
         {
@@ -177,9 +508,12 @@ internal static class PccPackageWorkflow
         bool verifyCorpusRoles = true)
     {
         expected.Verify(reopened);
+        VerifyExplicitTextureLeaves(reopened, expected.ExplicitTextureLeaves.ToHashSet(StringComparer.OrdinalIgnoreCase));
         if (verifyCorpusRoles)
         {
-            VerifyCorpusRoles(reopened);
+            VerifyCorpusRoles(reopened,
+                new HashSet<CorpusRoleIssue>(CorpusRoleIssueComparer.Instance),
+                expected.ExplicitTextureLeaves.ToHashSet(StringComparer.OrdinalIgnoreCase));
         }
     }
 
@@ -227,9 +561,13 @@ internal static class PccPackageWorkflow
         private readonly IReadOnlySet<ExportEntry> _preexistingExports;
         private readonly PackageCache _cache = new() { CacheMaxSize = 64 };
         private readonly GamePackageReferenceResolver _resolver;
+        private readonly InstalledGameAssetResolver _officialAssets;
         private readonly RelinkerOptionsPackage _relinker;
         private readonly Dictionary<string, IEntry> _destinations = new(StringComparer.OrdinalIgnoreCase);
         private readonly List<(ExportEntry Source, ExportEntry Destination)> _textures = [];
+        private readonly Dictionary<ExportEntry, (ExportEntry Source, string TargetPath)> _stagedCopies = [];
+        private readonly List<CanonicalAttachmentMaterialPolicy.PreparedMesh> _preparedMeshes = [];
+        private readonly Dictionary<string, ExportEntry> _authoredMaterials = new(StringComparer.OrdinalIgnoreCase);
 
         internal GraphImportSession(
             IMEPackage destination,
@@ -237,7 +575,9 @@ internal static class PccPackageWorkflow
             bool preferBiogTextures,
             ICollection<string>? warnings,
             bool applyCorpusMaterialPolicy,
-            IReadOnlyList<IEntry> requiredExportReferences)
+            IReadOnlyList<IEntry> requiredExportReferences,
+            InstalledGameAssetResolver? installedAssets,
+            IReadOnlyList<ExportEntry> authoredMaterialDonors)
         {
             _destination = destination;
             _catalog = catalog;
@@ -251,7 +591,10 @@ internal static class PccPackageWorkflow
                 ? CaptureCorpusRoleIssues(destination)
                 : new HashSet<CorpusRoleIssue>(CorpusRoleIssueComparer.Instance);
             _preexistingExports = destination.Exports.ToHashSet();
-            _resolver = new GamePackageReferenceResolver(_cache);
+            _officialAssets = installedAssets ?? new InstalledGameAssetResolver();
+            foreach (var material in authoredMaterialDonors)
+                _authoredMaterials.TryAdd(CanonicalPath(material), material);
+            _resolver = new GamePackageReferenceResolver(_cache, _officialAssets);
             _relinker = new RelinkerOptionsPackage(_cache)
             {
                 ImportExportDependencies = false,
@@ -260,8 +603,9 @@ internal static class PccPackageWorkflow
             };
         }
 
-        internal ExportEntry ImportRoot(ExportEntry source, IEntry? destinationParent)
+        internal ExportEntry ImportRoot(ExportEntry source, IEntry? destinationParent, string? targetPathOverride)
         {
+            RememberAuthoredMeshMaterials(source);
             // The caller-selected parent is the destination counterpart of the
             // source root's parent. Seed that relationship before planning any
             // sibling dependencies (for example BioMaterialOverride children of
@@ -271,21 +615,27 @@ internal static class PccPackageWorkflow
             {
                 _relinker.CrossPackageMap[sourceParent] = destinationParent;
             }
-            var targetPath = destinationParent is null
+            var targetPath = targetPathOverride ?? (destinationParent is null
                 ? source.ObjectName.Instanced
-                : $"{destinationParent.InstancedFullPath}.{source.ObjectName.Instanced}";
+                : $"{destinationParent.InstancedFullPath}.{source.ObjectName.Instanced}");
+            if (targetPath.Equals(CanonicalPath(source), StringComparison.OrdinalIgnoreCase) &&
+                MaterialInstanceSourcePolicy.OverridesOfficialInstance(source, _officialAssets, _cache))
+            {
+                targetPath = MaterialInstanceSourcePolicy.UniqueInstancePath(_destination, targetPath);
+                _warnings?.Add($"Authored material instance '{CanonicalPath(source)}' was preserved as '{targetPath}' to keep its overrides separate from the stock instance.");
+            }
             var root = MaterializeExport(source, targetPath, destinationParent, forceExport: true) as ExportEntry
                        ?? throw new InvalidDataException(
                            $"The authored {source.ClassName} '{source.InstancedFullPath}' was not staged as an export.");
             MaterialisationVerifier.Relink(_relinker, _preexistingExports);
-            MaterialisationVerifier.Verify(root, source.Game, _relinker, _warnings);
+            MaterialisationVerifier.Verify(root, source.Game, _relinker, _warnings, stagedCopies: _stagedCopies);
             foreach (var (textureSource, textureDestination) in _textures)
             {
                 PccTextureDependencyResolver.VerifyBulkDataPreserved(textureSource, textureDestination);
             }
             if (_applyCorpusMaterialPolicy)
             {
-                VerifyCorpusRoles(_destination, _baselineCorpusRoleIssues);
+                VerifyCorpusRoles(_destination, _baselineCorpusRoleIssues, GetExplicitTextureLeaves(_destination));
             }
             return root;
         }
@@ -298,6 +648,18 @@ internal static class PccPackageWorkflow
             }
 
             var canonicalPath = DependencyPath(reference);
+            // Geometry may come from a different official cooked occurrence,
+            // but its MICs must not replace the authored mesh's instance data.
+            // Official duplicates can share a path while using a Player parent.
+            if (MaterialInstanceSourcePolicy.IsInstance(reference) &&
+                _authoredMaterials.TryGetValue(canonicalPath, out var authoredMaterial) &&
+                !ReferenceEquals(reference, authoredMaterial))
+            {
+                var authored = PlanReference(authoredMaterial);
+                _relinker.CrossPackageMap[reference] = authored;
+                return authored;
+            }
+            RememberAuthoredMeshMaterials(reference);
             // Callers can require an authored dependency (such as a converted
             // face's base mesh) to be embedded even when its donor uses an import
             // and the stock corpus has no role entry for that exact identity.
@@ -312,6 +674,15 @@ internal static class PccPackageWorkflow
             if (reference.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase))
             {
                 return PlanTexture(reference, canonicalPath);
+            }
+            if (reference is ExportEntry instance && MaterialInstanceSourcePolicy.IsInstance(instance) &&
+                MaterialInstanceSourcePolicy.OverridesOfficialInstance(instance, _officialAssets, _cache))
+            {
+                var uniquePath = MaterialInstanceSourcePolicy.UniqueInstancePath(_destination, canonicalPath);
+                _warnings?.Add($"Authored material instance '{canonicalPath}' was preserved as '{uniquePath}' to keep its overrides separate from the stock instance.");
+                var authored = MaterializeExport(instance, uniquePath, destinationParent: null, forceExport: true);
+                _relinker.CrossPackageMap[reference] = authored;
+                return authored;
             }
 
             var expected = ExpectedKind(reference.ClassName, canonicalPath);
@@ -329,9 +700,10 @@ internal static class PccPackageWorkflow
                 return imported;
             }
 
-            var source = reference as ExportEntry ?? _resolver.Require(
-                reference,
-                $"corpus export dependency of '{canonicalPath}'");
+            var source = reference is ExportEntry directExport &&
+                         !InstalledAssetOccurrence.IsSupportedClass(reference.ClassName)
+                ? directExport
+                : _resolver.Require(reference, $"corpus export dependency of '{canonicalPath}'");
             var materialized = MaterializeExport(source, targetPath, destinationParent: null, forceExport: false);
             _relinker.CrossPackageMap[reference] = materialized;
             return materialized;
@@ -344,16 +716,31 @@ internal static class PccPackageWorkflow
             PccTextureSource? selection = null;
             if (candidate is not null)
             {
-                selection = PccTextureDependencyResolver.Resolve(
-                    new AssetIdentity(
-                        resolved?.FileRef.FilePath ?? reference.FileRef.FilePath,
-                        candidate.InstancedPath,
-                        resolved?.UIndex ?? 0,
-                        "Texture2D"),
-                    _catalog,
-                    _preferBiogTextures);
+                try
+                {
+                    selection = PccTextureDependencyResolver.Resolve(
+                        new AssetIdentity(
+                            resolved?.FileRef.FilePath ?? reference.FileRef.FilePath,
+                            candidate.InstancedPath,
+                            resolved?.UIndex ?? 0,
+                            "Texture2D"),
+                        _catalog,
+                        _preferBiogTextures);
+                }
+                catch (KeyNotFoundException)
+                {
+                    // A registry occurrence from a mod does not authorize PCC
+                    // materialisation when no official donor exists. Preserve
+                    // the corpus's native import role below instead.
+                }
             }
             var targetPath = selection?.InstancedPath ?? canonicalPath;
+            if (IsRegisteredExplicitTexture(_destination, targetPath) &&
+                PackageIntegrity.FindExactEntry(_destination, targetPath, "Texture2D") is ExportEntry selectedExplicit)
+            {
+                _relinker.CrossPackageMap[reference] = selectedExplicit;
+                return selectedExplicit;
+            }
             var expected = ExpectedKind("Texture2D", targetPath);
             if (expected == MaterialOracleEntryKind.Import)
             {
@@ -403,6 +790,13 @@ internal static class PccPackageWorkflow
             {
                 return mapped;
             }
+            if (CanonicalAttachmentMaterialPolicy.PrepareMesh(source, _cache, _officialAssets) is { } prepared)
+            {
+                _preparedMeshes.Add(prepared);
+                var result = MaterializeExport(prepared.Mesh, targetPath, destinationParent, forceExport);
+                _relinker.CrossPackageMap[source] = result;
+                return result;
+            }
             var expected = ExpectedKind(source.ClassName, targetPath);
             if (!forceExport && expected == MaterialOracleEntryKind.Import)
             {
@@ -436,11 +830,35 @@ internal static class PccPackageWorkflow
             }
 
             var parent = destinationParent ?? ResolveDestinationParent(source, targetPath);
+            // Resolving a non-Package ancestor can stage part of this export's
+            // graph (for example a TextureCube parent imports its Texture2D face
+            // exports). Reuse that recursive result instead of importing the leaf
+            // a second time and creating a duplicate exact path.
+            if (_relinker.CrossPackageMap.TryGetValue(source, out mapped))
+            {
+                return mapped;
+            }
+            if (_destinations.TryGetValue(identityKey, out planned))
+            {
+                _relinker.CrossPackageMap[source] = planned;
+                return planned;
+            }
+            if (PackageIntegrity.FindExactEntry(_destination, targetPath, source.ClassName) is ExportEntry stagedByAncestor)
+            {
+                _destinations[identityKey] = stagedByAncestor;
+                _relinker.CrossPackageMap[source] = stagedByAncestor;
+                return stagedByAncestor;
+            }
+
             var importedEntry = EntryImporter.ImportExport(
                 _destination,
                 source,
                 parent?.UIndex ?? 0,
                 _relinker);
+            if (importedEntry is ExportEntry instance && MaterialInstanceSourcePolicy.IsInstance(source) &&
+                !source.ObjectName.Instanced.Equals(targetPath[(targetPath.LastIndexOf('.') + 1)..],
+                    StringComparison.OrdinalIgnoreCase))
+                instance.ObjectName = NameReference.FromInstancedString(targetPath[(targetPath.LastIndexOf('.') + 1)..]);
             if (importedEntry is not ExportEntry export ||
                 !export.ClassName.Equals(source.ClassName, StringComparison.OrdinalIgnoreCase) ||
                 !export.InstancedFullPath.Equals(targetPath, StringComparison.OrdinalIgnoreCase))
@@ -453,6 +871,7 @@ internal static class PccPackageWorkflow
             }
             _destinations[identityKey] = export;
             _relinker.CrossPackageMap[source] = export;
+            _stagedCopies[export] = (source, targetPath);
             if (source.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase))
             {
                 _textures.Add((source, export));
@@ -478,7 +897,7 @@ internal static class PccPackageWorkflow
                 var parentPath = targetPath.Contains('.')
                     ? targetPath[..targetPath.LastIndexOf('.')]
                     : DependencyPath(sourceParent);
-                return MaterializeExport(sourceParent, parentPath, destinationParent: null, forceExport: false);
+                return MaterializeExport(sourceParent, parentPath, destinationParent: null, forceExport: true);
             }
             return PackageIntegrity.EnsurePackagePath(_destination, targetPath, source.ClassName);
         }
@@ -495,7 +914,17 @@ internal static class PccPackageWorkflow
                     entry.InstancedFullPath,
                     entry.FileRef.FilePath);
 
-        public void Dispose() => _cache.Dispose();
+        private void RememberAuthoredMeshMaterials(IEntry entry)
+        {
+            foreach (var material in AuthoredMeshMaterials(entry))
+                _authoredMaterials.TryAdd(CanonicalPath(material), material);
+        }
+
+        public void Dispose()
+        {
+            foreach (var prepared in _preparedMeshes) prepared.Dispose();
+            _cache.Dispose();
+        }
     }
 
     private static TextureCatalogCandidate? FindTextureCandidate(
@@ -556,7 +985,9 @@ internal static class PccPackageWorkflow
     }
 
     private static void VerifyCorpusRoles(IMEPackage package)
-        => VerifyCorpusRoles(package, new HashSet<CorpusRoleIssue>(CorpusRoleIssueComparer.Instance));
+        => VerifyCorpusRoles(package,
+            new HashSet<CorpusRoleIssue>(CorpusRoleIssueComparer.Instance),
+            GetExplicitTextureLeaves(package));
 
     private static HashSet<CorpusRoleIssue> CaptureCorpusRoleIssues(IMEPackage package)
     {
@@ -586,10 +1017,17 @@ internal static class PccPackageWorkflow
         return issues;
     }
 
-    private static void VerifyCorpusRoles(IMEPackage package, IReadOnlySet<CorpusRoleIssue> baselineIssues)
+    private static void VerifyCorpusRoles(
+        IMEPackage package,
+        IReadOnlySet<CorpusRoleIssue> baselineIssues,
+        IReadOnlySet<string>? allowedExplicitTextureLeaves = null)
     {
         foreach (var issue in CaptureCorpusRoleIssues(package).Except(baselineIssues, CorpusRoleIssueComparer.Instance))
         {
+            if (issue.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase) &&
+                issue.Expected == MaterialOracleEntryKind.Import && issue.Actual == MaterialOracleEntryKind.Export &&
+                allowedExplicitTextureLeaves?.Contains(ExplicitLeafKey(issue.ClassName, issue.Path)) == true)
+                continue;
             throw new InvalidDataException(
                 $"Native corpus role mismatch for {issue.ClassName} '{issue.Path}': " +
                 $"expected {issue.Expected}, saved {issue.Actual}.");
@@ -654,7 +1092,11 @@ internal static class PccPackageWorkflow
                 parent = existingParent;
                 continue;
             }
-            if (parent is not ImportEntry)
+            // The localized LE2 eye override resolves through Startup. Its
+            // package root must also be imported for native import resolution.
+            var localizedEyeRoot = destination.Game == MEGame.LE2 &&
+                ancestorPath.Equals("BIOG_Humanoid_EYE_OVRD", StringComparison.OrdinalIgnoreCase);
+            if (parent is not ImportEntry && !localizedEyeRoot)
             {
                 parent = destination.CreatePackageExport(
                     NameReference.FromInstancedString(segment), parent as ExportEntry);
@@ -671,26 +1113,7 @@ internal static class PccPackageWorkflow
             parent);
     }
 
-    private static void ReserveReferencePackagePaths(IMEPackage destination, ExportEntry source)
-    {
-        foreach (var reference in EntryImporter.GetAllReferencesOfExport(source).Append(source))
-        {
-            if (reference.ClassName.Equals("Package", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-            var path = CanonicalPath(reference);
-            if (path.Contains('.') &&
-                !path.StartsWith("Core.", StringComparison.OrdinalIgnoreCase) &&
-                !path.StartsWith("Engine.", StringComparison.OrdinalIgnoreCase) &&
-                !path.StartsWith("SFXGame.", StringComparison.OrdinalIgnoreCase))
-            {
-                _ = PackageIntegrity.EnsurePackagePath(destination, path, reference.ClassName);
-            }
-        }
-    }
-
-    private static string CanonicalPath(IEntry entry)
+    internal static string CanonicalPath(IEntry entry)
     {
         if (entry is ImportEntry)
         {
@@ -722,9 +1145,10 @@ internal static class PccPackageWorkflow
 internal sealed record PccDependencyGraphSnapshot(
     string RootClass,
     string RootPath,
-    IReadOnlyList<PccDependencyNodeSnapshot> Nodes)
+    IReadOnlyList<PccDependencyNodeSnapshot> Nodes,
+    IReadOnlyList<string> ExplicitTextureLeaves)
 {
-    internal static PccDependencyGraphSnapshot Capture(ExportEntry root)
+    internal static PccDependencyGraphSnapshot Capture(ExportEntry root, IReadOnlySet<string>? explicitTextureLeaves = null)
     {
         var nodes = new List<PccDependencyNodeSnapshot>();
         var pending = new Queue<ExportEntry>();
@@ -758,7 +1182,8 @@ internal sealed record PccDependencyGraphSnapshot(
                 references));
         }
 
-        return new PccDependencyGraphSnapshot(root.ClassName, root.InstancedFullPath, nodes);
+        return new PccDependencyGraphSnapshot(root.ClassName, root.InstancedFullPath, nodes,
+            explicitTextureLeaves?.ToArray() ?? []);
     }
 
     internal void Verify(IMEPackage reopened)

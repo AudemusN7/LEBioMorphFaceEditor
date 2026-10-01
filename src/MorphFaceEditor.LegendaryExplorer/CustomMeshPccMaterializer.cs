@@ -90,6 +90,7 @@ public sealed class CustomMeshPccMaterializer
                        ToMeGame(request.Game)))
             {
                 var packageRoot = package.CreateExport(PackageRootName, "Package", indexed: false);
+                packageRoot.ExportFlags |= UnrealFlags.EExportFlags.ForcedExport;
                 var materials = MaterializeMaterials(package, packageRoot, request, warnings,
                     out materialResults);
                 var mesh = request.MeshWriter.Write(
@@ -160,6 +161,30 @@ public sealed class CustomMeshPccMaterializer
         var materialResults = new List<CustomMeshPccMaterialResult>(used.Length);
         var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var materialByKey = new Dictionary<string, ExportEntry>(StringComparer.OrdinalIgnoreCase);
+
+        // Explicit texture leaves must claim their exact path before the first
+        // material graph is imported. Otherwise a native corpus import can be
+        // created first and block the selected texture at that same identity.
+        var explicitTextureIdentities = new List<AssetIdentity?>();
+        foreach (var slot in used)
+        {
+            if (!assignments.TryGetValue(slot.MaterialIndex, out var assignment))
+            {
+                throw new InvalidDataException($"Material slot {slot.MaterialIndex} has no assigned material.");
+            }
+            var option = assignment.Option;
+            var sourceScope = GetScopeData(
+                request.MaterialData, scoped, option.EffectiveParameterScopeKey);
+            explicitTextureIdentities.AddRange(sourceScope.Textures
+                .Where(value => IsSerializableMaterialParameter(value.Name) &&
+                                option.Template.Supports(value.Name, MaterialParameterKind.Texture) &&
+                                value.TextureReference is { IsExplicitTextureDonor: true })
+                .Select(value => value.TextureReference));
+        }
+        using var explicitTextureCache = new PackageCache { CacheMaxSize = 8 };
+        var explicitTextureDonors = PccPackageWorkflow.ResolveExplicitTextureDonors(
+            explicitTextureIdentities, destination.Game, explicitTextureCache);
+        PccPackageWorkflow.StageExplicitTextureDonors(destination, packageRoot, explicitTextureDonors);
 
         foreach (var slot in used)
         {
@@ -488,6 +513,15 @@ public sealed class CustomMeshPccMaterializer
                    ?? throw new InvalidDataException("The custom mesh PCC has no MorphFaceEditor package export.");
         var mesh = package.FindExport(expectedMeshPath, "SkeletalMesh")
                    ?? throw new InvalidDataException("The custom mesh PCC has no written SkeletalMesh export.");
+        if (!root.IsForcedExport || !mesh.IsForcedExport)
+        {
+            throw new InvalidDataException("The custom mesh package root and SkeletalMesh must retain ForcedExport after reopening.");
+        }
+        if (!root.InstancedFullPath.Equals(PackageRootName, StringComparison.Ordinal) ||
+            !mesh.InstancedFullPath.Equals(expectedMeshPath, StringComparison.Ordinal))
+        {
+            throw new InvalidDataException("The custom mesh package paths changed after reopening.");
+        }
         if (!ReferenceEquals(mesh.Parent, root))
         {
             throw new InvalidDataException("The written SkeletalMesh is outside the MorphFaceEditor package.");

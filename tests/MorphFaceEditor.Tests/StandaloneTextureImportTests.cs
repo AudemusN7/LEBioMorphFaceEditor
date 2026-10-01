@@ -60,8 +60,7 @@ internal static class StandaloneTextureImportTests
                 using var package = MEPackageHandler.OpenMEPackage(installed[root + ".pcc"], forceLoadFromDisk: true);
                 foreach (var texture in package.Exports.Where(value => value.ClassName == "Texture2D"))
                 {
-                    var canonical = IsHumanHeadPath(texture.InstancedFullPath)
-                        ? texture.InstancedFullPath : $"{root}.{texture.InstancedFullPath}";
+                    var canonical = PccAssetPathPolicy.FromExport(texture);
                     var identity = new AssetIdentity(package.FilePath, canonical, 0, "Texture2D");
                     TestAssert.Equal(texture, ExternalTextureMaterializer.ResolveSourceExport(package, identity));
                     var isLocal = canonical != texture.InstancedFullPath;

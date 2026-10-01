@@ -460,11 +460,26 @@ public static class HairMaterialTests
             var source = package.Exports.Single(export =>
                 export.ObjectNameString.Equals(item.Material, StringComparison.OrdinalIgnoreCase));
             using var cache = new PackageCache();
-            var reader = new MorphFaceMaterialReader(cache, new GamePackageReferenceResolver(cache));
-            var result = reader.Read(source, [], [source], applyFaceOverrides: false);
-            var material = result.Materials.Find(MorphFacePackageReader.ToIdentity(source)!);
+            var references = new GamePackageReferenceResolver(cache);
+            var effective = references.Require(source, "installed masked hair material");
+            var resolvedAgain = references.Require(effective, "rechecked installed masked hair material");
+            TestAssert.True(
+                Path.GetFullPath(effective.FileRef.FilePath).Equals(
+                    Path.GetFullPath(resolvedAgain.FileRef.FilePath), StringComparison.OrdinalIgnoreCase) &&
+                effective.UIndex == resolvedAgain.UIndex,
+                $"{package.Game} asset resolution was not idempotent for {item.Material}. " +
+                $"First: {Describe(effective)}; second: {Describe(resolvedAgain)}.");
+            var reader = new MorphFaceMaterialReader(cache, references);
+            var result = reader.Read(effective, [], [effective], applyFaceOverrides: false);
+            var effectiveIdentity = MorphFacePackageReader.ToIdentity(effective)!;
+            var material = result.Materials.Find(effectiveIdentity);
             TestAssert.True(material is not null,
-                $"{package.Game} did not resolve {item.Material}.");
+                $"{package.Game} did not resolve {item.Material}. " +
+                $"Source: {Describe(source)}; selected: {Describe(effective)}; " +
+                $"requested key: '{MaterialIdentityKey.Create(effectiveIdentity)}'; " +
+                $"returned materials: [{string.Join("; ", result.Materials.Materials.Values.Select(value =>
+                    $"{value.MasterMaterialName} {value.Source.InstancedPath} at {value.Source.PackagePath}#{value.Source.UIndex}"))}]; " +
+                $"warnings: [{string.Join("; ", result.Warnings)}].");
             TestAssert.Equal(HeadMaterialFamily.MaskedHair, material!.Family);
             TestAssert.Equal(HeadMaterialBlendMode.Masked, material.BlendMode);
             TestAssert.True(!material.TwoSided,
@@ -477,6 +492,10 @@ public static class HairMaterialTests
             TestAssert.True(!material.Textures.ContainsKey("__PROShort01_Normal"),
                 $"{package.Game} incorrectly bound the compiled-out _Norm texture.");
         }
+
+        static string Describe(ExportEntry entry) =>
+            $"{entry.ClassName} raw='{entry.InstancedFullPath}' canonical='{PccAssetPathPolicy.FromExport(entry)}' " +
+            $"source='{entry.FileRef.FilePath}' uindex={entry.UIndex}";
     }
 
     private static void LashesUseRedAsUnlitOpacity()

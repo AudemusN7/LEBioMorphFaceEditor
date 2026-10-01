@@ -40,7 +40,11 @@ public sealed class MorphFacePackageReader : IDisposable
         var package = _packageCache.GetCachedPackage(fullPath)
             ?? throw new InvalidDataException($"Legendary Explorer Core could not open '{fullPath}'.");
         var face = ExportSelector.Find(package, exportSelector, "BioMorphFace");
-        var baseHead = ResolveObjectReference(face, "m_oBaseHead")
+        // Offline corpus evidence belongs to the reviewed package, not an
+        // installed cooked copy whose MIC parents may differ at the same path.
+        var headReference = face.GetProperty<ObjectProperty>("m_oBaseHead")?.ResolveToEntry(package);
+        var baseHead = headReference as ExportEntry ?? (headReference is null
+            ? null : _referenceResolver.Require(headReference, "randomisation corpus base head"))
             ?? throw new InvalidDataException($"BioMorphFace '{face.InstancedFullPath}' has no resolvable base head.");
         var materials = new List<ExportEntry>();
         _ = GetSkeletalMesh(baseHead, materials);
@@ -197,7 +201,8 @@ public sealed class MorphFacePackageReader : IDisposable
         var fullPath = RequireFile(packagePath);
         var package = _packageCache.GetCachedPackage(fullPath)
             ?? throw new InvalidDataException($"Legendary Explorer Core could not open '{fullPath}'.");
-        var meshExport = FindDetachedAttachmentExport(package, meshSelector);
+        var meshExport = _referenceResolver.Require(
+            FindDetachedAttachmentExport(package, meshSelector), "selected attachment mesh");
         var materialExports = new List<ExportEntry>();
         var mesh = ReadSkeletalMesh(meshExport, materialExports);
         var materials = materialExports
@@ -257,7 +262,8 @@ public sealed class MorphFacePackageReader : IDisposable
         var fullPath = RequireFile(packagePath);
         var package = _packageCache.GetCachedPackage(fullPath)
             ?? throw new InvalidDataException($"Legendary Explorer Core could not open '{fullPath}'.");
-        var meshExport = ExportSelector.Find(package, meshSelector, "SkeletalMesh");
+        var meshExport = _referenceResolver.Require(
+            ExportSelector.Find(package, meshSelector, "SkeletalMesh"), "mesh material evidence");
         var mesh = meshExport.GetBinaryData<SkeletalMesh>();
         if (mesh.LODModels is not { Length: > 0 })
         {
@@ -298,7 +304,8 @@ public sealed class MorphFacePackageReader : IDisposable
                     ?? throw new InvalidDataException(
                         $"SkeletalMesh '{meshExport.InstancedFullPath}' has invalid material UIndex " +
                         $"{materialUIndices[pair.Key]} in slot {pair.Key}.");
-                var materialExport = _referenceResolver.Require(
+                var materialExport = CanonicalAttachmentMaterialPolicy.ResolveReplacement(
+                    meshExport, materialReference, _packageCache) ?? _referenceResolver.Require(
                     materialReference,
                     $"SkeletalMesh '{meshExport.InstancedFullPath}' material slot {pair.Key}");
                 var material = _materialReader.ReadMaterialEvidence(materialExport);
@@ -324,11 +331,19 @@ public sealed class MorphFacePackageReader : IDisposable
         var package = _packageCache.GetCachedPackage(fullPath)
             ?? throw new InvalidDataException($"Legendary Explorer Core could not open '{fullPath}'.");
         var entry = package.FindEntry(textureSelector, "Texture2D")
-            ?? throw new KeyNotFoundException($"Texture2D reference '{textureSelector}' was not found in {package.FilePath}.");
-        var texture = _referenceResolver.Require(
-            entry,
-            $"Texture2D reference '{textureSelector}'");
-        return _materialReader.DecodeTextureReference(texture, definition);
+            ?? InstalledGameAssetResolver.RequireExact(_packageCache, fullPath, textureSelector, "Texture2D");
+        // This API is used by the texture picker: the selected physical donor
+        // is explicit, including a mod replacement at an otherwise stock path.
+        var texture = entry as ExportEntry ?? _referenceResolver.Require(
+            entry, $"Texture2D reference '{textureSelector}'");
+        var decoded = _materialReader.DecodeTextureReference(texture, definition);
+        // A seekfree donor may expose a package-local export path while the
+        // picker requested its package-qualified identity. Keep the physical
+        // package/UIndex, but return the canonical path that PCC writers use.
+        var canonicalPath = PccAssetPathPolicy.FromExport(texture);
+        return decoded.Source.InstancedPath.Equals(canonicalPath, StringComparison.OrdinalIgnoreCase)
+            ? decoded
+            : decoded with { Source = decoded.Source with { InstancedPath = canonicalPath } };
     }
 
     private MorphFaceDocument ReadDocument(ExportEntry export)
@@ -387,6 +402,11 @@ public sealed class MorphFacePackageReader : IDisposable
         var resolved = _referenceResolver.Resolve(entry);
         if (resolved is not null)
         {
+            if (!MorphFaceAttachmentTransferEngine.HasSupportedMaterials(resolved.FileRef, resolved, out var unsupported))
+            {
+                warnings.Add($"Optional attachment '{entry.InstancedFullPath}' was omitted because {unsupported} is outside MFE's supported canonical materials.");
+                return null;
+            }
             return resolved;
         }
         warnings.Add(
@@ -417,7 +437,8 @@ public sealed class MorphFacePackageReader : IDisposable
                 var reference = export.FileRef.GetEntry(index)
                     ?? throw new InvalidDataException(
                         $"SkeletalMesh '{export.InstancedFullPath}' has invalid material UIndex {index}.");
-                var resolved = _referenceResolver.Require(
+                var resolved = CanonicalAttachmentMaterialPolicy.ResolveReplacement(export, reference, _packageCache)
+                    ?? _referenceResolver.Require(
                     reference,
                     $"SkeletalMesh '{export.InstancedFullPath}' material slot");
                 var material = RecoverCorpusMaterialSlot(export, slot, resolved);

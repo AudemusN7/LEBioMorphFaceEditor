@@ -20,33 +20,24 @@ internal static class ExternalTextureMaterializer
         ArgumentNullException.ThrowIfNull(destination);
         ArgumentNullException.ThrowIfNull(identity);
 
-        if (destination.FindExport(identity.InstancedPath, "Texture2D") is { } existing)
-        {
-            return existing;
-        }
-        if (!File.Exists(identity.PackagePath))
-        {
-            throw new FileNotFoundException(
-                $"The selected texture's source package no longer exists: {identity.PackagePath}",
-                identity.PackagePath);
-        }
-
-        using var source = MEPackageHandler.OpenMEPackage(identity.PackagePath, forceLoadFromDisk: true);
-        if (source.Game != destination.Game)
-        {
-            throw new InvalidDataException(
-                $"Texture '{identity.InstancedPath}' is from {source.Game}, but the destination is {destination.Game}.");
-        }
-        var sourceExport = ResolveSourceExport(source, identity);
-        var parent = EnsurePackagePath(destination, identity.InstancedPath);
+        using var cache = new PackageCache();
+        InstalledGameAssetResolver.RefreshMounts(destination.Game);
+        var sourceExport = new InstalledGameAssetResolver().Resolve(
+            destination.Game, identity with { IsExplicitTextureDonor = true }, cache)
+            ?? ResolveSourceExport(cache.GetCachedPackage(identity.PackagePath)
+                ?? throw new FileNotFoundException("The selected texture's source package could not be opened.", identity.PackagePath), identity);
+        if (sourceExport.Game != destination.Game)
+            throw new InvalidDataException($"Texture '{identity.InstancedPath}' is from {sourceExport.Game}, but the destination is {destination.Game}.");
+        identity = identity with { InstancedPath = PccAssetPathPolicy.FromExport(sourceExport) };
         var textureExport = PccPackageWorkflow.ImportDependencyGraph(
             destination,
             sourceExport,
-            parent,
+            destinationParent: null,
             textureCatalog: null,
             preferBiogTextures: false,
-            warnings,
-            applyCorpusMaterialPolicy: false);
+            warnings: warnings,
+            applyCorpusMaterialPolicy: false,
+            targetPathOverride: identity.InstancedPath);
         if (!textureExport.InstancedFullPath.Equals(identity.InstancedPath, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidDataException(
@@ -86,9 +77,6 @@ internal static class ExternalTextureMaterializer
         return matches.Length == 1 ? matches[0] : throw new InvalidDataException(
             $"Texture2D '{identity.InstancedPath}' was {(matches.Length == 0 ? "not found" : "ambiguous")} in '{identity.PackagePath}'.");
     }
-
-    private static ExportEntry? EnsurePackagePath(IMEPackage destination, string assetPath)
-        => PackageIntegrity.EnsurePackagePath(destination, assetPath, "Texture2D");
 
     private static void AddWarnings(ICollection<string>? target, IEnumerable<string> warnings)
     {

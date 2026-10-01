@@ -108,7 +108,8 @@ public static class TestFixtures
                 throw new InvalidDataException($"Test texture database build failed for {game}: {status.ErrorMessage}");
             }
         }
-        return new TextureCatalogService(store);
+        // Corpus databases deliberately describe fixture files rather than the installed mounts.
+        return new TextureCatalogService(store, (_, _) => true);
     }
 
     private static string[] CorpusPackages(params string[] names) => names.Select(name =>

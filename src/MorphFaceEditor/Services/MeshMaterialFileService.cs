@@ -233,25 +233,30 @@ public sealed class MeshMaterialFileService(PackageReferenceService references)
         string requestedPath,
         IReadOnlyList<TextureCatalogCandidate> candidates)
     {
-        var requestedRoot = requestedPath.Split('.')[0];
-        return candidates.SelectMany(candidate => candidate.Occurrences.Select((occurrence, index) =>
-            {
-                var packageName = Path.GetFileNameWithoutExtension(occurrence.PackagePath);
-                var canonical = candidate.InstancedPath.StartsWith("BIO", StringComparison.OrdinalIgnoreCase)
-                    ? candidate.InstancedPath
-                    : $"{packageName}.{candidate.InstancedPath}";
-                var priority = packageName.Equals(requestedRoot, StringComparison.OrdinalIgnoreCase) ? 0 :
-                    packageName.Equals("EntryMenu", StringComparison.OrdinalIgnoreCase) ||
-                    packageName.Equals("BioP_Char", StringComparison.OrdinalIgnoreCase) ? 1 : 2;
-                return (candidate, occurrence, index, canonical, priority);
-            }))
-            .Where(value => value.canonical.Equals(requestedPath, StringComparison.OrdinalIgnoreCase) ||
-                            value.candidate.InstancedPath.Equals(requestedPath, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(value => value.priority)
-            .ThenBy(value => value.index)
-            .Select(value => ((TextureCatalogCandidate Candidate, TextureCatalogOccurrence Occurrence)?)
-                (value.candidate, value.occurrence))
+        ArgumentNullException.ThrowIfNull(candidates);
+        ArgumentException.ThrowIfNullOrWhiteSpace(requestedPath);
+
+        var matches = TextureCatalogPicker.Select(candidates)
+            .Where(candidate => candidate.InstancedPath.Equals(requestedPath, StringComparison.OrdinalIgnoreCase) ||
+                TextureCatalogPicker.CanonicalPath(candidate.InstancedPath,
+                    candidate.EffectiveOccurrence.PackagePath).Equals(requestedPath, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        var official = matches
+            .Where(candidate => candidate.IsEligibleOfficialDefault &&
+                candidate.EffectiveOccurrence.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc)
+            .OrderByDescending(candidate => candidate.EffectiveOccurrence.MountPriority)
+            .ThenBy(candidate => candidate.EffectiveOccurrence.PackagePath, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault();
+        if (official is not null) return (official, official.EffectiveOccurrence);
+
+        // An explicitly registered custom package remains usable when the path
+        // has no eligible installed official default. Mod occurrences are kept
+        // visible for explicit picker selection, not inferred from a path-only import.
+        var manual = matches
+            .Where(candidate => candidate.EffectiveOccurrence.Origin == TextureCatalogOrigin.Manual)
+            .OrderBy(candidate => candidate.EffectiveOccurrence.PackagePath, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
+        return manual is null ? null : (manual, manual.EffectiveOccurrence);
     }
 
     public static async Task WriteAsync(string destination, string text, string sourceMeshPath)

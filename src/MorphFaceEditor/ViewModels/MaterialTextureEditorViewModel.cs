@@ -5,6 +5,7 @@ using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.Models;
 using MorphFaceEditor.Services;
+using MorphFaceEditor.LegendaryExplorer;
 using System.Windows.Media;
 
 namespace MorphFaceEditor.ViewModels;
@@ -21,6 +22,12 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
     private IReadOnlyList<TextureCatalogCandidate> _registryCandidates;
     private bool _isRegistryAvailable;
     private readonly List<MaterialTextureOption> _allCandidates;
+    private IReadOnlyList<MaterialTextureOption> _defaultCandidates = [];
+    private HashSet<string> _officialDefaultKeys = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, MaterialTextureOption> _resolvablePaths = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, MaterialTextureOption> _exactPaths = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, MaterialTextureOption?> _objectNames = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, MaterialTextureOption> _physicalOptions = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, DecodedTextureAsset> _resolvedCandidateTextures =
         new(StringComparer.OrdinalIgnoreCase);
     private MaterialTextureOption? _selectedTexture;
@@ -33,6 +40,8 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
     private CancellationTokenSource? _previewCancellation;
     private bool _disposed;
     private string _searchText = string.Empty;
+    private bool _showAllPhysicalSources;
+    private bool _physicalSourcesExpanded;
 
     public MaterialTextureEditorViewModel(
         MaterialEditingSession session,
@@ -56,6 +65,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
         // but do not let profile relevance reorder an open picker.
         _ = registryProfile;
         _isRegistryAvailable = isRegistryAvailable;
+        _officialDefaultKeys = BuildOfficialDefaultKeys(_registryCandidates);
         var currentTexture = session.GetSelectedTexture(Name);
         var defaultTextureName = session.GetDefaultTexture(Name)?.Source.InstancedPath.Split('.').Last();
         var noneLabel = defaultTextureName is null
@@ -63,6 +73,8 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
             : $"None (material default: {defaultTextureName})";
         _allCandidates = [new MaterialTextureOption(null, DisplayNameOverride: noneLabel)];
         _allCandidates.AddRange(BuildOptions(currentTexture));
+        RebuildLookupIndices();
+        _defaultCandidates = BuildDefaultOptions(_allCandidates);
         Candidates = [];
         _initializing = true;
         ApplySearch();
@@ -79,6 +91,31 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
     public string Description => MetadataTooltipFormatter.Format(Label, _definition.Description);
     public IReadOnlyList<MaterialTextureOption> Candidates { get; private set; }
     public bool IsRegistryAvailable => _isRegistryAvailable;
+    public bool ShowAllPhysicalSources
+    {
+        get => _showAllPhysicalSources;
+        set
+        {
+            if (!SetProperty(ref _showAllPhysicalSources, value)) return;
+            CancelTexturePreview();
+            if (value && !_physicalSourcesExpanded)
+            {
+                var none = _allCandidates[0];
+                _allCandidates.Clear();
+                _allCandidates.Add(none);
+                _allCandidates.AddRange(BuildOptions(_session.GetSelectedTexture(Name), includePhysicalSources: true));
+                RebuildLookupIndices();
+                _physicalSourcesExpanded = true;
+            }
+            _defaultCandidates = BuildDefaultOptions(_allCandidates);
+            ApplySearch();
+            var wasInitializing = _initializing;
+            _initializing = true;
+            SelectedTexture = FindOptionForCurrentTexture(_session.GetTextureReference(Name)?.InstancedPath);
+            _initializing = wasInitializing;
+            RefreshPreview();
+        }
+    }
     public bool HasExternalRegistrySelection => SelectedTexture?.RegistryCandidate is not null;
     public string RegistryStatusLabel => _isRegistryAvailable
         ? $"{_registryCandidates.Count:N0} installed choices · {_localCandidates.Count:N0} open-package choices"
@@ -150,7 +187,8 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
         get
         {
             var texture = _session.GetPreviewTexture(Name);
-            if (_session.GetTextureReference(Name) is { } authored && texture?.Source != authored)
+            if (_session.GetTextureReference(Name) is { } authored &&
+                (texture is null || !SameCanonicalTexturePath(authored, texture.Source)))
                 return "Unresolved reference retained · showing the material default";
             var sourceWidth = texture?.SourceWidth > 0 ? texture.SourceWidth : texture?.Width;
             var sourceHeight = texture?.SourceHeight > 0 ? texture.SourceHeight : texture?.Height;
@@ -168,10 +206,12 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
         var reference = _session.GetTextureReference(Name);
         var current = reference?.InstancedPath;
         _initializing = true;
-        if (reference is not null && !_allCandidates.Any(value => value.InstancedPath.Equals(current, StringComparison.OrdinalIgnoreCase)))
+        if (reference is not null && !_resolvablePaths.ContainsKey(current!))
         {
             _allCandidates.Add(new MaterialTextureOption(new MorphFaceEditor.Models.PackageAssetListItem(reference),
                 DisplayNameOverride: $"{current} (unresolved reference)"));
+            RebuildLookupIndices();
+            _defaultCandidates = BuildDefaultOptions(_allCandidates);
             ApplySearch();
         }
         SelectedTexture = FindOptionForCurrentTexture(current);
@@ -184,13 +224,21 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
     public async Task<DecodedTextureAsset> ResolveReferenceAsync(AssetIdentity reference)
     {
         ArgumentNullException.ThrowIfNull(reference);
-        var option = _allCandidates.FirstOrDefault(candidate => candidate.MatchesIdentity(reference));
+        MaterialTextureOption? option;
+        if (string.IsNullOrWhiteSpace(reference.PackagePath))
+            option = _exactPaths.GetValueOrDefault(reference.InstancedPath);
+        else
+            _physicalOptions.TryGetValue(PhysicalCandidateKey(reference.InstancedPath,
+                reference.PackagePath, reference.UIndex), out option);
+        if (option is not null && !option.MatchesIdentity(reference)) option = null;
         var cached = option is null ? null : ResolvedTexture(option);
-        if (cached is not null) return cached;
-        return await _references.LoadTextureAsync(
+        var resolved = cached ?? await _references.LoadTextureAsync(
             option?.RegistryCandidate?.EffectiveOccurrence.PackagePath ?? reference.PackagePath,
             reference.InstancedPath,
             _definition);
+        return reference.IsExplicitTextureDonor
+            ? resolved with { Source = resolved.Source with { IsExplicitTextureDonor = true } }
+            : resolved;
     }
 
     public Task<DecodedTextureAsset> ResolveInstancedPathAsync(string instancedPath)
@@ -210,10 +258,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
     public Task<DecodedTextureAsset> ResolveExactInstancedPathAsync(string instancedPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(instancedPath);
-        var candidate = _allCandidates.FirstOrDefault(value => value.Asset is { } asset &&
-            (value.InstancedPath.Equals(instancedPath, StringComparison.OrdinalIgnoreCase) ||
-             MeshMaterialFileService.QualifyPath(asset.Identity).Equals(instancedPath,
-                 StringComparison.OrdinalIgnoreCase)))
+        var candidate = _exactPaths.GetValueOrDefault(instancedPath)
             ?? throw new FileNotFoundException($"Texture '{instancedPath}' is not available at its full path.");
         var identity = candidate.Asset!.Identity;
         return ResolveReferenceAsync(identity);
@@ -259,6 +304,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
         ArgumentNullException.ThrowIfNull(candidates);
         ArgumentNullException.ThrowIfNull(profile);
         _registryCandidates = candidates;
+        _officialDefaultKeys = BuildOfficialDefaultKeys(candidates);
         _isRegistryAvailable = isRegistryAvailable;
         CancelTexturePreview();
         CancelPendingSelection();
@@ -269,7 +315,10 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
             : $"None (material default: {defaultTextureName})";
         _allCandidates.Clear();
         _allCandidates.Add(new MaterialTextureOption(null, DisplayNameOverride: noneLabel));
-        _allCandidates.AddRange(BuildOptions(currentTexture));
+        _physicalSourcesExpanded = ShowAllPhysicalSources;
+        _allCandidates.AddRange(BuildOptions(currentTexture, _physicalSourcesExpanded));
+        RebuildLookupIndices();
+        _defaultCandidates = BuildDefaultOptions(_allCandidates);
         _initializing = true;
         ApplySearch();
         SelectedTexture = FindOptionForCurrentTexture(currentTexture?.Source.InstancedPath);
@@ -301,7 +350,10 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
             if (ResolvedTexture(selected) is { } resolved)
             {
                 if (generation == _selectionGeneration)
-                    _session.SetTextureReference(Name, resolved);
+                    _session.SetTextureReference(Name, resolved with
+                    {
+                        Source = resolved.Source with { IsExplicitTextureDonor = true }
+                    });
                 return;
             }
             var sourcePackage = selected.RegistryCandidate?.EffectiveOccurrence.PackagePath ?? selected.Asset?.Identity.PackagePath
@@ -316,7 +368,10 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
             selected.Asset?.SetThumbnail(texture);
             if (generation == _selectionGeneration && ReferenceEquals(selected, SelectedTexture))
             {
-                _session.SetTextureReference(Name, texture);
+                _session.SetTextureReference(Name, texture with
+                {
+                    Source = texture.Source with { IsExplicitTextureDonor = true }
+                });
             }
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
@@ -419,8 +474,9 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
 
     private void ApplySearch()
     {
-        var none = _allCandidates[0];
-        var filtered = _allCandidates.Skip(1)
+        var source = ShowAllPhysicalSources ? _allCandidates : _defaultCandidates;
+        var none = source[0];
+        var filtered = source.Skip(1)
             .Where(option => MatchesSearch(option, SearchText))
             .ToArray();
         Candidates = [none, .. filtered];
@@ -446,14 +502,15 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
         return $"{packagePath}|{option.InstancedPath}";
     }
 
-    private IReadOnlyList<MaterialTextureOption> BuildOptions(DecodedTextureAsset? currentTexture)
+    private IReadOnlyList<MaterialTextureOption> BuildOptions(
+        DecodedTextureAsset? currentTexture, bool includePhysicalSources = false)
     {
         var options = _localCandidates
             .Where(asset => !TextureRegistryDiscovery.IsExcludedPath(
                 TextureCatalogPicker.CanonicalPath(
                     asset.Identity.InstancedPath, asset.Identity.PackagePath)))
-            .GroupBy(asset => asset.Identity.InstancedPath, StringComparer.OrdinalIgnoreCase)
-            .Select(group => group.First())
+            .DistinctBy(asset => PhysicalCandidateKey(asset.Identity.InstancedPath,
+                asset.Identity.PackagePath, asset.Identity.UIndex), StringComparer.OrdinalIgnoreCase)
             .Select(asset =>
             {
                 var resolved = currentTexture is not null && asset.Identity == currentTexture.Source
@@ -463,15 +520,20 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
                 return new MaterialTextureOption(asset, resolved);
             })
             .ToList();
-        var localPaths = options.Where(option => option.Asset is not null)
-            .Select(option => TextureCatalogPicker.CanonicalPath(
-                option.InstancedPath, option.Asset!.Identity.PackagePath))
+        var localDonors = options.Where(option => option.Asset is not null)
+            .Select(option => PhysicalCandidateKey(option.Asset!.Identity.InstancedPath,
+                option.Asset.Identity.PackagePath, option.Asset.Identity.UIndex))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (_isRegistryAvailable)
         {
             options.AddRange(TextureCatalogPicker.Select(_registryCandidates)
-                .Where(candidate => !localPaths.Contains(TextureCatalogPicker.CanonicalPath(
-                    candidate.InstancedPath, candidate.EffectiveOccurrence.PackagePath)))
+                .SelectMany(candidate => PickerOccurrences(candidate, includePhysicalSources)
+                    .Select(occurrence => candidate with { EffectiveOccurrence = occurrence }))
+                .DistinctBy(candidate => PhysicalCandidateKey(candidate.InstancedPath,
+                        candidate.EffectiveOccurrence.PackagePath, candidate.EffectiveOccurrence.ExportUIndex),
+                    StringComparer.OrdinalIgnoreCase)
+                .Where(candidate => !localDonors.Contains(PhysicalCandidateKey(candidate.InstancedPath,
+                    candidate.EffectiveOccurrence.PackagePath, candidate.EffectiveOccurrence.ExportUIndex)))
                 .Select(candidate =>
                 {
                     var occurrence = candidate.EffectiveOccurrence;
@@ -497,6 +559,75 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
         return options;
     }
 
+    private static IEnumerable<TextureCatalogOccurrence> PickerOccurrences(
+        TextureCatalogCandidate candidate, bool includePhysicalSources)
+    {
+        if (includePhysicalSources)
+            return candidate.Occurrences.Append(candidate.EffectiveOccurrence).Distinct();
+        if (candidate.IsEligibleOfficialDefault && candidate.EffectiveOccurrence.Origin is
+                TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc)
+            return [candidate.EffectiveOccurrence];
+        // Keep unique custom paths selectable without constructing a row for
+        // every installed copy. Physical alternatives are expanded on request.
+        var alternatives = candidate.Occurrences.Append(candidate.EffectiveOccurrence);
+        var selected = alternatives.Where(value => value.Origin is TextureCatalogOrigin.Manual or TextureCatalogOrigin.Mod)
+            .OrderBy(value => value.Origin == TextureCatalogOrigin.Manual ? 0 : 1)
+            .ThenBy(value => value.PackagePath, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(value => value.ExportUIndex).FirstOrDefault();
+        return [selected ?? candidate.EffectiveOccurrence];
+    }
+
+    private IReadOnlyList<MaterialTextureOption> BuildDefaultOptions(
+        IReadOnlyList<MaterialTextureOption> physicalOptions)
+    {
+        var current = _session.GetTextureReference(Name);
+        var selected = physicalOptions.Skip(1)
+            .GroupBy(CanonicalOptionPath, StringComparer.OrdinalIgnoreCase)
+            .Select(group =>
+            {
+                var values = group.ToArray();
+                var explicitlySelected = current is { IsExplicitTextureDonor: true }
+                    ? values.FirstOrDefault(option => option.MatchesIdentity(current))
+                    : null;
+                if (explicitlySelected is not null) return explicitlySelected;
+
+                var official = values.FirstOrDefault(option => option.RegistryCandidate is { } candidate &&
+                    _officialDefaultKeys.Contains(PhysicalCandidateKey(candidate.InstancedPath,
+                        candidate.EffectiveOccurrence.PackagePath, candidate.EffectiveOccurrence.ExportUIndex)));
+                if (official is not null) return official;
+
+                return values
+                    .Where(option => option.RegistryCandidate is null ||
+                        option.RegistryCandidate.EffectiveOccurrence.Origin == TextureCatalogOrigin.Manual)
+                    .OrderBy(option => option.RegistryCandidate?.EffectiveOccurrence.Origin == TextureCatalogOrigin.Manual ? 1 : 0)
+                    .ThenBy(option => option.Asset?.Identity.PackagePath ??
+                                      option.RegistryCandidate?.EffectiveOccurrence.PackagePath,
+                        StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(option => option.Asset?.Identity.UIndex ??
+                                      option.RegistryCandidate?.EffectiveOccurrence.ExportUIndex ?? 0)
+                    .FirstOrDefault()
+                    ?? values
+                        .Where(option => option.RegistryCandidate?.EffectiveOccurrence.Origin == TextureCatalogOrigin.Mod)
+                        .OrderBy(option => option.RegistryCandidate!.EffectiveOccurrence.PackagePath,
+                            StringComparer.OrdinalIgnoreCase)
+                        .ThenBy(option => option.RegistryCandidate!.EffectiveOccurrence.ExportUIndex)
+                        .FirstOrDefault();
+            })
+            .Where(option => option is not null)
+            .Cast<MaterialTextureOption>()
+            .OrderBy(CanonicalOptionPath, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return [physicalOptions[0], .. selected];
+    }
+
+    private static string CanonicalOptionPath(MaterialTextureOption option)
+    {
+        var packagePath = option.RegistryCandidate?.EffectiveOccurrence.PackagePath ??
+                          option.Asset?.Identity.PackagePath ?? string.Empty;
+        return TextureCatalogPicker.CanonicalPath(option.InstancedPath, packagePath);
+    }
+
     private static bool MatchesSearch(MaterialTextureOption option, string searchText)
     {
         var query = searchText.Trim();
@@ -509,18 +640,98 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
 
     private MaterialTextureOption? FindResolvableOption(string instancedPath)
     {
-        var exact = _allCandidates.FirstOrDefault(value =>
-            value.InstancedPath.Equals(instancedPath, StringComparison.OrdinalIgnoreCase));
-        if (exact is not null) return exact;
+        if (_resolvablePaths.TryGetValue(instancedPath, out var exact)) return exact;
+        var reviewedPath = ReviewedTexturePathPolicy.Normalize(instancedPath);
+        if (!reviewedPath.Equals(instancedPath, StringComparison.OrdinalIgnoreCase) &&
+            _resolvablePaths.TryGetValue(reviewedPath, out var reviewed)) return reviewed;
         var objectName = instancedPath.Split('.').Last();
-        var matches = _allCandidates
-            .Where(value => value.ObjectName.Equals(objectName, StringComparison.OrdinalIgnoreCase))
-            .GroupBy(value => value.InstancedPath, StringComparer.OrdinalIgnoreCase)
-            .Select(group => group.First())
-            .Take(2)
-            .ToArray();
-        return matches.Length == 1 ? matches[0] : null;
+        return _objectNames.GetValueOrDefault(objectName);
     }
+
+    // Corpus availability is queried thousands of times per material roll. Index
+    // the donor choices once when the catalogue changes; misses must be cheap too.
+    private void RebuildLookupIndices()
+    {
+        _resolvablePaths.Clear();
+        _exactPaths.Clear();
+        _objectNames.Clear();
+        _physicalOptions.Clear();
+        foreach (var group in _allCandidates.Skip(1)
+                     .GroupBy(option => option.InstancedPath, StringComparer.OrdinalIgnoreCase))
+        {
+            if (PreferOfficialOccurrence(group) is not { } selected) continue;
+            _resolvablePaths[group.Key] = selected;
+            if (!_objectNames.TryAdd(selected.ObjectName, selected))
+                _objectNames[selected.ObjectName] = null; // Same name under different full paths is ambiguous.
+        }
+        var exactAliases = new Dictionary<string, List<MaterialTextureOption>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var option in _allCandidates.Skip(1))
+        {
+            if (option.Asset is not { } asset) continue;
+            // An unresolved material-file reference remains a visible authored
+            // path, but does not identify a physical donor to index.
+            if (!string.IsNullOrWhiteSpace(asset.Identity.PackagePath))
+            {
+                _physicalOptions.TryAdd(PhysicalCandidateKey(option.InstancedPath,
+                    asset.Identity.PackagePath, asset.Identity.UIndex), option);
+                // Zero UIndex is allowed for an exact source address from a material file.
+                _physicalOptions.TryAdd(PhysicalCandidateKey(option.InstancedPath,
+                    asset.Identity.PackagePath, 0), option);
+            }
+            foreach (var alias in new[] { option.InstancedPath, MeshMaterialFileService.QualifyPath(asset.Identity) }
+                         .Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                if (!exactAliases.TryGetValue(alias, out var values))
+                    exactAliases[alias] = values = [];
+                values.Add(option);
+            }
+        }
+        foreach (var (alias, options) in exactAliases)
+            if (PreferOfficialOccurrence(options) is { } selected) _exactPaths[alias] = selected;
+    }
+
+    private MaterialTextureOption? PreferOfficialOccurrence(IEnumerable<MaterialTextureOption> candidates)
+    {
+        var matches = candidates.ToArray();
+        var official = matches
+            .Where(option => option.RegistryCandidate is { } candidate &&
+                _officialDefaultKeys.Contains(PhysicalCandidateKey(candidate.InstancedPath,
+                    candidate.EffectiveOccurrence.PackagePath, candidate.EffectiveOccurrence.ExportUIndex)))
+            .OrderByDescending(option => option.RegistryCandidate!.EffectiveOccurrence.MountPriority)
+            .ThenBy(option => option.RegistryCandidate!.EffectiveOccurrence.PackagePath,
+                StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
+        if (official is not null) return official;
+
+        return matches.FirstOrDefault(option => option.RegistryCandidate is null) ??
+               matches.Where(option => option.RegistryCandidate?.EffectiveOccurrence.Origin == TextureCatalogOrigin.Manual)
+                   .OrderBy(option => option.RegistryCandidate!.EffectiveOccurrence.PackagePath,
+                       StringComparer.OrdinalIgnoreCase)
+                   .FirstOrDefault() ??
+               matches.Where(option => option.RegistryCandidate?.EffectiveOccurrence.Origin == TextureCatalogOrigin.Mod)
+                   .OrderBy(option => option.RegistryCandidate!.EffectiveOccurrence.PackagePath,
+                       StringComparer.OrdinalIgnoreCase)
+                   .ThenBy(option => option.RegistryCandidate!.EffectiveOccurrence.ExportUIndex)
+                   .FirstOrDefault();
+    }
+
+    private static string PhysicalCandidateKey(string instancedPath, string packagePath, int exportUIndex) =>
+        $"{TextureCatalogPicker.CanonicalPath(instancedPath, packagePath)}|" +
+        $"{(string.IsNullOrWhiteSpace(packagePath) ? string.Empty : Path.GetFullPath(packagePath))}|{exportUIndex}";
+
+    private static HashSet<string> BuildOfficialDefaultKeys(
+        IReadOnlyList<TextureCatalogCandidate> candidates) => TextureCatalogPicker.Select(candidates)
+        .Where(candidate => candidate.IsEligibleOfficialDefault &&
+            candidate.EffectiveOccurrence.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc)
+        .Select(candidate => PhysicalCandidateKey(candidate.InstancedPath,
+            candidate.EffectiveOccurrence.PackagePath, candidate.EffectiveOccurrence.ExportUIndex))
+        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    private static bool SameCanonicalTexturePath(AssetIdentity authored, AssetIdentity live) =>
+        authored.ClassName.Equals(live.ClassName, StringComparison.OrdinalIgnoreCase) &&
+        TextureCatalogPicker.CanonicalPath(authored.InstancedPath, authored.PackagePath).Equals(
+            TextureCatalogPicker.CanonicalPath(live.InstancedPath, live.PackagePath),
+            StringComparison.OrdinalIgnoreCase);
 
     private MaterialTextureOption FindOptionForCurrentTexture(string? instancedPath)
     {
@@ -529,11 +740,18 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
             return _allCandidates[0];
         }
         var current = _session.GetTextureReference(Name);
+        var visible = ShowAllPhysicalSources ? _allCandidates : _defaultCandidates;
         return current is not null
-            ? _allCandidates.FirstOrDefault(candidate => candidate.MatchesIdentity(current))
-                ?? _allCandidates.FirstOrDefault(candidate => candidate.InstancedPath.Equals(instancedPath, StringComparison.OrdinalIgnoreCase))
-                ?? _allCandidates[0]
-            : _allCandidates[0];
+            ? visible.FirstOrDefault(candidate => candidate.MatchesIdentity(current))
+                ?? visible.FirstOrDefault(candidate => SameCanonicalTexturePath(
+                    current,
+                    new AssetIdentity(candidate.Asset?.Identity.PackagePath ??
+                                      candidate.RegistryCandidate?.EffectiveOccurrence.PackagePath ?? string.Empty,
+                        candidate.InstancedPath,
+                        candidate.Asset?.Identity.UIndex ?? candidate.RegistryCandidate?.EffectiveOccurrence.ExportUIndex ?? 0,
+                        "Texture2D")))
+                ?? visible[0]
+            : visible[0];
     }
 }
 
@@ -553,7 +771,10 @@ public sealed record MaterialTextureOption(
     public bool MatchesIdentity(AssetIdentity identity)
     {
         ArgumentNullException.ThrowIfNull(identity);
-        if (Asset?.Identity == identity)
+        if (Asset?.Identity is { } assetIdentity &&
+            assetIdentity.PackagePath.Equals(identity.PackagePath, StringComparison.OrdinalIgnoreCase) &&
+            assetIdentity.InstancedPath.Equals(identity.InstancedPath, StringComparison.OrdinalIgnoreCase) &&
+            assetIdentity.UIndex == identity.UIndex && assetIdentity.ClassName == identity.ClassName)
         {
             return true;
         }

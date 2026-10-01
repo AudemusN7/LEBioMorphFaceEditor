@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace MorphFaceEditor.Core.Materials;
 
 /// <summary>Detached storage metadata for one non-empty texture mip.</summary>
@@ -19,11 +21,46 @@ public sealed record TextureRegistrySnapshot(
     int InstalledPackageCount,
     IReadOnlyList<TextureCatalogCandidate> Candidates)
 {
-    public const int CurrentSchemaVersion = 10;
+    public const int CurrentSchemaVersion = 13;
+
+    // Complete identity index, including dependencies outside the head pickers.
+    public IReadOnlyList<InstalledAssetOccurrence> Assets { get; init; } = [];
+    /// <summary>Highest official package for each physical filename, independent of mod overrides.</summary>
+    public IReadOnlyList<string> OfficialPackagePaths { get; init; } = [];
+    public IReadOnlyList<string> MountedPackagePaths { get; init; } = [];
+    public IReadOnlyList<MountedPackageFingerprint> MountedPackages { get; init; } = [];
 
     public IReadOnlyList<MorphFaceTemplateCandidate> MorphFaceTemplates { get; init; } = [];
     public IReadOnlyList<AttachmentMeshCandidate> AttachmentMeshes { get; init; } = [];
     public IReadOnlyList<ManualRegistryAsset> ManualAssets { get; init; } = [];
+}
+
+public sealed record MountedPackageFingerprint(string PackagePath, long Length, DateTime LastWriteTimeUtc)
+{
+    public static MountedPackageFingerprint Read(string path)
+    {
+        var file = new FileInfo(path);
+        return new(Path.GetFullPath(path), file.Length, file.LastWriteTimeUtc);
+    }
+
+    public bool IsCurrent()
+    {
+        var file = new FileInfo(PackagePath);
+        return file.Exists && file.Length == Length && file.LastWriteTimeUtc == LastWriteTimeUtc;
+    }
+}
+
+public sealed record InstalledAssetOccurrence(
+    string InstancedPath,
+    string ClassName,
+    string PackagePath,
+    int ExportUIndex,
+    int MountPriority,
+    TextureCatalogOrigin Origin = TextureCatalogOrigin.BaseGame)
+{
+    public static bool IsSupportedClass(string className) => className is
+        "Texture2D" or "SkeletalMesh" or "TextureCube" or "Material" or "MaterialInstanceConstant" or
+        "MaterialInstanceTimeVarying" or "RvrEffectsMaterialUser" or "RvrEffectsMaterial";
 }
 
 public sealed record ManualRegistryAsset(
@@ -44,7 +81,12 @@ public sealed record AttachmentMeshOccurrence(
 public sealed record AttachmentMeshCandidate(
     string CanonicalPath,
     AttachmentMeshOccurrence EffectiveOccurrence,
-    IReadOnlyList<AttachmentMeshOccurrence> Occurrences);
+    IReadOnlyList<AttachmentMeshOccurrence> Occurrences)
+{
+    /// <summary>True only when the effective official donor is from its filename-winning package.</summary>
+    [JsonIgnore]
+    public bool IsEligibleOfficialDefault { get; init; }
+}
 
 /// <summary>A lightweight pointer to a target-game face discovered during the registry scan.</summary>
 public sealed record MorphFaceTemplateCandidate(

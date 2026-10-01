@@ -20,7 +20,7 @@ public static class PlayerHairStyleCatalogTests
         new("official DLC hair styles are eligible but mod-only styles are not", OfficialDlcIsEligibleAndModsAreNot),
         new("locked Player hair mesh retains independent scalp styles only", MeshLockKeepsIndependentScalps),
         new("Ssk slot exposes one style with two meshes and a no-mesh outcome", SskSlotHasThreeEqualOutcomes),
-        new("Player hair catalogue uses base-game occurrence identity under mod override", BaseGameIdentitySurvivesOverride)
+        new("Player hair catalogue chooses the highest eligible official occurrence under mod override", OfficialIdentitySurvivesOverride)
     ];
 
     private static void MeshOnlyStylesPairWithCru()
@@ -48,7 +48,8 @@ public static class PlayerHairStyleCatalogTests
             new AttachmentMeshOccurrence("BIOG_HMF_HIR_PRO.pcc", "HMF_HIR_Cls_MDL",
                 13, 1, TextureCatalogOrigin.BaseGame, 31),
             [new AttachmentMeshOccurrence("BIOG_HMF_HIR_PRO.pcc", "HMF_HIR_Cls_MDL",
-                13, 1, TextureCatalogOrigin.BaseGame, 31)]);
+                13, 1, TextureCatalogOrigin.BaseGame, 31)])
+        { IsEligibleOfficialDefault = true };
         var options = PlayerHairStyleCatalog.Resolve(TextureCatalogGame.LE1, PlayerHairSex.Female,
             textures, [mesh]);
         var option = options.Single(value => value.Id == "hmf-cls");
@@ -127,7 +128,7 @@ public static class PlayerHairStyleCatalogTests
             var occurrence = new TextureCatalogOccurrence(package, 1, 0, TextureCatalogOrigin.BaseGame,
                 256, 256, "PF_DXT5", "Character", false, null);
             return new TextureCatalogCandidate(TextureCatalogGame.LE2, instancedPath,
-                occurrence, [occurrence]);
+                occurrence, [occurrence]) { IsEligibleOfficialDefault = true };
         }).ToArray();
         var meshes = new[] { "Braids01", "ShortAfro" }.Select((stem, index) =>
         {
@@ -139,8 +140,8 @@ public static class PlayerHairStyleCatalogTests
                 index == 0 ? 1270 : 1280, 0, TextureCatalogOrigin.BaseGame, 42);
             var overrideOccurrence = new AttachmentMeshOccurrence(overridePackage, instancedPath,
                 index == 0 ? 1270 : 1280, 2499, TextureCatalogOrigin.Mod, 42);
-            return (Candidate: new AttachmentMeshCandidate(canonicalPath, overrideOccurrence,
-                    [overrideOccurrence, baseOccurrence]),
+            return (Candidate: new AttachmentMeshCandidate(canonicalPath, baseOccurrence,
+                    [overrideOccurrence, baseOccurrence]) { IsEligibleOfficialDefault = true },
                 Selected: new AssetIdentity(overridePackage, canonicalPath,
                     overrideOccurrence.ExportUIndex, "SkeletalMesh"),
                 Id: index == 0 ? "hmf-braids" : "hmf-short-afro");
@@ -370,23 +371,31 @@ public static class PlayerHairStyleCatalogTests
             "The independent Sar-only scalp outcome must have no Flat Top morph.");
     }
 
-    private static void BaseGameIdentitySurvivesOverride()
+    private static void OfficialIdentitySurvivesOverride()
     {
         var textures = ScalpFamily(TextureCatalogGame.LE3, "HMM", "Cru");
         var baseOccurrence = new AttachmentMeshOccurrence("BIOG_HMM_HIR_PRO.pcc", "HMM_HIR_Fsk_MDL",
             41, 1, TextureCatalogOrigin.BaseGame, 28);
+        var officialDlcOccurrence = new AttachmentMeshOccurrence("DLC_CON_Hair/BIOG_HMM_HIR_PRO.pcc",
+            "HMM_HIR_Fsk_MDL", 43, 300, TextureCatalogOrigin.OfficialDlc, 28);
         var modOccurrence = new AttachmentMeshOccurrence("DLC_MOD_Fsk.pcc", "HMM_HIR_Fsk_MDL",
-            9, 20, TextureCatalogOrigin.Mod, 28);
+            9, 9000, TextureCatalogOrigin.Mod, 28);
         var canonicalPath = TextureCatalogPicker.CanonicalPath(
             baseOccurrence.InstancedPath, baseOccurrence.PackagePath);
         var mesh = new AttachmentMeshCandidate(canonicalPath,
-            modOccurrence, [baseOccurrence, modOccurrence]);
+            officialDlcOccurrence, [baseOccurrence, officialDlcOccurrence, modOccurrence])
+        { IsEligibleOfficialDefault = true };
         var options = PlayerHairStyleCatalog.Resolve(TextureCatalogGame.LE3, PlayerHairSex.Male,
             textures, [mesh]);
         var identity = options.Single(value => value.Id == "hmm-fsk").MeshVariants.Single();
-        TestAssert.Equal("BIOG_HMM_HIR_PRO.pcc", identity.PackagePath);
+        TestAssert.Equal(officialDlcOccurrence.PackagePath, identity.PackagePath);
         TestAssert.Equal(canonicalPath, identity.InstancedPath);
-        TestAssert.Equal(41, identity.UIndex);
+        TestAssert.Equal(43, identity.UIndex);
+
+        var unprojectedOptions = PlayerHairStyleCatalog.Resolve(TextureCatalogGame.LE3,
+            PlayerHairSex.Male, textures, [mesh with { IsEligibleOfficialDefault = false }]);
+        TestAssert.True(unprojectedOptions.All(value => value.Id != "hmm-fsk"),
+            "A physical mesh without eligible official-default provenance became an automatic hair variant.");
     }
 
     private static TextureCatalogCandidate[] ScalpFamily(TextureCatalogGame game, string sex, string stem)
@@ -400,7 +409,8 @@ public static class PlayerHairStyleCatalogTests
             var path = $"BIOG_{sex}_HIR_PRO_R.Hair.{name}";
             var occurrence = new TextureCatalogOccurrence($"BIOG_{sex}_HIR_PRO_R.pcc", index + 1,
                 0, TextureCatalogOrigin.BaseGame, 256, 256, "PF_DXT5", "Character", false, null);
-            return new TextureCatalogCandidate(game, path, occurrence, [occurrence]);
+            return new TextureCatalogCandidate(game, path, occurrence, [occurrence])
+            { IsEligibleOfficialDefault = true };
         }).ToArray();
     }
 
@@ -408,15 +418,17 @@ public static class PlayerHairStyleCatalogTests
     {
         var occurrence = new TextureCatalogOccurrence($"BIOG_{name.Split('_')[0]}_HIR_PRO.pcc", 22,
             0, TextureCatalogOrigin.BaseGame, 256, 256, "PF_DXT5", "Character", false, null);
-        return [new TextureCatalogCandidate(game, $"BIOG_{name.Split('_')[0]}_HIR_PRO.Hair.{name}", occurrence, [occurrence])];
+        return [new TextureCatalogCandidate(game, $"BIOG_{name.Split('_')[0]}_HIR_PRO.Hair.{name}", occurrence, [occurrence])
+        { IsEligibleOfficialDefault = true }];
     }
 
     private static AttachmentMeshCandidate Mesh(string objectName, TextureCatalogOrigin origin,
         string sex = "HMM")
     {
-        var occurrence = new AttachmentMeshOccurrence($"BIOG_{sex}_HIR_PRO.pcc", objectName,
+        var occurrence = new AttachmentMeshOccurrence($"BIOG_{sex}_HIR_PRO.pcc", $"Hair.{objectName}",
             7, 1, origin, 28);
-        return new AttachmentMeshCandidate($"BIOG_{sex}_HIR_PRO.Hair.{objectName}", occurrence, [occurrence]);
+        return new AttachmentMeshCandidate($"BIOG_{sex}_HIR_PRO.Hair.{objectName}", occurrence, [occurrence])
+        { IsEligibleOfficialDefault = origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc };
     }
 
     private static string ObjectName(string path) => path[(path.LastIndexOf('.') + 1)..];

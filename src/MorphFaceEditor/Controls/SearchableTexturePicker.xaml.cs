@@ -79,6 +79,10 @@ public partial class SearchableTexturePicker : UserControl
 
     private void OnPopupPreviewKeyDown(object sender, KeyEventArgs e)
     {
+        if (e.Key == Key.Enter && e.OriginalSource is CheckBox)
+        {
+            return;
+        }
         if (e.Key == Key.Escape)
         {
             CancelPreviewAndRestore();

@@ -1,3 +1,7 @@
+using LegendaryExplorerCore.Packages;
+using LegendaryExplorerCore.Unreal;
+using MorphFaceEditor.Core.Materials;
+
 namespace MorphFaceEditor.LegendaryExplorer;
 
 /// <summary>
@@ -8,10 +12,24 @@ namespace MorphFaceEditor.LegendaryExplorer;
 /// </summary>
 internal static class PccAssetPathPolicy
 {
+    internal static string FromExport(ExportEntry export) =>
+        export.IsForcedExport ? export.InstancedFullPath :
+            FromDonorOccurrence(export.InstancedFullPath, export.FileRef.FilePath);
+
+    internal static void NormalizeMaterializedAsset(ExportEntry export)
+    {
+        if (InstalledAssetOccurrence.IsSupportedClass(export.ClassName))
+        {
+            // The embedded identity is already package-qualified. Without this
+            // flag Unreal prefixes the destination linker's name a second time.
+            export.ExportFlags |= UnrealFlags.EExportFlags.ForcedExport;
+        }
+    }
+
     internal static string FromDonorOccurrence(string instancedPath, string donorPackagePath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(instancedPath);
-        ArgumentException.ThrowIfNullOrWhiteSpace(donorPackagePath);
+        if (string.IsNullOrWhiteSpace(donorPackagePath)) return instancedPath;
 
         var packageName = Path.GetFileNameWithoutExtension(donorPackagePath);
         if (string.IsNullOrWhiteSpace(packageName) ||

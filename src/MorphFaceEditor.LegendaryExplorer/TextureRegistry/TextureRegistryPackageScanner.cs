@@ -10,13 +10,17 @@ namespace MorphFaceEditor.LegendaryExplorer.TextureRegistry;
 
 internal sealed record TextureRegistryScannedTexture(
     string InstancedPath,
-    TextureCatalogOccurrence Occurrence);
+    TextureCatalogOccurrence Occurrence)
+{
+    public string? CanonicalPath { get; init; }
+}
 
 internal sealed record TextureRegistryPackageScan(
     IReadOnlyList<TextureRegistryScannedTexture> Textures,
     IReadOnlyList<MorphFaceTemplateCandidate> MorphFaceTemplates)
 {
     public IReadOnlyList<AttachmentMeshOccurrence> AttachmentMeshes { get; init; } = [];
+    public IReadOnlyList<InstalledAssetOccurrence> Assets { get; init; } = [];
 }
 
 internal interface ITextureRegistryPackageScanner
@@ -42,11 +46,18 @@ internal sealed class LecTextureRegistryPackageScanner : ITextureRegistryPackage
         var results = new List<TextureRegistryScannedTexture>();
         var templates = new List<MorphFaceTemplateCandidate>();
         var meshes = new List<AttachmentMeshOccurrence>();
+        var assets = new List<InstalledAssetOccurrence>();
         var origin = GetOrigin(packagePath, meGame);
         var mountPriority = GetMountPriority(packagePath, meGame);
         foreach (var export in package.Exports)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (!export.IsDefaultObject && InstalledAssetOccurrence.IsSupportedClass(export.ClassName))
+            {
+                assets.Add(new InstalledAssetOccurrence(
+                    PccAssetPathPolicy.FromExport(export), export.ClassName,
+                    Path.GetFullPath(packagePath), export.UIndex, mountPriority, origin));
+            }
             if (!export.IsDefaultObject &&
                 export.ClassName.Equals("SkeletalMesh", StringComparison.OrdinalIgnoreCase) &&
                 AttachmentMeshNamePolicy.IsInstalledHeadAttachment(export.InstancedFullPath))
@@ -73,8 +84,7 @@ internal sealed class LecTextureRegistryPackageScanner : ITextureRegistryPackage
             {
                 continue;
             }
-            var canonicalTexturePath = PccAssetPathPolicy.FromDonorOccurrence(
-                export.InstancedFullPath, packagePath);
+            var canonicalTexturePath = PccAssetPathPolicy.FromExport(export);
             if (TextureRegistryDiscovery.IsExcludedPath(canonicalTexturePath) ||
                 !TextureRegistryDiscovery.IsRelevantPath(export.InstancedFullPath) &&
                 !TextureRegistryDiscovery.IsExplicitPlayerMaterialPath(canonicalTexturePath) &&
@@ -82,13 +92,22 @@ internal sealed class LecTextureRegistryPackageScanner : ITextureRegistryPackage
                 !CrossGameAssetReconciliationCatalog.IsReviewedTexturePath(canonicalTexturePath))
                 continue;
 
-            var occurrence = ReadTextureOccurrence(export, packagePath, mountPriority, origin);
-            results.Add(new TextureRegistryScannedTexture(export.InstancedFullPath, occurrence));
+            TextureCatalogOccurrence occurrence;
+            try { occurrence = ReadTextureOccurrence(export, packagePath, mountPriority, origin); }
+            catch (Exception exception) when (exception is not OperationCanceledException and not OutOfMemoryException)
+            {
+                // Keep its exact identity indexed so preview can demonstrate the
+                // failure and consider alternatives, rather than hiding the mod.
+                occurrence = new(Path.GetFullPath(packagePath), export.UIndex, mountPriority, origin,
+                    0, 0, "Unreadable", "Unknown", false, null);
+            }
+            results.Add(new TextureRegistryScannedTexture(export.InstancedFullPath, occurrence) { CanonicalPath = canonicalTexturePath });
         }
 
         return new TextureRegistryPackageScan(results, templates)
         {
-            AttachmentMeshes = meshes
+            AttachmentMeshes = meshes,
+            Assets = assets
         };
     }
 
@@ -142,7 +161,7 @@ internal sealed class LecTextureRegistryPackageScanner : ITextureRegistryPackage
         }
     }
 
-    private static TextureCatalogOrigin GetOrigin(string packagePath, MEGame game)
+    internal static TextureCatalogOrigin GetOrigin(string packagePath, MEGame game)
     {
         var dlcDirectory = FindDlcDirectory(packagePath);
         if (dlcDirectory is null) return TextureCatalogOrigin.BaseGame;
@@ -151,13 +170,13 @@ internal sealed class LecTextureRegistryPackageScanner : ITextureRegistryPackage
             : TextureCatalogOrigin.Mod;
     }
 
-    private static int GetMountPriority(string packagePath, MEGame game)
+    internal static int GetMountPriority(string packagePath, MEGame game)
     {
         var dlcDirectory = FindDlcDirectory(packagePath);
         return dlcDirectory is null ? 0 : MELoadedDLC.GetMountPriority(dlcDirectory, game);
     }
 
-    private static string? FindDlcDirectory(string packagePath)
+    internal static string? FindDlcDirectory(string packagePath)
     {
         var current = new FileInfo(packagePath).Directory;
         while (current?.Parent is not null)

@@ -247,7 +247,7 @@ public static class PlayerHairStyleCatalog
         foreach (var name in objectNames)
         {
             var hits = candidates
-                .SelectMany(candidate => BaseGameTextureOccurrences(candidate)
+                .SelectMany(candidate => EligibleOfficialTextureOccurrences(candidate)
                     .Select(occurrence => (Candidate: candidate, Occurrence: occurrence)))
                 .Where(value => ObjectName(value.Candidate.InstancedPath)
                     .Equals(name, StringComparison.OrdinalIgnoreCase))
@@ -264,12 +264,10 @@ public static class PlayerHairStyleCatalog
         return null;
     }
 
-    private static TextureCatalogOccurrence[] BaseGameTextureOccurrences(TextureCatalogCandidate candidate) =>
-        candidate.Occurrences.Count == 0
-            ? IsCoreGameOrigin(candidate.EffectiveOccurrence.Origin)
-                ? [candidate.EffectiveOccurrence]
-                : []
-            : candidate.Occurrences.Where(value => IsCoreGameOrigin(value.Origin)).ToArray();
+    private static TextureCatalogOccurrence[] EligibleOfficialTextureOccurrences(TextureCatalogCandidate candidate) =>
+        candidate.IsEligibleOfficialDefault && IsCoreGameOrigin(candidate.EffectiveOccurrence.Origin)
+            ? [candidate.EffectiveOccurrence]
+            : [];
 
     private static AssetIdentity[] ResolveMeshes(
         IReadOnlyList<AttachmentMeshCandidate> candidates,
@@ -278,19 +276,21 @@ public static class PlayerHairStyleCatalog
         foreach (var aliasGroup in aliasGroups)
         {
             var matches = candidates
-                .SelectMany(candidate => candidate.Occurrences
-                    .Where(value => IsCoreGameOrigin(value.Origin) &&
-                                    aliasGroup.Any(alias => ObjectName(value.InstancedPath)
-                                        .Equals(alias, StringComparison.OrdinalIgnoreCase)))
-                    .Select(occurrence => new AssetIdentity(
-                        occurrence.PackagePath,
-                        TextureCatalogPicker.CanonicalPath(
-                            occurrence.InstancedPath, occurrence.PackagePath),
-                        occurrence.ExportUIndex,
-                        "SkeletalMesh")))
-                .GroupBy(value => (value.PackagePath, value.InstancedPath, value.UIndex),
-                    AssetIdentityKeyComparer.Instance)
-                .Select(group => group.First())
+                .Where(candidate => candidate.IsEligibleOfficialDefault &&
+                    IsCoreGameOrigin(candidate.EffectiveOccurrence.Origin) &&
+                    aliasGroup.Any(alias => ObjectName(candidate.CanonicalPath)
+                        .Equals(alias, StringComparison.OrdinalIgnoreCase)))
+                .Select(candidate => (Candidate: candidate, Identity: new AssetIdentity(
+                    candidate.EffectiveOccurrence.PackagePath,
+                    candidate.CanonicalPath,
+                    candidate.EffectiveOccurrence.ExportUIndex,
+                    "SkeletalMesh")))
+                .GroupBy(value => value.Identity.InstancedPath, StringComparer.OrdinalIgnoreCase)
+                .Select(group => group
+                    .OrderByDescending(value => value.Candidate.EffectiveOccurrence.MountPriority)
+                    .ThenBy(value => value.Candidate.EffectiveOccurrence.PackagePath,
+                        StringComparer.OrdinalIgnoreCase)
+                    .First().Identity)
                 .OrderBy(value => value.InstancedPath, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(value => value.PackagePath, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
@@ -511,16 +511,4 @@ public static class PlayerHairStyleCatalog
         IReadOnlyList<string> HairMorphNames,
         bool IncludesNoMeshOutcome = false);
 
-    private sealed class AssetIdentityKeyComparer : IEqualityComparer<(string PackagePath, string InstancedPath, int UIndex)>
-    {
-        public static AssetIdentityKeyComparer Instance { get; } = new();
-        public bool Equals((string PackagePath, string InstancedPath, int UIndex) x,
-            (string PackagePath, string InstancedPath, int UIndex) y) =>
-            x.UIndex == y.UIndex &&
-            x.PackagePath.Equals(y.PackagePath, StringComparison.OrdinalIgnoreCase) &&
-            x.InstancedPath.Equals(y.InstancedPath, StringComparison.OrdinalIgnoreCase);
-        public int GetHashCode((string PackagePath, string InstancedPath, int UIndex) value) =>
-            HashCode.Combine(StringComparer.OrdinalIgnoreCase.GetHashCode(value.PackagePath),
-                StringComparer.OrdinalIgnoreCase.GetHashCode(value.InstancedPath), value.UIndex);
-    }
 }

@@ -1333,21 +1333,12 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                     break;
                 case Player2DaValueKind.Texture when value.Texture is { } objectName:
                 {
-                    var assets = _registryTextureCandidates
-                        .Where(candidate => candidate.Game == context.Game &&
-                            candidate.ObjectName.Equals(objectName, StringComparison.OrdinalIgnoreCase))
-                        .SelectMany(candidate => candidate.Occurrences
-                            .DefaultIfEmpty(candidate.EffectiveOccurrence)
-                            .Where(occurrence => occurrence.Origin == TextureCatalogOrigin.BaseGame)
-                            .Select(occurrence => new MorphFaceEditor.Core.Domain.AssetIdentity(
-                                occurrence.PackagePath, candidate.InstancedPath,
-                                occurrence.ExportUIndex, "Texture2D")))
-                        .Distinct()
-                        .ToArray();
-                    if (assets.Length != 1) break;
+                    var asset = ResolvePlayer2DaTextureAsset(
+                        _registryTextureCandidates, context.Game, objectName);
+                    if (asset is null) break;
                     var control = Material.Textures.First(value =>
                         value.Name.Equals(controlName, StringComparison.OrdinalIgnoreCase));
-                    try { textures[controlName] = await control.ResolveReferenceAsync(assets[0]); }
+                    try { textures[controlName] = await control.ResolveReferenceAsync(asset); }
                     catch (Exception exception)
                     {
                         AppLog.Warning($"Skipped unresolved Player makeup lash '{objectName}': " +
@@ -1411,6 +1402,35 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             }
         }
         return prepared;
+    }
+
+    internal static MorphFaceEditor.Core.Domain.AssetIdentity? ResolvePlayer2DaTextureAsset(
+        IReadOnlyList<TextureCatalogCandidate> candidates,
+        TextureCatalogGame game,
+        string objectName)
+    {
+        ArgumentNullException.ThrowIfNull(candidates);
+        ArgumentException.ThrowIfNullOrWhiteSpace(objectName);
+        var identities = candidates
+            .Where(candidate => candidate.Game == game &&
+                candidate.ObjectName.Equals(objectName, StringComparison.OrdinalIgnoreCase) &&
+                candidate.IsEligibleOfficialDefault &&
+                candidate.EffectiveOccurrence.Origin is
+                    TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc)
+            .GroupBy(candidate => candidate.InstancedPath, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group
+                .OrderByDescending(candidate => candidate.EffectiveOccurrence.MountPriority)
+                .ThenBy(candidate => candidate.EffectiveOccurrence.PackagePath, StringComparer.OrdinalIgnoreCase)
+                .First())
+            .ToArray();
+        if (identities.Length != 1) return null;
+
+        var selected = identities[0];
+        return new MorphFaceEditor.Core.Domain.AssetIdentity(
+            selected.EffectiveOccurrence.PackagePath,
+            selected.InstancedPath,
+            selected.EffectiveOccurrence.ExportUIndex,
+            "Texture2D");
     }
 
     private async Task<PreparedMaterialRandomisation?> PreparePlayerFaceScarAsync(

@@ -25,6 +25,12 @@ public static class AttachmentMeshCatalogResolver
         if (candidate is null) return null;
 
         var source = candidate.EffectiveOccurrence;
+        if (source.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc &&
+            !candidate.IsEligibleOfficialDefault)
+        {
+            return null;
+        }
+
         return new AssetIdentity(source.PackagePath, requestedPath, source.ExportUIndex,
             "SkeletalMesh");
     }

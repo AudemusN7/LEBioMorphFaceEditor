@@ -15,7 +15,7 @@ public static class PlayerFacialDetailTexturePolicy
     /// <summary>
     /// Independently chooses a Player-specific texture for each supported material
     /// parameter that is present on the assigned Player material. Empty results mean
-    /// that the parameter is unsupported or no base-game candidate was found.
+    /// that the parameter is unsupported or no eligible official candidate was found.
     /// </summary>
     public static IReadOnlyDictionary<string, PlayerFacialDetailTextureSelection> CreateProposal(
         string profileKey,
@@ -50,7 +50,7 @@ public static class PlayerFacialDetailTexturePolicy
                 : "Brow";
             var expectedPrefix = isHumanMale ? "HMM_HED_PROCustom_" : "HMF_HED_PROCustom_";
             var eligible = candidates
-                .SelectMany(candidate => BaseGameOccurrences(candidate)
+                .SelectMany(candidate => EligibleOfficialOccurrences(candidate)
                     .Select(occurrence => new
                     {
                         Candidate = candidate,
@@ -66,7 +66,8 @@ public static class PlayerFacialDetailTexturePolicy
                                 value.Candidate.ObjectName.Contains("Custom", StringComparison.OrdinalIgnoreCase))
                 .GroupBy(value => value.Path, StringComparer.OrdinalIgnoreCase)
                 .Select(group => group
-                    .OrderBy(value => value.Occurrence.PackagePath, StringComparer.OrdinalIgnoreCase)
+                    .OrderByDescending(value => value.Occurrence.MountPriority)
+                    .ThenBy(value => value.Occurrence.PackagePath, StringComparer.OrdinalIgnoreCase)
                     .First())
                 .OrderBy(value => value.Path, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
@@ -96,11 +97,12 @@ public static class PlayerFacialDetailTexturePolicy
         return result;
     }
 
-    private static IEnumerable<TextureCatalogOccurrence> BaseGameOccurrences(
+    private static IEnumerable<TextureCatalogOccurrence> EligibleOfficialOccurrences(
         TextureCatalogCandidate candidate) =>
-        candidate.Occurrences
-            .DefaultIfEmpty(candidate.EffectiveOccurrence)
-            .Where(occurrence => occurrence.Origin == TextureCatalogOrigin.BaseGame);
+        candidate.IsEligibleOfficialDefault && candidate.EffectiveOccurrence.Origin is
+            TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc
+            ? [candidate.EffectiveOccurrence]
+            : [];
 
     private static bool HasCategory(string instancedPath, string category) =>
         instancedPath.Split('.', StringSplitOptions.RemoveEmptyEntries)

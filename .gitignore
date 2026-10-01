@@ -8,9 +8,14 @@ artifacts/
 .codex-temp/
 .worktrees/
 docs/PROJECT-CONTEXT.md
+docs/
+tools/PlayerHeadProbe/
+/Appdata Dir.lnk
 fixtures/local/*
 !fixtures/local/.gitkeep
 tests/Global Morphs/
+tests/RON Stress Test/
+tests/TUF Tattoos/
 *.user
 *.suo
 ***.received.*

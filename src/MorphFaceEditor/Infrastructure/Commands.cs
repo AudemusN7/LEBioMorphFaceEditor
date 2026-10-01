@@ -22,6 +22,10 @@ public sealed class AsyncRelayCommand(Func<Task> execute, Func<bool>? canExecute
     public bool CanExecute(object? parameter) => !_executing && (canExecute?.Invoke() ?? true);
 
     public async void Execute(object? parameter)
+        => await ExecuteAsync(parameter);
+
+    /// <summary>Exposes the existing guarded command lifecycle to noninteractive callers.</summary>
+    public async Task ExecuteAsync(object? parameter = null)
     {
         if (!CanExecute(parameter))
         {

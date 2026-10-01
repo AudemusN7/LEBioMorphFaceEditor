@@ -21,3 +21,6 @@ dotnet run --project tests/MorphFaceEditor.Tests -c Release -- --suite all
 Mesh exports include a versioned `.mfe.json` sidecar. Keep it beside the mesh for a lossless round trip; mesh-only import cannot reconstruct metadata-only controls, bone edits or unique lower-LOD branches.
 
 The application embeds canonical compressed morph targets and the randomisation donor corpus. Runtime editing never depends on the GlobalMorphs packages. Data regeneration remains available through `tools/MorphFaceEditor.DataCompiler`.
+
+Debug command for decompressing MFTR. Path is optional
+`dotnet run --project tools/MorphFaceEditor.Research -c Release -- unpack-mftr "C:\path\to\LE1.mftr"`

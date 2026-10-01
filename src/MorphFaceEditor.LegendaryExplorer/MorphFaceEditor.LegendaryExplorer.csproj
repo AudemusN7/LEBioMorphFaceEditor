@@ -10,6 +10,7 @@
     <ProjectReference Include="..\MorphFaceEditor.Core\MorphFaceEditor.Core.csproj" />
     <InternalsVisibleTo Include="MorphFaceEditor.Tests" />
     <InternalsVisibleTo Include="MorphFaceEditor.DataCompiler" />
+    <InternalsVisibleTo Include="MorphFaceEditor.QA" />
     <Reference Include="LegendaryExplorerCore">
       <HintPath>$(LecDirectory)\LegendaryExplorerCore.dll</HintPath>
       <Private>true</Private>

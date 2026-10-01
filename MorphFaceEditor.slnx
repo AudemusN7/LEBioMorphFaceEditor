@@ -12,6 +12,7 @@
     <Project Path="benchmarks/MorphFaceEditor.Benchmarks/MorphFaceEditor.Benchmarks.csproj" />
   </Folder>
   <Folder Name="/tools/">
+    <Project Path="tools/MorphFaceEditor.QA/MorphFaceEditor.QA.csproj" />
     <Project Path="tools/MorphFaceEditor.DataCompiler/MorphFaceEditor.DataCompiler.csproj" />
     <Project Path="tools/MorphFaceEditor.Research/MorphFaceEditor.Research.csproj" />
   </Folder>

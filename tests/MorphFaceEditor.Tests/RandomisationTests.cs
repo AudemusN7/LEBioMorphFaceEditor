@@ -41,6 +41,8 @@ public static class RandomisationTests
         new("embedded LE1 and LE2 HMF scalp specular avoids White", EmbeddedHmfScalpSpecAvoidsWhite),
         new("embedded texture families remain eligible under registry discovery", EmbeddedFamiliesMatchRegistryDiscovery),
         new("installed texture randomisation keeps only complete resolvable families", InstalledTextureRandomisationFiltersFamilies),
+        new("material seed families retain the installed projection", MaterialSeedUsesInstalledProjection),
+        new("rejected material seed families use compatible target parameters", RejectedSeedUsesCompatibleFamily),
         new("texture family scope honours disabled texture categories", TextureFamilyScopeHonoursDisabledCategories),
         new("material randomisation excludes an unreadable texture family signature", MaterialRandomisationExcludesFailedSignature),
         new("cursed randomisation wakes zero morphs within Mgamerz ranges", CursedRandomisationWakesZeroMorphs),
@@ -332,6 +334,73 @@ public static class RandomisationTests
         TestAssert.True(!projected.MaterialTextureFamilies.ContainsKey("human-face"),
             "A family missing a required normal map remained eligible for randomisation.");
     }
+
+    private static void MaterialSeedUsesInstalledProjection()
+    {
+        var raw = new MorphRandomisationDonor("seed", "le2-human-male", new HashSet<string>(),
+            new Dictionary<string, float>())
+        {
+            MaterialTextureFamilies = new Dictionary<string, IReadOnlyDictionary<string, string>>
+            {
+                ["human-eyes"] = new Dictionary<string, string>
+                {
+                    ["EYE_Diff"] = "Installed.Eye_Diff",
+                    ["EYE_Lens_Norm"] = "Unavailable.OtherGame_Lens"
+                }
+            }
+        };
+        var projected = raw with
+        {
+            MaterialTextureFamilies = new Dictionary<string, IReadOnlyDictionary<string, string>>
+            {
+                ["human-eyes"] = new Dictionary<string, string> { ["EYE_Diff"] = "Installed.Eye_Diff" }
+            }
+        };
+        foreach (var strength in new[] { 0, 100 })
+        {
+            var proposal = TextureOnlyProposal(raw, [projected], "le1-human-male", "human-eyes", strength);
+            TestAssert.True(!proposal.TextureFamilies["human-eyes"].ContainsKey("EYE_Lens_Norm"),
+                "The raw seed reintroduced a member removed from the installed projection.");
+            TestAssert.Equal("Installed.Eye_Diff", proposal.TextureFamilies["human-eyes"]["EYE_Diff"]);
+        }
+    }
+
+    private static void RejectedSeedUsesCompatibleFamily()
+    {
+        var raw = new MorphRandomisationDonor("LE3.Turian", "le3-turian", new HashSet<string>(),
+            new Dictionary<string, float>())
+        {
+            MaterialTextureFamilies = new Dictionary<string, IReadOnlyDictionary<string, string>>
+            {
+                ["turian-eyes"] = new Dictionary<string, string> { ["EYE_Diff"] = "Unavailable.ForeignEye" }
+            }
+        };
+        var projected = raw with { MaterialTextureFamilies = new Dictionary<string, IReadOnlyDictionary<string, string>>() };
+        var compatible = raw with
+        {
+            Id = "LE1.Turian", SourceProfileKey = "le1-turian",
+            MaterialTextureFamilies = new Dictionary<string, IReadOnlyDictionary<string, string>>
+            {
+                ["turian-eyes"] = new Dictionary<string, string> { ["TUR_EYE_Diff"] = "Installed.TargetEye" }
+            }
+        };
+        foreach (var strength in new[] { 0, 100 })
+        {
+            var proposal = TextureOnlyProposal(raw, [projected, compatible], "le1-turian", "turian-eyes", strength);
+            TestAssert.True(proposal.TextureFamilies["turian-eyes"].ContainsKey("TUR_EYE_Diff") &&
+                !proposal.TextureFamilies["turian-eyes"].ContainsKey("EYE_Diff"),
+                "A rejected seed family bypassed the target-game parameter set.");
+            TestAssert.Equal("Installed.TargetEye", proposal.TextureFamilies["turian-eyes"]["TUR_EYE_Diff"]);
+        }
+    }
+
+    private static MaterialRandomisationProposal TextureOnlyProposal(MorphRandomisationDonor donor,
+        IReadOnlyList<MorphRandomisationDonor> projected, string profile, string family, int strength) =>
+        MaterialRandomiser.CreateProposal(donor, projected,
+            new MaterialRandomisationProfile(profile, new Dictionary<string, MaterialScalarStatistics>(),
+                new Dictionary<string, MaterialVectorStatistics>(), new HashSet<string> { family }),
+            new Dictionary<string, float>(), new Dictionary<string, Vector4>(), [], new HashSet<string>(),
+            new HashSet<string>(), new HashSet<string> { family }, strength, 123);
 
     private static void TextureFamilyScopeHonoursDisabledCategories()
     {

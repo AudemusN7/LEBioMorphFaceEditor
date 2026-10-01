@@ -155,13 +155,14 @@ public sealed partial class MainWindowViewModel
             await RouteRonImportAsync(sourcePath, game);
             return;
         }
-        var hasMatchingPccContext = CanMutatePackageContext() && _loadedFace?.Game == game;
-        if (extension is ".me2headmorph" or ".me3headmorph")
+        // Mesh recognition belongs to the imported mesh, never to the face
+        // currently selected in a PCC. Unknown topology opens Custom Mode.
+        if (extension is ".me2headmorph" or ".me3headmorph" or ".psk" or ".pskx" or ".gltf" or ".glb")
         {
             await ImportStandaloneMorphAsync(sourcePath, game);
             return;
         }
-        if (hasMatchingPccContext)
+        if (CanMutatePackageContext() && _loadedFace?.Game == game)
         {
             await ImportMorphIntoPackageAsync(sourcePath);
             return;

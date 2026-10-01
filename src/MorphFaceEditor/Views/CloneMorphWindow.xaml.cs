@@ -11,7 +11,8 @@ public partial class CloneMorphWindow : Window
     public CloneMorphWindow(
         string suggestedName,
         IReadOnlyCollection<string> existingObjectNames,
-        bool importMode = false)
+        bool importMode = false,
+        bool newPlayerMode = false)
     {
         InitializeComponent();
         DarkTitleBar.Apply(this);
@@ -21,6 +22,11 @@ public partial class CloneMorphWindow : Window
             Title = "Name Imported BioMorphFace";
             IntroText.Text = "Choose the BioMorphFace export name used in this standalone workspace and any PCC you export.";
             PrimaryButton.Content = "Import Morph";
+        }
+        if (newPlayerMode)
+        {
+            Title = "Name New Player Morph";
+            PrimaryButton.Content = "Create Morph";
         }
         _existingNames = existingObjectNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
         ObjectNameBox.Text = suggestedName;

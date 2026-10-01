@@ -62,6 +62,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly AsyncRelayCommand _copyMaterialDataCommand;
     private readonly AsyncRelayCommand _pasteMaterialDataCommand;
     private readonly AsyncRelayCommand _importMorphCommand;
+    private readonly AsyncRelayCommand _newPlayerMorphCommand;
     private readonly RelayCommand _cancelNpcImportCommand;
     private readonly AsyncRelayCommand _exportMorphPskCommand;
     private readonly AsyncRelayCommand _exportMorphGltfCommand;
@@ -188,6 +189,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _pasteMorphDataCommand = new AsyncRelayCommand(PasteMorphDataAsync, CanPasteMorphData);
         _copyMaterialDataCommand = new AsyncRelayCommand(CopyMaterialDataAsync, CanUseMaterialContextMenu);
         _pasteMaterialDataCommand = new AsyncRelayCommand(PasteMaterialDataAsync, CanPasteMaterialData);
+        _newPlayerMorphCommand = new AsyncRelayCommand(NewPlayerMorphAsync, () => !IsBusy);
         _importMorphCommand = new AsyncRelayCommand(ImportMorphAsync, () => !IsBusy);
         _cancelNpcImportCommand = new RelayCommand(CancelNpcImport, () => CanCancelNpcImport);
         _exportMorphPskCommand = new AsyncRelayCommand(
@@ -253,6 +255,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public ICommand PasteMorphDataCommand => _pasteMorphDataCommand;
     public ICommand CopyMaterialDataCommand => _copyMaterialDataCommand;
     public ICommand PasteMaterialDataCommand => _pasteMaterialDataCommand;
+    public ICommand NewPlayerMorphCommand => _newPlayerMorphCommand;
     public ICommand ImportMorphCommand => _importMorphCommand;
     public ICommand CancelNpcImportCommand => _cancelNpcImportCommand;
     public ICommand ExportMorphPskCommand => _exportMorphPskCommand;

@@ -16,20 +16,28 @@ var suites = new Dictionary<string, IReadOnlyList<TestCase>>(StringComparer.Ordi
         .Concat(Player2DaRandomisationPolicyTests.All).ToArray(),
     ["materials"] = MaterialTests.All,
     ["rendering"] = RenderingTests.All,
-    ["ui"] = UiSmokeTests.All.Concat(NpcHairRandomisationTests.All)
+    ["ui"] = UiSmokeTests.All.Concat(AutomationCommandTests.All).Concat(NpcHairRandomisationTests.All)
         .Concat(TextureRegistrySettingsTests.All)
         .Concat(HairMeshManualSelectionTests.All)
         .Concat(PlayerWorkspaceReferencePolicyTests.All)
         .Concat(MorphTargetCatalogTests.All).Concat(MorphFaceCatalogTests.All)
-        .Concat(CustomMeshTests.All).Concat(MaterialInterchangeTests.All).ToArray(),
+        .Concat(CustomMeshTests.All).Concat(MaterialInterchangeTests.All)
+        .Concat(Le2PlayerMaterialRonIdentityTests.All).ToArray(),
     ["package"] = PackageContextTests.All.Concat(PackageIntegrityTests.All).Concat(ActorAssignmentInventoryTests.All)
         .Concat(ActorAssignmentTransactionTests.All).Concat(CustomMaterialEvidenceTests.All)
-        .Concat(RonStressTests.All).ToArray(),
+        .Concat(RonStressTests.All).Concat(InstalledAssetResolutionTests.All)
+        .Concat(TextureTransferDonorPolicyTests.All)
+        .Concat(SupportedMaterialGraphPolicyTests.All)
+        .Concat(MaterialInstancePreservationTests.All).Concat(Le2LocalizedEyeOverrideImportRoleTests.All)
+        .Concat(HeadHairTextureOwnershipTests.All).Concat(MorphFaceInterchangeExportTests.All).ToArray(),
     ["c4"] = ImportedSkeletalMeshWriterTests.All
         .Concat(CustomMeshPccMaterializerTests.All)
+        .Concat(CustomMeshForcedExportTests.All)
+        .Concat(GltfInverseMorphTests.All)
         .Concat(PccTextureDependencyResolverTests.All)
         .ToArray(),
-    ["tooling"] = RandomisationTests.Tooling
+    ["tooling"] = RandomisationTests.Tooling.Concat(QaUtilityTests.All)
+        .Concat(QaNpcEyeGraphCheckTests.All).Concat(QaTextureIdentityTests.All).ToArray()
 };
 
 if (args.Contains("--list", StringComparer.OrdinalIgnoreCase))

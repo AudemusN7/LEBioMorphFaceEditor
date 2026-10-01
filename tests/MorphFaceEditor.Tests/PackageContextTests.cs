@@ -31,6 +31,12 @@ public static class PackageContextTests
         new("cross-game conversion requires current texture databases", ConversionRequiresTextureDatabases),
         new("all six cross-game directions preserve canonical hair donors", PreserveCanonicalHairAcrossAllDirections),
         new("LE2 human attachment to LE1 preserves material graph", Le2HumanAttachmentToLe1),
+        new("unsupported optional attachment material omits its mesh with a warning", UnsupportedAttachmentMaterialIsOmitted),
+        new("attachment lookup rejects a same-named mesh at a different path", AttachmentLookupRejectsSameNameWrongPath),
+        new("canonical stock hair and headwear MICs resolve their supported parent graphs", CanonicalHatMaterialsRemainSupported),
+        new("reviewed Officer and Beret attachments survive their native-game conversions", StockHatAttachmentsSurviveReview),
+        new("custom hair MIC is supported through its canonical hair parent", CustomHairMicUsesCanonicalParent),
+        new("TUF and custom attachment MICs share the canonical Turian parent rule", CustomAttachmentsUseCanonicalTurianParent),
         new("installed LE1 Asari template survives a shadowing mod", InstalledLe1AsariTemplateSurvivesMod),
         new("installed conversion templates materialise required Asari Krogan and Human dependencies", InstalledConversionDependencies),
         new("D1 corpus conversion matrix preserves attachment semantics", D1CorpusConversionMatrix),
@@ -731,7 +737,7 @@ public static class PackageContextTests
             ("LE1", MorphFaceGame.LE3, "HMF.BIOA_PRC2_HMF_Guard01", "biog_hmf_hir_pro.Hair_Cute.HMF_HIR_Cte_MDL"),
             ("LE2", MorphFaceGame.LE1, "HMF.arv_kenson", "BIOG_HMF_HIR_PRO.Mom.HMF_HIR_Mom_MDL"),
             ("LE2", MorphFaceGame.LE3, "HMF.arv_kenson", "biog_hmf_hir_pro.Hair_Mom.HMF_HIR_Mom_MDL"),
-            ("LE3", MorphFaceGame.LE1, "HMF.cat004_cerb_scientist1_face", "BIOG_HMF_HIR_PRO.PonyTail.Mom.HMF_HIR_Mom_MDL"),
+            ("LE3", MorphFaceGame.LE1, "HMF.cat004_cerb_scientist1_face", "BIOG_HMF_HIR_PRO.Mom.HMF_HIR_Mom_MDL"),
             ("LE3", MorphFaceGame.LE2, "HMF.cat004_cerb_scientist1_face", "BIOG_HMF_HIR_PRO.Mom.HMF_HIR_Mom_MDL")
         };
         foreach (var (sourceGame, targetGame, facePath, expectedHair) in cases)
@@ -788,6 +794,237 @@ public static class PackageContextTests
         {
             if (File.Exists(destination)) File.Delete(destination);
         }
+    }
+
+    private static void UnsupportedAttachmentMaterialIsOmitted()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        var donorPath = Path.Combine(Path.GetTempPath(), $"MFE-UnsupportedAttachment-{Guid.NewGuid():N}.pcc");
+        var donorPackageName = Path.GetFileNameWithoutExtension(donorPath);
+        var meshPath = $"{donorPackageName}.UnsupportedAttachment";
+        try
+        {
+            using (var donor = MEPackageHandler.CreateMemoryEmptyPackage(donorPath, MEGame.LE3))
+            {
+                var material = donor.CreateExport("MFE_CustomAttachmentMaterial", "Material", indexed: false);
+                var mesh = donor.CreateExport("UnsupportedAttachment", "SkeletalMesh", indexed: false);
+                var binary = SkeletalMesh.Create();
+                binary.Materials = [material.UIndex];
+                mesh.WriteBinary(binary);
+                donor.Save();
+            }
+
+            using var destination = MEPackageHandler.CreateMemoryEmptyPackage("MFE-AttachmentTarget.pcc", MEGame.LE3);
+            var result = MorphFaceAttachmentTransferEngine.Transfer(
+                destination,
+                null,
+                [new AssetIdentity(donorPath, meshPath, 0, "SkeletalMesh")],
+                MEGame.LE3,
+                donorPath);
+
+            TestAssert.True(result.OtherMeshes.Count == 0,
+                "An attachment with a material outside the canonical material oracle was retained.");
+            TestAssert.True(result.Warnings.Any(value =>
+                    value.Contains("unsupported material", StringComparison.OrdinalIgnoreCase) &&
+                    value.Contains("MFE_CustomAttachmentMaterial", StringComparison.OrdinalIgnoreCase)),
+                "Omitting the unsupported attachment did not explain the unsupported material.");
+            TestAssert.True(destination.FindExport(meshPath, "SkeletalMesh") is null,
+                "The unsupported optional attachment was materialised before being rejected.");
+        }
+        finally
+        {
+            if (File.Exists(donorPath)) File.Delete(donorPath);
+        }
+    }
+
+    private static void CanonicalHatMaterialsRemainSupported()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        using var cache = new PackageCache { CacheMaxSize = 8 };
+        var installedAssets = new InstalledGameAssetResolver();
+        var referenceResolver = new GamePackageReferenceResolver(cache, installedAssets);
+        var examples = new (MEGame Game, string ClassName, string Path)[]
+        {
+            (MEGame.LE1, "MaterialInstanceConstant", "BIOG_HMM_HIR_PRO_R.Cap.HMM_HAT_Cap_MAT_1a"),
+            (MEGame.LE2, "MaterialInstanceConstant", "BIOG_HMM_HIR_PRO_R.Cap.HMM_HAT_Cap_Mat_2b"),
+            (MEGame.LE2, "MaterialInstanceConstant", "BIOG_HMM_HIR_PRO_R.Moto.HMM_HAT_Mtr_MAT_1a"),
+            (MEGame.LE3, "MaterialInstanceConstant", "BIOG_HMM_HIR_PRO_R.Hat_Beret.HMM_HAT_Brt_MAT_1a"),
+            (MEGame.LE3, "MaterialInstanceConstant", "BIOG_HMM_HIR_PRO_R.Hat_Officer.HMM_HAT_Off_MAT_1a"),
+            (MEGame.LE2, "MaterialInstanceConstant", "BIOG_HMM_HIR_PRO_R.Beret.HMM_HAT_Brt_MAT_1a"),
+            (MEGame.LE3, "Material", "BIOG_HMM_HIR_PRO_R.Hat_Moto.HMM_HAT_Mtr_MASTER"),
+            (MEGame.LE1, "MaterialInstanceConstant", "BIOG_HMF_HIR_PRO.Hair_PROShepard.HMF_HIR_PROShepard_MAT_1a"),
+            (MEGame.LE2, "MaterialInstanceConstant", "BIOG_HMF_HIR_PRO.Hair_PROShepard.HMF_HIR_PROShepard_MAT_1a"),
+            (MEGame.LE3, "MaterialInstanceConstant", "BIOG_HMF_HIR_PRO.Hair_PROShepard.HMF_HIR_PROShepard_MAT_1a"),
+            (MEGame.LE1, "MaterialInstanceConstant", "BIOG_HMF_HIR_PRO.PROCustomShort02.HMF_HIR_PROCustomShort02_MAT_1a"),
+            (MEGame.LE2, "MaterialInstanceConstant", "BIOG_HMF_HIR_PRO.PROCustomShort02.HMF_HIR_PROCustomShort02_MAT_1a"),
+            (MEGame.LE3, "MaterialInstanceConstant", "BIOG_HMF_HIR_FTL_R.Materials.LongHair.HMF_HIR_FTL_LongHair_Mat1a"),
+            (MEGame.LE3, "MaterialInstanceConstant", "biog_hmf_hir_pro.Hair_PROJack.HMF_HIR_PROJack_Mat_1a")
+        };
+        foreach (var example in examples)
+        {
+            var material = installedAssets.Resolve(example.Game, example.Path, example.ClassName, cache)
+                           ?? throw new InvalidDataException($"Official material '{example.Path}' is missing.");
+            TestAssert.True(
+                SupportedMaterialGraphPolicy.IsSupported(
+                    example.Game, material, referenceResolver, out var failure),
+                $"Canonical {example.Game} stock attachment material '{example.Path}' was rejected: {failure}");
+        }
+    }
+
+    private static void AttachmentLookupRejectsSameNameWrongPath()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        var donorPath = Path.Combine(Path.GetTempPath(), $"MFE-WrongPathAttachment-{Guid.NewGuid():N}.pcc");
+        var donorPackageName = Path.GetFileNameWithoutExtension(donorPath);
+        var donorMeshPath = $"{donorPackageName}.Container.SameName_MDL";
+        const string requestedPath = "BIOG_HMF_HIR_PRO.Beret.SameName_MDL";
+        try
+        {
+            using (var donor = MEPackageHandler.CreateMemoryEmptyPackage(donorPath, MEGame.LE3))
+            {
+                var container = donor.CreatePackageExport("Container");
+                var mesh = donor.CreateExport("SameName_MDL", "SkeletalMesh", container, indexed: false);
+                mesh.WriteBinary(SkeletalMesh.Create());
+                donor.Save();
+            }
+
+            using var destination = MEPackageHandler.CreateMemoryEmptyPackage("MFE-WrongPathTarget.pcc", MEGame.LE3);
+            var result = MorphFaceAttachmentTransferEngine.Transfer(
+                destination,
+                new AssetIdentity(donorPath, requestedPath, 0, "SkeletalMesh"),
+                [],
+                MEGame.LE3,
+                donorPath);
+
+            TestAssert.Equal(0, result.OtherMeshes.Count);
+            TestAssert.True(result.Hair is null,
+                "An attachment with only a same-named, different-path template export was guessed.");
+            TestAssert.True(result.Warnings.Any(value =>
+                    value.Contains(requestedPath, StringComparison.OrdinalIgnoreCase) &&
+                    value.Contains("no exact", StringComparison.OrdinalIgnoreCase)),
+                "Rejecting the wrong-path candidate did not identify the missing exact donor path.");
+            TestAssert.True(destination.FindExport(requestedPath, "SkeletalMesh") is null,
+                "The same-named, different-path mesh was materialised under the requested path.");
+        }
+        finally
+        {
+            if (File.Exists(donorPath)) File.Delete(donorPath);
+        }
+    }
+
+    private static void StockHatAttachmentsSurviveReview()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        var service = new MorphFaceConversionService(
+            MorphFaceProfileRegistry.CreateDefault(),
+            new MorphTargetCatalog(),
+            new MorphFacePackageContextService(),
+            TestFixtures.GetCorpusTextureCatalogService());
+        var cases = new[]
+        {
+            (SourceGame: MorphFaceGame.LE1, TargetGame: MorphFaceGame.LE3, Family: "HMM",
+                Face: "rp115_admiral", Kind: "Other", SourcePath: "BIOG_HMM_HIR_PRO_R.Officer.HMM_HAT_Off_MDL",
+                TargetPath: "BIOG_HMM_HIR_PRO_R.Hat_Officer.HMM_HAT_Off_MDL",
+                MaterialPath: "BIOG_HMM_HIR_PRO_R.Hat_Officer.HMM_HAT_Off_MAT_1a"),
+            (SourceGame: MorphFaceGame.LE3, TargetGame: MorphFaceGame.LE2, Family: "HMF",
+                Face: "nor_warroom_guard2", Kind: "Hair", SourcePath: "biog_hmf_hir_pro.Hat_Beret.HMF_HAT_Brt_MDL",
+                TargetPath: "BIOG_HMF_HIR_PRO.Beret.HMF_HAT_Brt_MDL",
+                MaterialPath: "BIOG_HMM_HIR_PRO_R.Beret.HMM_HAT_Brt_MAT_1a")
+        };
+
+        foreach (var item in cases)
+        {
+            var sourcePackage = FixturePath($"{item.SourceGame} GlobalMorphs.pcc");
+            var destination = Path.Combine(Path.GetTempPath(), $"MFE-StockHat-{Guid.NewGuid():N}.pcc");
+            try
+            {
+                var result = service.Convert(new MorphFaceConversionRequest(
+                    sourcePackage,
+                    $"{item.Family}.{item.Face}",
+                    item.TargetGame,
+                    destination,
+                    CreateNewPackage: true,
+                    FixturePath($"{item.TargetGame} GlobalMorphs.pcc")));
+
+                TestAssert.True(!result.SaveResult.Warnings.Any(value =>
+                        value.Contains("unsupported material", StringComparison.OrdinalIgnoreCase)),
+                    $"{item.SourceGame}->{item.TargetGame} {item.Family}.{item.Face} still reports its native stock hat as unsupported: " +
+                    string.Join(" | ", result.SaveResult.Warnings));
+
+                using var package = MEPackageHandler.OpenMEPackage(destination, forceLoadFromDisk: true);
+                var face = package.FindExport(result.SaveResult.FaceInstancedPath, "BioMorphFace")
+                           ?? throw new InvalidDataException($"Converted face '{result.SaveResult.FaceInstancedPath}' is missing.");
+                var attachment = item.Kind == "Hair"
+                    ? face.GetProperty<ObjectProperty>("m_oHairMesh")?.ResolveToEntry(package)
+                    : face.GetProperty<ArrayProperty<ObjectProperty>>("m_oOtherMeshes")?
+                        .Select(value => value.ResolveToEntry(package))
+                        .FirstOrDefault(value => value is not null);
+                TestAssert.True(attachment is ExportEntry mesh,
+                    $"The exact reviewed stock attachment '{item.TargetPath}' was omitted.");
+                TestAssert.True(attachment!.InstancedFullPath.Equals(item.TargetPath,
+                        StringComparison.OrdinalIgnoreCase),
+                    $"Expected exact target attachment '{item.TargetPath}', got '{attachment.InstancedFullPath}'.");
+                var materialIndices = ((ExportEntry)attachment).GetBinaryData<SkeletalMesh>().Materials;
+                TestAssert.True(materialIndices.Length > 0, $"Stock hat '{item.TargetPath}' had no material slots.");
+                var material = package.GetEntry(materialIndices[0]);
+                TestAssert.True(material is not null && material.ClassName.Equals(
+                        "MaterialInstanceConstant", StringComparison.OrdinalIgnoreCase) &&
+                    material.InstancedFullPath.Equals(item.MaterialPath, StringComparison.OrdinalIgnoreCase),
+                    $"Expected native material '{item.MaterialPath}', got '{material?.InstancedFullPath ?? "<unresolved>"}'.");
+            }
+            finally
+            {
+                if (File.Exists(destination)) File.Delete(destination);
+            }
+        }
+    }
+
+    private static void CustomHairMicUsesCanonicalParent()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        using var package = MEPackageHandler.CreateMemoryEmptyPackage("MFE-ShepardHairMaterial.pcc", MEGame.LE3);
+        var masterPackage = package.CreatePackageExport("BIOG_Humanoid_MASTER_MTR_R");
+        var humanGroup = package.CreatePackageExport("Human", masterPackage);
+        var hairMaster = package.CreateExport("HMN_HED_PRO_MASTER_HAIR_MAT", "Material", humanGroup, indexed: false);
+        var customMic = package.CreateExport("MFE_CustomHairMic", "MaterialInstanceConstant", indexed: false);
+        customMic.WriteProperty(new ObjectProperty(hairMaster, "Parent"));
+        var customMesh = package.CreateExport("MFE_CustomHairMesh", "SkeletalMesh", indexed: false);
+        var binary = SkeletalMesh.Create();
+        binary.Materials = [customMic.UIndex];
+        customMesh.WriteBinary(binary);
+
+        TestAssert.True(
+            MorphFaceAttachmentTransferEngine.HasSupportedMaterials(package, customMesh, out var failure),
+            $"A custom MIC using the supported canonical hair master was rejected: {failure}");
+    }
+
+    private static void CustomAttachmentsUseCanonicalTurianParent()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        using var package = MEPackageHandler.CreateMemoryEmptyPackage("MFE-TufAttachment.pcc", MEGame.LE3);
+        var masterPackage = package.CreatePackageExport("BIOG_Humanoid_MASTER_MTR_R");
+        var turianGroup = package.CreatePackageExport("Turian", masterPackage);
+        var turianMaster = package.CreateExport("TUR_HED_PRO_MASTER_MAT", "Material", turianGroup, indexed: false);
+        var tufMic = package.CreateExport("TUF_HED_PRO_Face_Mat", "MaterialInstanceConstant", indexed: false);
+        tufMic.WriteProperty(new ObjectProperty(turianMaster, "Parent"));
+        var tufMesh = package.CreateExport("TUF_HED_PROBase_MDL", "SkeletalMesh", indexed: false);
+        var tufBinary = SkeletalMesh.Create();
+        tufBinary.Materials = [tufMic.UIndex];
+        tufMesh.WriteBinary(tufBinary);
+
+        TestAssert.True(
+            MorphFaceAttachmentTransferEngine.HasSupportedMaterials(package, tufMesh, out var tufFailure),
+            $"The TUF MIC sharing the exact supported TUR master was rejected: {tufFailure}");
+
+        var ordinaryMic = package.CreateExport("HMM_HED_Custom_Mat", "MaterialInstanceConstant", indexed: false);
+        ordinaryMic.WriteProperty(new ObjectProperty(turianMaster, "Parent"));
+        var ordinaryMesh = package.CreateExport("HMM_HED_Custom_MDL", "SkeletalMesh", indexed: false);
+        var ordinaryBinary = SkeletalMesh.Create();
+        ordinaryBinary.Materials = [ordinaryMic.UIndex];
+        ordinaryMesh.WriteBinary(ordinaryBinary);
+        TestAssert.True(
+            MorphFaceAttachmentTransferEngine.HasSupportedMaterials(package, ordinaryMesh, out var failure),
+            $"A custom MIC using the supported canonical TUR master was rejected: {failure}");
     }
 
     private static void InstalledLe1AsariTemplateSurvivesMod()
@@ -1047,7 +1284,7 @@ public static class PackageContextTests
             }
         }
 
-        const int expectedConversionCount = 68;
+        const int expectedConversionCount = MorphFaceEditor.TestData.ConversionMatrix.ExpectedCount;
         if (conversionCount != expectedConversionCount)
         {
             failures.Add(
@@ -1149,61 +1386,12 @@ public static class PackageContextTests
         TestAssert.Equal(targetMask, graphMask);
     }
 
-    private static IEnumerable<MorphFaceGame> D1TargetGames(D1CorpusCandidate candidate)
-    {
-        if (candidate.Family.Equals("ALN", StringComparison.OrdinalIgnoreCase))
-        {
-            return candidate.SourceGame switch
-            {
-                MorphFaceGame.LE2 => [MorphFaceGame.LE3],
-                MorphFaceGame.LE3 => [MorphFaceGame.LE2],
-                _ => []
-            };
-        }
-
-        return Enum.GetValues<MorphFaceGame>()
-            .Where(game => game is MorphFaceGame.LE1 or MorphFaceGame.LE2 or MorphFaceGame.LE3)
-            .Where(game => game != candidate.SourceGame);
-    }
+    private static IEnumerable<MorphFaceGame> D1TargetGames(D1CorpusCandidate candidate) =>
+        MorphFaceEditor.TestData.ConversionMatrix.TargetGames(candidate.SourceGame, candidate.Family);
 
     private static IReadOnlyList<D1CorpusCandidate> D1CorpusCandidates() =>
-    [
-        new(MorphFaceGame.LE1, "HMM", "rp115_admiral"),
-        new(MorphFaceGame.LE1, "HMM", "BIOA_PRC2_YoungWarrior"),
-        new(MorphFaceGame.LE1, "HMM", "sta20_human_ambassador"),
-        new(MorphFaceGame.LE1, "HMF", "sta70_control02"),
-        new(MorphFaceGame.LE1, "HMF", "rp105a_emilywong"),
-        new(MorphFaceGame.LE1, "HMF", "ice_ercs_guard3"),
-        new(MorphFaceGame.LE1, "ASA", "Psyrana"),
-        new(MorphFaceGame.LE1, "SAL", "sta60_schells"),
-        new(MorphFaceGame.LE1, "TUR", "sta60_assassin02"),
-        new(MorphFaceGame.LE1, "KRO", "jug70_docdroyas"),
-        new(MorphFaceGame.LE1, "BAT", "prc1_balak"),
-        new(MorphFaceGame.LE2, "HMM", "BioFace_Security2"),
-        new(MorphFaceGame.LE2, "HMM", "PtyMtl_Partner"),
-        new(MorphFaceGame.LE2, "HMM", "zyavtl_vido"),
-        new(MorphFaceGame.LE2, "HMF", "cithub_csec_officer_b"),
-        new(MorphFaceGame.LE2, "HMF", "BioFace_HMF_Guest04"),
-        new(MorphFaceGame.LE2, "HMF", "zyavtl_corpse_1"),
-        new(MorphFaceGame.LE2, "ALN", "BioFace_LyingVorcha1"),
-        new(MorphFaceGame.LE2, "ASA", "BioFace_Asari_Spectre_Head"),
-        new(MorphFaceGame.LE2, "SAL", "BioFace_male_extra2"),
-        new(MorphFaceGame.LE2, "TUR", "face_gangster_1"),
-        new(MorphFaceGame.LE2, "KRO", "KroPrl_weyrloc_clanspeaker"),
-        new(MorphFaceGame.LE2, "BAT", "face_anto"),
-        new(MorphFaceGame.LE3, "HMM", "BioFace_End001_CommRoomTech"),
-        new(MorphFaceGame.LE3, "HMM", "nor_ken"),
-        new(MorphFaceGame.LE3, "HMM", "global_udina"),
-        new(MorphFaceGame.LE3, "HMF", "nor_warroom_guard2"),
-        new(MorphFaceGame.LE3, "HMF", "cermir_Orianna"),
-        new(MorphFaceGame.LE3, "HMF", "citprs_bounty_hunter01"),
-        new(MorphFaceGame.LE3, "ALN", "citwrd_gryll"),
-        new(MorphFaceGame.LE3, "ASA", "global_aria"),
-        new(MorphFaceGame.LE3, "SAL", "GenericSalarian01_Face"),
-        new(MorphFaceGame.LE3, "TUR", "Turian_Primarchson_face"),
-        new(MorphFaceGame.LE3, "KRO", "norkro_wreav"),
-        new(MorphFaceGame.LE3, "BAT", "Batarian_Crew4_Face")
-    ];
+        MorphFaceEditor.TestData.ConversionMatrix.Sources.Select(source =>
+            new D1CorpusCandidate(source.SourceGame, source.Family, source.ObjectName)).ToArray();
 
     private static D1AttachmentMask GetD1AttachmentMask(MorphFaceMeshReferences references) =>
         (references.HairMeshPath is not null ? D1AttachmentMask.Hair : D1AttachmentMask.None) |
@@ -1763,11 +1951,14 @@ public static class PackageContextTests
         {
             var context = new MorphFacePackageContextService();
             var donor = ReadFaces(donorPath).First(face =>
-                face.ProfileKey.Equals("le2-human-male", StringComparison.OrdinalIgnoreCase));
+                face.ProfileKey.Equals("le2-human-male", StringComparison.OrdinalIgnoreCase) &&
+                face.InstancedPath.Equals("HMM.BioFace_Security2", StringComparison.OrdinalIgnoreCase));
             var ronPath = Path.Combine(Path.GetTempPath(), $"MFE-StandaloneNpc-{Guid.NewGuid():N}.ron");
             var donorFingerprint = PackageFingerprint.Capture(donorPath);
             try
             {
+                AssertNpcEyeGraph(donorPath, donor.InstancedPath,
+                    "The source must be a native HMM NPC donor, not a Player face classified under the shared human-male profile.");
                 context.ExportRon(donorPath, donor.InstancedPath, ronPath);
                 var expectedMorph = context.CaptureMorphData(donorPath, donor.InstancedPath);
                 var expectedMaterial = context.CaptureMaterialData(donorPath, donor.InstancedPath);
@@ -1787,6 +1978,8 @@ public static class PackageContextTests
                     "An NPC import exposed a commit-capable workspace.");
                 TestAssert.Equal(MorphFaceGame.LE2, imported.TargetGame);
                 TestAssert.Equal("HMM", imported.Archetype);
+                AssertNpcEyeGraph(imported.Workspace.WorkingPath, imported.ImportedFacePath,
+                    "The detached NPC import did not preserve the source eye-material parent graph.");
                 AssertMorphEqual(
                     expectedMorph,
                     context.CaptureMorphData(imported.Workspace.WorkingPath, imported.ImportedFacePath));
@@ -1806,6 +1999,8 @@ public static class PackageContextTests
                         imported.Workspace.WorkingPath,
                         exportedPath,
                         createNewPackage: true);
+                    AssertNpcEyeGraph(exportedPath, saved.FaceInstancedPath,
+                        "The standalone NPC RON export did not preserve the source eye-material parent graph.");
                     AssertMorphEqual(expectedMorph,
                         context.CaptureMorphData(exportedPath, saved.FaceInstancedPath));
                 }
@@ -1822,6 +2017,18 @@ public static class PackageContextTests
                 }
             }
         });
+
+        static void AssertNpcEyeGraph(string packagePath, string facePath, string failureContext)
+        {
+            using var package = MEPackageHandler.OpenMEPackage(packagePath, forceLoadFromDisk: true);
+            var face = package.FindExport(facePath, "BioMorphFace");
+            TestAssert.True(face is not null, $"{failureContext} Face export '{facePath}' was not found.");
+            var baseHead = face!.GetProperty<ObjectProperty>("m_oBaseHead")?.ResolveToEntry(package) as ExportEntry;
+            TestAssert.True(baseHead is not null, $"{failureContext} Base head for '{facePath}' was not an export.");
+            var evidence = MorphFaceEditor.QA.QaNpcEyeGraphCheck.Inspect(package, baseHead!, "HMM");
+            TestAssert.True(evidence.Passed,
+                $"{failureContext} {string.Join("; ", evidence.Failures)}");
+        }
     }
 
     private static void CancelledStandaloneNpcConstructionCleansCandidates()

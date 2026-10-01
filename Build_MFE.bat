@@ -1,0 +1,1 @@
+dotnet build MorphFaceEditor.slnx -c Release

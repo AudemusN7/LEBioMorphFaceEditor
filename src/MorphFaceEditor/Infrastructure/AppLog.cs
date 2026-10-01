@@ -5,6 +5,8 @@ namespace MorphFaceEditor.Infrastructure;
 
 public static class AppLog
 {
+    /// <summary>In-process diagnostics for automation; observers cannot affect editor operations.</summary>
+    public static event Action<string, string>? MessageWritten;
     private static readonly object Sync = new();
     private static readonly string SessionId = Guid.NewGuid().ToString("N")[..8];
     public static string DirectoryPath { get; } = Path.Combine(
@@ -21,6 +23,9 @@ public static class AppLog
 
     private static void Write(string level, string message, Exception? exception)
     {
+        if (MessageWritten is { } observers)
+            foreach (Action<string, string> observer in observers.GetInvocationList())
+                try { observer(level, message); } catch { }
         try
         {
             var builder = new StringBuilder()

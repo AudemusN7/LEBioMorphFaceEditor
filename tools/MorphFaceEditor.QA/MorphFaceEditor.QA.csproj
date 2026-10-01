@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>MorphFaceEditor.QA</AssemblyName>
+    <RootNamespace>MorphFaceEditor.QA</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../tests/MorphFaceEditor.TestData/ConversionMatrix.cs" Link="Fixtures/ConversionMatrix.cs" />
+    <ProjectReference Include="../../src/MorphFaceEditor/MorphFaceEditor.csproj" />
+    <Reference Include="LegendaryExplorerCore">
+      <HintPath>../../lib/LegendaryExplorerCore/LegendaryExplorerCore.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+</Project>

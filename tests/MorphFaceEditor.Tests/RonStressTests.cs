@@ -1,4 +1,6 @@
 using System.Numerics;
+using LegendaryExplorerCore.Packages;
+using LegendaryExplorerCore.Unreal.BinaryConverters;
 using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
@@ -27,10 +29,12 @@ internal static class RonStressTests
     [
         new("RON provenance metadata round-trips and rejects partial headers", ProvenanceMetadata),
         new("RON export omits attachment-only Diffuseuse", RonOmitsAttachmentTexture),
+        new("RON hair texture comparison distinguishes MFE exports from ordinary TSE files", HairTextureComparisonUsesExporterHeader),
         new("Optional local RON corpus parses five files and verifies primary structure", ParseCorpus),
         new("RON texture catalogue canonicalises occurrence package paths", CanonicalTextureCataloguePaths),
         new("RON primary roots classify for their intended games", ClassifyPrimaryRoots),
-        new("Optional local RON imports preserve primary payloads and installed fingerprints", StandalonePrimaryRoundTrips)
+        new("Optional local RON imports preserve primary payloads and installed fingerprints", () => StandalonePrimaryRoundTrips()),
+        new("Optional local LE2 Ashley RON preserves its stock hair attachment", () => StandalonePrimaryRoundTrips(ashleyOnly: true))
     ];
 
     private static void ProvenanceMetadata()
@@ -125,6 +129,57 @@ internal static class RonStressTests
         {
             if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
         }
+    }
+
+    private static bool IsMfeRonExport(string path)
+    {
+        foreach (var line in File.ReadLines(path))
+        {
+            var header = line.Trim().TrimStart('\uFEFF');
+            if (header.Length == 0) continue;
+            if (!header.StartsWith("//", StringComparison.Ordinal)) break;
+            if (header.StartsWith("// MFE material export version:", StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return TseHeadMorphRon.ReadProvenance(path)?.Producer == RonExportProducer.MFE;
+    }
+
+    private static void HairTextureComparisonUsesExporterHeader()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"MFE-RonHairComparison-{Guid.NewGuid():N}.ron");
+        var hair = new TextureMaterialOverride("HAIR_Diff", null);
+        var scalp = new TextureMaterialOverride("HED_Scalp_Diff", null);
+        var original = new MorphFaceMaterialData([], [], [scalp, hair]);
+        var headOnly = original with { Textures = [scalp] };
+        var morph = new TseHeadMorph("None", [], new MorphFaceMorphData([], [], [[Vector3.Zero]]), headOnly);
+        try
+        {
+            TseHeadMorphRon.Write(path, morph);
+            TestAssert.True(!IsMfeRonExport(path), "An untagged TSE RON was classified as an MFE export.");
+            AssertMaterialEqual(original, original, "ordinary TSE hair entries",
+                ignoreAttachmentTextures: IsMfeRonExport(path));
+            var rejected = false;
+            try { AssertMaterialEqual(original, headOnly, "ordinary TSE missing hair entry"); }
+            catch (Exception) { rejected = true; }
+            TestAssert.True(rejected, "An untagged TSE comparison silently skipped its hair entries.");
+
+            TseHeadMorphRon.Write(path, morph,
+                new RonExportProvenance(RonExportProducer.MFE, "0.9.17", MorphFaceGame.LE1, "HMF", true));
+            TestAssert.True(IsMfeRonExport(path), "The full-head MFE exporter header was not recognised.");
+            AssertMaterialEqual(original, headOnly, "MFE full-head readback",
+                ignoreAttachmentTextures: IsMfeRonExport(path));
+
+            TseHeadMorphRon.Write(path, morph);
+            File.WriteAllText(path, "// MFE material export version: 1\n" + File.ReadAllText(path));
+            TestAssert.True(IsMfeRonExport(path), "The material-only MFE exporter header was not recognised.");
+            AssertMaterialEqual(original, headOnly, "MFE material readback",
+                ignoreAttachmentTextures: IsMfeRonExport(path));
+
+            // Header detection must not mistake a payload comment for exporter provenance.
+            TseHeadMorphRon.Write(path, morph);
+            File.AppendAllText(path, "\n// MFE material export version: 1\n");
+            TestAssert.True(!IsMfeRonExport(path), "A trailing payload comment was treated as an exporter header.");
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
     }
 
     private static void ParseCorpus()
@@ -256,7 +311,7 @@ internal static class RonStressTests
         }
     }
 
-    private static void StandalonePrimaryRoundTrips()
+    private static void StandalonePrimaryRoundTrips(bool ashleyOnly = false)
     {
         var directory = FindCorpusDirectory();
         if (directory is null)
@@ -272,12 +327,12 @@ internal static class RonStressTests
         var unavailableAttachmentSkips = 0;
         var failures = new List<string>();
 
-        var roundTripCases = PrimaryCases.Append((
-            "LE1-2_Default_Jane_ashleyhair.ron",
-            string.Empty,
-            [MorphFaceGame.LE1, MorphFaceGame.LE2],
-            StandalonePlayerSex.Female,
-            2232));
+        var ashley = (FileName: "LE1-2_Default_Jane_ashleyhair.ron", VariantPrefix: string.Empty,
+            Games: new[] { MorphFaceGame.LE1, MorphFaceGame.LE2 }, Sex: StandalonePlayerSex.Female,
+            Lod0Vertices: 2232);
+        var roundTripCases = ashleyOnly
+            ? new[] { ashley with { Games = [MorphFaceGame.LE2] } }
+            : PrimaryCases.Append(ashley).ToArray();
         var totalCases = roundTripCases.Sum(primary => primary.Games.Length);
         foreach (var primary in roundTripCases)
         {
@@ -333,6 +388,17 @@ internal static class RonStressTests
                     }
                     if (primary.FileName.Contains("ashleyhair", StringComparison.OrdinalIgnoreCase))
                     {
+                        if (game == MorphFaceGame.LE2)
+                        {
+                            using var savedPackage = LegendaryExplorerCore.Packages.MEPackageHandler.OpenMEPackage(
+                                imported.Workspace.WorkingPath, forceLoadFromDisk: true);
+                            var savedHair = savedPackage.Exports.Single(value =>
+                                value.ClassName == "SkeletalMesh" &&
+                                value.InstancedFullPath == CanonicalAttachmentMaterialPolicy.AshleyMeshPath);
+                            var savedMesh = savedHair.GetBinaryData<LegendaryExplorerCore.Unreal.BinaryConverters.SkeletalMesh>();
+                            TestAssert.Equal(CanonicalAttachmentMaterialPolicy.AshleyMaterialPath,
+                                savedPackage.GetEntry(savedMesh.Materials.Single())!.InstancedFullPath);
+                        }
                         TestAssert.True(imported.SaveResult.Warnings.All(value =>
                                 !value.Contains("malformed Texture2D", StringComparison.OrdinalIgnoreCase)),
                             $"{game} Ashley hair retained its empty HAIR_Mask sentinel as a malformed texture.");
@@ -362,12 +428,15 @@ internal static class RonStressTests
                             $"{game} {primary.FileName}");
                     }
 
-                    context.ExportRon(imported.Workspace.WorkingPath, imported.ImportedFacePath, readbackPath);
+                    var provenance = new RonExportProvenance(RonExportProducer.MFE, "0.9.17", game,
+                        primary.Sex == StandalonePlayerSex.Male ? "HMM" : "HMF", PlayerMorph: true);
+                    context.ExportRon(imported.Workspace.WorkingPath, imported.ImportedFacePath, readbackPath, provenance);
                     var readback = TseHeadMorphRon.Read(readbackPath);
                     AssertMorphEqual(expected.MorphData, readback.MorphData,
                         $"{game} {primary.FileName} RON readback morph data");
                     AssertMaterialEqual(expected.MaterialData, readback.MaterialData,
-                        $"{game} {primary.FileName} RON readback material data");
+                        $"{game} {primary.FileName} RON readback material data",
+                        ignoreAttachmentTextures: IsMfeRonExport(readbackPath));
                     TestAssert.Equal(NormalizeAttachment(expected.HairMesh), NormalizeAttachment(readback.HairMesh));
                     TestAssert.True(expected.AccessoryMeshes.SequenceEqual(readback.AccessoryMeshes,
                             StringComparer.OrdinalIgnoreCase),
@@ -382,7 +451,7 @@ internal static class RonStressTests
                         context.CaptureMorphData(imported.Workspace.WorkingPath, imported.ImportedFacePath),
                         $"{game} {primary.FileName} persisted relative morph edit");
                     File.Delete(readbackPath);
-                    context.ExportRon(imported.Workspace.WorkingPath, imported.ImportedFacePath, readbackPath);
+                    context.ExportRon(imported.Workspace.WorkingPath, imported.ImportedFacePath, readbackPath, provenance);
                     AssertMorphEqual(
                         editedMorph,
                         TseHeadMorphRon.Read(readbackPath).MorphData,
@@ -555,8 +624,15 @@ internal static class RonStressTests
     }
 
     private static void AssertMaterialEqual(MorphFaceMaterialData expected, MorphFaceMaterialData actual,
-        string label)
+        string label, bool ignoreAttachmentTextures = false)
     {
+        if (ignoreAttachmentTextures)
+        {
+            expected = expected with { Textures = expected.Textures.Where(value =>
+                !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(value.Name)).ToArray() };
+            actual = actual with { Textures = actual.Textures.Where(value =>
+                !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(value.Name)).ToArray() };
+        }
         TestAssert.Equal(expected.Scalars.Count, actual.Scalars.Count);
         TestAssert.Equal(expected.Vectors.Count, actual.Vectors.Count);
         TestAssert.Equal(expected.Textures.Count, actual.Textures.Count);

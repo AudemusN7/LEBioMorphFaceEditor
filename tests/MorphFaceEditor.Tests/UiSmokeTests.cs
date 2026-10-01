@@ -37,15 +37,18 @@ public static class UiSmokeTests
         new("startup welcome preference persists", StartupWelcomePreferencePersists),
         new("standalone morph import is available before opening a PCC", StandaloneImportIsAvailableWithoutPackage),
         new("unrecognised mesh import publishes a detached preview workspace", UnrecognisedMeshPublishesDetachedWorkspace),
+        new("custom mesh import ignores the selected PCC morph topology", () => UnrecognisedMeshPublishesDetachedWorkspace(openPcc: true)),
         new("glTF and GLB drops publish detached mesh workspaces", GltfAndGlbDropsPublishDetachedWorkspaces),
         new("morph import asks for its source game with an open PCC", ImportAsksForSourceGameWithOpenPcc),
         new("NPC RON donor choices include supported game-local archetypes", NpcRonArchetypesAreGameLocal),
         new("NPC RON resolver accepts static ALN donors and rejects player donors", RonResolverAcceptsStaticAlnDonor),
+        new("NPC RON donor uses highest mounted duplicate face", RonResolverPrefersHighestMountedDuplicate),
         new("empty editor imports a tagged native NPC RON", EmptyEditorImportsTaggedNpcRon),
         new("NPC import cancellation command cancels an active request", NpcImportCancellationCommandCancelsActiveRequest),
         new("tagged human RON follows the user's NPC or Player destination", TaggedHumanRonFollowsDestination),
         new("standalone Gibbed import rejects the wrong selected game before mutation", StandaloneGibbedRejectsWrongGame),
         new("standalone fixed-bake workspaces allow material clipboard commands", StandaloneFixedBakeMaterialClipboardCommands),
+        new("ALN morph clipboard commands stay blocked before and after load", AlnMorphClipboardCommandsStayBlocked),
         new("numeric wheel increments are finite and crash-safe", NumericWheelIncrementsAreSafe),
         new("extended sliders are optional and preserve edited values", ExtendedSlidersAreOptional),
         new("each face editor owns a valid selected bone transform", BoneTransformSelectionIsPerEditor),
@@ -59,6 +62,7 @@ public static class UiSmokeTests
         new("Player Character morph randomisation keeps only scalp-safe exceptions", PlayerCharacterMorphScopeKeepsExceptions),
         new("HMF mesh rolls clear only unlocked hair morphs", FemaleMeshRollClearsUnlockedHairMorphs),
         new("Player colour randomisation applies linked 2DA rows and Cursed variation", PlayerColourRandomisationUses2Da),
+        new("Player 2DA texture lookup selects the eligible official full-path default", Player2DaTextureLookupUsesOfficialDefault),
         new("Player hair and addition colours randomise for HMM in all games", PlayerHairAndAdditionColoursRandomiseAcrossGames),
         new("Set to Defaults restores stock morph and material values atomically", SetToDefaultsRestoresStockState),
         new("global morph and material randomisation uses separate donors", GlobalRandomisationUsesSeparateDonors),
@@ -71,6 +75,8 @@ public static class UiSmokeTests
         new("LE3 HMM scalp randomisation preserves its required texture pair", Le3HmmScalpRandomisationAppliesCorePair),
         new("manual hair scalp prompt survives an optional Mask decode failure", ManualHairScalpPromptKeepsRequiredPairWhenOptionalMapFails),
         new("cursed mode randomises morph bones and materials as one undo step", CursedModeRandomisesOneUndoStep),
+        new("awaitable randomisation completes the real edit and supports aggregate undo", AwaitableRandomisationCompletes),
+        new("awaitable randomisation propagates seed failures without partial edits", AwaitableRandomisationPropagatesFailure),
         new("Cursed material-only rolls leave morphs and bones unchanged", CursedMaterialOnlyLeavesBonesUnchanged),
         new("fixed-bake Cursed mode cannot mutate morph sliders", FixedBakeCursedModePreservesMorphs),
         new("relative-bake Player RON exposes live morph controls", RelativeBakeExposesMorphControls),
@@ -88,6 +94,11 @@ public static class UiSmokeTests
         new("WPF resources, nested menus, and HDR colour controls work", HdrPickerConstructs),
         new("Human Male UI profile orders, groups, and filters features", HumanMaleProfileOrganizesFeatures),
         new("material editor hides Unreal selection colour parameters", MaterialEditorHidesSelectionColor),
+        new("material texture details distinguish unresolved paths from physical donor changes", MaterialTextureDetailsUseCanonicalPath),
+        new("texture picker preserves physical donors without duplicating one export", TexturePickerDeduplicatesPhysicalExports),
+        new("texture path lookups reuse their official donor index", TextureLookupsReuseOfficialDonorIndex),
+        new("material randomisation availability stays fast with repeated physical texture donors", LargeTextureRegistryAvailability),
+        new("installed material randomisation projects texture availability without opening donors", InstalledTextureAvailabilityPerformance),
         new("LE3 Human Male UI hides inert eye metadata and marks vestigial pupils", Le3HumanMaleProfileOrganizesFeatures),
         new("Human Female UI profile exposes female morph and makeup controls", HumanFemaleProfileOrganizesFeatures),
         new("LE3 Human Female UI exposes character targets and hides malformed hair targets", Le3HumanFemaleProfileOrganizesFeatures),
@@ -192,7 +203,10 @@ public static class UiSmokeTests
         TestAssert.Equal(0, dialogs.MorphImportFileChoiceCount);
     }
 
-    private static void UnrecognisedMeshPublishesDetachedWorkspace()
+    private static void UnrecognisedMeshPublishesDetachedWorkspace() =>
+        UnrecognisedMeshPublishesDetachedWorkspace(openPcc: false);
+
+    private static void UnrecognisedMeshPublishesDetachedWorkspace(bool openPcc)
     {
         var sourcePath = Path.Combine(Path.GetTempPath(), $"MFE-Detached-{Guid.NewGuid():N}.psk");
         try
@@ -219,6 +233,13 @@ public static class UiSmokeTests
                 StandaloneNameChoiceResult = "DetachedFixture"
             };
             using var viewModel = CreateMainWindowViewModel(reader, dialogs);
+            if (openPcc)
+            {
+                var packagePath = Path.GetFullPath(Path.Combine("tests", "Global Morphs", "LE2 GlobalMorphs.pcc"));
+                RunWithDispatcher(() => viewModel.OpenDroppedFileAsync(packagePath));
+                TestAssert.True(viewModel.Editor is not null && viewModel.LoadedFacePath is not null,
+                    $"The PCC fixture did not load a selected morph: {viewModel.ErrorMessage}");
+            }
             HeadPreviewScene? scene = null;
             viewModel.PreviewSceneReady += (value, _) => scene = value;
 
@@ -494,6 +515,42 @@ public static class UiSmokeTests
         }
     }
 
+    private static void RonResolverPrefersHighestMountedDuplicate()
+    {
+        var lowerPath = Path.Combine(Path.GetTempPath(), $"MFE-ALN-Shadowed-{Guid.NewGuid():N}.pcc");
+        var higherPath = Path.Combine(Path.GetTempPath(), $"MFE-ALN-Official-{Guid.NewGuid():N}.pcc");
+        var modPath = Path.Combine(Path.GetTempPath(), $"DLC_MOD_CommunityPatch-{Guid.NewGuid():N}.pcc");
+        try
+        {
+            File.WriteAllBytes(lowerPath, []);
+            File.WriteAllBytes(higherPath, []);
+            File.WriteAllBytes(modPath, []);
+            const string facePath = "BIOG_ALN_HED_PROMorph_R.BioFace_LyingVorcha1";
+            const string headPath = "BIOG_ALN_HED_PROMorph_R.ALN_HED_PROBase_MDL";
+            var donor = new RonNpcDonorResolver(MorphFaceProfileRegistry.CreateDefault()).Resolve(
+                MorphFaceGame.LE2,
+                "ALN",
+                [
+                    new MorphFaceTemplateCandidate(lowerPath, 1, facePath, headPath, 3500,
+                        TextureCatalogOrigin.OfficialDlc),
+                    new MorphFaceTemplateCandidate(higherPath, 2, facePath, headPath, 3000,
+                        TextureCatalogOrigin.OfficialDlc),
+                    new MorphFaceTemplateCandidate(modPath, 3, facePath, headPath, 9000,
+                        TextureCatalogOrigin.Mod)
+                ],
+                [higherPath]);
+
+            TestAssert.Equal(Path.GetFullPath(higherPath), Path.GetFullPath(donor.PackagePath));
+            TestAssert.Equal(facePath, donor.FacePath);
+        }
+        finally
+        {
+            if (File.Exists(lowerPath)) File.Delete(lowerPath);
+            if (File.Exists(higherPath)) File.Delete(higherPath);
+            if (File.Exists(modPath)) File.Delete(modPath);
+        }
+    }
+
     private static void EmptyEditorImportsTaggedNpcRon()
     {
         var textureCatalog = new MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureCatalogService(
@@ -502,7 +559,7 @@ public static class UiSmokeTests
         var snapshot = textureCatalog.ReadAsync(MorphFaceGame.LE2).GetAwaiter().GetResult();
         TestAssert.True(snapshot.IsAvailable, "The installed LE2 texture database is needed for NPC import.");
         var donor = new RonNpcDonorResolver(MorphFaceProfileRegistry.CreateDefault())
-            .Resolve(MorphFaceGame.LE2, "SAL", snapshot.MorphFaceTemplates);
+            .Resolve(MorphFaceGame.LE2, "SAL", snapshot.MorphFaceTemplates, snapshot.OfficialPackagePaths);
         var ronPath = Path.Combine(Path.GetTempPath(), $"MFE-UiNpc-{Guid.NewGuid():N}.ron");
         try
         {
@@ -570,7 +627,7 @@ public static class UiSmokeTests
         var snapshot = textureCatalog.ReadAsync(MorphFaceGame.LE2).GetAwaiter().GetResult();
         TestAssert.True(snapshot.IsAvailable, "The installed LE2 texture database is needed for human RON routing.");
         var donor = new RonNpcDonorResolver(MorphFaceProfileRegistry.CreateDefault())
-            .Resolve(MorphFaceGame.LE2, "HMM", snapshot.MorphFaceTemplates);
+            .Resolve(MorphFaceGame.LE2, "HMM", snapshot.MorphFaceTemplates, snapshot.OfficialPackagePaths);
         var ronPath = Path.Combine(Path.GetTempPath(), $"MFE-UiHumanNpc-{Guid.NewGuid():N}.ron");
         var incompatiblePath = Path.Combine(Path.GetTempPath(), $"MFE-UiHumanNpc-Bad-{Guid.NewGuid():N}.ron");
         try
@@ -804,6 +861,65 @@ public static class UiSmokeTests
             "Standalone fixed-bake material support incorrectly enabled morph paste.");
     }
 
+    private static void AlnMorphClipboardCommandsStayBlocked()
+    {
+        using var reader = new MorphFacePackageReader();
+        var packagePath = Path.GetFullPath(Path.Combine("tests", "Global Morphs", "LE2 GlobalMorphs.pcc"));
+        var payload = MorphFaceClipboardPayload.Morph("le2-vorcha", "BIOG_ALN_HED_PROMorph_R.Face",
+            new MorphFaceMorphData([], [], []));
+        var materialPayload = MorphFaceClipboardPayload.Material("le2-vorcha", "BIOG_ALN_HED_PROMorph_R.Face",
+            new MorphFaceMaterialData([], [], []));
+        var clipboard = new TrackingClipboard(payload, materialPayload);
+        using var viewModel = CreateMainWindowViewModel(reader, clipboard: clipboard);
+        var workspaceField = typeof(MainWindowViewModel).GetField(
+            "_packageWorkspace",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new Exception("MainWindowViewModel._packageWorkspace was not found.");
+        workspaceField.SetValue(viewModel, new MorphFacePackageWorkspace(packagePath, canCommit: true));
+        var selectedFace = new BioMorphFaceListItem(
+            1,
+            "BIOG_ALN_HED_PROMorph_R.Face",
+            "Face",
+            ProfileTag: "[ALN]",
+            ProfileKey: "le2-vorcha");
+
+        void AssertClipboardAvailability(string state)
+        {
+            viewModel.RefreshClipboardCommandAvailability();
+            TestAssert.True(!viewModel.CopyMorphDataCommand.CanExecute(null) &&
+                            !viewModel.PasteMorphDataCommand.CanExecute(null),
+                $"ALN exposed a Morph clipboard command while {state}.");
+            TestAssert.True(viewModel.CopyMaterialDataCommand.CanExecute(null) &&
+                            viewModel.PasteMaterialDataCommand.CanExecute(null),
+                $"Blocking ALN Morph clipboard commands also blocked Material clipboard commands while {state}.");
+        }
+
+        viewModel.SelectedFace = selectedFace;
+        AssertClipboardAvailability("unloaded");
+        ((AsyncRelayCommand)viewModel.CopyMorphDataCommand).ExecuteAsync().GetAwaiter().GetResult();
+        ((AsyncRelayCommand)viewModel.PasteMorphDataCommand).ExecuteAsync().GetAwaiter().GetResult();
+        TestAssert.Equal(0, clipboard.Writes);
+        TestAssert.Equal(0, clipboard.Reads);
+
+        var vorchaEditor = CreateEditor(reader, new VorchaFeatureMetadataCatalog(), "le2-vorcha");
+        TestAssert.Equal(0, vorchaEditor.Features.Count(value => value.IsEditable));
+        TestAssert.True(!vorchaEditor.AllowsMorphRandomisation,
+            "The loaded Vorcha editor unexpectedly allowed morph randomisation.");
+        var setEditor = typeof(MainWindowViewModel).GetMethod(
+            "SetEditor",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new Exception("MainWindowViewModel.SetEditor was not found.");
+        setEditor.Invoke(viewModel, [vorchaEditor, null]);
+        typeof(MainWindowViewModel).GetProperty(nameof(MainWindowViewModel.LoadedFacePath))!
+            .SetValue(viewModel, selectedFace.InstancedPath);
+        viewModel.SelectedFace = selectedFace;
+        AssertClipboardAvailability("loaded");
+        ((AsyncRelayCommand)viewModel.CopyMorphDataCommand).ExecuteAsync().GetAwaiter().GetResult();
+        ((AsyncRelayCommand)viewModel.PasteMorphDataCommand).ExecuteAsync().GetAwaiter().GetResult();
+        TestAssert.Equal(0, clipboard.Writes);
+        TestAssert.Equal(0, clipboard.Reads);
+    }
+
     private static void FemaleTurianProfileIsMaterialOnly()
     {
         using var reader = new MorphFacePackageReader();
@@ -1000,7 +1116,10 @@ public static class UiSmokeTests
 
     private static void MorphClipboardCodecRoundTrips()
     {
-        var texture = new AssetIdentity("fixture.pcc", "Package.Texture", 7, "Texture2D");
+        var texture = new AssetIdentity("fixture.pcc", "Package.Texture", 7, "Texture2D")
+        {
+            IsExplicitTextureDonor = true
+        };
         var morph = MorphFaceClipboardPayload.Morph(
             "le3-human-male",
             "Package.Face",
@@ -1028,6 +1147,9 @@ public static class UiSmokeTests
             MorphFaceClipboardKind.Material);
         TestAssert.Near(0.25f, materialRoundTrip.MaterialData!.Scalars[0].Value, 0);
         TestAssert.Equal(texture, materialRoundTrip.MaterialData.Textures[0].TextureReference);
+        TestAssert.True(materialRoundTrip.MaterialData.Textures[0].TextureReference!.IsExplicitTextureDonor,
+            "The clipboard lost the explicit texture-picker selection marker.");
+        TestAssert.Equal(texture.GetHashCode(), materialRoundTrip.MaterialData.Textures[0].TextureReference!.GetHashCode());
 
         try
         {
@@ -1123,8 +1245,8 @@ public static class UiSmokeTests
         using var editor = CreateRandomisationEditor(reader, includePlayerHairMorph: true);
         var hairGroup = editor.Categories.SelectMany(category => category.SliderGroups)
             .Single(group => group.MorphFeatures.Any(feature => feature.Name == "Afro"));
-        TestAssert.True(hairGroup.RandomiseCommand?.CanExecute(null) == true,
-            "An unlocked Player hair morph group was not eligible for randomisation.");
+        TestAssert.True(hairGroup.RandomiseCommand?.CanExecute(null) == false,
+            "A Player hair morph group could randomise independently while material randomisation was disabled.");
 
         editor.HairMesh.IsRandomisationLocked = true;
         TestAssert.True(hairGroup.RandomiseCommand?.CanExecute(null) == false,
@@ -1215,6 +1337,50 @@ public static class UiSmokeTests
             TestAssert.True(actual == expected,
                 "Cursed Player colour lost either its 2DA base row or its variation.");
         }
+    }
+
+    private static void Player2DaTextureLookupUsesOfficialDefault()
+    {
+        const string path = "BIOG_HMF_HED_PROMorph_R.Textures.HMF_HED_PROLash_Opac_M01";
+        var baseGame = new TextureCatalogOccurrence(
+            "BIOG_HMF_HED_PROMorph_R.pcc", 12, 0, TextureCatalogOrigin.BaseGame,
+            512, 512, "PF_DXT5", "TEXTUREGROUP_Character", false, null);
+        var officialDlc = new TextureCatalogOccurrence(
+            "DLC_CON_HMF_HED_PROMorph_R\\CookedPCConsole\\BIOG_HMF_HED_PROMorph_R.pcc",
+            44, 430, TextureCatalogOrigin.OfficialDlc,
+            512, 512, "PF_DXT5", "TEXTUREGROUP_Character", false, null);
+        var higherMountedMod = new TextureCatalogOccurrence(
+            "DLC_MOD_Override\\CookedPCConsole\\BIOG_HMF_HED_PROMorph_R.pcc",
+            77, 9000, TextureCatalogOrigin.Mod,
+            512, 512, "PF_DXT5", "TEXTUREGROUP_Character", false, null);
+        var candidate = new TextureCatalogCandidate(
+            TextureCatalogGame.LE3, path, officialDlc,
+            [baseGame, officialDlc, higherMountedMod])
+        {
+            IsEligibleOfficialDefault = true
+        };
+
+        var selected = FaceEditorViewModel.ResolvePlayer2DaTextureAsset(
+            [candidate], TextureCatalogGame.LE3, "HMF_HED_PROLash_Opac_M01");
+        TestAssert.True(selected is not null,
+            "The official table object name was discarded because its path had multiple physical occurrences.");
+        TestAssert.Equal(officialDlc.PackagePath, selected!.PackagePath);
+        TestAssert.Equal(path, selected.InstancedPath);
+        TestAssert.True(!selected.IsExplicitTextureDonor,
+            "An automatic 2DA table selection was marked as an explicit user donor.");
+
+        var secondIdentity = candidate with
+        {
+            InstancedPath = "BIOG_HMF_HED_PROMorph_R.Other.HMF_HED_PROLash_Opac_M01",
+            EffectiveOccurrence = baseGame
+        };
+        TestAssert.True(FaceEditorViewModel.ResolvePlayer2DaTextureAsset(
+                [candidate, secondIdentity], TextureCatalogGame.LE3, "HMF_HED_PROLash_Opac_M01") is null,
+            "The 2DA object-name lookup guessed between two distinct full asset identities.");
+        TestAssert.True(FaceEditorViewModel.ResolvePlayer2DaTextureAsset(
+                [candidate with { IsEligibleOfficialDefault = false }],
+                TextureCatalogGame.LE3, "HMF_HED_PROLash_Opac_M01") is null,
+            "The 2DA lookup used an occurrence that was not projected as an eligible official default.");
     }
 
     private static void PlayerHairAndAdditionColoursRandomiseAcrossGames()
@@ -1662,6 +1828,41 @@ public static class UiSmokeTests
             "Excluded morph sliders changed or global Cursed bones stopped randomising.");
     }
 
+    private static void AwaitableRandomisationCompletes()
+    {
+        using var reader = new MorphFacePackageReader();
+        using var editor = CreateRandomisationEditor(reader);
+        editor.CursedMode = true;
+        editor.RandomisationStrength = 100;
+        var before = editor.CreateDraft();
+        editor.RandomiseAsync().GetAwaiter().GetResult();
+        TestAssert.True(!MorphFaceEditorStateComparer.Equals(before, editor.CreateDraft()),
+            "Awaited randomisation completed without publishing its authored edit.");
+        editor.UndoCommand.Execute(null);
+        TestAssert.True(MorphFaceEditorStateComparer.Equals(before, editor.CreateDraft()),
+            "Awaited randomisation did not preserve the editor's aggregate undo behaviour.");
+    }
+
+    private static void AwaitableRandomisationPropagatesFailure()
+    {
+        using var reader = new MorphFacePackageReader();
+        var expected = new InvalidOperationException("QA seed factory failure");
+        using var editor = CreateRandomisationEditor(reader, randomSeedFactory: () => throw expected);
+        editor.CursedMode = true;
+        var before = editor.CreateDraft();
+        try
+        {
+            editor.RandomiseAsync().GetAwaiter().GetResult();
+            throw new Exception("Awaited randomisation swallowed its failure.");
+        }
+        catch (InvalidOperationException actual)
+        {
+            TestAssert.True(ReferenceEquals(actual, expected), "Automation lost the original randomisation error.");
+        }
+        TestAssert.True(MorphFaceEditorStateComparer.Equals(before, editor.CreateDraft()) && !editor.UndoCommand.CanExecute(null),
+            "A failed awaited randomisation committed a partial edit.");
+    }
+
     private static void FailedCursedRandomisationRollsBack()
     {
         using var reader = new MorphFacePackageReader();
@@ -1716,7 +1917,7 @@ public static class UiSmokeTests
     private static MainWindowViewModel CreateMainWindowViewModel(
         MorphFacePackageReader reader,
         StubEditorDialogs? dialogs = null,
-        StubClipboard? clipboard = null,
+        IMorphFaceClipboardService? clipboard = null,
         MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureCatalogService? textureCatalog = null)
     {
         var sceneFactory = new HeadPreviewSceneFactory();
@@ -2319,6 +2520,31 @@ public static class UiSmokeTests
         public void Set(MorphFaceClipboardPayload payload) => throw new NotSupportedException();
         public MorphFaceClipboardPayload Get(MorphFaceClipboardKind expectedKind) => throw new NotSupportedException();
         public bool Contains(MorphFaceClipboardKind expectedKind) => _availableKinds.Contains(expectedKind);
+    }
+
+    private sealed class TrackingClipboard(params MorphFaceClipboardPayload[] initialPayloads) : IMorphFaceClipboardService
+    {
+        private readonly Dictionary<MorphFaceClipboardKind, MorphFaceClipboardPayload> _payloads =
+            initialPayloads.ToDictionary(value => value.Kind);
+
+        public int Writes { get; private set; }
+        public int Reads { get; private set; }
+
+        public void Set(MorphFaceClipboardPayload payload)
+        {
+            Writes++;
+            _payloads[payload.Kind] = payload;
+        }
+
+        public MorphFaceClipboardPayload Get(MorphFaceClipboardKind expectedKind)
+        {
+            Reads++;
+            return _payloads.TryGetValue(expectedKind, out var payload)
+                ? payload
+                : throw new InvalidDataException($"No {expectedKind} payload is available.");
+        }
+
+        public bool Contains(MorphFaceClipboardKind expectedKind) => _payloads.ContainsKey(expectedKind);
     }
 
     private sealed class StubEditorDialogs : IEditorDialogService
@@ -2979,12 +3205,13 @@ public static class UiSmokeTests
         var session = new MorphFaceEditor.Core.Editing.MaterialEditingSession(
             MorphFaceMaterialOverrides.Empty,
             new ResolvedHeadMaterialSet(new Dictionary<string, ResolvedHeadMaterial> { [material.Key] = material }));
-        var candidates = family.Values.Select(path =>
+        var candidates = family.Values.Select((path, index) =>
         {
             var occurrence = new TextureCatalogOccurrence(
-                "installed.pcc", 42, 0, TextureCatalogOrigin.BaseGame, 1, 1,
+                "installed.pcc", 42 + index, 0, TextureCatalogOrigin.BaseGame, 1, 1,
                 "PF_B8G8R8A8", "TEXTUREGROUP_Character", false, null);
-            return new TextureCatalogCandidate(TextureCatalogGame.LE3, path, occurrence, [occurrence]);
+            return new TextureCatalogCandidate(TextureCatalogGame.LE3, path, occurrence, [occurrence])
+            { IsEligibleOfficialDefault = true };
         }).ToArray();
         using var editor = new MaterialEditorViewModel(
             session, new StubColorDialog(), new ImmediateTextureLoader(), packagePath, [],
@@ -3027,12 +3254,13 @@ public static class UiSmokeTests
         var session = new MorphFaceEditor.Core.Editing.MaterialEditingSession(
             MorphFaceMaterialOverrides.Empty,
             new ResolvedHeadMaterialSet(new Dictionary<string, ResolvedHeadMaterial> { [material.Key] = material }));
-        var candidates = family.Values.Select(path =>
+        var candidates = family.Values.Select((path, index) =>
         {
             var occurrence = new TextureCatalogOccurrence(
-                "installed.pcc", 42, 0, TextureCatalogOrigin.BaseGame, 1, 1,
+                "installed.pcc", 42 + index, 0, TextureCatalogOrigin.BaseGame, 1, 1,
                 "PF_B8G8R8A8", "TEXTUREGROUP_Character", false, null);
-            return new TextureCatalogCandidate(TextureCatalogGame.LE3, path, occurrence, [occurrence]);
+            return new TextureCatalogCandidate(TextureCatalogGame.LE3, path, occurrence, [occurrence])
+            { IsEligibleOfficialDefault = true };
         }).ToArray();
         using var editor = new MaterialEditorViewModel(
             session, new StubColorDialog(), new ImmediateTextureLoader("GBL_ARM_ALL_Black"), packagePath, [],
@@ -3091,6 +3319,22 @@ public static class UiSmokeTests
         }
     }
 
+    private sealed class CountingTextureCatalogCandidates(
+        IReadOnlyList<TextureCatalogCandidate> values) : IReadOnlyList<TextureCatalogCandidate>
+    {
+        public int EnumerationCount { get; private set; }
+        public int Count => values.Count;
+        public TextureCatalogCandidate this[int index] => values[index];
+
+        public IEnumerator<TextureCatalogCandidate> GetEnumerator()
+        {
+            EnumerationCount++;
+            return values.GetEnumerator();
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
     private static void MaterialEditorHidesSelectionColor()
     {
         var identity = TestFixtures.CreateIdentity("SelectionColorMaterial", "MaterialInstanceConstant");
@@ -3125,6 +3369,243 @@ public static class UiSmokeTests
         TestAssert.True(MaterialEditorViewModel.IsEngineEditorOnlyParameter("Selection Color") &&
                         MaterialEditorViewModel.IsEngineEditorOnlyParameter("Selection_Color"),
             "Selection Color spelling variants were not recognized as engine-only properties.");
+    }
+
+    private static void MaterialTextureDetailsUseCanonicalPath()
+    {
+        var baseline = MaterialTestFixtures.CreateSession();
+        var liveTexture = baseline.GetPreviewTexture("HED_Diff")!;
+        var liveIdentity = liveTexture.Source;
+
+        MaterialTextureEditorViewModel CreateEditor(string path)
+        {
+            var overrides = new MorphFaceMaterialOverrides(null, [], [],
+            [new TextureMaterialOverride("HED_Diff", new AssetIdentity(
+                "opened.pcc", path, 91, "Texture2D", IsImport: true))]);
+            var session = new MaterialEditingSession(overrides, baseline.Materials);
+            return new MaterialTextureEditorViewModel(
+                session,
+                HumanMaterialProfiles.Describe("HED_Diff", MaterialParameterKind.Texture, HeadMaterialFamily.Skin),
+                new ImmediateTextureLoader(),
+                "opened.pcc",
+                [],
+                _ => { });
+        }
+
+        using var resolved = CreateEditor(liveIdentity.InstancedPath);
+        TestAssert.True(!resolved.Details.Contains("Unresolved reference retained", StringComparison.Ordinal),
+            "A live texture with the same canonical instanced path was marked unresolved only because its physical source differed.");
+
+        using var unresolved = CreateEditor("BIOG_Missing.Textures.Missing_Diff");
+        TestAssert.True(unresolved.Details.Contains("Unresolved reference retained · showing the material default",
+                StringComparison.Ordinal),
+            "A missing authored path stopped reporting that the material default is being previewed.");
+    }
+
+    private static void TexturePickerDeduplicatesPhysicalExports()
+    {
+        var session = MaterialTestFixtures.CreateSession();
+        const string path = "BIOG_MFE_Test.Textures.Shared_Diff";
+        var local = new PackageAssetListItem(new AssetIdentity("opened.pcc", path, 12, "Texture2D"));
+        var localOnly = new PackageAssetListItem(new AssetIdentity(
+            "opened.pcc", "LocalOnly.Textures.Local_Diff", 13, "Texture2D"));
+        var official = new TextureCatalogOccurrence(
+            "BIOG_MFE_Test.pcc", 41, 100, TextureCatalogOrigin.BaseGame, 128, 128,
+            "PF_DXT1", "TEXTUREGROUP_Character", false, null);
+        // The same physical export can arrive through both the occurrence list and
+        // effective default with slightly different registry metadata.
+        var duplicate = official with { MountPriority = 99 };
+        var mod = official with
+        {
+            PackagePath = "DLC_MOD_Test\\CookedPCConsole\\BIOG_MFE_Test.pcc",
+            ExportUIndex = 42,
+            Origin = TextureCatalogOrigin.Mod,
+            MountPriority = 900
+        };
+        var manual = new TextureCatalogOccurrence(
+            "C:\\Manual\\ManualTexture.pcc", 88, 0, TextureCatalogOrigin.Manual, 128, 128,
+            "PF_DXT1", "TEXTUREGROUP_Character", false, null);
+        var manualOnly = new TextureCatalogCandidate(TextureCatalogGame.LE3,
+            "ManualOnly.Textures.Manual_Diff", manual, [manual]);
+        var candidate = new TextureCatalogCandidate(TextureCatalogGame.LE3, path, official,
+            [duplicate, mod]) { IsEligibleOfficialDefault = true };
+        using var editor = new MaterialTextureEditorViewModel(
+            session,
+            HumanMaterialProfiles.Describe("HED_Diff", MaterialParameterKind.Texture, HeadMaterialFamily.Skin),
+            new ImmediateTextureLoader(),
+            "opened.pcc",
+            [local, localOnly],
+            _ => { },
+            [candidate, manualOnly],
+            isRegistryAvailable: true);
+
+        var defaultChoices = editor.Candidates.Where(option => option.InstancedPath.Equals(
+            path, StringComparison.OrdinalIgnoreCase)).ToArray();
+        TestAssert.True(defaultChoices.Length == 1,
+            "The default picker should collapse a path to its eligible official occurrence.");
+        TestAssert.True(defaultChoices[0].RegistryCandidate?.EffectiveOccurrence.PackagePath == official.PackagePath,
+            "The collapsed row did not use the eligible official donor.");
+        TestAssert.True(editor.Candidates.Any(option => option.InstancedPath == localOnly.Identity.InstancedPath),
+            "A unique local-only texture disappeared from the default picker.");
+        TestAssert.True(editor.Candidates.Any(option => option.InstancedPath == manualOnly.InstancedPath),
+            "A unique manual texture disappeared from the default picker.");
+
+        editor.ShowAllPhysicalSources = true;
+        var choices = editor.Candidates.Where(option => option.InstancedPath.Equals(
+            path, StringComparison.OrdinalIgnoreCase)).ToArray();
+        TestAssert.True(choices.Length == 3,
+            "The expanded picker should show the local export, one official export, and one distinct mod export.");
+        TestAssert.True(choices.Any(option => option.Asset?.Identity == local.Identity),
+            "The local physical texture choice disappeared.");
+        TestAssert.True(choices.Count(option => option.RegistryCandidate?.EffectiveOccurrence.PackagePath == official.PackagePath) == 1,
+            "The same official package/UIndex was shown twice.");
+        TestAssert.True(choices.Any(option => option.RegistryCandidate?.EffectiveOccurrence.PackagePath == mod.PackagePath),
+            "The distinct mod physical texture choice disappeared.");
+
+        var modOption = choices.Single(option => option.RegistryCandidate?.EffectiveOccurrence.PackagePath == mod.PackagePath);
+        editor.CommitTexture(modOption);
+        TestAssert.True(session.GetTextureReference("HED_Diff")?.IsExplicitTextureDonor == true,
+            "Committing a physical source did not record explicit picker intent.");
+        editor.ShowAllPhysicalSources = false;
+        TestAssert.True(editor.SelectedTexture?.RegistryCandidate?.EffectiveOccurrence.PackagePath == mod.PackagePath,
+            "Collapsing physical sources discarded the user's explicitly selected donor.");
+    }
+
+    private static void TextureLookupsReuseOfficialDonorIndex()
+    {
+        var session = MaterialTestFixtures.CreateSession();
+        const string path = "BIOG_MFE_Test.Textures.Indexed_Diff";
+        var occurrence = new TextureCatalogOccurrence(
+            "BIOG_MFE_Test.pcc", 42, 10, TextureCatalogOrigin.BaseGame, 128, 128,
+            "PF_DXT1", "TEXTUREGROUP_Character", false, null);
+        var candidate = new TextureCatalogCandidate(TextureCatalogGame.LE3, path, occurrence, [occurrence])
+        {
+            IsEligibleOfficialDefault = true
+        };
+        var registry = new CountingTextureCatalogCandidates([candidate]);
+        using var editor = new MaterialTextureEditorViewModel(
+            session,
+            HumanMaterialProfiles.Describe("HED_Diff", MaterialParameterKind.Texture, HeadMaterialFamily.Skin),
+            new ImmediateTextureLoader(),
+            session.GetPreviewTexture("HED_Diff")!.Source.PackagePath,
+            [],
+            _ => { },
+            registry,
+            isRegistryAvailable: true);
+        var enumerationsAfterConstruction = registry.EnumerationCount;
+
+        for (var index = 0; index < 8; index++)
+        {
+            _ = editor.ResolveInstancedPathAsync(path).GetAwaiter().GetResult();
+            _ = editor.ResolveExactInstancedPathAsync(path).GetAwaiter().GetResult();
+        }
+
+        TestAssert.True(enumerationsAfterConstruction == registry.EnumerationCount,
+            "Repeated path lookups re-enumerated and regrouped the full registry instead of using the cached official index.");
+    }
+
+    private static void LargeTextureRegistryAvailability()
+    {
+        const int uniquePaths = 1600;
+        const int copiesPerPath = 40;
+        var registry = Enumerable.Range(0, uniquePaths).Select(index =>
+        {
+            var official = new TextureCatalogOccurrence("BIOG_MFE_Performance.pcc", index + 1, 0,
+                TextureCatalogOrigin.BaseGame, 128, 128, "PF_DXT1", "Character", false, null);
+            var copies = Enumerable.Range(0, copiesPerPath - 1).Select(copy => official with
+            {
+                PackagePath = $"DLC_MOD_Performance{copy:D2}\\CookedPCConsole\\Copy.pcc",
+                Origin = TextureCatalogOrigin.Mod,
+                MountPriority = copy + 100
+            }).Prepend(official).ToArray();
+            return new TextureCatalogCandidate(TextureCatalogGame.LE3,
+                $"BIOG_MFE_Performance.Textures.Texture{index:D4}_Diff", official, copies)
+                { IsEligibleOfficialDefault = true };
+        }).ToArray();
+        var session = MaterialTestFixtures.CreateSession();
+        var loader = new AvailabilityOnlyTextureLoader();
+        var timer = System.Diagnostics.Stopwatch.StartNew();
+        using var editor = new MaterialTextureEditorViewModel(session,
+            HumanMaterialProfiles.Describe("HED_Diff", MaterialParameterKind.Texture, HeadMaterialFamily.Skin),
+            loader, "opened.pcc", [], _ => { }, registry, isRegistryAvailable: true);
+        var constructionMs = timer.ElapsedMilliseconds;
+        timer.Restart();
+        for (var index = 0; index < 400; index++)
+        {
+            TestAssert.True(editor.CanResolveInstancedPath($"BIOG_MFE_Performance.Textures.Texture{index:D4}_Diff"),
+                "An official texture disappeared from randomisation availability.");
+            TestAssert.True(!editor.CanResolveInstancedPath($"BIOG_Missing.Textures.Missing{index:D4}_Diff"),
+                "A missing full texture path became available.");
+        }
+        timer.Stop();
+        Console.WriteLine($"Texture availability: {uniquePaths * copiesPerPath:N0} physical sources; " +
+            $"construction {constructionMs} ms; 800 present/missing lookups {timer.ElapsedMilliseconds} ms.");
+        TestAssert.True(timer.Elapsed < TimeSpan.FromSeconds(1),
+            "Texture availability regressed to repeated full-list scans.");
+        editor.ShowAllPhysicalSources = true;
+        timer.Restart();
+        for (var index = 0; index < 400; index++)
+        {
+            TestAssert.True(editor.CanResolveInstancedPath($"BIOG_MFE_Performance.Textures.Texture{index:D4}_Diff"),
+                "Expanding physical sources lost an official texture.");
+            TestAssert.True(!editor.CanResolveInstancedPath($"BIOG_Missing.Textures.Missing{index:D4}_Diff"),
+                "Expanding physical sources admitted a missing texture.");
+        }
+        timer.Stop();
+        Console.WriteLine($"Expanded physical sources: 800 present/missing lookups {timer.ElapsedMilliseconds} ms.");
+        TestAssert.True(timer.Elapsed < TimeSpan.FromSeconds(1),
+            "Revealing physical sources reintroduced full-list scans into randomisation.");
+        TestAssert.Equal(0, loader.Calls);
+    }
+
+    private static void InstalledTextureAvailabilityPerformance()
+    {
+        var store = new MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureRegistryStore(
+            MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureRegistryPaths.CreateDefault());
+        var snapshot = store.ReadWithStatus(MorphFaceGame.LE3).Snapshot
+            ?? throw new TestSkippedException("No installed LE3 registry is available.");
+        var officialPackages = snapshot.OfficialPackagePaths.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var candidates = snapshot.Candidates.Select(candidate => candidate with
+        {
+            IsEligibleOfficialDefault = candidate.EffectiveOccurrence.Origin is
+                TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc &&
+                officialPackages.Contains(Path.GetFullPath(candidate.EffectiveOccurrence.PackagePath))
+        }).ToArray();
+        var session = MaterialTestFixtures.CreateSession();
+        var loader = new AvailabilityOnlyTextureLoader();
+        var timer = System.Diagnostics.Stopwatch.StartNew();
+        using var editor = new MaterialTextureEditorViewModel(session,
+            HumanMaterialProfiles.Describe("HED_Diff", MaterialParameterKind.Texture, HeadMaterialFamily.Skin),
+            loader, "opened.pcc", [], _ => { }, candidates, isRegistryAvailable: true);
+        var constructionMs = timer.ElapsedMilliseconds;
+        var catalog = MorphRandomisationCatalog.LoadEmbedded();
+        var queries = 0;
+        var families = 0;
+        timer.Restart();
+        foreach (var profile in catalog.Corpus.MaterialProfiles.Keys.Where(key => key.StartsWith("le3-")))
+            families += catalog.ProjectInstalledMaterialDonors(profile, (_, path) =>
+                {
+                    queries++;
+                    return editor.CanResolveInstancedPath(path);
+                }).Sum(donor => donor.MaterialTextureFamilies.Count);
+        timer.Stop();
+        Console.WriteLine($"Installed LE3: {candidates.Length:N0} paths / " +
+            $"{candidates.Sum(candidate => candidate.Occurrences.Count):N0} physical occurrences; " +
+            $"editor construction {constructionMs} ms; {queries:N0} corpus availability queries " +
+            $"and {families:N0} retained families in {timer.ElapsedMilliseconds} ms.");
+        TestAssert.True(families > 0, "The installed projection discarded every available texture family.");
+        TestAssert.Equal(0, loader.Calls);
+    }
+
+    private sealed class AvailabilityOnlyTextureLoader : ITextureReferenceLoader
+    {
+        public int Calls { get; private set; }
+        public Task<DecodedTextureAsset> LoadTextureAsync(string packagePath, string texturePath,
+            MaterialParameterDefinition definition, CancellationToken cancellationToken = default)
+        {
+            Calls++;
+            throw new InvalidOperationException("Availability checks must not open texture donor packages.");
+        }
     }
 
     private static void HumanMaleProfileOrganizesFeatures()

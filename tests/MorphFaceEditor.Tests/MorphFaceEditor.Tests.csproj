@@ -6,6 +6,14 @@
     <RootNamespace>MorphFaceEditor.Tests</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../MorphFaceEditor.TestData/ConversionMatrix.cs" Link="Fixtures/ConversionMatrix.cs" />
+    <Compile Include="../../tools/MorphFaceEditor.QA/QaCoverageSelection.cs" Link="Qa/QaCoverageSelection.cs" />
+    <Compile Include="../../tools/MorphFaceEditor.QA/QaRandomisationBatch.cs" Link="Qa/QaRandomisationBatch.cs" />
+    <Compile Include="../../tools/MorphFaceEditor.QA/QaPerformance.cs" Link="Qa/QaPerformance.cs" />
+    <Compile Include="../../tools/MorphFaceEditor.QA/QaReport.cs" Link="Qa/QaReport.cs" />
+    <Compile Include="../../tools/MorphFaceEditor.QA/QaDisplay.cs" Link="Qa/QaDisplay.cs" />
+    <Compile Include="../../tools/MorphFaceEditor.QA/QaNpcEyeGraphCheck.cs" Link="Qa/QaNpcEyeGraphCheck.cs" />
+    <Compile Include="../../tools/MorphFaceEditor.QA/QaTextureIdentity.cs" Link="Qa/QaTextureIdentity.cs" />
     <ProjectReference Include="..\..\tools\MorphFaceEditor.DataCompiler\MorphFaceEditor.DataCompiler.csproj" />
     <ProjectReference Include="..\..\src\MorphFaceEditor.Core\MorphFaceEditor.Core.csproj" />
     <ProjectReference Include="..\..\src\MorphFaceEditor.Rendering\MorphFaceEditor.Rendering.csproj" />

@@ -15,6 +15,7 @@
         Drop="OnFileDrop"
         WindowStartupLocation="CenterScreen">
     <Window.InputBindings>
+        <KeyBinding Key="E" Modifiers="Control" Command="{Binding NewPlayerMorphCommand}" />
         <KeyBinding Key="O" Modifiers="Control" Command="{Binding OpenPackageCommand}" />
         <KeyBinding Key="S" Modifiers="Control" Command="{Binding SaveCommand}" />
         <KeyBinding Key="W" Modifiers="Control" Command="{Binding CloseWorkspaceCommand}" />
@@ -193,6 +194,7 @@
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                     <Menu VerticalAlignment="Center">
                         <MenuItem Header="_File" Height="30" MinWidth="54">
+                            <MenuItem Header="New Player Morph" Command="{Binding NewPlayerMorphCommand}" InputGestureText="Ctrl+E" />
                             <MenuItem Header="Open Package…" Command="{Binding OpenPackageCommand}" InputGestureText="Ctrl+O" />
                             <MenuItem Header="Save Package" Command="{Binding SaveCommand}" InputGestureText="Ctrl+S" />
                             <Separator />

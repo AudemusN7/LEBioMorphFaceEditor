@@ -7,10 +7,18 @@ namespace MorphFaceEditor.Views;
 /// <summary>Selects the installed game assets used to construct a standalone player workspace.</summary>
 public partial class StandaloneImportGameWindow : Window
 {
-    public StandaloneImportGameWindow()
+    public StandaloneImportGameWindow(bool newPlayerMode = false)
     {
         InitializeComponent();
         DarkTitleBar.Apply(this);
+        if (newPlayerMode)
+        {
+            Title = "New Player Morph";
+            Height = 300;
+            PromptText.Text = "Choose the game and player for your new morph.";
+            SexPanel.Visibility = Visibility.Visible;
+            ContinueButton.Content = "Continue";
+        }
         GameBox.ItemsSource = new[]
         {
             new GameChoice(MorphFaceGame.LE1, "LE1"),
@@ -19,6 +27,8 @@ public partial class StandaloneImportGameWindow : Window
         };
         GameBox.SelectedIndex = 0;
     }
+
+    public StandalonePlayerSex SelectedSex => SexBox.SelectedIndex == 1 ? StandalonePlayerSex.Female : StandalonePlayerSex.Male;
 
     public MorphFaceGame? SelectedGame { get; private set; }
 

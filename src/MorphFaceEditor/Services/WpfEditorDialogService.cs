@@ -100,6 +100,13 @@ public sealed class WpfEditorDialogService : IEditorDialogService
         return dialog.ShowDialog() == true ? dialog.FileName : null;
     }
 
+    public NewPlayerMorphChoice? ChooseNewPlayerMorph()
+    {
+        var window = new StandaloneImportGameWindow(newPlayerMode: true) { Owner = Application.Current.MainWindow };
+        return window.ShowDialog() == true && window.SelectedGame is { } game
+            ? new NewPlayerMorphChoice(game, window.SelectedSex) : null;
+    }
+
     public MorphFaceGame? ChooseStandaloneImportGame()
     {
         var window = new StandaloneImportGameWindow
@@ -121,6 +128,13 @@ public sealed class WpfEditorDialogService : IEditorDialogService
         return window.ShowDialog() == true && window.Destination is { } destination
             ? new RonImportDestinationChoice(destination, window.SelectedNpcArchetypeKey)
             : null;
+    }
+
+    public string? ChooseNewPlayerMorphName(string suggestedName, IReadOnlyCollection<string> existingObjectNames)
+    {
+        var window = new CloneMorphWindow(suggestedName, existingObjectNames, importMode: true, newPlayerMode: true)
+        { Owner = Application.Current.MainWindow };
+        return window.ShowDialog() == true ? window.ObjectName : null;
     }
 
     public string? ChooseStandaloneMorphName(

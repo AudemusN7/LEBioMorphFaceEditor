@@ -15,10 +15,13 @@ public interface IEditorDialogService
     string? ChooseCloneName(string suggestedName, IReadOnlyCollection<string> existingObjectNames);
     string? ChooseMorphImportFile(string? initialDirectory = null);
     MorphFaceGame? ChooseStandaloneImportGame();
+    NewPlayerMorphChoice? ChooseNewPlayerMorph() => null;
     RonImportDestinationChoice? ChooseRonImportDestination(
         MorphFaceGame targetGame,
         IReadOnlyList<RonNpcArchetypeOption> archetypes,
         bool allowPlayer);
+    string? ChooseNewPlayerMorphName(string suggestedName, IReadOnlyCollection<string> existingObjectNames) =>
+        ChooseStandaloneMorphName(suggestedName, existingObjectNames);
     string? ChooseStandaloneMorphName(string suggestedName, IReadOnlyCollection<string> existingObjectNames);
     string? ChooseRonExportFile(string suggestedFileName, string? initialDirectory = null);
     string? ChooseMaterialImportFile(bool tse, string? initialDirectory = null) => ChooseMorphImportFile(initialDirectory);
@@ -70,3 +73,5 @@ public enum UnsavedChangesScope
     DetachedMaterials,
     Package
 }
+
+public sealed record NewPlayerMorphChoice(MorphFaceGame Game, StandalonePlayerSex Sex);

@@ -120,6 +120,43 @@ public sealed partial class MainWindowViewModel
             player);
     }
 
+    private async Task NewPlayerMorphAsync()
+    {
+        var choice = _dialogs.ChooseNewPlayerMorph();
+        if (choice is null) return;
+        var directory = Path.Combine(Path.GetTempPath(), "MFE-NewPlayer-" + Guid.NewGuid().ToString("N"));
+        var sourcePath = Path.Combine(directory, "PlayerMorph.ron");
+        IsBusy = true;
+        ErrorMessage = null;
+        Status = $"Preparing {choice.Game} player defaults...";
+        try
+        {
+            Directory.CreateDirectory(directory);
+            await Task.Run(() => _packageContextService.ExportRon(
+                StandalonePlayerMorphImportService.ResolveInstalledSeed(choice.Game),
+                StandalonePlayerMorphImportService.ResolvePlayerTemplate(choice.Game, choice.Sex), sourcePath));
+            IsBusy = false;
+            await ImportStandaloneMorphAsync(sourcePath, choice.Game, newPlayerMode: true);
+            if (_standaloneImportPath == sourcePath)
+            {
+                _standaloneImportPath = null;
+                if (ErrorMessage is null) Status = $"Created {LoadedFacePath} from {choice.Game} player defaults.";
+            }
+        }
+        catch (Exception exception)
+        {
+            AppLog.Error("New player morph creation failed.", exception);
+            ErrorMessage = $"The player morph could not be created: {exception.Message}";
+            Status = "New player morph failed; the current workspace was not changed.";
+        }
+        finally
+        {
+            IsBusy = false;
+            if (File.Exists(sourcePath)) File.Delete(sourcePath);
+            if (Directory.Exists(directory)) Directory.Delete(directory);
+        }
+    }
+
     private async Task ImportMorphAsync()
     {
         var game = _dialogs.ChooseStandaloneImportGame();
@@ -419,7 +456,7 @@ public sealed partial class MainWindowViewModel
         }
     }
 
-    private async Task ImportStandaloneMorphAsync(string sourcePath, MorphFaceGame game)
+    private async Task ImportStandaloneMorphAsync(string sourcePath, MorphFaceGame game, bool newPlayerMode = false)
     {
         var extension = Path.GetExtension(sourcePath).ToLowerInvariant();
         var isRon = extension == ".ron";
@@ -476,7 +513,9 @@ public sealed partial class MainWindowViewModel
         var suggestedName = SuggestImportName(
             SanitizeObjectName(Path.GetFileNameWithoutExtension(sourcePath)),
             existingNames);
-        var objectName = _dialogs.ChooseStandaloneMorphName(suggestedName, existingNames);
+        var objectName = newPlayerMode
+            ? _dialogs.ChooseNewPlayerMorphName(suggestedName, existingNames)
+            : _dialogs.ChooseStandaloneMorphName(suggestedName, existingNames);
         if (objectName is null)
         {
             return;

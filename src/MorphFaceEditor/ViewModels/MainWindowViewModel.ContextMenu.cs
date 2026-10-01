@@ -56,6 +56,7 @@ public sealed partial class MainWindowViewModel
         _copyMaterialDataCommand.RaiseCanExecuteChanged();
         _pasteMaterialDataCommand.RaiseCanExecuteChanged();
         _importMorphCommand.RaiseCanExecuteChanged();
+        _newPlayerMorphCommand.RaiseCanExecuteChanged();
         _exportMorphPskCommand.RaiseCanExecuteChanged();
         _exportMorphGltfCommand.RaiseCanExecuteChanged();
         _exportMorphMd5Command.RaiseCanExecuteChanged();

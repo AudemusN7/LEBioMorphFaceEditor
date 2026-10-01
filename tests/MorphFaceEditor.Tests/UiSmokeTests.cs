@@ -198,6 +198,11 @@ public static class UiSmokeTests
             "An empty editor rejected a dropped player RON before game selection.");
         TestAssert.True(!viewModel.SaveCommand.CanExecute(null),
             "An empty editor exposed Save PCC.");
+        TestAssert.True(viewModel.NewPlayerMorphCommand.CanExecute(null),
+            "New Player Morph requires an open package.");
+        viewModel.NewPlayerMorphCommand.Execute(null);
+        TestAssert.True(viewModel.PackagePath is null && viewModel.Editor is null,
+            "Cancelling new player setup changed the empty workspace.");
         viewModel.ImportMorphCommand.Execute(null);
         TestAssert.Equal(1, dialogs.StandaloneGameChoiceCount);
         TestAssert.Equal(0, dialogs.MorphImportFileChoiceCount);

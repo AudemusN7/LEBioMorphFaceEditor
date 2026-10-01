@@ -35,6 +35,8 @@ public static class UiSmokeTests
         new("editor file drops recognise every supported format", EditorFileDropsRecogniseSupportedFormats),
         new("recent files persist, deduplicate, and cap at ten", RecentFilesPersistDeduplicateAndCap),
         new("startup welcome preference persists", StartupWelcomePreferencePersists),
+        new("application settings: diagnostic PCC captures pending edits without modifying live data", DiagnosticPccCapturesPendingEdits),
+        new("application settings: detached diagnostics include loaded geometry and current material assignments", DiagnosticDetachedMeshIncludesState),
         new("standalone morph import is available before opening a PCC", StandaloneImportIsAvailableWithoutPackage),
         new("unrecognised mesh import publishes a detached preview workspace", UnrecognisedMeshPublishesDetachedWorkspace),
         new("custom mesh import ignores the selected PCC morph topology", () => UnrecognisedMeshPublishesDetachedWorkspace(openPcc: true)),
@@ -185,6 +187,102 @@ public static class UiSmokeTests
             if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true);
         }
     }
+
+    private static void DiagnosticPccCapturesPendingEdits() => RunWithDispatcher(async () =>
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"MFE-DiagnosticPcc-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            using var reader = new MorphFacePackageReader();
+            using var viewModel = CreateMainWindowViewModel(reader);
+            var source = Path.GetFullPath(Path.Combine("tests", "Global Morphs", "LE1 GlobalMorphs.pcc"));
+            var sourceBefore = PackageFingerprint.Capture(source);
+            await viewModel.OpenDroppedFileAsync(source);
+            var editor = viewModel.Editor ?? throw new Exception($"Fixture did not load: {viewModel.ErrorMessage}");
+            var scalar = editor.Material.Scalars.First();
+            scalar.Value += 0.125f;
+            TestAssert.True(editor.IsDirty, "The pending edit was not dirty.");
+            var draft = editor.CreateDraft();
+            var workingPath = draft.Source.PackagePath;
+            var workingBefore = PackageFingerprint.Capture(workingPath);
+            var log = Path.Combine(root, "latest.log");
+            File.WriteAllText(log, "fixture log");
+            var service = new DiagnosticArchiveService(new ApplicationDataPaths(root), log);
+            var result = await viewModel.GenerateDiagnosticsAsync(Path.Combine(root, "report.zip"), service);
+            TestAssert.Equal(0, result.Warnings.Count);
+            TestAssert.Equal(sourceBefore, PackageFingerprint.Capture(source));
+            TestAssert.Equal(workingBefore, PackageFingerprint.Capture(workingPath));
+            TestAssert.True(ReferenceEquals(editor, viewModel.Editor) && editor.IsDirty && !viewModel.IsBusy,
+                "Generating diagnostics replaced or cleaned the live editor, or left it busy.");
+            var extraction = Path.Combine(root, "Extracted");
+            System.IO.Compression.ZipFile.ExtractToDirectory(result.Path, extraction);
+            var snapshotPath = Directory.GetFiles(Path.Combine(extraction, "Workspace"), "*.pcc").Single();
+            var captured = reader.Load(snapshotPath, draft.Source.InstancedPath).Document;
+            var expectedScalar = draft.MaterialOverrides.Scalars.Single(value => value.Name == scalar.Name);
+            var capturedScalar = captured.MaterialOverrides.Scalars.Single(value => value.Name == scalar.Name);
+            TestAssert.Equal(expectedScalar.Value, capturedScalar.Value);
+
+            // Reproduce a changed working file: reports must still export when the ordinary save gate rejects it.
+            using (var stream = new FileStream(workingPath, FileMode.Append)) stream.WriteByte(0);
+            var changedWorking = PackageFingerprint.Capture(workingPath);
+            var fallback = await viewModel.GenerateDiagnosticsAsync(Path.Combine(root, "fallback.zip"), service);
+            TestAssert.Equal(1, fallback.Warnings.Count);
+            TestAssert.Equal(changedWorking, PackageFingerprint.Capture(workingPath));
+            TestAssert.Equal(sourceBefore, PackageFingerprint.Capture(source));
+            using var zip = System.IO.Compression.ZipFile.OpenRead(fallback.Path);
+            var pendingEntry = zip.GetEntry("Workspace/PendingEdits.json")
+                ?? throw new Exception("Failed save omitted pending edits from its report.");
+            using var pendingStream = pendingEntry.Open();
+            var pending = System.Text.Json.JsonSerializer.Deserialize<MorphFaceDocument>(pendingStream,
+                new System.Text.Json.JsonSerializerOptions { IncludeFields = true })!;
+            TestAssert.Equal(expectedScalar.Value, pending.MaterialOverrides.Scalars.Single(value => value.Name == scalar.Name).Value);
+            TestAssert.True(editor.IsDirty && !viewModel.IsBusy, "Fallback report cleaned the editor or left it busy.");
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    });
+
+    private static void DiagnosticDetachedMeshIncludesState() => RunWithDispatcher(async () =>
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"MFE-DiagnosticMesh-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var source = Path.Combine(root, "triangle.gltf");
+            File.WriteAllBytes(source, CreateMinimalTriangleGltf(binary: false));
+            using var reader = new MorphFacePackageReader();
+            using var viewModel = CreateMainWindowViewModel(reader, new StubEditorDialogs
+            {
+                StandaloneGameChoiceResult = MorphFaceGame.LE2,
+                StandaloneNameChoiceResult = "DiagnosticMesh"
+            });
+            await viewModel.OpenDroppedFileAsync(source);
+            var editor = viewModel.Editor ?? throw new Exception($"Mesh did not load: {viewModel.ErrorMessage}");
+            var template = MaterialTestFixtures.CreateSession().Materials.Materials.Values.First();
+            editor.CustomMaterials!.Assign(0, new CustomMaterialAssignmentOption(
+                "human-test", "Human test", "le2-human-male", "head", HeadMaterialFamily.Skin, template)
+                { ParameterScopeKey = "human", ParameterScopeLabel = "Human" });
+            var log = Path.Combine(root, "latest.log");
+            File.WriteAllText(log, "fixture log");
+            // Even when an input has disappeared, the in-memory mesh remains available for diagnostics.
+            File.Delete(source);
+            var result = await viewModel.GenerateDiagnosticsAsync(Path.Combine(root, "report.zip"),
+                new DiagnosticArchiveService(new ApplicationDataPaths(root), log));
+            TestAssert.Equal(1, result.Warnings.Count);
+            using var zip = System.IO.Compression.ZipFile.OpenRead(result.Path);
+            using var meshStream = zip.GetEntry("Workspace/MeshWorkspace.json")!.Open();
+            using var meshState = System.Text.Json.JsonDocument.Parse(meshStream);
+            TestAssert.Equal(3, meshState.RootElement.GetProperty("Source").GetProperty("Positions").GetArrayLength());
+            TestAssert.True(meshState.RootElement.GetProperty("PendingEdits").ValueKind != System.Text.Json.JsonValueKind.Null,
+                "Pending mesh edits were omitted.");
+            using var materialsReader = new StreamReader(zip.GetEntry("Workspace/Workspace.materials.ron")!.Open());
+            var materials = MaterialRonCodec.ReadMfe(materialsReader.ReadToEnd());
+            TestAssert.Equal("human-test", materials.Slots.Single().MaterialId);
+            TestAssert.True(ReferenceEquals(editor, viewModel.Editor) && editor.IsDirty && !viewModel.IsBusy,
+                "Detached diagnostics replaced or cleaned the live editor, or left it busy.");
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    });
 
     private static void StandaloneImportIsAvailableWithoutPackage()
     {
@@ -2826,6 +2924,21 @@ public static class UiSmokeTests
                 using var reader = new MorphFacePackageReader();
                 using var viewModel = CreateMainWindowViewModel(reader);
                 var mainWindow = new MainWindow(viewModel);
+                var settings = new SettingsWindow(viewModel);
+                var languages = (ComboBox)settings.FindName("LanguageSelector");
+                var themes = (ComboBox)settings.FindName("ThemeSelector");
+                TestAssert.Equal(10, languages.Items.Count);
+                TestAssert.Equal(2, themes.Items.Count);
+                TestAssert.True(!languages.IsEnabled && !themes.IsEnabled,
+                    "Language/theme placeholders became active before their checkpoints.");
+                TestAssert.True(((Button)settings.FindName("GenerateLogsButton")).IsEnabled &&
+                    ((Button)settings.FindName("ClearDataButton")).IsEnabled,
+                    "Checkpoint-one Settings actions are disabled.");
+                var settingsMenu = (MenuItem)mainWindow.FindName("SettingsMenuItem");
+                var fileMenu = (MenuItem)settingsMenu.Parent;
+                TestAssert.True(Equals(((MenuItem)fileMenu.Items[fileMenu.Items.IndexOf(settingsMenu) + 1]).Header, "Exit"),
+                    "Settings is not immediately above Exit.");
+                settings.Close();
                 mainWindow.ShowInTaskbar = false;
                 mainWindow.Opacity = 0;
                 mainWindow.Show();

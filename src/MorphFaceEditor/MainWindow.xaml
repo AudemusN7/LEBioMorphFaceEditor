@@ -209,6 +209,17 @@
                             </MenuItem>
                             <Separator />
                             <MenuItem Header="Close" Command="{Binding CloseWorkspaceCommand}" InputGestureText="Ctrl+W" />
+                            <MenuItem x:Name="SettingsMenuItem" Header="Settings" Click="OnSettingsClick">
+                                <MenuItem.Style>
+                                    <Style TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsBusy}" Value="True">
+                                                <Setter Property="IsEnabled" Value="False" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </MenuItem.Style>
+                            </MenuItem>
                             <MenuItem Header="Exit" Command="{Binding ExitCommand}" />
                         </MenuItem>
                     </Menu>

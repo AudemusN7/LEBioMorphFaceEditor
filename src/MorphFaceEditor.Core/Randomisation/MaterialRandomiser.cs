@@ -304,20 +304,17 @@ public static class MaterialRandomiser
                 .ToArray();
             if (candidates.Length == 0) continue;
 
+            // The seed owns numeric donor values, but compatibleDonors owns
+            // target-game texture eligibility. Its copy may have removed an
+            // unavailable member or an entire incompatible family. Never put
+            // the raw corpus family back into a projected candidate set.
+            var seedFamily = compatibleDonors.FirstOrDefault(value =>
+                    value.Id.Equals(donor.Id, StringComparison.OrdinalIgnoreCase))?
+                .MaterialTextureFamilies.GetValueOrDefault(family);
             IReadOnlyDictionary<string, string>? selected = null;
-            if (strength == 0 && donor.MaterialTextureFamilies.TryGetValue(family, out var seedFamily) &&
-                !IsBlacklistedTextureFamily(profileKey, family, seedFamily) &&
-                excludedTextureSignatures?.Contains(TextureSignature(seedFamily)) != true)
-            {
-                selected = seedFamily;
-            }
-            else if (!ShouldBalanceTextureFamily(family) &&
-                     donor.MaterialTextureFamilies.TryGetValue(family, out seedFamily) &&
-                     !IsBlacklistedTextureFamily(profileKey, family, seedFamily) &&
-                     excludedTextureSignatures?.Contains(TextureSignature(seedFamily)) != true)
-            {
-                selected = seedFamily;
-            }
+            if (seedFamily is not null && (strength == 0 || !ShouldBalanceTextureFamily(family)))
+                selected = candidates.FirstOrDefault(value =>
+                    TextureSignature(value).Equals(TextureSignature(seedFamily), StringComparison.OrdinalIgnoreCase));
             selected ??= candidates[random.NextIndex(candidates.Length)];
             result[family] = selected;
         }

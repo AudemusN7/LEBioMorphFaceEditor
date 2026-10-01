@@ -184,7 +184,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _cloneMorphCommand = new AsyncRelayCommand(CloneMorphAsync, CanMutatePackageContext);
         _deleteMorphCommand = new AsyncRelayCommand(DeleteMorphAsync, CanMutatePackageContext);
         _convertMorphCommand = new AsyncRelayCommand(ConvertMorphAsync, CanMutatePackageContext);
-        _copyMorphDataCommand = new AsyncRelayCommand(CopyMorphDataAsync, CanUseFaceContextMenu);
+        _copyMorphDataCommand = new AsyncRelayCommand(CopyMorphDataAsync, CanCopyMorphData);
         _pasteMorphDataCommand = new AsyncRelayCommand(PasteMorphDataAsync, CanPasteMorphData);
         _copyMaterialDataCommand = new AsyncRelayCommand(CopyMaterialDataAsync, CanUseMaterialContextMenu);
         _pasteMaterialDataCommand = new AsyncRelayCommand(PasteMaterialDataAsync, CanPasteMaterialData);

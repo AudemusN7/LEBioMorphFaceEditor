@@ -91,6 +91,24 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
                 controlName, StringComparison.OrdinalIgnoreCase));
             if (editor is null)
             {
+                // Some runtime material parameters (including Player alignment textures)
+                // are intentionally hidden from the editing surface. A qualified RON
+                // reference still identifies an exact donor and should survive import
+                // with that donor attached to the material state.
+                if (reference.PackagePath.Length > 0 || reference.InstancedPath.StartsWith(
+                        "BIOG_", StringComparison.OrdinalIgnoreCase))
+                {
+                    try
+                    {
+                        var resolved = await ResolveHiddenTextureAsync(controlName, reference);
+                        if (resolved is not null) decoded[controlName] = resolved;
+                        else warnings.Add($"Texture '{desired.Name}' could not be resolved from its qualified donor path '{reference.InstancedPath}'.");
+                    }
+                    catch (Exception exception)
+                    {
+                        warnings.Add($"Texture '{desired.Name}' could not be resolved: {exception.Message}");
+                    }
+                }
                 continue;
             }
 
@@ -108,6 +126,44 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
 
         _session.MergeMaterialData(data, decoded);
         return warnings;
+    }
+
+    private async Task<DecodedTextureAsset?> ResolveHiddenTextureAsync(
+        string controlName,
+        AssetIdentity reference)
+    {
+        var definition = DescribeControl(controlName, MaterialParameterKind.Texture);
+        if (!string.IsNullOrWhiteSpace(reference.PackagePath))
+        {
+            var resolved = await _references.LoadTextureAsync(reference.PackagePath, reference.InstancedPath, definition);
+            return reference.IsExplicitTextureDonor
+                ? resolved with { Source = resolved.Source with { IsExplicitTextureDonor = true } }
+                : resolved;
+        }
+
+        if (_registryCandidates is { Count: > 0 })
+        {
+            var selected = MeshMaterialFileService.PreferredTextureSource(reference.InstancedPath, _registryCandidates);
+            if (selected is { } donor)
+            {
+                return await _references.LoadTextureAsync(donor.Occurrence.PackagePath,
+                    donor.Candidate.InstancedPath, definition);
+            }
+        }
+
+        var local = _textureCandidates
+            .Where(candidate => candidate.Identity.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase) &&
+                MeshMaterialFileService.QualifyPath(candidate.Identity).Equals(
+                    reference.InstancedPath, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        var physical = local.GroupBy(candidate =>
+                $"{Path.GetFullPath(candidate.Identity.PackagePath)}|{candidate.Identity.UIndex}",
+                StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First()).ToArray();
+        if (physical.Length != 1) return null;
+
+        var identity = physical[0].Identity;
+        return await _references.LoadTextureAsync(identity.PackagePath, identity.InstancedPath, definition);
     }
 
     private void RebuildControls()

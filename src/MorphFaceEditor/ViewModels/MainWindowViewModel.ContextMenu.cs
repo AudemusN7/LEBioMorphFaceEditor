@@ -13,6 +13,9 @@ public sealed partial class MainWindowViewModel
     private bool CanMutatePackageContext() =>
         CanUseFaceContextMenu() && _packageWorkspace?.CanCommit == true;
 
+    private bool CanCopyMorphData() =>
+        CanUseFaceContextMenu() && !IsAlnMorphClipboardFace(SelectedFace);
+
     private bool CanUseMaterialContextMenu() =>
         CanUseFaceContextMenu() &&
         (_packageWorkspace?.CanCommit == true || IsStandaloneFixedBakeFace());
@@ -24,7 +27,13 @@ public sealed partial class MainWindowViewModel
          _relativeBakeFacePaths.Contains(selectedFace.InstancedPath));
 
     private bool CanPasteMorphData() =>
-        CanMutatePackageContext() && _clipboard.Contains(MorphFaceClipboardKind.Morph);
+        CanMutatePackageContext() && !IsAlnMorphClipboardFace(SelectedFace) &&
+        _clipboard.Contains(MorphFaceClipboardKind.Morph);
+
+    private static bool IsAlnMorphClipboardFace(BioMorphFaceListItem? face) =>
+        face is not null &&
+        (face.ProfileTag.Equals("[ALN]", StringComparison.OrdinalIgnoreCase) ||
+         face.ProfileKey.EndsWith("-vorcha", StringComparison.OrdinalIgnoreCase));
 
     private bool CanPasteMaterialData() =>
         CanUseMaterialContextMenu() && _clipboard.Contains(MorphFaceClipboardKind.Material);
@@ -229,6 +238,11 @@ public sealed partial class MainWindowViewModel
         {
             return;
         }
+        if (IsAlnMorphClipboardFace(source))
+        {
+            Status = "Morph data copy is unavailable for the ALN profile.";
+            return;
+        }
 
         IsBusy = true;
         ErrorMessage = null;
@@ -257,6 +271,11 @@ public sealed partial class MainWindowViewModel
     {
         if (SelectedFace is not { } target || WorkspacePackagePath is null)
         {
+            return;
+        }
+        if (IsAlnMorphClipboardFace(target))
+        {
+            Status = "Morph data paste is unavailable for the ALN profile.";
             return;
         }
 

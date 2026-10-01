@@ -163,7 +163,8 @@ public static class MaterialRonCodec
         Map("scalar_parameters", data.Scalars.Select(value => (value.Name, Format(value.Value))));
         Map("vector_parameters", data.Vectors.Select(value => (value.Name,
             $"({Format(value.Value.X)}, {Format(value.Value.Y)}, {Format(value.Value.Z)}, {Format(value.Value.W)})")));
-        Map("texture_parameters", data.Textures.Select(value => (value.Name, Quote(value.TextureReference?.InstancedPath ?? "None"))));
+        Map("texture_parameters", data.Textures.Select(value => (value.Name,
+            Quote(value.TextureReference is { } reference ? QualifiedTexturePath(reference) : "None"))));
         void Map(string name, IEnumerable<(string Name, string Value)> items)
         {
             var pad = new string(' ', indent * 4);
@@ -176,6 +177,9 @@ public static class MaterialRonCodec
             output.Append(pad).AppendLine("},");
         }
     }
+
+    private static string QualifiedTexturePath(AssetIdentity reference)
+        => TextureCatalogPicker.CanonicalPath(reference.InstancedPath, reference.PackagePath);
 
     private static void ValidateParameterName(string name)
     {

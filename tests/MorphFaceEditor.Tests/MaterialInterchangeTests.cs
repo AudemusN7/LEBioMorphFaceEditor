@@ -18,6 +18,7 @@ public static class MaterialInterchangeTests
         new("C3 TSE material import preserves alien values and export qualifies attachments", TsePolicy),
         new("C3 material import rejects malformed and incompatible files before editing", RejectsInvalidFiles),
         new("C3 texture import resolves exact registry paths without name substitution", ResolvesExactTexturePaths),
+        new("C3 texture import uses the eligible official default over a package-root match", TextureImportPrefersEligibleOfficial),
         new("C3 material export writes atomically and protects the source mesh", ExportProtectsSource),
         new("D3 face material export wraps unscoped values and writes safe metadata", FaceMaterialExport),
         new("D3 face material import separates tagged heads from untagged TSE", FaceMaterialImport)
@@ -167,9 +168,9 @@ public static class MaterialInterchangeTests
         var characterCreatorOccurrence = new TextureCatalogOccurrence("EntryMenu.pcc", 18, 0, TextureCatalogOrigin.BaseGame,
             1, 1, "PF_B8G8R8A8", "TEXTUREGROUP_Character", false, null);
         var seekFreeCandidate = new TextureCatalogCandidate(TextureCatalogGame.LE1, "Diff.Test",
-            seekFreeOccurrence, [seekFreeOccurrence]);
+            seekFreeOccurrence, [seekFreeOccurrence]) { IsEligibleOfficialDefault = true };
         var characterCreatorCandidate = new TextureCatalogCandidate(TextureCatalogGame.LE1, path,
-            characterCreatorOccurrence, [characterCreatorOccurrence]);
+            characterCreatorOccurrence, [characterCreatorOccurrence]) { IsEligibleOfficialDefault = true };
         var loader = new Loader();
         PreparedMeshMaterialImport Prepare(string texturePath, IReadOnlyList<TextureCatalogCandidate>? sources = null) =>
             MeshMaterialFileService.PrepareTexturesAsync(null,
@@ -177,11 +178,11 @@ public static class MaterialInterchangeTests
             fixture.Workspace, sources ?? [characterCreatorCandidate, seekFreeCandidate], loader).GetAwaiter().GetResult();
         var prepared = Prepare(path);
         TestAssert.Equal(1, prepared.Textures.Count);
-        TestAssert.Equal("Diff.Test", loader.LoadedPath);
+        TestAssert.Equal(path, loader.LoadedPath);
         TestAssert.Equal("BIOG_External.pcc", loader.LoadedPackage);
         TestAssert.Equal(0, prepared.Warnings.Count);
         fixture.Editor.ApplyMeshMaterialImport(prepared);
-        TestAssert.Equal("Diff.Test", fixture.Session.GetPreviewTexture(Key("human", "HED_Diff"))!.Source.InstancedPath);
+        TestAssert.Equal(path, fixture.Session.GetPreviewTexture(Key("human", "HED_Diff"))!.Source.InstancedPath);
         TestAssert.True(fixture.Export().Contains(path, StringComparison.Ordinal),
             "The seek-free package-local texture identity was not requalified on export.");
         var fallback = Prepare(path, [characterCreatorCandidate]);
@@ -192,6 +193,37 @@ public static class MaterialInterchangeTests
         TestAssert.Equal(0, unmatched.Textures.Count);
         TestAssert.Equal(1, unmatched.Warnings.Count);
         TestAssert.Equal(path, loader.LoadedPath);
+    }
+
+    private static void TextureImportPrefersEligibleOfficial()
+    {
+        static TextureCatalogOccurrence Occurrence(string package, int priority, TextureCatalogOrigin origin) => new(
+            package, 17, priority, origin, 1, 1, "PF_B8G8R8A8", "TEXTUREGROUP_Character", false, null);
+
+        const string path = "BIOG_Lower.Textures.Shared";
+        var lower = Occurrence("BIOG_Lower.pcc", 100, TextureCatalogOrigin.OfficialDlc);
+        var higher = Occurrence("BIOG_Higher.pcc", 9000, TextureCatalogOrigin.OfficialDlc);
+        var candidate = new TextureCatalogCandidate(TextureCatalogGame.LE1, path, higher, [lower, higher])
+        {
+            IsEligibleOfficialDefault = true
+        };
+
+        var selected = MeshMaterialFileService.PreferredTextureSource(path, [candidate]);
+        TestAssert.Equal("BIOG_Higher.pcc", selected?.Occurrence.PackagePath);
+
+        var customOccurrence = Occurrence("custom.pcc", 0, TextureCatalogOrigin.Manual);
+        var custom = new TextureCatalogCandidate(TextureCatalogGame.LE1,
+            "BIOG_Custom.Textures.Only", customOccurrence, [customOccurrence]);
+        TestAssert.Equal("custom.pcc",
+            MeshMaterialFileService.PreferredTextureSource(custom.InstancedPath, [custom])?.Occurrence.PackagePath);
+
+        var modOccurrence = Occurrence("mod.pcc", 8000, TextureCatalogOrigin.Mod);
+        var modOnly = new TextureCatalogCandidate(TextureCatalogGame.LE1,
+            "BIOG_Mod.Textures.Only", modOccurrence, [modOccurrence]);
+        TestAssert.True(MeshMaterialFileService.PreferredTextureSource(modOnly.InstancedPath, [modOnly]) is null,
+            "A path-only material import inferred a mod donor without an official default or explicit selection.");
+        TestAssert.True(MeshMaterialFileService.PreferredTextureSource("BIOG_Missing.Textures.None", [candidate]) is null,
+            "A missing exact path was redirected to an unrelated candidate.");
     }
 
     private static void ExportProtectsSource()

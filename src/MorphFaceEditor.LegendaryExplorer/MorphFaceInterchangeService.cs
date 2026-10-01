@@ -246,12 +246,15 @@ public sealed class MorphFaceInterchangeService
             indexed: false);
         clonedHead.WriteProperty(MeshHelper.GetLodInfoForSkeletalMesh(appliedHead, face.Game));
         clonedHead.WriteBinary(appliedHead);
-        meshName = clonedHead.ObjectNameString;
+        // ObjectNameString exposes only the base FName text. Preserve its
+        // numeric instance suffix because UModel selects the exported object
+        // by the full instance name (for example, Skel_HMM_1).
+        meshName = clonedHead.ObjectName.Instanced;
         temporaryPackage.Save(tempPackagePath);
         return tempPackagePath;
     }
 
-    private static string? TryWriteVertexMapSidecar(
+    internal static string? TryWriteVertexMapSidecar(
         string meshPath,
         MorphMeshFormat format,
         IReadOnlyList<Vector3> bakedPositions,
@@ -278,7 +281,7 @@ public sealed class MorphFaceInterchangeService
         return null;
     }
 
-    private static string? TryWriteGltfVertexMapSidecar(
+    internal static string? TryWriteGltfVertexMapSidecar(
         string gltfPath,
         string md5Path,
         IReadOnlyList<Vector3> bakedPositions,
@@ -286,29 +289,35 @@ public sealed class MorphFaceInterchangeService
     {
         var baseHead = CreatePositionOnlyMesh(bakedPositions);
         var md5Candidates = ReadMd5(md5Path, baseHead);
-        int[]? exportedToBase = null;
+        var gltfCandidates = ReadGltf(gltfPath, baseHead);
         foreach (var candidate in md5Candidates.Where(value =>
                      value.CoordinateSystem.EndsWith("file order", StringComparison.Ordinal)))
         {
-            if (TryMatchExactVertexSet(candidate.Positions, bakedPositions, out var mapping))
+            if (!TryMatchExactVertexSet(candidate.Positions, bakedPositions, out var md5ToBase))
             {
-                exportedToBase = mapping;
-                break;
+                continue;
+            }
+            foreach (var gltfCandidate in gltfCandidates.Where(value =>
+                         value.CoordinateSystem.EndsWith("file order", StringComparison.Ordinal)))
+            {
+                // The two UModel exporters need not use the same vertex order.
+                // Prove correspondence before borrowing the MD5-to-bake map;
+                // corrections must never conceal a reflected basis or a reorder.
+                if (!TryMatchExactVertexSet(gltfCandidate.Positions, candidate.Positions, out var gltfToMd5))
+                {
+                    continue;
+                }
+                var exportedToBase = gltfToMd5.Select(index => md5ToBase[index]).ToArray();
+                if (gltfCandidate.Positions.Where((position, index) =>
+                        Vector3.DistanceSquared(position, bakedPositions[exportedToBase[index]]) >
+                        VertexMapTolerance * VertexMapTolerance).Any())
+                {
+                    continue;
+                }
+                return WriteSidecar(gltfPath + ".mfe.json", gltfCandidate, exportedToBase, bakedPositions, fitPrior);
             }
         }
-        if (exportedToBase is null)
-        {
-            return null;
-        }
-
-        var gltfCandidate = ReadGltf(gltfPath, baseHead)
-            .Where(value => value.CoordinateSystem.EndsWith("file order", StringComparison.Ordinal) &&
-                            value.Positions.Count == exportedToBase.Length)
-            .MinBy(value => Enumerable.Range(0, exportedToBase.Length).Sum(index =>
-                Vector3.DistanceSquared(value.Positions[index], bakedPositions[exportedToBase[index]])));
-        return gltfCandidate is null
-            ? null
-            : WriteSidecar(gltfPath + ".mfe.json", gltfCandidate, exportedToBase, bakedPositions, fitPrior);
+        return null;
     }
 
     private static string WriteSidecar(
@@ -451,6 +460,8 @@ public sealed class MorphFaceInterchangeService
         }
     }
 
+    private const float VertexMapTolerance = 0.001f;
+
     private static bool TryMatchExactVertexSet(
         IReadOnlyList<Vector3> exported,
         IReadOnlyList<Vector3> baked,
@@ -461,13 +472,12 @@ public sealed class MorphFaceInterchangeService
         {
             return false;
         }
-        const float tolerance = 0.001f;
         var available = Enumerable.Range(0, baked.Count).ToHashSet();
         var mapping = new int[exported.Count];
         for (var exportedIndex = 0; exportedIndex < exported.Count; exportedIndex++)
         {
             var nearest = -1;
-            var nearestDistance = tolerance * tolerance;
+            var nearestDistance = VertexMapTolerance * VertexMapTolerance;
             foreach (var baseIndex in available)
             {
                 var distance = Vector3.DistanceSquared(exported[exportedIndex], baked[baseIndex]);
@@ -630,6 +640,7 @@ public sealed class MorphFaceInterchangeService
         var transforms = new (string Name, Func<Vector3, Vector3> Apply)[]
         {
             ("XYZ", value => value * scale),
+            ("XZY", value => ImportedMeshDecoder.GltfToCanonicalVector(value) * scale),
             ("X-YZ", value => new Vector3(value.X, -value.Y, value.Z) * scale),
             ("XZ-Y", value => new Vector3(value.X, value.Z, -value.Y) * scale),
             ("X-ZY", value => new Vector3(value.X, -value.Z, value.Y) * scale)

@@ -10,6 +10,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using System.IO;
+using MorphFaceEditor.Views;
 
 namespace MorphFaceEditor;
 
@@ -57,6 +58,18 @@ public partial class MainWindow : Window
     private void OnPreviewCleared(object? sender, EventArgs e) => _previewHost.ClearScene();
 
     private void OnExitRequested(object? sender, EventArgs e) => Close();
+
+    private void OnSettingsClick(object sender, RoutedEventArgs e)
+    {
+        if (_viewModel.IsBusy) return;
+        EndNumericWheelEdit();
+        var settings = new SettingsWindow(_viewModel) { Owner = this };
+        _ = settings.ShowDialog();
+        if (!settings.ClearDataRequested) return;
+        _closeConfirmed = true;
+        if (Application.Current is App app) app.ClearApplicationDataOnExit = true;
+        Close();
+    }
 
     private void OnPreviewDeformationReady(HeadPreviewDeformationUpdate update)
     {

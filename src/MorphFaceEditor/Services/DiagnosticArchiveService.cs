@@ -1,0 +1,76 @@
+using System.IO;
+using System.IO.Compression;
+using System.Text.Json;
+using MorphFaceEditor.Infrastructure;
+
+namespace MorphFaceEditor.Services;
+
+internal sealed record DiagnosticArchiveResult(string Path, IReadOnlyList<string> Entries, IReadOnlyList<string> Warnings);
+
+/// <summary>Publishes an archive only after every requested file has been copied successfully.</summary>
+internal sealed class DiagnosticArchiveService(ApplicationDataPaths paths, string logPath)
+{
+    public DiagnosticArchiveResult Export(string destination, IReadOnlyList<string> workspaceFiles,
+        IReadOnlyList<string>? warnings = null)
+    {
+        destination = Path.GetFullPath(destination);
+        if (!Path.GetExtension(destination).Equals(".zip", StringComparison.OrdinalIgnoreCase))
+            throw new IOException("Choose a .zip file for the diagnostic export.");
+        warnings ??= [];
+        var files = new List<(string Source, string Entry)>();
+        if (!File.Exists(logPath))
+            throw new FileNotFoundException("The latest application log is unavailable.", logPath);
+        files.Add((logPath, "Logs/" + Path.GetFileName(logPath)));
+        files.AddRange(workspaceFiles.Select(path => (path, "Workspace/" + Path.GetFileName(path))));
+        foreach (var root in new[] { paths.CurrentDirectory, paths.LegacyDirectory })
+        {
+            var registries = Path.Combine(root, "TextureRegistries");
+            if (!Directory.Exists(registries)) continue;
+            var prefix = root == paths.CurrentDirectory ? "TextureRegistries/" : "LegacyTextureRegistries/";
+            files.AddRange(Directory.EnumerateFiles(registries, "*.mftr", SearchOption.TopDirectoryOnly)
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .Select(path => (path, prefix + Path.GetFileName(path))));
+        }
+        if (files.Any(file => Path.GetFullPath(file.Source).Equals(destination, StringComparison.OrdinalIgnoreCase)))
+            throw new IOException("The ZIP destination must be different from the files being collected.");
+
+        var temporary = Path.Combine(Path.GetDirectoryName(destination)!, $".mfe-diagnostics-{Guid.NewGuid():N}.tmp");
+        try
+        {
+            using (var archive = ZipFile.Open(temporary, ZipArchiveMode.Create))
+            {
+                foreach (var (source, entryName) in files)
+                {
+                    using var sourceStream = new FileStream(source, FileMode.Open, FileAccess.Read,
+                        FileShare.ReadWrite | FileShare.Delete);
+                    // Snapshot the current length so a busy logger cannot prolong the copy indefinitely.
+                    var remaining = sourceStream.Length;
+                    using var targetStream = archive.CreateEntry(entryName, CompressionLevel.Optimal).Open();
+                    var buffer = new byte[81920];
+                    while (remaining > 0)
+                    {
+                        var read = sourceStream.Read(buffer, 0, (int)Math.Min(buffer.Length, remaining));
+                        if (read == 0) throw new IOException($"'{Path.GetFileName(source)}' changed while being collected.");
+                        targetStream.Write(buffer, 0, read);
+                        remaining -= read;
+                    }
+                }
+                using var manifest = archive.CreateEntry("Report.json").Open();
+                JsonSerializer.Serialize(manifest, new
+                {
+                    ApplicationVersion = typeof(App).Assembly.GetName().Version?.ToString(),
+                    CreatedUtc = DateTimeOffset.UtcNow,
+                    WorkspaceIncluded = workspaceFiles.Count > 0,
+                    Warnings = warnings,
+                    Files = files.Select(file => file.Entry).ToArray()
+                }, new JsonSerializerOptions { WriteIndented = true });
+            }
+            File.Move(temporary, destination, overwrite: true);
+            return new DiagnosticArchiveResult(destination, files.Select(file => file.Entry).ToArray(), warnings);
+        }
+        finally
+        {
+            if (File.Exists(temporary)) File.Delete(temporary);
+        }
+    }
+}

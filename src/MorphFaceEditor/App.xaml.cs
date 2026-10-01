@@ -12,6 +12,7 @@ namespace MorphFaceEditor;
 public partial class App : Application
 {
     private MainWindowViewModel? _viewModel;
+    internal bool ClearApplicationDataOnExit { get; set; }
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -91,7 +92,15 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        if (ClearApplicationDataOnExit) AppLog.StopFileWrites();
         _viewModel?.Dispose();
+        if (ClearApplicationDataOnExit)
+        {
+            var failures = ApplicationDataPaths.CreateDefault().Clear();
+            if (failures.Count > 0)
+                MessageBox.Show("Some application data could not be removed:\n\n" + string.Join("\n", failures),
+                    "Application data cleanup incomplete", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
         base.OnExit(e);
     }
 }

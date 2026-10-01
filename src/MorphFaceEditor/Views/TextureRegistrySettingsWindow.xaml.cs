@@ -13,6 +13,7 @@ public partial class TextureRegistrySettingsWindow : Window
     public TextureRegistrySettingsWindow(TextureRegistrySettingsViewModel viewModel)
     {
         InitializeComponent();
+        DarkTitleBar.Apply(this);
         DataContext = viewModel;
         Closing += OnClosing;
         Loaded += async (_, _) => await viewModel.RefreshAsync();
@@ -22,8 +23,6 @@ public partial class TextureRegistrySettingsWindow : Window
     {
         if (_addingAssets || DataContext is TextureRegistrySettingsViewModel { CanClose: false }) e.Cancel = true;
     }
-
-    private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
 
     private async void OnRebuildClick(object sender, RoutedEventArgs e)
     {

@@ -1,0 +1,86 @@
+<Window x:Class="MorphFaceEditor.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Settings" Width="660" Height="760" MinWidth="580" MinHeight="560"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{StaticResource WindowBackground}" Foreground="{StaticResource PrimaryText}">
+    <Window.Resources>
+        <Style x:Key="SettingsSection" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource PanelBackground}" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Padding" Value="18" />
+            <Setter Property="Margin" Value="0,0,0,12" />
+        </Style>
+        <Style x:Key="SettingsDescription" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource SecondaryText}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Margin" Value="0,6,0,12" />
+        </Style>
+        <Style x:Key="SettingsHeading" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Accent}" />
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+    </Window.Resources>
+    <Grid Margin="22">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <TextBlock Text="SETTINGS" Foreground="{DynamicResource Accent}" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,18" />
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel x:Name="SettingsSections">
+                <Border Style="{StaticResource SettingsSection}">
+                    <StackPanel>
+                        <TextBlock Text="Language" Style="{StaticResource SettingsHeading}" />
+                        <TextBlock Text="Language selection will be available in a future update." Style="{StaticResource SettingsDescription}" />
+                        <ComboBox x:Name="LanguageSelector" SelectedIndex="0" IsEnabled="False" AutomationProperties.Name="Language">
+                            <ComboBoxItem Content="English (UK)" />
+                            <ComboBoxItem Content="English (US)" />
+                            <ComboBoxItem Content="French" />
+                            <ComboBoxItem Content="Spanish" />
+                            <ComboBoxItem Content="German" />
+                            <ComboBoxItem Content="Italian" />
+                            <ComboBoxItem Content="Polish" />
+                            <ComboBoxItem Content="Russian" />
+                            <ComboBoxItem Content="Simplified Chinese" />
+                            <ComboBoxItem Content="Japanese" />
+                        </ComboBox>
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource SettingsSection}">
+                    <StackPanel>
+                        <TextBlock Text="UI Theme" Style="{StaticResource SettingsHeading}" />
+                        <TextBlock Text="Theme and background, foreground and accent colour customisation will be available in a future update." Style="{StaticResource SettingsDescription}" />
+                        <ComboBox x:Name="ThemeSelector" SelectedIndex="1" IsEnabled="False" AutomationProperties.Name="UI theme">
+                            <ComboBoxItem Content="Light Mode" />
+                            <ComboBoxItem Content="Dark Mode" />
+                        </ComboBox>
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource SettingsSection}">
+                    <StackPanel>
+                        <TextBlock Text="Generate Logs" Style="{StaticResource SettingsHeading}" />
+                        <TextBlock Text="Export a ZIP containing the latest application log, the open workspace with current edits, and stock and custom mesh/texture databases. Choose where to save it." Style="{StaticResource SettingsDescription}" />
+                        <Button x:Name="GenerateLogsButton" Content="Generate Logs…" Click="OnGenerateLogsClick" HorizontalAlignment="Left" />
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource SettingsSection}">
+                    <StackPanel>
+                        <TextBlock Text="Clear Application Data" Style="{StaticResource SettingsHeading}" />
+                        <TextBlock Text="Remove MFE preferences, logs, temporary workspaces and mesh/texture databases, including legacy application data. MFE will close; databases will need to be rebuilt when you reopen it." Style="{StaticResource SettingsDescription}" />
+                        <Button x:Name="ClearDataButton" Content="Clear Application Data…" Click="OnClearDataClick" HorizontalAlignment="Left" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+        <Grid Grid.Row="2" Margin="0,14,0,0">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+            <TextBlock x:Name="OperationStatus" TextWrapping="Wrap" Foreground="{StaticResource SecondaryText}" VerticalAlignment="Center" Margin="0,0,14,0" />
+            <Button x:Name="CloseButton" Grid.Column="1" Content="Close" IsCancel="True" Click="OnCloseClick" MinWidth="85" />
+        </Grid>
+    </Grid>
+</Window>

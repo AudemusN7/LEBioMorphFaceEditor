@@ -8,6 +8,7 @@ public static class AppLog
     /// <summary>In-process diagnostics for automation; observers cannot affect editor operations.</summary>
     public static event Action<string, string>? MessageWritten;
     private static readonly object Sync = new();
+    private static bool _fileWritesStopped;
     private static readonly string SessionId = Guid.NewGuid().ToString("N")[..8];
     public static string DirectoryPath { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -20,6 +21,12 @@ public static class AppLog
     public static void Information(string message) => Write("INFO", message, null);
     public static void Warning(string message) => Write("WARN", message, null);
     public static void Error(string message, Exception exception) => Write("ERROR", message, exception);
+
+    // Shutdown reset must wait for active appends and prevent background diagnostics recreating AppData.
+    internal static void StopFileWrites()
+    {
+        lock (Sync) _fileWritesStopped = true;
+    }
 
     private static void Write(string level, string message, Exception? exception)
     {
@@ -39,6 +46,7 @@ public static class AppLog
             builder.AppendLine();
             lock (Sync)
             {
+                if (_fileWritesStopped) return;
                 Directory.CreateDirectory(DirectoryPath);
                 File.AppendAllText(FilePath, builder.ToString(), Encoding.UTF8);
             }

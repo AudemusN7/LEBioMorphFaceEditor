@@ -88,8 +88,6 @@ public sealed class MorphTargetCatalog
                 $"{profile.DisplayName} has no bundled or standalone source for MorphTargetSet '{profile.TargetSetName}'.",
                 sourcePackagePath);
         }
-        var cookedPath = LegendaryExplorerCoreRuntime.GetCookedPath(game)
-            ?? throw new DirectoryNotFoundException($"The {game} CookedPCConsole directory was not discovered.");
-        return Path.Combine(cookedPath, profile.TargetPackageName);
+        return InstalledGameAssetResolver.ResolvePackage(game, profile.TargetPackageName);
     }
 }

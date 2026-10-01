@@ -21,10 +21,13 @@ public sealed class RonNpcDonorResolver(MorphFaceProfileRegistry profiles)
     public MorphFaceTemplateCandidate Resolve(
         MorphFaceGame game,
         string archetype,
-        IReadOnlyList<MorphFaceTemplateCandidate> candidates)
+        IReadOnlyList<MorphFaceTemplateCandidate> candidates,
+        IReadOnlyCollection<string>? eligibleOfficialPackagePaths = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(archetype);
         ArgumentNullException.ThrowIfNull(candidates);
+        var eligiblePackages = eligibleOfficialPackagePaths?.Select(Path.GetFullPath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var profile = _profiles.Profiles.SingleOrDefault(value =>
             value.Game == game &&
             value.ExportTag.Trim('[', ']').Equals(archetype, StringComparison.OrdinalIgnoreCase) &&
@@ -33,10 +36,12 @@ public sealed class RonNpcDonorResolver(MorphFaceProfileRegistry profiles)
 
         return candidates
             .Where(candidate => IsNativeNpc(candidate) &&
+                                (eligiblePackages is null || eligiblePackages.Contains(Path.GetFullPath(candidate.PackagePath))) &&
                                 _profiles.Find(game, candidate.FacePath, candidate.BaseHeadPath)?.Key == profile.Key &&
                                 profile.GeometryEditBlockReason(candidate.BaseHeadPath) is null &&
                                 File.Exists(candidate.PackagePath))
-            .OrderBy(candidate => candidate.Origin)
+            .OrderByDescending(candidate => candidate.MountPriority)
+            .ThenBy(candidate => candidate.Origin)
             .ThenBy(candidate => candidate.PackagePath, StringComparer.OrdinalIgnoreCase)
             .ThenBy(candidate => candidate.FacePath, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault() ?? throw new InvalidDataException(
@@ -53,9 +58,7 @@ public sealed class RonNpcDonorResolver(MorphFaceProfileRegistry profiles)
         profile.ExportTag.Trim('[', ']').Length > 0;
 
     private static bool IsNativeNpc(MorphFaceTemplateCandidate candidate) =>
-        (candidate.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc ||
-         candidate.Origin == TextureCatalogOrigin.Mod &&
-         candidate.PackagePath.Contains("CommunityPatch", StringComparison.OrdinalIgnoreCase)) &&
+        (candidate.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc) &&
         !IsPlayerOrCreator(candidate.FacePath) &&
         !IsPlayerOrCreator(candidate.BaseHeadPath);
 

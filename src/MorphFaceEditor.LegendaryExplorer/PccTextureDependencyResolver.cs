@@ -15,8 +15,7 @@ namespace MorphFaceEditor.LegendaryExplorer;
 internal static class PccTextureDependencyResolver
 {
     /// <summary>
-    /// Resolves an exact installed texture identity. Human/player textures use
-    /// BIOG as their primary PCC donor and EntryMenu/BioP_Char only as fallback.
+    /// Resolves an exact official texture identity by mount priority.
     /// Object-name matching is forbidden because player lashes and cube faces
     /// deliberately reuse names at multiple logical paths.
     /// </summary>
@@ -30,49 +29,49 @@ internal static class PccTextureDependencyResolver
         ArgumentException.ThrowIfNullOrWhiteSpace(identity.InstancedPath);
 
         var requestedPath = identity.InstancedPath;
-        var matches = catalog.Where(value =>
-                value.InstancedPath.Equals(requestedPath, StringComparison.OrdinalIgnoreCase) ||
-                value.Occurrences.Append(value.EffectiveOccurrence)
-                    .Any(occurrence => PccAssetPathPolicy.FromDonorOccurrence(
-                            value.InstancedPath, occurrence.PackagePath)
-                        .Equals(requestedPath, StringComparison.OrdinalIgnoreCase)))
+        var all = catalog.Where(candidate => candidate.IsEligibleOfficialDefault &&
+                candidate.EffectiveOccurrence.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc)
+            .Select(candidate => (Candidate: candidate, Occurrence: candidate.EffectiveOccurrence,
+                Path: PccAssetPathPolicy.FromDonorOccurrence(candidate.InstancedPath, candidate.EffectiveOccurrence.PackagePath)))
             .ToArray();
-        var candidate = preferBiog
-            ? matches.Where(value => value.Occurrences.Append(value.EffectiveOccurrence)
-                    .Any(occurrence => IsSeekfreePackage(occurrence.PackagePath) &&
-                        (value.InstancedPath.Equals(requestedPath, StringComparison.OrdinalIgnoreCase) ||
-                         PccAssetPathPolicy.FromDonorOccurrence(value.InstancedPath, occurrence.PackagePath)
-                             .Equals(requestedPath, StringComparison.OrdinalIgnoreCase))))
-                .OrderByDescending(value => value.EffectiveOccurrence.MountPriority)
-                .FirstOrDefault()
-            : null;
-        candidate ??= matches.FirstOrDefault(value =>
-            value.InstancedPath.Equals(requestedPath, StringComparison.OrdinalIgnoreCase));
-        candidate ??= matches.Length == 1 ? matches[0] : null;
-        if (candidate is null && matches.Length > 1)
-            throw new InvalidDataException(
-                $"Texture2D '{requestedPath}' maps to multiple exact package-qualified catalogue identities.");
-
-        if (candidate is null)
+        var matches = all.Where(value => value.Path.Equals(requestedPath, StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (matches.Length == 0 && !string.IsNullOrWhiteSpace(identity.PackagePath))
+        {
+            var qualified = PccAssetPathPolicy.FromDonorOccurrence(requestedPath, identity.PackagePath);
+            matches = all.Where(value => value.Path.Equals(qualified, StringComparison.OrdinalIgnoreCase)).ToArray();
+        }
+        if (matches.Length == 0)
+        {
+            matches = all.Where(value => value.Candidate.InstancedPath.Equals(requestedPath, StringComparison.OrdinalIgnoreCase)).ToArray();
+            // A package-local name only identifies an asset inside its donor.
+            // Different package-qualified identities must never be merged.
+            var donorPath = PccAssetPathPolicy.FromDonorOccurrence(requestedPath, identity.PackagePath);
+            if (matches.Any(value => value.Path.Equals(donorPath, StringComparison.OrdinalIgnoreCase)))
+                matches = matches.Where(value => value.Path.Equals(donorPath, StringComparison.OrdinalIgnoreCase)).ToArray();
+            else if (matches.Select(value => value.Path).Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1)
+                throw new InvalidDataException($"Texture2D '{requestedPath}' maps to multiple exact package-qualified catalogue identities.");
+        }
+        if (matches.Length == 0)
         {
             throw new KeyNotFoundException(
                 $"Texture2D '{identity.InstancedPath}' is not present in the installed texture database.");
         }
 
-        var occurrences = candidate.Occurrences.Count == 0
-            ? [candidate.EffectiveOccurrence]
-            : candidate.Occurrences;
-        var occurrence = SelectOccurrence(
-            candidate.InstancedPath,
-            requestedPath,
-            identity.PackagePath,
-            candidate.EffectiveOccurrence,
-            occurrences,
-            preferBiog);
+        matches = matches.Where(value => value.Occurrence.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc).ToArray();
+        if (matches.Length == 0)
+        {
+            throw new KeyNotFoundException(
+                $"Texture2D '{identity.InstancedPath}' has no exact official installed donor.");
+        }
+
+        var selected = matches.OrderByDescending(value => value.Occurrence.MountPriority)
+            .ThenByDescending(value => IsSeekfreePackage(value.Occurrence.PackagePath))
+            .ThenBy(value => value.Occurrence.PackagePath, StringComparer.OrdinalIgnoreCase).First();
         return new PccTextureSource(
             requestedPath,
-            PccAssetPathPolicy.FromDonorOccurrence(candidate.InstancedPath, occurrence.PackagePath),
-            occurrence);
+            selected.Path,
+            selected.Occurrence,
+            IsExplicitDonor: false);
     }
 
     /// <summary>
@@ -103,12 +102,15 @@ internal static class PccTextureDependencyResolver
     {
         ArgumentNullException.ThrowIfNull(destination);
         ArgumentNullException.ThrowIfNull(identity);
+        using var cache = new PackageCache();
+        var donor = new InstalledGameAssetResolver().Resolve(destination.Game, identity, cache)
+            ?? throw new InvalidDataException($"Texture2D '{identity.InstancedPath}' has no exact official or authored donor.");
         var source = new PccTextureSource(
             identity.InstancedPath,
-            PccAssetPathPolicy.FromDonorOccurrence(identity.InstancedPath, identity.PackagePath),
+            PccAssetPathPolicy.FromExport(donor),
             new TextureCatalogOccurrence(
-                identity.PackagePath,
-                identity.UIndex,
+                donor.FileRef.FilePath,
+                donor.UIndex,
                 0,
                 TextureCatalogOrigin.BaseGame,
                 0,
@@ -116,7 +118,8 @@ internal static class PccTextureDependencyResolver
                 string.Empty,
                 string.Empty,
                 false,
-                null));
+                null),
+            IsExplicitDonor: true);
         return MaterializeResolved(destination, source, warnings);
     }
 
@@ -125,48 +128,35 @@ internal static class PccTextureDependencyResolver
         PccTextureSource source,
         ICollection<string>? warnings)
     {
-
-        if (destination.FindExport(source.InstancedPath, "Texture2D") is { } existing)
+        using var cache = new PackageCache();
+        InstalledGameAssetResolver.RefreshMounts(destination.Game);
+        var resolver = new InstalledGameAssetResolver();
+        ExportEntry? donorTexture = source.IsExplicitDonor
+            ? resolver.Resolve(destination.Game,
+                new AssetIdentity(source.Occurrence.PackagePath, source.InstancedPath, source.Occurrence.ExportUIndex, "Texture2D")
+                { IsExplicitTextureDonor = true }, cache)
+            : resolver.Resolve(destination.Game, source.InstancedPath, "Texture2D", cache);
+        if (donorTexture is null && source.IsExplicitDonor)
         {
-            return existing;
+            donorTexture = ResolveSourceExport(cache.GetCachedPackage(source.Occurrence.PackagePath)
+                ?? throw new FileNotFoundException("The selected texture donor could not be opened.", source.Occurrence.PackagePath),
+                source.InstancedPath, source.Occurrence.ExportUIndex);
         }
-        if (PackageIntegrity.FindExactEntry(destination, source.InstancedPath, "Texture2D") is ImportEntry)
-        {
+        if (donorTexture is null)
             throw new InvalidDataException(
-                $"Cannot materialise Texture2D '{source.InstancedPath}': an import occupies the required export identity.");
-        }
-        if (!File.Exists(source.Occurrence.PackagePath))
-        {
-            throw new FileNotFoundException(
-                $"The installed texture donor package is missing: {source.Occurrence.PackagePath}",
-                source.Occurrence.PackagePath);
-        }
-
-        using var donor = MEPackageHandler.OpenMEPackage(
-            source.Occurrence.PackagePath,
-            forceLoadFromDisk: true);
-        if (donor.Game != destination.Game)
-        {
-            throw new InvalidDataException(
-                $"Texture '{source.InstancedPath}' is from {donor.Game}, but the destination is {destination.Game}.");
-        }
-
-        var donorTexture = ResolveSourceExport(
-            donor,
-            source.InstancedPath,
-            source.Occurrence.ExportUIndex);
-        var parent = PackageIntegrity.EnsurePackagePath(
-            destination,
-            source.InstancedPath,
-            "Texture2D");
+                $"Texture2D '{source.InstancedPath}' has no exact official installed donor.");
+        if (donorTexture.Game != destination.Game)
+            throw new InvalidDataException($"Texture '{source.InstancedPath}' is from {donorTexture.Game}, but the destination is {destination.Game}.");
+        source = source with { InstancedPath = PccAssetPathPolicy.FromExport(donorTexture) };
         var textureExport = PccPackageWorkflow.ImportDependencyGraph(
             destination,
             donorTexture,
-            parent,
+            destinationParent: null,
             textureCatalog: null,
             preferBiogTextures: false,
-            warnings,
-            applyCorpusMaterialPolicy: false);
+            warnings: warnings,
+            applyCorpusMaterialPolicy: false,
+            targetPathOverride: source.InstancedPath);
         if (!textureExport.InstancedFullPath.Equals(source.InstancedPath, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidDataException(
@@ -191,99 +181,6 @@ internal static class PccTextureDependencyResolver
         return packageName.StartsWith("BIOG", StringComparison.OrdinalIgnoreCase) &&
                !IsCharacterCreatorPackage(packagePath);
     }
-
-    private static TextureCatalogOccurrence SelectOccurrence(
-        string texturePath,
-        string requestedPath,
-        string requestedPackagePath,
-        TextureCatalogOccurrence effectiveOccurrence,
-        IReadOnlyList<TextureCatalogOccurrence> occurrences,
-        bool preferBiog)
-    {
-        var exactIdentities = occurrences
-            .Where(value => PccAssetPathPolicy.FromDonorOccurrence(texturePath, value.PackagePath)
-                .Equals(requestedPath, StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-        if (exactIdentities.Length == 1)
-        {
-            return exactIdentities[0];
-        }
-        if (exactIdentities.Length > 1)
-        {
-            var requested = !string.IsNullOrWhiteSpace(requestedPackagePath)
-                ? exactIdentities.FirstOrDefault(value => Path.GetFullPath(value.PackagePath).Equals(
-                    Path.GetFullPath(requestedPackagePath), StringComparison.OrdinalIgnoreCase))
-                : null;
-            if (requested is not null)
-            {
-                return requested;
-            }
-            if (preferBiog)
-            {
-                var seekfree = exactIdentities
-                    .Where(value => IsSeekfreePackage(value.PackagePath))
-                    .OrderByDescending(HasExternalMips)
-                    .ThenByDescending(value => value.MountPriority)
-                    .ThenBy(value => value.PackagePath, StringComparer.OrdinalIgnoreCase)
-                    .FirstOrDefault();
-                if (seekfree is not null)
-                {
-                    return seekfree;
-                }
-            }
-            if (exactIdentities.Contains(effectiveOccurrence))
-            {
-                return effectiveOccurrence;
-            }
-            return exactIdentities
-                .OrderByDescending(HasExternalMips)
-                .ThenByDescending(value => value.MountPriority)
-                .ThenBy(value => value.PackagePath, StringComparer.OrdinalIgnoreCase)
-                .First();
-        }
-
-        if (preferBiog)
-        {
-            var seekfree = occurrences
-                .Where(value => IsSeekfreePackage(value.PackagePath))
-                .OrderByDescending(HasExternalMips)
-                .ThenByDescending(value => value.MountPriority)
-                .ThenBy(value => value.PackagePath, StringComparer.OrdinalIgnoreCase)
-                .FirstOrDefault();
-            if (seekfree is not null)
-            {
-                return seekfree;
-            }
-
-            var nonSeekfree = occurrences
-                .Where(value => IsCharacterCreatorPackage(value.PackagePath))
-                .OrderByDescending(HasExternalMips)
-                .ThenByDescending(value => value.MountPriority)
-                .ThenBy(value => value.PackagePath, StringComparer.OrdinalIgnoreCase)
-                .FirstOrDefault();
-            if (nonSeekfree is not null)
-            {
-                return nonSeekfree;
-            }
-        }
-
-        if (!string.IsNullOrWhiteSpace(requestedPackagePath))
-        {
-            var requested = occurrences.FirstOrDefault(value =>
-                Path.GetFullPath(value.PackagePath).Equals(
-                    Path.GetFullPath(requestedPackagePath),
-                    StringComparison.OrdinalIgnoreCase));
-            if (requested is not null)
-            {
-                return requested;
-            }
-        }
-
-        return effectiveOccurrence;
-    }
-
-    private static bool HasExternalMips(TextureCatalogOccurrence occurrence) =>
-        occurrence.Mips.Any(mip => ((StorageFlags)mip.StorageType & StorageFlags.externalFile) != 0);
 
     internal static ExportEntry ResolveSourceExport(
         IMEPackage source,
@@ -362,4 +259,5 @@ internal static class PccTextureDependencyResolver
 internal sealed record PccTextureSource(
     string RequestedPath,
     string InstancedPath,
-    TextureCatalogOccurrence Occurrence);
+    TextureCatalogOccurrence Occurrence,
+    bool IsExplicitDonor = false);

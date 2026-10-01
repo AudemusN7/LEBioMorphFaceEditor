@@ -1,5 +1,6 @@
 using System.Numerics;
 using LegendaryExplorerCore.Packages;
+using LegendaryExplorerCore.Packages.CloningImportingAndRelinking;
 using LegendaryExplorerCore.Unreal;
 using LegendaryExplorerCore.Unreal.Classes;
 using MorphFaceEditor.Core.Domain;
@@ -20,6 +21,7 @@ public static class CustomMeshPccMaterializerTests
         new("D1 every assignable material shares a package in both slot orders", EveryAssignableMaterialSharesPackage),
         new("D1 LE2 combined human skin lashes and eyes share exact dependency identities", Le2CombinedHumanMaterialsShareDependencies),
         new("D1 LE1 authored HMF lash retains and references the stock import identity", Le1AuthoredHmfLashPreservesImport),
+        new("D1 explicit custom material texture is staged before a conflicting stock import", ExplicitCustomTextureOverridesNativeImport),
         new("D1 LE2 human PCC preserves compiled graph and donor storage", Le2HumanPccUsesBiogTfcTextures),
         new("D1 LE2 human lash references one exact BIOG texture identity", Le2HumanLashUsesExactTextureIdentity),
         new("D1 custom PCC MIC references a package-qualified non-corpus texture", CustomMicUsesPackageQualifiedNonCorpusTexture),
@@ -168,6 +170,88 @@ public static class CustomMeshPccMaterializerTests
         finally
         {
             if (File.Exists(output)) File.Delete(output);
+        }
+    }
+
+    private static void ExplicitCustomTextureOverridesNativeImport()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        var store = new TextureRegistryStore(TextureRegistryPaths.CreateDefault());
+        if (store.GetStatus(MorphFaceGame.LE1).State != TextureRegistryState.Ready)
+            throw new InvalidOperationException("The LE1 texture database is required for this D1 custom texture test.");
+        const string lashPath = "BIOG_Humanoid_MASTER_MTR_R.Human.HMF_HED_PROLash_Opac_M01";
+        TestAssert.Equal(MaterialOracleEntryKind.Import,
+            MaterialDependencyOracle.Instance.GetKind(MEGame.LE1, "Texture2D", lashPath));
+        var textureCatalog = store.Read(MorphFaceGame.LE1).Candidates;
+        var option = new CustomMaterialTemplateCatalogService(new MorphFacePackageReader(), store)
+            .Load(MorphFaceGame.LE1)
+            .Options
+            .FirstOrDefault(value => value.Label == "Human Female/Asari Lashes")
+            ?? throw new InvalidOperationException("The LE1 HMF lash material template is unavailable.");
+        var donorPath = Path.Combine(Path.GetTempPath(), $"BIOG_HMF_HIR_CustomLash-{Guid.NewGuid():N}.pcc");
+        var outputPath = Path.Combine(Path.GetTempPath(), $"MFE-C4-ExplicitLash-{Guid.NewGuid():N}.pcc");
+        try
+        {
+            using (var donor = MEPackageHandler.CreateMemoryEmptyPackage(
+                       "BIOG_HMF_HIR_CustomLash.pcc", MEGame.LE1))
+            using (var corpus = MEPackageHandler.OpenMEPackage(
+                       Path.GetFullPath("tests/Global Morphs/LE1 GlobalMorphs.pcc"), forceLoadFromDisk: true))
+            {
+                var root = donor.CreatePackageExport("BIOG_Humanoid_MASTER_MTR_R");
+                var human = donor.CreatePackageExport("Human", root);
+                var sourceTexture = corpus.Exports.First(export =>
+                    export.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase) &&
+                    new Texture2D(export).Mips.Any(mip => mip.storageType != StorageTypes.empty));
+                var cloned = EntryImporter.ImportExport(donor, sourceTexture, human.UIndex,
+                    new RelinkerOptionsPackage
+                    {
+                        ImportExportDependencies = false,
+                        GenerateImportsForGlobalFiles = false
+                    }) as ExportEntry ?? throw new InvalidDataException("Could not clone the custom lash texture donor.");
+                cloned.ObjectName = new NameReference("HMF_HED_PROLash_Opac_M01");
+                donor.Save(donorPath);
+            }
+
+            using var selectedPackage = MEPackageHandler.OpenMEPackage(donorPath, forceLoadFromDisk: true);
+            var selectedTexture = selectedPackage.FindExport(lashPath, "Texture2D")
+                                  ?? throw new InvalidDataException("The explicit lash donor has the wrong path.");
+            var textureIdentity = new AssetIdentity(
+                donorPath, lashPath, selectedTexture.UIndex, "Texture2D") { IsExplicitTextureDonor = true };
+            var materialData = new MorphFaceMaterialData(
+                [], [], [new TextureMaterialOverride("HED_Lash_Diff", textureIdentity)]);
+            var source = CreateTriangleMesh("c4-explicit-lash.gltf");
+            var workspace = new CustomMaterialWorkspace(source);
+            workspace.Assign(0, option);
+
+            _ = new CustomMeshPccMaterializer().Save(new CustomMeshPccSaveRequest(
+                source,
+                workspace,
+                materialData,
+                MorphFaceGame.LE1,
+                outputPath,
+                "C4ExplicitLashFixture",
+                new ImportedSkeletalMeshPackageWriter(),
+                textureCatalog));
+
+            using var package = MEPackageHandler.OpenMEPackage(outputPath, forceLoadFromDisk: true);
+            var textureExport = package.FindExport(lashPath, "Texture2D");
+            TestAssert.True(textureExport is not null,
+                "The selected explicit texture was not embedded at its exact stock identity.");
+            TestAssert.True(textureExport!.IsForcedExport,
+                "The explicit texture leaf lost its package-qualified ForcedExport identity.");
+            TestAssert.Equal(1, package.Exports.Count(entry => entry.ClassName == "Texture2D" &&
+                entry.InstancedFullPath.Equals(lashPath, StringComparison.OrdinalIgnoreCase)));
+            TestAssert.Equal(0, package.Imports.Count(entry => entry.ClassName == "Texture2D" &&
+                entry.InstancedFullPath.Equals(lashPath, StringComparison.OrdinalIgnoreCase)));
+            var referencedTexture = ResolveTextureParameter(FindAuthoredMic(package), "HED_Lash_Diff");
+            TestAssert.True(referencedTexture is ExportEntry,
+                "The authored lash MIC did not resolve its selected texture to an export.");
+            TestAssert.Equal(textureExport.UIndex, referencedTexture!.UIndex);
+        }
+        finally
+        {
+            if (File.Exists(donorPath)) File.Delete(donorPath);
+            if (File.Exists(outputPath)) File.Delete(outputPath);
         }
     }
 
@@ -500,13 +584,15 @@ public static class CustomMeshPccMaterializerTests
                     value.ClassName.StartsWith("MaterialExpression", StringComparison.OrdinalIgnoreCase)),
                 "The compiled human Material lost its required expression graph.");
 
-            const string stockMask = "Skin_HumanHED_SpecMulitplier_Mask";
-            var mask = textures.SingleOrDefault(value =>
-                value.ObjectNameString.Equals(stockMask, StringComparison.OrdinalIgnoreCase));
-            TestAssert.True(mask is not null, "The LE2 compiled skin mask was not materialised.");
-            TestAssert.True(new Texture2D(mask!).Mips.Any(mip =>
-                    mip.storageType != StorageTypes.empty && mip.IsPackageStored),
-                "The sole installed LE2PATCH skin-mask donor did not retain its package storage.");
+            const string stockMask = "BIOG_Humanoid_MASTER_MTR_R.Skin_HumanHED_SpecMulitplier_Mask";
+            var mask = package.Imports.SingleOrDefault(value =>
+                value.ClassName == "Texture2D" && value.InstancedFullPath == stockMask);
+            TestAssert.True(mask is not null,
+                "The intentionally unresolved LE2 skin-mask identity did not remain a native import.");
+            TestAssert.True(!textures.Any(value => value.InstancedFullPath == stockMask),
+                "The LE2 skin-mask exception inherited an automatic community-patch export.");
+            TestAssert.True(package.Exports.Any(value => PackageIntegrity.References(value).Values.Contains(mask!.UIndex)),
+                "The compiled skin graph no longer references the native skin-mask import.");
         }
         finally
         {
@@ -516,27 +602,36 @@ public static class CustomMeshPccMaterializerTests
 
     private static void Le2HumanLashUsesExactTextureIdentity()
     {
+        const string expectedLashPath = "BIOG_HMF_HED_PROMorph_R.Average.HMF_HED_PROLash_Opac_M01";
+        TestAssert.Equal(MaterialOracleEntryKind.Import,
+            MaterialDependencyOracle.Instance.GetKind(MEGame.LE2, "Texture2D", expectedLashPath));
         WithInstalledMaterial(
             MorphFaceGame.LE2,
             option => option.Label == "Human Female/Asari Lashes",
             package =>
             {
-                var textures = package.Exports
-                    .Where(value => value.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase))
-                    .ToArray();
-                TestAssert.True(textures.Any(value =>
-                        value.ObjectNameString.Contains("Lash", StringComparison.OrdinalIgnoreCase)),
-                    "The authored HMF lash texture was not materialised.");
                 var referenced = ResolveTextureParameter(FindAuthoredMic(package), "HED_Lash_Diff");
-                TestAssert.True(referenced is ExportEntry,
-                    "The authored lash MIC does not reference a materialised Texture2D.");
-                var referencedExport = (ExportEntry)referenced!;
-                TestAssert.True(
-                    referencedExport.InstancedFullPath.StartsWith("BIOG", StringComparison.OrdinalIgnoreCase),
-                    "The authored lash MIC was not relinked to its exact BIOG texture identity.");
-                TestAssert.Equal(1, package.Exports.Count(value =>
+                TestAssert.True(referenced is ImportEntry &&
+                        referenced.InstancedFullPath.Equals(expectedLashPath, StringComparison.OrdinalIgnoreCase),
+                    $"The authored HMF lash MIC must reference the exact native import '{expectedLashPath}', " +
+                    $"as recorded by the material oracle; found {referenced?.InstancedFullPath ?? "no texture"} ({referenced?.GetType().Name ?? "unresolved"}).");
+
+                var exactImports = package.Imports.Where(value =>
                     value.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase) &&
-                    value.InstancedFullPath.Equals(referencedExport.InstancedFullPath, StringComparison.OrdinalIgnoreCase)));
+                    value.InstancedFullPath.Equals(expectedLashPath, StringComparison.OrdinalIgnoreCase)).ToArray();
+                var exactExports = package.Exports.Where(value =>
+                    value.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase) &&
+                    value.InstancedFullPath.Equals(expectedLashPath, StringComparison.OrdinalIgnoreCase)).ToArray();
+                TestAssert.True(exactImports.Length == 1,
+                    $"The native HMF lash identity '{expectedLashPath}' must appear exactly once as an import.");
+                TestAssert.True(exactExports.Length == 0,
+                    $"The native HMF lash import '{expectedLashPath}' was incorrectly duplicated as an export.");
+                TestAssert.Equal(exactImports[0].UIndex, referenced!.UIndex);
+                using var cache = new PackageCache();
+                var installedTexture = new GamePackageReferenceResolver(cache)
+                    .Require(referenced, "native LE2 HMF lash texture");
+                TestAssert.Equal("Texture2D", installedTexture.ClassName);
+                TestAssert.Equal(expectedLashPath, PccAssetPathPolicy.FromExport(installedTexture));
             });
     }
 
@@ -553,7 +648,6 @@ public static class CustomMeshPccMaterializerTests
             .SelectMany(candidate => candidate.Occurrences
                 .Where(occurrence => PccTextureDependencyResolver.IsSeekfreePackage(occurrence.PackagePath))
                 .Select(occurrence => (Candidate: candidate, Occurrence: occurrence)))
-            .Where(value => !value.Candidate.InstancedPath.StartsWith("BIO", StringComparison.OrdinalIgnoreCase))
             .Where(value => File.Exists(value.Occurrence.PackagePath))
             .Select(value => (
                 value.Candidate,
@@ -561,6 +655,12 @@ public static class CustomMeshPccMaterializerTests
                 TargetPath: PccAssetPathPolicy.FromDonorOccurrence(
                     value.Candidate.InstancedPath,
                     value.Occurrence.PackagePath)))
+            // The registry now stores the canonical package-qualified path. Select a
+            // path rooted at its physical package so this still covers the seekfree
+            // package-relative identity restoration case, including BIOG-named donors.
+            .Where(value => value.TargetPath.StartsWith(
+                Path.GetFileNameWithoutExtension(value.Occurrence.PackagePath) + ".",
+                StringComparison.OrdinalIgnoreCase))
             .FirstOrDefault(value => MaterialDependencyOracle.Instance.GetKind(
                 MEGame.LE2,
                 "Texture2D",
@@ -608,8 +708,13 @@ public static class CustomMeshPccMaterializerTests
             TestAssert.True(authoredTexture is ExportEntry,
                 $"The authored {parameter} override was not materialised as a Texture2D export.");
             TestAssert.Equal(selected.TargetPath, authoredTexture!.InstancedFullPath);
-            TestAssert.True(package.FindExport(selected.Candidate.InstancedPath, "Texture2D") is null,
-                "The authored MIC retained an unqualified duplicate of the non-corpus BIOG texture.");
+            using var donor = MEPackageHandler.OpenMEPackage(selected.Occurrence.PackagePath, forceLoadFromDisk: true);
+            var donorExport = donor.GetUExport(selected.Occurrence.ExportUIndex);
+            if (!donorExport.InstancedFullPath.Equals(selected.TargetPath, StringComparison.OrdinalIgnoreCase))
+            {
+                TestAssert.True(package.FindExport(donorExport.InstancedFullPath, "Texture2D") is null,
+                    "The authored MIC retained an unqualified duplicate of the package-relative texture.");
+            }
         }
         finally
         {

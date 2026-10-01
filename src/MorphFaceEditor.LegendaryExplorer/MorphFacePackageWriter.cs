@@ -35,6 +35,7 @@ public sealed class MorphFacePackageWriter
     {
         ArgumentNullException.ThrowIfNull(draft);
         ArgumentException.ThrowIfNullOrWhiteSpace(logicalSourcePackagePath);
+        draft = draft with { MaterialOverrides = HeadMorphMaterialParameterPolicy.ForHeadMorph(draft.MaterialOverrides) };
         LegendaryExplorerCoreRuntime.Initialize();
         var sourcePath = Path.GetFullPath(draft.Source.PackagePath);
         var logicalSourcePath = Path.GetFullPath(logicalSourcePackagePath);
@@ -72,6 +73,22 @@ public sealed class MorphFacePackageWriter
             {
                 EnsureSupportedGame(sourcePackage);
                 var sourceFace = FindExport(sourcePackage, draft.Source.InstancedPath, "BioMorphFace");
+                draft = FilterSupportedAttachments(draft, sourcePackage.Game, warnings);
+                // Keep the graph of retained attachments. Strip only outgoing
+                // or unsupported references before the authored face is ported.
+                var sourceProperties = sourceFace.GetProperties();
+                var sourceHair = sourceProperties.GetProp<ObjectProperty>("m_oHairMesh")?.ResolveToEntry(sourcePackage);
+                if (draft.HairMeshReference is null || sourceHair is null ||
+                    !sourceHair.InstancedFullPath.Equals(draft.HairMeshReference.InstancedPath, StringComparison.OrdinalIgnoreCase))
+                    sourceProperties.RemoveNamedProperty("m_oHairMesh");
+                var selectedOthers = draft.OtherMeshReferences.Where(identity => identity is not null)
+                    .Select(identity => identity!.InstancedPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var retainedOthers = sourceProperties.GetProp<ArrayProperty<ObjectProperty>>("m_oOtherMeshes")?
+                    .Where(reference => reference.ResolveToEntry(sourcePackage) is { } entry &&
+                        selectedOthers.Contains(entry.InstancedFullPath)).ToArray() ?? [];
+                if (retainedOthers.Length == 0) sourceProperties.RemoveNamedProperty("m_oOtherMeshes");
+                else sourceProperties.AddOrReplaceProp(new ArrayProperty<ObjectProperty>(retainedOthers, "m_oOtherMeshes"));
+                sourceFace.WriteProperties(sourceProperties);
                 using var destinationPackage = createNewPackage
                     ? MEPackageHandler.CreateMemoryEmptyPackage(destination, sourcePackage.Game)
                     : MEPackageHandler.OpenMEPackage(destination, forceLoadFromDisk: true);
@@ -87,10 +104,13 @@ public sealed class MorphFacePackageWriter
                         $"The destination already contains an entry named '{destinationFacePath}'.");
                 }
 
+                using var explicitTextureCache = new PackageCache { CacheMaxSize = 8 };
+                var explicitTextureDonors = ResolveExplicitTextureDonors(draft, sourcePackage.Game, explicitTextureCache);
                 var portedFace = PccPackageWorkflow.ImportRootPreservingStructure(
                     destinationPackage,
                     sourceFace,
-                    warnings);
+                    warnings,
+                    explicitTextureDonors: explicitTextureDonors);
                 if (destinationObjectName is not null)
                 {
                     portedFace.ObjectName = new NameReference(destinationObjectName);
@@ -149,6 +169,7 @@ public sealed class MorphFacePackageWriter
     public MorphFaceSaveResult SaveExisting(MorphFaceDocument draft)
     {
         ArgumentNullException.ThrowIfNull(draft);
+        draft = draft with { MaterialOverrides = HeadMorphMaterialParameterPolicy.ForHeadMorph(draft.MaterialOverrides) };
         LegendaryExplorerCoreRuntime.Initialize();
         var packagePath = Path.GetFullPath(draft.Source.PackagePath);
         ValidateDraft(draft, packagePath);
@@ -164,18 +185,26 @@ public sealed class MorphFacePackageWriter
             File.Copy(packagePath, temporaryPath, overwrite: false);
             string overridePath;
             var warnings = new List<string>();
+            PccDependencyGraphSnapshot? dependencyGraph = null;
             using (var package = MEPackageHandler.OpenMEPackage(temporaryPath, forceLoadFromDisk: true))
             {
                 EnsureSupportedGame(package);
                 var face = FindExport(package, draft.Source.InstancedPath, "BioMorphFace");
+                using var explicitTextureCache = new PackageCache { CacheMaxSize = 8 };
+                var explicitDonors = ResolveExplicitTextureDonors(draft, package.Game, explicitTextureCache)
+                    .Where(donor => !Path.GetFullPath(donor.FileRef.FilePath).Equals(packagePath, StringComparison.OrdinalIgnoreCase) ||
+                        package.FindExport(PccAssetPathPolicy.FromExport(donor), "Texture2D")?.UIndex != donor.UIndex)
+                    .ToArray();
+                PccPackageWorkflow.StageExplicitTextureDonors(package, face, explicitDonors);
                 WriteFace(package, face, draft, warnings);
                 var materialOverride = ResolveMaterialOverride(face);
                 WriteMaterialOverride(package, materialOverride, draft.MaterialOverrides, warnings);
                 overridePath = materialOverride.InstancedFullPath;
+                if (explicitDonors.Length > 0) dependencyGraph = PccPackageWorkflow.CaptureDependencyGraph(face);
                 package.Save(temporaryPath);
             }
 
-            Verify(temporaryPath, draft.Source.InstancedPath, draft, integrityBaseline);
+            Verify(temporaryPath, draft.Source.InstancedPath, draft, integrityBaseline, dependencyGraph);
             if (PackageFingerprint.Capture(packagePath) != draft.SourceFingerprint)
             {
                 throw new IOException("The open PCC changed while the face was being written. Nothing was replaced.");
@@ -334,6 +363,38 @@ public sealed class MorphFacePackageWriter
                 .GetProp<ObjectProperty>("m_pTexture")?.ResolveToEntry(package);
             VerifyReference(actual, value.TextureReference, $"texture {value.Name}");
         }
+    }
+
+    private static IReadOnlyList<ExportEntry> ResolveExplicitTextureDonors(
+        MorphFaceDocument draft, MEGame game, PackageCache cache) =>
+        PccPackageWorkflow.ResolveExplicitTextureDonors(
+            draft.MaterialOverrides.Textures.Select(value => value.TextureReference), game, cache);
+
+    private static MorphFaceDocument FilterSupportedAttachments(
+        MorphFaceDocument draft, MEGame game, ICollection<string> warnings)
+    {
+        using var cache = new PackageCache { CacheMaxSize = 8 };
+        var resolver = new GamePackageReferenceResolver(cache);
+        AssetIdentity? Filter(AssetIdentity? identity)
+        {
+            if (identity is null || !File.Exists(identity.PackagePath)) return identity;
+            var source = cache.GetCachedPackage(identity.PackagePath);
+            var entry = source?.GetEntry(identity.UIndex);
+            if (entry is null || !entry.ClassName.Equals("SkeletalMesh", StringComparison.OrdinalIgnoreCase) ||
+                !entry.InstancedFullPath.Equals(identity.InstancedPath, StringComparison.OrdinalIgnoreCase))
+                entry = source?.FindEntry(identity.InstancedPath, "SkeletalMesh");
+            var mesh = resolver.Resolve(entry);
+            if (mesh is null) return identity; // The existing unresolved-reference guard reports this.
+            if (MorphFaceAttachmentTransferEngine.HasSupportedMaterials(mesh.FileRef, mesh, out var unsupported))
+                return identity;
+            warnings.Add($"Optional attachment '{identity.InstancedPath}' was omitted because {unsupported} is outside MFE's supported canonical materials.");
+            return null;
+        }
+        return draft with
+        {
+            HairMeshReference = Filter(draft.HairMeshReference),
+            OtherMeshReferences = draft.OtherMeshReferences.Select(Filter).Where(identity => identity is not null).ToArray()
+        };
     }
 
     private static void WriteAttachmentReferences(

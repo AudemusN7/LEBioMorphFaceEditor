@@ -36,10 +36,14 @@ internal static class ExternalSkeletalMeshMaterializer
         ArgumentException.ThrowIfNullOrWhiteSpace(instancedPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(className);
 
+        using var cache = new PackageCache();
+        InstalledGameAssetResolver.RefreshMounts(destination.Game);
+        var installed = new InstalledGameAssetResolver().Resolve(destination.Game,
+            new AssetIdentity(donorPackagePath, instancedPath, sourceUIndex, className), cache);
+        if (installed is not null)
+            return MaterializeResolved(destination, installed, PccAssetPathPolicy.FromExport(installed), className, warnings);
         if (destination.FindExport(instancedPath, className) is { } existing)
-        {
             return existing;
-        }
         if (!File.Exists(donorPackagePath))
         {
             throw new FileNotFoundException(
@@ -56,10 +60,12 @@ internal static class ExternalSkeletalMeshMaterializer
         var sourceExport = ResolveSourceExport(source, instancedPath, className, sourceUIndex)
                            ?? throw new InvalidDataException(
                                $"{className} '{instancedPath}' was not found in '{source.FilePath}'.");
+        var targetPath = sourceExport.IsForcedExport ? sourceExport.InstancedFullPath :
+            PccAssetPathPolicy.FromDonorOccurrence(sourceExport.InstancedFullPath, donorPackagePath);
         return MaterializeResolved(
             destination,
             sourceExport,
-            instancedPath,
+            targetPath,
             className,
             warnings);
     }
@@ -71,20 +77,15 @@ internal static class ExternalSkeletalMeshMaterializer
         string className,
         ICollection<string>? warnings)
     {
-        if (destination.FindExport(instancedPath, className) is { } existing)
-        {
-            return existing;
-        }
-
-        var parent = PackageIntegrity.EnsurePackagePath(destination, instancedPath, className);
         var materialized = PccPackageWorkflow.ImportDependencyGraph(
             destination,
             sourceExport,
-            parent,
+            destinationParent: null,
             textureCatalog: null,
             preferBiogTextures: false,
-            warnings,
-            applyCorpusMaterialPolicy: true);
+            warnings: warnings,
+            applyCorpusMaterialPolicy: true,
+            targetPathOverride: instancedPath);
         if (
             !materialized.ClassName.Equals(className, StringComparison.OrdinalIgnoreCase))
         {
@@ -107,13 +108,24 @@ internal static class ExternalSkeletalMeshMaterializer
     /// </summary>
     internal static void PrepareReferencedPackagePaths(
         IMEPackage destination,
-        ExportEntry sourceExport)
+        ExportEntry sourceExport,
+        IReadOnlyDictionary<IEntry, IEntry>? plannedMappings = null)
     {
-        var referencedExports = EntryImporter.GetAllReferencesOfExport(sourceExport)
-            .OfType<ExportEntry>()
-            .Append(sourceExport);
-        foreach (var referencedExport in referencedExports)
+        var pending = new Queue<ExportEntry>();
+        var visited = new HashSet<ExportEntry>();
+        pending.Enqueue(sourceExport);
+        while (pending.TryDequeue(out var referencedExport))
         {
+            if (!visited.Add(referencedExport)) continue;
+            // Preseeded dependencies already have their destination graph. Do
+            // not reserve the discarded donor subtree as exports: it may have
+            // been deliberately replaced by a native import.
+            if (plannedMappings?.ContainsKey(referencedExport) == true) continue;
+            foreach (var index in PackageIntegrity.References(referencedExport).Values.Where(value => value != 0).Distinct())
+            {
+                if (referencedExport.FileRef.GetEntry(index) is ExportEntry dependency)
+                    pending.Enqueue(dependency);
+            }
             var packages = new Stack<IEntry>();
             for (IEntry? entry = referencedExport; entry is not null; entry = entry.Parent)
             {
@@ -148,7 +160,7 @@ internal static class ExternalSkeletalMeshMaterializer
 
         if (sourceUIndex > 0 && source.IsUExport(sourceUIndex) &&
             source.GetUExport(sourceUIndex) is { } indexed &&
-            indexed.ClassName.Equals(className, StringComparison.OrdinalIgnoreCase))
+            Matches(indexed))
         {
             return indexed;
         }

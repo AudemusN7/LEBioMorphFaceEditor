@@ -30,7 +30,8 @@ public sealed record StandalonePlayerAssetCatalog(
     {
         ArgumentNullException.ThrowIfNull(requestedPaths);
         LegendaryExplorerCoreRuntime.Initialize();
-        var loadedFiles = MELoadedFiles.GetFilesLoadedInGame(ToMeGame(game), forceUseCached: true);
+        var loadedFiles = InstalledGameAssetResolver.GetOfficialPackageFiles(ToMeGame(game));
+        var installed = InstalledGameAssetResolver.ResolveInstalledReferences(game, requestedPaths, "SkeletalMesh");
         string? fallbackPackage = null;
         try { fallbackPackage = StandalonePlayerMorphImportService.ResolveInstalledSeed(game); }
         catch (Exception) { /* The seek-free package may still resolve without a player seed. */ }
@@ -38,7 +39,7 @@ public sealed record StandalonePlayerAssetCatalog(
             .Where(path => !string.IsNullOrWhiteSpace(path) && !path.Equals("None", StringComparison.OrdinalIgnoreCase))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Select(path => (Path: path, Identity:
-                FindInstalledExport(loadedFiles, path, "SkeletalMesh", packageLocalPath: true) ??
+                installed.GetValueOrDefault(path) ?? FindInstalledExport(loadedFiles, path, "SkeletalMesh", packageLocalPath: true) ??
                 FindPackageExport(fallbackPackage, path, "SkeletalMesh")))
             .Where(value => value.Identity is not null)
             .ToDictionary(value => value.Path, value => value.Identity!, StringComparer.OrdinalIgnoreCase);
@@ -73,8 +74,9 @@ public sealed record StandalonePlayerAssetCatalog(
                            !path.Equals("None", StringComparison.OrdinalIgnoreCase))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        var loadedFiles = MELoadedFiles.GetFilesLoadedInGame(ToMeGame(game), forceUseCached: true);
+        var loadedFiles = InstalledGameAssetResolver.GetOfficialPackageFiles(ToMeGame(game));
         using var packageCache = new PackageCache { CacheMaxSize = 8 };
+        var officialPaths = loadedFiles.Values.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var referencePath = referencePackagePath is null
             ? StandalonePlayerMorphImportService.ResolveInstalledSeed(game)
             : Path.GetFullPath(referencePackagePath);
@@ -83,13 +85,22 @@ public sealed record StandalonePlayerAssetCatalog(
                                    $"Could not open installed RON reference package '{referencePath}'.");
         var referenceResolver = new GamePackageReferenceResolver(packageCache);
         var textureAssets = new List<AssetIdentity>();
+        var installedTextures = InstalledGameAssetResolver.ResolveInstalledReferences(game, requestedTextures, "Texture2D");
+        var installedMeshes = InstalledGameAssetResolver.ResolveInstalledReferences(game, requestedMeshes, "SkeletalMesh");
         foreach (var requestedPath in requestedTextures)
         {
+            if (installedTextures.TryGetValue(requestedPath, out var installedTexture))
+            {
+                textureAssets.Add(installedTexture);
+                continue;
+            }
             var registryMatches = textures
                 .Where(candidate => MatchesRequestedTexturePath(candidate, game, requestedPath))
                 .Take(2)
                 .ToArray();
-            if (registryMatches.Length == 1 && File.Exists(registryMatches[0].EffectiveOccurrence.PackagePath))
+            if (registryMatches.Length == 1 && File.Exists(registryMatches[0].EffectiveOccurrence.PackagePath) &&
+                (officialPaths.Contains(registryMatches[0].EffectiveOccurrence.PackagePath) ||
+                 registryMatches[0].EffectiveOccurrence.Origin is TextureCatalogOrigin.Mod or TextureCatalogOrigin.Manual))
             {
                 var occurrence = registryMatches[0].EffectiveOccurrence;
                 textureAssets.Add(new AssetIdentity(
@@ -110,6 +121,11 @@ public sealed record StandalonePlayerAssetCatalog(
         var meshes = new List<AssetIdentity>();
         foreach (var requestedPath in requestedMeshes)
         {
+            if (installedMeshes.TryGetValue(requestedPath, out var installedMesh))
+            {
+                meshes.Add(installedMesh);
+                continue;
+            }
             if (attachmentMeshes is not null &&
                 AttachmentMeshCatalogResolver.Resolve(attachmentMeshes, requestedPath) is { } indexedMesh)
             {

@@ -40,18 +40,25 @@ if (args.Length == 2 && args[0].Equals("verify-texture-registries", StringCompar
             !AttachmentMeshNamePolicy.IsInstalledHeadAttachment(candidate.EffectiveOccurrence.InstancedPath)).ToArray();
         var duplicateMeshes = snapshot.AttachmentMeshes.GroupBy(candidate => candidate.CanonicalPath,
                 StringComparer.OrdinalIgnoreCase).Where(group => group.Count() > 1).ToArray();
-        var nonBiogWinners = snapshot.Candidates.Where(candidate =>
-            candidate.Occurrences.Any(occurrence => Path.GetFileNameWithoutExtension(occurrence.PackagePath)
-                .StartsWith("BIOG", StringComparison.OrdinalIgnoreCase)) &&
-            !Path.GetFileNameWithoutExtension(candidate.EffectiveOccurrence.PackagePath)
-                .StartsWith("BIOG", StringComparison.OrdinalIgnoreCase)).ToArray();
+        var officialPaths = snapshot.OfficialPackagePaths.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var incorrectDonors = snapshot.Candidates.Where(candidate =>
+        {
+            var expected = candidate.Occurrences.Where(occurrence => officialPaths.Contains(occurrence.PackagePath))
+                .OrderByDescending(occurrence => occurrence.MountPriority)
+                .ThenBy(occurrence => occurrence.PackagePath, StringComparer.OrdinalIgnoreCase).FirstOrDefault();
+            var actual = candidate.EffectiveOccurrence;
+            return expected is not null &&
+                (!expected.PackagePath.Equals(actual.PackagePath, StringComparison.OrdinalIgnoreCase) ||
+                 expected.ExportUIndex != actual.ExportUIndex || expected.MountPriority != actual.MountPriority ||
+                 expected.Origin != actual.Origin);
+        }).ToArray();
         if (excluded.Length > 0 || unsafeMeshes.Length > 0 || duplicateMeshes.Length > 0 ||
-            nonBiogWinners.Length > 0)
+            incorrectDonors.Length > 0)
             throw new InvalidDataException($"{game} calibration failed: {excluded.Length} excluded textures, " +
                 $"{unsafeMeshes.Length} invalid meshes, {duplicateMeshes.Length} duplicate meshes, " +
-                $"{nonBiogWinners.Length} non-BIOG effective textures with BIOG occurrences.");
+                $"{incorrectDonors.Length} textures with an incorrect official donor.");
         Console.WriteLine($"{game}: verified {snapshot.Candidates.Count} texture paths and " +
-            $"{snapshot.AttachmentMeshes.Count} HIR mesh paths; no exclusion, duplicate, or BIOG-priority violations.");
+            $"{snapshot.AttachmentMeshes.Count} HIR mesh paths; no exclusion, duplicate, or official-donor violations.");
     }
     return 0;
 }
@@ -165,11 +172,12 @@ if (args.Length == 3 && args[0].Equals("material-oracle", StringComparison.Ordin
         var sourcePath = Path.Combine(oracleDirectory, $"{gameName} GlobalMorphs.pcc");
         using var sourcePackage = MEPackageHandler.OpenMEPackage(sourcePath, forceLoadFromDisk: true);
         var materialRoots = sourcePackage.Exports
-            .Where(entry => IsMaterialGraphRootClass(entry.ClassName))
+            .Where(entry => IsMaterialGraphRootClass(entry.ClassName) && !IsTrashedMaterialGraphEntry(entry))
             .ToArray();
         var entries = materialRoots
             .SelectMany(root => EntryImporter.GetAllReferencesOfExport(root).Append<IEntry>(root))
             .Distinct()
+            .Where(entry => !IsTrashedMaterialGraphEntry(entry))
             .Select(entry => new MaterialOracleEntry(
                 entry.ClassName,
                 entry.InstancedFullPath,
@@ -177,6 +185,39 @@ if (args.Length == 3 && args[0].Equals("material-oracle", StringComparison.Ordin
             .OrderBy(entry => entry.ClassName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(entry => entry.Path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        if (gameName.Equals("LE2", StringComparison.OrdinalIgnoreCase))
+        {
+            // These Player-only dependencies have reviewed native Startup import
+            // roles, independent of whether the NPC GlobalMorphs corpus contains them.
+            var reviewedPlayerImports = new[]
+            {
+                new MaterialOracleEntry("RvrEffectsMaterialUser",
+                    "BIOG_Humanoid_EYE_OVRD.HMM_EYE_MASTER_OVRD_MAT_USER", "Import"),
+                new MaterialOracleEntry("Texture2D",
+                    "BIOG_Humanoid_MASTER_MTR_R.IrisGradientMask", "Import"),
+                new MaterialOracleEntry("TextureCube",
+                    "BIOG_Humanoid_MASTER_MTR_R.Cube.Cube_EyeReflection", "Import")
+            };
+            foreach (var reviewedImport in reviewedPlayerImports)
+            {
+                var matches = entries.Where(entry =>
+                        entry.ClassName.Equals(reviewedImport.ClassName, StringComparison.OrdinalIgnoreCase) &&
+                        entry.Path.Equals(reviewedImport.Path, StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+                if (matches.Length > 1)
+                {
+                    throw new InvalidDataException(
+                        $"Expected at most one LE2 GlobalMorphs role for '{reviewedImport.Path}', found {matches.Length}.");
+                }
+                entries = matches.Length == 0
+                    ? entries.Append(reviewedImport).ToArray()
+                    : entries.Select(entry =>
+                        entry.ClassName.Equals(reviewedImport.ClassName, StringComparison.OrdinalIgnoreCase) &&
+                        entry.Path.Equals(reviewedImport.Path, StringComparison.OrdinalIgnoreCase)
+                            ? entry with { Kind = "Import" }
+                            : entry).ToArray();
+            }
+        }
         oracleGames.Add(gameName, new MaterialOracleGame(entries));
         Console.WriteLine($"{gameName}: {entries.Length} material/texture identities");
     }
@@ -709,6 +750,10 @@ static bool IsMaterialGraphRootClass(string className) =>
     className.Equals("MaterialInstanceConstant", StringComparison.OrdinalIgnoreCase) ||
     className.Equals("BioMaterialInstanceConstant", StringComparison.OrdinalIgnoreCase) ||
     className.Equals("RvrEffectsMaterialUser", StringComparison.OrdinalIgnoreCase);
+
+static bool IsTrashedMaterialGraphEntry(IEntry entry) =>
+    entry.InstancedFullPath.Equals("ME3ExplorerTrashPackage", StringComparison.OrdinalIgnoreCase) ||
+    entry.InstancedFullPath.StartsWith("ME3ExplorerTrashPackage.", StringComparison.OrdinalIgnoreCase);
 
 static string HashPositions(IReadOnlyList<Vector3> positions)
 {

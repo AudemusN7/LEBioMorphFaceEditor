@@ -219,13 +219,6 @@ public sealed class StandalonePlayerMorphImportService
     private static string ResolveInstalledSeed(MorphFaceGame game, string fileName)
     {
         LegendaryExplorerCoreRuntime.Initialize();
-        var cookedPath = LegendaryExplorerCoreRuntime.GetCookedPath(game)
-                         ?? throw new DirectoryNotFoundException(
-                             $"The installed {game} CookedPCConsole directory was not discovered.");
-        var path = Path.Combine(cookedPath, fileName);
-        return File.Exists(path)
-            ? Path.GetFullPath(path)
-            : throw new FileNotFoundException(
-                $"The installed {game} player template package '{fileName}' was not found.", path);
+        return InstalledGameAssetResolver.ResolvePackage(game, fileName);
     }
 }

@@ -1276,11 +1276,12 @@ public sealed class MorphFacePackageContextService
         return ExternalTextureMaterializer.Materialize(package, candidate);
     }
 
-    private static IEntry ResolveMeshCandidate(
+    private static IEntry? ResolveMeshCandidate(
         IMEPackage package,
         string instancedPath,
         StandalonePlayerAssetCatalog? assetCatalog,
-        ImportEntry? existingImport)
+        ImportEntry? existingImport,
+        ICollection<string> warnings)
     {
         var candidates = assetCatalog?.SkeletalMeshes
             .Where(value => value.ClassName.Equals("SkeletalMesh", StringComparison.OrdinalIgnoreCase) &&
@@ -1291,6 +1292,17 @@ public sealed class MorphFacePackageContextService
         {
             throw new UnresolvedRonAttachmentException(
                 $"RON SkeletalMesh '{instancedPath}' is not present in the standalone seed and does not have exactly one exact installed-game donor candidate.");
+        }
+        using (var cache = new PackageCache { CacheMaxSize = 8 })
+        {
+            var donor = cache.GetCachedPackage(candidates[0].PackagePath);
+            var source = donor?.GetEntry(candidates[0].UIndex) ?? donor?.FindEntry(instancedPath, "SkeletalMesh");
+            var mesh = new GamePackageReferenceResolver(cache).Resolve(source);
+            if (mesh is not null && !MorphFaceAttachmentTransferEngine.HasSupportedMaterials(mesh.FileRef, mesh, out var unsupported))
+            {
+                warnings.Add($"RON attachment '{instancedPath}' was omitted because {unsupported} is outside MFE's supported canonical materials.");
+                return null;
+            }
         }
         if (existingImport is not null)
         {
@@ -1324,7 +1336,7 @@ public sealed class MorphFacePackageContextService
             {
                 try
                 {
-                    hair = ResolveMeshCandidate(package, ron.HairMesh, assetCatalog, existing as ImportEntry);
+                    hair = ResolveMeshCandidate(package, ron.HairMesh, assetCatalog, existing as ImportEntry, warnings);
                 }
                 catch (UnresolvedRonAttachmentException exception) when (strictAssetResolution)
                 {
@@ -1345,10 +1357,12 @@ public sealed class MorphFacePackageContextService
                     }
                 }
             }
+            hair = RetainSupportedRonAttachment(hair, warnings);
             if (hair is not null)
             {
                 properties.AddOrReplaceProp(new ObjectProperty(hair, "m_oHairMesh"));
             }
+            else properties.RemoveNamedProperty("m_oHairMesh");
         }
 
         var accessories = ron.AccessoryMeshes.Select(path =>
@@ -1359,7 +1373,7 @@ public sealed class MorphFacePackageContextService
             {
                 try
                 {
-                    entry = ResolveMeshCandidate(package, path, assetCatalog, existing as ImportEntry);
+                    entry = ResolveMeshCandidate(package, path, assetCatalog, existing as ImportEntry, warnings);
                 }
                 catch (UnresolvedRonAttachmentException exception) when (strictAssetResolution)
                 {
@@ -1369,8 +1383,9 @@ public sealed class MorphFacePackageContextService
                         exception);
                 }
             }
-            return new ObjectProperty(entry);
-        }).ToArray();
+            entry = RetainSupportedRonAttachment(entry, warnings);
+            return entry is null ? null : new ObjectProperty(entry);
+        }).Where(property => property is not null).Cast<ObjectProperty>().ToArray();
         if (accessories.Length == 0)
         {
             properties.RemoveNamedProperty("m_oOtherMeshes");
@@ -1380,6 +1395,17 @@ public sealed class MorphFacePackageContextService
             properties.AddOrReplaceProp(new ArrayProperty<ObjectProperty>(accessories, "m_oOtherMeshes"));
         }
         face.WriteProperties(properties);
+    }
+
+    private static IEntry? RetainSupportedRonAttachment(IEntry? entry, ICollection<string> warnings)
+    {
+        if (entry is ExportEntry mesh &&
+            !MorphFaceAttachmentTransferEngine.HasSupportedMaterials(mesh.FileRef, mesh, out var unsupported))
+        {
+            warnings.Add($"RON attachment '{entry.InstancedFullPath}' was omitted because {unsupported} is outside MFE's supported canonical materials.");
+            return null;
+        }
+        return entry;
     }
 
     private sealed class UnresolvedRonAttachmentException(string message) : IOException(message);

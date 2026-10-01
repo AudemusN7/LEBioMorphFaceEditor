@@ -80,10 +80,12 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
 
         var options = new List<CustomMaterialAssignmentOption>();
         var warnings = new List<string>();
+        var officialPackages = InstalledGameAssetResolver.GetOfficialPackages(game);
         foreach (var source in Sources)
         {
             if (source.Games is not null && !source.Games.Contains(game)) continue;
-            var packagePath = Path.Combine(cookedPath, source.PackageFileName);
+            var packagePath = officialPackages.GetValueOrDefault(source.PackageFileName)
+                ?? Path.Combine(cookedPath, source.PackageFileName);
             if (!File.Exists(packagePath))
             {
                 warnings.Add($"Custom material source '{source.PackageFileName}' is not installed for {game}.");
@@ -213,29 +215,43 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
 
     private static IEnumerable<IndexedMaterialCandidate> CandidatePackages(
         TextureRegistrySnapshot snapshot,
-        IndexedTemplateSource source)
+        IndexedTemplateSource source) => CandidatePackages(snapshot, source.MeshObjectName,
+        source.TextureMarker, source.FullyQualifiedMeshPath);
+
+    internal static IReadOnlyList<IndexedMaterialCandidate> CandidatePackages(
+        TextureRegistrySnapshot snapshot,
+        string meshObjectName,
+        string textureMarker,
+        string fullyQualifiedMeshPath)
     {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        var officialPackages = snapshot.OfficialPackagePaths.Select(Path.GetFullPath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var templates = snapshot.MorphFaceTemplates
             .Where(candidate => candidate.BaseHeadPath is not null &&
                 candidate.BaseHeadPath.Split('.').Last().Equals(
-                    source.MeshObjectName, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(candidate => candidate.Origin)
-            .ThenByDescending(candidate => candidate.MountPriority)
-            .ThenBy(candidate => candidate.PackagePath, StringComparer.OrdinalIgnoreCase)
-            .Select(candidate => new IndexedMaterialCandidate(candidate.PackagePath, candidate.BaseHeadPath!));
+                    meshObjectName, StringComparison.OrdinalIgnoreCase) &&
+                officialPackages.Contains(Path.GetFullPath(candidate.PackagePath)))
+            .Select(candidate => new IndexedMaterialCandidate(candidate.PackagePath, candidate.BaseHeadPath!,
+                candidate.MountPriority, candidate.Origin));
         var texturePackages = snapshot.Candidates
-            .Where(candidate => candidate.InstancedPath.Contains(
-                source.TextureMarker, StringComparison.OrdinalIgnoreCase))
-            .SelectMany(candidate => candidate.Occurrences)
-            .OrderBy(occurrence => occurrence.Origin)
-            .ThenByDescending(occurrence => occurrence.MountPriority)
-            .ThenBy(occurrence => occurrence.PackagePath, StringComparer.OrdinalIgnoreCase)
-            .Select(occurrence => new IndexedMaterialCandidate(
-                occurrence.PackagePath, source.FullyQualifiedMeshPath));
+            .Where(candidate => candidate.InstancedPath.Contains(textureMarker,
+                StringComparison.OrdinalIgnoreCase))
+            .Select(candidate => candidate.EffectiveOccurrence)
+            .Where(occurrence =>
+                occurrence.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc &&
+                officialPackages.Contains(Path.GetFullPath(occurrence.PackagePath)))
+            .Select(occurrence => new IndexedMaterialCandidate(occurrence.PackagePath,
+                fullyQualifiedMeshPath, occurrence.MountPriority, occurrence.Origin));
         return templates.Concat(texturePackages)
             .Where(candidate => File.Exists(candidate.PackagePath))
             .DistinctBy(candidate => $"{candidate.PackagePath}|{candidate.MeshPath}",
-                StringComparer.OrdinalIgnoreCase);
+                StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(candidate => candidate.MountPriority)
+            .ThenBy(candidate => candidate.Origin)
+            .ThenBy(candidate => candidate.PackagePath, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(candidate => candidate.MeshPath, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private IReadOnlyList<AssetIdentity> LoadPreviewAttachments(
@@ -368,5 +384,9 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
         };
     }
 
-    private sealed record IndexedMaterialCandidate(string PackagePath, string MeshPath);
+    internal sealed record IndexedMaterialCandidate(
+        string PackagePath,
+        string MeshPath,
+        int MountPriority,
+        TextureCatalogOrigin Origin);
 }

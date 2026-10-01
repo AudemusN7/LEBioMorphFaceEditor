@@ -38,9 +38,13 @@ internal static class MorphFaceTextureTransferEngine
         string sourcePackagePath,
         string? targetTemplatePackagePath,
         IReadOnlyList<TextureCatalogCandidate> sourceTextureCatalog,
-        IReadOnlyList<TextureCatalogCandidate> targetTextureCatalog)
+        IReadOnlyList<TextureCatalogCandidate> targetTextureCatalog,
+        InstalledGameAssetResolver? installedAssetsOverride = null)
     {
         var warnings = new List<string>();
+        InstalledGameAssetResolver.RefreshMounts(sourceGame);
+        InstalledGameAssetResolver.RefreshMounts(destination.Game);
+        var installedAssets = installedAssetsOverride ?? new InstalledGameAssetResolver();
         var textures = new List<TextureMaterialOverride>();
         using var donors = new DonorPackages();
         foreach (var value in source.Textures.Where(value =>
@@ -57,18 +61,20 @@ internal static class MorphFaceTextureTransferEngine
             if (decision.Kind == TransferKind.EmbedSource)
             {
                 var existingTargetPath = ResolveTargetPath(
-                    destination, sourcePath, targetTemplatePackagePath, donors, targetTextureCatalog);
+                    destination, sourcePath, targetTemplatePackagePath, donors, targetTextureCatalog, installedAssets);
                 targetEntry = existingTargetPath is not null
                     ? MaterializeTargetTexture(
                         destination, existingTargetPath, targetTemplatePackagePath, donors,
-                        targetTextureCatalog, warnings)
+                        targetTextureCatalog, warnings, installedAssets)
                     : EmbedPackageStoredSourceTexture(
                         destination,
                         sourceGame,
                         sourcePackagePath,
                         sourcePath,
+                        value.TextureReference,
                         sourceTextureCatalog,
                         donors,
+                        installedAssets,
                         warnings);
             }
             else
@@ -83,12 +89,13 @@ internal static class MorphFaceTextureTransferEngine
                         requestedPath,
                         targetTemplatePackagePath,
                         donors,
-                        targetTextureCatalog);
+                        targetTextureCatalog,
+                        installedAssets);
                 targetEntry = resolvedPath is null
                     ? null
                     : MaterializeTargetTexture(
                         destination, resolvedPath, targetTemplatePackagePath, donors,
-                        targetTextureCatalog, warnings);
+                        targetTextureCatalog, warnings, installedAssets);
             }
 
             if (targetEntry is null)
@@ -209,19 +216,21 @@ internal static class MorphFaceTextureTransferEngine
         string requestedPath,
         string? targetTemplatePackagePath,
         DonorPackages donors,
-        IReadOnlyList<TextureCatalogCandidate> targetTextureCatalog)
+        IReadOnlyList<TextureCatalogCandidate> targetTextureCatalog,
+        InstalledGameAssetResolver installedAssets)
     {
+        if (installedAssets.Resolve(destination.Game, requestedPath, "Texture2D", donors.Cache) is not null)
+        {
+            return requestedPath;
+        }
         if (FindEntryByCanonicalPath(destination, requestedPath, "Texture2D") is not null)
         {
             return requestedPath;
         }
 
-        var availability = new TextureCatalogAvailability(
-            [],
-            targetTextureCatalog);
-        if (availability.TryResolve(requestedPath, out var installedPath))
+        if (FindCatalogCandidate(targetTextureCatalog, requestedPath) is not null)
         {
-            return installedPath;
+            return requestedPath;
         }
 
         var candidates = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
@@ -268,8 +277,18 @@ internal static class MorphFaceTextureTransferEngine
         string? targetTemplatePackagePath,
         DonorPackages donors,
         IReadOnlyList<TextureCatalogCandidate> targetTextureCatalog,
-        ICollection<string> warnings)
+        ICollection<string> warnings,
+        InstalledGameAssetResolver installedAssets)
     {
+        if (installedAssets.Resolve(destination.Game, canonicalPath, "Texture2D", donors.Cache) is { } official)
+        {
+            return PccPackageWorkflow.ResolveTextureReference(
+                destination,
+                new AssetIdentity(official.FileRef.FilePath, canonicalPath, official.UIndex, "Texture2D"),
+                textureCatalog: null,
+                preferBiogTextures: false,
+                warnings: warnings);
+        }
         if (FindEntryByCanonicalPath(destination, canonicalPath, "Texture2D") is { } existing)
         {
             return existing;
@@ -285,9 +304,9 @@ internal static class MorphFaceTextureTransferEngine
                     canonicalPath,
                     occurrence.ExportUIndex,
                     "Texture2D"),
-                targetTextureCatalog,
-                PreferBiogTexture(canonicalPath),
-                warnings);
+                textureCatalog: null,
+                preferBiogTextures: false,
+                warnings: warnings);
         }
         foreach (var path in TargetDonorPaths(targetTemplatePackagePath))
         {
@@ -313,24 +332,24 @@ internal static class MorphFaceTextureTransferEngine
         IReadOnlyList<TextureCatalogCandidate> candidates,
         string requestedPath)
         => candidates.FirstOrDefault(candidate =>
+            candidate.IsEligibleOfficialDefault &&
+            (candidate.EffectiveOccurrence.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc) &&
             candidate.InstancedPath.Equals(requestedPath, StringComparison.OrdinalIgnoreCase));
-
-    private static bool PreferBiogTexture(string path) =>
-        path.Contains("HMM_", StringComparison.OrdinalIgnoreCase) ||
-        path.Contains("HMF_", StringComparison.OrdinalIgnoreCase) ||
-        path.Contains("Humanoid", StringComparison.OrdinalIgnoreCase);
 
     private static IEntry EmbedPackageStoredSourceTexture(
         IMEPackage destination,
         MEGame sourceGame,
         string sourcePackagePath,
         string sourcePath,
+        AssetIdentity? sourceIdentity,
         IReadOnlyList<TextureCatalogCandidate> sourceTextureCatalog,
         DonorPackages donors,
+        InstalledGameAssetResolver installedAssets,
         List<string> warnings)
     {
         var sourceExport = ResolveSourceExport(
-                               sourceGame, sourcePackagePath, sourcePath, sourceTextureCatalog, donors)
+                               sourceGame, sourcePackagePath, sourcePath, sourceIdentity,
+                               sourceTextureCatalog, donors, installedAssets)
                            ?? throw new InvalidDataException(
                                $"Source texture '{sourcePath}' could not be resolved from the installed {sourceGame} packages.");
         var sourceTexture = new Texture2D(sourceExport);
@@ -365,9 +384,47 @@ internal static class MorphFaceTextureTransferEngine
         MEGame sourceGame,
         string sourcePackagePath,
         string sourcePath,
+        AssetIdentity? sourceIdentity,
         IReadOnlyList<TextureCatalogCandidate> sourceTextureCatalog,
-        DonorPackages donors)
+        DonorPackages donors,
+        InstalledGameAssetResolver installedAssets)
     {
+        if (sourceIdentity is { IsImport: false, IsExplicitTextureDonor: true } explicitDonor)
+        {
+            if (string.IsNullOrWhiteSpace(explicitDonor.PackagePath) || !File.Exists(explicitDonor.PackagePath))
+            {
+                throw new InvalidDataException(
+                    $"The explicitly selected texture '{sourcePath}' donor '{explicitDonor.PackagePath}' is unavailable.");
+            }
+            var explicitPackage = donors.Open(explicitDonor.PackagePath);
+            if (explicitPackage.Game != sourceGame)
+            {
+                throw new InvalidDataException(
+                    $"The explicitly selected texture '{sourcePath}' is from {explicitPackage.Game}, expected {sourceGame}.");
+            }
+            return InstalledGameAssetResolver.RequireExact(
+                donors.Cache,
+                explicitDonor.PackagePath,
+                sourcePath,
+                "Texture2D",
+                explicitDonor.UIndex);
+        }
+        if (installedAssets.Resolve(sourceGame, sourcePath, "Texture2D", donors.Cache) is { } official)
+        {
+            return official;
+        }
+        if (sourceIdentity is { IsImport: false } explicitIdentity &&
+            !string.IsNullOrWhiteSpace(explicitIdentity.PackagePath) &&
+            File.Exists(explicitIdentity.PackagePath))
+        {
+            var package = donors.Open(explicitIdentity.PackagePath);
+            if (package.Game == sourceGame &&
+                FindExportByCanonicalPath(package, sourcePath, "Texture2D") is { } explicitExport &&
+                (explicitIdentity.UIndex <= 0 || explicitExport.UIndex == explicitIdentity.UIndex))
+            {
+                return explicitExport;
+            }
+        }
         if (File.Exists(sourcePackagePath))
         {
             var sourcePackage = donors.Open(sourcePackagePath);
@@ -378,12 +435,14 @@ internal static class MorphFaceTextureTransferEngine
             }
         }
         var installed = FindCatalogCandidate(sourceTextureCatalog, sourcePath);
-        if (installed is not null && File.Exists(installed.EffectiveOccurrence.PackagePath))
+        if (installed is not null)
         {
-            var package = donors.Open(installed.EffectiveOccurrence.PackagePath);
+            var occurrence = installed.EffectiveOccurrence;
+            if (!File.Exists(occurrence.PackagePath)) return null;
+            var package = donors.Open(occurrence.PackagePath);
             if (package.Game == sourceGame &&
-                package.IsUExport(installed.EffectiveOccurrence.ExportUIndex) &&
-                package.GetUExport(installed.EffectiveOccurrence.ExportUIndex) is { } indexed &&
+                package.IsUExport(occurrence.ExportUIndex) &&
+                package.GetUExport(occurrence.ExportUIndex) is { } indexed &&
                 indexed.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase) &&
                 CanonicalPath(package, indexed).Equals(sourcePath, StringComparison.OrdinalIgnoreCase))
             {
@@ -451,6 +510,7 @@ internal static class MorphFaceTextureTransferEngine
 
     private sealed class DonorPackages : IDisposable
     {
+        internal PackageCache Cache { get; } = new();
         private readonly Dictionary<string, IMEPackage> _packages = new(StringComparer.OrdinalIgnoreCase);
 
         public IMEPackage Open(string path)
@@ -465,6 +525,7 @@ internal static class MorphFaceTextureTransferEngine
 
         public void Dispose()
         {
+            Cache.Dispose();
             foreach (var package in _packages.Values)
             {
                 package.Dispose();

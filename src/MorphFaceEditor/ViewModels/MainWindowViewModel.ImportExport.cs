@@ -267,7 +267,8 @@ public sealed partial class MainWindowViewModel
                     $"The {targetGame} mesh/texture database is unavailable. Build it in Mesh/Texture Databases before importing an NPC RON.");
             }
             var donor = new RonNpcDonorResolver(MorphFaceProfileRegistry.CreateDefault())
-                .Resolve(targetGame, archetype, textureCatalog.MorphFaceTemplates);
+                .Resolve(targetGame, archetype, textureCatalog.MorphFaceTemplates,
+                    textureCatalog.OfficialPackagePaths);
             var sourceCatalog = sourceGame == targetGame
                 ? textureCatalog
                 : await _referenceService.ReadTextureCatalogAsync(sourceGame, cancellationToken);

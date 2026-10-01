@@ -16,31 +16,34 @@ internal static class MaterialisationVerifier
     {
         try
         {
-            if (preexistingExports is null ||
-                !options.CrossPackageMap.Any(pair => pair.Value is ExportEntry target &&
-                                                     preexistingExports.Contains(target)))
+            // A graph can contain multiple source identities that intentionally
+            // resolve to the same destination export. Relinking each alias would
+            // process the destination binary more than once: after the first pass
+            // its UIndices are destination indices, so a second pass interprets
+            // them as donor indices and corrupts otherwise valid references.
+            // Keep the first source->destination pair (the source used to stage the
+            // export) and process each destination at most once. The map may grow
+            // while Relinker adds imports, so keep scanning until no new source is
+            // available.
+            var processedTargets = new HashSet<ExportEntry>();
+            var processedSources = new HashSet<IEntry>();
+            while (true)
             {
-                Relinker.RelinkAll(options);
-            }
-            else
-            {
-                // Keep mappings to existing exports for references in new objects, but
-                // never relink an existing destination binary as if it still held donor indices.
-                var processedSources = new HashSet<IEntry>();
-                while (true)
+                var next = options.CrossPackageMap.FirstOrDefault(pair =>
+                    pair.Key is ExportEntry && pair.Value is ExportEntry &&
+                    !processedSources.Contains(pair.Key));
+                if (next.Key is not ExportEntry source || next.Value is not ExportEntry target)
                 {
-                    var next = options.CrossPackageMap.FirstOrDefault(pair =>
-                        pair.Key is ExportEntry && pair.Value is ExportEntry &&
-                        !processedSources.Contains(pair.Key));
-                    if (next.Key is not ExportEntry source || next.Value is not ExportEntry target)
-                    {
-                        break;
-                    }
-                    processedSources.Add(source);
-                    if (!preexistingExports.Contains(target))
-                    {
-                        Relinker.Relink(source, target, options);
-                    }
+                    break;
+                }
+                processedSources.Add(source);
+                if (!processedTargets.Add(target))
+                {
+                    continue;
+                }
+                if (preexistingExports is null || !preexistingExports.Contains(target))
+                {
+                    Relinker.Relink(source, target, options);
                 }
             }
         }
@@ -62,7 +65,8 @@ internal static class MaterialisationVerifier
     }
 
     internal static void Verify(ExportEntry root, MEGame sourceGame, RelinkerOptionsPackage options,
-        ICollection<string>? warnings = null, bool rootOnly = false)
+        ICollection<string>? warnings = null, bool rootOnly = false,
+        IReadOnlyDictionary<ExportEntry, (ExportEntry Source, string TargetPath)>? stagedCopies = null)
     {
         var issues = new List<MaterialisationDiagnostic>();
         var checkedEntries = new HashSet<IEntry>();
@@ -77,6 +81,46 @@ internal static class MaterialisationVerifier
                 if (pair.Key is not ExportEntry source || pair.Value is not ExportEntry target ||
                     !ReferenceEquals(target.FileRef, root.FileRef) ||
                     rootOnly && !ReferenceEquals(target, root)) continue;
+
+                (ExportEntry Source, string TargetPath)? stagedCopy = null;
+                if (stagedCopies?.TryGetValue(target, out var recordedCopy) == true)
+                {
+                    stagedCopy = recordedCopy;
+                }
+                if (stagedCopy is { } provenance)
+                {
+                    if (!target.InstancedFullPath.Equals(provenance.TargetPath, StringComparison.OrdinalIgnoreCase) ||
+                        !target.ClassName.Equals(provenance.Source.ClassName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new InvalidDataException(
+                            $"Staged export '{target.InstancedFullPath}' no longer matches its recorded donor identity " +
+                            $"'{provenance.Source.ClassName} {provenance.TargetPath}'.");
+                    }
+                    if (!options.CrossPackageMap.TryGetValue(provenance.Source, out var stagedTarget) ||
+                        !ReferenceEquals(stagedTarget, target))
+                    {
+                        throw new InvalidDataException(
+                            $"The recorded donor '{provenance.Source.InstancedFullPath}' is not bound to its staged export.");
+                    }
+                    if (!SameCanonicalAssetIdentity(source, provenance.Source))
+                    {
+                        throw new InvalidDataException(
+                            $"Source alias '{source.ClassName} {source.InstancedFullPath}' does not identify the staged donor " +
+                            $"'{provenance.Source.ClassName} {provenance.Source.InstancedFullPath}'.");
+                    }
+                    if (!ReferenceEquals(source, provenance.Source))
+                    {
+                        // The alias is checked above; the destination's content and
+                        // dependency graph are checked only against the donor that
+                        // EntryImporter actually copied into this target.
+                        continue;
+                    }
+                }
+                if (stagedCopy is not null && !checkedEntries.Add(target))
+                {
+                    continue;
+                }
+                checkedEntries.Add(target);
                 var original = PackageIntegrity.References(source);
                 var final = PackageIntegrity.References(target);
                 foreach (var reference in final)
@@ -118,7 +162,6 @@ internal static class MaterialisationVerifier
                         throw new InvalidDataException($"'{target.InstancedFullPath}' lost required reference slots: {string.Join(", ", removed)}.");
                     prunedEntries.Add(target);
                 }
-                checkedEntries.Add(target);
             }
             if (!checkedEntries.Contains(root))
                 throw new InvalidDataException($"Materialised root '{root.InstancedFullPath}' is absent from the verified relink map.");
@@ -179,5 +222,20 @@ internal static class MaterialisationVerifier
         var prefix = donorPackage + ".";
         return actualPath.Equals(prefix + donorPath, StringComparison.OrdinalIgnoreCase) ||
                donorPath.Equals(prefix + actualPath, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool SameCanonicalAssetIdentity(IEntry alias, ExportEntry donor)
+    {
+        if (!alias.ClassName.Equals(donor.ClassName, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        if (alias is ExportEntry aliasExport &&
+            PccAssetPathPolicy.FromExport(aliasExport).Equals(
+                PccAssetPathPolicy.FromExport(donor), StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+        return HasExactPackageQualifiedIdentity(alias, donor);
     }
 }

@@ -15,6 +15,7 @@ public static class CustomMaterialEvidenceTests
     public static IReadOnlyList<TestCase> All { get; } =
     [
         new("custom material evidence enumerates used mesh slots deterministically", EnumeratesUsedMeshSlotsDeterministically),
+        new("custom material evidence tries highest mounted official source first", IndexedEvidencePrefersHighestOfficialSource),
         new("custom material evidence retains duplicate source material refs", RetainsDuplicateSourceMaterialRefs),
         new("custom material catalogue exposes only proven installed families", CatalogueExposesProvenFamilies),
         new("attachment picker excludes only audited literal mesh suffixes", HirReviewMeshesAreExcluded),
@@ -23,6 +24,61 @@ public static class CustomMaterialEvidenceTests
         new("used null attachment material slots remain invalid", UsedNullAttachmentMaterialSlotsRemainInvalid),
         new("D1 human scar and teeth support follows compiled material evidence", HumanScarAndTeethSupportFollowsEvidence)
     ];
+
+    private static void IndexedEvidencePrefersHighestOfficialSource()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"MFE-IndexedEvidence-{Guid.NewGuid():N}");
+        var lowerPath = Path.Combine(root, "CookedPCConsole", "BIOG_SAL_HED_PROMorph_R.pcc");
+        var higherPath = Path.Combine(root, "DLC", "CookedPCConsole", "BIOG_SAL_HED_PROMorph_R_DLC.pcc");
+        var modPath = Path.Combine(root, "DLC_MOD", "CookedPCConsole", "BIOG_SAL_HED_PROMorph_R_Mod.pcc");
+        Directory.CreateDirectory(Path.GetDirectoryName(lowerPath)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(higherPath)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(modPath)!);
+        File.WriteAllBytes(lowerPath, []);
+        File.WriteAllBytes(higherPath, []);
+        File.WriteAllBytes(modPath, []);
+        try
+        {
+            const string headPath = "BIOG_SAL_HED_PROMorph_R.SAL_HED_PROBase_MDL";
+            const string facePath = "BIOG_SAL_HED_PROMorph_R.BioFace_Test";
+            const string texturePath = "BIOG_SAL_HED_PROMorph_R.Textures.SAL_HED_Diff";
+            var lowerTexture = new TextureCatalogOccurrence(lowerPath, 10, 2060,
+                TextureCatalogOrigin.BaseGame, 1, 1, "PF_B8G8R8A8", "", false, null);
+            var higherTexture = new TextureCatalogOccurrence(higherPath, 20, 4000,
+                TextureCatalogOrigin.OfficialDlc, 1, 1, "PF_B8G8R8A8", "", false, null);
+            var modTexture = new TextureCatalogOccurrence(modPath, 30, 9000,
+                TextureCatalogOrigin.Mod, 1, 1, "PF_B8G8R8A8", "", false, null);
+            var texture = new TextureCatalogCandidate(TextureCatalogGame.LE3, texturePath,
+                higherTexture, [lowerTexture, higherTexture, modTexture])
+            {
+                IsEligibleOfficialDefault = true
+            };
+            var snapshot = new TextureRegistrySnapshot(TextureRegistrySnapshot.CurrentSchemaVersion,
+                TextureCatalogGame.LE3, DateTimeOffset.UtcNow, 3, [texture])
+            {
+                OfficialPackagePaths = [lowerPath, higherPath],
+                MorphFaceTemplates =
+                [
+                    new MorphFaceTemplateCandidate(lowerPath, 1, facePath, headPath, 2060,
+                        TextureCatalogOrigin.BaseGame),
+                    new MorphFaceTemplateCandidate(higherPath, 2, facePath, headPath, 4000,
+                        TextureCatalogOrigin.OfficialDlc)
+                ]
+            };
+
+            var choices = CustomMaterialTemplateCatalogService.CandidatePackages(
+                snapshot, "SAL_HED_PROBase_MDL", "SAL_HED", headPath);
+            TestAssert.True(choices.Count > 0, "The synthetic indexed source produced no package choices.");
+            TestAssert.Equal(Path.GetFullPath(higherPath), Path.GetFullPath(choices[0].PackagePath));
+            TestAssert.True(choices.All(choice => !Path.GetFullPath(choice.PackagePath)
+                    .Equals(Path.GetFullPath(modPath), StringComparison.OrdinalIgnoreCase)),
+                "Path-only material evidence admitted a mod occurrence instead of an eligible official default.");
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
 
     private static void HirReviewMeshesAreExcluded()
     {
@@ -273,9 +329,17 @@ public static class CustomMaterialEvidenceTests
             packagePath,
             "Hair_PROShepard.HMF_HIR_PROShepard_MDL");
 
-        TestAssert.Equal(
-            Path.GetFullPath(packagePath),
-            Path.GetFullPath(evidence.Mesh.PackagePath));
+        const string canonical = "BIOG_HMF_HIR_PRO.Hair_PROShepard.HMF_HIR_PROShepard_MDL";
+        TestAssert.True(canonical.Equals(PccAssetPathPolicy.FromDonorOccurrence(
+                evidence.Mesh.InstancedPath, evidence.Mesh.PackagePath), StringComparison.OrdinalIgnoreCase),
+            $"The selected evidence mesh changed identity: expected '{canonical}', got '{evidence.Mesh.InstancedPath}'.");
+        using (var cache = new PackageCache())
+        {
+            var installed = new InstalledGameAssetResolver().Resolve(MEGame.LE3, canonical, "SkeletalMesh", cache);
+            TestAssert.True(installed is not null,
+                $"The installed registry did not resolve the selected mesh identity '{canonical}'.");
+            TestAssert.Equal(Path.GetFullPath(installed!.FileRef.FilePath), Path.GetFullPath(evidence.Mesh.PackagePath));
+        }
         TestAssert.True(evidence.Slots.Count > 0,
             "The selected evidence mesh had no used material slots.");
         TestAssert.True(

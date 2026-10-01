@@ -72,7 +72,7 @@ internal sealed class MorphFaceMaterialReader(
             foreach (var value in materialVectors) vectors[value.Key] = value.Value;
             foreach (var value in materialTextures.Where(value => value.Value.IsA("Texture2D")))
             {
-                textures[value.Key] = value.Value.InstancedFullPath;
+                textures[value.Key] = PccAssetPathPolicy.FromExport(value.Value);
             }
         }
 
@@ -342,6 +342,8 @@ internal sealed class MorphFaceMaterialReader(
 
         var textureExports = new Dictionary<string, ExportEntry?>(StringComparer.OrdinalIgnoreCase);
         var textures = properties.GetProp<ArrayProperty<StructProperty>>("m_aTextureOverrides")?
+            .Where(value => !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(
+                value.GetProp<NameProperty>("nName")?.Value.Instanced ?? string.Empty))
             .Select(value =>
             {
                 var name = value.GetProp<NameProperty>("nName")?.Value.Instanced ?? string.Empty;
@@ -351,7 +353,11 @@ internal sealed class MorphFaceMaterialReader(
                 // Salarian Add6 override). Keep the import identity for an
                 // unchanged save, but fall back to the inherited material
                 // texture when no export can be decoded for preview.
-                var export = referenceResolver.Resolve(entry);
+                var explicitlyEmbedded = entry is ExportEntry localTexture &&
+                                         localTexture.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase) &&
+                                         PccPackageWorkflow.HasPersistedExplicitTextureLeaf(
+                                             materialOverride.FileRef, localTexture.InstancedFullPath);
+                var export = explicitlyEmbedded ? (ExportEntry)entry! : referenceResolver.Resolve(entry);
                 if (!string.IsNullOrWhiteSpace(name))
                 {
                     textureExports[name] = export;
@@ -360,7 +366,10 @@ internal sealed class MorphFaceMaterialReader(
                 // The resolved export above is only the preview source; replacing
                 // an import with that external export identity makes an unchanged
                 // override impossible to re-author in the opened PCC.
-                return new TextureMaterialOverride(name, MorphFacePackageReader.ToIdentity(entry));
+                var identity = MorphFacePackageReader.ToIdentity(entry);
+                return new TextureMaterialOverride(name, explicitlyEmbedded && identity is not null
+                    ? identity with { IsExplicitTextureDonor = true }
+                    : identity);
             })
             .Where(value => !string.IsNullOrWhiteSpace(value.Name))
             .ToArray() ?? [];

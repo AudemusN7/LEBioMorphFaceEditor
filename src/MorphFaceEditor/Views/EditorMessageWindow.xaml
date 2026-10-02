@@ -3,18 +3,18 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Width="520" MinHeight="210" SizeToContent="Height" ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner"
-        Background="{StaticResource WindowBackground}"
-        Foreground="{StaticResource PrimaryText}">
+        Background="{DynamicResource WindowBackground}"
+        Foreground="{DynamicResource PrimaryText}">
     <Grid Margin="22">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
-        <TextBlock x:Name="HeadingText" Foreground="{StaticResource Accent}" FontSize="12"
+        <TextBlock x:Name="HeadingText" Foreground="{DynamicResource Accent}" FontSize="12"
                    FontWeight="SemiBold" TextWrapping="Wrap" />
         <TextBlock x:Name="MessageText" Grid.Row="1" Margin="0,13,0,22"
-                   Foreground="{StaticResource SecondaryText}" FontSize="13"
+                   Foreground="{DynamicResource SecondaryText}" FontSize="13"
                    TextWrapping="Wrap" />
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
             <Button x:Name="CancelButton" Content="Cancel" MinWidth="84" Margin="0,0,8,0"

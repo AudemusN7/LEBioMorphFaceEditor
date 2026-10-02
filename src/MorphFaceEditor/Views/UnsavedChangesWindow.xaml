@@ -4,20 +4,20 @@
         Title="Unsaved package changes"
         Width="510" Height="230" ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner"
-        Background="{StaticResource WindowBackground}" Foreground="{StaticResource PrimaryText}">
+        Background="{DynamicResource WindowBackground}" Foreground="{DynamicResource PrimaryText}">
     <Grid Margin="22">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
-        <TextBlock Text="SAVE CHANGES?" Foreground="{StaticResource Accent}" FontSize="12" FontWeight="SemiBold" />
+        <TextBlock Text="SAVE CHANGES?" Foreground="{DynamicResource Accent}" FontSize="12" FontWeight="SemiBold" />
         <StackPanel Grid.Row="1" Margin="0,13,0,18">
             <TextBlock x:Name="SummaryText" Text="The package workspace has unsaved BioMorphFace changes." FontSize="14" />
-            <TextBlock x:Name="FacePathText" Foreground="{StaticResource SecondaryText}" Margin="0,8,0,0"
+            <TextBlock x:Name="FacePathText" Foreground="{DynamicResource SecondaryText}" Margin="0,8,0,0"
                        TextWrapping="Wrap" TextTrimming="CharacterEllipsis" />
             <TextBlock x:Name="SaveExplanationText" Text="Save commits all temporary edits to the source PCC."
-                       Foreground="{StaticResource MutedText}" FontSize="11" Margin="0,8,0,0" />
+                       Foreground="{DynamicResource MutedText}" FontSize="11" Margin="0,8,0,0" />
         </StackPanel>
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Content="Cancel" MinWidth="82" IsCancel="True" Click="OnCancel" />

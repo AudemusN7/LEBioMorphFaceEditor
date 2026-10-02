@@ -12,6 +12,8 @@ namespace MorphFaceEditor;
 public partial class App : Application
 {
     private MainWindowViewModel? _viewModel;
+    private ThemeViewportBinding? _themeViewport;
+    internal ThemeManager? Themes { get; private set; }
     internal bool ClearApplicationDataOnExit { get; set; }
 
     protected override void OnStartup(StartupEventArgs e)
@@ -26,6 +28,13 @@ public partial class App : Application
         TaskScheduler.UnobservedTaskException += (_, args) =>
             AppLog.Error("Unobserved task exception.", args.Exception);
         LegendaryExplorerCoreRuntime.Initialize(TaskScheduler.FromCurrentSynchronizationContext());
+        Themes = ThemeManager.CreateDefault(Resources);
+
+#if DEBUG
+        // Palette authoring is opt-in now that the reviewed themes are shipped.
+        var debugPalette = Environment.GetEnvironmentVariable("MFE_THEME_DEBUG") == "1"
+            ? DebugThemePalette.CreateDefault(Resources) : null;
+#endif
 
         var sceneFactory = new HeadPreviewSceneFactory();
         var textureRegistryPaths = TextureRegistryPaths.CreateDefault();
@@ -61,9 +70,20 @@ public partial class App : Application
                 sceneFactory,
                 materialCatalog: new CustomMaterialTemplateCatalogService(packageReader, textureRegistryStore)));
         textureRegistrySettings.DatabaseChanged += _viewModel.RefreshTextureRegistry;
+        _themeViewport = new ThemeViewportBinding(Themes, _viewModel);
         var window = new MainWindow(_viewModel);
         MainWindow = window;
         window.Show();
+#if DEBUG
+        if (debugPalette is not null)
+        {
+            var debugWindow = new ThemeDebugWindow(debugPalette) { Owner = window };
+            void RefreshDebug(object? sender, EventArgs args) => debugPalette.Refresh();
+            Themes.Changed += RefreshDebug;
+            debugWindow.Closed += (_, _) => Themes.Changed -= RefreshDebug;
+            debugWindow.Show();
+        }
+#endif
         _ = Dispatcher.BeginInvoke(() =>
             ShowFirstRunWelcome(window, startupPreferences, dialogs));
     }
@@ -92,6 +112,8 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _themeViewport?.Dispose();
+        Themes?.Dispose();
         if (ClearApplicationDataOnExit) AppLog.StopFileWrites();
         _viewModel?.Dispose();
         if (ClearApplicationDataOnExit)

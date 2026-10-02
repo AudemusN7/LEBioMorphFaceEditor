@@ -15,6 +15,14 @@ public sealed class WpfHdrColorDialogService : IHdrColorDialogService
     public Vector4? EditStandard(string title, Vector4 value, Action<Vector4> livePreview)
         => EditWindow(title, value with { W = 1 }, livePreview, allowHdr: false);
 
+    public BackgroundColourChoice? EditBackground(string title, Vector4 value, Vector4 themeDefault, Action<Vector4> livePreview)
+    {
+        var window = new HdrColorPickerWindow(title, value, allowHdr: false,
+            extendedSliders: ExtendedSliders, resetColor: themeDefault) { Owner = Application.Current.MainWindow };
+        window.ValueChanged += (_, _) => livePreview(window.Value);
+        return window.ShowDialog() == true ? new(window.Value, window.UsesResetColour) : null;
+    }
+
     private Vector4? EditWindow(
         string title,
         Vector4 value,

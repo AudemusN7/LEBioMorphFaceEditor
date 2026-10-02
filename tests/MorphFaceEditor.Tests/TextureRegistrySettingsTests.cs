@@ -36,8 +36,9 @@ public static class TextureRegistrySettingsTests
         var outdated = Row(TextureRegistryState.Outdated);
         var failed = Row(TextureRegistryState.Failed);
 
-        TestAssert.Equal("#F0B657", outdated.StatusColour);
-        TestAssert.Equal("#E36D6D", failed.StatusColour);
+        TestAssert.Equal("StatusPending", outdated.StatusBrushKey);
+        TestAssert.Equal("StatusFailed", failed.StatusBrushKey);
+        TestAssert.Equal("StatusReady", Row(TextureRegistryState.Ready).StatusBrushKey);
     }
 
     private static void PayloadValidationIsDeferred()

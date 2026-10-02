@@ -3,18 +3,18 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Settings" Width="660" Height="760" MinWidth="580" MinHeight="560"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
-        Background="{StaticResource WindowBackground}" Foreground="{StaticResource PrimaryText}">
+        Background="{DynamicResource WindowBackground}" Foreground="{DynamicResource PrimaryText}">
     <Window.Resources>
         <Style x:Key="SettingsSection" TargetType="Border">
-            <Setter Property="Background" Value="{StaticResource PanelBackground}" />
-            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PanelBackground}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="4" />
             <Setter Property="Padding" Value="18" />
             <Setter Property="Margin" Value="0,0,0,12" />
         </Style>
         <Style x:Key="SettingsDescription" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{StaticResource SecondaryText}" />
+            <Setter Property="Foreground" Value="{DynamicResource SecondaryText}" />
             <Setter Property="TextWrapping" Value="Wrap" />
             <Setter Property="Margin" Value="0,6,0,12" />
         </Style>
@@ -53,12 +53,21 @@
                 </Border>
                 <Border Style="{StaticResource SettingsSection}">
                     <StackPanel>
-                        <TextBlock Text="UI Theme" Style="{StaticResource SettingsHeading}" />
-                        <TextBlock Text="Theme and background, foreground and accent colour customisation will be available in a future update." Style="{StaticResource SettingsDescription}" />
-                        <ComboBox x:Name="ThemeSelector" SelectedIndex="1" IsEnabled="False" AutomationProperties.Name="UI theme">
-                            <ComboBoxItem Content="Light Mode" />
-                            <ComboBoxItem Content="Dark Mode" />
+                        <TextBlock Text="Theme" Style="{StaticResource SettingsHeading}" />
+                        <ComboBox x:Name="ThemeSelector" Margin="0,12,0,0" SelectionChanged="OnThemeSelectionChanged" AutomationProperties.Name="Theme">
+                            <ComboBoxItem Content="System" />
+                            <ComboBoxItem Content="Light" />
+                            <ComboBoxItem Content="Dark" />
                         </ComboBox>
+                        <Grid Margin="0,14,0,0">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                            <TextBlock Text="Accent Colour" VerticalAlignment="Center" />
+                            <Button x:Name="AccentColourButton" Grid.Column="1" Click="OnAccentColourClick"
+                                    Padding="4" AutomationProperties.Name="Accent colour" ToolTip="Choose accent colour">
+                                <Border Width="56" Height="24" Background="{DynamicResource Accent}"
+                                        BorderBrush="{DynamicResource SwatchBorder}" BorderThickness="1" CornerRadius="2" />
+                            </Button>
+                        </Grid>
                     </StackPanel>
                 </Border>
                 <Border Style="{StaticResource SettingsSection}">
@@ -79,7 +88,7 @@
         </ScrollViewer>
         <Grid Grid.Row="2" Margin="0,14,0,0">
             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-            <TextBlock x:Name="OperationStatus" TextWrapping="Wrap" Foreground="{StaticResource SecondaryText}" VerticalAlignment="Center" Margin="0,0,14,0" />
+            <TextBlock x:Name="OperationStatus" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}" VerticalAlignment="Center" Margin="0,0,14,0" />
             <Button x:Name="CloseButton" Grid.Column="1" Content="Close" IsCancel="True" Click="OnCloseClick" MinWidth="85" />
         </Grid>
     </Grid>

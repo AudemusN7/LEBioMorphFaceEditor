@@ -13,8 +13,8 @@
             <ToggleButton.Template>
                 <ControlTemplate TargetType="ToggleButton">
                     <Border x:Name="Chrome"
-                            Background="{StaticResource RaisedBackground}"
-                            BorderBrush="{StaticResource BorderBrush}"
+                            Background="{DynamicResource RaisedBackground}"
+                            BorderBrush="{DynamicResource BorderBrush}"
                             BorderThickness="1"
                             CornerRadius="3"
                             Padding="{TemplateBinding Padding}">
@@ -22,14 +22,14 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Chrome" Property="Background" Value="{StaticResource HoverBackground}" />
+                            <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource HoverBackground}" />
                         </Trigger>
                         <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource Accent}" />
-                            <Setter TargetName="Chrome" Property="Background" Value="{StaticResource PressedBackground}" />
+                            <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                            <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource PressedBackground}" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
-                            <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource Accent}" />
+                            <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Accent}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -40,10 +40,10 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <TextBlock Text="{Binding Selected.DisplayName}"
-                           Foreground="{StaticResource PrimaryText}"
+                           Foreground="{DynamicResource PrimaryText}"
                            TextTrimming="CharacterEllipsis"
                            VerticalAlignment="Center" />
-                <TextBlock Grid.Column="1" Text="▼" Foreground="{StaticResource MutedText}"
+                <TextBlock Grid.Column="1" Text="▼" Foreground="{DynamicResource MutedText}"
                            FontSize="9" Margin="8,0,0,0" VerticalAlignment="Center" />
             </Grid>
         </ToggleButton>
@@ -60,8 +60,8 @@
                     MinWidth="360"
                     Padding="6"
                     PreviewKeyDown="OnPopupPreviewKeyDown"
-                    Background="{StaticResource PanelBackground}"
-                    BorderBrush="{StaticResource BorderBrush}"
+                    Background="{DynamicResource PanelBackground}"
+                    BorderBrush="{DynamicResource BorderBrush}"
                     BorderThickness="1">
                 <Grid>
                     <Grid.RowDefinitions>
@@ -96,7 +96,7 @@
                                       PreviewMouseLeftButtonUp="OnCandidateMouseLeftButtonUp">
                                     <StackPanel Margin="4,3">
                                         <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" />
-                                        <TextBlock Text="{Binding SourceDescription}" Foreground="{StaticResource MutedText}"
+                                        <TextBlock Text="{Binding SourceDescription}" Foreground="{DynamicResource MutedText}"
                                                    FontSize="9" TextTrimming="CharacterEllipsis" />
                                     </StackPanel>
                                 </Grid>
@@ -111,7 +111,7 @@
                             <ControlTemplate TargetType="Thumb">
                                 <Border Background="Transparent">
                                     <Border Width="42" Height="3" CornerRadius="2"
-                                            Background="{StaticResource MutedText}"
+                                            Background="{DynamicResource MutedText}"
                                             HorizontalAlignment="Center" VerticalAlignment="Center" />
                                 </Border>
                             </ControlTemplate>

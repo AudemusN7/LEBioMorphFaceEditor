@@ -4,8 +4,8 @@
         Title="Save to PCC"
         Width="620" Height="245" ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner"
-        Background="{StaticResource WindowBackground}"
-        Foreground="{StaticResource PrimaryText}">
+        Background="{DynamicResource WindowBackground}"
+        Foreground="{DynamicResource PrimaryText}">
     <Grid Margin="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -14,7 +14,7 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <TextBlock Text="Export the selected morph and its required assets while preserving its instanced path. Choose an existing PCC to add it there, or leave this field blank to create a new minimal PCC."
-                   TextWrapping="Wrap" Foreground="{StaticResource SecondaryText}" Margin="0,0,0,16" />
+                   TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}" Margin="0,0,0,16" />
         <Grid Grid.Row="1">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
@@ -30,7 +30,7 @@
                 <Button Grid.Column="1" Content="Browse Existing…" Margin="8,0,0,0" Click="OnBrowse" />
             </Grid>
         </Grid>
-        <TextBlock x:Name="ValidationText" Grid.Row="2" Foreground="#FFFF8C8C" FontSize="11"
+        <TextBlock x:Name="ValidationText" Grid.Row="2" Foreground="{DynamicResource ValidationForeground}" FontSize="11"
                    Margin="0,8,0,0" TextWrapping="Wrap" />
         <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
             <Button Content="Cancel" IsCancel="True" MinWidth="84" Margin="0,0,8,0" />

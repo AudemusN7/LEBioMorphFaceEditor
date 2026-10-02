@@ -297,12 +297,12 @@ public sealed class TextureRegistrySettingsRowViewModel : ObservableObject
         TextureRegistryState.Failed => "Failed",
         _ => "Missing"
     };
-    public string StatusColour => _status.State switch
+    public string StatusBrushKey => _status.State switch
     {
-        TextureRegistryState.Ready => "#63C174",
+        TextureRegistryState.Ready => "StatusReady",
         TextureRegistryState.Checking or TextureRegistryState.Building or
-            TextureRegistryState.Outdated or TextureRegistryState.Cancelled => "#F0B657",
-        _ => "#E36D6D"
+            TextureRegistryState.Outdated or TextureRegistryState.Cancelled => "StatusPending",
+        _ => "StatusFailed"
     };
     public string LastBuiltLabel => _status.LastBuilt is { } timestamp
         ? timestamp.LocalDateTime.ToString("g")
@@ -313,7 +313,7 @@ public sealed class TextureRegistrySettingsRowViewModel : ObservableObject
         _status = status;
         OnPropertyChanged(nameof(Status));
         OnPropertyChanged(nameof(StatusLabel));
-        OnPropertyChanged(nameof(StatusColour));
+        OnPropertyChanged(nameof(StatusBrushKey));
         OnPropertyChanged(nameof(LastBuiltLabel));
         OnPropertyChanged(nameof(CanAddCustomAsset));
         OnPropertyChanged(nameof(WarningLabel));

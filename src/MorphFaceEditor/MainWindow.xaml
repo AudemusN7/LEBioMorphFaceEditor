@@ -8,8 +8,8 @@
         MinWidth="1100"
         MinHeight="650"
         Icon="icon.ico"
-        Background="{StaticResource WindowBackground}"
-        Foreground="{StaticResource PrimaryText}"
+        Background="{DynamicResource WindowBackground}"
+        Foreground="{DynamicResource PrimaryText}"
         AllowDrop="True"
         PreviewDragOver="OnFileDragOver"
         Drop="OnFileDrop"
@@ -45,16 +45,16 @@
                     <ControlTemplate TargetType="{x:Type GridSplitter}">
                         <Grid Background="{TemplateBinding Background}">
                             <Border x:Name="Grip" Width="1" HorizontalAlignment="Center"
-                                    Background="{StaticResource BorderBrush}" />
+                                    Background="{DynamicResource BorderBrush}" />
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="Grip" Property="Width" Value="2" />
-                                <Setter TargetName="Grip" Property="Background" Value="{StaticResource Accent}" />
+                                <Setter TargetName="Grip" Property="Background" Value="{DynamicResource Accent}" />
                             </Trigger>
                             <Trigger Property="IsKeyboardFocusWithin" Value="True">
                                 <Setter TargetName="Grip" Property="Width" Value="2" />
-                                <Setter TargetName="Grip" Property="Background" Value="{StaticResource Accent}" />
+                                <Setter TargetName="Grip" Property="Background" Value="{DynamicResource Accent}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -63,9 +63,9 @@
         </Style>
 
         <DataTemplate x:Key="MorphFeatureEditorTemplate">
-            <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="3,8" ToolTip="{Binding Description}">
+            <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="3,8" ToolTip="{Binding Description}">
                 <StackPanel>
-                    <TextBlock Text="{Binding Label}" Foreground="{StaticResource PrimaryText}" FontSize="12" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding Label}" Foreground="{DynamicResource PrimaryText}" FontSize="12" TextTrimming="CharacterEllipsis" />
                     <Grid Margin="0,5,0,0" IsEnabled="{Binding IsEditable}">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
@@ -88,16 +88,16 @@
         </DataTemplate>
 
         <DataTemplate x:Key="MaterialScalarEditorTemplate">
-            <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="3,8" ToolTip="{Binding Description}">
+            <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="3,8" ToolTip="{Binding Description}">
                 <StackPanel>
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="{Binding Label}" Foreground="{StaticResource PrimaryText}" FontSize="12" TextTrimming="CharacterEllipsis" />
-                        <Border Grid.Column="1" Background="#24313A" BorderBrush="#3E5863" BorderThickness="1" CornerRadius="2" Padding="5,1" Margin="8,0,0,0">
-                            <TextBlock Text="MATERIAL" Foreground="{StaticResource Accent}" FontSize="8" FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding Label}" Foreground="{DynamicResource PrimaryText}" FontSize="12" TextTrimming="CharacterEllipsis" />
+                        <Border Grid.Column="1" Background="{DynamicResource BadgeBackground}" BorderBrush="{DynamicResource BadgeBorder}" BorderThickness="1" CornerRadius="2" Padding="5,1" Margin="8,0,0,0">
+                            <TextBlock Text="MATERIAL" Foreground="{DynamicResource Accent}" FontSize="8" FontWeight="SemiBold" />
                         </Border>
                     </Grid>
                     <Grid Margin="0,5,0,0">
@@ -122,17 +122,17 @@
         </DataTemplate>
 
         <DataTemplate x:Key="MaterialColourEditorTemplate">
-            <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="3,8" ToolTip="{Binding Description}">
+            <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="3,8" ToolTip="{Binding Description}">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="34" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <Border Width="26" Height="26" Background="{Binding PreviewBrush}" BorderBrush="#88939CA7" BorderThickness="1" CornerRadius="3" />
+                    <Border Width="26" Height="26" Background="{Binding PreviewBrush}" BorderBrush="{DynamicResource SwatchBorder}" BorderThickness="1" CornerRadius="3" />
                     <StackPanel Grid.Column="1" Margin="7,0">
-                        <TextBlock Text="{Binding Label}" Foreground="{StaticResource PrimaryText}" FontSize="12" TextTrimming="CharacterEllipsis" />
-                        <TextBlock Text="{Binding ValueSummary}" Foreground="{StaticResource MutedText}" FontSize="9" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding Label}" Foreground="{DynamicResource PrimaryText}" FontSize="12" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding ValueSummary}" Foreground="{DynamicResource MutedText}" FontSize="9" TextTrimming="CharacterEllipsis" />
                     </StackPanel>
                     <Button Grid.Column="2" Content="Edit…" Command="{Binding EditCommand}" MinWidth="54" />
                 </Grid>
@@ -140,38 +140,38 @@
         </DataTemplate>
 
         <DataTemplate x:Key="MaterialTextureEditorTemplate">
-            <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="3,8" ToolTip="{Binding Description}">
+            <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="3,8" ToolTip="{Binding Description}">
                 <StackPanel>
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="46" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <Border Width="40" Height="40" Background="#0B0E12" BorderBrush="#88939CA7" BorderThickness="1" CornerRadius="3"
+                        <Border Width="40" Height="40" Background="{DynamicResource TextureWellBackground}" BorderBrush="{DynamicResource SwatchBorder}" BorderThickness="1" CornerRadius="3"
                                 MouseEnter="OnCommittedTextureMouseEnter">
                             <Image Source="{Binding PreviewThumbnail}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" />
                             <Border.ToolTip>
-                                <Border Background="{StaticResource PanelBackground}"
-                                        BorderBrush="{StaticResource BorderBrush}"
+                                <Border Background="{DynamicResource PanelBackground}"
+                                        BorderBrush="{DynamicResource BorderBrush}"
                                         BorderThickness="1" Padding="8">
                                     <StackPanel>
                                         <Image Source="{Binding PreviewThumbnail}" Width="192" Height="192"
                                                Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" />
-                                        <TextBlock Text="{Binding SourceName}" Foreground="{StaticResource SecondaryText}"
+                                        <TextBlock Text="{Binding SourceName}" Foreground="{DynamicResource SecondaryText}"
                                                    FontSize="10" Margin="0,6,0,0" MaxWidth="260" TextWrapping="Wrap" />
-                                        <TextBlock Text="{Binding Details}" Foreground="{StaticResource MutedText}"
+                                        <TextBlock Text="{Binding Details}" Foreground="{DynamicResource MutedText}"
                                                    FontSize="10" Margin="0,3,0,0" MaxWidth="260" TextWrapping="Wrap" />
                                     </StackPanel>
                                 </Border>
                             </Border.ToolTip>
                         </Border>
                         <StackPanel Grid.Column="1" Margin="7,0,0,0" VerticalAlignment="Center">
-                            <TextBlock Text="{Binding Label}" Foreground="{StaticResource PrimaryText}" FontSize="12" />
-                            <TextBlock Text="{Binding SourceName}" Foreground="{StaticResource SecondaryText}" FontSize="9" TextTrimming="CharacterEllipsis" />
-                            <TextBlock Text="{Binding Details}" Foreground="{StaticResource Accent}" FontSize="9" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Text="{Binding Label}" Foreground="{DynamicResource PrimaryText}" FontSize="12" />
+                            <TextBlock Text="{Binding SourceName}" Foreground="{DynamicResource SecondaryText}" FontSize="9" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Text="{Binding Details}" Foreground="{DynamicResource Accent}" FontSize="9" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
                     </Grid>
-                    <TextBlock Text="{Binding RegistryStatusLabel}" Foreground="{StaticResource MutedText}" FontSize="9" Margin="0,7,0,0" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding RegistryStatusLabel}" Foreground="{DynamicResource MutedText}" FontSize="9" Margin="0,7,0,0" TextTrimming="CharacterEllipsis" />
                     <controls:SearchableTexturePicker Margin="0,3,0,0" />
                 </StackPanel>
             </Border>
@@ -184,7 +184,7 @@
             <RowDefinition Height="30" />
         </Grid.RowDefinitions>
 
-        <Border Grid.Row="0" Background="{StaticResource PanelBackground}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
+        <Border Grid.Row="0" Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1">
             <Grid Margin="16,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
@@ -229,18 +229,18 @@
                 </StackPanel>
                 <StackPanel Grid.Column="1" Margin="16,0" VerticalAlignment="Center">
                     <TextBlock Text="{Binding PackageDisplayName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                    <TextBlock Text="BioMorphFace geometry and material editor" Foreground="{StaticResource MutedText}" FontSize="11" />
+                    <TextBlock Text="BioMorphFace geometry and material editor" Foreground="{DynamicResource MutedText}" FontSize="11" />
                 </StackPanel>
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="Material" Foreground="{StaticResource SecondaryText}" VerticalAlignment="Center" Margin="0,0,7,0" />
+                    <TextBlock Text="Material" Foreground="{DynamicResource SecondaryText}" VerticalAlignment="Center" Margin="0,0,7,0" />
                     <ComboBox Width="108" ItemsSource="{Binding RenderModes}" SelectedItem="{Binding RenderMode}" />
-                    <TextBlock Text="LOD" Foreground="{StaticResource SecondaryText}" VerticalAlignment="Center" Margin="14,0,7,0" />
+                    <TextBlock Text="LOD" Foreground="{DynamicResource SecondaryText}" VerticalAlignment="Center" Margin="14,0,7,0" />
                     <ComboBox Width="74"
                               ItemsSource="{Binding PreviewLods}"
                               DisplayMemberPath="Name"
                               SelectedValuePath="LodIndex"
                               SelectedValue="{Binding PreviewLod}" />
-                    <TextBlock Text="Lighting" Foreground="{StaticResource SecondaryText}" VerticalAlignment="Center" Margin="14,0,7,0" />
+                    <TextBlock Text="Lighting" Foreground="{DynamicResource SecondaryText}" VerticalAlignment="Center" Margin="14,0,7,0" />
                     <ComboBox Width="120"
                               ItemsSource="{Binding LightingPresets}"
                               DisplayMemberPath="Name"
@@ -264,7 +264,7 @@
                 <ColumnDefinition Width="480" MinWidth="360" MaxWidth="760" />
             </Grid.ColumnDefinitions>
 
-            <Border Grid.Column="0" Background="{StaticResource PanelBackground}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,1,0" Padding="14">
+            <Border Grid.Column="0" Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0" Padding="14">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -274,7 +274,7 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <TextBlock Text="BIOMORPHFACE EXPORTS" Foreground="{StaticResource MutedText}" FontSize="11" FontWeight="SemiBold" Margin="2,0,0,9" />
+                    <TextBlock Text="BIOMORPHFACE EXPORTS" Foreground="{DynamicResource MutedText}" FontSize="11" FontWeight="SemiBold" Margin="2,0,0,9" />
                     <TextBox Grid.Row="1"
                              Text="{Binding FaceSearchText, UpdateSourceTrigger=PropertyChanged}"
                              Padding="7,5"
@@ -327,13 +327,13 @@
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
-                                    <Border Background="{Binding ProfileTagColor}"
+                                    <Border controls:ArchetypeTag.Code="{Binding ProfileTag}"
                                             CornerRadius="3"
                                             Padding="5,2"
                                             Margin="0,0,7,0"
                                             VerticalAlignment="Center">
                                         <TextBlock Text="{Binding ProfileTag}"
-                                                   Foreground="White"
+                                                   Foreground="{DynamicResource OnColourText}"
                                                    FontSize="9"
                                                    FontWeight="Bold" />
                                     </Border>
@@ -358,10 +358,10 @@
                     <Button Grid.Row="4" Content="Fix Morph" Command="{Binding FixMorphCommand}" Margin="0,7,0,0"
                             Visibility="{Binding CanFixMorph, Converter={StaticResource BooleanToVisibilityConverter}}"
                             ToolTip="Rebuild this face from the profile's canonical base head, restoring the baked geometry/oracle relationship without changing its current slider values." />
-                    <Border Grid.Row="5" Background="#151A20" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="11" Margin="0,10,0,0">
+                    <Border Grid.Row="5" Background="{DynamicResource InputBackground}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="11" Margin="0,10,0,0">
                         <StackPanel>
-                            <TextBlock Text="{Binding LoadedFacePath}" Foreground="{StaticResource SecondaryText}" TextWrapping="Wrap" FontSize="11" />
-                            <TextBlock Text="{Binding FaceDetails}" Foreground="{StaticResource Accent}" TextWrapping="Wrap" FontSize="11" Margin="0,7,0,0" />
+                            <TextBlock Text="{Binding LoadedFacePath}" Foreground="{DynamicResource SecondaryText}" TextWrapping="Wrap" FontSize="11" />
+                            <TextBlock Text="{Binding FaceDetails}" Foreground="{DynamicResource Accent}" TextWrapping="Wrap" FontSize="11" Margin="0,7,0,0" />
                         </StackPanel>
                     </Border>
                 </Grid>
@@ -376,7 +376,7 @@
                           ToolTip="Drag to resize the face browser"
                           AutomationProperties.Name="Resize face browser" />
 
-            <Grid Grid.Column="2" x:Name="PreviewHost" Background="#090C10" ClipToBounds="True" Focusable="True">
+            <Grid Grid.Column="2" x:Name="PreviewHost" Background="{DynamicResource PreviewHostBackground}" ClipToBounds="True" Focusable="True">
                 <Image x:Name="PreviewImage" Stretch="Fill" RenderOptions.BitmapScalingMode="HighQuality"
                        RenderTransformOrigin="0.5,0.5">
                     <Image.RenderTransform>
@@ -394,11 +394,11 @@
                             </Style.Triggers>
                         </Style>
                     </StackPanel.Style>
-                    <TextBlock Text="HEAD PREVIEW" Foreground="#526071" FontSize="24" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                    <TextBlock Text="Open a package containing BioMorphFace exports." Foreground="{StaticResource MutedText}" Margin="0,8,0,0" />
+                    <TextBlock Text="HEAD PREVIEW" Foreground="{DynamicResource PlaceholderText}" FontSize="24" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                    <TextBlock Text="Open a package containing BioMorphFace exports." Foreground="{DynamicResource MutedText}" Margin="0,8,0,0" />
                 </StackPanel>
-                <Border HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="14" Background="#C012171D" BorderBrush="#553A4653" BorderThickness="1" Padding="10,7" CornerRadius="4">
-                    <TextBlock Foreground="{StaticResource SecondaryText}" FontSize="11" Text="Left drag: orbit   ·   Middle drag: pan   ·   Right drag / wheel: zoom" />
+                <Border HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="14" Background="{DynamicResource PreviewHintBackground}" BorderBrush="{DynamicResource HintBorder}" BorderThickness="1" Padding="10,7" CornerRadius="4">
+                    <TextBlock Foreground="{DynamicResource SecondaryText}" FontSize="11" Text="Left drag: orbit   ·   Middle drag: pan   ·   Right drag / wheel: zoom" />
                 </Border>
                 <StackPanel HorizontalAlignment="Right" VerticalAlignment="Top" Orientation="Horizontal" Margin="14">
                     <Button Content="Front" Click="OnFrontClick" Margin="0,0,6,0" />
@@ -410,18 +410,18 @@
                     <StackPanel Orientation="Horizontal">
                         <Border Width="18" Height="18" Margin="0,0,7,0"
                                 Background="{Binding BackgroundPreviewBrush}"
-                                BorderBrush="#88939CA7" BorderThickness="1" CornerRadius="3" />
+                                BorderBrush="{DynamicResource SwatchBorder}" BorderThickness="1" CornerRadius="3" />
                         <TextBlock Text="Background" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
 
-                <Border VerticalAlignment="Top" Margin="14,62,14,0" Background="#DA4B2025" BorderBrush="#D5746670" BorderThickness="1" Padding="10" Visibility="{Binding HasError, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <Border VerticalAlignment="Top" Margin="14,62,14,0" Background="{DynamicResource ErrorBannerBackground}" BorderBrush="{DynamicResource ErrorBannerBorder}" BorderThickness="1" Padding="10" Visibility="{Binding HasError, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="{Binding ErrorMessage}" Foreground="#FFE2E4" TextWrapping="Wrap" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding ErrorMessage}" Foreground="{DynamicResource ErrorBannerText}" TextWrapping="Wrap" VerticalAlignment="Center" />
                         <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="10,0,0,0"
                                     HorizontalAlignment="Right" VerticalAlignment="Center">
                             <Button Click="OnCopyErrorClick" Padding="2" MinWidth="24" Height="24"
@@ -430,7 +430,7 @@
                                     ToolTip="Copy error message">
                                 <Viewbox Width="14" Height="14">
                                     <Path Data="M 5,2 H 12 V 9 H 5 Z M 2,5 H 9 V 12 H 2 Z"
-                                          Stroke="#FFE2E4" StrokeThickness="1.5"
+                                          Stroke="{DynamicResource CopyErrorStroke}" StrokeThickness="1.5"
                                           StrokeLineJoin="Round" Fill="Transparent" />
                                 </Viewbox>
                             </Button>
@@ -443,10 +443,10 @@
                         </StackPanel>
                     </Grid>
                 </Border>
-                <Border Background="#99090C10" Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <Border Background="{DynamicResource BusyOverlayBackground}" Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                         <ProgressBar Width="220" Height="4" IsIndeterminate="True" />
-                        <TextBlock Text="Reading package and morph data…" Foreground="{StaticResource SecondaryText}" HorizontalAlignment="Center" Margin="0,12,0,0" />
+                        <TextBlock Text="Reading package and morph data…" Foreground="{DynamicResource SecondaryText}" HorizontalAlignment="Center" Margin="0,12,0,0" />
                         <Button Content="Cancel NPC import" Command="{Binding CancelNpcImportCommand}"
                                 Visibility="{Binding CanCancelNpcImport, Converter={StaticResource BooleanToVisibilityConverter}}"
                                 Margin="0,12,0,0" Padding="10,4" HorizontalAlignment="Center" />
@@ -463,7 +463,7 @@
                           ToolTip="Drag to resize the face editor"
                           AutomationProperties.Name="Resize face editor" />
 
-            <Border Grid.Column="4" Background="{StaticResource PanelBackground}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1,0,0,0">
+            <Border Grid.Column="4" Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1,0,0,0">
                 <Grid Margin="12">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -481,7 +481,7 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <StackPanel>
-                            <TextBlock Text="FACE EDITOR" Foreground="{StaticResource MutedText}" FontSize="11" FontWeight="SemiBold" />
+                            <TextBlock Text="FACE EDITOR" Foreground="{DynamicResource MutedText}" FontSize="11" FontWeight="SemiBold" />
                         </StackPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                             <Button Content="Undo" Command="{Binding Editor.UndoCommand}" MinWidth="66" Padding="9,5" Margin="0,0,6,0" />
@@ -518,7 +518,7 @@
                                     VerticalAlignment="Center" />
                             <TextBlock x:Name="MorphRandomisationStrengthValue" Grid.Column="2"
                                        Style="{StaticResource FieldLabel}"
-                                       Foreground="{StaticResource SecondaryText}"
+                                       Foreground="{DynamicResource SecondaryText}"
                                        Text="{Binding MorphRandomisationStrength, StringFormat={}{0}%}"
                                        Visibility="{Binding Editor.HasMorphControls, Converter={StaticResource BooleanToVisibilityConverter}}"
                                        HorizontalAlignment="Right" VerticalAlignment="Center" />
@@ -539,7 +539,7 @@
                                     Margin="0,3,0,0" VerticalAlignment="Center" />
                             <TextBlock x:Name="MaterialRandomisationStrengthValue" Grid.Row="1" Grid.Column="2"
                                        Style="{StaticResource FieldLabel}"
-                                       Foreground="{StaticResource SecondaryText}"
+                                       Foreground="{DynamicResource SecondaryText}"
                                        Text="{Binding MaterialRandomisationStrength, StringFormat={}{0}%}"
                                        HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,3,0,0" />
                             <CheckBox x:Name="RandomiseMaterialsCheckBox" Grid.Row="1" Grid.Column="3" Content="Randomise Materials"
@@ -569,7 +569,7 @@
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Text="{Binding Label}" Foreground="{StaticResource SecondaryText}"
+                                        <TextBlock Text="{Binding Label}" Foreground="{DynamicResource SecondaryText}"
                                                    FontSize="10" VerticalAlignment="Center" />
                                         <controls:SearchableMeshPicker Grid.Column="1" />
                                         <Button Grid.Column="2" Content="Randomise" Command="{Binding RandomiseCommand}"
@@ -595,7 +595,7 @@
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="*" />
                                 </Grid.RowDefinitions>
-                                <Border Background="#1C242C" BorderBrush="{StaticResource BorderBrush}"
+                                <Border Background="{DynamicResource SectionBackground}" BorderBrush="{DynamicResource BorderBrush}"
                                         BorderThickness="0,0,0,1" Padding="10,8"
                                         Visibility="{Binding Editor.HasCustomMaterialSlots, Converter={StaticResource BooleanToVisibilityConverter}}">
                                     <StackPanel>
@@ -610,8 +610,8 @@
                                                             <ColumnDefinition Width="*" />
                                                         </Grid.ColumnDefinitions>
                                                         <StackPanel VerticalAlignment="Center">
-                                                            <TextBlock Text="{Binding Label}" Foreground="{StaticResource SecondaryText}" FontSize="10" />
-                                                            <TextBlock Text="{Binding Detail}" Foreground="#788591" FontSize="9" />
+                                                            <TextBlock Text="{Binding Label}" Foreground="{DynamicResource SecondaryText}" FontSize="10" />
+                                                            <TextBlock Text="{Binding Detail}" Foreground="{DynamicResource LocalDetailText}" FontSize="9" />
                                                         </StackPanel>
                                                         <ComboBox Grid.Column="1" ItemsSource="{Binding Options}"
                                                                   SelectedItem="{Binding Selected, Mode=TwoWay}"
@@ -625,7 +625,7 @@
                                 </Border>
                             <TabControl Grid.Row="1" ItemsSource="{Binding Editor.Categories}"
                                         SelectedItem="{Binding Editor.SelectedCategory, Mode=TwoWay}"
-                                        Background="#151A20">
+                                        Background="{DynamicResource InputBackground}">
                                 <TabControl.ItemContainerStyle>
                                     <Style TargetType="TabItem" BasedOn="{StaticResource {x:Type TabItem}}">
                                         <Setter Property="Padding" Value="8,6" />
@@ -639,19 +639,19 @@
                                 </TabControl.ItemTemplate>
                                 <TabControl.ContentTemplate>
                                     <DataTemplate>
-                                        <Grid Background="#151A20">
+                                        <Grid Background="{DynamicResource InputBackground}">
                                             <Grid.RowDefinitions>
                                                 <RowDefinition Height="Auto" />
                                                 <RowDefinition Height="*" />
                                             </Grid.RowDefinitions>
-                                            <Border Background="#1C242C" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="10,8">
+                                            <Border Background="{DynamicResource SectionBackground}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="10,8">
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="*" />
                                                         <ColumnDefinition Width="Auto" />
                                                     </Grid.ColumnDefinitions>
-                                                    <TextBlock Text="{Binding Description}" Foreground="{StaticResource SecondaryText}" FontSize="10" TextWrapping="Wrap" />
-                                                    <TextBlock Grid.Column="1" Text="{Binding CountLabel}" Foreground="{StaticResource Accent}" FontSize="10" Margin="10,0,0,0" VerticalAlignment="Top" />
+                                                    <TextBlock Text="{Binding Description}" Foreground="{DynamicResource SecondaryText}" FontSize="10" TextWrapping="Wrap" />
+                                                    <TextBlock Grid.Column="1" Text="{Binding CountLabel}" Foreground="{DynamicResource Accent}" FontSize="10" Margin="10,0,0,0" VerticalAlignment="Top" />
                                                 </Grid>
                                             </Border>
                                             <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
@@ -747,23 +747,23 @@
                         </TabItem>
 
                         <TabItem Header="Bones" IsEnabled="{Binding Editor.CanEditBones}">
-                            <Grid Background="#151A20">
+                            <Grid Background="{DynamicResource InputBackground}">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="*" />
                                 </Grid.RowDefinitions>
-                                <Border Background="#1C242C" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="10,8">
-                                    <TextBlock Text="Raw final-skeleton translation editing. Feature controls are usually the safer authoring surface." Foreground="{StaticResource SecondaryText}" FontSize="10" TextWrapping="Wrap" />
+                                <Border Background="{DynamicResource SectionBackground}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="10,8">
+                                    <TextBlock Text="Raw final-skeleton translation editing. Feature controls are usually the safer authoring surface." Foreground="{DynamicResource SecondaryText}" FontSize="10" TextWrapping="Wrap" />
                                 </Border>
                                 <ListBox x:Name="BoneList" Grid.Row="1" ItemsSource="{Binding Editor.BoneTransforms}"
                                          SelectedItem="{Binding Editor.SelectedBoneTransform, Mode=TwoWay}"
-                                         BorderThickness="0" Background="#151A20" Foreground="{StaticResource PrimaryText}"
+                                         BorderThickness="0" Background="{DynamicResource InputBackground}" Foreground="{DynamicResource PrimaryText}"
                                          ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                                     <ListBox.ItemContainerStyle>
                                         <Style TargetType="ListBoxItem">
                                             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                                             <Setter Property="Background" Value="Transparent" />
-                                            <Setter Property="Foreground" Value="{StaticResource PrimaryText}" />
+                                            <Setter Property="Foreground" Value="{DynamicResource PrimaryText}" />
                                             <Setter Property="Padding" Value="0" />
                                             <Style.Triggers>
                                                 <Trigger Property="IsSelected" Value="True">
@@ -774,7 +774,7 @@
                                     </ListBox.ItemContainerStyle>
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
-                                            <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1"
+                                            <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1"
                                                     Visibility="{Binding IsAvailable, Converter={StaticResource BooleanToVisibilityConverter}}">
                                                 <StackPanel>
                                                     <Border Padding="9,8" Cursor="Hand" PreviewMouseLeftButtonDown="OnBoneHeaderMouseLeftButtonDown">
@@ -783,10 +783,10 @@
                                                                 <Setter Property="Background" Value="Transparent" />
                                                                 <Style.Triggers>
                                                                     <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                                                                        <Setter Property="Background" Value="{StaticResource HoverBackground}" />
+                                                                        <Setter Property="Background" Value="{DynamicResource HoverBackground}" />
                                                                     </DataTrigger>
                                                                     <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                                                                        <Setter Property="Background" Value="#202B34" />
+                                                                        <Setter Property="Background" Value="{DynamicResource BoneSelectionBackground}" />
                                                                     </DataTrigger>
                                                                 </Style.Triggers>
                                                             </Style>
@@ -797,13 +797,13 @@
                                                                 <ColumnDefinition Width="Auto" />
                                                                 <ColumnDefinition Width="18" />
                                                             </Grid.ColumnDefinitions>
-                                                            <TextBlock Text="{Binding BoneName}" Foreground="{StaticResource PrimaryText}" FontSize="11" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                                            <TextBlock Text="{Binding BoneName}" Foreground="{DynamicResource PrimaryText}" FontSize="11" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
                                                             <Button Content="Reset" Command="{Binding ResetCommand}"
                                                                     Grid.Column="1" Margin="5,0,5,0"
                                                                     HorizontalAlignment="Right" VerticalAlignment="Center"
                                                                     Visibility="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}, Converter={StaticResource BooleanToVisibilityConverter}}"
                                                                     Padding="7,2" FontSize="9" ToolTip="Restore this bone to its loaded translation" />
-                                                            <Path Data="M 0 0 L 4 4 L 8 0" Stroke="{StaticResource SecondaryText}" StrokeThickness="1.2"
+                                                            <Path Data="M 0 0 L 4 4 L 8 0" Stroke="{DynamicResource SecondaryText}" StrokeThickness="1.2"
                                                                   Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center">
                                                                 <Path.Style>
                                                                     <Style TargetType="Path">
@@ -834,21 +834,21 @@
                                                                          Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=LostFocus, StringFormat={}{0:G6}}"
                                                                          PreviewKeyDown="OnNumericValueKeyDown" GotKeyboardFocus="OnNumericValueGotFocus"
                                                                          LostKeyboardFocus="OnNumericValueLostFocus" PreviewMouseWheel="OnNumericValueMouseWheel" />
-                                                                <TextBlock Text="X" Foreground="{StaticResource Accent}" FontSize="10" Margin="5,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False" />
+                                                                <TextBlock Text="X" Foreground="{DynamicResource Accent}" FontSize="10" Margin="5,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False" />
                                                             </Grid>
                                                             <Grid Grid.Column="2">
                                                                 <TextBox DataContext="{Binding Y}" Padding="18,3,4,3" FontSize="10"
                                                                          Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=LostFocus, StringFormat={}{0:G6}}"
                                                                          PreviewKeyDown="OnNumericValueKeyDown" GotKeyboardFocus="OnNumericValueGotFocus"
                                                                          LostKeyboardFocus="OnNumericValueLostFocus" PreviewMouseWheel="OnNumericValueMouseWheel" />
-                                                                <TextBlock Text="Y" Foreground="{StaticResource Accent}" FontSize="10" Margin="5,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False" />
+                                                                <TextBlock Text="Y" Foreground="{DynamicResource Accent}" FontSize="10" Margin="5,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False" />
                                                             </Grid>
                                                             <Grid Grid.Column="4">
                                                                 <TextBox DataContext="{Binding Z}" Padding="18,3,4,3" FontSize="10"
                                                                          Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=LostFocus, StringFormat={}{0:G6}}"
                                                                          PreviewKeyDown="OnNumericValueKeyDown" GotKeyboardFocus="OnNumericValueGotFocus"
                                                                          LostKeyboardFocus="OnNumericValueLostFocus" PreviewMouseWheel="OnNumericValueMouseWheel" />
-                                                                <TextBlock Text="Z" Foreground="{StaticResource Accent}" FontSize="10" Margin="5,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False" />
+                                                                <TextBlock Text="Z" Foreground="{DynamicResource Accent}" FontSize="10" Margin="5,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False" />
                                                             </Grid>
                                                         </Grid>
                                                     </StackPanel>
@@ -864,9 +864,9 @@
             </Border>
         </Grid>
 
-        <Border Grid.Row="2" Background="#151A20" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0">
+        <Border Grid.Row="2" Background="{DynamicResource InputBackground}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0">
             <Grid Margin="12,0">
-                <TextBlock Text="{Binding Status}" Foreground="{StaticResource SecondaryText}" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="{Binding Status}" Foreground="{DynamicResource SecondaryText}" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
             </Grid>
         </Border>
     </Grid>

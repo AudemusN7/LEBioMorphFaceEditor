@@ -27,6 +27,7 @@
     <InternalsVisibleTo Include="MorphFaceEditor.Tests" />
     <InternalsVisibleTo Include="MorphFaceEditor.QA" />
     <ProjectReference Include="..\MorphFaceEditor.Core\MorphFaceEditor.Core.csproj" />
+    <ProjectReference Include="..\MorphFaceEditor.Localisation\MorphFaceEditor.Localisation.csproj" />
     <ProjectReference Include="..\MorphFaceEditor.LegendaryExplorer\MorphFaceEditor.LegendaryExplorer.csproj" />
     <ProjectReference Include="..\MorphFaceEditor.Rendering\MorphFaceEditor.Rendering.csproj" />
   </ItemGroup>

@@ -52,6 +52,9 @@
           "System.IO.Hashing": "[10.0.2, )"
         }
       },
+      "morphfaceeditor.localisation": {
+        "type": "Project"
+      },
       "morphfaceeditor.rendering": {
         "type": "Project",
         "dependencies": {

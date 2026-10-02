@@ -18,6 +18,7 @@
     <ProjectReference Include="..\..\src\MorphFaceEditor.Core\MorphFaceEditor.Core.csproj" />
     <ProjectReference Include="..\..\src\MorphFaceEditor.Rendering\MorphFaceEditor.Rendering.csproj" />
     <ProjectReference Include="..\..\src\MorphFaceEditor\MorphFaceEditor.csproj" />
+    <ProjectReference Include="..\..\tools\MorphFaceEditor.Localiser\MorphFaceEditor.Localiser.csproj" />
     <Reference Include="LegendaryExplorerCore">
       <HintPath>..\..\lib\LegendaryExplorerCore\LegendaryExplorerCore.dll</HintPath>
       <Private>true</Private>

@@ -18,5 +18,6 @@ tests/RON Stress Test/
 tests/TUF Tattoos/
 *.user
 *.suo
+*.localiser.bak
 ***.received.*
 ***.approved.*

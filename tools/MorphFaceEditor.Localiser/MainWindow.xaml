@@ -1,0 +1,143 @@
+<Window x:Class="MorphFaceEditor.Localiser.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:MorphFaceEditor.Localiser"
+        Title="{Binding WindowTitle}" Width="1600" Height="920" MinWidth="1360" MinHeight="640"
+        Background="{DynamicResource WindowBackground}" Foreground="{DynamicResource PrimaryText}"
+        FontFamily="Segoe UI" FontSize="13" WindowStartupLocation="CenterScreen" Closing="OnClosing" PreviewKeyDown="OnHistoryKeyDown">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries><ResourceDictionary Source="Themes/EditorTheme.xaml" /></ResourceDictionary.MergedDictionaries>
+            <Style TargetType="ToolTip">
+                <Setter Property="Background" Value="{DynamicResource PanelBackground}" />
+                <Setter Property="Foreground" Value="{DynamicResource PrimaryText}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+            </Style>
+            <Style x:Key="CellText" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+                <EventSetter Event="GotKeyboardFocus" Handler="OnCellEditStarted" />
+                <EventSetter Event="LostKeyboardFocus" Handler="OnCellEditEnded" />
+                <Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Padding" Value="7,6" /><Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="AcceptsReturn" Value="True" /><Setter Property="VerticalContentAlignment" Value="Top" />
+                <Setter Property="IsUndoEnabled" Value="False" />
+                <Style.Triggers><Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter Property="Background" Value="{DynamicResource InputBackground}" /></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Background" Value="{DynamicResource InputBackground}" /><Setter Property="Foreground" Value="{DynamicResource MutedText}" /></Trigger></Style.Triggers>
+            </Style>
+            <Style TargetType="RadioButton">
+                <Setter Property="Foreground" Value="{DynamicResource PrimaryText}" /><Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="Margin" Value="0,0,12,0" /><Setter Property="FontSize" Value="12" />
+                <Setter Property="Template"><Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Width="14" Height="14" CornerRadius="7" Background="{DynamicResource InputBackground}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" VerticalAlignment="Center">
+                                <Ellipse x:Name="Dot" Width="6" Height="6" Fill="{DynamicResource Accent}" Visibility="Collapsed" />
+                            </Border>
+                            <ContentPresenter Margin="5,0,0,0" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <ControlTemplate.Triggers><Trigger Property="IsChecked" Value="True"><Setter TargetName="Dot" Property="Visibility" Value="Visible" /></Trigger></ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value></Setter>
+            </Style>
+            <Style TargetType="DataGridColumnHeader">
+                <Setter Property="Background" Value="{DynamicResource RaisedBackground}" /><Setter Property="Foreground" Value="{DynamicResource PrimaryText}" />
+                <Setter Property="Padding" Value="7,9" /><Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" /><Setter Property="BorderThickness" Value="0,0,1,1" />
+            </Style>
+            <Style TargetType="DataGridCell">
+                <Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Foreground" Value="{DynamicResource PrimaryText}" /><Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                <Style.Triggers><Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="{DynamicResource SelectionBackground}" /><Setter Property="Foreground" Value="{DynamicResource PrimaryText}" /></Trigger></Style.Triggers>
+            </Style>
+            <Style TargetType="DataGridRow">
+                <Setter Property="Background" Value="{DynamicResource PanelBackground}" /><Setter Property="Foreground" Value="{DynamicResource PrimaryText}" />
+                <Setter Property="MinHeight" Value="34" /><Setter Property="ToolTip" Value="{Binding Problem}" />
+            </Style>
+        </ResourceDictionary>
+    </Window.Resources>
+    <Window.CommandBindings>
+        <CommandBinding Command="ApplicationCommands.Undo" PreviewExecuted="OnUndoCommand" PreviewCanExecute="CanUndo" />
+        <CommandBinding Command="ApplicationCommands.Redo" PreviewExecuted="OnRedoCommand" PreviewCanExecute="CanRedo" />
+        <CommandBinding Command="ApplicationCommands.Open" Executed="OnLoadCommand" />
+        <CommandBinding Command="ApplicationCommands.SaveAs" Executed="OnSaveCommand" CanExecute="CanSave" />
+        <CommandBinding Command="ApplicationCommands.Save" Executed="OnSaveCommand" CanExecute="CanSave" />
+    </Window.CommandBindings>
+    <Border Background="{DynamicResource WindowBackground}">
+    <Grid Background="{DynamicResource WindowBackground}" Margin="12">
+        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+        <Grid Margin="0,0,0,12">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="280" /></Grid.ColumnDefinitions>
+            <TabControl x:Name="FilterTabs" ItemsSource="{Binding Filters}" SelectedItem="{Binding SelectedFilter}" BorderThickness="0">
+                <TabControl.Template><ControlTemplate TargetType="TabControl"><TabPanel IsItemsHost="True" /></ControlTemplate></TabControl.Template>
+                <TabControl.ItemContainerStyle><Style TargetType="TabItem" BasedOn="{StaticResource {x:Type TabItem}}"><Setter Property="Header" Value="{Binding}" /></Style></TabControl.ItemContainerStyle>
+            </TabControl>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="12,0,0,0">
+                <Button x:Name="UndoButton" Content="Undo" Command="ApplicationCommands.Undo" ToolTip="Undo (Ctrl+Z)" Margin="0,0,8,0" />
+                <Button x:Name="RedoButton" Content="Redo" Command="ApplicationCommands.Redo" ToolTip="Redo (Ctrl+Y / Ctrl+Shift+Z)" />
+            </StackPanel>
+            <TextBox x:Name="SearchBox" Grid.Column="2" Text="{Binding Search, UpdateSourceTrigger=PropertyChanged}" Margin="12,0,0,0" ToolTip="Search strings, notes or source references" AutomationProperties.Name="Search" />
+        </Grid>
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="230" /><ColumnDefinition Width="10" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+            <ListBox x:Name="SectionList" ItemsSource="{Binding Sections}" SelectedItem="{Binding SelectedSection}" BorderThickness="1" BorderBrush="{DynamicResource BorderBrush}" HorizontalContentAlignment="Stretch">
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="Padding" Value="0" /><Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem">
+                            <Border x:Name="Selection" Padding="0" BorderThickness="1" BorderBrush="Transparent"><ContentPresenter /></Border>
+                            <ControlTemplate.Triggers><Trigger Property="IsSelected" Value="True"><Setter TargetName="Selection" Property="BorderBrush" Value="{DynamicResource Accent}" /></Trigger><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Selection" Property="Background" Value="{DynamicResource HoverBackground}" /></Trigger></ControlTemplate.Triggers>
+                        </ControlTemplate></Setter.Value></Setter>
+                    </Style>
+                </ListBox.ItemContainerStyle>
+                <ListBox.ItemTemplate><DataTemplate>
+                    <Border x:Name="SectionChrome" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="4,0,0,0" Background="{DynamicResource PanelBackground}" Padding="8,8">
+                        <TextBlock x:Name="SectionName" Text="{Binding Name}" Foreground="{DynamicResource PrimaryText}" TextWrapping="Wrap" />
+                    </Border>
+                    <DataTemplate.Triggers>
+                        <DataTrigger Binding="{Binding State}" Value="{x:Static local:SectionState.Reviewed}"><Setter TargetName="SectionChrome" Property="BorderBrush" Value="{DynamicResource StatusReady}" /><Setter TargetName="SectionName" Property="Foreground" Value="{DynamicResource StatusReady}" /></DataTrigger>
+                        <DataTrigger Binding="{Binding State}" Value="{x:Static local:SectionState.Excluded}"><Setter TargetName="SectionChrome" Property="BorderBrush" Value="{DynamicResource StatusPending}" /><Setter TargetName="SectionName" Property="Foreground" Value="{DynamicResource StatusPending}" /></DataTrigger>
+                        <DataTrigger Binding="{Binding State}" Value="{x:Static local:SectionState.Invalid}"><Setter TargetName="SectionChrome" Property="BorderBrush" Value="{DynamicResource StatusFailed}" /><Setter TargetName="SectionName" Property="Foreground" Value="{DynamicResource StatusFailed}" /></DataTrigger>
+                    </DataTemplate.Triggers>
+                </DataTemplate></ListBox.ItemTemplate>
+            </ListBox>
+            <DataGrid x:Name="StringList" Grid.Column="2" ItemsSource="{Binding Entries}" IsReadOnly="True" AutoGenerateColumns="False"
+                      SelectionMode="Extended" SelectionUnit="FullRow" CanUserAddRows="False" CanUserDeleteRows="False"
+                      Background="{DynamicResource InputBackground}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                      HorizontalGridLinesBrush="{DynamicResource BorderBrush}" VerticalGridLinesBrush="{DynamicResource BorderBrush}"
+                      GridLinesVisibility="All" HeadersVisibility="Column" EnableRowVirtualization="True" EnableColumnVirtualization="True"
+                      ScrollViewer.CanContentScroll="True" PreviewKeyDown="OnTableKeyDown">
+                <DataGrid.Columns>
+                    <DataGridTemplateColumn Header="Key" Width="1.2*" MinWidth="180" SortMemberPath="Key">
+                        <DataGridTemplateColumn.CellTemplate><DataTemplate><TextBlock Text="{Binding Key}" ToolTip="{Binding References}" ToolTipService.ShowDuration="60000" TextWrapping="Wrap" Margin="7,6" FontSize="11" Foreground="{DynamicResource SecondaryText}" /></DataTemplate></DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTemplateColumn Header="English" Width="1.8*" MinWidth="170" SortMemberPath="English">
+                        <DataGridTemplateColumn.CellTemplate><DataTemplate><TextBox Text="{Binding English, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource CellText}" IsTabStop="{Binding EnglishEditable}">
+                            <TextBox.IsReadOnly><Binding Path="EnglishEditable" Converter="{x:Static local:InverseBooleanConverter.Instance}" /></TextBox.IsReadOnly>
+                        </TextBox></DataTemplate></DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTemplateColumn Header="Localised" Width="1.8*" MinWidth="170" SortMemberPath="Localised">
+                        <DataGridTemplateColumn.CellTemplate><DataTemplate><TextBox Text="{Binding Localised, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding LocalisedEditable}" Style="{StaticResource CellText}" ToolTip="{Binding Problem}" /></DataTemplate></DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTemplateColumn Header="Notes" Width="1.1*" MinWidth="130" SortMemberPath="Notes">
+                        <DataGridTemplateColumn.CellTemplate><DataTemplate><TextBox Text="{Binding Notes, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource CellText}" /></DataTemplate></DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTemplateColumn Header="Excluded" Width="76" CanUserSort="False">
+                        <DataGridTemplateColumn.CellTemplate><DataTemplate><CheckBox IsChecked="{Binding Excluded, Mode=OneWay}" Tag="Excluded" HorizontalAlignment="Center" PreviewMouseLeftButtonDown="OnFlagClick" PreviewKeyDown="OnFlagKey" /></DataTemplate></DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTemplateColumn Header="Reviewed" Width="78" CanUserSort="False">
+                        <DataGridTemplateColumn.CellTemplate><DataTemplate><CheckBox IsChecked="{Binding Reviewed, Mode=OneWay}" IsEnabled="{Binding CanReview}" Tag="Reviewed" HorizontalAlignment="Center" PreviewMouseLeftButtonDown="OnFlagClick" PreviewKeyDown="OnFlagKey" /></DataTemplate></DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                </DataGrid.Columns>
+            </DataGrid>
+        </Grid>
+        <Grid Grid.Row="2" Margin="0,12,0,0">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+            <ItemsControl x:Name="LanguageOptions" ItemsSource="{Binding Languages}" VerticalAlignment="Center">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate><DataTemplate><RadioButton Content="{Binding Name}" GroupName="LocalisationLanguage" IsChecked="{Binding IsSelected, Mode=OneWay}" Checked="OnLanguageChecked" Tag="{Binding Code}" /></DataTemplate></ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <Button Content="Load localisation" Command="ApplicationCommands.Open" Margin="8,0,8,0" />
+                <Button Content="Save localisation as…" Command="ApplicationCommands.SaveAs" ToolTip="{Binding CurrentPath}" />
+            </StackPanel>
+        </Grid>
+    </Grid>
+    </Border>
+</Window>

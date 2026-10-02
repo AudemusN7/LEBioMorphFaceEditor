@@ -25,7 +25,7 @@ public partial class ThemeDebugWindow : Window
         _rows = DebugThemePalette.Definitions.Select(d => new DebugThemeColour(palette, d)).ToArray();
         ColourRows.ItemsSource = _rows;
         SavePath.Text = palette.FilePath;
-        SaveStatus.Text = loadStatus ?? "Colours are saved only when you click Save.";
+        SaveStatus.Text = loadStatus ?? Loc.Text("loc_ThemeDebugWindow_ColoursSavedOnlyOnSave");
         palette.Changed += OnPaletteChanged;
         SourceInitialized += (_, _) =>
         {
@@ -61,7 +61,7 @@ public partial class ThemeDebugWindow : Window
     private void OnPaletteChanged(object? sender, EventArgs e)
     {
         foreach (var row in _rows) row.Refresh();
-        SaveStatus.Text = "Unsaved palette changes.";
+        SaveStatus.Text = Loc.Text("loc_ThemeDebugWindow_UnsavedPaletteChanges");
     }
 
     private void OnEditColour(object sender, RoutedEventArgs e)
@@ -99,11 +99,11 @@ public partial class ThemeDebugWindow : Window
         try
         {
             _palette.Save();
-            SaveStatus.Text = "Saved. Send theme-palette.json when you're happy with the colours.";
+            SaveStatus.Text = Loc.Text("loc_ThemeDebugWindow_SaveCompleteInstructions");
         }
         catch (Exception exception) when (exception is System.IO.IOException or UnauthorizedAccessException)
         {
-            SaveStatus.Text = $"Could not save: {exception.Message}";
+            SaveStatus.Text = Loc.Format("loc_ThemeDebugWindow_CouldNotSave", exception.Message);
         }
     }
 

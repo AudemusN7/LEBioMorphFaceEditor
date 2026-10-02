@@ -1,12 +1,16 @@
 <Application x:Class="MorphFaceEditor.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:infrastructure="clr-namespace:MorphFaceEditor.Infrastructure">
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="Themes/EditorTheme.xaml" />
+                <ResourceDictionary Source="Localisation/Strings.en-GB.xaml" />
+                <ResourceDictionary Source="Localisation/LanguageFlags.xaml" />
             </ResourceDictionary.MergedDictionaries>
             <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+            <infrastructure:PreviewRenderModeLabelConverter x:Key="PreviewRenderModeLabelConverter" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

@@ -12,14 +12,19 @@ public partial class SettingsWindow : Window
     private bool _operating;
     private readonly ThemeManager? _themes;
     private bool _updatingTheme;
+    private bool _updatingLanguage;
+    private readonly ApplicationPreferencesStore _preferences;
 
     public SettingsWindow(MainWindowViewModel viewModel) : this(viewModel, (Application.Current as App)?.Themes) { }
 
-    internal SettingsWindow(MainWindowViewModel viewModel, ThemeManager? themes)
+    internal SettingsWindow(MainWindowViewModel viewModel, ThemeManager? themes, ApplicationPreferencesStore? preferences = null)
     {
         InitializeComponent();
         DarkTitleBar.Apply(this);
         _viewModel = viewModel;
+        _preferences = preferences ?? ApplicationPreferencesStore.CreateDefault();
+        LanguageSelector.ItemsSource = LanguageOption.All;
+        UpdateLanguageSelection();
         _themes = themes;
         ThemeSelector.IsEnabled = themes is not null;
         AccentColourButton.IsEnabled = themes is not null;
@@ -33,6 +38,28 @@ public partial class SettingsWindow : Window
     }
 
     public bool ClearDataRequested { get; private set; }
+
+    private void UpdateLanguageSelection()
+    {
+        _updatingLanguage = true;
+        LanguageSelector.SelectedItem = LanguageOption.All.First(option => option.Code == Loc.NormalizeLanguage(_preferences.Current.Language));
+        _updatingLanguage = false;
+    }
+
+    private void OnLanguageSelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (_updatingLanguage || _preferences is null || LanguageSelector.SelectedItem is not LanguageOption selected) return;
+        try
+        {
+            _preferences.Update(current => current with { Language = selected.Code });
+            OperationStatus.Text = Loc.Text("loc_Settings_RestartNotice");
+        }
+        catch (Exception exception) when (exception is System.IO.IOException or UnauthorizedAccessException)
+        {
+            UpdateLanguageSelection();
+            OperationStatus.Text = Loc.Format("loc_Settings_LanguageSaveFailed", exception.Message);
+        }
+    }
 
     private void OnThemeChanged(object? sender, EventArgs e) => UpdateThemeSelection();
     private void UpdateThemeSelection()
@@ -48,7 +75,7 @@ public partial class SettingsWindow : Window
         catch (Exception exception) when (exception is System.IO.IOException or UnauthorizedAccessException)
         {
             UpdateThemeSelection();
-            OperationStatus.Text = $"Could not save your theme: {exception.Message}";
+            OperationStatus.Text = Loc.Format("loc_Settings_ThemeSaveFailed", exception.Message);
         }
     }
     private void OnAccentColourClick(object sender, RoutedEventArgs e)
@@ -63,8 +90,8 @@ public partial class SettingsWindow : Window
         if (_operating || _viewModel.IsBusy) return;
         var dialog = new SaveFileDialog
         {
-            Title = "Export MFE diagnostic logs",
-            Filter = "ZIP archive (*.zip)|*.zip",
+            Title = Loc.Text("loc_Settings_ExportLogsTitle"),
+            Filter = Loc.Text("loc_Settings_ZipFilter"),
             DefaultExt = ".zip",
             AddExtension = true,
             OverwritePrompt = true,
@@ -72,19 +99,19 @@ public partial class SettingsWindow : Window
         };
         if (dialog.ShowDialog(this) != true) return;
         SetOperating(true);
-        OperationStatus.Text = "Collecting logs, workspace and databases…";
+        OperationStatus.Text = Loc.Text("loc_Settings_CollectingLogs");
         try
         {
             var result = await _viewModel.GenerateDiagnosticsAsync(dialog.FileName);
-            OperationStatus.Text = $"Exported {result.Entries.Count} file(s).";
-            _ = new EditorMessageWindow("Diagnostic ZIP exported", $"Saved to:\n{result.Path}" +
+            OperationStatus.Text = Loc.Format("loc_Settings_ExportedFiles", result.Entries.Count);
+            _ = new EditorMessageWindow(Loc.Text("loc_Settings_ExportedTitle"), Loc.Format("loc_Settings_SavedTo", result.Path) +
                 (result.Warnings.Count > 0 ? "\n\n" + string.Join("\n", result.Warnings) : ""))
                 { Owner = this }.ShowDialog();
         }
         catch (Exception exception)
         {
-            OperationStatus.Text = "Export failed.";
-            _ = new EditorMessageWindow("Diagnostic export failed", exception.Message)
+            OperationStatus.Text = Loc.Text("loc_Settings_ExportFailed");
+            _ = new EditorMessageWindow(Loc.Text("loc_Settings_ExportFailedTitle"), exception.Message)
                 { Owner = this }.ShowDialog();
         }
         finally { SetOperating(false); }
@@ -93,11 +120,9 @@ public partial class SettingsWindow : Window
     private async void OnClearDataClick(object sender, RoutedEventArgs e)
     {
         if (_operating || _viewModel.IsBusy) return;
-        var confirmation = new EditorMessageWindow("Clear Application Data?",
-            "This removes all MFE preferences, logs, temporary workspaces and mesh/texture databases, " +
-            "including legacy application data. MFE will close after checking for unsaved work.\n\n" +
-            "Source files outside MFE's AppData folders remain in place. Databases will need to be rebuilt when MFE is reopened.",
-            confirmation: true, primaryLabel: "Clear and Exit", secondaryLabel: "Cancel") { Owner = this };
+        var confirmation = new EditorMessageWindow(Loc.Text("loc_Settings_ClearQuestion"),
+            Loc.Text("loc_Settings_ClearConfirmation"),
+            confirmation: true, primaryLabel: Loc.Text("loc_Settings_ClearExit"), secondaryLabel: Loc.Text("loc_Settings_Cancel")) { Owner = this };
         if (confirmation.ShowDialog() != true) return;
         SetOperating(true);
         try
@@ -117,5 +142,6 @@ public partial class SettingsWindow : Window
         CloseButton.IsEnabled = !operating;
         ThemeSelector.IsEnabled = !operating && _themes is not null;
         AccentColourButton.IsEnabled = !operating && _themes is not null;
+        LanguageSelector.IsEnabled = !operating;
     }
 }

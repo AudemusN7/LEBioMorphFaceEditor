@@ -10,7 +10,8 @@ internal sealed record ApplicationPreferences(
     ThemeMode Mode = ThemeMode.System,
     double? AccentHue = null,
     ViewportBackgroundPreference? ViewportBackground = null,
-    string[]? RecentFiles = null);
+    string[]? RecentFiles = null,
+    string Language = "en-GB");
 
 /// <summary>One atomic preferences document shared by all application settings.</summary>
 internal sealed class ApplicationPreferencesStore

@@ -1,3 +1,4 @@
+using MorphFaceEditor.Infrastructure;
 using System.Text.RegularExpressions;
 using MorphFaceEditor.Core.Deformation;
 using MorphFaceEditor.Core.Materials;
@@ -43,18 +44,18 @@ public sealed partial class BatarianFeatureMetadataCatalog : IHeadEditorUiProfil
 
     public IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
     [
-        new(FacialStructure, "Facial Structure", "Batarian-specific cranium and regional-colour controls.",
-            [new(Cranium, "CRANIUM"), new(RegionalColour, "REGIONAL COLOUR")]),
-        new(Head, "Head", "Overall shape, forehead, ears, cheeks, neck width, and surface controls.",
-            [new(HeadShape, "SHAPE"), new(Ears, "EARS"), new(Cheeks, "CHEEKS"), new(Neck, "NECK"), new(Surface, "SURFACE")]),
-        new(Eyes, "Eyes", "Eye position and shape controls.",
-            [new(Shape, "SHAPE"), new(Position, "POSITION")]),
-        new(Nose, "Nose", "Nose position and profile controls.",
-            [new(NoseShape, "SHAPE")]),
-        new(Mouth, "Mouth / Jaw", "Mouth, teeth, jaw, and chin controls.",
-            [new(MouthShape, "MOUTH"), new(Teeth, "TEETH"), new(Jaw, "JAW"), new(Chin, "CHIN")]),
-        new(Markings, "Markings", "Complexion texture, mask, colour, and specular controls.",
-            [new(Complexion, "COMPLEXION")])
+        new(FacialStructure, Loc.Text("loc_Services_Taxonomy_facial_structure_812284cf"), Loc.Text("loc_Services_Taxonomy_batarian_specific_cranium_and_regional_colour_co_3ef2e9bb"),
+            [new(Cranium, Loc.Text("loc_Services_Taxonomy_cranium_5f4bf434")), new(RegionalColour, Loc.Text("loc_Services_Taxonomy_regional_colour_199c8ed3"))]),
+        new(Head, Loc.Text("loc_Services_Taxonomy_head_9bb0aacc"), Loc.Text("loc_Services_Taxonomy_overall_shape_forehead_ears_cheeks_neck_width_an_81ec7dba"),
+            [new(HeadShape, Loc.Text("loc_Services_Taxonomy_shape_cfb25fc2")), new(Ears, Loc.Text("loc_Services_Taxonomy_ears_903a1aed")), new(Cheeks, Loc.Text("loc_Services_Taxonomy_cheeks_daeb3667")), new(Neck, Loc.Text("loc_Services_Taxonomy_neck_00020b4f")), new(Surface, Loc.Text("loc_Services_Taxonomy_surface_026aa612"))]),
+        new(Eyes, Loc.Text("loc_Services_Taxonomy_eyes_a39e9d98"), Loc.Text("loc_Services_Taxonomy_eye_position_and_shape_controls_94ce5554"),
+            [new(Shape, Loc.Text("loc_Services_Taxonomy_shape_cfb25fc2")), new(Position, Loc.Text("loc_Services_Taxonomy_position_aad6faa6"))]),
+        new(Nose, Loc.Text("loc_Services_Taxonomy_nose_05c5d4db"), Loc.Text("loc_Services_Taxonomy_nose_position_and_profile_controls_cabe6812"),
+            [new(NoseShape, Loc.Text("loc_Services_Taxonomy_shape_cfb25fc2"))]),
+        new(Mouth, Loc.Text("loc_Services_Taxonomy_mouth_jaw_1b80f857"), Loc.Text("loc_Services_Taxonomy_mouth_teeth_jaw_and_chin_controls_a13bf17b"),
+            [new(MouthShape, Loc.Text("loc_Services_Taxonomy_mouth_7feedf9a")), new(Teeth, Loc.Text("loc_Services_Taxonomy_teeth_0afde705")), new(Jaw, Loc.Text("loc_Services_Taxonomy_jaw_296d1292")), new(Chin, Loc.Text("loc_Services_Taxonomy_chin_cfa4ce51"))]),
+        new(Markings, Loc.Text("loc_Services_Taxonomy_markings_86efda29"), Loc.Text("loc_Services_Taxonomy_complexion_texture_mask_colour_and_specular_cont_ce2b43f8"),
+            [new(Complexion, Loc.Text("loc_Services_Taxonomy_complexion_0ee9bf54"))])
     ];
 
     public MorphFeatureMetadata Describe(ResolvedMorphFeature feature, bool sessionCanEdit)
@@ -75,7 +76,7 @@ public sealed partial class BatarianFeatureMetadataCatalog : IHeadEditorUiProfil
             0.01f,
             visible && sessionCanEdit && feature.IsResolved,
             feature.Kind == MorphFeatureResolutionKind.MetadataOnly
-                ? "Stored creator metadata with no direct target delta."
+                ? Loc.Text("loc_Services_Taxonomy_stored_creator_metadata_with_no_direct_target_de_e78cd33a")
                 : string.Empty);
         return MetadataTextCatalog.Apply(MorphFaceMetadataCatalogRegistry.Batarian, metadata);
     }

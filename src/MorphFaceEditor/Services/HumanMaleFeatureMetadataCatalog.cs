@@ -1,3 +1,4 @@
+using MorphFaceEditor.Infrastructure;
 using System.Text.RegularExpressions;
 using MorphFaceEditor.Core.Deformation;
 using MorphFaceEditor.Core.Materials;
@@ -96,20 +97,20 @@ public class HumanMaleFeatureMetadataCatalog : IHeadEditorUiProfile
 
     public virtual IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
     [
-        new(FacialStructure, "Facial Structure", "Character likeness, race, and geometry-based hairstyles.",
-            [new(Character, "CHARACTER"), new(Race, "RACE"), new(Hair, "HAIR")]),
-        new(Head, "Head", "Face shape, cheeks, ears, skin, and base head surface settings.",
-            [new(Shape, "SHAPE"), new(Ears, "EARS"), new(Cheeks, "CHEEKS")]),
-        new(Eyes, "Eyes", "Brows, sockets, eyes, eyelids, lashes, pupils, iris colour, and eye textures.",
-            [new(EyeShape, "SHAPE"), new(Brows, "BROWS"), new(Sockets, "SOCKETS"), new(Eyelids, "EYELIDS"), new(Lashes, "LASHES"), new(Surface, "SURFACE")]),
-        new(Nose, "Nose", "Nose shape, bridge, tip, and nostrils.",
-            [new(Shape, "SHAPE"), new(Bridge, "BRIDGE"), new(Tip, "TIP"), new(Nostrils, "NOSTRILS")]),
-        new(Mouth, "Mouth", "Mouth shape, lips, bite, teeth, and philtrum.",
-            [new(MouthShape, "MOUTH"), new(Lips, "LIPS"), new(Teeth, "TEETH")]),
-        new(NeckJaw, "Neck / Jaw", "Chin, jaw, neck, Adam's apple, and lower-face structure.",
-            [new(Jaw, "JAW"), new(Chin, "CHIN"), new(Neck, "NECK")]),
-        new(Additions, "Additions", "Surface additions, face overlays, freckles, scars, and scalp settings.",
-            [new(Addition, "ADDITION"), new(Face, "FACE"), new(Scalp, "SCALP")])
+        new(FacialStructure, Loc.Text("loc_Services_Taxonomy_facial_structure_812284cf"), Loc.Text("loc_Services_Taxonomy_character_likeness_race_and_geometry_based_hairs_50ee7c21"),
+            [new(Character, Loc.Text("loc_Services_Taxonomy_character_19cd78f5")), new(Race, Loc.Text("loc_Services_Taxonomy_race_c51fb9b5")), new(Hair, Loc.Text("loc_Services_Taxonomy_hair_3ba4bcee"))]),
+        new(Head, Loc.Text("loc_Services_Taxonomy_head_9bb0aacc"), Loc.Text("loc_Services_Taxonomy_face_shape_cheeks_ears_skin_and_base_head_surfac_11c71fda"),
+            [new(Shape, Loc.Text("loc_Services_Taxonomy_shape_cfb25fc2")), new(Ears, Loc.Text("loc_Services_Taxonomy_ears_903a1aed")), new(Cheeks, Loc.Text("loc_Services_Taxonomy_cheeks_daeb3667"))]),
+        new(Eyes, Loc.Text("loc_Services_Taxonomy_eyes_a39e9d98"), Loc.Text("loc_Services_Taxonomy_brows_sockets_eyes_eyelids_lashes_pupils_iris_co_76faa4fc"),
+            [new(EyeShape, Loc.Text("loc_Services_Taxonomy_shape_cfb25fc2")), new(Brows, Loc.Text("loc_Services_Taxonomy_brows_9cbe502a")), new(Sockets, Loc.Text("loc_Services_Taxonomy_sockets_1d56780a")), new(Eyelids, Loc.Text("loc_Services_Taxonomy_eyelids_601775d2")), new(Lashes, Loc.Text("loc_Services_Taxonomy_lashes_6ad1e621")), new(Surface, Loc.Text("loc_Services_Taxonomy_surface_026aa612"))]),
+        new(Nose, Loc.Text("loc_Services_Taxonomy_nose_05c5d4db"), Loc.Text("loc_Services_Taxonomy_nose_shape_bridge_tip_and_nostrils_63409eb0"),
+            [new(Shape, Loc.Text("loc_Services_Taxonomy_shape_cfb25fc2")), new(Bridge, Loc.Text("loc_Services_Taxonomy_bridge_ef304fbe")), new(Tip, Loc.Text("loc_Services_Taxonomy_tip_cd320198")), new(Nostrils, Loc.Text("loc_Services_Taxonomy_nostrils_84cac5a8"))]),
+        new(Mouth, Loc.Text("loc_Services_Taxonomy_mouth_169541e5"), Loc.Text("loc_Services_Taxonomy_mouth_shape_lips_bite_teeth_and_philtrum_d071099d"),
+            [new(MouthShape, Loc.Text("loc_Services_Taxonomy_mouth_7feedf9a")), new(Lips, Loc.Text("loc_Services_Taxonomy_lips_43c004a7")), new(Teeth, Loc.Text("loc_Services_Taxonomy_teeth_0afde705"))]),
+        new(NeckJaw, Loc.Text("loc_Services_Taxonomy_neck_jaw_7d7d03d1"), Loc.Text("loc_Services_Taxonomy_chin_jaw_neck_adam_s_apple_and_lower_face_struct_c0fb74b0"),
+            [new(Jaw, Loc.Text("loc_Services_Taxonomy_jaw_296d1292")), new(Chin, Loc.Text("loc_Services_Taxonomy_chin_cfa4ce51")), new(Neck, Loc.Text("loc_Services_Taxonomy_neck_00020b4f"))]),
+        new(Additions, Loc.Text("loc_Services_Taxonomy_additions_966ff941"), Loc.Text("loc_Services_Taxonomy_surface_additions_face_overlays_freckles_scars_a_1f3ef8ca"),
+            [new(Addition, Loc.Text("loc_Services_Taxonomy_addition_63d99162")), new(Face, Loc.Text("loc_Services_Taxonomy_face_215db504")), new(Scalp, Loc.Text("loc_Services_Taxonomy_scalp_91d59546"))])
     ];
 
     public virtual MorphFeatureMetadata Describe(ResolvedMorphFeature feature, bool sessionCanEdit)
@@ -117,7 +118,7 @@ public class HumanMaleFeatureMetadataCatalog : IHeadEditorUiProfile
         var (category, subcategory) = GetFeaturePlacement(feature.Feature.Name);
         var editable = sessionCanEdit && feature.IsResolved;
         var description = feature.Kind == MorphFeatureResolutionKind.MetadataOnly
-            ? "Stored character-creator metadata with no direct vertex or bone delta."
+            ? Loc.Text("loc_Services_Taxonomy_stored_character_creator_metadata_with_no_direct_4b548561")
             : string.Empty;
         var metadata = new MorphFeatureMetadata(
             feature.Feature.Name,

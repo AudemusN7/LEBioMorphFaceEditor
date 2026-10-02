@@ -1,3 +1,4 @@
+using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.Core.Deformation;
 using MorphFaceEditor.Core.Materials;
 
@@ -39,7 +40,7 @@ public sealed class FemaleTurianFeatureMetadataCatalog : IHeadEditorUiProfile
         {
             IsVisible = false,
             IsEditable = false,
-            Description = "Reserved Female Turian placeholder; no TUF morph target is currently available."
+            Description = Loc.Text("loc_Services_Taxonomy_reserved_female_turian_placeholder_no_tuf_morph_b14ba244")
         };
         return MetadataTextCatalog.Apply(MorphFaceMetadataCatalogRegistry.FemaleTurian, described);
     }

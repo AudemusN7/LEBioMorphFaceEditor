@@ -1,3 +1,4 @@
+using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.Core.Deformation;
 using MorphFaceEditor.LegendaryExplorer;
 
@@ -41,6 +42,6 @@ public sealed class Le3HumanMaleFeatureMetadataCatalog : HumanMaleFeatureMetadat
     private static MorphFeatureMetadata DescribeVestigialPupil(
         MorphFeatureMetadata metadata) => metadata with
     {
-        Description = "Stock LE3 target retained for package fidelity; it visibly affects the lower jaw rather than pupil size."
+        Description = Loc.Text("loc_Services_Taxonomy_stock_le3_target_retained_for_package_fidelity_i_3d37e5eb")
     };
 }

@@ -87,9 +87,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private string _faceSearchText = string.Empty;
     private BioMorphFaceListItem? _selectedFace;
     private FaceEditorViewModel? _editor;
-    private string _status = "Open a package to begin.";
+    private string _status = Loc.Text("loc_Shell_Status_OpenPackageToBegin");
     private string? _errorMessage;
     private string? _faceDetails;
+    private string? _faceDetailsPrefix;
+    private bool _faceDetailsHasBakedFallback;
     private string? _loadedFacePath;
     private bool _isBusy;
     private bool _hasPreview;
@@ -235,10 +237,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public IReadOnlyList<HeadPreviewRenderMode> RenderModes { get; } = Enum.GetValues<HeadPreviewRenderMode>();
     public IReadOnlyList<PreviewLightingChoice> LightingPresets { get; } =
     [
-        new(HeadPreviewLightingPreset.Studio, "Studio"),
-        new(HeadPreviewLightingPreset.HighContrast, "High Contrast"),
-        new(HeadPreviewLightingPreset.WarmInterior, "Warm Interior"),
-        new(HeadPreviewLightingPreset.CoolNight, "Cool Night")
+        new(HeadPreviewLightingPreset.Studio, Loc.Text("loc_Shell_Lighting_Studio")),
+        new(HeadPreviewLightingPreset.HighContrast, Loc.Text("loc_Shell_Lighting_HighContrast")),
+        new(HeadPreviewLightingPreset.WarmInterior, Loc.Text("loc_Shell_Lighting_WarmInterior")),
+        new(HeadPreviewLightingPreset.CoolNight, Loc.Text("loc_Shell_Lighting_CoolNight"))
     ];
     public ICommand OpenPackageCommand => _openPackageCommand;
     public ICommand LoadSelectedFaceCommand => _loadSelectedFaceCommand;
@@ -284,10 +286,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     public string PackageName => _detachedMeshSource is not null
-        ? $"{_standaloneGame} Detached Mesh Workspace"
+        ? Loc.Format("loc_Shell_PackageName_DetachedMeshWorkspace", _standaloneGame)
         : _standaloneGame is not null
-        ? $"{_standaloneGame} Standalone {(_isStandaloneNpcWorkspace ? "NPC" : "Player")} Workspace"
-        : PackagePath is null ? "No package open" : Path.GetFileName(PackagePath);
+        ? Loc.Format(_isStandaloneNpcWorkspace ? "loc_Shell_PackageName_StandaloneNpcWorkspace" : "loc_Shell_PackageName_StandalonePlayerWorkspace", _standaloneGame)
+        : PackagePath is null ? Loc.Text("loc_Shell_PackageName_NoPackageOpen") : Path.GetFileName(PackagePath);
     public string PackageDisplayName => IsDirty ? $"{PackageName} *" : PackageName;
     public bool HasWorkspace => PackagePath is not null;
     public bool HasRecentFiles => RecentFiles.Count > 0;
@@ -539,12 +541,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 Editor.SetPreviewLod(value);
                 PreviewSceneReady?.Invoke(CreateCurrentPreviewScene(), false);
                 Status = Editor.HasMorphGeometryAtLod(value)
-                    ? $"Previewing LOD {value}."
-                    : $"Previewing LOD {value}; the game has no authored morph-target geometry for this LOD, so morph sliders are disabled.";
+                    ? Loc.Format("loc_Shell_Status_PreviewingLod", value)
+                    : Loc.Format("loc_Shell_Status_PreviewingLodMorphDisabled", value);
             }
             catch (Exception exception)
             {
-                SetPreviewError($"LOD {value} could not be previewed: {exception.Message}");
+                SetPreviewError(Loc.Format("loc_Shell_Error_LodPreviewFailed", value, exception.Message));
             }
         }
     }
@@ -586,7 +588,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         var before = BackgroundColor;
         var applied = _colorDialog.EditBackground(
-            "Preview background colour",
+            Loc.Text("loc_Shell_Dialog_PreviewBackgroundColour"),
             before,
             _themeBackgroundColor,
             value => BackgroundColor = value);
@@ -605,12 +607,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         (byte)Math.Round(Math.Clamp(value, 0, 1) * byte.MaxValue);
 
     public void SetFrameStatus(HeadPreviewFrame frame) =>
-        Status = $"{frame.DeviceKind} · {frame.Width}×{frame.Height} · {frame.DrawCalls} sections · {frame.RenderTime.TotalMilliseconds:F1} ms";
+        Status = Loc.Format("loc_Shell_Status_PreviewStats", frame.DeviceKind, frame.Width, frame.Height, frame.DrawCalls, frame.RenderTime.TotalMilliseconds);
 
     public void SetPreviewError(string message)
     {
         ErrorMessage = message;
-        Status = "Preview unavailable.";
+        Status = Loc.Text("loc_Shell_Status_PreviewUnavailable");
     }
 
     private void SetEditorError(string message)
@@ -630,8 +632,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
         if (EditorFileDrop.Classify(selectedPath) == EditorFileDropKind.Unsupported)
         {
-            ErrorMessage = $"'{Path.GetExtension(selectedPath)}' is not a supported package or morph file type.";
-            Status = "The selected file could not be opened.";
+            ErrorMessage = Loc.Format("loc_Shell_Error_UnsupportedFileType", Path.GetExtension(selectedPath));
+            Status = Loc.Text("loc_Shell_Status_SelectedFileCouldNotOpen");
             return;
         }
 
@@ -682,8 +684,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             _recentFileService.Remove(path);
             RefreshRecentFiles();
-            ErrorMessage = $"The recent file no longer exists: {path}";
-            Status = "The recent file could not be opened.";
+            ErrorMessage = Loc.Format("loc_Shell_Error_RecentFileMissing", path);
+            Status = Loc.Text("loc_Shell_Status_RecentFileCouldNotOpen");
             return;
         }
         await OpenDroppedFileAsync(path);
@@ -716,8 +718,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         catch (Exception exception)
         {
             AppLog.Error($"Package workspace creation failed for '{selectedPath}'.", exception);
-            ErrorMessage = $"Package could not be opened: {exception.Message}";
-            Status = "Package load failed.";
+            ErrorMessage = Loc.Format("loc_Shell_Error_PackageCouldNotOpen", exception.Message);
+            Status = Loc.Text("loc_Shell_Status_PackageLoadFailed");
             return false;
         }
 
@@ -756,8 +758,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         ErrorMessage = null;
         HasPreview = false;
         FaceDetails = null;
+        _faceDetailsPrefix = null;
+        _faceDetailsHasBakedFallback = false;
         LoadedFacePath = null;
-        Status = "Reading BioMorphFace exports…";
+        Status = Loc.Text("loc_Shell_Status_ReadingBioMorphFaceExports");
         var opened = false;
         try
         {
@@ -786,16 +790,16 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                       preferredFacePath,
                       StringComparison.OrdinalIgnoreCase)) ?? Faces.FirstOrDefault();
             Status = Faces.Count == 0
-                ? "This package contains no non-default BioMorphFace exports."
-                : $"Found {Faces.Count:N0} BioMorphFace export{(Faces.Count == 1 ? string.Empty : "s")}.";
+                ? Loc.Text("loc_Shell_Status_NoBioMorphFaceExports")
+                : Loc.Format("loc_Shell_Status_BioMorphFaceExportsFound", Faces.Count);
             AppLog.Information($"Package workspace catalogue loaded: '{catalog.PackagePath}', {Faces.Count} face(s).");
             opened = true;
         }
         catch (Exception exception)
         {
             AppLog.Error($"Package workspace refresh failed for '{workspacePath}'.", exception);
-            ErrorMessage = $"Package could not be opened: {exception.Message}";
-            Status = "Package load failed.";
+            ErrorMessage = Loc.Format("loc_Shell_Error_PackageCouldNotOpen", exception.Message);
+            Status = Loc.Text("loc_Shell_Status_PackageLoadFailed");
         }
         finally
         {
@@ -833,7 +837,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         SelectedFace = Faces.FirstOrDefault(face => face.UIndex == requestedFaceUIndex);
         if (SelectedFace is null)
         {
-            ErrorMessage = $"BioMorphFace '{requestedFacePath}' is no longer present in the open PCC.";
+            ErrorMessage = Loc.Format("loc_Shell_Error_FaceMissingFromPcc", requestedFacePath);
             return false;
         }
 
@@ -843,7 +847,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         var cancellationToken = _loadCancellation.Token;
         IsBusy = true;
         ErrorMessage = null;
-        Status = $"Loading {SelectedFace.DisplayName}…";
+        Status = Loc.Format("loc_Shell_Status_LoadingFace", SelectedFace.DisplayName);
         AppLog.Information($"Loading face '{SelectedFace.InstancedPath}' from temporary workspace '{workspacePath}'.");
         try
         {
@@ -874,18 +878,22 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             var displayedFinalBoneCount = result.Profile.IgnoresAuthoredGeometry
                 ? 0
                 : result.Loaded.Document.FinalSkeleton.Count;
-            FaceDetails = $"{topology.VertexCount:N0} vertices · {topology.IndexCount / 3:N0} triangles · " +
-                          $"{topology.Sections.Count} sections · {displayedFinalBoneCount} final bones · " +
-                          $"{materialOverrides.Scalars.Count}/{materialOverrides.Vectors.Count}/{materialOverrides.Textures.Count} material S/V/T · " +
-                          (result.EditingSession.GeometryMode == MorphFaceGeometryMode.RelativeBake
-                              ? "relative imported bake"
-                              : result.EditingSession.GeometryMode == MorphFaceGeometryMode.FixedBake
-                                  ? "fixed imported bake"
-                              : result.EditingSession.CanEdit
-                              ? $"oracle {oracle!.MaximumError:G4} max"
-                              : result.Profile.IgnoresAuthoredGeometry
-                                  ? "base-head material-only preview"
-                              : $"baked fallback · {result.EditingSession.EditBlockReason}");
+            var geometryDetails = result.EditingSession.GeometryMode == MorphFaceGeometryMode.RelativeBake
+                ? Loc.Text("loc_Shell_FaceDetails_RelativeImportedBake")
+                : result.EditingSession.GeometryMode == MorphFaceGeometryMode.FixedBake
+                    ? Loc.Text("loc_Shell_FaceDetails_FixedImportedBake")
+                : result.EditingSession.CanEdit
+                    ? Loc.Format("loc_Shell_FaceDetails_OracleMax", oracle!.MaximumError)
+                : result.Profile.IgnoresAuthoredGeometry
+                    ? Loc.Text("loc_Shell_FaceDetails_BaseHeadMaterialOnlyPreview")
+                : Loc.Format("loc_Shell_FaceDetails_BakedFallback", result.EditingSession.EditBlockReason);
+            _faceDetailsPrefix = Loc.Format("loc_Shell_FaceDetails_LoadedMorphPrefix", topology.VertexCount,
+                topology.IndexCount / 3, topology.Sections.Count, displayedFinalBoneCount,
+                materialOverrides.Scalars.Count, materialOverrides.Vectors.Count, materialOverrides.Textures.Count);
+            _faceDetailsHasBakedFallback = result.EditingSession.GeometryMode != MorphFaceGeometryMode.RelativeBake &&
+                result.EditingSession.GeometryMode != MorphFaceGeometryMode.FixedBake &&
+                !result.EditingSession.CanEdit && !result.Profile.IgnoresAuthoredGeometry;
+            SetGeometryDetails(geometryDetails);
             LoadedFacePath = result.Loaded.Document.Source.InstancedPath;
             var editor = new FaceEditorViewModel(
                 result.EditingSession,
@@ -927,16 +935,14 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             _previewCameraFamily = cameraFamily;
             PreviewSceneReady?.Invoke(result.Scene, resetCameraPosition);
             Status = result.EditingSession.GeometryMode == MorphFaceGeometryMode.RelativeBake
-                ? $"Loaded {SelectedFace.DisplayName} ({result.Profile.DisplayName}); authored geometry preserved with relative morph, bone and material editing ready."
+                ? Loc.Format("loc_Shell_Status_LoadedFaceRelativeBake", SelectedFace.DisplayName, result.Profile.DisplayName)
                 : result.EditingSession.GeometryMode == MorphFaceGeometryMode.FixedBake
-                    ? $"Loaded {SelectedFace.DisplayName} ({result.Profile.DisplayName}); fixed-bake geometry, bone and material editing ready. Morph sliders are preserved but disabled."
+                    ? Loc.Format("loc_Shell_Status_LoadedFaceFixedBake", SelectedFace.DisplayName, result.Profile.DisplayName)
                 : result.EditingSession.CanEdit
-                ? $"Loaded {SelectedFace.DisplayName} ({result.Profile.DisplayName}); live geometry and material editing ready."
+                ? Loc.Format("loc_Shell_Status_LoadedFaceLiveGeometry", SelectedFace.DisplayName, result.Profile.DisplayName)
                 : result.Profile.IgnoresAuthoredGeometry
-                    ? $"Loaded {SelectedFace.DisplayName} ({result.Profile.DisplayName}); material editing ready with base-head preview. " +
-                      result.EditingSession.EditBlockReason
-                : $"Loaded {SelectedFace.DisplayName} ({result.Profile.DisplayName}); material editing ready with baked geometry fallback. " +
-                  result.EditingSession.EditBlockReason;
+                    ? Loc.Format("loc_Shell_Status_LoadedFaceBaseHeadPreview", SelectedFace.DisplayName, result.Profile.DisplayName, result.EditingSession.EditBlockReason)
+                : Loc.Format("loc_Shell_Status_LoadedFaceBakedGeometryFallback", SelectedFace.DisplayName, result.Profile.DisplayName, result.EditingSession.EditBlockReason);
             AppLog.Information(
                 $"Face loaded: '{LoadedFacePath}', editable={result.EditingSession.CanEdit}, " +
                 $"vertices={topology.VertexCount}, targets={result.EditingSession.Evaluation.Resolution.WeightedTargets.Count}.");
@@ -950,7 +956,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
         catch (OperationCanceledException)
         {
-            Status = "Load cancelled.";
+            Status = Loc.Text("loc_Shell_Status_LoadCancelled");
             return false;
         }
         catch (Exception exception)
@@ -958,8 +964,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             AppLog.Error($"Face load failed for '{requestedFacePath}' in '{workspacePath}'.", exception);
             HasPreview = false;
             SetEditor(null, null);
-            ErrorMessage = $"Face could not be loaded: {exception.Message}";
-            Status = "Face load failed.";
+            ErrorMessage = Loc.Format("loc_Shell_Error_FaceCouldNotLoad", exception.Message);
+            Status = Loc.Text("loc_Shell_Status_FaceLoadFailed");
             return false;
         }
         finally
@@ -1061,10 +1067,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                          .Where(lod => editor is null || editor.AvailableLodIndices.Contains(lod.LodIndex))
                          .OrderBy(lod => lod.LodIndex))
             {
-                var staticSuffix = editor?.HasMorphGeometryAtLod(lod.LodIndex) == false
-                    ? " (static)"
-                    : string.Empty;
-                PreviewLods.Add(new PreviewLodChoice(lod.LodIndex, $"LOD {lod.LodIndex}{staticSuffix}"));
+                PreviewLods.Add(new PreviewLodChoice(lod.LodIndex, Loc.Format(
+                    editor?.HasMorphGeometryAtLod(lod.LodIndex) == false
+                        ? "loc_Shell_PreviewLodStatic"
+                        : "loc_Shell_PreviewLod", lod.LodIndex)));
             }
         }
         _previewLod = PreviewLods.FirstOrDefault()?.LodIndex ?? 0;
@@ -1116,7 +1122,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         catch (Exception exception)
         {
             AppLog.Error($"Could not prepare scalp textures for manually selected hair '{mesh.InstancedPath}'.", exception);
-            SetEditorError($"Matching scalp textures could not be prepared: {exception.Message}");
+            SetEditorError(Loc.Format("loc_Shell_Error_MatchingScalpTexturesCouldNotPrepare", exception.Message));
         }
     }
 
@@ -1187,13 +1193,13 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 return;
             }
             AppLog.Error($"Morph repair failed for '{LoadedFacePath}'.", exception);
-            ErrorMessage = $"The morph could not be repaired: {exception.Message}";
-            Status = "Morph repair failed; the face was not changed.";
+            ErrorMessage = Loc.Format("loc_Shell_Error_MorphCouldNotRepair", exception.Message);
+            Status = Loc.Text("loc_Shell_Status_MorphRepairFailedFaceUnchanged");
             return;
         }
 
         var report = editor.Evaluation.OriginalOracleReport;
-        SetGeometryDetails($"oracle repaired · {report?.MaximumError ?? 0:G4} max · unsaved");
+        SetGeometryDetails(Loc.Format("loc_Shell_FaceDetails_OracleRepaired", report?.MaximumError ?? 0));
         try
         {
             PreviewSceneReady?.Invoke(CreateCurrentPreviewScene(), false);
@@ -1203,7 +1209,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             ReportPostRepairPreviewFailure(editor, exception);
             return;
         }
-        Status = $"Fixed {SelectedFace?.DisplayName ?? "morph"}; canonical geometry restored. Save to commit the repair.";
+        Status = Loc.Format("loc_Shell_Status_MorphFixed", SelectedFace?.DisplayName ?? Loc.Text("loc_Shell_Word_Morph"));
         AppLog.Information(
             $"Baked morph geometry repaired for '{LoadedFacePath}'; " +
             $"post-repair oracle maximum {report?.MaximumError ?? 0:G9}.");
@@ -1212,12 +1218,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private void ReportPostRepairPreviewFailure(FaceEditorViewModel editor, Exception exception)
     {
         var report = editor.Evaluation.OriginalOracleReport;
-        SetGeometryDetails($"oracle repaired · {report?.MaximumError ?? 0:G4} max · unsaved");
+        SetGeometryDetails(Loc.Format("loc_Shell_FaceDetails_OracleRepaired", report?.MaximumError ?? 0));
         AppLog.Error(
             $"Baked morph geometry was repaired for '{LoadedFacePath}', but the preview refresh failed.",
             exception);
-        ErrorMessage = $"The morph was repaired, but the preview could not be refreshed: {exception.Message}";
-        Status = "Morph repaired; unsaved changes retained, but preview refresh failed.";
+        ErrorMessage = Loc.Format("loc_Shell_Error_MorphRepairedPreviewCouldNotRefresh", exception.Message);
+        Status = Loc.Text("loc_Shell_Status_MorphRepairedPreviewRefreshFailed");
     }
 
     private void MarkWorkspaceChanged()
@@ -1232,12 +1238,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             if (Editor.UsesLiveDeformationPreview)
             {
-                if (Editor.CanEditMorphFeatures &&
-                    FaceDetails?.Contains("baked fallback", StringComparison.Ordinal) == true)
+                if (Editor.CanEditMorphFeatures && _faceDetailsHasBakedFallback)
                 {
                     var report = Editor.Evaluation.OriginalOracleReport;
-                    SetGeometryDetails($"oracle repaired · {report?.MaximumError ?? 0:G4} max · unsaved");
-                    Status = "Morph repair restored; save to commit the repaired geometry.";
+                    SetGeometryDetails(Loc.Format("loc_Shell_FaceDetails_OracleRepaired", report?.MaximumError ?? 0));
+                    _faceDetailsHasBakedFallback = false;
+                    Status = Loc.Text("loc_Shell_Status_MorphRepairRestored");
                 }
                 PreviewDeformationReady?.Invoke(
                     _sceneFactory.CreateUpdate(_loadedFace, Editor.Evaluation, PreviewLod));
@@ -1247,8 +1253,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 PreviewSceneReady?.Invoke(CreateCurrentPreviewScene(), false);
                 if (Editor.CanFixMorph)
                 {
-                    SetGeometryDetails($"baked fallback · {Editor.EditBlockReason}");
-                    Status = "Morph repair undone; original baked geometry restored.";
+                    SetGeometryDetails(Loc.Format("loc_Shell_FaceDetails_BakedFallback", Editor.EditBlockReason));
+                    _faceDetailsHasBakedFallback = true;
+                    Status = Loc.Text("loc_Shell_Status_MorphRepairUndone");
                 }
             }
         }
@@ -1256,27 +1263,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private void SetGeometryDetails(string geometryDetails)
     {
-        var prefix = FaceDetails;
-        if (!string.IsNullOrEmpty(prefix))
-        {
-            var marker = new[] { " · baked fallback", " · oracle repaired", " · oracle " }
-                .Select(value => prefix.IndexOf(value, StringComparison.Ordinal))
-                .Where(index => index >= 0)
-                .DefaultIfEmpty(-1)
-                .Min();
-            if (marker >= 0)
-            {
-                prefix = prefix[..marker];
-            }
-            else if (prefix.StartsWith("baked fallback", StringComparison.Ordinal) ||
-                     prefix.StartsWith("oracle ", StringComparison.Ordinal))
-            {
-                prefix = null;
-            }
-        }
-        FaceDetails = string.IsNullOrEmpty(prefix)
+        FaceDetails = string.IsNullOrEmpty(_faceDetailsPrefix)
             ? geometryDetails
-            : $"{prefix} · {geometryDetails}";
+            : Loc.Format("loc_Shell_FaceDetails_WithGeometryDetails", _faceDetailsPrefix, geometryDetails);
     }
 
     private void OnMaterialPreviewChanged(object? sender, EventArgs e)
@@ -1385,8 +1374,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             _loadedFace = committedLoadedFace;
             PreviewSceneReady?.Invoke(committedScene, false);
             Status = changedSlot.Value is null
-                ? $"{changedSlot.Label} cleared."
-                : $"{changedSlot.Label} changed to {changedSlot.Value.InstancedPath}.";
+                ? Loc.Format("loc_Shell_Status_AttachmentCleared", changedSlot.Label)
+                : Loc.Format("loc_Shell_Status_AttachmentChanged", changedSlot.Label, changedSlot.Value.InstancedPath);
         }
         catch (Exception exception)
         {
@@ -1397,7 +1386,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                     editor.Material.RestoreAttachmentState(materialState);
                 }
                 AppLog.Error($"Attachment change failed for {changedSlot.Label}.", exception);
-                SetEditorError($"Attachment mesh could not be changed: {exception.Message}");
+                SetEditorError(Loc.Format("loc_Shell_Error_AttachmentMeshCouldNotChange", exception.Message));
             }
         }
         finally
@@ -1627,7 +1616,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
         IsBusy = true;
         ErrorMessage = null;
-        Status = "Updating the temporary package workspace…";
+        Status = Loc.Text("loc_Shell_Status_UpdatingTemporaryPackageWorkspace");
         try
         {
             AppLog.Information($"Flushing face '{LoadedFacePath}' to temporary workspace '{WorkspacePackagePath}'.");
@@ -1636,19 +1625,19 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             var reopened = await RefreshWorkspaceAsync(result.FaceInstancedPath);
             if (!reopened)
             {
-                ErrorMessage = "Temporary edits were retained, but the refreshed workspace could not be opened.";
-                Status = "Workspace updated; reload failed.";
+                ErrorMessage = Loc.Text("loc_Shell_Error_TemporaryEditsRetainedWorkspaceReloadFailed");
+                Status = Loc.Text("loc_Shell_Status_WorkspaceUpdatedReloadFailed");
                 return false;
             }
-            Status = $"Temporary edits updated for {result.FaceInstancedPath}.";
+            Status = Loc.Format("loc_Shell_Status_TemporaryEditsUpdated", result.FaceInstancedPath);
             AppLog.Information($"Temporary face update verified: '{result.FaceInstancedPath}'.");
             return true;
         }
         catch (Exception exception)
         {
             AppLog.Error($"Temporary face update failed for '{LoadedFacePath}'.", exception);
-            ErrorMessage = $"Temporary edits could not be updated: {exception.Message}";
-            Status = "Workspace update failed; the source PCC was not modified.";
+            ErrorMessage = Loc.Format("loc_Shell_Error_TemporaryEditsCouldNotUpdate", exception.Message);
+            Status = Loc.Text("loc_Shell_Status_WorkspaceUpdateFailedSourceUnmodified");
             return false;
         }
         finally
@@ -1665,8 +1654,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
         if (!_packageWorkspace.CanCommit)
         {
-            ErrorMessage = "Standalone imports cannot overwrite the installed player template package. Use Save to PCC instead.";
-            Status = "Choose Save to PCC for this standalone import.";
+            ErrorMessage = Loc.Text("loc_Shell_Error_StandaloneCannotOverwritePlayerTemplate");
+            Status = Loc.Text("loc_Shell_Status_UseSaveToPccForStandaloneImport");
             return false;
         }
         if (Editor?.IsDirty == true && !await FlushEditorToWorkspaceAsync())
@@ -1680,18 +1669,18 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
         IsBusy = true;
         ErrorMessage = null;
-        Status = "Committing and verifying package changes…";
+        Status = Loc.Text("loc_Shell_Status_CommittingAndVerifyingPackageChanges");
         try
         {
             await Task.Run(_packageWorkspace.Commit);
             _hasWorkspaceChanges = false;
             OnDirtyStateChanged();
-            Status = $"Saved {PackageName}.";
+            Status = Loc.Format("loc_Shell_Status_PackageSaved", PackageName);
             if (showConfirmation)
             {
                 _dialogs.ShowInformation(
-                    "Package saved",
-                    $"All temporary BioMorphFace changes were committed successfully.\n\nPackage: {PackagePath}");
+                    Loc.Text("loc_Shell_DialogTitle_PackageSaved"),
+                    Loc.Format("loc_Shell_Dialog_PackageSaved", PackagePath));
             }
             AppLog.Information($"Temporary package workspace committed to '{PackagePath}'.");
             return true;
@@ -1699,8 +1688,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         catch (Exception exception)
         {
             AppLog.Error($"Package workspace commit failed for '{PackagePath}'.", exception);
-            ErrorMessage = $"Package changes could not be committed: {exception.Message}";
-            Status = "Save failed; temporary edits are still available and the source PCC was not modified.";
+            ErrorMessage = Loc.Format("loc_Shell_Error_PackageChangesCouldNotCommit", exception.Message);
+            Status = Loc.Text("loc_Shell_Status_SaveFailedTemporaryEditsRetainedSourceUnmodified");
             return false;
         }
         finally
@@ -1716,7 +1705,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             return true;
         }
         return _dialogs.ConfirmUnsavedChanges(
-            LoadedFacePath ?? "Loaded BioMorphFace",
+            LoadedFacePath ?? Loc.Text("loc_Shell_UnsavedChanges_LoadedBioMorphFace"),
             IsDetachedMeshWorkspace ? UnsavedChangesScope.DetachedMaterials : IsStandaloneWorkspace
                 ? UnsavedChangesScope.StandaloneFace
                 : UnsavedChangesScope.Face) switch
@@ -1736,7 +1725,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             return true;
         }
         return _dialogs.ConfirmUnsavedChanges(
-            IsStandaloneWorkspace ? LoadedFacePath ?? PackageName : PackagePath ?? "Open package",
+            IsStandaloneWorkspace ? LoadedFacePath ?? PackageName : PackagePath ?? Loc.Text("loc_Shell_UnsavedChanges_OpenPackage"),
             IsDetachedMeshWorkspace ? UnsavedChangesScope.DetachedMaterials :
                 IsStandaloneWorkspace ? UnsavedChangesScope.StandaloneFace : UnsavedChangesScope.Package) switch
         {
@@ -1790,11 +1779,13 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         Faces.Clear();
         FaceSearchText = string.Empty;
         FaceDetails = null;
+        _faceDetailsPrefix = null;
+        _faceDetailsHasBakedFallback = false;
         LoadedFacePath = null;
         HasPreview = false;
         ErrorMessage = null;
         PackagePath = null;
-        Status = "Open a package to begin.";
+        Status = Loc.Text("loc_Shell_Status_OpenAPackageToBegin");
         OnDirtyStateChanged();
         RaiseFaceContextCanExecuteChanged();
         PreviewCleared?.Invoke(this, EventArgs.Empty);
@@ -1833,7 +1824,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
         IsBusy = true;
         ErrorMessage = null;
-        Status = "Exporting the morph and its dependencies…";
+        Status = Loc.Text("loc_Shell_Status_ExportingMorphAndDependencies");
         try
         {
             var draft = Editor.CreateDraft();
@@ -1846,8 +1837,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 request.DestinationPackagePath,
                 request.CreateNewPackage));
             Status = result.Warnings.Count == 0
-                ? $"Exported and verified {result.FaceInstancedPath}."
-                : $"Exported and verified {result.FaceInstancedPath} with {result.Warnings.Count} dependency warning(s).";
+                ? Loc.Format("loc_Shell_Status_MorphExportedAndVerified", result.FaceInstancedPath)
+                : Loc.Format("loc_Shell_Status_MorphExportedAndVerifiedWithWarnings", result.FaceInstancedPath, result.Warnings.Count);
             if (result.Warnings.Count > 0)
             {
                 AppLog.Warning(
@@ -1856,20 +1847,19 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             }
             var warningSummary = result.Warnings.Count == 0
                 ? string.Empty
-                : $"\nDependency warnings: {result.Warnings.Count} (details were written to the application log).";
+                : Loc.Format("loc_Shell_Dialog_DependencyWarningSummary", result.Warnings.Count);
             _dialogs.ShowInformation(
-                "Morph package saved",
-                $"The morph and its required package dependencies were exported successfully.\n\n" +
-                $"Package: {result.PackagePath}\nFace: {result.FaceInstancedPath}\n" +
-                $"Baked LODs: {result.LodCount}\nTexture references: {result.TextureReferenceCount}" + warningSummary);
+                Loc.Text("loc_Shell_DialogTitle_MorphPackageSaved"),
+                Loc.Format("loc_Shell_Dialog_MorphPackageSaved", result.PackagePath, result.FaceInstancedPath,
+                    result.LodCount, result.TextureReferenceCount, warningSummary));
             AppLog.Information($"Morph package export verified: '{result.FaceInstancedPath}' in '{result.PackagePath}'.");
             return true;
         }
         catch (Exception exception)
         {
             AppLog.Error($"Morph package export failed for '{LoadedFacePath}' in '{PackagePath}'.", exception);
-            ErrorMessage = $"The morph could not be exported: {exception.Message}";
-            Status = "Save failed; the source PCC was not modified.";
+            ErrorMessage = Loc.Format("loc_Shell_Error_MorphCouldNotExport", exception.Message);
+            Status = Loc.Text("loc_Shell_Status_SaveFailedSourcePccUnmodified");
             return false;
         }
         finally
@@ -1897,14 +1887,14 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
         IsBusy = true;
         ErrorMessage = null;
-        Status = "Creating the mesh, materials and package dependencies…";
+        Status = Loc.Text("loc_Shell_Status_CreatingMeshMaterialsAndDependencies");
         try
         {
             var textureCatalog = await _referenceService.ReadTextureCatalogAsync(game);
             if (!textureCatalog.IsAvailable)
             {
                 throw new InvalidOperationException(
-                    "Save to PCC requires a ready texture database for the selected game.");
+                    Loc.Text("loc_Shell_Error_SaveToPccRequiresTextureDatabase"));
             }
             var request = new CustomMeshPccSaveRequest(
                 _detachedMeshSource,
@@ -1916,26 +1906,25 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 _customMeshBinaryWriter,
                 textureCatalog.Candidates);
             var result = await Task.Run(() => _customMeshPccMaterializer.Save(request));
-            Status = $"Saved and verified {result.MeshPath} with {result.Materials.Count} authored material(s).";
+            Status = Loc.Format("loc_Shell_Status_CustomMeshSavedAndVerified", result.MeshPath, result.Materials.Count);
             var warningSummary = result.Warnings.Count == 0
                 ? string.Empty
-                : $"\nDependency warnings: {result.Warnings.Count} (details were written to the application log).";
+                : Loc.Format("loc_Shell_Dialog_DependencyWarningSummary", result.Warnings.Count);
             foreach (var warning in result.Warnings)
             {
                 AppLog.Warning(warning);
             }
             _dialogs.ShowInformation(
-                "Mesh package saved",
-                $"The mesh and its authored materials were saved successfully.\n\n" +
-                $"Package: {result.PackagePath}\nMesh: {result.MeshPath}\n" +
-                $"Materials: {result.Materials.Count}{warningSummary}");
+                Loc.Text("loc_Shell_DialogTitle_MeshPackageSaved"),
+                Loc.Format("loc_Shell_Dialog_MeshPackageSaved", result.PackagePath, result.MeshPath,
+                    result.Materials.Count, warningSummary));
             return true;
         }
         catch (Exception exception)
         {
             AppLog.Error($"Custom mesh PCC export failed for '{_detachedMeshSource.SourcePath}'.", exception);
-            ErrorMessage = $"The mesh could not be saved: {exception.Message}";
-            Status = "Save failed; the source mesh and current material edit were not modified.";
+            ErrorMessage = Loc.Format("loc_Shell_Error_MeshCouldNotSave", exception.Message);
+            Status = Loc.Text("loc_Shell_Status_SaveFailedSourceMeshAndMaterialEditUnmodified");
             return false;
         }
         finally

@@ -80,7 +80,7 @@ public partial class MainWindow : Window
         catch (Exception exception)
         {
             AppLog.Error("Live deformation preview update failed.", exception);
-            _viewModel.SetPreviewError($"Live deformation preview failed. Log: {AppLog.FilePath}");
+            _viewModel.SetPreviewError(Loc.Format("loc_MainWindow_LiveDeformationPreviewFailedLog", AppLog.FilePath));
         }
     }
 
@@ -93,7 +93,7 @@ public partial class MainWindow : Window
         catch (Exception exception)
         {
             AppLog.Error("Live material preview update failed.", exception);
-            _viewModel.SetPreviewError($"Live material preview failed. Log: {AppLog.FilePath}");
+            _viewModel.SetPreviewError(Loc.Format("loc_MainWindow_LiveMaterialPreviewFailedLog", AppLog.FilePath));
         }
     }
 

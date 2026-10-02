@@ -2,6 +2,7 @@ using System.IO;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.Core.Services;
+using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.LegendaryExplorer;
 
 namespace MorphFaceEditor.Services;
@@ -69,7 +70,7 @@ public static class FaceMaterialFileService
             if (!allowTse && !taggedHead)
             {
                 throw new InvalidDataException(
-                    "This workspace accepts MFE material RONs only; an untagged TSE RON is supported in Player workspaces.");
+                    Loc.Text("loc_Services_FaceMaterialFile_OnlyTaggedMfeRonsAccepted"));
             }
 
             return new(parameters, !taggedHead, []);
@@ -121,7 +122,7 @@ public static class FaceMaterialFileService
             foreach (var group in source.GroupBy(name, StringComparer.OrdinalIgnoreCase))
             {
                 if (group.Count() == 1) values.Add(group.First());
-                else warnings.Add($"Skipped {kind} '{group.Key}' because multiple source material scopes define it.");
+                else warnings.Add(Loc.Format("loc_Services_FaceMaterialFile_AmbiguousParameterSkipped", kind, group.Key));
             }
             return values.ToArray();
         }

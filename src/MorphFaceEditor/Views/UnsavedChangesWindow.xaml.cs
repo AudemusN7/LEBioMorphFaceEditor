@@ -13,26 +13,26 @@ public partial class UnsavedChangesWindow : Window
         FacePathText.Text = assetPath;
         if (scope == UnsavedChangesScope.Face)
         {
-            Title = "Unsaved BioMorphFace changes";
-            SummaryText.Text = "The loaded BioMorphFace has unsaved changes.";
-            SaveExplanationText.Text = "Commit keeps these edits in the temporary package workspace without saving the source PCC.";
-            DiscardButton.Content = "Don't Commit";
-            SaveButton.Content = "Commit";
+            Title = Loc.Text("loc_UnsavedChangesWindow_UnsavedBioMorphFaceChanges");
+            SummaryText.Text = Loc.Text("loc_UnsavedChangesWindow_LoadedBioMorphFaceHasUnsavedChanges");
+            SaveExplanationText.Text = Loc.Text("loc_UnsavedChangesWindow_CommitPackageChangesExplanation");
+            DiscardButton.Content = Loc.Text("loc_UnsavedChangesWindow_DontCommit");
+            SaveButton.Content = Loc.Text("loc_UnsavedChangesWindow_Commit");
         }
         else if (scope == UnsavedChangesScope.DetachedMaterials)
         {
-            Title = "Unsaved mesh material settings";
-            SummaryText.Text = "The mesh workspace has unsaved edits.";
-            SaveExplanationText.Text = "Export Materials keeps slot assignments and material settings in an MFE RON. Preview bones and attachments are not included.";
-            SaveButton.Content = "Export Materials…";
+            Title = Loc.Text("loc_UnsavedChangesWindow_UnsavedMeshMaterialSettings");
+            SummaryText.Text = Loc.Text("loc_UnsavedChangesWindow_MeshWorkspaceHasUnsavedEdits");
+            SaveExplanationText.Text = Loc.Text("loc_UnsavedChangesWindow_ExportMaterialsExplanation");
+            SaveButton.Content = Loc.Text("loc_UnsavedChangesWindow_ExportMaterials");
         }
         else if (scope == UnsavedChangesScope.StandaloneFace)
         {
-            Title = "Unsaved standalone morph changes";
-            SummaryText.Text = "The loaded standalone morph has unsaved changes.";
+            Title = Loc.Text("loc_UnsavedChangesWindow_UnsavedStandaloneMorphChanges");
+            SummaryText.Text = Loc.Text("loc_UnsavedChangesWindow_StandaloneMorphHasUnsavedChanges");
             SaveExplanationText.Text =
-                "Export opens Save to PCC. The installed game template is read-only and will not be modified.";
-            SaveButton.Content = "Export…";
+                Loc.Text("loc_UnsavedChangesWindow_ExportStandaloneMorphExplanation");
+            SaveButton.Content = Loc.Text("loc_UnsavedChangesWindow_Export");
         }
     }
 

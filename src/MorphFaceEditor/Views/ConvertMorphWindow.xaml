@@ -1,7 +1,7 @@
 <Window x:Class="MorphFaceEditor.Views.ConvertMorphWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Convert Morph"
+        Title="{DynamicResource loc_View_ConvertMorphWindow_ConvertMorph}"
         Width="650" Height="315" ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource WindowBackground}"
@@ -14,10 +14,10 @@
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
-        <TextBlock Text="Convert slider values, final-skeleton residuals, and compatible material overrides onto a destination-game face template. Choose an existing PCC containing a matching face, or leave it blank to create a new minimal PCC."
+        <TextBlock Text="{DynamicResource loc_View_ConvertMorphWindow_ConvertSliderValuesFinalSkeletonResidualsAndCompatibleM}"
                    TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}" Margin="0,0,0,15" />
         <StackPanel Grid.Row="1" Margin="0,0,0,13">
-            <TextBlock Text="TARGET GAME" Style="{StaticResource FieldLabel}" />
+            <TextBlock Text="{DynamicResource loc_View_ConvertMorphWindow_TARGETGAME}" Style="{StaticResource FieldLabel}" />
             <ComboBox x:Name="TargetGameBox" Width="150" HorizontalAlignment="Left" Margin="0,5,0,0"
                       DisplayMemberPath="Label" />
         </StackPanel>
@@ -26,21 +26,21 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
-            <TextBlock Text="EXISTING DESTINATION PCC (OPTIONAL)" Style="{StaticResource FieldLabel}" />
+            <TextBlock Text="{DynamicResource loc_View_ConvertMorphWindow_EXISTINGDESTINATIONPCCOPTIONAL}" Style="{StaticResource FieldLabel}" />
             <Grid Grid.Row="1" Margin="0,5,0,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <TextBox x:Name="DestinationBox" VerticalContentAlignment="Center" />
-                <Button Grid.Column="1" Content="Browse Existing…" Margin="8,0,0,0" Click="OnBrowse" />
+                <Button Grid.Column="1" Content="{DynamicResource loc_View_ConvertMorphWindow_BrowseExisting}" Margin="8,0,0,0" Click="OnBrowse" />
             </Grid>
         </Grid>
         <TextBlock x:Name="ValidationText" Grid.Row="3" Foreground="{DynamicResource ValidationForeground}" FontSize="11"
                    Margin="0,8,0,0" TextWrapping="Wrap" />
         <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
-            <Button Content="Cancel" IsCancel="True" MinWidth="84" Margin="0,0,8,0" />
-            <Button Content="Convert Morph" IsDefault="True" MinWidth="120" Click="OnConvert" />
+            <Button Content="{DynamicResource loc_View_ConvertMorphWindow_Cancel}" IsCancel="True" MinWidth="84" Margin="0,0,8,0" />
+            <Button Content="{DynamicResource loc_View_ConvertMorphWindow_ConvertMorph_2}" IsDefault="True" MinWidth="120" Click="OnConvert" />
         </StackPanel>
     </Grid>
 </Window>

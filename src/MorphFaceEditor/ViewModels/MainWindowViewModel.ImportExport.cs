@@ -28,7 +28,7 @@ public sealed partial class MainWindowViewModel
 
         IsBusy = true;
         ErrorMessage = null;
-        Status = $"Baking {selected.DisplayName} and exporting {format} through UModel…";
+        Status = Loc.Format("loc_Shell_Status_BakingAndExportingThroughUmodel", selected.DisplayName, format);
         try
         {
             var result = await _interchangeService.ExportMeshAsync(
@@ -36,16 +36,16 @@ public sealed partial class MainWindowViewModel
                 selected.InstancedPath,
                 outputDirectory,
                 format);
-            Status = $"Exported {selected.DisplayName} as {format} ({result.ProducedFiles.Count} file(s)).";
+            Status = Loc.Format("loc_Shell_Status_ExportedAsFileS", selected.DisplayName, format, result.ProducedFiles.Count);
             _dialogs.ShowInformation(
-                "Morph mesh exported",
-                $"The baked morph was exported through UModel as {format}.\n\nOutput: {outputDirectory}");
+                Loc.Text("loc_Shell_DialogTitle_MorphMeshExported"),
+                Loc.Format("loc_Shell_Dialog_MorphMeshExported", format, outputDirectory));
         }
         catch (Exception exception)
         {
             AppLog.Error($"{format} morph export failed.", exception);
-            ErrorMessage = $"The morph mesh could not be exported: {exception.Message}";
-            Status = "Morph mesh export failed; the PCC was not modified.";
+            ErrorMessage = Loc.Format("loc_Shell_Error_TheMorphMeshCouldNot", exception.Message);
+            Status = Loc.Text("loc_Shell_Status_MorphMeshExportFailedThe");
         }
         finally
         {
@@ -69,7 +69,7 @@ public sealed partial class MainWindowViewModel
 
         IsBusy = true;
         ErrorMessage = null;
-        Status = $"Exporting {selected.DisplayName} as Trilogy Save Editor RON…";
+        Status = Loc.Format("loc_Shell_Status_ExportingAsTrilogySaveEditor", selected.DisplayName);
         try
         {
             var provenance = CreateRonExportProvenance(selected);
@@ -78,13 +78,13 @@ public sealed partial class MainWindowViewModel
                 selected.InstancedPath,
                 destination,
                 provenance));
-            Status = $"Exported {selected.DisplayName} as {Path.GetFileName(destination)}.";
+            Status = Loc.Format("loc_Shell_Status_ExportedAs", selected.DisplayName, Path.GetFileName(destination));
         }
         catch (Exception exception)
         {
             AppLog.Error("RON morph export failed.", exception);
-            ErrorMessage = $"The RON head morph could not be exported: {exception.Message}";
-            Status = "RON export failed; the PCC was not modified.";
+            ErrorMessage = Loc.Format("loc_Shell_Error_TheRonHeadMorphCould", exception.Message);
+            Status = Loc.Text("loc_Shell_Status_RonExportFailedThePcc");
         }
         finally
         {
@@ -128,7 +128,7 @@ public sealed partial class MainWindowViewModel
         var sourcePath = Path.Combine(directory, "PlayerMorph.ron");
         IsBusy = true;
         ErrorMessage = null;
-        Status = $"Preparing {choice.Game} player defaults...";
+        Status = Loc.Format("loc_Shell_Status_PreparingPlayerDefaults", choice.Game);
         try
         {
             Directory.CreateDirectory(directory);
@@ -140,14 +140,14 @@ public sealed partial class MainWindowViewModel
             if (_standaloneImportPath == sourcePath)
             {
                 _standaloneImportPath = null;
-                if (ErrorMessage is null) Status = $"Created {LoadedFacePath} from {choice.Game} player defaults.";
+                if (ErrorMessage is null) Status = Loc.Format("loc_Shell_Status_CreatedFromPlayerDefaults", LoadedFacePath, choice.Game);
             }
         }
         catch (Exception exception)
         {
             AppLog.Error("New player morph creation failed.", exception);
-            ErrorMessage = $"The player morph could not be created: {exception.Message}";
-            Status = "New player morph failed; the current workspace was not changed.";
+            ErrorMessage = Loc.Format("loc_Shell_Error_ThePlayerMorphCouldNot", exception.Message);
+            Status = Loc.Text("loc_Shell_Status_NewPlayerMorphFailedThe");
         }
         finally
         {
@@ -216,8 +216,8 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception exception)
         {
-            ErrorMessage = $"The RON provenance could not be read: {exception.Message}";
-            Status = "RON import failed; the current workspace was not changed.";
+            ErrorMessage = Loc.Format("loc_Shell_Error_TheRonProvenanceCouldNot", exception.Message);
+            Status = Loc.Text("loc_Shell_Status_RonImportFailedTheCurrent");
             return;
         }
 
@@ -230,9 +230,8 @@ public sealed partial class MainWindowViewModel
 
         if (!StandaloneNpcMorphImportService.AreGamesCompatible(provenance.Game, targetGame))
         {
-            ErrorMessage = $"A {provenance.Game} RON cannot be imported directly into {targetGame}. " +
-                           "LE3 cross-game morphs require the explicit conversion workflow.";
-            Status = "RON import failed; the current workspace was not changed.";
+            ErrorMessage = Loc.Format("loc_Shell_Error_RonCrossGameRequiresConversion", provenance.Game, targetGame);
+            Status = Loc.Text("loc_Shell_Status_RonImportFailedTheCurrent");
             return;
         }
 
@@ -245,7 +244,8 @@ public sealed partial class MainWindowViewModel
         {
             var choice = _dialogs.ChooseRonImportDestination(
                 targetGame,
-                [new RonNpcArchetypeOption(archetype, archetype == "HMM" ? "Human Male" : "Human Female")],
+                [new RonNpcArchetypeOption(archetype, Loc.Text(archetype == "HMM"
+                    ? "loc_Shell_Archetype_HumanMale" : "loc_Shell_Archetype_HumanFemale"))],
                 allowPlayer: true);
             if (choice is null)
             {
@@ -259,8 +259,8 @@ public sealed partial class MainWindowViewModel
         {
             if (!isHuman)
             {
-                ErrorMessage = $"{provenance.Archetype} has no supported standalone Player Morph route.";
-                Status = "RON import failed; the current workspace was not changed.";
+                ErrorMessage = Loc.Format("loc_Shell_Error_HasNoSupportedStandalonePlayer", provenance.Archetype);
+                Status = Loc.Text("loc_Shell_Status_RonImportFailedTheCurrent");
                 return;
             }
             await ImportStandaloneMorphAsync(sourcePath, targetGame);
@@ -291,7 +291,7 @@ public sealed partial class MainWindowViewModel
         _cancelNpcImportCommand.RaiseCanExecuteChanged();
         OnPropertyChanged(nameof(CanCancelNpcImport));
         ErrorMessage = null;
-        Status = $"Preparing a native {targetGame} {archetype} NPC workspace…";
+        Status = Loc.Format("loc_Shell_Status_PreparingANativeNpcWorkspace", targetGame, archetype);
         StandaloneNpcMorphImportResult? imported = null;
         FaceEditorViewModel? preparedEditor = null;
         IReadOnlyList<string> importWarnings = [];
@@ -302,7 +302,7 @@ public sealed partial class MainWindowViewModel
             if (!textureCatalog.IsAvailable)
             {
                 throw new InvalidOperationException(
-                    $"The {targetGame} mesh/texture database is unavailable. Build it in Mesh/Texture Databases before importing an NPC RON.");
+                    Loc.Format("loc_Shell_Error_NpcTargetDatabaseUnavailable", targetGame));
             }
             var donor = new RonNpcDonorResolver(MorphFaceProfileRegistry.CreateDefault())
                 .Resolve(targetGame, archetype, textureCatalog.MorphFaceTemplates,
@@ -313,7 +313,7 @@ public sealed partial class MainWindowViewModel
             if (!sourceCatalog.IsAvailable)
             {
                 throw new InvalidOperationException(
-                    $"The {sourceGame} mesh/texture database is unavailable. Build it in Mesh/Texture Databases before transferring this NPC RON.");
+                    Loc.Format("loc_Shell_Error_NpcSourceDatabaseUnavailable", sourceGame));
             }
             var assets = await Task.Run(() => StandalonePlayerAssetCatalog.ForRon(
                 targetGame, sourcePath, textureCatalog.Candidates, donor.PackagePath), cancellationToken);
@@ -343,7 +343,7 @@ public sealed partial class MainWindowViewModel
             var selected = catalog.Faces.FirstOrDefault(face =>
                 string.Equals(face.InstancedPath, imported.ImportedFacePath,
                     StringComparison.OrdinalIgnoreCase)) ?? throw new InvalidDataException(
-                "The imported NPC face was absent from its verified workspace catalogue.");
+                Loc.Text("loc_Shell_Error_ImportedNpcFaceMissingFromCatalogue"));
             var preview = await _previewLoadService.LoadAsync(
                 candidatePath,
                 selected.UIndex.ToString(System.Globalization.CultureInfo.InvariantCulture),
@@ -352,8 +352,7 @@ public sealed partial class MainWindowViewModel
             if (!preview.EditingSession.CanEditMorphFeatures)
             {
                 throw new InvalidDataException(
-                    "The imported NPC face does not have a usable native morph target set: " +
-                    preview.EditingSession.EditBlockReason);
+                    Loc.Format("loc_Shell_Error_ImportedNpcMorphTargetsUnavailable", preview.EditingSession.EditBlockReason));
             }
             var textureProfile = TextureCatalogProfiles.For(preview.Profile);
             preparedEditor = new FaceEditorViewModel(
@@ -400,9 +399,9 @@ public sealed partial class MainWindowViewModel
             }
             SelectedFace = selected;
             LoadedFacePath = preview.Loaded.Document.Source.InstancedPath;
-            FaceDetails = $"{preview.Loaded.BaseHead.Topology.VertexCount:N0} vertices · " +
-                          $"{preview.Loaded.Document.BakedLods.Count} authored LODs · " +
-                          "native NPC relative bake";
+            _faceDetailsPrefix = null;
+            _faceDetailsHasBakedFallback = false;
+            FaceDetails = Loc.Format("loc_Shell_FaceDetails_NpcNativeRelativeBake", preview.Loaded.BaseHead.Topology.VertexCount, preview.Loaded.Document.BakedLods.Count);
             SetEditor(preparedEditor, preview.Loaded);
             preparedEditor = null;
             HasPreview = true;
@@ -418,31 +417,29 @@ public sealed partial class MainWindowViewModel
             RaiseFaceContextCanExecuteChanged();
             _ = LoadTextureRegistryAsync(
                 Editor!, targetGame, preview.Profile, textureProfile, CancellationToken.None);
-            Status = $"Imported {selected.DisplayName} as a {targetGame} {archetype} NPC morph; " +
-                     "authored geometry preserved with native morph editing ready.";
+            Status = Loc.Format("loc_Shell_Status_ImportedAsNpcMorphReady", selected.DisplayName, targetGame, archetype);
             foreach (var warning in importWarnings.Concat(preview.Loaded.Warnings))
             {
                 AppLog.Warning(warning);
             }
             if (importWarnings.Count > 0)
             {
-                Status = $"Imported {selected.DisplayName} with {importWarnings.Count} asset or static-LOD warning(s).";
+                Status = Loc.Format("loc_Shell_Status_ImportedWithAssetOrStatic", selected.DisplayName, importWarnings.Count);
                 _dialogs.ShowInformation(
-                    "NPC morph imported with warnings",
-                    "The authored data was retained. Review these preview or material limitations:\n\n- " +
-                    string.Join("\n- ", importWarnings));
+                    Loc.Text("loc_Shell_DialogTitle_NpcMorphImportedWithWarnings"),
+                    Loc.Format("loc_Shell_Dialog_NpcMorphImportWarnings", string.Join("\n- ", importWarnings)));
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             ErrorMessage = null;
-            Status = "NPC import cancelled; the current workspace was not changed.";
+            Status = Loc.Text("loc_Shell_Status_NpcImportCancelledTheCurrent");
         }
         catch (Exception exception)
         {
             AppLog.Error($"Standalone NPC import failed for '{sourcePath}' as {targetGame} {archetype}.", exception);
-            ErrorMessage = $"The standalone NPC morph could not be imported: {exception.Message}";
-            Status = "NPC import failed; the current workspace was not changed.";
+            ErrorMessage = Loc.Format("loc_Shell_Error_TheStandaloneNpcMorphCould", exception.Message);
+            Status = Loc.Text("loc_Shell_Status_NpcImportFailedTheCurrent");
         }
         finally
         {
@@ -464,9 +461,8 @@ public sealed partial class MainWindowViewModel
         var isMesh = extension is ".psk" or ".pskx" or ".gltf" or ".glb";
         if (!isRon && !isLegacy && !isMesh)
         {
-            ErrorMessage = "Standalone import accepts Trilogy Save Editor .ron, Gibbed " +
-                           ".me2headmorph/.me3headmorph, and PSK/PSKX or glTF/GLB mesh files.";
-            Status = "Standalone import requires a supported head-morph or mesh file.";
+            ErrorMessage = Loc.Text("loc_Shell_Error_StandaloneImportSupportedFormats");
+            Status = Loc.Text("loc_Shell_Status_StandaloneImportRequiresASupported");
             return;
         }
         if (isLegacy)
@@ -478,7 +474,7 @@ public sealed partial class MainWindowViewModel
             catch (Exception exception)
             {
                 ErrorMessage = exception.Message;
-                Status = "The selected game does not match the Gibbed head morph.";
+                Status = Loc.Text("loc_Shell_Status_TheSelectedGameDoesNot");
                 return;
             }
         }
@@ -487,7 +483,7 @@ public sealed partial class MainWindowViewModel
         {
             IsBusy = true;
             ErrorMessage = null;
-            Status = $"Inspecting {Path.GetFileName(sourcePath)} topology…";
+            Status = Loc.Format("loc_Shell_Status_InspectingTopology", Path.GetFileName(sourcePath));
             try
             {
                 meshAnalysis = await Task.Run(() => _standaloneMeshImportService.Analyze(game, sourcePath));
@@ -495,8 +491,8 @@ public sealed partial class MainWindowViewModel
             catch (Exception exception)
             {
                 AppLog.Error($"Mesh analysis failed for '{sourcePath}' as {game}.", exception);
-                ErrorMessage = $"The mesh could not be imported: {exception.Message}";
-                Status = "Mesh import failed; the current workspace was not changed.";
+                ErrorMessage = Loc.Format("loc_Shell_Error_TheMeshCouldNotBe", exception.Message);
+                Status = Loc.Text("loc_Shell_Status_MeshImportFailedTheCurrent");
                 return;
             }
             finally
@@ -531,7 +527,7 @@ public sealed partial class MainWindowViewModel
 
         IsBusy = true;
         ErrorMessage = null;
-        Status = $"Importing {Path.GetFileName(sourcePath)} as a standalone {game} player morph…";
+        Status = Loc.Format("loc_Shell_Status_ImportingAsAStandalonePlayer", Path.GetFileName(sourcePath), game);
         try
         {
             if (meshAnalysis is { Recognition: null })
@@ -660,8 +656,8 @@ public sealed partial class MainWindowViewModel
             OnDirtyStateChanged();
             if (!await RefreshWorkspaceAsync(importedFacePath, clearSearch: true))
             {
-                ErrorMessage ??= "The player head morph was imported, but its detached workspace could not be opened.";
-                Status = "Standalone import completed; workspace load failed.";
+                ErrorMessage ??= Loc.Text("loc_Shell_Error_PlayerMorphImportedWorkspaceCouldNotOpen");
+                Status = Loc.Text("loc_Shell_Status_StandaloneImportCompletedWorkspaceLoad");
             }
             else if (importWarnings.Count > 0)
             {
@@ -669,29 +665,26 @@ public sealed partial class MainWindowViewModel
                 {
                     AppLog.Warning(warning);
                 }
-                Status = $"Imported {importedFacePath} with {importWarnings.Count} visible asset warning(s).";
+                Status = Loc.Format("loc_Shell_Status_ImportedWithVisibleAssetWarning", importedFacePath, importWarnings.Count);
                 _dialogs.ShowInformation(
-                    "Player morph imported with warnings",
-                    "The morph was imported and its authored references were retained, but some assets could not be resolved for preview:\n\n- " +
-                    string.Join("\n- ", importWarnings));
+                    Loc.Text("loc_Shell_DialogTitle_PlayerMorphImportedWithWarnings"),
+                    Loc.Format("loc_Shell_Dialog_PlayerMorphImportWarnings", string.Join("\n- ", importWarnings)));
             }
             else if (isRon)
             {
-                Status = $"Imported {importedFacePath} as a canonical {game} Player RON; " +
-                         "authored geometry preserved with relative morph editing ready.";
+                Status = Loc.Format("loc_Shell_Status_ImportedAsCanonicalPlayerReady", importedFacePath, game);
             }
             else if (meshRecognition is not null)
             {
-                Status = $"Imported {importedFacePath} as a recognised {game} " +
-                         $"{meshRecognition.Sex} player mesh ({meshRecognition.CoordinateSystem}); " +
-                         "fixed-bake geometry, canonical bone rig and material editing ready.";
+                Status = Loc.Format("loc_Shell_Status_ImportedAsRecognisedPlayerMeshReady", importedFacePath, game,
+                    meshRecognition.Sex, meshRecognition.CoordinateSystem);
             }
         }
         catch (Exception exception)
         {
             AppLog.Error($"Standalone player import failed for '{sourcePath}' as {game}.", exception);
-            ErrorMessage = $"The standalone player morph could not be imported: {exception.Message}";
-            Status = "Standalone import failed; the current workspace was not changed.";
+            ErrorMessage = Loc.Format("loc_Shell_Error_TheStandalonePlayerMorphCould", exception.Message);
+            Status = Loc.Text("loc_Shell_Status_StandaloneImportFailedTheCurrent");
         }
         finally
         {
@@ -757,9 +750,9 @@ public sealed partial class MainWindowViewModel
             previewOnlyAttachments: true,
             playerRandomisationGame: game);
         SetEditor(editor, result.Preview.Loaded);
-        FaceDetails = $"{topology.VertexCount:N0} vertices · {topology.IndexCount / 3:N0} triangles · " +
-                      $"{topology.Sections.Count} sections · {topology.ReferenceSkeleton.Count} verified bones · " +
-                      $"{result.CustomMaterials?.UsedSlots.Count ?? 0} used material slots · detached LOD0 preview";
+        _faceDetailsPrefix = null;
+        _faceDetailsHasBakedFallback = false;
+        FaceDetails = Loc.Format("loc_Shell_FaceDetails_DetachedMeshPreview", topology.VertexCount, topology.IndexCount / 3, topology.Sections.Count, topology.ReferenceSkeleton.Count, result.CustomMaterials?.UsedSlots.Count ?? 0);
         HasPreview = true;
         var cameraFamily = PreviewCameraGrouping.ForProfile(result.Preview.Profile.Key);
         var resetCamera = !string.Equals(_previewCameraFamily, cameraFamily, StringComparison.OrdinalIgnoreCase);
@@ -772,9 +765,9 @@ public sealed partial class MainWindowViewModel
         {
             AppLog.Warning(warning);
         }
-        Status = result.Preview.EditingSession.CanEditBones
-            ? $"Loaded {objectName} as an unrecognised custom mesh; material assignment, LOD0 preview and verified bone controls ready with exact source data retained. Morph controls are disabled."
-            : $"Loaded {objectName} as an unrecognised custom mesh; material assignment and LOD0 preview ready with exact source data retained. Morph and bone controls are disabled.";
+        Status = Loc.Format(result.Preview.EditingSession.CanEditBones
+            ? "loc_Shell_Status_LoadedUnrecognisedMeshWithBoneEditing"
+            : "loc_Shell_Status_LoadedUnrecognisedMeshWithoutBoneEditing", objectName);
         OnPropertyChanged(nameof(PackageName));
         OnPropertyChanged(nameof(PackageDisplayName));
         OnDirtyStateChanged();
@@ -809,7 +802,7 @@ public sealed partial class MainWindowViewModel
 
         IsBusy = true;
         ErrorMessage = null;
-        Status = $"Importing {Path.GetFileName(sourcePath)} using {template.DisplayName} as the profile template…";
+        Status = Loc.Format("loc_Shell_Status_ImportingUsingAsTheProfile", Path.GetFileName(sourcePath), template.DisplayName);
         var packageModified = false;
         try
         {
@@ -834,7 +827,7 @@ public sealed partial class MainWindowViewModel
                     return;
                 }
                 IsBusy = true;
-                Status = $"Converting {Path.GetFileName(sourcePath)} to the selected Legendary Edition profile…";
+                Status = Loc.Format("loc_Shell_Status_ConvertingToTheSelectedLegendary", Path.GetFileName(sourcePath));
                 var legacy = await Task.Run(() => _packageContextService.ReadLegacyHeadMorph(sourcePath));
                 Editor.ApplyMorphData(legacy.MorphData);
                 var convertedDraft = Editor.CreateDraft();
@@ -857,7 +850,7 @@ public sealed partial class MainWindowViewModel
                     return;
                 }
                 IsBusy = true;
-                Status = $"Solving {Path.GetFileName(sourcePath)} against the selected morph-target profile…";
+                Status = Loc.Format("loc_Shell_Status_SolvingAgainstTheSelectedMorph", Path.GetFileName(sourcePath));
                 var candidates = await Task.Run(() => _interchangeService.ReadMeshPositions(
                     sourcePath,
                     _loadedFace.BaseHead));
@@ -872,34 +865,28 @@ public sealed partial class MainWindowViewModel
             MarkWorkspaceChanged();
             if (!await RefreshWorkspaceAsync(result.FaceInstancedPath))
             {
-                ErrorMessage = "The morph was imported, but the refreshed workspace could not be opened.";
-                Status = "Import completed; workspace reload failed.";
+                ErrorMessage = Loc.Text("loc_Shell_ErrorMessage_TheMorphWasImportedBut");
+                Status = Loc.Text("loc_Shell_Status_ImportCompletedWorkspaceReloadFailed");
                 return;
             }
             Status = fit is null
                 ? isLegacy
-                    ? $"Imported and verified {result.FaceInstancedPath}; converted legacy morph data to the selected LE profile."
-                    : $"Imported and verified {result.FaceInstancedPath} from {sourceExtension.TrimStart('.')}."
+                    ? Loc.Format("loc_Shell_Status_ImportedLegacyMorphVerified", result.FaceInstancedPath)
+                    : Loc.Format("loc_Shell_Status_ImportedMorphVerifiedFromFormat", result.FaceInstancedPath, sourceExtension.TrimStart('.'))
                 : fit.UsedSourcePrior
-                    ? $"Imported and verified {result.FaceInstancedPath}; restored exported sliders and all stored LODs, " +
-                      $"max mesh difference {fit.MaximumError:G4}."
-                : $"Imported and verified {result.FaceInstancedPath}; recovered {fit.RecoveredFeatureCount} sliders, " +
-                  $"RMS {fit.RootMeanSquareError:G4}, max {fit.MaximumError:G4}.";
+                    ? Loc.Format("loc_Shell_Status_ImportedMorphRestoredLods", result.FaceInstancedPath, fit.MaximumError)
+                : Loc.Format("loc_Shell_Status_ImportedMorphRecoveredSliders", result.FaceInstancedPath, fit.RecoveredFeatureCount, fit.RootMeanSquareError, fit.MaximumError);
             if (fit is { MaximumError: > 0.001f })
             {
                 _dialogs.ShowInformation(
-                    "Mesh projected onto morph sliders",
-                    $"The mesh was imported as the nearest face representable by the selected profile.\n\n" +
-                    $"Recovered sliders: {fit.RecoveredFeatureCount}\n" +
-                    $"Coordinate mapping: {fit.CoordinateSystem}\n" +
-                    $"RMS vertex error: {fit.RootMeanSquareError:G6}\n" +
-                    $"Maximum vertex error: {fit.MaximumError:G6}\n\n" +
-                    "Mesh-only files cannot recover metadata-only controls, bone-only controls, or manual final-skeleton edits.");
+                    Loc.Text("loc_Shell_DialogTitle_MeshProjectedOntoMorphSliders"),
+                    Loc.Format("loc_Shell_Dialog_MeshProjectedOntoMorphSliders", fit.RecoveredFeatureCount,
+                        fit.CoordinateSystem, fit.RootMeanSquareError, fit.MaximumError));
             }
         }
         catch (Exception exception)
         {
-            ReportContextOperationFailure("Import Morph", "The morph could not be imported", exception, packageModified);
+            ReportContextOperationFailure("loc_Shell_Operation_ImportMorph", "loc_Shell_Error_MorphCouldNotImport", exception, packageModified);
         }
         finally
         {

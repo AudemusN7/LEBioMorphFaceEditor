@@ -9,8 +9,8 @@ public partial class EditorMessageWindow : Window
         string title,
         string message,
         bool confirmation = false,
-        string primaryLabel = "OK",
-        string secondaryLabel = "Cancel",
+        string? primaryLabel = null,
+        string? secondaryLabel = null,
         string? cancelLabel = null)
     {
         InitializeComponent();
@@ -18,8 +18,8 @@ public partial class EditorMessageWindow : Window
         Title = title;
         HeadingText.Text = title.ToUpperInvariant();
         MessageText.Text = message;
-        PrimaryButton.Content = primaryLabel;
-        SecondaryButton.Content = secondaryLabel;
+        PrimaryButton.Content = primaryLabel ?? Loc.Text("loc_Common_Ok");
+        SecondaryButton.Content = secondaryLabel ?? Loc.Text("loc_Common_Cancel");
         SecondaryButton.Visibility = confirmation ? Visibility.Visible : Visibility.Collapsed;
         if (cancelLabel is not null)
         {

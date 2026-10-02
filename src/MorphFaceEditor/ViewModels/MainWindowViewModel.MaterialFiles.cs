@@ -50,14 +50,14 @@ public sealed partial class MainWindowViewModel
                     editor.OtherMeshes.Select(value => value.Value).ToArray())
                 : MaterialRonCodec.WriteMfe(MeshMaterialFileService.Capture(workspace, game, name, values));
             await MeshMaterialFileService.WriteAsync(path, text, workspace.Source.SourcePath);
-            Status = $"Exported {(tse ? "TSE material settings" : "MFE material settings and slot assignments")} to {Path.GetFileName(path)}.";
+            Status = Loc.Format(tse ? "loc_Shell_Status_ExportedTseMaterialSettings" : "loc_Shell_Status_ExportedMfeMaterialSettings", Path.GetFileName(path));
             return true;
         }
         catch (Exception exception)
         {
             AppLog.Error("MESH material export failed.", exception);
             ErrorMessage = exception.Message;
-            Status = "Material export failed; the current mesh edit is retained.";
+            Status = Loc.Text("loc_Shell_Status_MaterialExportFailedTheCurrent");
             return false;
         }
         finally { IsBusy = false; }
@@ -70,7 +70,7 @@ public sealed partial class MainWindowViewModel
         if (path is null) return;
         IsBusy = true;
         ErrorMessage = null;
-        Status = "Preparing material settings and texture references…";
+        Status = Loc.Text("loc_Shell_Status_PreparingMaterialSettingsAndTexture");
         try
         {
             var text = await File.ReadAllTextAsync(path);
@@ -78,24 +78,22 @@ public sealed partial class MainWindowViewModel
                 text, tse, workspace, editor.CustomMaterialOptions, game);
             if (!ReferenceEquals(Editor, editor)) return;
             editor.ApplyMeshMaterialImport(prepared);
-            Status = prepared.IsTse
-                ? $"Imported TSE material settings from {Path.GetFileName(path)} as one undoable edit."
-                : $"Imported {Path.GetFileName(path)} as one undoable material edit.";
+            Status = Loc.Format(prepared.IsTse ? "loc_Shell_Status_ImportedTseMaterialSettings" : "loc_Shell_Status_ImportedMaterialSettings", Path.GetFileName(path));
             if (prepared.Warnings.Count > 0)
             {
                 foreach (var warning in prepared.Warnings) AppLog.Warning(warning);
                 const int displayLimit = 8;
                 var details = string.Join("\n\n", prepared.Warnings.Take(displayLimit));
                 if (prepared.Warnings.Count > displayLimit)
-                    details += $"\n\nPlus {prepared.Warnings.Count - displayLimit} more warnings. All details are in the application log.";
-                _dialogs.ShowInformation("Materials imported with warnings", details);
+                    details += Loc.Format("loc_Shell_MaterialFiles_MoreWarningsInLog", prepared.Warnings.Count - displayLimit);
+                _dialogs.ShowInformation(Loc.Text("loc_Shell_DialogTitle_MaterialsImportedWithWarnings"), details);
             }
         }
         catch (Exception exception)
         {
             AppLog.Error("MESH material import failed.", exception);
             ErrorMessage = exception.Message;
-            Status = "Material import failed; the current mesh edit is retained.";
+            Status = Loc.Text("loc_Shell_Status_MaterialImportFailedTheCurrent");
         }
         finally { IsBusy = false; }
     }
@@ -117,13 +115,13 @@ public sealed partial class MainWindowViewModel
             var text = MaterialRonCodec.WriteMfe(FaceMaterialFileService.Capture(game, face.ObjectName, values));
             await MeshMaterialFileService.WriteAsync(path, text,
                 _standaloneImportPath ?? _packageWorkspace?.SourcePath ?? path);
-            Status = $"Exported MFE material settings to {Path.GetFileName(path)}.";
+            Status = Loc.Format("loc_Shell_Status_ExportedMfeMaterialSettingsTo", Path.GetFileName(path));
         }
         catch (Exception exception)
         {
             AppLog.Error("Face material export failed.", exception);
             ErrorMessage = exception.Message;
-            Status = "Material export failed; the current face edit is retained.";
+            Status = Loc.Text("loc_Shell_Status_MaterialExportFailedTheCurrent2");
         }
         finally { IsBusy = false; }
     }
@@ -138,31 +136,29 @@ public sealed partial class MainWindowViewModel
         if (path is null) return;
         IsBusy = true;
         ErrorMessage = null;
-        Status = "Reading material settings…";
+        Status = Loc.Text("loc_Shell_Status_ReadingMaterialSettings");
         try
         {
             var text = await File.ReadAllTextAsync(path);
             var imported = FaceMaterialFileService.Read(text, allowTse: IsPlayerWorkspace);
             if (!ReferenceEquals(Editor, editor)) return;
             var warnings = imported.Warnings.Concat(await editor.MergeMaterialDataAsync(imported.Parameters)).ToList();
-            Status = imported.IsTse
-                ? $"Imported TSE material settings from {Path.GetFileName(path)} as one undoable edit."
-                : $"Imported material settings from {Path.GetFileName(path)} as one undoable edit.";
+            Status = Loc.Format(imported.IsTse ? "loc_Shell_Status_ImportedTseMaterialSettings" : "loc_Shell_Status_ImportedMaterialSettingsFrom", Path.GetFileName(path));
             if (warnings.Count > 0)
             {
                 foreach (var warning in warnings) AppLog.Warning(warning);
                 const int displayLimit = 8;
                 var details = string.Join("\n\n", warnings.Take(displayLimit));
                 if (warnings.Count > displayLimit)
-                    details += $"\n\nPlus {warnings.Count - displayLimit} more warnings. All details are in the application log.";
-                _dialogs.ShowInformation("Materials imported with warnings", details);
+                    details += Loc.Format("loc_Shell_MaterialFiles_MoreWarningsInLog", warnings.Count - displayLimit);
+                _dialogs.ShowInformation(Loc.Text("loc_Shell_DialogTitle_MaterialsImportedWithWarnings"), details);
             }
         }
         catch (Exception exception)
         {
             AppLog.Error("Face material import failed.", exception);
             ErrorMessage = exception.Message;
-            Status = "Material import failed; the current face edit is retained.";
+            Status = Loc.Text("loc_Shell_Status_MaterialImportFailedTheCurrent2");
         }
         finally { IsBusy = false; }
     }
@@ -176,12 +172,12 @@ public sealed partial class MainWindowViewModel
     {
         if (_standaloneGame is { } standaloneGame) return standaloneGame;
         if (_packageWorkspace is null || LoadedFacePath is null)
-            throw new InvalidOperationException("The current face workspace has no source package.");
+            throw new InvalidOperationException(Loc.Text("loc_Shell_Error_FaceWorkspaceHasNoSourcePackage"));
         var reference = MorphFaceReferenceInspector.Inspect(_packageWorkspace.SourcePath)
             .SingleOrDefault(value => string.Equals(value.FacePath, LoadedFacePath,
                 StringComparison.OrdinalIgnoreCase));
         if (reference is null || reference.Game == MorphFaceGame.Unsupported)
-            throw new InvalidOperationException($"Could not determine the game for '{LoadedFacePath}'.");
+            throw new InvalidOperationException(Loc.Format("loc_Shell_Error_CouldNotDetermineGameForFace", LoadedFacePath));
         return reference.Game;
     }
 

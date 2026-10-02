@@ -33,13 +33,13 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
         _session = session;
         Label = label;
         SlotIndex = slotIndex;
-        var options = new List<HairMeshOption> { new("None", null) };
+        var options = new List<HairMeshOption> { new(Loc.Text("loc_VM_hairMesh_none"), null) };
         options.AddRange(candidates.Select(candidate => new HairMeshOption(
             candidate.DisplayName, candidate.Identity,
-            $"Open package · {BoneLabel(candidate.BoneCount)}")));
+            Loc.Format("loc_VM_hairMesh_openPackageDetails", BoneLabel(candidate.BoneCount)))));
         if (session.Value is { } current && !options.Any(option => Same(option.Identity, current)))
         {
-            options.Add(new HairMeshOption($"{current.InstancedPath} (current reference)", current));
+            options.Add(new HairMeshOption(Loc.Format("loc_VM_hairMesh_currentReference", current.InstancedPath), current));
         }
         _options = options.ToArray();
         _localOptions = _options;
@@ -139,7 +139,7 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
                 Add(occurrence, candidate.CanonicalPath);
         }
         if (_session.Value is { } current && !options.Any(option => Same(option.Identity, current)))
-            options.Add(new HairMeshOption($"{current.InstancedPath} (current reference)", current));
+            options.Add(new HairMeshOption(Loc.Format("loc_VM_hairMesh_currentReference", current.InstancedPath), current));
         _options = options;
         _selected = Find(_session.Value);
         OnPropertyChanged(nameof(Options));
@@ -153,24 +153,28 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
             if (!physicalOccurrences.Add(PhysicalOccurrenceKey(identity))) return;
             var origin = occurrence.Origin switch
             {
-                TextureCatalogOrigin.BaseGame => "Base game",
-                TextureCatalogOrigin.OfficialDlc => "Official DLC",
-                TextureCatalogOrigin.Mod => "Mod",
-                TextureCatalogOrigin.Manual => "Custom",
-                _ => occurrence.Origin.ToString()
+                TextureCatalogOrigin.BaseGame => Loc.Text("loc_VM_hairMesh_originBaseGame"),
+                TextureCatalogOrigin.OfficialDlc => Loc.Text("loc_VM_hairMesh_originOfficialDlc"),
+                TextureCatalogOrigin.Mod => Loc.Text("loc_VM_hairMesh_originMod"),
+                TextureCatalogOrigin.Manual => Loc.Text("loc_VM_hairMesh_originCustom"),
+                _ => Loc.Text("loc_VM_hairMesh_originOther")
             };
             options.Add(new HairMeshOption(canonicalPath, identity,
-                $"{origin} · {Path.GetFileName(occurrence.PackagePath)} · {BoneLabel(occurrence.BoneCount)}"));
+                Loc.Format("loc_VM_hairMesh_occurrenceDetails", origin, Path.GetFileName(occurrence.PackagePath), BoneLabel(occurrence.BoneCount))));
         }
     }
 
-    private static string BoneLabel(int? count) => count is > 0 ? $"{count} bones" : "Bones unavailable";
+    private static string BoneLabel(int? count) => count is > 0
+        ? count.Value == 1
+            ? Loc.Text("loc_VM_hairMesh_oneBone")
+            : Loc.Format("loc_VM_hairMesh_bonesCount", count.Value)
+        : Loc.Text("loc_VM_hairMesh_bonesUnavailable");
 
     public void SetImportedPreview(AssetIdentity? value)
     {
         if (value is not null && !_options.Any(option => Same(option.Identity, value)))
         {
-            _options = [.. _options, new HairMeshOption($"{value.InstancedPath} (imported preview)", value)];
+            _options = [.. _options, new HairMeshOption(Loc.Format("loc_VM_hairMesh_importedPreview", value.InstancedPath), value)];
             OnPropertyChanged(nameof(Options));
             ApplySearch();
         }
@@ -184,7 +188,7 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
         if (value is not null && !_options.Any(option => Same(option.Identity, value)))
         {
             _options = [.. _options, new HairMeshOption(value.InstancedPath, value,
-                $"Randomised · {Path.GetFileName(value.PackagePath)}")];
+                Loc.Format("loc_VM_hairMesh_randomisedSource", Path.GetFileName(value.PackagePath)))];
             OnPropertyChanged(nameof(Options));
             ApplySearch();
         }

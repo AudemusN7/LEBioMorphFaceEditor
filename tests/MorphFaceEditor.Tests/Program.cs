@@ -18,6 +18,7 @@ var suites = new Dictionary<string, IReadOnlyList<TestCase>>(StringComparer.Ordi
     ["rendering"] = RenderingTests.All,
     ["ui"] = UiSmokeTests.All.Concat(AutomationCommandTests.All).Concat(NpcHairRandomisationTests.All)
         .Concat(ApplicationSettingsTests.All)
+        .Concat(LocalisationTests.All)
         .Concat(TextureRegistrySettingsTests.All)
         .Concat(HairMeshManualSelectionTests.All)
         .Concat(PlayerWorkspaceReferencePolicyTests.All)

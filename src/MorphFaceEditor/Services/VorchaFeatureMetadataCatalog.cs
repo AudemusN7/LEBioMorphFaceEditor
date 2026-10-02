@@ -1,3 +1,4 @@
+using MorphFaceEditor.Infrastructure;
 using System.Text.RegularExpressions;
 using MorphFaceEditor.Core.Deformation;
 using MorphFaceEditor.Core.Materials;
@@ -25,17 +26,17 @@ public sealed partial class VorchaFeatureMetadataCatalog : IHeadEditorUiProfile
 
     public IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
     [
-        new(Head, "Head", "Reconstructed Vorcha facial-shape controls.",
-            [new(Shape, "SHAPE"), new(Nose, "NOSE"), new(Mouth, "MOUTH / JAW"), new(Spikes, "SPIKES")]),
-        new(Eyes, "Eye", "Vorcha eye-shape controls and eye material settings.", [new(EyeShape, "SHAPE")]),
-        new(Markings, "Markings", "Stripe/tattoo and surface-colour settings.", [new(Tattoo, "TATTOO"), new(Surface, "SURFACE")])
+        new(Head, Loc.Text("loc_Services_Taxonomy_head_9bb0aacc"), Loc.Text("loc_Services_Taxonomy_reconstructed_vorcha_facial_shape_controls_8e9650d1"),
+            [new(Shape, Loc.Text("loc_Services_Taxonomy_shape_cfb25fc2")), new(Nose, Loc.Text("loc_Services_Taxonomy_nose_3c3cb8fe")), new(Mouth, Loc.Text("loc_Services_Taxonomy_mouth_jaw_b57e4681")), new(Spikes, Loc.Text("loc_Services_Taxonomy_spikes_fe7e5996"))]),
+        new(Eyes, Loc.Text("loc_Services_Taxonomy_eye_cee37055"), Loc.Text("loc_Services_Taxonomy_vorcha_eye_shape_controls_and_eye_material_setti_958690ef"), [new(EyeShape, Loc.Text("loc_Services_Taxonomy_shape_cfb25fc2"))]),
+        new(Markings, Loc.Text("loc_Services_Taxonomy_markings_86efda29"), Loc.Text("loc_Services_Taxonomy_stripe_tattoo_and_surface_colour_settings_68179072"), [new(Tattoo, Loc.Text("loc_Services_Taxonomy_tattoo_600e952e")), new(Surface, Loc.Text("loc_Services_Taxonomy_surface_026aa612"))])
     ];
 
     public MorphFeatureMetadata Describe(ResolvedMorphFeature feature, bool sessionCanEdit)
     {
         var (category, group) = Placement(feature.Feature.Name);
         var source = feature.Kind == MorphFeatureResolutionKind.MetadataOnly
-            ? "preserved inert LE3 metadata."
+            ? Loc.Text("loc_Services_Taxonomy_preserved_inert_le3_metadata_fa7f4e2e")
             : "reconstructed from the six available LE2 baked-face oracles.";
         var metadata = new MorphFeatureMetadata(feature.Feature.Name, Label(feature.Feature.Name), category, group,
             false, Sort(feature.Feature.Name), 0, 1, 0.01f, false,

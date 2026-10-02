@@ -28,7 +28,7 @@ public partial class RonImportDestinationWindow : Window
         };
 
         _npcArchetype = archetypes.Count == 1 ? archetypes[0] : null;
-        ArchetypeText.Text = _npcArchetype?.DisplayName ?? "No compatible archetype available";
+        ArchetypeText.Text = _npcArchetype?.DisplayName ?? Loc.Text("loc_RonImportDestinationWindow_NoCompatibleArchetype");
         PlayerButton.Visibility = allowPlayer ? Visibility.Visible : Visibility.Collapsed;
         PlayerButton.IsEnabled = allowPlayer;
         PlayerButton.IsDefault = allowPlayer;
@@ -48,7 +48,7 @@ public partial class RonImportDestinationWindow : Window
     {
         if (_npcArchetype is not { } archetype)
         {
-            ValidationText.Text = "No NPC archetype is available.";
+            ValidationText.Text = Loc.Text("loc_RonImportDestinationWindow_NoNpcArchetypeAvailable");
             return;
         }
 

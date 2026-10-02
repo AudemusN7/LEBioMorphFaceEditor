@@ -158,10 +158,10 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             () => Randomise(GlobalRandomisationScope(), includeCursedBones: true),
             () => CanRandomiseScope(GlobalRandomisationScope(), includeCursedBones: true));
         AttachmentMeshesHeading = previewOnlyAttachments
-            ? "HAIR / ACCESSORY MESHES (preview only)"
-            : "HAIR / ACCESSORY MESHES";
+            ? Loc.Text("loc_VM_faceEditor_attachmentHeadingPreviewOnly")
+            : Loc.Text("loc_VM_faceEditor_attachmentHeading");
         HairMesh = new HairMeshEditorViewModel(
-            hairSession, meshCandidates, previewOnlyAttachments ? "Hair mesh" : "m_oHairMesh", 0);
+            hairSession, meshCandidates, previewOnlyAttachments ? Loc.Text("loc_VM_faceEditor_hairMesh") : "m_oHairMesh", 0);
         _hairRandomiseCommand = new RelayCommand(
             () => Randomise(HairRandomisationScope(), includeCursedBones: false),
             CanRandomiseHair);
@@ -171,7 +171,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             .Select((otherSession, index) => new HairMeshEditorViewModel(
                 otherSession,
                 meshCandidates,
-                previewOnlyAttachments ? "Accessory mesh" : "m_oOtherMeshes",
+                previewOnlyAttachments ? Loc.Text("loc_VM_faceEditor_accessoryMesh") : "m_oOtherMeshes",
                 index + 1))
             .ToArray();
         AttachmentMeshes = [HairMesh, .. OtherMeshes];
@@ -239,7 +239,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
 
     public void ApplyMeshMaterialImport(PreparedMeshMaterialImport import)
     {
-        if (_customMaterialWorkspace is null) throw new InvalidOperationException("A MESH material workspace is required.");
+        if (_customMaterialWorkspace is null) throw new InvalidOperationException(Loc.Text("loc_VM_faceEditor_meshWorkspaceRequired"));
         using (var aggregate = _history.BeginAggregate())
         {
             if (import.Assignments is not null) _customMaterialWorkspace.ReplaceAssignments(import.Assignments);
@@ -445,7 +445,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     /// <summary>Runs the same global operation as the editor command and exposes completion to automation.</summary>
     public Task RandomiseAsync()
     {
-        if (!CanRandomise) throw new InvalidOperationException("This workspace has no eligible randomisation scope.");
+        if (!CanRandomise) throw new InvalidOperationException(Loc.Text("loc_VM_faceEditor_noRandomisationScope"));
         return RandomiseCoreAsync(GlobalRandomisationScope(), includeCursedBones: true, propagateErrors: true);
     }
 
@@ -595,16 +595,16 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                 }
                 aggregate.Commit();
             }
-            AppLog.Information(
-                $"Randomised {morphScope.Count} morph and {materialValueCount} material values " +
-                $"at morph/material strengths {MorphRandomisationStrength}%/{MaterialRandomisationStrength}% " +
-                $"with RNG seeds {morphSeed?.ToString() ?? "n/a"}/{materialSeed?.ToString() ?? "n/a"}.");
+            AppLog.Information(Loc.Format(
+                "loc_VM_faceEditor_randomisationLog",
+                morphScope.Count, materialValueCount, MorphRandomisationStrength, MaterialRandomisationStrength,
+                morphSeed?.ToString() ?? "n/a", materialSeed?.ToString() ?? "n/a"));
         }
         catch (Exception exception)
         {
             AppLog.Error("Face randomisation failed.", exception);
             if (propagateErrors) throw;
-            _reportError($"The face could not be randomised. Details were written to {AppLog.FilePath}");
+            _reportError(Loc.Format("loc_VM_faceEditor_randomisationFailed", AppLog.FilePath));
         }
     }
 
@@ -783,10 +783,10 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             _cursedBoneOffsets.Clear();
             foreach (var value in nextBoneOffsets) _cursedBoneOffsets[value.Key] = value.Value;
         }
-        AppLog.Information(
-            $"Cursed-randomised {features.Count} morph sliders, {fuzzedBoneCount} facial bones and " +
-            $"{scalars.Count + vectors.Count} material values at morph/material strengths " +
-            $"{MorphRandomisationStrength}%/{MaterialRandomisationStrength}% with RNG seed {seed}.");
+        AppLog.Information(Loc.Format(
+            "loc_VM_faceEditor_cursedRandomisationLog",
+            features.Count, fuzzedBoneCount, scalars.Count + vectors.Count,
+            MorphRandomisationStrength, MaterialRandomisationStrength, seed));
     }
 
     private int NextDistinctSeed(int? otherSeed)
@@ -1929,8 +1929,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             if (WereAllTextureFamiliesRejected(
                     eligibleSignatureCount, excludedSignatures.Count, prepared.AppliedTextureFamilies))
             {
-                const string warning =
-                    "No readable texture family was available; numeric material values were still randomised.";
+                var warning = Loc.Text("loc_VM_faceEditor_noReadableTextureFamily");
                 AppLog.Warning(warning);
                 _reportError(warning);
             }

@@ -13,11 +13,11 @@ public partial class StandaloneImportGameWindow : Window
         DarkTitleBar.Apply(this);
         if (newPlayerMode)
         {
-            Title = "New Player Morph";
+            Title = Loc.Text("loc_StandaloneImportGameWindow_NewPlayerMorph");
             Height = 300;
-            PromptText.Text = "Choose the game and player for your new morph.";
+            PromptText.Text = Loc.Text("loc_StandaloneImportGameWindow_NewPlayerPrompt");
             SexPanel.Visibility = Visibility.Visible;
-            ContinueButton.Content = "Continue";
+            ContinueButton.Content = Loc.Text("loc_StandaloneImportGameWindow_Continue");
         }
         GameBox.ItemsSource = new[]
         {
@@ -36,7 +36,7 @@ public partial class StandaloneImportGameWindow : Window
     {
         if (GameBox.SelectedItem is not GameChoice choice)
         {
-            ValidationText.Text = "Choose a target game.";
+            ValidationText.Text = Loc.Text("loc_StandaloneImportGameWindow_ChooseTargetGame");
             return;
         }
 

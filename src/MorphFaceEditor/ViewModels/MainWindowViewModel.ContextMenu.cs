@@ -83,7 +83,7 @@ public sealed partial class MainWindowViewModel
                                 Faces.ElementAtOrDefault(selectedIndex - 1)?.InstancedPath;
         IsBusy = true;
         ErrorMessage = null;
-        Status = $"Deleting {source.DisplayName}…";
+        Status = Loc.Format("loc_Shell_Status_Deleting", source.DisplayName);
         var packageModified = false;
         try
         {
@@ -93,16 +93,16 @@ public sealed partial class MainWindowViewModel
             MarkWorkspaceChanged();
             if (!await RefreshWorkspaceAsync(preferredFacePath))
             {
-                ErrorMessage = "The morph was deleted, but the refreshed workspace could not be opened.";
-                Status = "Delete completed; workspace reload failed.";
+                ErrorMessage = Loc.Text("loc_Shell_ErrorMessage_TheMorphWasDeletedBut");
+                Status = Loc.Text("loc_Shell_Status_DeleteCompletedWorkspaceReloadFailed");
                 return;
             }
-            Status = $"Deleted {source.InstancedPath}; save the package to commit the change.";
+            Status = Loc.Format("loc_Shell_Status_DeletedSaveThePackageTo", source.InstancedPath);
             AppLog.Information($"Face deletion verified: '{source.InstancedPath}'.");
         }
         catch (Exception exception)
         {
-            ReportContextOperationFailure("Delete Morph", "The morph could not be deleted", exception, packageModified);
+            ReportContextOperationFailure("loc_Shell_Operation_DeleteMorph", "loc_Shell_Error_MorphCouldNotDelete", exception, packageModified);
         }
         finally
         {
@@ -130,7 +130,7 @@ public sealed partial class MainWindowViewModel
 
         IsBusy = true;
         ErrorMessage = null;
-        Status = $"Cloning {source.DisplayName}…";
+        Status = Loc.Format("loc_Shell_Status_Cloning", source.DisplayName);
         var packageModified = false;
         try
         {
@@ -141,16 +141,16 @@ public sealed partial class MainWindowViewModel
             MarkWorkspaceChanged();
             if (!await RefreshWorkspaceAsync(result.FaceInstancedPath))
             {
-                ErrorMessage = "The morph was cloned, but the refreshed workspace could not be opened.";
-                Status = "Clone completed; workspace reload failed.";
+                ErrorMessage = Loc.Text("loc_Shell_ErrorMessage_TheMorphWasClonedBut");
+                Status = Loc.Text("loc_Shell_Status_CloneCompletedWorkspaceReloadFailed");
                 return;
             }
-            Status = $"Cloned and verified {result.FaceInstancedPath}.";
+            Status = Loc.Format("loc_Shell_Status_ClonedAndVerified", result.FaceInstancedPath);
             AppLog.Information($"Face clone verified: '{result.FaceInstancedPath}'.");
         }
         catch (Exception exception)
         {
-            ReportContextOperationFailure("Clone Morph", "The morph could not be cloned", exception, packageModified);
+            ReportContextOperationFailure("loc_Shell_Operation_CloneMorph", "loc_Shell_Error_MorphCouldNotClone", exception, packageModified);
         }
         finally
         {
@@ -180,7 +180,7 @@ public sealed partial class MainWindowViewModel
 
         IsBusy = true;
         ErrorMessage = null;
-        Status = $"Converting {source.DisplayName} to {request.TargetGame}…";
+        Status = Loc.Format("loc_Shell_Status_ConvertingTo", source.DisplayName, request.TargetGame);
         try
         {
             AppLog.Information(
@@ -194,18 +194,17 @@ public sealed partial class MainWindowViewModel
                 request.CreateNewPackage,
                 request.TemplatePackagePath)));
             Status = result.SaveResult.Warnings.Count == 0
-                ? $"Converted and verified {result.SaveResult.FaceInstancedPath} ({result.TargetProfile})."
-                : $"Converted and verified {result.SaveResult.FaceInstancedPath} with {result.SaveResult.Warnings.Count} warning(s).";
+                ? Loc.Format("loc_Shell_Status_ConvertedAndVerified", result.SaveResult.FaceInstancedPath, result.TargetProfile)
+                : Loc.Format("loc_Shell_Status_ConvertedAndVerifiedWithWarnings", result.SaveResult.FaceInstancedPath, result.SaveResult.Warnings.Count);
             var dropped = result.DroppedFeatureCount == 0
-                ? "No non-zero source sliders were unsupported."
-                : $"Unsupported non-zero source sliders reset to neutral: {result.DroppedFeatureCount}.";
+                ? Loc.Text("loc_Shell_Conversion_NoUnsupportedSourceSliders")
+                : Loc.Format("loc_Shell_Conversion_UnsupportedSlidersReset", result.DroppedFeatureCount);
             var geometryWarning = result.SourceGeometryValidated
                 ? string.Empty
-                : "\nThe source used baked read-only geometry; serialized sliders and bone residuals transferred, " +
-                  "but shape detail not represented by them could not be preserved.";
+                : Loc.Text("loc_Shell_Conversion_BakedGeometryWarning");
             var textureWarnings = result.SaveResult.Warnings.Count == 0
                 ? string.Empty
-                : "\n\nTexture/dependency report:\n- " + string.Join("\n- ", result.SaveResult.Warnings);
+                : Loc.Format("loc_Shell_Conversion_TextureDependencyReport", string.Join("\n- ", result.SaveResult.Warnings));
             if (result.SaveResult.Warnings.Count > 0)
             {
                 AppLog.Warning(
@@ -213,19 +212,17 @@ public sealed partial class MainWindowViewModel
                     string.Join("; ", result.SaveResult.Warnings));
             }
             _dialogs.ShowInformation(
-                "Morph converted",
-                $"The morph was converted successfully.\n\n" +
-                $"Source profile: {result.SourceProfile}\nTarget profile: {result.TargetProfile}\n" +
-                $"Package: {result.SaveResult.PackagePath}\nFace: {result.SaveResult.FaceInstancedPath}\n" +
-                $"Transferred non-zero sliders: {result.TransferredFeatureCount}\n{dropped}\n" +
-                $"Material overrides (S/V/T): {result.ScalarCount}/{result.VectorCount}/{result.TextureCount}\n" +
-                $"Baked destination LODs: {result.SaveResult.LodCount}" + geometryWarning + textureWarnings);
+                Loc.Text("loc_Shell_DialogTitle_MorphConverted"),
+                Loc.Format("loc_Shell_Dialog_MorphConverted", result.SourceProfile, result.TargetProfile,
+                    result.SaveResult.PackagePath, result.SaveResult.FaceInstancedPath,
+                    result.TransferredFeatureCount, dropped, result.ScalarCount, result.VectorCount,
+                    result.TextureCount, result.SaveResult.LodCount, geometryWarning, textureWarnings));
         }
         catch (Exception exception)
         {
             AppLog.Error($"Morph conversion failed for '{source.InstancedPath}'.", exception);
-            ErrorMessage = $"The morph could not be converted: {exception.Message}";
-            Status = "Morph conversion failed; the source PCC was not modified.";
+            ErrorMessage = Loc.Format("loc_Shell_Error_TheMorphCouldNotBe", exception.Message);
+            Status = Loc.Text("loc_Shell_Status_MorphConversionFailedTheSource");
         }
         finally
         {
@@ -241,13 +238,13 @@ public sealed partial class MainWindowViewModel
         }
         if (IsAlnMorphClipboardFace(source))
         {
-            Status = "Morph data copy is unavailable for the ALN profile.";
+            Status = Loc.Text("loc_Shell_Status_MorphDataCopyIsUnavailable");
             return;
         }
 
         IsBusy = true;
         ErrorMessage = null;
-        Status = $"Copying morph data from {source.DisplayName}…";
+        Status = Loc.Format("loc_Shell_Status_CopyingMorphDataFrom", source.DisplayName);
         try
         {
             var data = IsLoaded(source) && Editor is not null
@@ -256,11 +253,11 @@ public sealed partial class MainWindowViewModel
                     _packageContextService.CaptureMorphData(workspacePath, source.InstancedPath));
             _clipboard.Set(MorphFaceClipboardPayload.Morph(source.ProfileKey, source.InstancedPath, data));
             _pasteMorphDataCommand.RaiseCanExecuteChanged();
-            Status = $"Copied {data.MorphFeatures.Count} morph sliders, {data.FinalSkeleton.Count} final bones, and {data.BakedLods.Count} baked LODs.";
+            Status = Loc.Format("loc_Shell_Status_CopiedMorphSlidersFinalBones", data.MorphFeatures.Count, data.FinalSkeleton.Count, data.BakedLods.Count);
         }
         catch (Exception exception)
         {
-            ReportContextOperationFailure("Copy Morph Data", "Morph data could not be copied", exception);
+            ReportContextOperationFailure("loc_Shell_Operation_CopyMorphData", "loc_Shell_Error_MorphDataCouldNotCopy", exception);
         }
         finally
         {
@@ -276,7 +273,7 @@ public sealed partial class MainWindowViewModel
         }
         if (IsAlnMorphClipboardFace(target))
         {
-            Status = "Morph data paste is unavailable for the ALN profile.";
+            Status = Loc.Text("loc_Shell_Status_MorphDataPasteIsUnavailable");
             return;
         }
 
@@ -291,13 +288,13 @@ public sealed partial class MainWindowViewModel
 
             IsBusy = true;
             ErrorMessage = null;
-            Status = $"Pasting morph data into {target.DisplayName}…";
+            Status = Loc.Format("loc_Shell_Status_PastingMorphDataInto", target.DisplayName);
             Editor.ApplyMorphData(payload.MorphData!);
-            Status = $"Pasted morph data into {target.DisplayName}; save or switch faces to resolve the unsaved edit.";
+            Status = Loc.Format("loc_Shell_Status_PastedMorphDataIntoSave", target.DisplayName);
         }
         catch (Exception exception)
         {
-            ReportContextOperationFailure("Paste Morph Data", "Morph data could not be pasted", exception);
+            ReportContextOperationFailure("loc_Shell_Operation_PasteMorphData", "loc_Shell_Error_MorphDataCouldNotPaste", exception);
         }
         finally
         {
@@ -314,7 +311,7 @@ public sealed partial class MainWindowViewModel
 
         IsBusy = true;
         ErrorMessage = null;
-        Status = $"Copying material data from {source.DisplayName}…";
+        Status = Loc.Format("loc_Shell_Status_CopyingMaterialDataFrom", source.DisplayName);
         try
         {
             var data = IsLoaded(source) && Editor is not null
@@ -323,11 +320,11 @@ public sealed partial class MainWindowViewModel
                     _packageContextService.CaptureMaterialData(workspacePath, source.InstancedPath));
             _clipboard.Set(MorphFaceClipboardPayload.Material(source.ProfileKey, source.InstancedPath, data));
             _pasteMaterialDataCommand.RaiseCanExecuteChanged();
-            Status = $"Copied {data.Scalars.Count}/{data.Vectors.Count}/{data.Textures.Count} material scalar/vector/texture overrides.";
+            Status = Loc.Format("loc_Shell_Status_CopiedMaterialScalarVectorTexture", data.Scalars.Count, data.Vectors.Count, data.Textures.Count);
         }
         catch (Exception exception)
         {
-            ReportContextOperationFailure("Copy Material Data", "Material data could not be copied", exception);
+            ReportContextOperationFailure("loc_Shell_Operation_CopyMaterialData", "loc_Shell_Error_MaterialDataCouldNotCopy", exception);
         }
         finally
         {
@@ -353,13 +350,13 @@ public sealed partial class MainWindowViewModel
 
             IsBusy = true;
             ErrorMessage = null;
-            Status = $"Pasting material data into {target.DisplayName}…";
+            Status = Loc.Format("loc_Shell_Status_PastingMaterialDataInto", target.DisplayName);
             await Editor.ApplyMaterialDataAsync(payload.MaterialData!);
-            Status = $"Pasted material data into {target.DisplayName}; save or switch faces to resolve the unsaved edit.";
+            Status = Loc.Format("loc_Shell_Status_PastedMaterialDataIntoSave", target.DisplayName);
         }
         catch (Exception exception)
         {
-            ReportContextOperationFailure("Paste Material Data", "Material data could not be pasted", exception);
+            ReportContextOperationFailure("loc_Shell_Operation_PasteMaterialData", "loc_Shell_Error_MaterialDataCouldNotPaste", exception);
         }
         finally
         {
@@ -371,9 +368,8 @@ public sealed partial class MainWindowViewModel
     {
         if (!string.Equals(payload.ProfileKey, target.ProfileKey, StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException(
-                $"The clipboard contains {ProfileLabel(payload.ProfileKey)} data, but {target.DisplayName} is {ProfileLabel(target.ProfileKey)}. " +
-                "Morph and material data can only be pasted between matching species and game profiles.");
+            throw new InvalidOperationException(Loc.Format("loc_Shell_Error_ClipboardProfileMismatch",
+                ProfileLabel(payload.ProfileKey), target.DisplayName, ProfileLabel(target.ProfileKey)));
         }
     }
 
@@ -413,13 +409,15 @@ public sealed partial class MainWindowViewModel
         Exception exception,
         bool packageModified = false)
     {
-        AppLog.Error($"{operation} failed.", exception);
+        var operationName = Loc.Text(operation);
+        var messageText = Loc.Text(message);
+        AppLog.Error($"{Loc.ReadEmbeddedEnglish()[operation]} failed.", exception);
         ErrorMessage = packageModified
-            ? $"Temporary edits were retained, but the workspace could not be refreshed: {exception.Message}"
-            : $"{message}: {exception.Message}";
+            ? Loc.Format("loc_Shell_Error_TemporaryEditsRetainedWorkspaceRefreshFailed", exception.Message)
+            : Loc.Format("loc_Shell_Error_ContextOperationFailed", messageText, exception.Message);
         Status = packageModified
-            ? $"{operation} updated temporary edits, but the workspace reload failed."
-            : $"{operation} failed; the source PCC was not modified.";
+            ? Loc.Format("loc_Shell_Status_ContextOperationUpdatedWorkspaceReloadFailed", operationName)
+            : Loc.Format("loc_Shell_Status_ContextOperationFailedSourceUnmodified", operationName);
     }
 
     private static string SuggestCloneName(string sourceName, IReadOnlyCollection<string> existingNames)
@@ -445,6 +443,40 @@ public sealed partial class MainWindowViewModel
         return separator < 0 ? string.Empty : path[..separator];
     }
 
-    private static string ProfileLabel(string profileKey) =>
-        string.IsNullOrWhiteSpace(profileKey) ? "an unknown profile" : profileKey.Replace('-', ' ');
+    private static string ProfileLabel(string profileKey)
+    {
+        if (string.IsNullOrWhiteSpace(profileKey))
+        {
+            return Loc.Text("loc_Shell_Profile_Unknown");
+        }
+        var parts = profileKey.Split('-', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 2)
+        {
+            return profileKey;
+        }
+        var gameKey = parts[0].ToLowerInvariant() switch
+        {
+            "le1" => "loc_Shell_Game_LE1",
+            "le2" => "loc_Shell_Game_LE2",
+            "le3" => "loc_Shell_Game_LE3",
+            _ => null
+        };
+        var species = string.Join("-", parts.Skip(1));
+        var speciesKey = species switch
+        {
+            "human-male" => "loc_Shell_ProfileSpecies_HumanMale",
+            "human-female" => "loc_Shell_ProfileSpecies_HumanFemale",
+            "female-turian" => "loc_Shell_ProfileSpecies_FemaleTurian",
+            "asari" => "loc_Shell_ProfileSpecies_Asari",
+            "salarian" => "loc_Shell_ProfileSpecies_Salarian",
+            "turian" => "loc_Shell_ProfileSpecies_Turian",
+            "krogan" => "loc_Shell_ProfileSpecies_Krogan",
+            "batarian" => "loc_Shell_ProfileSpecies_Batarian",
+            "vorcha" => "loc_Shell_ProfileSpecies_Vorcha",
+            _ => null
+        };
+        return gameKey is not null && speciesKey is not null
+            ? Loc.Format("loc_Shell_Profile_Label", Loc.Text(gameKey), Loc.Text(speciesKey))
+            : profileKey;
+    }
 }

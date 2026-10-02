@@ -1,6 +1,7 @@
 using System.IO;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
+using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.LegendaryExplorer.TextureRegistry;
 
@@ -39,27 +40,27 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
 
     private static readonly IReadOnlyList<TemplateSource> Sources =
     [
-        new("human-male", "Human Male", "human-male", "BIOG_HMM_HED_PROMorph.pcc",
+        new("human-male", "loc_Services_CustomTemplate_HumanMale", "human-male", "BIOG_HMM_HED_PROMorph.pcc",
             "Custom.HMM_HED_PROCustom_MDL"),
-        new("human-female", "Human Female", "human-female", "BIOG_HMF_HED_PROMorph_R.pcc",
+        new("human-female", "loc_Services_CustomTemplate_HumanFemale", "human-female", "BIOG_HMF_HED_PROMorph_R.pcc",
             "Custom.HMF_HED_PROCustom_MDL"),
-        new("human-hair", "Human Hair", "human", "BIOG_HMM_HIR_PRO_R.pcc",
-            "Short02.HMM_HIR_PROShort02_MDL", "Human Hair", [MorphFaceGame.LE1, MorphFaceGame.LE2]),
-        new("human-hair", "Human Hair", "human", "BIOG_HMM_HIR_PRO_R.pcc",
-            "Hair_Short02.HMM_HIR_PROShort02_MDL_CC", "Human Hair", [MorphFaceGame.LE3]),
-        new("human-iconic-femshep-hair", "Human Iconic FemShep", "human-female", "BIOG_HMF_HIR_PRO.pcc",
-            "Hair_PROShepard.HMF_HIR_PROShepard_MDL", "Human Iconic FemShep - Hair",
+        new("human-hair", "loc_Services_CustomTemplate_HumanHair", "human", "BIOG_HMM_HIR_PRO_R.pcc",
+            "Short02.HMM_HIR_PROShort02_MDL", "loc_Services_CustomTemplate_HumanHair", [MorphFaceGame.LE1, MorphFaceGame.LE2]),
+        new("human-hair", "loc_Services_CustomTemplate_HumanHair", "human", "BIOG_HMM_HIR_PRO_R.pcc",
+            "Hair_Short02.HMM_HIR_PROShort02_MDL_CC", "loc_Services_CustomTemplate_HumanHair", [MorphFaceGame.LE3]),
+        new("human-iconic-femshep-hair", "loc_Services_CustomTemplate_IconicFemShepHair", "human-female", "BIOG_HMF_HIR_PRO.pcc",
+            "Hair_PROShepard.HMF_HIR_PROShepard_MDL", "loc_Services_CustomTemplate_IconicFemShepHairOption",
             [MorphFaceGame.LE1, MorphFaceGame.LE2])
     ];
 
     private static readonly IReadOnlyList<IndexedTemplateSource> IndexedSources =
     [
-        new("asari", "Asari", "asari", "ASA_HED_PROBASE_MDL", "ASA_HED"),
-        new("salarian", "Salarian", "salarian", "SAL_HED_PROBASE_MDL", "SAL_HED"),
-        new("turian", "Turian", "turian", "TUR_HED_PROBase_MDL", "TUR_HED"),
-        new("krogan", "Krogan", "krogan", "KRO_HED_PROBase_MDL", "KRO_HED"),
-        new("batarian", "Batarian", "batarian", "BAT_HED_PROBase_MDL", "BAT_HED"),
-        new("vorcha", "Vorcha", "vorcha", "ALN_HED_PROBase_MDL", "ALN_HED",
+        new("asari", "loc_Services_CustomTemplate_Asari", "asari", "ASA_HED_PROBASE_MDL", "ASA_HED"),
+        new("salarian", "loc_Services_CustomTemplate_Salarian", "salarian", "SAL_HED_PROBASE_MDL", "SAL_HED"),
+        new("turian", "loc_Services_CustomTemplate_Turian", "turian", "TUR_HED_PROBase_MDL", "TUR_HED"),
+        new("krogan", "loc_Services_CustomTemplate_Krogan", "krogan", "KRO_HED_PROBase_MDL", "KRO_HED"),
+        new("batarian", "loc_Services_CustomTemplate_Batarian", "batarian", "BAT_HED_PROBase_MDL", "BAT_HED"),
+        new("vorcha", "loc_Services_CustomTemplate_Vorcha", "vorcha", "ALN_HED_PROBase_MDL", "ALN_HED",
             [MorphFaceGame.LE2, MorphFaceGame.LE3])
     ];
 
@@ -74,7 +75,7 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
         if (string.IsNullOrWhiteSpace(cookedPath) || !Directory.Exists(cookedPath))
         {
             return new CustomMaterialTemplateCatalogResult([], [
-                $"{game} is not installed or its CookedPCConsole path is unavailable; Custom material assignment is disabled."
+                Loc.Format("loc_Services_CustomTemplate_GameInstallUnavailable", game)
             ], []);
         }
 
@@ -88,7 +89,7 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
                 ?? Path.Combine(cookedPath, source.PackageFileName);
             if (!File.Exists(packagePath))
             {
-                warnings.Add($"Custom material source '{source.PackageFileName}' is not installed for {game}.");
+                warnings.Add(Loc.Format("loc_Services_CustomTemplate_SourceNotInstalled", source.PackageFileName, game));
                 continue;
             }
 
@@ -100,8 +101,8 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
             catch (Exception exception)
             {
                 warnings.Add(
-                    $"Custom material source '{source.MeshInstancedPath}' could not be read from " +
-                    $"{source.PackageFileName}: {exception.Message}");
+                    Loc.Format("loc_Services_CustomTemplate_SourceCouldNotBeRead", source.MeshInstancedPath,
+                        source.PackageFileName, exception.Message));
                 continue;
             }
 
@@ -112,15 +113,14 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
                     !HeadMaterialClassifier.IsAssignableHeadFamily(material.Family))
                 {
                     warnings.Add(
-                        $"Skipped '{material.Source.InstancedPath}' because its effective master does not prove " +
-                        "an implemented head-material family.");
+                        Loc.Format("loc_Services_CustomTemplate_SkippedUnprovenFamily", material.Source.InstancedPath));
                     continue;
                 }
 
                 var role = Role(material.Family);
                 options.Add(new CustomMaterialAssignmentOption(
                     $"{game}:{source.Key}:{material.Source.InstancedPath}",
-                    source.OptionLabel ?? HumanLabel(source, material.Family),
+                    source.OptionLabelKey is null ? HumanLabel(source, material.Family) : Loc.Text(source.OptionLabelKey),
                     source.AppearanceCompatibilityKey,
                     role,
                     material.Family,
@@ -128,7 +128,7 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
                 {
                     RandomisationProfileKey = RandomisationProfileKey(game, source.Key),
                     ParameterScopeKey = "human",
-                    ParameterScopeLabel = "Human"
+                    ParameterScopeLabel = Loc.Text("loc_Services_CustomTemplate_HumanScope")
                 });
             }
         }
@@ -154,7 +154,7 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
         }
         catch (Exception exception)
         {
-            warnings.Add($"NPC Custom materials require the {game} texture database: {exception.Message}");
+            warnings.Add(Loc.Format("loc_Services_CustomTemplate_TextureDatabaseRequired", game, exception.Message));
             return;
         }
 
@@ -179,8 +179,8 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
             if (evidence is null)
             {
                 warnings.Add(candidates.Length == 0
-                    ? $"The {game} texture database contains no material-bearing {source.Label} head."
-                    : $"No indexed {source.Label} head could provide Custom material evidence: {lastFailure?.Message}");
+                    ? Loc.Format("loc_Services_CustomTemplate_NoMaterialBearingHead", game, SourceLabel(source))
+                    : Loc.Format("loc_Services_CustomTemplate_NoIndexedHeadEvidence", SourceLabel(source), lastFailure?.Message));
                 continue;
             }
 
@@ -199,7 +199,7 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
                 }
                 options.Add(new CustomMaterialAssignmentOption(
                     $"{game}:{source.Key}:{material.Source.InstancedPath}",
-                    $"{source.Label} {FamilyLabel(material.Family)}",
+                    Loc.Format("loc_Services_CustomTemplate_IndexedOptionLabel", SourceLabel(source), FamilyLabel(material.Family)),
                     source.AppearanceCompatibilityKey,
                     Role(material.Family),
                     material.Family,
@@ -207,7 +207,7 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
                 {
                     RandomisationProfileKey = RandomisationProfileKey(game, source.Key),
                     ParameterScopeKey = source.Key,
-                    ParameterScopeLabel = source.Label
+                    ParameterScopeLabel = SourceLabel(source)
                 });
             }
         }
@@ -279,14 +279,14 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
                     catch (Exception exception)
                     {
                         warnings.Add(
-                            $"Preview attachment '{entry.InstancedPath}' in '{fileName}' was skipped because " +
-                            $"its mesh/material data is not loadable: {exception.Message}");
+                            Loc.Format("loc_Services_CustomTemplate_PreviewAttachmentSkipped", entry.InstancedPath,
+                                fileName, exception.Message));
                     }
                 }
             }
             catch (Exception exception)
             {
-                warnings.Add($"Preview attachment catalogue '{fileName}' could not be read: {exception.Message}");
+                warnings.Add(Loc.Format("loc_Services_CustomTemplate_PreviewAttachmentCatalogueUnreadable", fileName, exception.Message));
             }
         }
         return results
@@ -324,23 +324,26 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
     {
         HeadMaterialFamily.Skin or HeadMaterialFamily.AsariSkin or HeadMaterialFamily.SalarianSkin or
             HeadMaterialFamily.TurianSkin or HeadMaterialFamily.BatarianSkin or
-            HeadMaterialFamily.KroganSkin or HeadMaterialFamily.VorchaSkin => "Skin",
+            HeadMaterialFamily.KroganSkin or HeadMaterialFamily.VorchaSkin => Loc.Text("loc_Services_CustomTemplate_FamilySkin"),
         HeadMaterialFamily.Eyes or HeadMaterialFamily.SalarianEyes or HeadMaterialFamily.TurianEyes or
-            HeadMaterialFamily.KroganEyes or HeadMaterialFamily.VorchaEyes => "Eyes",
-        HeadMaterialFamily.Lashes => "Lashes",
-        HeadMaterialFamily.Scalp => "Scalp / Mouth",
-        HeadMaterialFamily.Hair => "Hair",
-        HeadMaterialFamily.MaskedHair => "Masked Hair",
-        HeadMaterialFamily.Teeth => "Teeth",
+            HeadMaterialFamily.KroganEyes or HeadMaterialFamily.VorchaEyes => Loc.Text("loc_Services_CustomTemplate_FamilyEyes"),
+        HeadMaterialFamily.Lashes => Loc.Text("loc_Services_CustomTemplate_FamilyLashes"),
+        HeadMaterialFamily.Scalp => Loc.Text("loc_Services_CustomTemplate_FamilyScalpMouth"),
+        HeadMaterialFamily.Hair => Loc.Text("loc_Services_CustomTemplate_FamilyHair"),
+        HeadMaterialFamily.MaskedHair => Loc.Text("loc_Services_CustomTemplate_FamilyMaskedHair"),
+        HeadMaterialFamily.Teeth => Loc.Text("loc_Services_CustomTemplate_FamilyTeeth"),
+        HeadMaterialFamily.Unknown => Loc.Text("loc_Services_CustomTemplate_FamilyUnknown"),
         _ => family.ToString()
     };
 
     private static string HumanLabel(TemplateSource source, HeadMaterialFamily family) =>
         source.Key == "human-female" && family == HeadMaterialFamily.Eyes
-            ? "Human Female/Asari Eyes"
+            ? Loc.Text("loc_Services_CustomTemplate_HumanFemaleAsariEyes")
             : source.Key == "human-female" && family == HeadMaterialFamily.Lashes
-                ? "Human Female/Asari Lashes"
-                : $"{source.Label} - {FamilyLabel(family)}";
+                ? Loc.Text("loc_Services_CustomTemplate_HumanFemaleAsariLashes")
+                : Loc.Format("loc_Services_CustomTemplate_HumanOptionLabel", Loc.Text(source.LabelKey), FamilyLabel(family));
+
+    private static string SourceLabel(IndexedTemplateSource source) => Loc.Text(source.LabelKey);
 
     private static string RandomisationProfileKey(MorphFaceGame game, string archetype)
     {
@@ -357,16 +360,16 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
 
     private sealed record TemplateSource(
         string Key,
-        string Label,
+        string LabelKey,
         string AppearanceCompatibilityKey,
         string PackageFileName,
         string MeshInstancedPath,
-        string? OptionLabel = null,
+        string? OptionLabelKey = null,
         IReadOnlyList<MorphFaceGame>? Games = null);
 
     private sealed record IndexedTemplateSource(
         string Key,
-        string Label,
+        string LabelKey,
         string AppearanceCompatibilityKey,
         string MeshObjectName,
         string TextureMarker,

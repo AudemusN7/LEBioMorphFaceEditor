@@ -1,3 +1,4 @@
+using MorphFaceEditor.Infrastructure;
 using System.Text.RegularExpressions;
 using MorphFaceEditor.Core.Deformation;
 using MorphFaceEditor.Core.Materials;
@@ -68,7 +69,7 @@ public class HumanFemaleFeatureMetadataCatalog : HumanMaleFeatureMetadataCatalog
             IsVisible = !HiddenFeatures.Contains(name),
             SortOrder = GetFemaleSortOrder(name, metadata.SortOrder),
             Description = feature.Kind == MorphFeatureResolutionKind.MetadataOnly
-                ? "Stored Human Female creator metadata with no direct target delta."
+                ? Loc.Text("loc_Services_Taxonomy_stored_human_female_creator_metadata_with_no_dir_27f9bda2")
                 : metadata.Description
         };
         return MetadataTextCatalog.Apply(TextArchetype, described, TextGame);
@@ -217,36 +218,36 @@ public class HumanFemaleFeatureMetadataCatalog : HumanMaleFeatureMetadataCatalog
         {
             Eyes => category with
             {
-                Description = "Brows, eye position, proportions, character shapes, and eyelids.",
+                Description = Loc.Text("loc_Services_Taxonomy_brows_eye_position_proportions_character_shapes_8c6daf9a"),
                 SliderGroups =
                 [
-                    new EditorSubcategoryDefinition(CharacterEyeShape, "CHARACTER SHAPES"),
-                    new EditorSubcategoryDefinition(RaceEyeShape, "RACE SHAPES"),
-                    new EditorSubcategoryDefinition(ShapeEyeShape, "SHAPE / ROTATION"),
-                    new EditorSubcategoryDefinition(Brows, "BROWS"),
-                    new EditorSubcategoryDefinition(Sockets, "SOCKETS"),
-                    new EditorSubcategoryDefinition(Eyelids, "EYELIDS"),
-                    new EditorSubcategoryDefinition("lashes", "LASHES"),
-                    new EditorSubcategoryDefinition(Surface, "SURFACE")
+                    new EditorSubcategoryDefinition(CharacterEyeShape, Loc.Text("loc_Services_Taxonomy_character_shapes_0fab481f")),
+                    new EditorSubcategoryDefinition(RaceEyeShape, Loc.Text("loc_Services_Taxonomy_race_shapes_0087193f")),
+                    new EditorSubcategoryDefinition(ShapeEyeShape, Loc.Text("loc_Services_Taxonomy_shape_rotation_7a73993a")),
+                    new EditorSubcategoryDefinition(Brows, Loc.Text("loc_Services_Taxonomy_brows_9cbe502a")),
+                    new EditorSubcategoryDefinition(Sockets, Loc.Text("loc_Services_Taxonomy_sockets_1d56780a")),
+                    new EditorSubcategoryDefinition(Eyelids, Loc.Text("loc_Services_Taxonomy_eyelids_601775d2")),
+                    new EditorSubcategoryDefinition("lashes", Loc.Text("loc_Services_Taxonomy_lashes_6ad1e621")),
+                    new EditorSubcategoryDefinition(Surface, Loc.Text("loc_Services_Taxonomy_surface_026aa612"))
                 ]
             },
             Mouth => category with
             {
                 SliderGroups =
                 [
-                    new EditorSubcategoryDefinition(CharacterMouth, "CHARACTER SHAPES"),
-                    new EditorSubcategoryDefinition(RaceMouth, "RACE SHAPES"),
-                    new EditorSubcategoryDefinition(ShapeMouth, "SHAPE"),
+                    new EditorSubcategoryDefinition(CharacterMouth, Loc.Text("loc_Services_Taxonomy_character_shapes_0fab481f")),
+                    new EditorSubcategoryDefinition(RaceMouth, Loc.Text("loc_Services_Taxonomy_race_shapes_0087193f")),
+                    new EditorSubcategoryDefinition(ShapeMouth, Loc.Text("loc_Services_Taxonomy_shape_cfb25fc2")),
                     .. category.SliderGroups.Where(group => group.Key != "mouth-shape")
                 ]
             },
             Additions => category with
             {
-                Description = "Makeup, hair highlights, surface additions, face overlays, freckles, scars, and scalp settings.",
+                Description = Loc.Text("loc_Services_Taxonomy_makeup_hair_highlights_surface_additions_face_ov_50a0f9b7"),
                 SliderGroups =
                 [
-                    new EditorSubcategoryDefinition(Makeup, "MAKEUP"),
-                    new EditorSubcategoryDefinition(MaterialHair, "HAIR"),
+                    new EditorSubcategoryDefinition(Makeup, Loc.Text("loc_Services_Taxonomy_makeup_0be431f7")),
+                    new EditorSubcategoryDefinition(MaterialHair, Loc.Text("loc_Services_Taxonomy_hair_3ba4bcee")),
                     .. category.SliderGroups
                 ]
             },

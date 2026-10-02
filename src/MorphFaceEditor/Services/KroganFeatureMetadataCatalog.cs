@@ -1,3 +1,4 @@
+using MorphFaceEditor.Infrastructure;
 using System.Text.RegularExpressions;
 using MorphFaceEditor.Core.Deformation;
 using MorphFaceEditor.Core.Materials;
@@ -42,16 +43,16 @@ public sealed partial class KroganFeatureMetadataCatalog : IHeadEditorUiProfile
 
     public IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
     [
-        new(FacialStructure, "Facial Structure", "Krogan head-plate proportions and character shapes.",
-            [new(Character, "CHARACTER"), new(HeadPlates, "HEAD PLATES")]),
-        new(Head, "Head", "Overall head shape, skin colour, gradients, and surface response.",
-            [new(Shape, "SHAPE"), new(Nose, "NOSE"), new(Neck, "NECK"), new(Surface, "SURFACE")]),
-        new(Eyes, "Eyes", "Eye position, shape, pupil, tint, and surface controls.",
-            [new(Shape, "SHAPE"), new(Position, "POSITION")]),
-        new(Mouth, "Mouth / Jaw", "Mouth position and jaw controls.",
-            [new(Position, "MOUTH"), new(Jaw, "JAW / CHIN")]),
-        new(Markings, "Markings", "Complexion texture, mask, and colour controls.",
-            [new(Complexion, "COMPLEXION")])
+        new(FacialStructure, Loc.Text("loc_Services_Taxonomy_facial_structure_812284cf"), Loc.Text("loc_Services_Taxonomy_krogan_head_plate_proportions_and_character_shap_296f9a25"),
+            [new(Character, Loc.Text("loc_Services_Taxonomy_character_19cd78f5")), new(HeadPlates, Loc.Text("loc_Services_Taxonomy_head_plates_c859789f"))]),
+        new(Head, Loc.Text("loc_Services_Taxonomy_head_9bb0aacc"), Loc.Text("loc_Services_Taxonomy_overall_head_shape_skin_colour_gradients_and_sur_9058f712"),
+            [new(Shape, Loc.Text("loc_Services_Taxonomy_shape_cfb25fc2")), new(Nose, Loc.Text("loc_Services_Taxonomy_nose_3c3cb8fe")), new(Neck, Loc.Text("loc_Services_Taxonomy_neck_00020b4f")), new(Surface, Loc.Text("loc_Services_Taxonomy_surface_026aa612"))]),
+        new(Eyes, Loc.Text("loc_Services_Taxonomy_eyes_a39e9d98"), Loc.Text("loc_Services_Taxonomy_eye_position_shape_pupil_tint_and_surface_contro_150018fb"),
+            [new(Shape, Loc.Text("loc_Services_Taxonomy_shape_cfb25fc2")), new(Position, Loc.Text("loc_Services_Taxonomy_position_aad6faa6"))]),
+        new(Mouth, Loc.Text("loc_Services_Taxonomy_mouth_jaw_1b80f857"), Loc.Text("loc_Services_Taxonomy_mouth_position_and_jaw_controls_ac632eb5"),
+            [new(Position, Loc.Text("loc_Services_Taxonomy_mouth_7feedf9a")), new(Jaw, Loc.Text("loc_Services_Taxonomy_jaw_chin_66b310ff"))]),
+        new(Markings, Loc.Text("loc_Services_Taxonomy_markings_86efda29"), Loc.Text("loc_Services_Taxonomy_complexion_texture_mask_and_colour_controls_7eeea867"),
+            [new(Complexion, Loc.Text("loc_Services_Taxonomy_complexion_0ee9bf54"))])
     ];
 
     public MorphFeatureMetadata Describe(ResolvedMorphFeature feature, bool sessionCanEdit)
@@ -70,7 +71,7 @@ public sealed partial class KroganFeatureMetadataCatalog : IHeadEditorUiProfile
             0.01f,
             visible && sessionCanEdit && feature.IsResolved,
             feature.Kind == MorphFeatureResolutionKind.MetadataOnly
-                ? "Preserved creator metadata with no Krogan target delta."
+                ? Loc.Text("loc_Services_Taxonomy_preserved_creator_metadata_with_no_krogan_target_077f9eba")
                 : string.Empty);
         return MetadataTextCatalog.Apply(MorphFaceMetadataCatalogRegistry.Krogan, metadata);
     }

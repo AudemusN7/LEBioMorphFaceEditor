@@ -31,7 +31,7 @@ public partial class ManualAssetSelectionWindow : Window
         DarkTitleBar.Apply(this);
         Closed += OnClosed;
         _packagePath = inventory.PackagePath;
-        Heading.Text = $"Add custom assets to {game}";
+        Heading.Text = Loc.Format("loc_ManualAssetSelectionWindow_AddCustomAssetsToGame", game);
         PackageLabel.Text = _packagePath;
         _rows = inventory.Entries
             .Where(entry => !entry.IsDefaultObject && entry.ClassName is "Texture2D" or "SkeletalMesh")
@@ -109,7 +109,7 @@ public partial class ManualAssetSelectionWindow : Window
     {
         if (SelectedAssets.Count == 0)
         {
-            ValidationText.Text = "Select at least one new asset.";
+            ValidationText.Text = Loc.Text("loc_ManualAssetSelectionWindow_SelectAtLeastOneNewAsset");
             return;
         }
         DialogResult = true;

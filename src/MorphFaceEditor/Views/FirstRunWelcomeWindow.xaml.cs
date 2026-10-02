@@ -29,8 +29,8 @@ public partial class FirstRunWelcomeWindow : Window
         {
             AppLog.Error("The GitHub tutorial could not be opened.", exception);
             _ = new EditorMessageWindow(
-                "Tutorial unavailable",
-                $"The tutorial could not be opened in your browser.\n\n{TutorialUri.AbsoluteUri}")
+                Loc.Text("loc_FirstRunWelcomeWindow_TutorialUnavailable"),
+                Loc.Format("loc_FirstRunWelcomeWindow_TutorialCouldNotOpen", TutorialUri.AbsoluteUri))
             {
                 Owner = this
             }.ShowDialog();

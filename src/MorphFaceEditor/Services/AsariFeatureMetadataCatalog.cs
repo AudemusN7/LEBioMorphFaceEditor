@@ -1,3 +1,4 @@
+using MorphFaceEditor.Infrastructure;
 using System.Text.RegularExpressions;
 using MorphFaceEditor.Core.Deformation;
 using MorphFaceEditor.Core.Materials;
@@ -71,18 +72,18 @@ public sealed partial class AsariFeatureMetadataCatalog : IHeadEditorUiProfile
 
     public IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
     [
-        new(FacialStructure, "Facial Structure", "Asari head-crest proportions.",
-            [new(HeadCrest, "HEAD CREST")]),
-        new(Head, "Head", "Cheek, skin-colour, complexion, and facial-surface controls.",
-            [new(Cheeks, "CHEEKS"), new(Surface, "SURFACE")]),
-        new(Eyes, "Eyes", "Brow, eye-position, eye-shape, iris, and sclera controls.",
-            [new(Shape, "SHAPE"), new(Brows, "BROWS"), new(Sockets, "SOCKETS"), new(Surface, "SURFACE")]),
-        new(Nose, "Nose", "Nose shape, bridge, tip, and nostril controls.",
-            [new(Shape, "SHAPE"), new(Bridge, "BRIDGE"), new(Tip, "TIP"), new(Nostrils, "NOSTRILS")]),
-        new(Mouth, "Mouth / Jaw", "Mouth shape, lips, teeth, jaw, and gloss controls.",
-            [new(Shape, "MOUTH"), new(Lips, "LIPS"), new(Teeth, "TEETH"), new(Jaw, "JAW")]),
-        new(Markings, "Markings", "Complexion additions, makeup, and facial tattoos.",
-            [new(Complexion, "COMPLEXION"), new(Makeup, "MAKEUP"), new(Tattoos, "TATTOOS")])
+        new(FacialStructure, Loc.Text("loc_Services_Taxonomy_facial_structure_812284cf"), Loc.Text("loc_Services_Taxonomy_asari_head_crest_proportions_b5f4248a"),
+            [new(HeadCrest, Loc.Text("loc_Services_Taxonomy_head_crest_ace1e6bc"))]),
+        new(Head, Loc.Text("loc_Services_Taxonomy_head_9bb0aacc"), Loc.Text("loc_Services_Taxonomy_cheek_skin_colour_complexion_and_facial_surface_ea927833"),
+            [new(Cheeks, Loc.Text("loc_Services_Taxonomy_cheeks_daeb3667")), new(Surface, Loc.Text("loc_Services_Taxonomy_surface_026aa612"))]),
+        new(Eyes, Loc.Text("loc_Services_Taxonomy_eyes_a39e9d98"), Loc.Text("loc_Services_Taxonomy_brow_eye_position_eye_shape_iris_and_sclera_cont_47a086e6"),
+            [new(Shape, Loc.Text("loc_Services_Taxonomy_shape_cfb25fc2")), new(Brows, Loc.Text("loc_Services_Taxonomy_brows_9cbe502a")), new(Sockets, Loc.Text("loc_Services_Taxonomy_sockets_1d56780a")), new(Surface, Loc.Text("loc_Services_Taxonomy_surface_026aa612"))]),
+        new(Nose, Loc.Text("loc_Services_Taxonomy_nose_05c5d4db"), Loc.Text("loc_Services_Taxonomy_nose_shape_bridge_tip_and_nostril_controls_b1ee5f5b"),
+            [new(Shape, Loc.Text("loc_Services_Taxonomy_shape_cfb25fc2")), new(Bridge, Loc.Text("loc_Services_Taxonomy_bridge_ef304fbe")), new(Tip, Loc.Text("loc_Services_Taxonomy_tip_cd320198")), new(Nostrils, Loc.Text("loc_Services_Taxonomy_nostrils_84cac5a8"))]),
+        new(Mouth, Loc.Text("loc_Services_Taxonomy_mouth_jaw_1b80f857"), Loc.Text("loc_Services_Taxonomy_mouth_shape_lips_teeth_jaw_and_gloss_controls_95ebe7c2"),
+            [new(Shape, Loc.Text("loc_Services_Taxonomy_mouth_7feedf9a")), new(Lips, Loc.Text("loc_Services_Taxonomy_lips_43c004a7")), new(Teeth, Loc.Text("loc_Services_Taxonomy_teeth_0afde705")), new(Jaw, Loc.Text("loc_Services_Taxonomy_jaw_296d1292"))]),
+        new(Markings, Loc.Text("loc_Services_Taxonomy_markings_86efda29"), Loc.Text("loc_Services_Taxonomy_complexion_additions_makeup_and_facial_tattoos_870ea06a"),
+            [new(Complexion, Loc.Text("loc_Services_Taxonomy_complexion_0ee9bf54")), new(Makeup, Loc.Text("loc_Services_Taxonomy_makeup_0be431f7")), new(Tattoos, Loc.Text("loc_Services_Taxonomy_tattoos_b09f0d8b"))])
     ];
 
     public MorphFeatureMetadata Describe(ResolvedMorphFeature feature, bool sessionCanEdit)
@@ -100,7 +101,7 @@ public sealed partial class AsariFeatureMetadataCatalog : IHeadEditorUiProfile
             0.01f,
             sessionCanEdit && feature.IsResolved,
             feature.Kind == MorphFeatureResolutionKind.MetadataOnly
-                ? "Preserved front-end metadata with no ASA target delta."
+                ? Loc.Text("loc_Services_Taxonomy_preserved_front_end_metadata_with_no_asa_target_fc559827")
                 : string.Empty);
         return MetadataTextCatalog.Apply(MorphFaceMetadataCatalogRegistry.Asari, metadata, _textGame);
     }

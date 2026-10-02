@@ -26,8 +26,8 @@ public partial class SaveMorphToPccWindow : Window
     {
         var dialog = new OpenFileDialog
         {
-            Title = "Choose an existing destination PCC",
-            Filter = "Mass Effect packages (*.pcc)|*.pcc",
+            Title = Loc.Text("loc_SaveNewInstanceWindow_ChooseExistingDestinationPcc"),
+            Filter = EditorFileDrop.PackageFilter,
             CheckFileExists = true,
             Multiselect = false,
             InitialDirectory = Directory.Exists(Path.GetDirectoryName(DestinationBox.Text))
@@ -48,8 +48,8 @@ public partial class SaveMorphToPccWindow : Window
         {
             var dialog = new SaveFileDialog
             {
-                Title = "Create a minimal morph PCC",
-                Filter = "Mass Effect packages (*.pcc)|*.pcc",
+                Title = Loc.Text("loc_SaveNewInstanceWindow_CreateMinimalMorphPcc"),
+                Filter = EditorFileDrop.PackageFilter,
                 AddExtension = true,
                 DefaultExt = ".pcc",
                 FileName = _suggestedFileName,
@@ -63,18 +63,18 @@ public partial class SaveMorphToPccWindow : Window
             destination = dialog.FileName;
             if (File.Exists(destination))
             {
-                ValidationText.Text = "That PCC already exists. Use Browse Existing to add the morph to it, or choose a new filename.";
+                ValidationText.Text = Loc.Text("loc_SaveNewInstanceWindow_PccAlreadyExists");
                 return;
             }
         }
         else if (!File.Exists(destination))
         {
-            ValidationText.Text = "The specified destination does not exist. Clear the field to create a new minimal PCC.";
+            ValidationText.Text = Loc.Text("loc_SaveNewInstanceWindow_DestinationDoesNotExist");
             return;
         }
         if (string.Equals(Path.GetFullPath(destination), Path.GetFullPath(_sourcePackagePath), StringComparison.OrdinalIgnoreCase))
         {
-            ValidationText.Text = "Choose a different destination; the open source PCC cannot also be the export target.";
+            ValidationText.Text = Loc.Text("loc_SaveNewInstanceWindow_SourcePccCannotBeExportTarget");
             return;
         }
         Request = new MorphPackageSaveRequest(Path.GetFullPath(destination), createNewPackage);

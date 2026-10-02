@@ -9,7 +9,7 @@
                       HorizontalContentAlignment="Stretch"
                       PreviewMouseWheel="OnPickerPreviewMouseWheel"
                       PreviewKeyDown="OnPickerPreviewKeyDown"
-                      ToolTip="Choose a texture">
+                      ToolTip="{DynamicResource loc_View_SearchableTexturePicker_ChooseATexture}">
             <ToggleButton.Template>
                 <ControlTemplate TargetType="ToggleButton">
                     <Border x:Name="Chrome"
@@ -72,8 +72,8 @@
                     </Grid.RowDefinitions>
                     <Thumb Height="12" Margin="0,0,0,5"
                            Cursor="SizeNS" DragDelta="OnResizeDragDelta"
-                           ToolTip="Drag to resize texture list"
-                           AutomationProperties.Name="Resize texture list">
+                           ToolTip="{DynamicResource loc_View_SearchableTexturePicker_DragToResizeTextureList}"
+                           AutomationProperties.Name="{DynamicResource loc_View_SearchableTexturePicker_ResizeTextureList}">
                         <Thumb.Template>
                             <ControlTemplate TargetType="Thumb">
                                 <Border Background="Transparent">
@@ -85,15 +85,15 @@
                         </Thumb.Template>
                     </Thumb>
                     <CheckBox Grid.Row="1"
-                              Content="Show all physical sources"
+                              Content="{DynamicResource loc_View_SearchableTexturePicker_ShowAllPhysicalSources}"
                               IsChecked="{Binding ShowAllPhysicalSources, Mode=TwoWay}"
                               Foreground="{DynamicResource SecondaryText}"
                               Margin="2,0,0,6"
-                              ToolTip="Show every installed, manual, and open-package copy instead of one default per texture path." />
+                              ToolTip="{DynamicResource loc_View_SearchableTexturePicker_ShowEveryInstalledManualAndOpenPackageCopyInsteadOfOneD}" />
                     <TextBox Grid.Row="2" x:Name="SearchBox"
                              Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
                              TextChanged="OnSearchTextChanged"
-                             ToolTip="Search by texture name, path, source package, or origin"
+                             ToolTip="{DynamicResource loc_View_SearchableTexturePicker_SearchByTextureNamePathSourcePackageOrOrigin}"
                              Margin="0,0,0,6" />
                     <ListBox Grid.Row="3"
                              x:Name="CandidateList"

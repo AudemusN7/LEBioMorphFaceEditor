@@ -17,8 +17,8 @@
                    Foreground="{DynamicResource SecondaryText}" Margin="0,0,0,12" />
         <TextBox Grid.Row="1" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
                  Padding="8,6" Margin="0,0,0,12"
-                 ToolTip="Search tags, actor/type/archetype names, classes, UIndexes, and paths"
-                 AutomationProperties.Name="Search actor assignment candidates" />
+                 ToolTip="{DynamicResource loc_View_ActorAssignmentWindow_SearchTagsActorTypeArchetypeNamesClassesUIndexesAndPath}"
+                 AutomationProperties.Name="{DynamicResource loc_View_ActorAssignmentWindow_SearchActorAssignmentCandidates}" />
         <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="1.05*" />
@@ -87,7 +87,7 @@
             </Border>
         </Grid>
         <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
-            <Button Content="Cancel" IsCancel="True" MinWidth="84" Margin="0,0,8,0" />
+            <Button Content="{DynamicResource loc_View_ActorAssignmentWindow_Cancel}" IsCancel="True" MinWidth="84" Margin="0,0,8,0" />
             <Button Content="{Binding ConfirmLabel}" IsDefault="True" MinWidth="126"
                     IsEnabled="{Binding CanConfirm}" Click="OnConfirm" />
         </StackPanel>

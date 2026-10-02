@@ -1,7 +1,7 @@
 <Window x:Class="MorphFaceEditor.Views.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Settings" Width="660" Height="760" MinWidth="580" MinHeight="560"
+        Title="{DynamicResource loc_Settings_Title}" Width="660" Height="760" MinWidth="580" MinHeight="560"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
         Background="{DynamicResource WindowBackground}" Foreground="{DynamicResource PrimaryText}">
     <Window.Resources>
@@ -30,40 +30,41 @@
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
-        <TextBlock Text="SETTINGS" Foreground="{DynamicResource Accent}" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,18" />
+        <TextBlock Text="{DynamicResource loc_Settings_Heading}" Foreground="{DynamicResource Accent}" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,18" />
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel x:Name="SettingsSections">
                 <Border Style="{StaticResource SettingsSection}">
                     <StackPanel>
-                        <TextBlock Text="Language" Style="{StaticResource SettingsHeading}" />
-                        <TextBlock Text="Language selection will be available in a future update." Style="{StaticResource SettingsDescription}" />
-                        <ComboBox x:Name="LanguageSelector" SelectedIndex="0" IsEnabled="False" AutomationProperties.Name="Language">
-                            <ComboBoxItem Content="English (UK)" />
-                            <ComboBoxItem Content="English (US)" />
-                            <ComboBoxItem Content="French" />
-                            <ComboBoxItem Content="Spanish" />
-                            <ComboBoxItem Content="German" />
-                            <ComboBoxItem Content="Italian" />
-                            <ComboBoxItem Content="Polish" />
-                            <ComboBoxItem Content="Russian" />
-                            <ComboBoxItem Content="Simplified Chinese" />
-                            <ComboBoxItem Content="Japanese" />
+                        <TextBlock Text="{DynamicResource loc_Settings_Language}" Style="{StaticResource SettingsHeading}" />
+                        <TextBlock Text="{DynamicResource loc_Settings_LanguageDescription}" Style="{StaticResource SettingsDescription}" />
+                        <ComboBox x:Name="LanguageSelector" SelectionChanged="OnLanguageSelectionChanged" AutomationProperties.Name="{DynamicResource loc_Settings_Language}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Margin="0,0,10,0" VerticalAlignment="Center">
+                                            <Image Source="{Binding Flag}" Width="30" Height="20" Stretch="Fill" />
+                                        </Border>
+                                        <TextBlock Text="{Binding NativeName}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
                         </ComboBox>
+                        <TextBlock Text="{DynamicResource loc_Settings_FallbackNotice}" Style="{StaticResource SettingsDescription}" />
                     </StackPanel>
                 </Border>
                 <Border Style="{StaticResource SettingsSection}">
                     <StackPanel>
-                        <TextBlock Text="Theme" Style="{StaticResource SettingsHeading}" />
-                        <ComboBox x:Name="ThemeSelector" Margin="0,12,0,0" SelectionChanged="OnThemeSelectionChanged" AutomationProperties.Name="Theme">
-                            <ComboBoxItem Content="System" />
-                            <ComboBoxItem Content="Light" />
-                            <ComboBoxItem Content="Dark" />
+                        <TextBlock Text="{DynamicResource loc_Settings_Theme}" Style="{StaticResource SettingsHeading}" />
+                        <ComboBox x:Name="ThemeSelector" Margin="0,12,0,0" SelectionChanged="OnThemeSelectionChanged" AutomationProperties.Name="{DynamicResource loc_Settings_Theme}">
+                            <ComboBoxItem Content="{DynamicResource loc_Settings_ThemeSystem}" />
+                            <ComboBoxItem Content="{DynamicResource loc_Settings_ThemeLight}" />
+                            <ComboBoxItem Content="{DynamicResource loc_Settings_ThemeDark}" />
                         </ComboBox>
                         <Grid Margin="0,14,0,0">
                             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                            <TextBlock Text="Accent Colour" VerticalAlignment="Center" />
+                            <TextBlock Text="{DynamicResource loc_Settings_AccentColour}" VerticalAlignment="Center" />
                             <Button x:Name="AccentColourButton" Grid.Column="1" Click="OnAccentColourClick"
-                                    Padding="4" AutomationProperties.Name="Accent colour" ToolTip="Choose accent colour">
+                                    Padding="4" AutomationProperties.Name="{DynamicResource loc_Settings_AccentAutomation}" ToolTip="{DynamicResource loc_Settings_AccentTooltip}">
                                 <Border Width="56" Height="24" Background="{DynamicResource Accent}"
                                         BorderBrush="{DynamicResource SwatchBorder}" BorderThickness="1" CornerRadius="2" />
                             </Button>
@@ -72,16 +73,16 @@
                 </Border>
                 <Border Style="{StaticResource SettingsSection}">
                     <StackPanel>
-                        <TextBlock Text="Generate Logs" Style="{StaticResource SettingsHeading}" />
-                        <TextBlock Text="Export a ZIP containing the latest application log, the open workspace with current edits, and stock and custom mesh/texture databases. Choose where to save it." Style="{StaticResource SettingsDescription}" />
-                        <Button x:Name="GenerateLogsButton" Content="Generate Logs…" Click="OnGenerateLogsClick" HorizontalAlignment="Left" />
+                        <TextBlock Text="{DynamicResource loc_Settings_GenerateLogs}" Style="{StaticResource SettingsHeading}" />
+                        <TextBlock Text="{DynamicResource loc_Settings_GenerateLogsDescription}" Style="{StaticResource SettingsDescription}" />
+                        <Button x:Name="GenerateLogsButton" Content="{DynamicResource loc_Settings_GenerateLogsButton}" Click="OnGenerateLogsClick" HorizontalAlignment="Left" />
                     </StackPanel>
                 </Border>
                 <Border Style="{StaticResource SettingsSection}">
                     <StackPanel>
-                        <TextBlock Text="Clear Application Data" Style="{StaticResource SettingsHeading}" />
-                        <TextBlock Text="Remove MFE preferences, logs, temporary workspaces and mesh/texture databases, including legacy application data. MFE will close; databases will need to be rebuilt when you reopen it." Style="{StaticResource SettingsDescription}" />
-                        <Button x:Name="ClearDataButton" Content="Clear Application Data…" Click="OnClearDataClick" HorizontalAlignment="Left" />
+                        <TextBlock Text="{DynamicResource loc_Settings_ClearData}" Style="{StaticResource SettingsHeading}" />
+                        <TextBlock Text="{DynamicResource loc_Settings_ClearDataDescription}" Style="{StaticResource SettingsDescription}" />
+                        <Button x:Name="ClearDataButton" Content="{DynamicResource loc_Settings_ClearDataButton}" Click="OnClearDataClick" HorizontalAlignment="Left" />
                     </StackPanel>
                 </Border>
             </StackPanel>
@@ -89,7 +90,7 @@
         <Grid Grid.Row="2" Margin="0,14,0,0">
             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
             <TextBlock x:Name="OperationStatus" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}" VerticalAlignment="Center" Margin="0,0,14,0" />
-            <Button x:Name="CloseButton" Grid.Column="1" Content="Close" IsCancel="True" Click="OnCloseClick" MinWidth="85" />
+            <Button x:Name="CloseButton" Grid.Column="1" Content="{DynamicResource loc_Settings_Close}" IsCancel="True" Click="OnCloseClick" MinWidth="85" />
         </Grid>
     </Grid>
 </Window>

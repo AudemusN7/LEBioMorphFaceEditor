@@ -38,7 +38,9 @@ public partial class HdrColorPickerWindow : Window
             MinHeight = allowAlpha ? 700 : 620;
             if (!_allowAlpha) AlphaRow.Height = new GridLength(0);
             HdrIntensityPanel.Visibility = Visibility.Collapsed;
-            PreviewCaption.Text = allowAlpha ? "Preview UI colour" : "Preview background colour";
+            PreviewCaption.Text = Loc.Text(allowAlpha
+                ? "loc_HdrColorPickerWindow_PreviewUiColour"
+                : "loc_HdrColorPickerWindow_PreviewBackgroundColour");
             ResetBackgroundButton.Visibility = resetColor is null ? Visibility.Collapsed : Visibility.Visible;
         }
         var channelMinimum = extendedSliders ? -1 : 0;

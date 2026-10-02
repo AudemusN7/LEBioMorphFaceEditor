@@ -69,8 +69,8 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
         var currentTexture = session.GetSelectedTexture(Name);
         var defaultTextureName = session.GetDefaultTexture(Name)?.Source.InstancedPath.Split('.').Last();
         var noneLabel = defaultTextureName is null
-            ? "None (material default)"
-            : $"None (material default: {defaultTextureName})";
+            ? Loc.Text("loc_VM_texture_noneMaterialDefault")
+            : Loc.Format("loc_VM_texture_noneMaterialDefaultNamed", defaultTextureName);
         _allCandidates = [new MaterialTextureOption(null, DisplayNameOverride: noneLabel)];
         _allCandidates.AddRange(BuildOptions(currentTexture));
         RebuildLookupIndices();
@@ -118,8 +118,8 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
     }
     public bool HasExternalRegistrySelection => SelectedTexture?.RegistryCandidate is not null;
     public string RegistryStatusLabel => _isRegistryAvailable
-        ? $"{_registryCandidates.Count:N0} installed choices · {_localCandidates.Count:N0} open-package choices"
-        : $"{_localCandidates.Count:N0} open-package choices · installed choices unavailable — build the active game's database in Mesh/Texture Databases.";
+        ? Loc.Format("loc_VM_texture_registryChoicesAvailable", _registryCandidates.Count, _localCandidates.Count)
+        : Loc.Format("loc_VM_texture_registryChoicesUnavailable", _localCandidates.Count);
     public string SearchText
     {
         get => _searchText;
@@ -181,7 +181,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
         private set => SetProperty(ref _previewThumbnail, value);
     }
     public string SourceName => _session.GetTextureReference(Name)?.InstancedPath ??
-        _session.GetPreviewTexture(Name)?.Source.InstancedPath ?? "None";
+        _session.GetPreviewTexture(Name)?.Source.InstancedPath ?? Loc.Text("loc_VM_texture_none");
     public string Details
     {
         get
@@ -189,15 +189,15 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
             var texture = _session.GetPreviewTexture(Name);
             if (_session.GetTextureReference(Name) is { } authored &&
                 (texture is null || !SameCanonicalTexturePath(authored, texture.Source)))
-                return "Unresolved reference retained · showing the material default";
+                return Loc.Text("loc_VM_texture_unresolvedReferenceDefaultShown");
             var sourceWidth = texture?.SourceWidth > 0 ? texture.SourceWidth : texture?.Width;
             var sourceHeight = texture?.SourceHeight > 0 ? texture.SourceHeight : texture?.Height;
             var preview = texture is not null && (sourceWidth != texture.Width || sourceHeight != texture.Height)
-                ? $" · {texture.Width}×{texture.Height} preview"
+                ? Loc.Format("loc_VM_texture_previewDimensions", texture.Width, texture.Height)
                 : string.Empty;
             return texture is null
-                ? $"{_definition.TextureRole} · {_definition.ColorSpace}"
-                : $"{sourceWidth}×{sourceHeight}{preview} · {texture.SourceFormat} · {texture.ColorSpace}";
+                ? Loc.Format("loc_VM_texture_roleAndColourSpace", LocalizedTextureRole(_definition.TextureRole), LocalizedColourSpace(_definition.ColorSpace))
+                : Loc.Format("loc_VM_texture_details", sourceWidth, sourceHeight, preview, texture.SourceFormat, LocalizedColourSpace(texture.ColorSpace));
         }
     }
 
@@ -209,7 +209,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
         if (reference is not null && !_resolvablePaths.ContainsKey(current!))
         {
             _allCandidates.Add(new MaterialTextureOption(new MorphFaceEditor.Models.PackageAssetListItem(reference),
-                DisplayNameOverride: $"{current} (unresolved reference)"));
+                DisplayNameOverride: Loc.Format("loc_VM_texture_unresolvedReference", current)));
             RebuildLookupIndices();
             _defaultCandidates = BuildDefaultOptions(_allCandidates);
             ApplySearch();
@@ -220,6 +220,23 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
         OnPropertyChanged(nameof(SourceName));
         OnPropertyChanged(nameof(Details));
     }
+
+    private static string LocalizedTextureRole(TextureRole role) => role switch
+    {
+        TextureRole.Diffuse => Loc.Text("loc_VM_textureRole_diffuse"),
+        TextureRole.Normal => Loc.Text("loc_VM_textureRole_normal"),
+        TextureRole.Mask => Loc.Text("loc_VM_textureRole_mask"),
+        TextureRole.Specular => Loc.Text("loc_VM_textureRole_specular"),
+        TextureRole.Detail => Loc.Text("loc_VM_textureRole_detail"),
+        TextureRole.Tangent => Loc.Text("loc_VM_textureRole_tangent"),
+        _ => Loc.Text("loc_VM_textureRole_other")
+    };
+
+    private static string LocalizedColourSpace(TextureColorSpace colorSpace) => colorSpace switch
+    {
+        TextureColorSpace.Srgb => Loc.Text("loc_VM_textureColourSpace_srgb"),
+        _ => Loc.Text("loc_VM_textureColourSpace_linear")
+    };
 
     public async Task<DecodedTextureAsset> ResolveReferenceAsync(AssetIdentity reference)
     {
@@ -245,7 +262,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(instancedPath);
         var candidate = FindResolvableOption(instancedPath)
-            ?? throw new FileNotFoundException($"Texture '{instancedPath}' is not available in the open package or installed registry.");
+            ?? throw new FileNotFoundException(Loc.Format("loc_VM_texture_notAvailableInSources", instancedPath));
         var identity = candidate.Asset?.Identity ?? new AssetIdentity(
             candidate.RegistryCandidate!.EffectiveOccurrence.PackagePath,
             candidate.InstancedPath,
@@ -259,7 +276,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(instancedPath);
         var candidate = _exactPaths.GetValueOrDefault(instancedPath)
-            ?? throw new FileNotFoundException($"Texture '{instancedPath}' is not available at its full path.");
+            ?? throw new FileNotFoundException(Loc.Format("loc_VM_texture_notAvailableAtFullPath", instancedPath));
         var identity = candidate.Asset!.Identity;
         return ResolveReferenceAsync(identity);
     }
@@ -311,8 +328,8 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
         var currentTexture = _session.GetSelectedTexture(Name);
         var defaultTextureName = _session.GetDefaultTexture(Name)?.Source.InstancedPath.Split('.').Last();
         var noneLabel = defaultTextureName is null
-            ? "None (material default)"
-            : $"None (material default: {defaultTextureName})";
+            ? Loc.Text("loc_VM_texture_noneMaterialDefault")
+            : Loc.Format("loc_VM_texture_noneMaterialDefaultNamed", defaultTextureName);
         _allCandidates.Clear();
         _allCandidates.Add(new MaterialTextureOption(null, DisplayNameOverride: noneLabel));
         _physicalSourcesExpanded = ShowAllPhysicalSources;
@@ -357,7 +374,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
                 return;
             }
             var sourcePackage = selected.RegistryCandidate?.EffectiveOccurrence.PackagePath ?? selected.Asset?.Identity.PackagePath
-                ?? throw new ArgumentException("None does not identify a package texture.", nameof(selected));
+                ?? throw new ArgumentException(Loc.Text("loc_VM_texture_noneNotPackageTexture"), nameof(selected));
             var instancedPath = selected.InstancedPath;
             var texture = await _references.LoadTextureAsync(
                 sourcePackage,
@@ -381,7 +398,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
         {
             if (generation == _selectionGeneration)
             {
-                _reportError($"Texture reference could not be changed: {exception.Message}");
+                _reportError(Loc.Format("loc_VM_texture_referenceChangeFailed", exception.Message));
                 Refresh();
             }
         }
@@ -415,7 +432,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
             else
             {
                 var sourcePackage = selected.RegistryCandidate?.EffectiveOccurrence.PackagePath ?? selected.Asset?.Identity.PackagePath
-                    ?? throw new ArgumentException("None does not identify a package texture.", nameof(selected));
+                    ?? throw new ArgumentException(Loc.Text("loc_VM_texture_noneNotPackageTexture"), nameof(selected));
                 texture = await _references.LoadTextureAsync(
                     sourcePackage,
                     selected.InstancedPath,
@@ -442,7 +459,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
         {
             if (generation == _previewGeneration)
             {
-                _reportError($"Texture preview could not be loaded: {exception.Message}");
+                _reportError(Loc.Format("loc_VM_texture_previewLoadFailed", exception.Message));
             }
         }
         finally
@@ -762,12 +779,14 @@ public sealed record MaterialTextureOption(
     TextureCatalogCandidate? RegistryCandidate = null)
 {
     public bool IsNone => Asset is null && ResolvedTexture is null && RegistryCandidate is null;
-    public string DisplayName => DisplayNameOverride ?? RegistryCandidate?.InstancedPath ?? Asset?.DisplayName ?? "None";
+    public string DisplayName => DisplayNameOverride ?? RegistryCandidate?.InstancedPath ?? Asset?.DisplayName ?? Loc.Text("loc_VM_texture_none");
     public string InstancedPath => RegistryCandidate?.InstancedPath ?? Asset?.Identity.InstancedPath ?? string.Empty;
     public string ObjectName => RegistryCandidate?.ObjectName ?? Asset?.ObjectName ?? string.Empty;
     public string SourceDescription => RegistryCandidate is { } candidate
-        ? $"{candidate.DisplayOrigin} · {candidate.EffectiveOccurrence.PackageName} · {candidate.EffectiveOccurrence.Width}×{candidate.EffectiveOccurrence.Height} · {candidate.EffectiveOccurrence.PixelFormat}"
-        : Asset is null ? string.Empty : $"Open package · {Asset.ObjectName}";
+        ? Loc.Format("loc_VM_texture_candidateSourceDetails", candidate.DisplayOrigin,
+            candidate.EffectiveOccurrence.PackageName, candidate.EffectiveOccurrence.Width,
+            candidate.EffectiveOccurrence.Height, candidate.EffectiveOccurrence.PixelFormat)
+        : Asset is null ? string.Empty : Loc.Format("loc_VM_texture_openPackageSource", Asset.ObjectName);
     public bool MatchesIdentity(AssetIdentity identity)
     {
         ArgumentNullException.ThrowIfNull(identity);

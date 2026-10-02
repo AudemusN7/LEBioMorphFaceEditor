@@ -4,6 +4,7 @@ using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.Core.Services;
+using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.LegendaryExplorer;
 
 namespace MorphFaceEditor.Services;
@@ -51,7 +52,9 @@ public sealed class DetachedMeshPreviewLoadService
         catch (InvalidDataException exception) when (
             exception.Message.Contains("at most", StringComparison.OrdinalIgnoreCase))
         {
-            warnings.Add(exception.Message + " The mesh remains previewable with its material slots unassigned.");
+            warnings.Add(Loc.Format(
+                "loc_Services_DetachedMeshPreviewLoad_MaterialSlotsUnassigned",
+                exception.Message));
         }
         detached = detached with { Warnings = warnings.Distinct(StringComparer.Ordinal).ToArray() };
         var loaded = new LoadedMorphFace(
@@ -68,15 +71,16 @@ public sealed class DetachedMeshPreviewLoadService
         var blockReason = detached.Editing.Rig.IsValid
             ? null
             : detached.Source.Bones.Count == 0
-                ? "This imported mesh has no rig; morph and bone controls are disabled."
-                : "The imported rig could not be verified; morph and bone controls are disabled. " +
-                  detached.Editing.Rig.BlockReason;
+                ? Loc.Text("loc_Services_DetachedMeshPreviewLoad_NoRig")
+                : Loc.Format(
+                    "loc_Services_DetachedMeshPreviewLoad_RigUnverified",
+                    detached.Editing.Rig.BlockReason);
         var session = new MorphFaceEditingSession(
             detached.Document,
             detached.Mesh,
             [],
             new HashSet<string>(StringComparer.OrdinalIgnoreCase),
-            "Detached Custom Mesh",
+            Loc.Text("loc_Services_DetachedMeshPreviewLoad_ProfileName"),
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
             _ => false,
             blockReason,
@@ -132,7 +136,7 @@ public sealed class DetachedMeshPreviewLoadService
         MorphFaceGame game,
         CustomMaterialWorkspace? customMaterials) => new(
         $"{game.ToString().ToLowerInvariant()}-detached-mesh",
-        "Detached Custom Mesh",
+        Loc.Text("loc_Services_DetachedMeshPreviewLoad_ProfileName"),
         game,
         string.Empty,
         new HashSet<string>(StringComparer.OrdinalIgnoreCase),

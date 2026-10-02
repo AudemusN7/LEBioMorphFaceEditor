@@ -80,7 +80,7 @@ public sealed class MorphFeatureEditorViewModel : ObservableObject, IContinuousE
                 {
                     AppLog.Error($"Feature edit failed for {Name}={value:G9}.", exception);
                     SetProperty(ref _value, _session.GetFeature(Name), nameof(Value));
-                    _reportError($"Feature '{Name}' could not be changed. Details were written to {AppLog.FilePath}");
+                    _reportError(Loc.Format("loc_VM_morphFeature_changeFailed", Name, AppLog.FilePath));
                 }
             }
         }

@@ -32,7 +32,7 @@ public sealed class MaterialVectorEditorViewModel : ObservableObject
     public string Description => MetadataTooltipFormatter.Format(Label, _definition.Description);
     public ICommand EditCommand { get; }
     public Vector4 Value => _session.GetVector(Name);
-    public string ValueSummary => $"R {Value.X:F3}  G {Value.Y:F3}  B {Value.Z:F3}  A {Value.W:F3}";
+    public string ValueSummary => Loc.Format("loc_VM_materialVector_valueSummary", Value.X, Value.Y, Value.Z, Value.W);
     // Parameter alpha is preserved in ValueSummary/the editor, but colour swatches
     // remain opaque so sentinel and mask alpha values cannot hide the RGB preview.
     public Brush PreviewBrush => new SolidColorBrush(Color.FromArgb(byte.MaxValue, ToByte(Value.X), ToByte(Value.Y), ToByte(Value.Z)));

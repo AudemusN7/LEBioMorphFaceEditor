@@ -64,14 +64,12 @@ public partial class TextureRegistrySettingsWindow : Window
         var affected = games.Where(settings.HasManualAssets).ToArray();
         if (affected.Length == 0) return true;
         var dialog = new EditorMessageWindow(
-            "Keep custom assets?",
-            $"Keep manually added assets for {string.Join(", ", affected)} during rebuild?\n\n" +
-            "Yes: keep them and check their source PCCs. Missing assets will be listed in an error log.\n" +
-            "No: discard their custom asset databases after a successful rebuild.",
+            Loc.Text("loc_TextureRegistrySettingsWindow_KeepCustomAssetsTitle"),
+            Loc.Format("loc_TextureRegistrySettingsWindow_KeepCustomAssetsMessage", string.Join(", ", affected)),
             confirmation: true,
-            primaryLabel: "Keep",
-            secondaryLabel: "Discard",
-            cancelLabel: "Cancel")
+            primaryLabel: Loc.Text("loc_TextureRegistrySettingsWindow_Keep"),
+            secondaryLabel: Loc.Text("loc_TextureRegistrySettingsWindow_Discard"),
+            cancelLabel: Loc.Text("loc_Common_Cancel"))
         {
             Owner = this
         };
@@ -86,8 +84,8 @@ public partial class TextureRegistrySettingsWindow : Window
             return;
         var fileDialog = new OpenFileDialog
         {
-            Title = $"Choose a {row.Game} PCC containing custom assets",
-            Filter = "Mass Effect packages (*.pcc)|*.pcc",
+            Title = Loc.Format("loc_TextureRegistrySettingsWindow_ChooseGamePccTitle", row.Game),
+            Filter = EditorFileDrop.PackageFilter,
             CheckFileExists = true,
             Multiselect = false
         };
@@ -100,13 +98,14 @@ public partial class TextureRegistrySettingsWindow : Window
             var inventory = await Task.Run(() => PackageAssetInspector.Inventory(
                 fileDialog.FileName, ["Texture2D", "SkeletalMesh"]));
             if (!inventory.Game.Equals(row.Game.ToString(), StringComparison.OrdinalIgnoreCase))
-                throw new InvalidDataException($"This PCC belongs to {inventory.Game}, not {row.Game}.");
+                throw new InvalidDataException(Loc.Format(
+                    "loc_TextureRegistrySettingsWindow_PccBelongsToDifferentGame", inventory.Game, row.Game));
             var selection = new ManualAssetSelectionWindow(row.Game, inventory,
                 settings.GetManualAssets(row.Game)) { Owner = this };
             if (selection.ShowDialog() != true) return;
             await settings.AppendManualAsync(row.Game, selection.SelectedAssets);
-            _ = new EditorMessageWindow("Custom assets added",
-                $"Added {selection.SelectedAssets.Count} asset(s) to the {row.Game} custom database.")
+            _ = new EditorMessageWindow(Loc.Text("loc_TextureRegistrySettingsWindow_CustomAssetsAddedTitle"),
+                Loc.Format("loc_TextureRegistrySettingsWindow_CustomAssetsAddedMessage", selection.SelectedAssets.Count, row.Game))
             {
                 Owner = this
             }.ShowDialog();
@@ -114,7 +113,7 @@ public partial class TextureRegistrySettingsWindow : Window
         catch (Exception exception)
         {
             AppLog.Error($"Could not add custom assets to {row.Game}.", exception);
-            _ = new EditorMessageWindow("Custom asset import failed", exception.Message)
+            _ = new EditorMessageWindow(Loc.Text("loc_TextureRegistrySettingsWindow_CustomAssetImportFailedTitle"), exception.Message)
             {
                 Owner = this
             }.ShowDialog();

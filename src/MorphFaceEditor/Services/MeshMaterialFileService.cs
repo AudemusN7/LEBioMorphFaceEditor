@@ -3,6 +3,7 @@ using System.Text;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.Core.Services;
+using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.LegendaryExplorer;
 
 namespace MorphFaceEditor.Services;
@@ -40,7 +41,7 @@ public sealed class MeshMaterialFileService(PackageReferenceService references)
         AssetIdentity? hair, IReadOnlyList<AssetIdentity?> accessories)
     {
         if (!MeshMaterialInterchange.CanExportTse(workspace))
-            throw new InvalidOperationException("TSE export requires at least one assigned material and only Human materials.");
+            throw new InvalidOperationException(Loc.Text("loc_Services_MeshMaterial_TseExportRequiresHumanMaterial"));
         var human = MeshMaterialInterchange.Split(QualifyTexturePaths(data)).GetValueOrDefault("human")
             ?? new MorphFaceMaterialData([], [], []);
         return MaterialRonCodec.WriteTse(human, AttachmentPath(hair), accessories.OfType<AssetIdentity>()
@@ -57,7 +58,7 @@ public sealed class MeshMaterialFileService(PackageReferenceService references)
         if (tse)
         {
             if (!MeshMaterialInterchange.CanImportTse(workspace))
-                throw new InvalidOperationException("Assign a Human material before importing TSE material settings.");
+                throw new InvalidOperationException(Loc.Text("loc_Services_MeshMaterial_AssignHumanBeforeTseImport"));
             tseDocument = MaterialRonCodec.ReadTseDocument(text);
             parameters = MeshMaterialInterchange.Scope(tseDocument.Parameters, "human");
         }
@@ -76,13 +77,13 @@ public sealed class MeshMaterialFileService(PackageReferenceService references)
             if (tseDocument is not null)
             {
                 if (!MeshMaterialInterchange.CanImportTse(workspace))
-                    throw new InvalidOperationException("This is a TSE RON. Assign a Human material before importing its settings.");
+                    throw new InvalidOperationException(Loc.Text("loc_Services_MeshMaterial_TseRonNeedsHumanMaterial"));
                 parameters = MeshMaterialInterchange.Scope(tseDocument.Parameters, "human");
             }
             else
             {
                 if (document!.Game != game.ToString())
-                    throw new InvalidDataException($"These materials are for {document.Game}; the current mesh workspace is {game}.");
+                    throw new InvalidDataException(Loc.Format("loc_Services_MeshMaterial_GameMismatch", document.Game, game));
                 assignments = ResolveAssignments(document, workspace, options);
                 target = new CustomMaterialWorkspace(workspace.Source);
                 target.ReplaceAssignments(assignments);
@@ -116,8 +117,7 @@ public sealed class MeshMaterialFileService(PackageReferenceService references)
         }
         catch (Exception exception)
         {
-            warnings.Add($"TSE preview attachments could not be resolved from the installed {game} files; " +
-                         $"the current preview attachments were retained. {exception.Message}");
+            warnings.Add(Loc.Format("loc_Services_MeshMaterial_AttachmentsCouldNotResolve", game, exception.Message));
             resolved = new Dictionary<string, AssetIdentity>(StringComparer.OrdinalIgnoreCase);
         }
         var validated = new Dictionary<string, AssetIdentity>(StringComparer.OrdinalIgnoreCase);
@@ -130,8 +130,7 @@ public sealed class MeshMaterialFileService(PackageReferenceService references)
             }
             catch (Exception exception)
             {
-                warnings.Add($"TSE preview attachment '{value.Key}' resolved but could not be loaded; " +
-                             $"the current preview attachment was retained. {exception.Message}");
+                warnings.Add(Loc.Format("loc_Services_MeshMaterial_AttachmentCouldNotLoad", value.Key, exception.Message));
             }
         }
 
@@ -141,7 +140,7 @@ public sealed class MeshMaterialFileService(PackageReferenceService references)
             if (string.IsNullOrWhiteSpace(path) || path.Equals("None", StringComparison.OrdinalIgnoreCase)) return (true, null);
             if (validated.TryGetValue(path, out var identity)) return (true, identity);
             if (resolved.ContainsKey(path)) return (false, null); // Validation already supplied the specific warning.
-            warnings.Add($"TSE {label} '{path}' was not found at its full path in the installed {game} files; the current preview attachment was retained.");
+            warnings.Add(Loc.Format("loc_Services_MeshMaterial_AttachmentPathNotFound", label, path, game));
             return (false, null);
         }
 
@@ -153,7 +152,7 @@ public sealed class MeshMaterialFileService(PackageReferenceService references)
                 ? (Apply: true, Identity: (AssetIdentity?)null)
                 : Resolve(accessoryPath, "accessory mesh");
         if (document.AccessoryMeshes is { Count: > 1 })
-            warnings.Add($"The TSE RON contains {document.AccessoryMeshes.Count} accessory meshes; MESH preview currently uses the first slot only.");
+            warnings.Add(Loc.Format("loc_Services_MeshMaterial_ExtraAccessoriesIgnored", document.AccessoryMeshes.Count));
         return new(hair.Apply, hair.Identity, accessory.Apply, accessory.Identity);
     }
 
@@ -161,14 +160,14 @@ public sealed class MeshMaterialFileService(PackageReferenceService references)
         MeshMaterialDocument document, CustomMaterialWorkspace workspace, IReadOnlyList<CustomMaterialAssignmentOption> options)
     {
         if (!document.Slots.Select(value => value.Index).Order().SequenceEqual(workspace.UsedSlots.Select(value => value.MaterialIndex).Order()))
-            throw new InvalidDataException("The material file's slot indices do not match this mesh. Import it onto a mesh with the same used slots.");
+            throw new InvalidDataException(Loc.Text("loc_Services_MeshMaterial_SlotIndicesMismatch"));
         var result = new Dictionary<int, CustomMaterialAssignmentOption>();
         foreach (var slot in document.Slots.Where(value => value.MaterialId.Length > 0))
         {
             var option = options.SingleOrDefault(value => value.Id.Equals(slot.MaterialId, StringComparison.OrdinalIgnoreCase))
-                ?? throw new InvalidDataException($"Material '{slot.MaterialName}' is unavailable in this game's material catalogue.");
+                ?? throw new InvalidDataException(Loc.Format("loc_Services_MeshMaterial_OptionUnavailable", slot.MaterialName));
             if (option.Family != slot.Family || !option.EffectiveParameterScopeKey.Equals(slot.Scope, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidDataException($"Material '{slot.MaterialName}' has inconsistent family or scope metadata.");
+                throw new InvalidDataException(Loc.Format("loc_Services_MeshMaterial_OptionMetadataInconsistent", slot.MaterialName));
             result.Add(slot.Index, option);
         }
         // Incompatible assignments must fail before any live assignments or history change.
@@ -190,8 +189,8 @@ public sealed class MeshMaterialFileService(PackageReferenceService references)
                     assignment.Option.Template.Supports(MaterialParameterControlKey.ParameterName(controlName), kind))
                 .Select(assignment => assignment.Option.Template);
         void WarnUnsupported(string controlName) => warnings.Add(
-            $"'{MaterialParameterControlKey.ScopeKey(controlName)} / {MaterialParameterControlKey.ParameterName(controlName)}' " +
-            "is not supported by an assigned material; its value was retained for export.");
+            Loc.Format("loc_Services_MeshMaterial_ParameterUnsupported", MaterialParameterControlKey.ScopeKey(controlName),
+                MaterialParameterControlKey.ParameterName(controlName)));
         foreach (var value in data.Scalars)
             if (!Supporting(value.Name, MaterialParameterKind.Scalar).Any()) WarnUnsupported(value.Name);
         foreach (var value in data.Vectors)
@@ -219,11 +218,11 @@ public sealed class MeshMaterialFileService(PackageReferenceService references)
                         candidate.Value.Candidate.InstancedPath, definition);
                 }
                 else if (inherited is not null) decoded[value.Name] = inherited.Texture;
-                else warnings.Add($"Texture '{reference.InstancedPath}' was not found in the texture database; its path was retained.");
+                else warnings.Add(Loc.Format("loc_Services_MeshMaterial_TextureNotFound", reference.InstancedPath));
             }
             catch (Exception exception)
             {
-                warnings.Add($"Texture '{reference.InstancedPath}' could not be previewed; its path was retained. {exception.Message}");
+                warnings.Add(Loc.Format("loc_Services_MeshMaterial_TexturePreviewFailed", reference.InstancedPath, exception.Message));
             }
         }
         return new(assignments, data, decoded, warnings);

@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using MorphFaceEditor.Infrastructure;
 
 namespace MorphFaceEditor.Controls;
 
@@ -14,17 +15,17 @@ public static class ArchetypeTag
 
     internal static readonly IReadOnlyList<Definition> Definitions =
     [
-        new("HMM", "Human Male [HMM]"),
-        new("HMF", "Human Female [HMF]"),
-        new("ASA", "Asari [ASA]"),
-        new("SAL", "Salarian [SAL]"),
-        new("TUR", "Turian [TUR]"),
-        new("TUF", "Female Turian [TUF]"),
-        new("KRO", "Krogan [KRO]"),
-        new("BAT", "Batarian [BAT]"),
-        new("ALN", "Vorcha [ALN]"),
-        new("CUSTOM", "Custom [CUSTOM]"),
-        new("MESH", "Mesh [MESH]")
+        new("HMM", Loc.Text("loc_ArchetypeTag_HumanMale")),
+        new("HMF", Loc.Text("loc_ArchetypeTag_HumanFemale")),
+        new("ASA", Loc.Text("loc_ArchetypeTag_Asari")),
+        new("SAL", Loc.Text("loc_ArchetypeTag_Salarian")),
+        new("TUR", Loc.Text("loc_ArchetypeTag_Turian")),
+        new("TUF", Loc.Text("loc_ArchetypeTag_FemaleTurian")),
+        new("KRO", Loc.Text("loc_ArchetypeTag_Krogan")),
+        new("BAT", Loc.Text("loc_ArchetypeTag_Batarian")),
+        new("ALN", Loc.Text("loc_ArchetypeTag_Vorcha")),
+        new("CUSTOM", Loc.Text("loc_ArchetypeTag_Custom")),
+        new("MESH", Loc.Text("loc_ArchetypeTag_Mesh"))
     ];
 
     public static readonly DependencyProperty CodeProperty = DependencyProperty.RegisterAttached(

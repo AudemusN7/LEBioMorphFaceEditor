@@ -12,23 +12,23 @@ internal sealed class DebugThemePalette
     internal sealed record Definition(string Key, string Group, string Name, string[] Roles);
     internal static readonly IReadOnlyList<Definition> Definitions =
     [
-        new("Palette.Window", "Backgrounds", "WindowBackground", ["WindowBackground", "InputBackground", "TextureWellBackground", "PreviewHintBackground", "BusyOverlayBackground", "BonePadBackground"]),
-        new("Palette.Panel", "Backgrounds", "PanelBackground", ["PanelBackground", "SectionBackground", "NavyCaption"]),
-        new("Palette.Raised", "Backgrounds", "RaisedBackground", ["RaisedBackground", "BoneSelectionBackground"]),
-        new("Palette.Hover", "Interaction", "HoverBackground", ["HoverBackground"]),
-        new("Palette.Pressed", "Interaction", "PressedBackground", ["PressedBackground"]),
-        new("Palette.Primary", "Foregrounds", "PrimaryText", ["PrimaryText", "OnColourText", "ErrorBannerText", "CopyErrorStroke", "LightText"]),
-        new("Palette.Secondary", "Foregrounds", "SecondaryText", ["SecondaryText", "SwatchBorder", "PuckOutline"]),
-        new("Palette.Muted", "Foregrounds", "MutedText", ["MutedText", "LocalDetailText", "PlaceholderText", "BonePadBorder", "BoneGridLine", "BoneRail"]),
-        new("Palette.Accent", "Accent", "Accent", ["Accent", "BadgeBorder", "TextSelectionBrush"]),
-        new("Palette.Border", "Borders", "BorderBrush", ["BorderBrush", "NavyBorder", "HintBorder"]),
-        new("Palette.SelectedRow", "Accent", "SelectionBackground", ["SelectionBackground", "BadgeBackground"]),
-        new("Palette.Ready", "Feedback", "StatusReady", ["StatusReady", "ActorIncludeBackground"]),
-        new("Palette.Pending", "Feedback", "StatusPending", ["StatusPending"]),
-        new("Palette.Failed", "Feedback", "StatusFailed", ["StatusFailed", "ValidationForeground", "WarningText", "ErrorBannerBorder", "ActorRemoveBackground", "ErrorBannerBackground"]),
-        new("Palette.PreviewHost", "Specialist", "PreviewHostBackground", ["PreviewHostBackground"]),
+        new("Palette.Window", Loc.Text("loc_DebugPalette_Backgrounds"), "WindowBackground", ["WindowBackground", "InputBackground", "TextureWellBackground", "PreviewHintBackground", "BusyOverlayBackground", "BonePadBackground"]),
+        new("Palette.Panel", Loc.Text("loc_DebugPalette_Backgrounds"), "PanelBackground", ["PanelBackground", "SectionBackground", "NavyCaption"]),
+        new("Palette.Raised", Loc.Text("loc_DebugPalette_Backgrounds"), "RaisedBackground", ["RaisedBackground", "BoneSelectionBackground"]),
+        new("Palette.Hover", Loc.Text("loc_DebugPalette_Interaction"), "HoverBackground", ["HoverBackground"]),
+        new("Palette.Pressed", Loc.Text("loc_DebugPalette_Interaction"), "PressedBackground", ["PressedBackground"]),
+        new("Palette.Primary", Loc.Text("loc_DebugPalette_Foregrounds"), "PrimaryText", ["PrimaryText", "OnColourText", "ErrorBannerText", "CopyErrorStroke", "LightText"]),
+        new("Palette.Secondary", Loc.Text("loc_DebugPalette_Foregrounds"), "SecondaryText", ["SecondaryText", "SwatchBorder", "PuckOutline"]),
+        new("Palette.Muted", Loc.Text("loc_DebugPalette_Foregrounds"), "MutedText", ["MutedText", "LocalDetailText", "PlaceholderText", "BonePadBorder", "BoneGridLine", "BoneRail"]),
+        new("Palette.Accent", Loc.Text("loc_DebugPalette_Accent"), "Accent", ["Accent", "BadgeBorder", "TextSelectionBrush"]),
+        new("Palette.Border", Loc.Text("loc_DebugPalette_Borders"), "BorderBrush", ["BorderBrush", "NavyBorder", "HintBorder"]),
+        new("Palette.SelectedRow", Loc.Text("loc_DebugPalette_Accent"), "SelectionBackground", ["SelectionBackground", "BadgeBackground"]),
+        new("Palette.Ready", Loc.Text("loc_DebugPalette_Feedback"), "StatusReady", ["StatusReady", "ActorIncludeBackground"]),
+        new("Palette.Pending", Loc.Text("loc_DebugPalette_Feedback"), "StatusPending", ["StatusPending"]),
+        new("Palette.Failed", Loc.Text("loc_DebugPalette_Feedback"), "StatusFailed", ["StatusFailed", "ValidationForeground", "WarningText", "ErrorBannerBorder", "ActorRemoveBackground", "ErrorBannerBackground"]),
+        new("Palette.PreviewHost", Loc.Text("loc_DebugPalette_Specialist"), "PreviewHostBackground", ["PreviewHostBackground"]),
         .. ArchetypeTag.Definitions.Select(tag =>
-            new Definition(tag.ColourKey, "Archetype tags", tag.DisplayName, [tag.BrushKey]))
+            new Definition(tag.ColourKey, Loc.Text("loc_DebugPalette_Archetypes"), tag.DisplayName, [tag.BrushKey]))
     ];
 
     private readonly ResourceDictionary _resources;
@@ -98,12 +98,12 @@ internal sealed class DebugThemePalette
                 colours.Add(key, (Color)ColorConverter.ConvertFromString(value));
             }
             foreach (var (key, colour) in colours) Set(key, colour);
-            return "Loaded saved debug colours.";
+            return Loc.Text("loc_DebugPalette_Loaded");
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
             JsonException or FormatException or ArgumentException)
         {
-            return $"Saved palette was not loaded: {exception.Message}";
+            return Loc.Format("loc_DebugPalette_LoadFailed", exception.Message);
         }
     }
 
@@ -124,7 +124,7 @@ internal sealed class DebugThemeColour(DebugThemePalette palette, DebugThemePale
     public string Group => definition.Group;
     public string Name => definition.Name;
     public string Roles => string.Join(", ", definition.Roles.Select(role =>
-        palette.RoleOpacity(role) == 1 ? role : $"{role} ({palette.RoleOpacity(role) * 100:0.#}% opacity)"));
+        palette.RoleOpacity(role) == 1 ? role : Loc.Format("loc_DebugPalette_RoleOpacity", role, palette.RoleOpacity(role) * 100)));
     public Color Colour => palette.Get(Key);
     public string Hex => DebugThemePalette.Format(Colour);
     public SolidColorBrush Brush => new(Colour);

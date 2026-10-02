@@ -34,7 +34,7 @@ public partial class ConvertMorphWindow : Window
 
     private void OnBrowse(object sender, RoutedEventArgs e)
     {
-        var dialog = CreatePackageOpenDialog("Choose an existing destination PCC");
+        var dialog = CreatePackageOpenDialog(Loc.Text("loc_ConvertMorphWindow_ChooseExistingDestinationPcc"));
         if (dialog.ShowDialog(this) == true)
         {
             DestinationBox.Text = dialog.FileName;
@@ -45,7 +45,7 @@ public partial class ConvertMorphWindow : Window
     {
         if (TargetGameBox.SelectedItem is not GameChoice target)
         {
-            ValidationText.Text = "Choose a target game.";
+            ValidationText.Text = Loc.Text("loc_ConvertMorphWindow_ChooseTargetGame");
             return;
         }
         var destination = DestinationBox.Text.Trim();
@@ -53,12 +53,12 @@ public partial class ConvertMorphWindow : Window
         {
             if (!File.Exists(destination))
             {
-                ValidationText.Text = "The specified destination does not exist. Clear the field to create a new PCC.";
+                ValidationText.Text = Loc.Text("loc_ConvertMorphWindow_DestinationDoesNotExist");
                 return;
             }
             if (IsSource(destination))
             {
-                ValidationText.Text = "Choose a different destination PCC.";
+                ValidationText.Text = Loc.Text("loc_ConvertMorphWindow_ChooseDifferentDestinationPcc");
                 return;
             }
             Request = new MorphConversionSaveRequest(
@@ -72,8 +72,8 @@ public partial class ConvertMorphWindow : Window
 
         var outputDialog = new SaveFileDialog
         {
-            Title = $"Create a converted {target.Label} morph PCC",
-            Filter = "Mass Effect packages (*.pcc)|*.pcc",
+            Title = Loc.Format("loc_ConvertMorphWindow_CreateConvertedMorphPcc", target.Label),
+            Filter = EditorFileDrop.PackageFilter,
             AddExtension = true,
             DefaultExt = ".pcc",
             FileName = _suggestedFileName,
@@ -86,12 +86,12 @@ public partial class ConvertMorphWindow : Window
         }
         if (File.Exists(outputDialog.FileName))
         {
-            ValidationText.Text = "That output PCC already exists. Choose a new filename.";
+            ValidationText.Text = Loc.Text("loc_ConvertMorphWindow_OutputPccAlreadyExists");
             return;
         }
         if (IsSource(outputDialog.FileName))
         {
-            ValidationText.Text = "The source and output PCCs must be different files.";
+            ValidationText.Text = Loc.Text("loc_ConvertMorphWindow_SourceAndOutputMustDiffer");
             return;
         }
         Request = new MorphConversionSaveRequest(
@@ -105,7 +105,7 @@ public partial class ConvertMorphWindow : Window
     private OpenFileDialog CreatePackageOpenDialog(string title) => new()
     {
         Title = title,
-        Filter = "Mass Effect packages (*.pcc)|*.pcc",
+        Filter = EditorFileDrop.PackageFilter,
         CheckFileExists = true,
         Multiselect = false,
         InitialDirectory = Path.GetDirectoryName(_sourcePackagePath)

@@ -13,7 +13,7 @@ public sealed partial class MainWindowViewModel
     internal async Task<DiagnosticArchiveResult> GenerateDiagnosticsAsync(
         string destination, DiagnosticArchiveService? archiveService = null)
     {
-        if (IsBusy) throw new InvalidOperationException("Wait for the current operation to finish.");
+        if (IsBusy) throw new InvalidOperationException(Loc.Text("loc_Shell_Diagnostics_WaitForCurrentOperation"));
         var workspacePath = WorkspacePackagePath;
         var draft = Editor?.IsDirty == true ? Editor.CreateDraft() : null;
         var meshSource = _detachedMeshSource;
@@ -51,8 +51,8 @@ public sealed partial class MainWindowViewModel
                             File.WriteAllText(pendingEdits, JsonSerializer.Serialize(draft,
                                 new JsonSerializerOptions { IncludeFields = true }));
                             files.Add(pendingEdits);
-                            warnings.Add("Pending edits could not be applied to the report's PCC copy. " +
-                                "The unchanged working PCC and PendingEdits.json are included instead. " + exception.Message);
+                            warnings.Add(Loc.Format("loc_Shell_Diagnostics_PendingEditsCouldNotApply",
+                                "PendingEdits.json", exception.Message));
                             AppLog.Warning(warnings[^1]);
                         }
                     }
@@ -66,7 +66,7 @@ public sealed partial class MainWindowViewModel
                         File.Copy(meshPath, snapshot);
                         files.Add(snapshot);
                     }
-                    else warnings.Add("The original mesh file is no longer available. Its loaded geometry is included in MeshWorkspace.json.");
+                    else warnings.Add(Loc.Format("loc_Shell_Diagnostics_OriginalMeshUnavailable", "MeshWorkspace.json"));
                     // Decoded geometry also covers external glTF buffers and verified rig edits.
                     var meshWorkspace = Path.Combine(scratch, "MeshWorkspace.json");
                     File.WriteAllText(meshWorkspace, JsonSerializer.Serialize(new { Source = meshSource, PendingEdits = draft },

@@ -135,7 +135,7 @@ public sealed class EditorFeatureCategoryViewModel
             var command = createRandomiseCommand?.Invoke(new EditorRandomisationScope(
                 [], remainingScalars, [], [], inclusionKey));
             sliderGroups.Add(new EditorSliderGroupViewModel(
-                "surface", "SURFACE", [], remainingScalars, command,
+                "surface", Loc.Text("loc_VM_featureGroup_surface"), [], remainingScalars, command,
                 CreateInclusion(inclusionKey, command,
                     inclusionState, inclusionChanged)));
         }
@@ -155,8 +155,8 @@ public sealed class EditorFeatureCategoryViewModel
                 return new EditorVectorGroupViewModel(
                     group.Key,
                     definition.Key == HumanMaleFeatureMetadataCatalog.Additions && group.Key == "scalp"
-                        ? "HAIR COLOURS"
-                        : $"{group.Label} COLOURS",
+                        ? Loc.Text("loc_VM_featureGroup_hairColours")
+                        : Loc.Format("loc_VM_featureGroup_colours", group.Label),
                     values, command,
                     CreateInclusion(inclusionKey, command,
                         inclusionState, inclusionChanged));
@@ -171,7 +171,7 @@ public sealed class EditorFeatureCategoryViewModel
             var inclusionKey = $"{definition.Key}:colours:colours";
             var command = createRandomiseCommand?.Invoke(new EditorRandomisationScope([], [], remainingVectors, [], inclusionKey));
             vectorGroups.Add(new EditorVectorGroupViewModel(
-                "colours", "COLOURS", remainingVectors, command,
+                "colours", Loc.Text("loc_VM_featureGroup_coloursGeneral"), remainingVectors, command,
                 CreateInclusion(inclusionKey, command,
                     inclusionState, inclusionChanged)));
         }
@@ -205,7 +205,9 @@ public sealed class EditorFeatureCategoryViewModel
     public bool HasColours => ColourGroups.Count > 0;
     public bool HasTextures => Textures.Count > 0;
     public int SettingCount => SliderGroups.Sum(group => group.MorphFeatures.Count + group.Scalars.Count) + Colours.Count + Textures.Count;
-    public string CountLabel => $"{SettingCount} setting{(SettingCount == 1 ? string.Empty : "s")}";
+    public string CountLabel => SettingCount == 1
+        ? Loc.Text("loc_VM_featureCategory_oneSetting")
+        : Loc.Format("loc_VM_featureCategory_manySettings", SettingCount);
 
     private static RandomisationInclusionViewModel? CreateInclusion(
         string key,

@@ -1,7 +1,7 @@
 <Window x:Class="MorphFaceEditor.Views.RonImportDestinationWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Choose RON destination"
+        Title="{DynamicResource loc_View_RonImportDestinationWindow_ChooseRONDestination}"
         Width="500" SizeToContent="Height" ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource WindowBackground}"
@@ -15,16 +15,16 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <TextBlock Text="Choose how to import this RON. The target game and NPC archetype determine the native assets used to build the workspace."
+        <TextBlock Text="{DynamicResource loc_View_RonImportDestinationWindow_ChooseHowToImportThisRONTheTargetGameAndNPCArchetypeDet}"
                    TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}" />
 
         <StackPanel Grid.Row="1" Margin="0,14,0,0">
-            <TextBlock Text="TARGET GAME" Style="{StaticResource FieldLabel}" />
+            <TextBlock Text="{DynamicResource loc_View_RonImportDestinationWindow_TARGETGAME}" Style="{StaticResource FieldLabel}" />
             <TextBlock x:Name="TargetGameText" Margin="0,4,0,0" />
         </StackPanel>
 
         <StackPanel Grid.Row="2" Margin="0,14,0,0">
-            <TextBlock Text="NPC ARCHETYPE" Style="{StaticResource FieldLabel}" />
+            <TextBlock Text="{DynamicResource loc_View_RonImportDestinationWindow_NPCARCHETYPE}" Style="{StaticResource FieldLabel}" />
             <TextBlock x:Name="ArchetypeText" Margin="0,4,0,0" TextWrapping="Wrap" />
         </StackPanel>
 
@@ -32,9 +32,9 @@
                    TextWrapping="Wrap" Foreground="{DynamicResource ValidationForeground}" FontSize="11" />
 
         <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
-            <Button Content="Cancel" IsCancel="True" MinWidth="76" Margin="0,0,8,0" />
-            <Button x:Name="NpcButton" Content="NPC Morph" MinWidth="105" Margin="0,0,8,0" Click="OnNpcMorph" />
-            <Button x:Name="PlayerButton" Content="Player Morph" MinWidth="105" Click="OnPlayerMorph" />
+            <Button Content="{DynamicResource loc_View_RonImportDestinationWindow_Cancel}" IsCancel="True" MinWidth="76" Margin="0,0,8,0" />
+            <Button x:Name="NpcButton" Content="{DynamicResource loc_View_RonImportDestinationWindow_NPCMorph}" MinWidth="105" Margin="0,0,8,0" Click="OnNpcMorph" />
+            <Button x:Name="PlayerButton" Content="{DynamicResource loc_View_RonImportDestinationWindow_PlayerMorph}" MinWidth="105" Click="OnPlayerMorph" />
         </StackPanel>
     </Grid>
 </Window>

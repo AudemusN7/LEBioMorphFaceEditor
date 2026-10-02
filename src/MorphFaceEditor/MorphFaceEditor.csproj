@@ -14,6 +14,8 @@
     <Compile Remove="Infrastructure\DebugThemePalette.cs" />
   </ItemGroup>
   <ItemGroup>
+    <EmbeddedResource Include="Localisation\Strings.en-GB.xaml" LogicalName="MorphFaceEditor.Localisation.Strings.en-GB.xaml" WithCulture="false" />
+    <Content Include="Localisation\Strings.*.xaml" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Resource Include="..\..\icon.ico" Link="icon.ico" />
     <Resource Include="..\..\ico_256.png" Link="ico_256.png" />
     <EmbeddedResource Include="Assets\MorphTargets\*.mft.br"

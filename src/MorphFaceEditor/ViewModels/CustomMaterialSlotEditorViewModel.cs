@@ -27,7 +27,7 @@ public sealed class CustomMaterialSlotEditorViewModel : ObservableObject, IDispo
         _slot = slot;
         _reportError = reportError;
         Options = [
-            new CustomMaterialSlotOptionViewModel("Unassigned", null),
+            new CustomMaterialSlotOptionViewModel(Loc.Text("loc_VM_materialSlot_unassigned"), null),
             .. assignments.Select(option => new CustomMaterialSlotOptionViewModel(option.Label, option))
         ];
         _selected = Options[0];
@@ -35,10 +35,10 @@ public sealed class CustomMaterialSlotEditorViewModel : ObservableObject, IDispo
         workspace.ActiveMaterialsChanged += OnWorkspaceChanged;
     }
 
-    public string Label => $"Slot {_slot.MaterialIndex}: {_slot.MaterialName}";
+    public string Label => Loc.Format("loc_VM_materialSlot_label", _slot.MaterialIndex, _slot.MaterialName);
     public string Detail => _slot.Sections.Count == 1
-        ? "1 used section"
-        : $"{_slot.Sections.Count} used sections";
+        ? Loc.Text("loc_VM_materialSlot_oneSection")
+        : Loc.Format("loc_VM_materialSlot_manySections", _slot.Sections.Count);
     public IReadOnlyList<CustomMaterialSlotOptionViewModel> Options { get; }
     public CustomMaterialSlotOptionViewModel Selected
     {

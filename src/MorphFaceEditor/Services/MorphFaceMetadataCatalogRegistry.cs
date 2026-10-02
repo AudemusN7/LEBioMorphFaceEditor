@@ -1,3 +1,4 @@
+using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.LegendaryExplorer;
 
 namespace MorphFaceEditor.Services;
@@ -11,23 +12,23 @@ public static class MorphFaceMetadataCatalogRegistry
     private static readonly IReadOnlyDictionary<MorphFaceGame, string> GameTerms =
         new Dictionary<MorphFaceGame, string>
         {
-            [MorphFaceGame.LE1] = "LE1",
-            [MorphFaceGame.LE2] = "LE2",
+            [MorphFaceGame.LE1] = Loc.Text("loc_Services_ProfileGame_LE1"),
+            [MorphFaceGame.LE2] = Loc.Text("loc_Services_ProfileGame_LE2"),
             [MorphFaceGame.LE3] = "LE3"
         };
 
     private static readonly IReadOnlyDictionary<string, string> ArchetypeTerms =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            [HumanMale] = "Human Male",
-            [HumanFemale] = "Human Female",
-            [Asari] = "Asari",
-            [Salarian] = "Salarian",
-            [Turian] = "Turian",
-            [FemaleTurian] = "Female Turian",
-            [Batarian] = "Batarian",
-            [Krogan] = "Krogan",
-            [Vorcha] = "Vorcha"
+            [HumanMale] = Loc.Text("loc_Services_ProfileArchetype_HumanMale"),
+            [HumanFemale] = Loc.Text("loc_Services_ProfileArchetype_HumanFemale"),
+            [Asari] = Loc.Text("loc_Services_ProfileArchetype_Asari"),
+            [Salarian] = Loc.Text("loc_Services_ProfileArchetype_Salarian"),
+            [Turian] = Loc.Text("loc_Services_ProfileArchetype_Turian"),
+            [FemaleTurian] = Loc.Text("loc_Services_ProfileArchetype_FemaleTurian"),
+            [Batarian] = Loc.Text("loc_Services_ProfileArchetype_Batarian"),
+            [Krogan] = Loc.Text("loc_Services_ProfileArchetype_Krogan"),
+            [Vorcha] = Loc.Text("loc_Services_ProfileArchetype_Vorcha")
         };
 
     public const string HumanMale = "human-male";
@@ -63,5 +64,5 @@ public static class MorphFaceMetadataCatalogRegistry
         game == MorphFaceGame.LE3 ? Le3Asari : AsariParent;
 
     public static string ProfileDisplayName(MorphFaceGame game, string archetypeKey) =>
-        $"{GameTerms[game]} {ArchetypeTerms[archetypeKey]}";
+        Loc.Format("loc_Services_ProfileDisplayName", GameTerms[game], ArchetypeTerms[archetypeKey]);
 }

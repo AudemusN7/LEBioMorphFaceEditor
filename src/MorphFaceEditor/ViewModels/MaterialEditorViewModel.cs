@@ -102,11 +102,11 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
                     {
                         var resolved = await ResolveHiddenTextureAsync(controlName, reference);
                         if (resolved is not null) decoded[controlName] = resolved;
-                        else warnings.Add($"Texture '{desired.Name}' could not be resolved from its qualified donor path '{reference.InstancedPath}'.");
+                        else warnings.Add(Loc.Format("loc_VM_materialImport_textureUnresolvedQualified", desired.Name, reference.InstancedPath));
                     }
                     catch (Exception exception)
                     {
-                        warnings.Add($"Texture '{desired.Name}' could not be resolved: {exception.Message}");
+                        warnings.Add(Loc.Format("loc_VM_materialImport_textureUnresolved", desired.Name, exception.Message));
                     }
                 }
                 continue;
@@ -120,7 +120,7 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
             }
             catch (Exception exception)
             {
-                warnings.Add($"Texture '{desired.Name}' could not be resolved: {exception.Message}");
+                warnings.Add(Loc.Format("loc_VM_materialImport_textureUnresolved", desired.Name, exception.Message));
             }
         }
 
@@ -232,7 +232,10 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
         return described with
         {
             Name = controlName,
-            Label = scopeLabel is null ? described.Label : $"{scopeLabel} - {described.Label}"
+            Label = scopeLabel is null
+                ? described.Label
+                : Loc.Format("loc_VM_material_scopeParameterLabel", LocalizedScopeLabel(
+                    _session.GetParameterScopeKey(controlName), scopeLabel), described.Label)
         };
     }
     public string SourceParameterName(string controlName) => _session.GetSourceParameterName(controlName);
@@ -322,7 +325,7 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
                         if (required)
                         {
                             throw new InvalidDataException(
-                                $"Texture family '{family.Key}' requires unavailable parameter '{member.Key}'.");
+                                Loc.Format("loc_VM_material_randomisationMissingParameter", family.Key, member.Key));
                         }
                         AppLog.Information(
                             $"Ignored unsupported optional member '{member.Key}' in randomisation texture family '{family.Key}'.");
@@ -362,6 +365,18 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
                     ? MaterialParameterControlKey.ParameterName(parameterName).EndsWith("_HED_Diff", StringComparison.OrdinalIgnoreCase) ||
                       MaterialParameterControlKey.ParameterName(parameterName).EndsWith("_HED_Norm", StringComparison.OrdinalIgnoreCase)
                 : true;
+
+    private static string LocalizedScopeLabel(string? scopeKey, string sourceLabel) => scopeKey?.ToLowerInvariant() switch
+    {
+        "human" => Loc.Text("loc_VM_materialScope_human"),
+        "asari" => Loc.Text("loc_VM_materialScope_asari"),
+        "salarian" => Loc.Text("loc_VM_materialScope_salarian"),
+        "turian" => Loc.Text("loc_VM_materialScope_turian"),
+        "krogan" => Loc.Text("loc_VM_materialScope_krogan"),
+        "batarian" => Loc.Text("loc_VM_materialScope_batarian"),
+        "vorcha" => Loc.Text("loc_VM_materialScope_vorcha"),
+        _ => sourceLabel
+    };
     private static string SourceFamilyName(string family) =>
         family.Contains('|') ? family[(family.IndexOf('|') + 1)..] : family;
     public void ApplyRandomisation(PreparedMaterialRandomisation values)

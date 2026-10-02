@@ -1,3 +1,4 @@
+using MorphFaceEditor.Infrastructure;
 using System.Text.RegularExpressions;
 using MorphFaceEditor.Core.Deformation;
 using MorphFaceEditor.Core.Materials;
@@ -81,16 +82,16 @@ public sealed partial class TurianFeatureMetadataCatalog : IHeadEditorUiProfile
 
     public IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
     [
-        new(FacialStructure, "Facial Structure", "Turian mandible and head-spike proportions.",
-            [new(HeadSpikes, "HEAD SPIKES"), new(Mandibles, "MANDIBLES")]),
-        new(Head, "Head", "Cheek, neck, skin-colour, tint, and surface controls.",
-            [new(Cheeks, "CHEEKS"), new(Neck, "NECK"), new(Surface, "SURFACE")]),
-        new(Eyes, "Eyes", "Brow, eye-position, eye-shape, iris, lens, and sclera controls.",
-            [new(Shape, "SHAPE"), new(Brows, "BROWS")]),
-        new(Nose, "Nose", "Nose position, length, and width controls.", [new(Shape, "SHAPE")]),
-        new(Mouth, "Mouth", "Mouth position, width, and teeth controls.", [new(Shape, "SHAPE"), new(Teeth, "TEETH")]),
-        new(Markings, "Markings", "Complexion additions and channel-selected facial tattoos.",
-            [new(Complexion, "COMPLEXION"), new(Tattoos, "TATTOOS")])
+        new(FacialStructure, Loc.Text("loc_Services_Taxonomy_facial_structure_812284cf"), Loc.Text("loc_Services_Taxonomy_turian_mandible_and_head_spike_proportions_81516cfd"),
+            [new(HeadSpikes, Loc.Text("loc_Services_Taxonomy_head_spikes_3b88885a")), new(Mandibles, Loc.Text("loc_Services_Taxonomy_mandibles_bdadb10a"))]),
+        new(Head, Loc.Text("loc_Services_Taxonomy_head_9bb0aacc"), Loc.Text("loc_Services_Taxonomy_cheek_neck_skin_colour_tint_and_surface_controls_d0203b6d"),
+            [new(Cheeks, Loc.Text("loc_Services_Taxonomy_cheeks_daeb3667")), new(Neck, Loc.Text("loc_Services_Taxonomy_neck_00020b4f")), new(Surface, Loc.Text("loc_Services_Taxonomy_surface_026aa612"))]),
+        new(Eyes, Loc.Text("loc_Services_Taxonomy_eyes_a39e9d98"), Loc.Text("loc_Services_Taxonomy_brow_eye_position_eye_shape_iris_lens_and_sclera_970580b2"),
+            [new(Shape, Loc.Text("loc_Services_Taxonomy_shape_cfb25fc2")), new(Brows, Loc.Text("loc_Services_Taxonomy_brows_9cbe502a"))]),
+        new(Nose, Loc.Text("loc_Services_Taxonomy_nose_05c5d4db"), Loc.Text("loc_Services_Taxonomy_nose_position_length_and_width_controls_6b3c6f9b"), [new(Shape, Loc.Text("loc_Services_Taxonomy_shape_cfb25fc2"))]),
+        new(Mouth, Loc.Text("loc_Services_Taxonomy_mouth_169541e5"), Loc.Text("loc_Services_Taxonomy_mouth_position_width_and_teeth_controls_948e9e44"), [new(Shape, Loc.Text("loc_Services_Taxonomy_shape_cfb25fc2")), new(Teeth, Loc.Text("loc_Services_Taxonomy_teeth_0afde705"))]),
+        new(Markings, Loc.Text("loc_Services_Taxonomy_markings_86efda29"), Loc.Text("loc_Services_Taxonomy_complexion_additions_and_channel_selected_facial_db383d40"),
+            [new(Complexion, Loc.Text("loc_Services_Taxonomy_complexion_0ee9bf54")), new(Tattoos, Loc.Text("loc_Services_Taxonomy_tattoos_b09f0d8b"))])
     ];
 
     public MorphFeatureMetadata Describe(ResolvedMorphFeature feature, bool sessionCanEdit)
@@ -108,7 +109,7 @@ public sealed partial class TurianFeatureMetadataCatalog : IHeadEditorUiProfile
             0.01f,
             sessionCanEdit && feature.IsResolved,
             feature.Kind == MorphFeatureResolutionKind.MetadataOnly
-                ? "Preserved front-end metadata with no TUR target delta."
+                ? Loc.Text("loc_Services_Taxonomy_preserved_front_end_metadata_with_no_tur_target_ee5830d7")
                 : string.Empty);
         return MetadataTextCatalog.Apply(MorphFaceMetadataCatalogRegistry.Turian, metadata);
     }

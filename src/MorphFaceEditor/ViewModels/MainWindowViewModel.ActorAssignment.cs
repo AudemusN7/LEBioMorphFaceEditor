@@ -24,9 +24,9 @@ public sealed partial class MainWindowViewModel
         ActorAssignmentInventory inventory;
         IsBusy = true;
         ErrorMessage = null;
-        Status = mode == ActorAssignmentMode.Morph
-            ? "Finding compatible authored actors…"
-            : "Finding safe local head and hair materials…";
+        Status = Loc.Text(mode == ActorAssignmentMode.Morph
+            ? "loc_Shell_Status_FindingCompatibleAuthoredActors"
+            : "loc_Shell_Status_FindingSafeLocalMaterials");
         try
         {
             inventory = await Task.Run(() => _actorAssignmentService.ReadInventory(
@@ -35,8 +35,8 @@ public sealed partial class MainWindowViewModel
         catch (Exception exception)
         {
             AppLog.Error($"Actor-assignment preflight failed for '{source.InstancedPath}'.", exception);
-            ErrorMessage = $"Actor assignment could not be prepared: {exception.Message}";
-            Status = "Actor-assignment preflight failed; the workspace was not modified.";
+            ErrorMessage = Loc.Format("loc_Shell_Error_ActorAssignmentCouldNotBe", exception.Message);
+            Status = Loc.Text("loc_Shell_Status_ActorAssignmentPreflightFailedThe");
             return;
         }
         finally
@@ -47,15 +47,16 @@ public sealed partial class MainWindowViewModel
         var candidate = _dialogs.ChooseActorAssignment(inventory, mode);
         if (candidate is null)
         {
-            Status = "Actor assignment cancelled; the workspace was not modified.";
+            Status = Loc.Text("loc_Shell_Status_ActorAssignmentCancelledTheWorkspace");
             return;
         }
 
         IsBusy = true;
         ErrorMessage = null;
-        Status = mode == ActorAssignmentMode.Morph
-            ? $"Assigning {source.DisplayName} to {candidate.DisplayName}…"
-            : $"Assigning material overrides to {candidate.DisplayName}…";
+        Status = Loc.Format(mode == ActorAssignmentMode.Morph
+            ? "loc_Shell_Status_AssigningMorphToActor"
+            : "loc_Shell_Status_AssigningMaterialOverridesToActor",
+            source.DisplayName, candidate.DisplayName);
         var packageModified = false;
         try
         {
@@ -67,11 +68,11 @@ public sealed partial class MainWindowViewModel
                 MarkWorkspaceChanged();
                 if (!await RefreshWorkspaceAsync(source.InstancedPath))
                 {
-                    ErrorMessage = "The morph was assigned, but the refreshed workspace could not be opened.";
-                    Status = "Morph assignment completed; workspace reload failed.";
+                    ErrorMessage = Loc.Text("loc_Shell_ErrorMessage_TheMorphWasAssignedBut");
+                    Status = Loc.Text("loc_Shell_Status_MorphAssignmentCompletedWorkspaceReload");
                     return;
                 }
-                Status = $"Assigned and verified {result.NewMorphPath} on {candidate.DisplayName}; save the package to commit the change.";
+                Status = Loc.Format("loc_Shell_Status_AssignedAndVerifiedOnSave", result.NewMorphPath, candidate.DisplayName);
                 AppLog.Information(
                     $"Actor morph assignment verified: '{result.OwnerPath}.{result.PropertyName}' -> '{result.NewMorphPath}'.");
             }
@@ -83,13 +84,13 @@ public sealed partial class MainWindowViewModel
                 MarkWorkspaceChanged();
                 if (!await RefreshWorkspaceAsync(source.InstancedPath))
                 {
-                    ErrorMessage = "The materials were assigned, but the refreshed workspace could not be opened.";
-                    Status = "Material assignment completed; workspace reload failed.";
+                    ErrorMessage = Loc.Text("loc_Shell_ErrorMessage_TheMaterialsWereAssignedBut");
+                    Status = Loc.Text("loc_Shell_Status_MaterialAssignmentCompletedWorkspaceReload");
                     return;
                 }
                 var changedCount = result.ChangedMaterials.Select(value => value.UIndex).Distinct().Count();
-                Status = $"Assigned and verified material overrides on {changedCount} MIC(s); save the package to commit the change.";
-                _dialogs.ShowInformation("Materials assigned", BuildMaterialCompletion(result));
+                Status = Loc.Format("loc_Shell_Status_AssignedAndVerifiedMaterialOverrides", changedCount);
+                _dialogs.ShowInformation(Loc.Text("loc_Shell_DialogTitle_MaterialsAssigned"), BuildMaterialCompletion(result));
                 AppLog.Information(
                     $"Actor material assignment verified for '{result.ActorPath}' on {changedCount} local MIC(s).");
             }
@@ -97,10 +98,10 @@ public sealed partial class MainWindowViewModel
         catch (Exception exception)
         {
             ReportContextOperationFailure(
-                mode == ActorAssignmentMode.Morph ? "Assign Morph to Actor" : "Assign Materials to Actor",
+                mode == ActorAssignmentMode.Morph ? "loc_Shell_Operation_AssignMorphToActor" : "loc_Shell_Operation_AssignMaterialsToActor",
                 mode == ActorAssignmentMode.Morph
-                    ? "The morph could not be assigned"
-                    : "The materials could not be assigned",
+                    ? "loc_Shell_Error_MorphCouldNotAssign"
+                    : "loc_Shell_Error_MaterialsCouldNotAssign",
                 exception,
                 packageModified);
         }
@@ -116,27 +117,36 @@ public sealed partial class MainWindowViewModel
             .DistinctBy(value => value.UIndex)
             .ToArray();
         var text = new StringBuilder()
-            .AppendLine($"Actor: {result.ActorPath}")
-            .AppendLine($"Source override: {result.SourceMaterialOverridePath}")
-            .AppendLine($"Changed local MICs: {changed.Length}")
-            .AppendLine($"Categories replaced: " + string.Join(", ", new[]
+            .AppendLine(Loc.Format("loc_Shell_ActorAssignment_Actor", result.ActorPath))
+            .AppendLine(Loc.Format("loc_Shell_ActorAssignment_SourceOverride", result.SourceMaterialOverridePath))
+            .AppendLine(Loc.Format("loc_Shell_ActorAssignment_ChangedLocalMics", changed.Length))
+            .AppendLine(Loc.Format("loc_Shell_ActorAssignment_CategoriesReplaced", string.Join(", ", new[]
             {
-                result.ReplacedTextures ? "textures" : null,
-                result.ReplacedVectors ? "vectors" : null,
-                result.ReplacedScalars ? "scalars" : null
-            }.Where(value => value is not null)))
+                result.ReplacedTextures ? Loc.Text("loc_Shell_ActorAssignment_Textures") : null,
+                result.ReplacedVectors ? Loc.Text("loc_Shell_ActorAssignment_Vectors") : null,
+                result.ReplacedScalars ? Loc.Text("loc_Shell_ActorAssignment_Scalars") : null
+            }.Where(value => value is not null))))
             .AppendLine()
-            .AppendLine("Changed:");
+            .AppendLine(Loc.Text("loc_Shell_ActorAssignment_Changed"));
         foreach (var target in changed)
         {
-            text.AppendLine($"• #{target.UIndex} {target.InstancedPath} ({target.ComponentRole} slot {target.SlotIndex}, {target.Family})");
+            text.AppendLine(Loc.Format("loc_Shell_ActorAssignment_ChangedRow",
+                target.UIndex, target.InstancedPath, LocalizedComponentRole(target.ComponentRole), target.SlotIndex, target.Family));
         }
-        text.AppendLine().AppendLine($"Skipped slots: {result.SkippedMaterials.Count}");
+        text.AppendLine().AppendLine(Loc.Format("loc_Shell_ActorAssignment_SkippedSlots", result.SkippedMaterials.Count));
         foreach (var skipped in result.SkippedMaterials)
         {
-            text.AppendLine($"• #{skipped.UIndex} {skipped.InstancedPath}: {skipped.Reason}");
+            text.AppendLine(Loc.Format("loc_Shell_ActorAssignment_SkippedRow",
+                skipped.UIndex, skipped.InstancedPath, skipped.Reason));
         }
-        text.AppendLine().Append("The change is still in the temporary workspace. Use Save to commit it to the source PCC.");
+        text.AppendLine().Append(Loc.Text("loc_Shell_ActorAssignment_TemporaryWorkspaceSaveNote"));
         return text.ToString();
     }
+
+    private static string LocalizedComponentRole(ActorComponentRole role) => role switch
+    {
+        ActorComponentRole.Head => Loc.Text("loc_VM_actorAssignment_componentRoleHead"),
+        ActorComponentRole.Hair => Loc.Text("loc_VM_actorAssignment_componentRoleHair"),
+        _ => Loc.Text("loc_VM_actorAssignment_componentRoleOther")
+    };
 }

@@ -1,3 +1,4 @@
+using MorphFaceEditor.Infrastructure;
 using System.Text.RegularExpressions;
 using MorphFaceEditor.Core.Deformation;
 using MorphFaceEditor.Core.Materials;
@@ -44,16 +45,16 @@ public sealed partial class SalarianFeatureMetadataCatalog : IHeadEditorUiProfil
 
     public IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
     [
-        new(FacialStructure, "Facial Structure", "Salarian cranial-ring proportions.",
-            [new(CranialRing, "CRANIAL RING")]),
-        new(Head, "Head", "Cheek shape, skin colour, secondary colour, surface, and lighting controls.",
-            [new(Cheeks, "CHEEKS"), new(Surface, "SURFACE")]),
-        new(Eyes, "Eyes", "Eye position, shape, iris, pupil, and emissive controls.",
-            [new(Shape, "SHAPE"), new(Position, "POSITION")]),
-        new(Mouth, "Mouth / Jaw", "Mouth, lip, bite, chin, and jaw controls.",
-            [new(Shape, "MOUTH"), new(Lips, "LIPS"), new(Bite, "BITE"), new(Jaw, "JAW / CHIN")]),
-        new(Markings, "Markings", "Complexion additions and facial tattoos.",
-            [new(Complexion, "COMPLEXION"), new(Tattoos, "TATTOOS")])
+        new(FacialStructure, Loc.Text("loc_Services_Taxonomy_facial_structure_812284cf"), Loc.Text("loc_Services_Taxonomy_salarian_cranial_ring_proportions_2d573b0d"),
+            [new(CranialRing, Loc.Text("loc_Services_Taxonomy_cranial_ring_b34926d4"))]),
+        new(Head, Loc.Text("loc_Services_Taxonomy_head_9bb0aacc"), Loc.Text("loc_Services_Taxonomy_cheek_shape_skin_colour_secondary_colour_surface_1656a493"),
+            [new(Cheeks, Loc.Text("loc_Services_Taxonomy_cheeks_daeb3667")), new(Surface, Loc.Text("loc_Services_Taxonomy_surface_026aa612"))]),
+        new(Eyes, Loc.Text("loc_Services_Taxonomy_eyes_a39e9d98"), Loc.Text("loc_Services_Taxonomy_eye_position_shape_iris_pupil_and_emissive_contr_90827edd"),
+            [new(Shape, Loc.Text("loc_Services_Taxonomy_shape_cfb25fc2")), new(Position, Loc.Text("loc_Services_Taxonomy_position_aad6faa6"))]),
+        new(Mouth, Loc.Text("loc_Services_Taxonomy_mouth_jaw_1b80f857"), Loc.Text("loc_Services_Taxonomy_mouth_lip_bite_chin_and_jaw_controls_aa7cb7cc"),
+            [new(Shape, Loc.Text("loc_Services_Taxonomy_mouth_7feedf9a")), new(Lips, Loc.Text("loc_Services_Taxonomy_lips_43c004a7")), new(Bite, Loc.Text("loc_Services_Taxonomy_bite_196fedce")), new(Jaw, Loc.Text("loc_Services_Taxonomy_jaw_chin_66b310ff"))]),
+        new(Markings, Loc.Text("loc_Services_Taxonomy_markings_86efda29"), Loc.Text("loc_Services_Taxonomy_complexion_additions_and_facial_tattoos_19506d3e"),
+            [new(Complexion, Loc.Text("loc_Services_Taxonomy_complexion_0ee9bf54")), new(Tattoos, Loc.Text("loc_Services_Taxonomy_tattoos_b09f0d8b"))])
     ];
 
     public MorphFeatureMetadata Describe(ResolvedMorphFeature feature, bool sessionCanEdit)
@@ -71,7 +72,7 @@ public sealed partial class SalarianFeatureMetadataCatalog : IHeadEditorUiProfil
             0.01f,
             sessionCanEdit && feature.IsResolved,
             feature.Kind == MorphFeatureResolutionKind.MetadataOnly
-                ? "Preserved front-end metadata with no SAL target delta."
+                ? Loc.Text("loc_Services_Taxonomy_preserved_front_end_metadata_with_no_sal_target_20e94d45")
                 : string.Empty);
         return MetadataTextCatalog.Apply(MorphFaceMetadataCatalogRegistry.Salarian, metadata);
     }

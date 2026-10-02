@@ -3062,6 +3062,12 @@ public static class UiSmokeTests
                 Source = new Uri("/MorphFaceEditor;component/Themes/EditorTheme.xaml", UriKind.Relative)
             });
             Resources.Add("BooleanToVisibilityConverter", new BooleanToVisibilityConverter());
+            Resources.Add("PreviewRenderModeLabelConverter", new PreviewRenderModeLabelConverter());
+            Resources.MergedDictionaries.Add(new ResourceDictionary
+            {
+                Source = new Uri("/MorphFaceEditor;component/Localisation/LanguageFlags.xaml", UriKind.Relative)
+            });
+            Loc.Initialize(Resources, "en-GB");
         }
     }
 
@@ -3082,14 +3088,17 @@ public static class UiSmokeTests
                 var mainWindow = new MainWindow(viewModel);
                 using var themeFixture = new ThemeRuntimeTests.Fixture(application.Resources);
                 VerifyAuthoredViewport(themeFixture);
-                var settings = new SettingsWindow(viewModel, themeFixture.Manager);
+                var languagePreferencesPath = Path.Combine(themeFixture.Root, "language-preferences.json");
+                var languagePreferences = new ApplicationPreferencesStore(languagePreferencesPath);
+                var settings = new SettingsWindow(viewModel, themeFixture.Manager, languagePreferences);
                 var languages = (ComboBox)settings.FindName("LanguageSelector");
                 var themes = (ComboBox)settings.FindName("ThemeSelector");
                 TestAssert.Equal(10, languages.Items.Count);
                 TestAssert.Equal(3, themes.Items.Count);
-                TestAssert.True(!languages.IsEnabled && themes.IsEnabled &&
+                TestAssert.True(languages.IsEnabled && themes.IsEnabled &&
                                 ((Button)settings.FindName("AccentColourButton")).IsEnabled,
-                    "Theme controls are unavailable or the language placeholder became active.");
+                    "Theme or language controls are unavailable.");
+                LocalisationTests.VerifyWindow(application, settings, languagePreferencesPath);
                 TestAssert.True(((Button)settings.FindName("GenerateLogsButton")).IsEnabled &&
                     ((Button)settings.FindName("ClearDataButton")).IsEnabled,
                     "Checkpoint-one Settings actions are disabled.");

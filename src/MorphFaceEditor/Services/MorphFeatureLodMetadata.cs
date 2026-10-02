@@ -1,4 +1,5 @@
 using MorphFaceEditor.Core.Deformation;
+using MorphFaceEditor.Infrastructure;
 
 namespace MorphFaceEditor.Services;
 
@@ -29,13 +30,13 @@ public static class MorphFeatureLodMetadata
         }
 
         var lodList = string.Join('/', affectedLods);
-        var marker = $"LOD {lodList} ONLY";
+        var marker = Loc.Format("loc_Services_Metadata_LodOnlyMarker", lodList);
         return metadata with
         {
             Label = metadata.Label.Contains(marker, StringComparison.OrdinalIgnoreCase)
                 ? metadata.Label
-                : $"{metadata.Label} — {marker}",
-            Description = $"{metadata.Description} Geometry from this control is present only in LOD {lodList}."
+                : Loc.Format("loc_Services_Metadata_LodOnlyLabel", metadata.Label, marker),
+            Description = Loc.Format("loc_Services_Metadata_LodOnlyDescription", metadata.Description, lodList)
         };
     }
 }

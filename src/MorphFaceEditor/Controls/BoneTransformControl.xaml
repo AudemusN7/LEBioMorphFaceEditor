@@ -24,13 +24,13 @@
                 <Grid Margin="1" ClipToBounds="True">
                     <Rectangle Width="1" HorizontalAlignment="Center" Fill="{DynamicResource BoneGridLine}" />
                     <Rectangle Height="1" VerticalAlignment="Center" Fill="{DynamicResource BoneGridLine}" />
-                    <TextBlock Text="Up (Z+)" Foreground="{DynamicResource MutedText}" FontSize="9"
+                    <TextBlock Text="{DynamicResource loc_View_BoneTransformControl_UpZ}" Foreground="{DynamicResource MutedText}" FontSize="9"
                                HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,5,0,0" />
-                    <TextBlock Text="Down (Z-)" Foreground="{DynamicResource MutedText}" FontSize="9"
+                    <TextBlock Text="{DynamicResource loc_View_BoneTransformControl_DownZ}" Foreground="{DynamicResource MutedText}" FontSize="9"
                                HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,5" />
-                    <TextBlock Text="Left (Y-)" Foreground="{DynamicResource MutedText}" FontSize="9"
+                    <TextBlock Text="{DynamicResource loc_View_BoneTransformControl_LeftY}" Foreground="{DynamicResource MutedText}" FontSize="9"
                                HorizontalAlignment="Left" VerticalAlignment="Center" Margin="5,0,0,0" />
-                    <TextBlock Text="Right (Y+)" Foreground="{DynamicResource MutedText}" FontSize="9"
+                    <TextBlock Text="{DynamicResource loc_View_BoneTransformControl_RightY}" Foreground="{DynamicResource MutedText}" FontSize="9"
                                HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,5,0" />
                     <Canvas x:Name="PuckCanvas" IsHitTestVisible="False">
                         <Ellipse x:Name="Puck"
@@ -48,7 +48,7 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
-            <TextBlock Text="Depth (X +/-)" Foreground="{DynamicResource SecondaryText}" FontSize="10"
+            <TextBlock Text="{DynamicResource loc_View_BoneTransformControl_DepthX}" Foreground="{DynamicResource SecondaryText}" FontSize="10"
                        Margin="0,0,8,0" VerticalAlignment="Center" />
             <Grid x:Name="DepthTrack" Grid.Column="1" Height="18"
                   Cursor="SizeWE"

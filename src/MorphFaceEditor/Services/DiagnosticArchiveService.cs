@@ -15,11 +15,11 @@ internal sealed class DiagnosticArchiveService(ApplicationDataPaths paths, strin
     {
         destination = Path.GetFullPath(destination);
         if (!Path.GetExtension(destination).Equals(".zip", StringComparison.OrdinalIgnoreCase))
-            throw new IOException("Choose a .zip file for the diagnostic export.");
+            throw new IOException(Loc.Text("loc_Services_DiagnosticArchive_ChooseZip"));
         warnings ??= [];
         var files = new List<(string Source, string Entry)>();
         if (!File.Exists(logPath))
-            throw new FileNotFoundException("The latest application log is unavailable.", logPath);
+            throw new FileNotFoundException(Loc.Text("loc_Services_DiagnosticArchive_LogUnavailable"), logPath);
         files.Add((logPath, "Logs/" + Path.GetFileName(logPath)));
         files.AddRange(workspaceFiles.Select(path => (path, "Workspace/" + Path.GetFileName(path))));
         foreach (var root in new[] { paths.CurrentDirectory, paths.LegacyDirectory })
@@ -32,7 +32,7 @@ internal sealed class DiagnosticArchiveService(ApplicationDataPaths paths, strin
                 .Select(path => (path, prefix + Path.GetFileName(path))));
         }
         if (files.Any(file => Path.GetFullPath(file.Source).Equals(destination, StringComparison.OrdinalIgnoreCase)))
-            throw new IOException("The ZIP destination must be different from the files being collected.");
+            throw new IOException(Loc.Text("loc_Services_DiagnosticArchive_DestinationIsInput"));
 
         var temporary = Path.Combine(Path.GetDirectoryName(destination)!, $".mfe-diagnostics-{Guid.NewGuid():N}.tmp");
         try
@@ -50,7 +50,7 @@ internal sealed class DiagnosticArchiveService(ApplicationDataPaths paths, strin
                     while (remaining > 0)
                     {
                         var read = sourceStream.Read(buffer, 0, (int)Math.Min(buffer.Length, remaining));
-                        if (read == 0) throw new IOException($"'{Path.GetFileName(source)}' changed while being collected.");
+                        if (read == 0) throw new IOException(Loc.Format("loc_Services_DiagnosticArchive_SourceChanged", Path.GetFileName(source)));
                         targetStream.Write(buffer, 0, read);
                         remaining -= read;
                     }

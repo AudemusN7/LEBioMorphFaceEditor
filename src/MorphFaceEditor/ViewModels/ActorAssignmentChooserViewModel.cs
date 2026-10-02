@@ -41,12 +41,14 @@ public sealed class ActorAssignmentChooserViewModel : ObservableObject
     public ObservableCollection<ActorAssignmentChoice> Choices { get; }
     public System.ComponentModel.ICollectionView FilteredChoices { get; }
     public string WindowTitle => Mode == ActorAssignmentMode.Morph
-        ? "Assign Morph to Actor"
-        : "Assign Materials to Actor";
+        ? Loc.Text("loc_VM_actorAssignment_titleMorph")
+        : Loc.Text("loc_VM_actorAssignment_titleMaterials");
     public string Introduction => Mode == ActorAssignmentMode.Morph
-        ? $"Choose the authored actor that should use {Inventory.SelectedFacePath}. The exact morph owner is shown before anything is changed."
-        : $"Choose an actor whose safe local head/hair MICs should receive the material overrides from {Inventory.SelectedFacePath}.";
-    public string ConfirmLabel => Mode == ActorAssignmentMode.Morph ? "Assign Morph" : "Assign Materials";
+        ? Loc.Format("loc_VM_actorAssignment_introMorph", Inventory.SelectedFacePath)
+        : Loc.Format("loc_VM_actorAssignment_introMaterials", Inventory.SelectedFacePath);
+    public string ConfirmLabel => Mode == ActorAssignmentMode.Morph
+        ? Loc.Text("loc_VM_actorAssignment_confirmMorph")
+        : Loc.Text("loc_VM_actorAssignment_confirmMaterials");
     public bool CanConfirm => SelectedChoice?.IsEligible == true;
 
     public string SearchText
@@ -90,8 +92,8 @@ public sealed class ActorAssignmentChoice
     public ActorAssignmentCandidate Candidate { get; }
     public ActorAssignmentMode Mode { get; }
     public string GroupName => Candidate.TargetKind == ActorAssignmentTargetKind.SpawnTemplate
-        ? "SPAWN TEMPLATES / ACTOR TYPES"
-        : "PLACED ACTORS";
+        ? Loc.Text("loc_VM_actorAssignment_groupSpawnTemplates")
+        : Loc.Text("loc_VM_actorAssignment_groupPlacedActors");
     public int GroupSortOrder => (int)Candidate.TargetKind;
     public int ProfileSortOrder => string.Equals(
         Candidate.SelectedProfileKey,
@@ -100,16 +102,21 @@ public sealed class ActorAssignmentChoice
     public string DisplayName => Candidate.DisplayName;
     public string TechnicalIdentity =>
         $"#{Candidate.UIndex}  {Candidate.ClassName}  ·  {ShortLevelPath(Candidate.InstancedPath)}";
-    public string EvidenceSummary =>
-        $"Head: {Candidate.HeadMeshProfileKey ?? "unresolved"}  ·  " +
-        $"Morph: {ShortObjectName(Candidate.MorphTarget?.CurrentMorphPath) ?? "none"}  ·  " +
-        $"Safe MICs: {Candidate.SafeMaterialCount}";
+    public string EvidenceSummary => Loc.Format(
+        "loc_VM_actorAssignment_evidenceSummary",
+        Candidate.HeadMeshProfileKey ?? Loc.Text("loc_VM_actorAssignment_unresolved"),
+        ShortObjectName(Candidate.MorphTarget?.CurrentMorphPath) ?? Loc.Text("loc_VM_actorAssignment_none"),
+        Candidate.SafeMaterialCount);
     public bool IsEligible => Mode == ActorAssignmentMode.Morph
         ? Candidate.CanAssignMorph
         : Candidate.CanAssignMaterials;
     public string EligibilityLabel => IsEligible
-        ? Mode == ActorAssignmentMode.Morph ? "MORPH READY" : $"{Candidate.SafeMaterialCount} MIC(S) READY"
-        : "NOT ELIGIBLE";
+        ? Mode == ActorAssignmentMode.Morph
+            ? Loc.Text("loc_VM_actorAssignment_morphReady")
+            : Candidate.SafeMaterialCount == 1
+                ? Loc.Text("loc_VM_actorAssignment_oneMicReady")
+                : Loc.Format("loc_VM_actorAssignment_micsReady", Candidate.SafeMaterialCount)
+        : Loc.Text("loc_VM_actorAssignment_notEligible");
     public string Details { get; }
 
     private static string BuildDetails(ActorAssignmentCandidate candidate, ActorAssignmentMode mode)
@@ -118,35 +125,42 @@ public sealed class ActorAssignmentChoice
         text.AppendLine($"{candidate.DisplayName}");
         text.AppendLine($"#{candidate.UIndex} {candidate.ClassName} · {ShortLevelPath(candidate.InstancedPath)}");
         text.AppendLine();
-        text.AppendLine("ASSIGNMENT SUMMARY");
-        text.AppendLine($"• Selected profile: {candidate.SelectedProfileKey}");
-        text.AppendLine($"• Head mesh: {ShortObjectName(candidate.HeadMeshPath) ?? "unresolved"}");
-        text.AppendLine($"• Head profile: {candidate.HeadMeshProfileKey ?? "unresolved"}");
+        text.AppendLine(Loc.Text("loc_VM_actorAssignment_detailsSummaryHeading"));
+        text.AppendLine(Loc.Format("loc_VM_actorAssignment_detailsSelectedProfile", candidate.SelectedProfileKey));
+        text.AppendLine(Loc.Format("loc_VM_actorAssignment_detailsHeadMesh", ShortObjectName(candidate.HeadMeshPath) ?? Loc.Text("loc_VM_actorAssignment_unresolved")));
+        text.AppendLine(Loc.Format("loc_VM_actorAssignment_detailsHeadProfile", candidate.HeadMeshProfileKey ?? Loc.Text("loc_VM_actorAssignment_unresolved")));
         if (mode == ActorAssignmentMode.Morph)
         {
-            text.AppendLine($"• Morph: {(candidate.CanAssignMorph ? "eligible" : CompactMorphReason(candidate))}");
+            text.AppendLine(Loc.Format("loc_VM_actorAssignment_detailsMorph", candidate.CanAssignMorph
+                ? Loc.Text("loc_VM_actorAssignment_eligible")
+                : CompactMorphReason(candidate)));
         }
         else
         {
-            text.AppendLine($"• Materials: {(candidate.CanAssignMaterials ? $"{candidate.SafeMaterialCount} safe local MIC(s)" : candidate.MaterialIneligibilityReason)}");
+            text.AppendLine(Loc.Format("loc_VM_actorAssignment_detailsMaterials", candidate.CanAssignMaterials
+                ? candidate.SafeMaterialCount == 1
+                    ? Loc.Text("loc_VM_actorAssignment_oneSafeLocalMic")
+                    : Loc.Format("loc_VM_actorAssignment_safeLocalMics", candidate.SafeMaterialCount)
+                : candidate.MaterialIneligibilityReason));
         }
 
         if (mode == ActorAssignmentMode.Morph && candidate.MorphTarget is not null)
         {
             text.AppendLine();
-            text.AppendLine("EXACT MORPH OWNER");
+            text.AppendLine(Loc.Text("loc_VM_actorAssignment_exactMorphOwnerHeading"));
             text.AppendLine($"• #{candidate.MorphTarget.OwnerUIndex} {candidate.MorphTarget.OwnerClass} · " +
                             $"{ShortLevelPath(candidate.MorphTarget.OwnerPath)}.{candidate.MorphTarget.PropertyName}");
-            text.AppendLine($"• Current: {ShortObjectName(candidate.MorphTarget.CurrentMorphPath) ?? "none"}");
+            text.AppendLine(Loc.Format("loc_VM_actorAssignment_currentMorph",
+                ShortObjectName(candidate.MorphTarget.CurrentMorphPath) ?? Loc.Text("loc_VM_actorAssignment_none")));
         }
 
         if (mode == ActorAssignmentMode.Materials)
         {
             text.AppendLine();
-            text.AppendLine("SAFE MATERIAL TARGETS");
+            text.AppendLine(Loc.Text("loc_VM_actorAssignment_safeMaterialTargetsHeading"));
             if (candidate.MaterialTargets.Count == 0)
             {
-                text.AppendLine("• None");
+                text.AppendLine(Loc.Format("loc_VM_actorAssignment_noneBullet", Loc.Text("loc_VM_actorAssignment_none")));
             }
             else
             {
@@ -155,10 +169,10 @@ public sealed class ActorAssignmentChoice
             }
 
             text.AppendLine();
-            text.AppendLine("SKIPPED MATERIALS");
+            text.AppendLine(Loc.Text("loc_VM_actorAssignment_skippedMaterialsHeading"));
             if (candidate.SkippedMaterials.Count == 0)
             {
-                text.AppendLine("• None");
+                text.AppendLine(Loc.Format("loc_VM_actorAssignment_noneBullet", Loc.Text("loc_VM_actorAssignment_none")));
             }
             else
             {
@@ -170,7 +184,7 @@ public sealed class ActorAssignmentChoice
         if (candidate.ReferencedBy.Count > 0)
         {
             text.AppendLine();
-            text.AppendLine("LOCAL REFERRERS");
+            text.AppendLine(Loc.Text("loc_VM_actorAssignment_localReferrersHeading"));
             foreach (var reference in candidate.ReferencedBy)
             {
                 text.AppendLine($"• #{reference.UIndex} {ShortLevelPath(reference.InstancedPath)} · {reference.PropertyPath}");
@@ -179,13 +193,13 @@ public sealed class ActorAssignmentChoice
         if (candidate.Warnings.Count > 0)
         {
             text.AppendLine();
-            text.AppendLine("WARNINGS");
+            text.AppendLine(Loc.Text("loc_VM_actorAssignment_warningsHeading"));
             foreach (var warning in candidate.Warnings) text.AppendLine($"• {warning}");
         }
         if (!(mode == ActorAssignmentMode.Morph ? candidate.CanAssignMorph : candidate.CanAssignMaterials))
         {
             text.AppendLine();
-            text.AppendLine("This row cannot be confirmed for the current operation.");
+            text.AppendLine(Loc.Text("loc_VM_actorAssignment_rowCannotConfirm"));
         }
         return text.ToString().TrimEnd();
     }
@@ -214,13 +228,13 @@ public sealed class ActorAssignmentChoice
         for (var roleIndex = 0; roleIndex < roles.Length; roleIndex++)
         {
             if (roleIndex > 0) text.AppendLine();
-            text.AppendLine(roles[roleIndex].Key.ToString());
+            text.AppendLine(LocalizedComponentRole(roles[roleIndex].Key));
             var roleTargets = roles[roleIndex].OrderBy(value => value.SlotIndex).ToArray();
             for (var targetIndex = 0; targetIndex < roleTargets.Length; targetIndex++)
             {
                 if (targetIndex > 0) text.AppendLine();
                 var target = roleTargets[targetIndex];
-                text.AppendLine($"Slot {target.SlotIndex} · {target.Family}");
+                text.AppendLine(Loc.Format("loc_VM_actorAssignment_slotFamily", target.SlotIndex, target.Family));
                 AppendCompactChain(text, target.ObjectName, target.ParentChain);
             }
         }
@@ -234,15 +248,15 @@ public sealed class ActorAssignmentChoice
         for (var roleIndex = 0; roleIndex < roles.Length; roleIndex++)
         {
             if (roleIndex > 0) text.AppendLine();
-            text.AppendLine(roles[roleIndex].Key.ToString());
+            text.AppendLine(LocalizedComponentRole(roles[roleIndex].Key));
             var roleTargets = roles[roleIndex].OrderBy(value => value.SlotIndex).ToArray();
             for (var targetIndex = 0; targetIndex < roleTargets.Length; targetIndex++)
             {
                 if (targetIndex > 0) text.AppendLine();
                 var skipped = roleTargets[targetIndex];
-                text.AppendLine($"Slot {skipped.SlotIndex} · {skipped.Family}");
+                text.AppendLine(Loc.Format("loc_VM_actorAssignment_slotFamily", skipped.SlotIndex, skipped.Family));
                 AppendCompactChain(text, skipped.ObjectName, skipped.ParentChain);
-                text.AppendLine($"Skipped: {skipped.Reason}");
+                text.AppendLine(Loc.Format("loc_VM_actorAssignment_skippedReason", skipped.Reason));
             }
         }
     }
@@ -271,9 +285,16 @@ public sealed class ActorAssignmentChoice
                name?.EndsWith("_USER", StringComparison.OrdinalIgnoreCase) == true;
     }
 
+    private static string LocalizedComponentRole(ActorComponentRole role) => role switch
+    {
+        ActorComponentRole.Head => Loc.Text("loc_VM_actorAssignment_componentRoleHead"),
+        ActorComponentRole.Hair => Loc.Text("loc_VM_actorAssignment_componentRoleHair"),
+        _ => Loc.Text("loc_VM_actorAssignment_componentRoleOther")
+    };
+
     private static string CompactMorphReason(ActorAssignmentCandidate candidate)
     {
-        var reason = candidate.MorphIneligibilityReason ?? "not eligible";
+        var reason = candidate.MorphIneligibilityReason ?? Loc.Text("loc_VM_actorAssignment_notEligibleLowercase");
         return string.IsNullOrWhiteSpace(candidate.HeadMeshPath)
             ? reason
             : reason.Replace(

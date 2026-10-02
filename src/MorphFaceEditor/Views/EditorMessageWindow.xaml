@@ -17,11 +17,11 @@
                    Foreground="{DynamicResource SecondaryText}" FontSize="13"
                    TextWrapping="Wrap" />
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button x:Name="CancelButton" Content="Cancel" MinWidth="84" Margin="0,0,8,0"
+            <Button x:Name="CancelButton" Content="{DynamicResource loc_View_EditorMessageWindow_Cancel}" MinWidth="84" Margin="0,0,8,0"
                     Visibility="Collapsed" IsCancel="True" Click="OnCancel" />
-            <Button x:Name="SecondaryButton" Content="No" MinWidth="84" Margin="0,0,8,0"
+            <Button x:Name="SecondaryButton" Content="{DynamicResource loc_View_EditorMessageWindow_No}" MinWidth="84" Margin="0,0,8,0"
                     IsCancel="True" Click="OnSecondary" />
-            <Button x:Name="PrimaryButton" Content="OK" MinWidth="84"
+            <Button x:Name="PrimaryButton" Content="{DynamicResource loc_View_EditorMessageWindow_OK}" MinWidth="84"
                     IsDefault="True" Click="OnPrimary" />
         </StackPanel>
     </Grid>

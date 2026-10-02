@@ -18,8 +18,8 @@ public sealed class WpfEditorDialogService : IEditorDialogService
     {
         var dialog = new OpenFileDialog
         {
-            Title = "Open a package containing BioMorphFace exports",
-            Filter = "Mass Effect packages (*.pcc)|*.pcc|All files (*.*)|*.*",
+            Title = Loc.Text("loc_WpfEditorDialogService_OpenPackageTitle"),
+            Filter = EditorFileDrop.WorkspaceOpenFilter,
             CheckFileExists = true,
             Multiselect = false,
             InitialDirectory = Directory.Exists(initialDirectory) ? initialDirectory : null
@@ -40,8 +40,8 @@ public sealed class WpfEditorDialogService : IEditorDialogService
     {
         var dialog = new SaveFileDialog
         {
-            Title = "Save Mesh and Materials to PCC",
-            Filter = "Mass Effect packages (*.pcc)|*.pcc",
+            Title = Loc.Text("loc_WpfEditorDialogService_SaveMeshMaterialsTitle"),
+            Filter = EditorFileDrop.PackageFilter,
             DefaultExt = ".pcc",
             AddExtension = true,
             OverwritePrompt = true,
@@ -78,7 +78,7 @@ public sealed class WpfEditorDialogService : IEditorDialogService
     {
         var dialog = new OpenFileDialog
         {
-            Title = "Import a BioMorphFace or baked mesh",
+            Title = Loc.Text("loc_WpfEditorDialogService_ImportMorphTitle"),
             Filter = EditorFileDrop.MorphImportFilter,
             CheckFileExists = true,
             Multiselect = false,
@@ -91,7 +91,7 @@ public sealed class WpfEditorDialogService : IEditorDialogService
     {
         var dialog = new OpenFileDialog
         {
-            Title = "Open a package or morph workspace",
+            Title = Loc.Text("loc_WpfEditorDialogService_OpenWorkspaceTitle"),
             Filter = EditorFileDrop.WorkspaceOpenFilter,
             CheckFileExists = true,
             Multiselect = false,
@@ -152,8 +152,8 @@ public sealed class WpfEditorDialogService : IEditorDialogService
     {
         var dialog = new SaveFileDialog
         {
-            Title = "Export Morph as Trilogy Save Editor RON",
-            Filter = "RON head morph (*.ron)|*.ron",
+            Title = Loc.Text("loc_WpfEditorDialogService_ExportMorphRonTitle"),
+            Filter = EditorFileDrop.RonMorphFilter,
             DefaultExt = ".ron",
             AddExtension = true,
             OverwritePrompt = true,
@@ -167,8 +167,8 @@ public sealed class WpfEditorDialogService : IEditorDialogService
     {
         var dialog = new OpenFileDialog
         {
-            Title = tse ? "Import TSE RON Material Settings" : "Import Materials",
-            Filter = tse ? "TSE RON (*.ron)|*.ron" : "RON material files (*.ron)|*.ron",
+            Title = Loc.Text(tse ? "loc_WpfEditorDialogService_ImportTseRonTitle" : "loc_WpfEditorDialogService_ImportMaterialsTitle"),
+            Filter = tse ? EditorFileDrop.TseRonFilter : EditorFileDrop.RonMaterialFilter,
             InitialDirectory = Directory.Exists(initialDirectory) ? initialDirectory : null,
             Multiselect = false
         };
@@ -179,8 +179,8 @@ public sealed class WpfEditorDialogService : IEditorDialogService
     {
         var dialog = new SaveFileDialog
         {
-            Title = tse ? "Export TSE RON" : "Export Materials",
-            Filter = tse ? "TSE RON (*.ron)|*.ron" : "RON material files (*.ron)|*.ron",
+            Title = Loc.Text(tse ? "loc_WpfEditorDialogService_ExportTseRonTitle" : "loc_WpfEditorDialogService_ExportMaterialsTitle"),
+            Filter = tse ? EditorFileDrop.TseRonFilter : EditorFileDrop.RonMaterialFilter,
             DefaultExt = ".ron", AddExtension = true, OverwritePrompt = true,
             FileName = suggestedFileName,
             InitialDirectory = Directory.Exists(initialDirectory) ? initialDirectory : null
@@ -192,7 +192,7 @@ public sealed class WpfEditorDialogService : IEditorDialogService
     {
         var dialog = new OpenFolderDialog
         {
-            Title = "Select a folder for the UModel mesh export",
+            Title = Loc.Text("loc_WpfEditorDialogService_UModelExportFolderTitle"),
             InitialDirectory = Directory.Exists(initialDirectory) ? initialDirectory : null,
             Multiselect = false
         };
@@ -212,11 +212,11 @@ public sealed class WpfEditorDialogService : IEditorDialogService
 
     public bool ConfirmDeleteMorph(string facePath) =>
         new EditorMessageWindow(
-            "Delete Morph",
-            $"Trash '{facePath}' and all of its child exports?\n\nThe change remains temporary until you save the package.",
+            Loc.Text("loc_WpfEditorDialogService_DeleteMorphTitle"),
+            Loc.Format("loc_WpfEditorDialogService_DeleteMorphMessage", facePath),
             confirmation: true,
-            primaryLabel: "Delete Morph",
-            secondaryLabel: "Cancel")
+            primaryLabel: Loc.Text("loc_WpfEditorDialogService_DeleteMorphTitle"),
+            secondaryLabel: Loc.Text("loc_Common_Cancel"))
         {
             Owner = Application.Current.MainWindow
         }.ShowDialog() == true;
@@ -235,11 +235,11 @@ public sealed class WpfEditorDialogService : IEditorDialogService
 
     public bool ConfirmHairScalpTextureSwitch(string hairMeshPath) =>
         new EditorMessageWindow(
-            "Match Scalp Textures",
-            $"The selected hair mesh uses a matching scalp texture set. Switch the scalp textures to match {hairMeshPath}?\n\nChoose No to keep the current scalp textures.",
+            Loc.Text("loc_WpfEditorDialogService_MatchScalpTexturesTitle"),
+            Loc.Format("loc_WpfEditorDialogService_MatchScalpTexturesMessage", hairMeshPath),
             confirmation: true,
-            primaryLabel: "Switch Scalp",
-            secondaryLabel: "Keep Current")
+            primaryLabel: Loc.Text("loc_WpfEditorDialogService_SwitchScalp"),
+            secondaryLabel: Loc.Text("loc_WpfEditorDialogService_KeepCurrent"))
         {
             Owner = Application.Current.MainWindow
         }.ShowDialog() == true;

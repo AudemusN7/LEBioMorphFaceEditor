@@ -17,7 +17,7 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
     private bool _isRebuildingAll;
     private int _packagesProcessed;
     private int _totalPackages;
-    private string _progressLabel = "Preparing build…";
+    private string _progressLabel = Loc.Text("loc_VM_textureRegistry_preparingBuild");
 
     public TextureRegistrySettingsViewModel(
         TextureRegistryStore store,
@@ -52,8 +52,8 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
         }
     }
 
-    public string ActionLabel => IsBuilding ? "Cancel" : "Rebuild";
-    public string RebuildAllActionLabel => IsBuilding ? "Cancel" : "Rebuild All";
+    public string ActionLabel => IsBuilding ? Loc.Text("loc_VM_textureRegistry_cancel") : Loc.Text("loc_VM_textureRegistry_rebuild");
+    public string RebuildAllActionLabel => IsBuilding ? Loc.Text("loc_VM_textureRegistry_cancel") : Loc.Text("loc_VM_textureRegistry_rebuildAll");
     public bool IsRebuildAllActionVisible => !IsBuilding || _isRebuildingAll;
     public bool CanClose => !IsBuilding;
     public int PackagesProcessed { get => _packagesProcessed; private set => SetProperty(ref _packagesProcessed, value); }
@@ -81,7 +81,7 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
     public async Task AppendManualAsync(MorphFaceGame game,
         IReadOnlyList<MorphFaceEditor.Core.Materials.ManualRegistryAsset> selections)
     {
-        if (IsBuilding) throw new InvalidOperationException("Wait for the database build to finish.");
+        if (IsBuilding) throw new InvalidOperationException(Loc.Text("loc_VM_textureRegistry_waitForBuild"));
         var status = await Task.Run(() => _manualAssets.Append(game, selections));
         Rows.Single(row => row.Game == game).UpdateManual(status);
         _catalogInvalidator?.Invoke(game);
@@ -194,7 +194,9 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
             new FileNotFoundException($"See {report}"));
         return status with
         {
-            ErrorMessage = $"{failures.Count} custom asset(s) could not be found. Details: {report}"
+            ErrorMessage = failures.Count == 1
+                ? Loc.Format("loc_VM_textureRegistry_oneMissingCustomAsset", report)
+                : Loc.Format("loc_VM_textureRegistry_missingCustomAssets", failures.Count, report)
         };
     }
 
@@ -205,11 +207,13 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
         ProgressLabel = progress.Phase switch
         {
             TextureRegistryBuildPhase.ScanningPackages =>
-                $"Scanning packages — {progress.PackagesProcessed:N0} / {progress.TotalPackages:N0}",
-            TextureRegistryBuildPhase.WritingRegistry => "Writing compact registry",
-            TextureRegistryBuildPhase.VerifyingRegistry => "Verifying registry",
-            TextureRegistryBuildPhase.Ready => $"Ready — {progress.TextureCount:N0} textures",
-            _ => "Preparing build…"
+                Loc.Format("loc_VM_textureRegistry_scanningPackages", progress.PackagesProcessed, progress.TotalPackages),
+            TextureRegistryBuildPhase.WritingRegistry => Loc.Text("loc_VM_textureRegistry_writingRegistry"),
+            TextureRegistryBuildPhase.VerifyingRegistry => Loc.Text("loc_VM_textureRegistry_verifyingRegistry"),
+            TextureRegistryBuildPhase.Ready => progress.TextureCount == 1
+                ? Loc.Text("loc_VM_textureRegistry_oneTextureReady")
+                : Loc.Format("loc_VM_textureRegistry_readyTextureCount", progress.TextureCount),
+            _ => Loc.Text("loc_VM_textureRegistry_preparingBuild")
         };
         OnPropertyChanged(nameof(ProgressPercent));
 
@@ -226,7 +230,7 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
         _buildCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _isRebuildingAll = rebuildingAll;
         PackagesProcessed = TotalPackages = 0;
-        ProgressLabel = "Preparing build…";
+        ProgressLabel = Loc.Text("loc_VM_textureRegistry_preparingBuild");
         SetBuildActionVisibility(activeGame, building: true);
         IsBuilding = true;
         OnPropertyChanged(nameof(IsRebuildAllActionVisible));
@@ -276,10 +280,10 @@ public sealed class TextureRegistrySettingsRowViewModel : ObservableObject
     public bool IsAddCustomAssetVisible => !_isBuildInProgress;
     public string ManualStatusLabel => _manualStatus?.State switch
     {
-        TextureRegistryState.Ready => "Custom assets available",
-        TextureRegistryState.Missing => "No custom assets",
-        null => "Checking custom assets…",
-        _ => $"Custom database: {_manualStatus.State} — {_manualStatus.ErrorMessage}"
+        TextureRegistryState.Ready => Loc.Text("loc_VM_textureRegistry_customAssetsAvailable"),
+        TextureRegistryState.Missing => Loc.Text("loc_VM_textureRegistry_noCustomAssets"),
+        null => Loc.Text("loc_VM_textureRegistry_checkingCustomAssets"),
+        _ => Loc.Format("loc_VM_textureRegistry_customDatabaseStatus", LocalizedStatus(_manualStatus.State), _manualStatus.ErrorMessage)
     };
     public string? WarningLabel => _status.ErrorMessage ?? _manualStatus?.ErrorMessage;
     public bool IsBuildActionVisible
@@ -289,13 +293,13 @@ public sealed class TextureRegistrySettingsRowViewModel : ObservableObject
     }
     public string StatusLabel => _status.State switch
     {
-        TextureRegistryState.Checking => "Checking",
-        TextureRegistryState.Ready => "Ready",
-        TextureRegistryState.Building => "Building",
-        TextureRegistryState.Outdated => "Outdated",
-        TextureRegistryState.Cancelled => "Cancelled",
-        TextureRegistryState.Failed => "Failed",
-        _ => "Missing"
+        TextureRegistryState.Checking => Loc.Text("loc_VM_textureRegistry_statusChecking"),
+        TextureRegistryState.Ready => Loc.Text("loc_VM_textureRegistry_statusReady"),
+        TextureRegistryState.Building => Loc.Text("loc_VM_textureRegistry_statusBuilding"),
+        TextureRegistryState.Outdated => Loc.Text("loc_VM_textureRegistry_statusOutdated"),
+        TextureRegistryState.Cancelled => Loc.Text("loc_VM_textureRegistry_statusCancelled"),
+        TextureRegistryState.Failed => Loc.Text("loc_VM_textureRegistry_statusFailed"),
+        _ => Loc.Text("loc_VM_textureRegistry_statusMissing")
     };
     public string StatusBrushKey => _status.State switch
     {
@@ -307,6 +311,17 @@ public sealed class TextureRegistrySettingsRowViewModel : ObservableObject
     public string LastBuiltLabel => _status.LastBuilt is { } timestamp
         ? timestamp.LocalDateTime.ToString("g")
         : "—";
+
+    private static string LocalizedStatus(TextureRegistryState? state) => state switch
+    {
+        TextureRegistryState.Checking => Loc.Text("loc_VM_textureRegistry_statusChecking"),
+        TextureRegistryState.Ready => Loc.Text("loc_VM_textureRegistry_statusReady"),
+        TextureRegistryState.Building => Loc.Text("loc_VM_textureRegistry_statusBuilding"),
+        TextureRegistryState.Outdated => Loc.Text("loc_VM_textureRegistry_statusOutdated"),
+        TextureRegistryState.Cancelled => Loc.Text("loc_VM_textureRegistry_statusCancelled"),
+        TextureRegistryState.Failed => Loc.Text("loc_VM_textureRegistry_statusFailed"),
+        _ => Loc.Text("loc_VM_textureRegistry_statusMissing")
+    };
 
     public void Update(TextureRegistryStatus status)
     {

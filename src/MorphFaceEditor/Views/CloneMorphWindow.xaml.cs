@@ -19,14 +19,14 @@ public partial class CloneMorphWindow : Window
         _importMode = importMode;
         if (importMode)
         {
-            Title = "Name Imported BioMorphFace";
-            IntroText.Text = "Choose the BioMorphFace export name used in this standalone workspace and any PCC you export.";
-            PrimaryButton.Content = "Import Morph";
+            Title = Loc.Text("loc_CloneMorphWindow_NameImportedBioMorphFace");
+            IntroText.Text = Loc.Text("loc_CloneMorphWindow_ImportedMorphIntro");
+            PrimaryButton.Content = Loc.Text("loc_CloneMorphWindow_ImportMorph");
         }
         if (newPlayerMode)
         {
-            Title = "Name New Player Morph";
-            PrimaryButton.Content = "Create Morph";
+            Title = Loc.Text("loc_CloneMorphWindow_NameNewPlayerMorph");
+            PrimaryButton.Content = Loc.Text("loc_CloneMorphWindow_CreateMorph");
         }
         _existingNames = existingObjectNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
         ObjectNameBox.Text = suggestedName;
@@ -56,16 +56,16 @@ public partial class CloneMorphWindow : Window
         if (string.IsNullOrWhiteSpace(name))
         {
             return _importMode
-                ? "Enter a name for the imported BioMorphFace."
-                : "Enter a name for the cloned BioMorphFace.";
+                ? Loc.Text("loc_CloneMorphWindow_EnterImportedBioMorphFaceName")
+                : Loc.Text("loc_CloneMorphWindow_EnterClonedBioMorphFaceName");
         }
         if (!(char.IsLetter(name[0]) || name[0] == '_') ||
             name.Skip(1).Any(character => !(char.IsLetterOrDigit(character) || character == '_')))
         {
-            return "Use letters, digits, and underscores; the first character cannot be a digit.";
+            return Loc.Text("loc_CloneMorphWindow_NameCharactersRule");
         }
         return _existingNames.Contains(name)
-            ? "A BioMorphFace with that name already exists at this package path."
+            ? Loc.Text("loc_CloneMorphWindow_BioMorphFaceNameAlreadyExists")
             : null;
     }
 }

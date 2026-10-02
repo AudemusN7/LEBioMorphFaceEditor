@@ -1,3 +1,4 @@
+using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.Core.Deformation;
 using MorphFaceEditor.LegendaryExplorer;
 
@@ -22,7 +23,7 @@ public sealed class Le3HumanFemaleFeatureMetadataCatalog : HumanFemaleFeatureMet
             metadata = metadata with
             {
                 IsVisible = false,
-                Description = "Hidden stock LE3 target; the six nominal hair controls contain near-identical whole-face sag deltas rather than useful hair geometry."
+                Description = Loc.Text("loc_Services_Taxonomy_hidden_stock_le3_target_the_six_nominal_hair_con_087d3ba8")
             };
         }
         return MetadataTextCatalog.Apply(TextArchetype, metadata, TextGame);

@@ -19,6 +19,7 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        Loc.Initialize(Resources, ApplicationPreferencesStore.CreateDefault().Current.Language);
         AppLog.Information($"Application starting; version {typeof(App).Assembly.GetName().Version}.");
         DispatcherUnhandledException += (_, args) =>
             AppLog.Error("Unhandled WPF dispatcher exception.", args.Exception);
@@ -120,8 +121,8 @@ public partial class App : Application
         {
             var failures = ApplicationDataPaths.CreateDefault().Clear();
             if (failures.Count > 0)
-                MessageBox.Show("Some application data could not be removed:\n\n" + string.Join("\n", failures),
-                    "Application data cleanup incomplete", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(Loc.Format("loc_App_CleanupFailed", string.Join("\n", failures)),
+                    Loc.Text("loc_App_CleanupIncomplete"), MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         base.OnExit(e);
     }

@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Xml.Linq;
 using MorphFaceEditor.Infrastructure;
+using MorphFaceEditor.Localisation;
 using MorphFaceEditor.Views;
 using ThemeMode = MorphFaceEditor.Infrastructure.ThemeMode;
 
@@ -20,6 +21,7 @@ internal static class LocalisationTests
         new("localisation: translation placeholders may reorder but cannot disappear", PlaceholderValidation),
         new("localisation: dictionary rejects duplicate keys, objects and unknown translations", DictionaryValidation),
         new("localisation: file-dialog filter syntax is preserved", FilterValidation),
+        new("localisation: shipped languages load with excluded English fallback and stable numeric culture", ShippedLanguages),
         new("localisation: language preferences persist and preserve independent settings", PreferencesRoundTrip)
     ];
 
@@ -118,6 +120,61 @@ internal static class LocalisationTests
         TestAssert.Equal("en-GB", Loc.NormalizeLanguage(null));
         TestAssert.Equal("en-US", Loc.NormalizeLanguage("EN-us"));
     });
+
+    private static void ShippedLanguages()
+    {
+        Exception? error = null;
+        var thread = new Thread(() =>
+        {
+            var directory = Path.Combine(AppContext.BaseDirectory, "Localisation");
+            var culture = CultureInfo.CurrentCulture;
+            var uiCulture = CultureInfo.CurrentUICulture;
+            var defaultUi = CultureInfo.DefaultThreadCurrentUICulture;
+            var resources = new ResourceDictionary { ["unrelated-resource"] = "keep" };
+            try
+            {
+                using var masterStream = File.OpenRead(Path.Combine(directory, "Strings.en-GB.xaml"));
+                var master = StringCatalogue.Read(masterStream);
+                // A comma-decimal culture makes accidental changes to numeric parsing visible.
+                CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("fr-FR");
+                foreach (var language in LanguageOption.All)
+                {
+                    using var stream = File.OpenRead(Path.Combine(directory, $"Strings.{language.Code}.xaml"));
+                    var overlay = StringCatalogue.Read(stream);
+                    StringCatalogue.ValidateOverlay(master.Strings, overlay.Strings,
+                        language.Code == Loc.DefaultLanguage ? null : master.Annotations);
+                    Loc.Initialize(resources, language.Code, directory);
+                    TestAssert.Equal(language.Code, Loc.Language);
+                    TestAssert.Equal(overlay.Strings.Count, Loc.TranslatedStringCount);
+                    TestAssert.Equal(language.Code, CultureInfo.CurrentUICulture.Name);
+                    TestAssert.Equal("fr-FR", CultureInfo.CurrentCulture.Name);
+                    TestAssert.Equal("1,5", 1.5.ToString(CultureInfo.CurrentCulture));
+                    TestAssert.Equal("keep", (string)resources["unrelated-resource"]);
+                    foreach (var (key, english) in master.Strings)
+                    {
+                        var expected = overlay.Strings.TryGetValue(key, out var translated) ? translated : english;
+                        TestAssert.True(expected == Loc.Text(key), $"{language.Code}: wording mismatch for {key}");
+                        TestAssert.True(expected == (string)resources[key], $"{language.Code}: XAML resource mismatch for {key}");
+                        if (master.Annotations.TryGetValue(key, out var annotation) && annotation.DoNotTranslate)
+                            TestAssert.True(english == expected, $"{language.Code}: excluded string changed for {key}");
+                    }
+                }
+            }
+            catch (Exception exception) { error = exception; }
+            finally
+            {
+                try { Loc.Initialize(resources, Loc.DefaultLanguage, directory); }
+                catch (Exception exception) { error ??= exception; }
+                CultureInfo.CurrentCulture = culture;
+                CultureInfo.CurrentUICulture = uiCulture;
+                CultureInfo.DefaultThreadCurrentUICulture = defaultUi;
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        if (!thread.Join(TimeSpan.FromSeconds(30))) throw new Exception("Shipped localisation check timed out.");
+        if (error is not null) throw new Exception("Shipped localisation check failed: " + error.Message, error);
+    }
 
     // Called within the existing STA application smoke check, without starting the product app.
     internal static void VerifyWindow(Application app, SettingsWindow settings, string preferencesPath)

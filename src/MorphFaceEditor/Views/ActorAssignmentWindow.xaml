@@ -4,8 +4,8 @@
         Title="{Binding WindowTitle}"
         Width="1050" Height="720" MinWidth="850" MinHeight="560"
         WindowStartupLocation="CenterOwner"
-        Background="{StaticResource WindowBackground}"
-        Foreground="{StaticResource PrimaryText}">
+        Background="{DynamicResource WindowBackground}"
+        Foreground="{DynamicResource PrimaryText}">
     <Grid Margin="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -14,7 +14,7 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <TextBlock Text="{Binding Introduction}" TextWrapping="Wrap"
-                   Foreground="{StaticResource SecondaryText}" Margin="0,0,0,12" />
+                   Foreground="{DynamicResource SecondaryText}" Margin="0,0,0,12" />
         <TextBox Grid.Row="1" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
                  Padding="8,6" Margin="0,0,0,12"
                  ToolTip="Search tags, actor/type/archetype names, classes, UIndexes, and paths"
@@ -25,7 +25,7 @@
                 <ColumnDefinition Width="12" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
-            <Border Background="{StaticResource PanelBackground}" CornerRadius="5" Padding="8">
+            <Border Background="{DynamicResource PanelBackground}" CornerRadius="5" Padding="8">
                 <ListBox ItemsSource="{Binding FilteredChoices}" SelectedItem="{Binding SelectedChoice}"
                          BorderThickness="0" Background="Transparent"
                          HorizontalContentAlignment="Stretch"
@@ -57,32 +57,32 @@
                                         MinWidth="92" HorizontalAlignment="Right">
                                     <Border.Style>
                                         <Style TargetType="Border">
-                                            <Setter Property="Background" Value="#FF285340" />
+                                            <Setter Property="Background" Value="{DynamicResource ActorIncludeBackground}" />
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding IsEligible}" Value="False">
-                                                    <Setter Property="Background" Value="#FF67383D" />
+                                                    <Setter Property="Background" Value="{DynamicResource ActorRemoveBackground}" />
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
                                     </Border.Style>
                                     <TextBlock Text="{Binding EligibilityLabel}" FontSize="9" FontWeight="Bold"
-                                               Foreground="White" TextAlignment="Center" />
+                                               Foreground="{DynamicResource OnColourText}" TextAlignment="Center" />
                                 </Border>
                                 <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="{Binding TechnicalIdentity}"
-                                           Foreground="{StaticResource SecondaryText}" FontSize="11"
+                                           Foreground="{DynamicResource SecondaryText}" FontSize="11"
                                            TextTrimming="CharacterEllipsis" Margin="0,3,18,0" />
                                 <TextBlock Grid.Row="2" Grid.ColumnSpan="2" Text="{Binding EvidenceSummary}"
-                                           Foreground="{StaticResource MutedText}" FontSize="11" Margin="0,2,2,0"
+                                           Foreground="{DynamicResource MutedText}" FontSize="11" Margin="0,2,2,0"
                                            TextWrapping="Wrap" />
                             </Grid>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
             </Border>
-            <Border Grid.Column="2" Background="{StaticResource PanelBackground}" CornerRadius="5" Padding="12">
+            <Border Grid.Column="2" Background="{DynamicResource PanelBackground}" CornerRadius="5" Padding="12">
                 <TextBox Text="{Binding SelectedChoice.Details, Mode=OneWay}" IsReadOnly="True"
                          TextWrapping="Wrap" AcceptsReturn="True" BorderThickness="0"
-                         Background="Transparent" Foreground="{StaticResource SecondaryText}"
+                         Background="Transparent" Foreground="{DynamicResource SecondaryText}"
                          VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" />
             </Border>
         </Grid>

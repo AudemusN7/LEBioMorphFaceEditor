@@ -4,8 +4,8 @@
         Title="Choose RON destination"
         Width="500" SizeToContent="Height" ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner"
-        Background="{StaticResource WindowBackground}"
-        Foreground="{StaticResource PrimaryText}">
+        Background="{DynamicResource WindowBackground}"
+        Foreground="{DynamicResource PrimaryText}">
     <Grid Margin="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -16,7 +16,7 @@
         </Grid.RowDefinitions>
 
         <TextBlock Text="Choose how to import this RON. The target game and NPC archetype determine the native assets used to build the workspace."
-                   TextWrapping="Wrap" Foreground="{StaticResource SecondaryText}" />
+                   TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}" />
 
         <StackPanel Grid.Row="1" Margin="0,14,0,0">
             <TextBlock Text="TARGET GAME" Style="{StaticResource FieldLabel}" />
@@ -29,7 +29,7 @@
         </StackPanel>
 
         <TextBlock x:Name="ValidationText" Grid.Row="3" Margin="0,10,0,0"
-                   TextWrapping="Wrap" Foreground="#FFFF8C8C" FontSize="11" />
+                   TextWrapping="Wrap" Foreground="{DynamicResource ValidationForeground}" FontSize="11" />
 
         <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
             <Button Content="Cancel" IsCancel="True" MinWidth="76" Margin="0,0,8,0" />

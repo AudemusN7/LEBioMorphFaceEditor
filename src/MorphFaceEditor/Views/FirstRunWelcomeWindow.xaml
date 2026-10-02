@@ -9,8 +9,8 @@
         ResizeMode="NoResize"
         ShowInTaskbar="False"
         WindowStartupLocation="CenterOwner"
-        Background="{StaticResource WindowBackground}"
-        Foreground="{StaticResource PrimaryText}">
+        Background="{DynamicResource WindowBackground}"
+        Foreground="{DynamicResource PrimaryText}">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -32,7 +32,7 @@
                     <TextBlock Text="Welcome to BioMorphFace Editor"
                                FontSize="22" FontWeight="SemiBold" />
                     <TextBlock Margin="0,0,0,0"
-                               Foreground="{StaticResource SecondaryText}"
+                               Foreground="{DynamicResource SecondaryText}"
                                FontSize="13" TextWrapping="Wrap"
                                Text="Inspect, edit, convert and export Mass Effect Legendary Edition BioMorphFace and head data with a live mesh/material editor." />
                 </StackPanel>
@@ -40,12 +40,12 @@
 
             <TextBlock Margin="80,18,0,22" FontSize="14">
                 <Hyperlink NavigateUri="https://github.com/AudemusN7/LEBioMorphFaceEditor"
-                           Foreground="{StaticResource Accent}"
+                           Foreground="{DynamicResource Accent}"
                            RequestNavigate="OnTutorialNavigate">Read the GitHub tutorial</Hyperlink>
             </TextBlock>
 
-            <Border Background="{StaticResource RaisedBackground}"
-                    BorderBrush="{StaticResource BorderBrush}"
+            <Border Background="{DynamicResource RaisedBackground}"
+                    BorderBrush="{DynamicResource BorderBrush}"
                     BorderThickness="1" CornerRadius="4" Padding="18">
                 <Grid>
                     <Grid.RowDefinitions>
@@ -54,14 +54,14 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <TextBlock Text="RECOMMENDED: BUILD YOUR TEXTURE DATABASES"
-                               Foreground="{StaticResource Accent}"
+                               Foreground="{DynamicResource Accent}"
                                FontSize="11" FontWeight="SemiBold" />
                     <TextBlock Grid.Row="1" Margin="0,8,0,0"
-                               Foreground="{StaticResource SecondaryText}"
+                               Foreground="{DynamicResource SecondaryText}"
                                FontSize="13" TextWrapping="Wrap"
                                Text="Mesh/Texture Databases let the editor find and use textures, attachment meshes, and compatible templates outside of the currently opened package" />
                     <TextBlock x:Name="DatabaseConsequenceText" Grid.Row="2" Margin="0,9,0,0"
-                               Foreground="{StaticResource MutedText}"
+                               Foreground="{DynamicResource MutedText}"
                                FontSize="12" TextWrapping="Wrap"
                                Text="Without one, you can still open and edit faces, but installed game texture choices and automatic template discovery will be unavailable. Some conversion, import and export workflows need to index game assets, and will require you to build the relevant database first." />
                 </Grid>
@@ -72,8 +72,8 @@
                     Click="OnBuildTextureDatabases" />
         </StackPanel>
 
-        <Border Grid.Row="1" Background="{StaticResource PanelBackground}"
-                BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0"
+        <Border Grid.Row="1" Background="{DynamicResource PanelBackground}"
+                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0"
                 Padding="18,14">
             <Grid>
                 <Grid.ColumnDefinitions>

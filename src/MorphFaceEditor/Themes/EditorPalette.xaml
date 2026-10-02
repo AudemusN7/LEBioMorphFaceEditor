@@ -1,0 +1,92 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:theme="clr-namespace:MorphFaceEditor.Infrastructure">
+    <!-- Canonical colours are shared; semantic brushes retain their separate roles. -->
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="DarkColours.xaml" />
+    </ResourceDictionary.MergedDictionaries>
+    <theme:ThemeColour x:Key="Palette.Window" Value="{StaticResource Default.Window}" />
+    <theme:ThemeColour x:Key="Palette.Panel" Value="{StaticResource Default.Panel}" />
+    <theme:ThemeColour x:Key="Palette.Raised" Value="{StaticResource Default.Raised}" />
+    <theme:ThemeColour x:Key="Palette.Hover" Value="{StaticResource Default.Hover}" />
+    <theme:ThemeColour x:Key="Palette.Pressed" Value="{StaticResource Default.Pressed}" />
+    <theme:ThemeColour x:Key="Palette.Primary" Value="{StaticResource Default.Primary}" />
+    <theme:ThemeColour x:Key="Palette.Secondary" Value="{StaticResource Default.Secondary}" />
+    <theme:ThemeColour x:Key="Palette.Muted" Value="{StaticResource Default.Muted}" />
+    <theme:ThemeColour x:Key="Palette.Accent" Value="{StaticResource Default.Accent}" />
+    <theme:ThemeColour x:Key="Palette.Border" Value="{StaticResource Default.Border}" />
+    <theme:ThemeColour x:Key="Palette.SelectedRow" Value="{StaticResource Default.SelectedRow}" />
+    <theme:ThemeColour x:Key="Palette.Ready" Value="{StaticResource Default.Ready}" />
+    <theme:ThemeColour x:Key="Palette.Pending" Value="{StaticResource Default.Pending}" />
+    <theme:ThemeColour x:Key="Palette.Failed" Value="{StaticResource Default.Failed}" />
+    <theme:ThemeColour x:Key="Palette.PreviewHost" Value="{StaticResource Default.PreviewHost}" />
+    <theme:ThemeColour x:Key="Palette.Tag.HMM" Value="{StaticResource Default.Tag.HMM}" />
+    <theme:ThemeColour x:Key="Palette.Tag.HMF" Value="{StaticResource Default.Tag.HMF}" />
+    <theme:ThemeColour x:Key="Palette.Tag.ASA" Value="{StaticResource Default.Tag.ASA}" />
+    <theme:ThemeColour x:Key="Palette.Tag.SAL" Value="{StaticResource Default.Tag.SAL}" />
+    <theme:ThemeColour x:Key="Palette.Tag.TUR" Value="{StaticResource Default.Tag.TUR}" />
+    <theme:ThemeColour x:Key="Palette.Tag.TUF" Value="{StaticResource Default.Tag.TUF}" />
+    <theme:ThemeColour x:Key="Palette.Tag.KRO" Value="{StaticResource Default.Tag.KRO}" />
+    <theme:ThemeColour x:Key="Palette.Tag.BAT" Value="{StaticResource Default.Tag.BAT}" />
+    <theme:ThemeColour x:Key="Palette.Tag.ALN" Value="{StaticResource Default.Tag.ALN}" />
+    <theme:ThemeColour x:Key="Palette.Tag.CUSTOM" Value="{StaticResource Default.Tag.CUSTOM}" />
+    <theme:ThemeColour x:Key="Palette.Tag.MESH" Value="{StaticResource Default.Tag.MESH}" />
+
+    <!-- Explicit bindings update every semantic brush, including native title bars. -->
+    <SolidColorBrush x:Key="WindowBackground" Color="{Binding Value, Source={StaticResource Palette.Window}}" />
+    <SolidColorBrush x:Key="InputBackground" Color="{Binding Value, Source={StaticResource Palette.Window}}" />
+    <SolidColorBrush x:Key="TextureWellBackground" Color="{Binding Value, Source={StaticResource Palette.Window}}" />
+    <SolidColorBrush x:Key="PreviewHintBackground" Color="{Binding Value, Source={StaticResource Palette.Window}}" />
+    <SolidColorBrush x:Key="BusyOverlayBackground" Color="{Binding Value, Source={StaticResource Palette.Window}}" />
+    <SolidColorBrush x:Key="BonePadBackground" Color="{Binding Value, Source={StaticResource Palette.Window}}" />
+    <SolidColorBrush x:Key="PanelBackground" Color="{Binding Value, Source={StaticResource Palette.Panel}}" />
+    <SolidColorBrush x:Key="SectionBackground" Color="{Binding Value, Source={StaticResource Palette.Panel}}" />
+    <SolidColorBrush x:Key="HoverBackground" Color="{Binding Value, Source={StaticResource Palette.Hover}}" />
+    <SolidColorBrush x:Key="NavyCaption" Color="{Binding Value, Source={StaticResource Palette.Panel}}" />
+    <SolidColorBrush x:Key="RaisedBackground" Color="{Binding Value, Source={StaticResource Palette.Raised}}" />
+    <SolidColorBrush x:Key="PressedBackground" Color="{Binding Value, Source={StaticResource Palette.Pressed}}" />
+    <SolidColorBrush x:Key="PrimaryText" Color="{Binding Value, Source={StaticResource Palette.Primary}}" />
+    <SolidColorBrush x:Key="OnColourText" Color="{Binding Value, Source={StaticResource Palette.Primary}}" />
+    <SolidColorBrush x:Key="ErrorBannerText" Color="{Binding Value, Source={StaticResource Palette.Primary}}" />
+    <SolidColorBrush x:Key="CopyErrorStroke" Color="{Binding Value, Source={StaticResource Palette.Primary}}" />
+    <SolidColorBrush x:Key="LightText" Color="{Binding Value, Source={StaticResource Palette.Primary}}" />
+    <SolidColorBrush x:Key="SecondaryText" Color="{Binding Value, Source={StaticResource Palette.Secondary}}" />
+    <SolidColorBrush x:Key="SwatchBorder" Color="{Binding Value, Source={StaticResource Palette.Secondary}}" />
+    <SolidColorBrush x:Key="PuckOutline" Color="{Binding Value, Source={StaticResource Palette.Secondary}}" />
+    <SolidColorBrush x:Key="MutedText" Color="{Binding Value, Source={StaticResource Palette.Muted}}" />
+    <SolidColorBrush x:Key="LocalDetailText" Color="{Binding Value, Source={StaticResource Palette.Muted}}" />
+    <SolidColorBrush x:Key="PlaceholderText" Color="{Binding Value, Source={StaticResource Palette.Muted}}" />
+    <SolidColorBrush x:Key="BonePadBorder" Color="{Binding Value, Source={StaticResource Palette.Muted}}" />
+    <SolidColorBrush x:Key="BoneGridLine" Color="{Binding Value, Source={StaticResource Palette.Muted}}" />
+    <SolidColorBrush x:Key="BoneRail" Color="{Binding Value, Source={StaticResource Palette.Muted}}" />
+    <SolidColorBrush x:Key="Accent" Color="{Binding Value, Source={StaticResource Palette.Accent}}" />
+    <SolidColorBrush x:Key="BorderBrush" Color="{Binding Value, Source={StaticResource Palette.Border}}" />
+    <SolidColorBrush x:Key="NavyBorder" Color="{Binding Value, Source={StaticResource Palette.Border}}" />
+    <SolidColorBrush x:Key="SelectionBackground" Color="{Binding Value, Source={StaticResource Palette.SelectedRow}}" />
+    <SolidColorBrush x:Key="BadgeBackground" Color="{Binding Value, Source={StaticResource Palette.SelectedRow}}" />
+    <SolidColorBrush x:Key="TextSelectionBrush" Color="{Binding Value, Source={StaticResource Palette.Accent}}" Opacity="0.75" />
+    <SolidColorBrush x:Key="StatusReady" Color="{Binding Value, Source={StaticResource Palette.Ready}}" />
+    <SolidColorBrush x:Key="ActorIncludeBackground" Color="{Binding Value, Source={StaticResource Palette.Ready}}" />
+    <SolidColorBrush x:Key="StatusPending" Color="{Binding Value, Source={StaticResource Palette.Pending}}" />
+    <SolidColorBrush x:Key="StatusFailed" Color="{Binding Value, Source={StaticResource Palette.Failed}}" />
+    <SolidColorBrush x:Key="ValidationForeground" Color="{Binding Value, Source={StaticResource Palette.Failed}}" />
+    <SolidColorBrush x:Key="WarningText" Color="{Binding Value, Source={StaticResource Palette.Failed}}" />
+    <SolidColorBrush x:Key="ErrorBannerBorder" Color="{Binding Value, Source={StaticResource Palette.Failed}}" />
+    <SolidColorBrush x:Key="ActorRemoveBackground" Color="{Binding Value, Source={StaticResource Palette.Failed}}" />
+    <SolidColorBrush x:Key="ErrorBannerBackground" Color="{Binding Value, Source={StaticResource Palette.Failed}}" Opacity="0.25" />
+    <SolidColorBrush x:Key="BadgeBorder" Color="{Binding Value, Source={StaticResource Palette.Accent}}" />
+    <SolidColorBrush x:Key="HintBorder" Color="{Binding Value, Source={StaticResource Palette.Border}}" />
+    <SolidColorBrush x:Key="BoneSelectionBackground" Color="{Binding Value, Source={StaticResource Palette.Raised}}" />
+    <SolidColorBrush x:Key="PreviewHostBackground" Color="{Binding Value, Source={StaticResource Palette.PreviewHost}}" />
+    <SolidColorBrush x:Key="ArchetypeTag.HMM" Color="{Binding Value, Source={StaticResource Palette.Tag.HMM}}" />
+    <SolidColorBrush x:Key="ArchetypeTag.HMF" Color="{Binding Value, Source={StaticResource Palette.Tag.HMF}}" />
+    <SolidColorBrush x:Key="ArchetypeTag.ASA" Color="{Binding Value, Source={StaticResource Palette.Tag.ASA}}" />
+    <SolidColorBrush x:Key="ArchetypeTag.SAL" Color="{Binding Value, Source={StaticResource Palette.Tag.SAL}}" />
+    <SolidColorBrush x:Key="ArchetypeTag.TUR" Color="{Binding Value, Source={StaticResource Palette.Tag.TUR}}" />
+    <SolidColorBrush x:Key="ArchetypeTag.TUF" Color="{Binding Value, Source={StaticResource Palette.Tag.TUF}}" />
+    <SolidColorBrush x:Key="ArchetypeTag.KRO" Color="{Binding Value, Source={StaticResource Palette.Tag.KRO}}" />
+    <SolidColorBrush x:Key="ArchetypeTag.BAT" Color="{Binding Value, Source={StaticResource Palette.Tag.BAT}}" />
+    <SolidColorBrush x:Key="ArchetypeTag.ALN" Color="{Binding Value, Source={StaticResource Palette.Tag.ALN}}" />
+    <SolidColorBrush x:Key="ArchetypeTag.CUSTOM" Color="{Binding Value, Source={StaticResource Palette.Tag.CUSTOM}}" />
+    <SolidColorBrush x:Key="ArchetypeTag.MESH" Color="{Binding Value, Source={StaticResource Palette.Tag.MESH}}" />
+</ResourceDictionary>

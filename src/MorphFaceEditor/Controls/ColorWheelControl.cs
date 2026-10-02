@@ -6,6 +6,7 @@ namespace MorphFaceEditor.Controls;
 
 public sealed class ColorWheelControl : FrameworkElement
 {
+    public bool HueOnly { get; set; }
     public static readonly DependencyProperty HueProperty = DependencyProperty.Register(
         nameof(Hue), typeof(double), typeof(ColorWheelControl),
         new FrameworkPropertyMetadata(0d, FrameworkPropertyMetadataOptions.AffectsRender, OnColourChanged, CoerceHue));
@@ -112,9 +113,21 @@ public sealed class ColorWheelControl : FrameworkElement
         var x = point.X - ActualWidth / 2;
         var y = point.Y - ActualHeight / 2;
         var radius = Math.Max(1, Math.Min(ActualWidth, ActualHeight) / 2 - 3);
-        Saturation = Math.Clamp(Math.Sqrt(x * x + y * y) / radius, 0, 1);
+        if (!HueOnly) Saturation = Math.Clamp(Math.Sqrt(x * x + y * y) / radius, 0, 1);
         var degrees = Math.Atan2(y, x) * 180 / Math.PI;
         Hue = degrees < 0 ? degrees + 360 : degrees;
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        if (HueOnly && e.Key is Key.Left or Key.Right or Key.Up or Key.Down)
+        {
+            var direction = e.Key is Key.Left or Key.Down ? -1 : 1;
+            var hue = Hue + direction * (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) ? 10 : 1);
+            Hue = (hue % 360 + 360) % 360;
+            e.Handled = true;
+        }
+        base.OnKeyDown(e);
     }
 
     private static Point PointOnCircle(Point center, double radius, double degrees)

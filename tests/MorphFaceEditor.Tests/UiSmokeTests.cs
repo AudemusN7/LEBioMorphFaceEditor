@@ -35,6 +35,7 @@ public static class UiSmokeTests
         new("editor file drops recognise every supported format", EditorFileDropsRecogniseSupportedFormats),
         new("recent files persist, deduplicate, and cap at ten", RecentFilesPersistDeduplicateAndCap),
         new("startup welcome preference persists", StartupWelcomePreferencePersists),
+        new("application preferences consolidate and migrate legacy settings", ApplicationPreferencesMigrate),
         new("application settings: diagnostic PCC captures pending edits without modifying live data", DiagnosticPccCapturesPendingEdits),
         new("application settings: detached diagnostics include loaded geometry and current material assignments", DiagnosticDetachedMeshIncludesState),
         new("standalone morph import is available before opening a PCC", StandaloneImportIsAvailableWithoutPackage),
@@ -2021,7 +2022,9 @@ public static class UiSmokeTests
         MorphFacePackageReader reader,
         StubEditorDialogs? dialogs = null,
         IMorphFaceClipboardService? clipboard = null,
-        MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureCatalogService? textureCatalog = null)
+        MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureCatalogService? textureCatalog = null,
+        IHdrColorDialogService? colorDialog = null,
+        StartupPreferencesService? startupPreferences = null)
     {
         var sceneFactory = new HeadPreviewSceneFactory();
         var profiles = MorphFaceProfileRegistry.CreateDefault();
@@ -2034,14 +2037,15 @@ public static class UiSmokeTests
             new MorphFaceCatalogService(profiles),
             new MorphFacePreviewLoadService(sceneFactory, targets, profiles, reader),
             sceneFactory,
-            new StubColorDialog(),
+            colorDialog ?? new StubColorDialog(),
             new PackageReferenceService(reader, textureCatalog),
             writer,
             context,
             new MorphFaceConversionService(
                 profiles, targets, context, textureCatalog),
             new MorphFaceInterchangeService(),
-            clipboard ?? new StubClipboard());
+            clipboard ?? new StubClipboard(),
+            startupPreferences: startupPreferences);
     }
 
     private static FaceEditorViewModel CreateEditor(
@@ -2613,6 +2617,143 @@ public static class UiSmokeTests
         public Vector4? EditStandard(string title, Vector4 value, Action<Vector4> livePreview) => null;
     }
 
+    private static void ApplicationPreferencesMigrate()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"MFE-Preferences-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            foreach (var (colour, expectedCustom) in new[]
+                     {
+                         (new Vector4(.035f, .043f, .055f, 1), false),
+                         (new Vector4(8 / 255f, 8 / 255f, 13 / 255f, 1), false),
+                         (new Vector4(242 / 255f, 242 / 255f, 242 / 255f, 1), false),
+                         (new Vector4(.2f, .4f, .6f, 1), true)
+                     })
+            {
+                var folder = Path.Combine(root, Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(folder);
+                File.WriteAllText(Path.Combine(folder, "startup-preferences.json"), System.Text.Json.JsonSerializer.Serialize(
+                    new StartupPreferences(true, new(colour.X, colour.Y, colour.Z))));
+                File.WriteAllText(Path.Combine(folder, "theme-preferences.json"), """{"Mode":"Light","AccentHue":285}""");
+                var recentPath = Path.Combine(folder, "face.pcc");
+                File.WriteAllText(Path.Combine(folder, "recent-files.json"), System.Text.Json.JsonSerializer.Serialize(new[] { recentPath }));
+                var path = Path.Combine(folder, "preferences.json");
+                var store = new ApplicationPreferencesStore(path, migrateLegacy: true);
+                var startup = new StartupPreferencesService(store);
+                var themes = new ThemePreferencesStore(store);
+                var recent = new RecentFileService(store);
+                TestAssert.True(startup.Current.SuppressWelcome, "Migration lost the welcome preference.");
+                TestAssert.Equal(expectedCustom, startup.BackgroundColor is not null);
+                if (expectedCustom) TestAssert.Equal(colour, startup.BackgroundColor!.Value);
+                TestAssert.Equal(new ThemePreferences(MorphFaceEditor.Infrastructure.ThemeMode.Light, 285), themes.Current);
+                TestAssert.Equal(recentPath, recent.Paths.Single());
+                TestAssert.Equal(1, Directory.GetFiles(folder, "*.json").Length);
+                // Consumers created separately must merge writes rather than erase other settings.
+                var independentTheme = new ThemePreferencesStore(path);
+                startup.SetSuppressWelcome(false);
+                independentTheme.Save(new(MorphFaceEditor.Infrastructure.ThemeMode.Dark, 120));
+                recent.Add(Path.Combine(folder, "second.pcc"));
+                var reloaded = new ApplicationPreferencesStore(path, migrateLegacy: true);
+                TestAssert.True(!reloaded.Current.SuppressWelcome, "A theme/recent write erased startup preferences.");
+                TestAssert.Equal(MorphFaceEditor.Infrastructure.ThemeMode.Dark, reloaded.Current.Mode);
+                TestAssert.Equal(120d, reloaded.Current.AccentHue);
+                TestAssert.Equal(2, reloaded.Current.RecentFiles!.Length);
+                TestAssert.Equal(expectedCustom, new StartupPreferencesService(reloaded).BackgroundColor is not null);
+                // Once unified preferences exist, stale legacy files cannot override them.
+                File.WriteAllText(Path.Combine(folder, "startup-preferences.json"), """{"SuppressWelcome":true}""");
+                TestAssert.True(!new ApplicationPreferencesStore(path, migrateLegacy: true).Current.SuppressWelcome,
+                    "Stale legacy settings overrode the unified document.");
+                startup.FollowThemeBackground();
+                TestAssert.True(new ApplicationPreferencesStore(path).Current.ViewportBackground is { FollowTheme: true, Colour: null },
+                    "Follow theme persisted a concrete background colour.");
+            }
+            var incomplete = Path.Combine(root, "incomplete");
+            Directory.CreateDirectory(incomplete);
+            File.WriteAllText(Path.Combine(incomplete, "startup-preferences.json"), """{"SuppressWelcome":true,}""");
+            File.WriteAllText(Path.Combine(incomplete, "theme-preferences.json"), "invalid JSON");
+            var incompleteStore = new ApplicationPreferencesStore(Path.Combine(incomplete, "preferences.json"), migrateLegacy: true);
+            TestAssert.True(incompleteStore.Current.SuppressWelcome && incompleteStore.Current.ViewportBackground!.FollowTheme,
+                "A missing background or a trailing comma broke startup migration.");
+            TestAssert.True(File.Exists(Path.Combine(incomplete, "theme-preferences.json")), "Migration discarded an unreadable legacy file.");
+            var blocked = Path.Combine(root, "blocked");
+            Directory.CreateDirectory(Path.Combine(blocked, "preferences.json"));
+            var legacy = Path.Combine(blocked, "startup-preferences.json");
+            File.WriteAllText(legacy, """{"SuppressWelcome":true}""");
+            _ = new ApplicationPreferencesStore(Path.Combine(blocked, "preferences.json"), migrateLegacy: true);
+            TestAssert.True(File.Exists(legacy) && !File.Exists(Path.Combine(blocked, "preferences.json.tmp")),
+                "Failed migration removed legacy data or left a temporary candidate.");
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    private sealed class BackgroundColorDialog : IHdrColorDialogService
+    {
+        public bool ExtendedSliders { get; set; }
+        public Vector4? Result { get; set; }
+        public bool FollowTheme { get; set; }
+        public BackgroundColourChoice? EditBackground(string title, Vector4 value, Vector4 themeDefault, Action<Vector4> livePreview)
+        {
+            livePreview(new Vector4(.6f, .4f, .2f, 1));
+            return Result is { } colour ? new(colour, FollowTheme) : null;
+        }
+        public Vector4? Edit(string title, Vector4 value, Action<Vector4> livePreview) => null;
+        public Vector4? EditStandard(string title, Vector4 value, Action<Vector4> livePreview)
+        {
+            livePreview(new Vector4(.6f, .4f, .2f, 1));
+            return Result;
+        }
+    }
+
+    private static void VerifyAuthoredViewport(ThemeRuntimeTests.Fixture fixture)
+    {
+        using var reader = new MorphFacePackageReader();
+        var preferences = new StartupPreferencesService(Path.Combine(fixture.Root, "viewport-preferences.json"));
+        var dialog = new BackgroundColorDialog();
+        using (var viewModel = CreateMainWindowViewModel(reader, colorDialog: dialog, startupPreferences: preferences))
+        using (var binding = new ThemeViewportBinding(fixture.Manager, viewModel))
+        {
+            var before = viewModel.BackgroundColor;
+            viewModel.EditBackgroundColorCommand.Execute(null);
+            TestAssert.Equal(before, viewModel.BackgroundColor);
+            TestAssert.True(preferences.BackgroundColor is null, "Cancelled preview persisted a custom background.");
+            fixture.Manager.SetMode(MorphFaceEditor.Infrastructure.ThemeMode.Light);
+            TestAssert.Equal(new Vector4(242 / 255f, 242 / 255f, 242 / 255f, 1), viewModel.BackgroundColor);
+            // A default colour remains theme-driven, even if Apply is clicked.
+            dialog.Result = viewModel.BackgroundColor;
+            viewModel.EditBackgroundColorCommand.Execute(null);
+            fixture.Manager.SetMode(MorphFaceEditor.Infrastructure.ThemeMode.Dark);
+            TestAssert.True(viewModel.BackgroundColor != dialog.Result.Value, "Applying the default pinned the viewport.");
+            TestAssert.True(preferences.BackgroundColor is null, "Default background saved a custom colour.");
+            dialog.Result = new Vector4(.2f, .4f, .6f, 1);
+            viewModel.EditBackgroundColorCommand.Execute(null);
+            fixture.Manager.SetMode(MorphFaceEditor.Infrastructure.ThemeMode.Light);
+            TestAssert.Equal(dialog.Result.Value, viewModel.BackgroundColor);
+        }
+        var reopenedPreferences = new StartupPreferencesService(Path.Combine(fixture.Root, "viewport-preferences.json"));
+        using var reopened = CreateMainWindowViewModel(reader, startupPreferences: reopenedPreferences);
+        using var reopenedBinding = new ThemeViewportBinding(fixture.Manager, reopened);
+        TestAssert.Equal(dialog.Result!.Value, reopened.BackgroundColor);
+        fixture.Manager.SetMode(MorphFaceEditor.Infrastructure.ThemeMode.Light);
+        fixture.Manager.SetMode(MorphFaceEditor.Infrastructure.ThemeMode.Dark);
+        TestAssert.Equal(dialog.Result.Value, reopened.BackgroundColor);
+        // Reset clears the authored override, and that state survives another restart.
+        using (var resetViewModel = CreateMainWindowViewModel(reader, colorDialog: dialog, startupPreferences: reopenedPreferences))
+        using (var resetBinding = new ThemeViewportBinding(fixture.Manager, resetViewModel))
+        {
+            dialog.FollowTheme = true;
+            resetViewModel.EditBackgroundColorCommand.Execute(null);
+            TestAssert.True(reopenedPreferences.BackgroundColor is null, "Reset kept a persisted background override.");
+            fixture.Manager.SetMode(MorphFaceEditor.Infrastructure.ThemeMode.Light);
+            TestAssert.Equal(new Vector4(242 / 255f, 242 / 255f, 242 / 255f, 1), resetViewModel.BackgroundColor);
+        }
+        using var resetReopened = CreateMainWindowViewModel(reader,
+            startupPreferences: new StartupPreferencesService(Path.Combine(fixture.Root, "viewport-preferences.json")));
+        using var resetReopenedBinding = new ThemeViewportBinding(fixture.Manager, resetReopened);
+        TestAssert.Equal(new Vector4(242 / 255f, 242 / 255f, 242 / 255f, 1), resetReopened.BackgroundColor);
+        fixture.Manager.SetMode(MorphFaceEditor.Infrastructure.ThemeMode.System);
+    }
+
     private sealed class StubClipboard : IMorphFaceClipboardService
     {
         private readonly HashSet<MorphFaceClipboardKind> _availableKinds;
@@ -2910,27 +3051,45 @@ public static class UiSmokeTests
         TestAssert.Equal(byte.MaxValue, pixel[3]);
     }
 
+    private sealed class SmokeApplication : Application
+    {
+        // Application queues startup before Run; dispatcher-pumping checks must
+        // never launch the editor or load a developer's working palette/AppData.
+        public void InitializeComponent()
+        {
+            Resources.MergedDictionaries.Add(new ResourceDictionary
+            {
+                Source = new Uri("/MorphFaceEditor;component/Themes/EditorTheme.xaml", UriKind.Relative)
+            });
+            Resources.Add("BooleanToVisibilityConverter", new BooleanToVisibilityConverter());
+        }
+    }
+
     private static void HdrPickerConstructs()
     {
         Exception? failure = null;
         var thread = new Thread(() =>
         {
-            App? application = null;
+            SmokeApplication? application = null;
             try
             {
-                application = new App();
+                application = new SmokeApplication();
                 application.InitializeComponent();
+                application.ShutdownMode = ShutdownMode.OnExplicitShutdown;
                 HdrPickerControlsPreserveAndScale();
                 using var reader = new MorphFacePackageReader();
                 using var viewModel = CreateMainWindowViewModel(reader);
                 var mainWindow = new MainWindow(viewModel);
-                var settings = new SettingsWindow(viewModel);
+                using var themeFixture = new ThemeRuntimeTests.Fixture(application.Resources);
+                VerifyAuthoredViewport(themeFixture);
+                var settings = new SettingsWindow(viewModel, themeFixture.Manager);
                 var languages = (ComboBox)settings.FindName("LanguageSelector");
                 var themes = (ComboBox)settings.FindName("ThemeSelector");
                 TestAssert.Equal(10, languages.Items.Count);
-                TestAssert.Equal(2, themes.Items.Count);
-                TestAssert.True(!languages.IsEnabled && !themes.IsEnabled,
-                    "Language/theme placeholders became active before their checkpoints.");
+                TestAssert.Equal(3, themes.Items.Count);
+                TestAssert.True(!languages.IsEnabled && themes.IsEnabled &&
+                                ((Button)settings.FindName("AccentColourButton")).IsEnabled,
+                    "Theme controls are unavailable or the language placeholder became active.");
                 TestAssert.True(((Button)settings.FindName("GenerateLogsButton")).IsEnabled &&
                     ((Button)settings.FindName("ClearDataButton")).IsEnabled,
                     "Checkpoint-one Settings actions are disabled.");
@@ -2942,6 +3101,8 @@ public static class UiSmokeTests
                 mainWindow.ShowInTaskbar = false;
                 mainWindow.Opacity = 0;
                 mainWindow.Show();
+                ThemePaletteTests.Verify(application, mainWindow, viewModel);
+                ThemeRuntimeTests.Verify(application, mainWindow, viewModel, themeFixture);
                 var faceList = mainWindow.FindName("FaceList") as ListBox;
                 var commit = mainWindow.FindName("CommitFaceButton") as Button;
                 var randomise = mainWindow.FindName("GlobalRandomiseButton") as Button;
@@ -3180,7 +3341,7 @@ public static class UiSmokeTests
         }
         if (failure is not null)
         {
-            throw new Exception($"HDR picker failed during construction: {failure.Message}", failure);
+            throw new Exception($"HDR picker failed during construction: {failure}", failure);
         }
     }
 
@@ -3263,6 +3424,9 @@ public static class UiSmokeTests
         ((Button)resettableBackground.FindName("ResetBackgroundButton")!).RaiseEvent(
             new RoutedEventArgs(Button.ClickEvent));
         TestAssert.Equal(WpfHdrColorDialogService.DefaultBackgroundColor, resettableBackground.Value);
+        TestAssert.True(resettableBackground.UsesResetColour, "Background Reset lost its theme-following intent.");
+        ((Slider)resettableBackground.FindName("RedSlider")!).Value = .5;
+        TestAssert.True(!resettableBackground.UsesResetColour, "Editing after Reset retained theme-following intent.");
         resettableBackground.Close();
     }
 

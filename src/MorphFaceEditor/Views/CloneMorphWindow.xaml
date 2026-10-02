@@ -4,8 +4,8 @@
         Title="Clone BioMorphFace"
         Width="500" Height="220" ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner"
-        Background="{StaticResource WindowBackground}"
-        Foreground="{StaticResource PrimaryText}">
+        Background="{DynamicResource WindowBackground}"
+        Foreground="{DynamicResource PrimaryText}">
     <Grid Margin="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -15,10 +15,10 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <TextBlock x:Name="IntroText" Text="Create an independent face and material-override child beside the selected export."
-                   TextWrapping="Wrap" Foreground="{StaticResource SecondaryText}" Margin="0,0,0,14" />
+                   TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}" Margin="0,0,0,14" />
         <TextBlock Grid.Row="1" Text="NEW BIOMORPHFACE NAME" Style="{StaticResource FieldLabel}" />
         <TextBox x:Name="ObjectNameBox" Grid.Row="2" Margin="0,5,0,0" />
-        <TextBlock x:Name="ValidationText" Grid.Row="3" Foreground="#FFFF8C8C" FontSize="11"
+        <TextBlock x:Name="ValidationText" Grid.Row="3" Foreground="{DynamicResource ValidationForeground}" FontSize="11"
                    Margin="0,6,0,0" TextWrapping="Wrap" />
         <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
             <Button Content="Cancel" IsCancel="True" MinWidth="84" Margin="0,0,8,0" />

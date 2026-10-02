@@ -100,6 +100,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private HeadPreviewLightingPreset _lightingPreset = HeadPreviewLightingPreset.Studio;
     private int _previewLod;
     private Vector4 _backgroundColor = WpfHdrColorDialogService.DefaultBackgroundColor;
+    private bool _hasAuthoredBackground;
+    private Vector4 _themeBackgroundColor = WpfHdrColorDialogService.DefaultBackgroundColor;
     private PackageReferenceCatalog _referenceCatalog = new([], []);
     private int _attachmentChangeVersion;
     private CancellationTokenSource? _attachmentPreviewCancellation;
@@ -159,6 +161,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _startupPreferences = startupPreferences;
         if (startupPreferences?.BackgroundColor is { } savedBackground)
         {
+            _hasAuthoredBackground = true;
             _backgroundColor = Vector4.Clamp(savedBackground, Vector4.Zero, Vector4.One);
         }
         _openPackageCommand = new AsyncRelayCommand(OpenPackageAsync, () => !IsBusy);
@@ -566,6 +569,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         ToColorByte(BackgroundColor.Y),
         ToColorByte(BackgroundColor.Z)));
 
+    internal void ApplyThemeBackgroundColor(Vector4 colour)
+    {
+        _themeBackgroundColor = colour;
+        if (!_hasAuthoredBackground) BackgroundColor = colour;
+    }
+
     public HeadPreviewOptions CreatePreviewOptions() => new(
         RenderMode,
         Wireframe,
@@ -576,14 +585,19 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private void EditBackgroundColor()
     {
         var before = BackgroundColor;
-        var applied = _colorDialog.EditStandard(
+        var applied = _colorDialog.EditBackground(
             "Preview background colour",
             before,
+            _themeBackgroundColor,
             value => BackgroundColor = value);
-        BackgroundColor = applied ?? before;
+        var followTheme = applied is not null && (applied.FollowTheme || applied.Colour == _themeBackgroundColor);
+        BackgroundColor = applied is null ? (_hasAuthoredBackground ? before : _themeBackgroundColor)
+            : followTheme ? _themeBackgroundColor : applied.Colour;
         if (applied is not null)
         {
-            _startupPreferences?.SetBackgroundColor(BackgroundColor);
+            _hasAuthoredBackground = !followTheme;
+            if (followTheme) _startupPreferences?.FollowThemeBackground();
+            else _startupPreferences?.SetBackgroundColor(BackgroundColor);
         }
     }
 

@@ -7,6 +7,12 @@
     <RootNamespace>MorphFaceEditor</RootNamespace>
     <ApplicationIcon>..\..\icon.ico</ApplicationIcon>
   </PropertyGroup>
+  <!-- Temporary palette tooling is absent from Release assemblies and resources. -->
+  <ItemGroup Condition="'$(Configuration)' != 'Debug'">
+    <Page Remove="Views\ThemeDebugWindow.xaml" />
+    <Compile Remove="Views\ThemeDebugWindow.xaml.cs" />
+    <Compile Remove="Infrastructure\DebugThemePalette.cs" />
+  </ItemGroup>
   <ItemGroup>
     <Resource Include="..\..\icon.ico" Link="icon.ico" />
     <Resource Include="..\..\ico_256.png" Link="ico_256.png" />

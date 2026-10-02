@@ -60,6 +60,13 @@ public partial class ManualAssetSelectionWindow : Window
 
     private void OnSearchChanged(object sender, TextChangedEventArgs e) => _view?.Refresh();
 
+    private void OnAssetListScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        if (sender is ScrollViewer viewer && ReferenceEquals(e.OriginalSource, viewer) &&
+            viewer.Template.FindName("AssetHeaderScrollViewer", viewer) is ScrollViewer header)
+            header.ScrollToHorizontalOffset(e.HorizontalOffset);
+    }
+
     private async void OnAssetToolTipOpening(object sender, ToolTipEventArgs e)
     {
         if (sender is not FrameworkElement { DataContext: ManualAssetRow row } ||

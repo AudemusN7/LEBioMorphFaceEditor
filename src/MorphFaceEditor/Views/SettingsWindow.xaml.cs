@@ -2,6 +2,7 @@ using System.Windows;
 using Microsoft.Win32;
 using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.ViewModels;
+using ThemeMode = MorphFaceEditor.Infrastructure.ThemeMode;
 
 namespace MorphFaceEditor.Views;
 
@@ -9,16 +10,51 @@ public partial class SettingsWindow : Window
 {
     private readonly MainWindowViewModel _viewModel;
     private bool _operating;
+    private readonly ThemeManager? _themes;
+    private bool _updatingTheme;
 
-    public SettingsWindow(MainWindowViewModel viewModel)
+    public SettingsWindow(MainWindowViewModel viewModel) : this(viewModel, (Application.Current as App)?.Themes) { }
+
+    internal SettingsWindow(MainWindowViewModel viewModel, ThemeManager? themes)
     {
         InitializeComponent();
         DarkTitleBar.Apply(this);
         _viewModel = viewModel;
+        _themes = themes;
+        ThemeSelector.IsEnabled = themes is not null;
+        AccentColourButton.IsEnabled = themes is not null;
+        if (themes is not null)
+        {
+            themes.Changed += OnThemeChanged;
+            UpdateThemeSelection();
+            Closed += (_, _) => themes.Changed -= OnThemeChanged;
+        }
         Closing += (_, args) => args.Cancel = _operating;
     }
 
     public bool ClearDataRequested { get; private set; }
+
+    private void OnThemeChanged(object? sender, EventArgs e) => UpdateThemeSelection();
+    private void UpdateThemeSelection()
+    {
+        _updatingTheme = true;
+        ThemeSelector.SelectedIndex = (int)_themes!.Mode;
+        _updatingTheme = false;
+    }
+    private void OnThemeSelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (_updatingTheme || _themes is null || ThemeSelector.SelectedIndex < 0) return;
+        try { _themes.SetMode((ThemeMode)ThemeSelector.SelectedIndex); }
+        catch (Exception exception) when (exception is System.IO.IOException or UnauthorizedAccessException)
+        {
+            UpdateThemeSelection();
+            OperationStatus.Text = $"Could not save your theme: {exception.Message}";
+        }
+    }
+    private void OnAccentColourClick(object sender, RoutedEventArgs e)
+    {
+        if (_themes is not null) _ = new AccentColorPickerWindow(_themes) { Owner = this }.ShowDialog();
+    }
 
     private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
 
@@ -79,5 +115,7 @@ public partial class SettingsWindow : Window
         GenerateLogsButton.IsEnabled = !operating;
         ClearDataButton.IsEnabled = !operating;
         CloseButton.IsEnabled = !operating;
+        ThemeSelector.IsEnabled = !operating && _themes is not null;
+        AccentColourButton.IsEnabled = !operating && _themes is not null;
     }
 }

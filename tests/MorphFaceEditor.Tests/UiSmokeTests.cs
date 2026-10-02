@@ -3287,24 +3287,22 @@ public static class UiSmokeTests
                     "Imported_Player",
                     ["Existing_Player"],
                     importMode: true);
-                TestAssert.Equal("Name Imported BioMorphFace", standaloneName.Title);
+                TestAssert.Equal(Loc.Text("loc_CloneMorphWindow_NameImportedBioMorphFace"), standaloneName.Title);
                 standaloneName.Close();
                 var standaloneUnsaved = new UnsavedChangesWindow(
                     "BIOG_MORPH_FACE.Imported_Player",
                     UnsavedChangesScope.StandaloneFace);
-                TestAssert.Equal("Export…", ((Button)standaloneUnsaved.FindName("SaveButton")).Content);
-                TestAssert.True(((TextBlock)standaloneUnsaved.FindName("SaveExplanationText")).Text
-                        .Contains("read-only", StringComparison.OrdinalIgnoreCase),
-                    "The standalone warning does not explain that the installed template is protected.");
+                TestAssert.Equal(Loc.Text("loc_UnsavedChangesWindow_Export"), ((Button)standaloneUnsaved.FindName("SaveButton")).Content);
+                TestAssert.Equal(Loc.Text("loc_UnsavedChangesWindow_ExportStandaloneMorphExplanation"),
+                    ((TextBlock)standaloneUnsaved.FindName("SaveExplanationText")).Text);
                 standaloneUnsaved.Close();
                 var faceUnsaved = new UnsavedChangesWindow(
                     "BIOG_MORPH_FACE.SelectedFace",
                     UnsavedChangesScope.Face);
-                TestAssert.Equal("Commit", ((Button)faceUnsaved.FindName("SaveButton")).Content);
-                TestAssert.Equal("Don't Commit", ((Button)faceUnsaved.FindName("DiscardButton")).Content);
-                TestAssert.True(((TextBlock)faceUnsaved.FindName("SaveExplanationText")).Text
-                        .Contains("without saving the source PCC", StringComparison.OrdinalIgnoreCase),
-                    "The face warning does not distinguish Commit from saving the package.");
+                TestAssert.Equal(Loc.Text("loc_UnsavedChangesWindow_Commit"), ((Button)faceUnsaved.FindName("SaveButton")).Content);
+                TestAssert.Equal(Loc.Text("loc_UnsavedChangesWindow_DontCommit"), ((Button)faceUnsaved.FindName("DiscardButton")).Content);
+                TestAssert.Equal(Loc.Text("loc_UnsavedChangesWindow_CommitPackageChangesExplanation"),
+                    ((TextBlock)faceUnsaved.FindName("SaveExplanationText")).Text);
                 faceUnsaved.Close();
                 var morphPackage = new SaveMorphToPccWindow(
                     "Face.pcc",

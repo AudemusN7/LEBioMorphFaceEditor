@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>MorphFaceEditor.Localiser</AssemblyName>
+    <RootNamespace>MorphFaceEditor.Localiser</RootNamespace>
+    <ApplicationIcon>..\..\icon.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\MorphFaceEditor.Localisation\MorphFaceEditor.Localisation.csproj" />
+    <InternalsVisibleTo Include="MorphFaceEditor.Tests" />
+    <Content Include="..\..\src\MorphFaceEditor\Localisation\Strings.*.xaml" Link="Catalogue\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Page Include="..\..\src\MorphFaceEditor\Themes\DarkColours.xaml" Link="Themes\DarkColours.xaml" />
+    <Page Include="..\..\src\MorphFaceEditor\Themes\EditorTheme.xaml" Link="Themes\EditorTheme.xaml" />
+  </ItemGroup>
+</Project>

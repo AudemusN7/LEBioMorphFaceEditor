@@ -156,6 +156,12 @@ internal static class LocalisationTests
                 Loc.Initialize(app.Resources, "fr", root);
                 TestAssert.Equal("Settings", settings.Title);
                 TestAssert.Equal(0, Loc.TranslatedStringCount);
+                File.WriteAllText(Path.Combine(root, "Strings.en-GB.xaml"), DictionaryXml(
+                    "<!-- localiser: {\"Key\":\"loc_Settings_Title\",\"DoNotTranslate\":true} --><system:String x:Key=\"loc_Settings_Title\">Settings</system:String>"));
+                File.WriteAllText(Path.Combine(root, "Strings.fr.xaml"), DictionaryXml("<system:String x:Key=\"loc_Settings_Title\">Paramètres</system:String>"));
+                Loc.Initialize(app.Resources, "fr", root);
+                TestAssert.Equal("Settings", settings.Title);
+                TestAssert.Equal(0, Loc.TranslatedStringCount);
             }
             finally
             {

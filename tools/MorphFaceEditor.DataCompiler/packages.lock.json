@@ -38,6 +38,7 @@
         "dependencies": {
           "MorphFaceEditor.Core": "[1.0.0, )",
           "MorphFaceEditor.LegendaryExplorer": "[1.0.0, )",
+          "MorphFaceEditor.Localisation": "[1.0.0, )",
           "MorphFaceEditor.Rendering": "[1.0.0, )"
         }
       },
@@ -59,6 +60,9 @@
           "SixLabors.ImageSharp": "[3.1.12, )",
           "System.IO.Hashing": "[10.0.2, )"
         }
+      },
+      "morphfaceeditor.localisation": {
+        "type": "Project"
       },
       "morphfaceeditor.rendering": {
         "type": "Project",

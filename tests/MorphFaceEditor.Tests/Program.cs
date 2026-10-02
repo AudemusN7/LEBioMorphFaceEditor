@@ -38,7 +38,7 @@ var suites = new Dictionary<string, IReadOnlyList<TestCase>>(StringComparer.Ordi
         .Concat(GltfInverseMorphTests.All)
         .Concat(PccTextureDependencyResolverTests.All)
         .ToArray(),
-    ["tooling"] = RandomisationTests.Tooling.Concat(QaUtilityTests.All)
+    ["tooling"] = LocaliserTests.All.Concat(RandomisationTests.Tooling).Concat(QaUtilityTests.All)
         .Concat(QaNpcEyeGraphCheckTests.All).Concat(QaTextureIdentityTests.All).ToArray()
 };
 

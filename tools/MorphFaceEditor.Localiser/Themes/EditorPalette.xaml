@@ -1,0 +1,20 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ResourceDictionary.MergedDictionaries><ResourceDictionary Source="DarkColours.xaml" /></ResourceDictionary.MergedDictionaries>
+    <SolidColorBrush x:Key="WindowBackground" Color="{StaticResource Default.Window}" />
+    <SolidColorBrush x:Key="InputBackground" Color="{StaticResource Default.Window}" />
+    <SolidColorBrush x:Key="PanelBackground" Color="{StaticResource Default.Panel}" />
+    <SolidColorBrush x:Key="RaisedBackground" Color="{StaticResource Default.Raised}" />
+    <SolidColorBrush x:Key="HoverBackground" Color="{StaticResource Default.Hover}" />
+    <SolidColorBrush x:Key="PressedBackground" Color="{StaticResource Default.Pressed}" />
+    <SolidColorBrush x:Key="PrimaryText" Color="{StaticResource Default.Primary}" />
+    <SolidColorBrush x:Key="SecondaryText" Color="{StaticResource Default.Secondary}" />
+    <SolidColorBrush x:Key="MutedText" Color="{StaticResource Default.Muted}" />
+    <SolidColorBrush x:Key="Accent" Color="{StaticResource Default.Accent}" />
+    <SolidColorBrush x:Key="BorderBrush" Color="{StaticResource Default.Border}" />
+    <SolidColorBrush x:Key="SelectionBackground" Color="{StaticResource Default.SelectedRow}" />
+    <SolidColorBrush x:Key="TextSelectionBrush" Color="{StaticResource Default.Accent}" Opacity="0.75" />
+    <SolidColorBrush x:Key="StatusReady" Color="{StaticResource Default.Ready}" />
+    <SolidColorBrush x:Key="StatusPending" Color="{StaticResource Default.Pending}" />
+    <SolidColorBrush x:Key="StatusFailed" Color="{StaticResource Default.Failed}" />
+</ResourceDictionary>

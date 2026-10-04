@@ -1817,4 +1817,6 @@ Elige «No» para conservar las texturas actuales del cuero cabelludo.</system:S
     <system:String x:Key="loc_WpfEditorDialogService_SaveMeshMaterialsTitle" xml:space="preserve">Guardar malla y materiales en PCC</system:String>
     <system:String x:Key="loc_WpfEditorDialogService_SwitchScalp" xml:space="preserve">Cambiar cuero cabelludo</system:String>
     <system:String x:Key="loc_WpfEditorDialogService_UModelExportFolderTitle" xml:space="preserve">Selecciona una carpeta para exportar la malla con UModel</system:String>
+    <system:String x:Key="loc_View_MainWindow_NoFaceLoaded" xml:space="preserve">No hay ningún rostro cargado.</system:String>
+    <system:String x:Key="loc_WpfEditorDialogService_DeleteReferencedMorphMessage" xml:space="preserve">¡'{0}' está referenciado por otras entradas! Estas referencias se romperán si lo eliminas. ¿Seguro que quieres continuar?&#xA;&#xA;Este cambio será temporal hasta que guardes el paquete.</system:String>
 </ResourceDictionary>

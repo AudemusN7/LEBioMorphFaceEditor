@@ -210,6 +210,15 @@ public sealed class MorphFacePackageContextService
         });
     }
 
+    public bool HasMorphReferences(string packagePath, string facePath)
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        using var package = MEPackageHandler.OpenMEPackage(packagePath, forceLoadFromDisk: true);
+        EnsureSupportedGame(package);
+        var face = FindFace(package, facePath);
+        return face.GetEntriesThatReferenceThisOne().Keys.Any(entry => !entry.IsDescendantOf(face));
+    }
+
     public void DeleteMorph(string packagePath, string facePath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(packagePath);

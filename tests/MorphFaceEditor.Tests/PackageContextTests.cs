@@ -24,6 +24,7 @@ public static class PackageContextTests
         new("LE2 BioD workspaces retain post-load import resolution", Le2BioDWorkspaceRetainsPostLoadResolution),
         new("LE1 context clone creates an independently named face and material child", CloneLe1Morph),
         new("LE1 context delete trashes a face only in its package workspace", DeleteLe1Morph),
+        new("morph deletion detects incoming references without modifying the PCC", MorphDeleteReferences),
         new("LE1 morph export creates and extends a dependency-only PCC without changing paths", ExportLe1MorphPackage),
         new("external hair and attachment meshes port their material chains on morph export", ExternalAttachmentsPortOnMorphExport),
         new("morph package export preserves paths across LE1, LE2, and LE3", ExportMorphPackagesAcrossGames),
@@ -218,6 +219,33 @@ public static class PackageContextTests
 
             TestAssert.True(ReadFaces(path).Any(face => face.ObjectName == "MFE_ContextClone_Test"),
                 "The committed workspace did not install the cloned face in the source PCC.");
+        });
+    }
+
+    private static void MorphDeleteReferences()
+    {
+        WithPackageCopy("LE1 GlobalMorphs.pcc", path =>
+        {
+            var service = new MorphFacePackageContextService();
+            var source = ReadFaces(path).First();
+            var clone = service.CloneMorph(path, source.InstancedPath, "MFE_DeleteReference_Test");
+            var beforeCheck = PackageFingerprint.Capture(path);
+            TestAssert.True(!service.HasMorphReferences(path, clone.FaceInstancedPath),
+                "An unreferenced face or its own children triggered the warning.");
+            TestAssert.Equal(beforeCheck, PackageFingerprint.Capture(path));
+            using (var package = MEPackageHandler.OpenMEPackage(path, forceLoadFromDisk: true))
+            {
+                package.FindExport(source.InstancedPath)!.WriteProperty(new ObjectProperty(
+                    package.FindExport(clone.FaceInstancedPath)!.UIndex, "MFE_TestMorphReference"));
+                package.Save(path);
+            }
+            beforeCheck = PackageFingerprint.Capture(path);
+            TestAssert.True(service.HasMorphReferences(path, clone.FaceInstancedPath),
+                "An incoming object reference did not trigger the warning.");
+            TestAssert.Equal(beforeCheck, PackageFingerprint.Capture(path));
+            service.DeleteMorph(path, clone.FaceInstancedPath);
+            TestAssert.True(ReadFaces(path).All(face => face.InstancedPath != clone.FaceInstancedPath),
+                "Referenced deletion was prohibited rather than left to the user's confirmation.");
         });
     }
 

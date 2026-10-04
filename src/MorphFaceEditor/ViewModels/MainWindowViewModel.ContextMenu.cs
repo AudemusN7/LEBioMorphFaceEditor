@@ -67,26 +67,28 @@ public sealed partial class MainWindowViewModel
 
     private async Task DeleteMorphAsync()
     {
-        if (SelectedFace is not { } source || WorkspacePackagePath is not { } workspacePath ||
-            !_dialogs.ConfirmDeleteMorph(source.InstancedPath))
+        if (SelectedFace is not { } source || WorkspacePackagePath is not { } workspacePath)
         {
             return;
         }
-        if (!await EnsureCanAbandonEditorChangesAsync())
-        {
-            RestoreLoadedFaceSelection();
-            return;
-        }
-
-        var selectedIndex = Faces.IndexOf(source);
-        var preferredFacePath = Faces.ElementAtOrDefault(selectedIndex + 1)?.InstancedPath ??
-                                Faces.ElementAtOrDefault(selectedIndex - 1)?.InstancedPath;
         IsBusy = true;
-        ErrorMessage = null;
-        Status = Loc.Format("loc_Shell_Status_Deleting", source.DisplayName);
         var packageModified = false;
         try
         {
+            var hasReferences = await Task.Run(() =>
+                _packageContextService.HasMorphReferences(workspacePath, source.InstancedPath));
+            if (!_dialogs.ConfirmDeleteMorph(source.InstancedPath, hasReferences)) return;
+            if (!await EnsureCanAbandonEditorChangesAsync())
+            {
+                RestoreLoadedFaceSelection();
+                return;
+            }
+            var selectedIndex = Faces.IndexOf(source);
+            var preferredFacePath = Faces.ElementAtOrDefault(selectedIndex + 1)?.InstancedPath ??
+                                    Faces.ElementAtOrDefault(selectedIndex - 1)?.InstancedPath;
+            IsBusy = true;
+            ErrorMessage = null;
+            Status = Loc.Format("loc_Shell_Status_Deleting", source.DisplayName);
             AppLog.Information($"Trashing face '{source.InstancedPath}' and its descendants in temporary workspace '{workspacePath}'.");
             await Task.Run(() => _packageContextService.DeleteMorph(workspacePath, source.InstancedPath));
             packageModified = true;

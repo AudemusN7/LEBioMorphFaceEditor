@@ -1817,4 +1817,6 @@ Wybierz Nie, aby pozostawić bieżące tekstury skóry głowy.</system:String>
     <system:String x:Key="loc_WpfEditorDialogService_SaveMeshMaterialsTitle" xml:space="preserve">Zapisz siatkę i materiały do PCC</system:String>
     <system:String x:Key="loc_WpfEditorDialogService_SwitchScalp" xml:space="preserve">Zmień skórę głowy</system:String>
     <system:String x:Key="loc_WpfEditorDialogService_UModelExportFolderTitle" xml:space="preserve">Wybierz folder eksportu siatki UModel</system:String>
+    <system:String x:Key="loc_View_MainWindow_NoFaceLoaded" xml:space="preserve">Nie wczytano twarzy.</system:String>
+    <system:String x:Key="loc_WpfEditorDialogService_DeleteReferencedMorphMessage" xml:space="preserve">'{0}' jest używany przez inne wpisy! Jeśli go usuniesz, te odwołania zostaną zerwane. Czy na pewno chcesz kontynuować?&#xA;&#xA;Ta zmiana pozostanie tymczasowa do zapisania pakietu.</system:String>
 </ResourceDictionary>

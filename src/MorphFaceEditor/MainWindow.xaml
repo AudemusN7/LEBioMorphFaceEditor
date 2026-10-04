@@ -401,7 +401,18 @@
                         </Style>
                     </StackPanel.Style>
                     <TextBlock Text="{DynamicResource loc_View_MainWindow_HEADPREVIEW}" Foreground="{DynamicResource PlaceholderText}" FontSize="24" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                    <TextBlock Text="{DynamicResource loc_View_MainWindow_OpenAPackageContainingBioMorphFaceExports}" Foreground="{DynamicResource MutedText}" Margin="0,8,0,0" />
+                    <TextBlock Foreground="{DynamicResource MutedText}" Margin="0,8,0,0">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Text" Value="{DynamicResource loc_View_MainWindow_OpenAPackageContainingBioMorphFaceExports}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasWorkspace}" Value="True">
+                                        <Setter Property="Text" Value="{DynamicResource loc_View_MainWindow_NoFaceLoaded}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
                 </StackPanel>
                 <Border HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="14" Background="{DynamicResource PreviewHintBackground}" BorderBrush="{DynamicResource HintBorder}" BorderThickness="1" Padding="10,7" CornerRadius="4">
                     <TextBlock Foreground="{DynamicResource SecondaryText}" FontSize="11" Text="{DynamicResource loc_View_MainWindow_LeftDragOrbitMiddleDragPanRightDragWheelZoom}" />

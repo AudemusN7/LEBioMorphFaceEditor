@@ -1817,4 +1817,8 @@ Choose No to keep the current scalp textures.</system:String>
     <system:String x:Key="loc_WpfEditorDialogService_SaveMeshMaterialsTitle" xml:space="preserve">Save Mesh and Materials to PCC</system:String>
     <system:String x:Key="loc_WpfEditorDialogService_SwitchScalp" xml:space="preserve">Switch Scalp</system:String>
     <system:String x:Key="loc_WpfEditorDialogService_UModelExportFolderTitle" xml:space="preserve">Select a folder for the UModel mesh export</system:String>
+    <system:String x:Key="loc_View_MainWindow_NoFaceLoaded" xml:space="preserve">No Face Loaded.</system:String>
+    <system:String x:Key="loc_WpfEditorDialogService_DeleteReferencedMorphMessage" xml:space="preserve">'{0}' is referenced by other entries! These references will be broken if you trash it. Are you sure you want to proceed?
+
+This change remains temporary until you save the package.</system:String>
 </ResourceDictionary>

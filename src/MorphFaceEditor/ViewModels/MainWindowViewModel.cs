@@ -816,7 +816,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 Faces.Add(face);
             }
             SelectedFace = preferredFacePath is null
-                ? Faces.FirstOrDefault()
+                ? null
                 : Faces.FirstOrDefault(face => string.Equals(
                       face.InstancedPath,
                       preferredFacePath,
@@ -1078,6 +1078,15 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _loadedFace = loaded;
         _preservedOtherMeshAssets = loaded?.OtherMeshes.Skip(1).ToArray() ?? [];
         Editor = editor;
+        if (editor is null)
+        {
+            LoadedFacePath = null;
+            FaceDetails = null;
+            _faceDetailsPrefix = null;
+            _faceDetailsHasBakedFallback = false;
+            HasPreview = false;
+            PreviewCleared?.Invoke(this, EventArgs.Empty);
+        }
         if (Editor is not null)
         {
             Editor.MorphRandomisationStrength = MorphRandomisationStrength;

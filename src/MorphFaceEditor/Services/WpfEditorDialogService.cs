@@ -210,10 +210,12 @@ public sealed class WpfEditorDialogService : IEditorDialogService
         return window.ShowDialog() == true ? window.SelectedCandidate : null;
     }
 
-    public bool ConfirmDeleteMorph(string facePath) =>
+    public bool ConfirmDeleteMorph(string facePath, bool hasReferences = false) =>
         new EditorMessageWindow(
             Loc.Text("loc_WpfEditorDialogService_DeleteMorphTitle"),
-            Loc.Format("loc_WpfEditorDialogService_DeleteMorphMessage", facePath),
+            Loc.Format(hasReferences
+                ? "loc_WpfEditorDialogService_DeleteReferencedMorphMessage"
+                : "loc_WpfEditorDialogService_DeleteMorphMessage", facePath),
             confirmation: true,
             primaryLabel: Loc.Text("loc_WpfEditorDialogService_DeleteMorphTitle"),
             secondaryLabel: Loc.Text("loc_Common_Cancel"))

@@ -1817,4 +1817,6 @@
     <system:String x:Key="loc_WpfEditorDialogService_SaveMeshMaterialsTitle" xml:space="preserve">メッシュとマテリアルを PCC に保存</system:String>
     <system:String x:Key="loc_WpfEditorDialogService_SwitchScalp" xml:space="preserve">頭皮を切り替える</system:String>
     <system:String x:Key="loc_WpfEditorDialogService_UModelExportFolderTitle" xml:space="preserve">UModel メッシュエクスポート先のフォルダーを選択</system:String>
+    <system:String x:Key="loc_View_MainWindow_NoFaceLoaded" xml:space="preserve">顔が読み込まれていません。</system:String>
+    <system:String x:Key="loc_WpfEditorDialogService_DeleteReferencedMorphMessage" xml:space="preserve">'{0}' は他のエントリから参照されています。破棄すると参照が壊れます。本当に続行しますか？&#xA;&#xA;この変更はパッケージを保存するまで一時的なものです。</system:String>
 </ResourceDictionary>

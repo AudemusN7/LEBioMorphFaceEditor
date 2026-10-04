@@ -2444,6 +2444,10 @@ No: discard custom asset databases after a successful rebuild.</system:String>
     <!--localiser: {"Key":"loc_View_UnsavedChangesWindow_UnsavedPackageChanges","ReviewedHash":"1AEE6C46BED786200C621D92581D4092122BBF84EFEEDDB4EB54AEAC007EDCEC","DoNotTranslate":false,"Note":"","SourceHash":null}--><system:String x:Key="loc_View_UnsavedChangesWindow_UnsavedPackageChanges" xml:space="preserve">Unsaved package changes</system:String>
 
     <!-- WpfEditorDialogService -->
+    <!--localiser: {"Key":"loc_View_MainWindow_NoFaceLoaded","ReviewedHash":"141E53EAA03C69DD1E06DDDF4B05F71CA6CFD9E4C2DE3D2F0C73805E8979AD05","DoNotTranslate":false,"Note":"","SourceHash":null}--><system:String x:Key="loc_View_MainWindow_NoFaceLoaded" xml:space="preserve">No Face Loaded.</system:String>
+    <!--localiser: {"Key":"loc_WpfEditorDialogService_DeleteReferencedMorphMessage","ReviewedHash":"2DAF8E9DF79BD3302BF105A90304F46F512DDED6D564B2B637BA119E258AE0B2","DoNotTranslate":false,"Note":"","SourceHash":null}--><system:String x:Key="loc_WpfEditorDialogService_DeleteReferencedMorphMessage" xml:space="preserve">'{0}' is referenced by other entries! These references will be broken if you trash it. Are you sure you want to proceed?
+
+This change remains temporary until you save the package.</system:String>
     <!--localiser: {"Key":"loc_WpfEditorDialogService_DeleteMorphMessage","ReviewedHash":"58EFF343B6F4EE9CCD5CB306E7BAB5BAF91D7DFFB2CD6B8BE9A9B9D440A9F1A7","DoNotTranslate":false,"Note":"","SourceHash":null}--><system:String x:Key="loc_WpfEditorDialogService_DeleteMorphMessage" xml:space="preserve">Trash '{0}' and all of its child exports?
 
 This change remains temporary until you save the package.</system:String>

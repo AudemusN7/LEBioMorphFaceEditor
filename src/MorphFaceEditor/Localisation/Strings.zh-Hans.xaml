@@ -1817,4 +1817,6 @@
     <system:String x:Key="loc_WpfEditorDialogService_SaveMeshMaterialsTitle" xml:space="preserve">将网格和材质保存到 PCC</system:String>
     <system:String x:Key="loc_WpfEditorDialogService_SwitchScalp" xml:space="preserve">切换头皮</system:String>
     <system:String x:Key="loc_WpfEditorDialogService_UModelExportFolderTitle" xml:space="preserve">为 UModel 网格导出选择文件夹</system:String>
+    <system:String x:Key="loc_View_MainWindow_NoFaceLoaded" xml:space="preserve">尚未加载面部。</system:String>
+    <system:String x:Key="loc_WpfEditorDialogService_DeleteReferencedMorphMessage" xml:space="preserve">条目 {0} 被其他条目引用！移除它会导致这些引用失效。确定要继续吗？&#xA;&#xA;保存包之前，此更改仅保留在临时工作区中。</system:String>
 </ResourceDictionary>

@@ -1817,4 +1817,6 @@ Choisissez Non pour conserver les textures actuelles.</system:String>
     <system:String x:Key="loc_WpfEditorDialogService_SaveMeshMaterialsTitle" xml:space="preserve">Enregistrer le maillage et les matériaux dans un PCC</system:String>
     <system:String x:Key="loc_WpfEditorDialogService_SwitchScalp" xml:space="preserve">Changer le cuir chevelu</system:String>
     <system:String x:Key="loc_WpfEditorDialogService_UModelExportFolderTitle" xml:space="preserve">Sélectionner un dossier pour l’export du maillage UModel</system:String>
+    <system:String x:Key="loc_View_MainWindow_NoFaceLoaded" xml:space="preserve">Aucun visage chargé.</system:String>
+    <system:String x:Key="loc_WpfEditorDialogService_DeleteReferencedMorphMessage" xml:space="preserve">'{0}' est référencé par d’autres entrées ! Ces références seront rompues si vous le supprimez. Voulez-vous continuer ?&#xA;&#xA;Cette modification restera temporaire jusqu’à l’enregistrement du package.</system:String>
 </ResourceDictionary>

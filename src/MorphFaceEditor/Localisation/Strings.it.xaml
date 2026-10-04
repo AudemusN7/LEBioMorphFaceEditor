@@ -1817,4 +1817,6 @@ Scegli No per mantenere le texture attuali.</system:String>
     <system:String x:Key="loc_WpfEditorDialogService_SaveMeshMaterialsTitle" xml:space="preserve">Salva mesh e materiali in PCC</system:String>
     <system:String x:Key="loc_WpfEditorDialogService_SwitchScalp" xml:space="preserve">Cambia cuoio capelluto</system:String>
     <system:String x:Key="loc_WpfEditorDialogService_UModelExportFolderTitle" xml:space="preserve">Seleziona una cartella per l'esportazione mesh di UModel</system:String>
+    <system:String x:Key="loc_View_MainWindow_NoFaceLoaded" xml:space="preserve">Nessun volto caricato.</system:String>
+    <system:String x:Key="loc_WpfEditorDialogService_DeleteReferencedMorphMessage" xml:space="preserve">'{0}' è referenziato da altre voci! Questi riferimenti verranno interrotti se lo elimini. Vuoi continuare?&#xA;&#xA;Questa modifica resterà temporanea finché non salverai il pacchetto.</system:String>
 </ResourceDictionary>

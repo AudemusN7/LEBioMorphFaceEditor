@@ -31,7 +31,7 @@ public interface IEditorDialogService
     ActorAssignmentCandidate? ChooseActorAssignment(
         ActorAssignmentInventory inventory,
         ActorAssignmentMode mode);
-    bool ConfirmDeleteMorph(string facePath);
+    bool ConfirmDeleteMorph(string facePath, bool hasReferences = false);
     UnsavedChangesChoice ConfirmUnsavedChanges(
         string assetPath,
         UnsavedChangesScope scope = UnsavedChangesScope.Package);

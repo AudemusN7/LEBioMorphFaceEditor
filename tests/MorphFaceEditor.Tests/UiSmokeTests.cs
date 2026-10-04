@@ -17,6 +17,8 @@ using System.Windows.Media.Imaging;
 using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.Core.Randomisation;
 using LegendaryExplorerCore.Unreal;
+using LegendaryExplorerCore.Packages;
+using LegendaryExplorerCore.Unreal.BinaryConverters;
 using MorphFaceEditor.Rendering;
 using System.Windows.Threading;
 
@@ -33,6 +35,7 @@ public static class UiSmokeTests
         new("Fix Morph undo restores baked preview and UI state", FixMorphUndoRestoresBakedPreview),
         new("texture thumbnails discard alpha", TextureThumbnailsDiscardAlpha),
         new("editor file drops recognise every supported format", EditorFileDropsRecogniseSupportedFormats),
+        new("PCCs start unloaded and empty packages clear the previous head", PccEmptyHeadState),
         new("recent files persist, deduplicate, and cap at ten", RecentFilesPersistDeduplicateAndCap),
         new("startup welcome preference persists", StartupWelcomePreferencePersists),
         new("application preferences consolidate and migrate legacy settings", ApplicationPreferencesMigrate),
@@ -200,6 +203,8 @@ public static class UiSmokeTests
             var source = Path.GetFullPath(Path.Combine("tests", "Global Morphs", "LE1 GlobalMorphs.pcc"));
             var sourceBefore = PackageFingerprint.Capture(source);
             await viewModel.OpenDroppedFileAsync(source);
+            viewModel.SelectedFace = viewModel.Faces.First();
+            await ((AsyncRelayCommand)viewModel.LoadSelectedFaceCommand).ExecuteAsync();
             var editor = viewModel.Editor ?? throw new Exception($"Fixture did not load: {viewModel.ErrorMessage}");
             var scalar = editor.Material.Scalars.First();
             scalar.Value += 0.125f;
@@ -341,6 +346,8 @@ public static class UiSmokeTests
             {
                 var packagePath = Path.GetFullPath(Path.Combine("tests", "Global Morphs", "LE2 GlobalMorphs.pcc"));
                 RunWithDispatcher(() => viewModel.OpenDroppedFileAsync(packagePath));
+                viewModel.SelectedFace = viewModel.Faces.First();
+                RunWithDispatcher(() => ((AsyncRelayCommand)viewModel.LoadSelectedFaceCommand).ExecuteAsync());
                 TestAssert.True(viewModel.Editor is not null && viewModel.LoadedFacePath is not null,
                     $"The PCC fixture did not load a selected morph: {viewModel.ErrorMessage}");
             }
@@ -352,7 +359,7 @@ public static class UiSmokeTests
             TestAssert.True(viewModel.ErrorMessage is null, viewModel.ErrorMessage ?? "Detached mesh import failed.");
             TestAssert.True(viewModel.RecentFiles.FirstOrDefault()?.FilePath == Path.GetFullPath(sourcePath),
                 "Opening a detached workspace did not add it to Recent.");
-            TestAssert.True(viewModel.PackageName.Contains("Detached Mesh Workspace", StringComparison.Ordinal),
+            TestAssert.True(viewModel.IsDetachedMeshWorkspace,
                 "Unrecognised mesh was not published as a detached workspace.");
             TestAssert.True(viewModel.Editor is { CanEditMorphFeatures: false, CanEditBones: false, HasMorphControls: false },
                 "Unrigged detached mesh exposed morph or bone controls.");
@@ -832,6 +839,8 @@ public static class UiSmokeTests
                 using var viewModel = CreateMainWindowViewModel(
                     reader, dialogs, textureCatalog: textureCatalog);
                 RunWithDispatcher(() => viewModel.OpenDroppedFileAsync(donor.PackagePath));
+                viewModel.SelectedFace = viewModel.Faces.First();
+                RunWithDispatcher(() => ((AsyncRelayCommand)viewModel.LoadSelectedFaceCommand).ExecuteAsync());
                 TestAssert.True(viewModel.Editor is not null,
                     viewModel.ErrorMessage ?? "The pre-existing PCC workspace did not load.");
                 var priorEditor = viewModel.Editor;
@@ -906,6 +915,62 @@ public static class UiSmokeTests
                         !viewModel.AssignMaterialsToActorCommand.CanExecute(null),
             $"The standalone {workspaceLabel} route inherited actor-assignment commands.");
     }
+
+    private static void PccEmptyHeadState() => RunWithDispatcher(async () =>
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"MFE-EmptyHead-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            using var reader = new MorphFacePackageReader();
+            var dialogs = new StubEditorDialogs { ConfirmDeleteMorphResult = true };
+            using var shell = CreateMainWindowViewModel(reader, dialogs);
+            var source = Path.GetFullPath(Path.Combine("tests", "Global Morphs", "LE1 GlobalMorphs.pcc"));
+            await shell.OpenDroppedFileAsync(source);
+            TestAssert.True(shell.Faces.Count > 0 && shell.SelectedFace is null &&
+                shell.Editor is null && !shell.HasPreview, "Opening a PCC automatically loaded a face.");
+            var face = shell.Faces.First(value => value.ProfileKey == "le1-human-male");
+            shell.SelectedFace = face;
+            await ((AsyncRelayCommand)shell.LoadSelectedFaceCommand).ExecuteAsync();
+            TestAssert.True(shell.Editor is not null && shell.HasPreview, shell.ErrorMessage ?? "Explicit face load failed.");
+
+            var clears = 0;
+            shell.PreviewCleared += (_, _) => clears++;
+            void CheckEmpty()
+            {
+                TestAssert.True(shell.HasWorkspace && shell.Faces.Count == 0 && shell.SelectedFace is null &&
+                    shell.Editor is null && !shell.HasPreview && shell.LoadedFacePath is null && shell.FaceDetails is null,
+                    "An empty PCC retained a loaded head or editor state.");
+                TestAssert.True(clears > 0, "The renderer was not told to clear its previous scene.");
+            }
+            string Prepare(string folder, string? keep)
+            {
+                var directory = Path.Combine(root, folder);
+                Directory.CreateDirectory(directory);
+                var path = Path.Combine(directory, Path.GetFileName(source));
+                File.Copy(source, path);
+                using var package = LegendaryExplorerCore.Packages.MEPackageHandler.OpenMEPackage(path, forceLoadFromDisk: true);
+                foreach (var export in package.Exports.Where(value => value.ClassName == "BioMorphFace" &&
+                    value.InstancedFullPath != keep).ToArray())
+                    EntryPruner.TrashEntryAndDescendants(export);
+                package.Save(path);
+                return path;
+            }
+
+            await shell.OpenDroppedFileAsync(Prepare("Empty", null));
+            CheckEmpty();
+            await shell.OpenDroppedFileAsync(Prepare("Single", face.InstancedPath));
+            shell.SelectedFace = shell.Faces.Single();
+            await ((AsyncRelayCommand)shell.LoadSelectedFaceCommand).ExecuteAsync();
+            TestAssert.True(shell.HasPreview, shell.ErrorMessage ?? "Single face did not load.");
+            clears = 0;
+            await ((AsyncRelayCommand)shell.DeleteMorphCommand).ExecuteAsync();
+            TestAssert.True(!shell.HasError, shell.ErrorMessage ?? "Last-face deletion failed.");
+            CheckEmpty();
+            TestAssert.True(shell.SaveCommand.CanExecute(null), "Deleting the last face disabled package Save.");
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    });
 
     private static void StandaloneFixedBakeMaterialClipboardCommands()
     {
@@ -2843,7 +2908,8 @@ public static class UiSmokeTests
         public ActorAssignmentCandidate? ChooseActorAssignment(
             ActorAssignmentInventory inventory,
             ActorAssignmentMode mode) => null;
-        public bool ConfirmDeleteMorph(string facePath) => false;
+        public bool ConfirmDeleteMorphResult { get; set; }
+        public bool ConfirmDeleteMorph(string facePath, bool hasReferences = false) => ConfirmDeleteMorphResult;
         public UnsavedChangesChoice ConfirmUnsavedChanges(string assetPath, UnsavedChangesScope scope = UnsavedChangesScope.Package)
         {
             ConfirmUnsavedChangesCount++;

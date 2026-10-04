@@ -249,7 +249,7 @@ internal sealed class QaDialogs : IEditorDialogService
     public string? ChooseRonExportFile(string suggestedFileName, string? initialDirectory = null) => throw Unexpected();
     public string? ChooseMeshExportDirectory(string? initialDirectory = null) => throw Unexpected();
     public ActorAssignmentCandidate? ChooseActorAssignment(ActorAssignmentInventory inventory, ActorAssignmentMode mode) => throw Unexpected();
-    public bool ConfirmDeleteMorph(string facePath) => throw Unexpected();
+    public bool ConfirmDeleteMorph(string facePath, bool hasReferences = false) => throw Unexpected();
     public UnsavedChangesChoice ConfirmUnsavedChanges(string assetPath, UnsavedChangesScope scope = UnsavedChangesScope.Package) => UnsavedChangesChoice.Save;
     public void ShowInformation(string title, string message) => Messages.Add(title + ": " + message);
     public void ShowTextureRegistrySettings() => throw Unexpected();

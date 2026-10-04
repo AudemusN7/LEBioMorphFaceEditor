@@ -1817,4 +1817,6 @@
     <system:String x:Key="loc_WpfEditorDialogService_SaveMeshMaterialsTitle" xml:space="preserve">Сохранить модель и материалы в PCC</system:String>
     <system:String x:Key="loc_WpfEditorDialogService_SwitchScalp" xml:space="preserve">Переключить кожу головы</system:String>
     <system:String x:Key="loc_WpfEditorDialogService_UModelExportFolderTitle" xml:space="preserve">Выбрать папку для экспорта модели через UModel</system:String>
+    <system:String x:Key="loc_View_MainWindow_NoFaceLoaded" xml:space="preserve">Лицо не загружено.</system:String>
+    <system:String x:Key="loc_WpfEditorDialogService_DeleteReferencedMorphMessage" xml:space="preserve">На '{0}' ссылаются другие записи! Если удалить его, эти ссылки будут потеряны. Продолжить?&#xA;&#xA;Это изменение останется временным, пока вы не сохраните пакет.</system:String>
 </ResourceDictionary>

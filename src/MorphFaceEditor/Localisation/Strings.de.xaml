@@ -1817,4 +1817,6 @@ Wähle „Nein“, um die aktuellen Kopfhauttexturen beizubehalten.</system:Stri
     <system:String x:Key="loc_WpfEditorDialogService_SaveMeshMaterialsTitle" xml:space="preserve">Mesh und Materialien in PCC speichern</system:String>
     <system:String x:Key="loc_WpfEditorDialogService_SwitchScalp" xml:space="preserve">Kopfhaut wechseln</system:String>
     <system:String x:Key="loc_WpfEditorDialogService_UModelExportFolderTitle" xml:space="preserve">Ordner für den UModel-Mesh-Export auswählen</system:String>
+    <system:String x:Key="loc_View_MainWindow_NoFaceLoaded" xml:space="preserve">Kein Gesicht geladen.</system:String>
+    <system:String x:Key="loc_WpfEditorDialogService_DeleteReferencedMorphMessage" xml:space="preserve">'{0}' wird von anderen Einträgen referenziert! Diese Referenzen gehen verloren, wenn du es löschst. Möchtest du fortfahren?&#xA;&#xA;Diese Änderung bleibt temporär, bis du das Paket speicherst.</system:String>
 </ResourceDictionary>

@@ -10,6 +10,9 @@ artifacts/
 docs/PROJECT-CONTEXT.md
 docs/
 tools/PlayerHeadProbe/
+/Build_MFE.bat
+/Run_MFE_Localiser.bat
+/Run_MFE_QA.bat
 /Appdata Dir.lnk
 fixtures/local/*
 !fixtures/local/.gitkeep

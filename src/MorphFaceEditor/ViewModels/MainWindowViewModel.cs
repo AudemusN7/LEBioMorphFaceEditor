@@ -444,19 +444,51 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public bool IsBusy
     {
-        get => _isBusy;
+        get => _isBusy || _saveControlLockDepth > 0;
         private set
         {
             if (SetProperty(ref _isBusy, value))
             {
-                _openPackageCommand.RaiseCanExecuteChanged();
-                _loadSelectedFaceCommand.RaiseCanExecuteChanged();
-                _commitCommand.RaiseCanExecuteChanged();
-                _saveCommand.RaiseCanExecuteChanged();
-                _saveMorphToPccCommand.RaiseCanExecuteChanged();
-                _fixMorphCommand.RaiseCanExecuteChanged();
-                RaiseFaceContextCanExecuteChanged();
+                NotifyBusyCommandsChanged();
             }
+        }
+    }
+
+    private int _saveControlLockDepth;
+
+    private void NotifyBusyCommandsChanged()
+    {
+        _openPackageCommand.RaiseCanExecuteChanged();
+        _loadSelectedFaceCommand.RaiseCanExecuteChanged();
+        _commitCommand.RaiseCanExecuteChanged();
+        _saveCommand.RaiseCanExecuteChanged();
+        _saveMorphToPccCommand.RaiseCanExecuteChanged();
+        _closeWorkspaceCommand.RaiseCanExecuteChanged();
+        _fixMorphCommand.RaiseCanExecuteChanged();
+        RaiseFaceContextCanExecuteChanged();
+    }
+
+    // Refresh/load also set IsBusy. Keep the controls locked until the whole
+    // save completes, even when one of those nested stages clears its flag.
+    private sealed class SaveControlLock : IDisposable
+    {
+        private MainWindowViewModel? _owner;
+
+        public SaveControlLock(MainWindowViewModel owner)
+        {
+            _owner = owner;
+            owner._saveControlLockDepth++;
+            owner.OnPropertyChanged(nameof(IsBusy));
+            owner.NotifyBusyCommandsChanged();
+        }
+
+        public void Dispose()
+        {
+            if (_owner is not { } owner) return;
+            _owner = null;
+            owner._saveControlLockDepth--;
+            owner.OnPropertyChanged(nameof(IsBusy));
+            owner.NotifyBusyCommandsChanged();
         }
     }
 
@@ -1614,6 +1646,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             return true;
         }
 
+        using var saveLock = new SaveControlLock(this);
         IsBusy = true;
         ErrorMessage = null;
         Status = Loc.Text("loc_Shell_Status_UpdatingTemporaryPackageWorkspace");
@@ -1658,6 +1691,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             Status = Loc.Text("loc_Shell_Status_UseSaveToPccForStandaloneImport");
             return false;
         }
+        using var saveLock = new SaveControlLock(this);
         if (Editor?.IsDirty == true && !await FlushEditorToWorkspaceAsync())
         {
             return false;

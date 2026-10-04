@@ -1497,8 +1497,8 @@ public static class PackageContextTests
             TestAssert.Equal(3, embedded.Length);
             TestAssert.True(embedded.All(entry => new LecTexture2D(entry).GetTopMip().IsPackageStored),
                 "At least one embedded alien texture was not serialized as package-stored.");
-            TestAssert.True(embedded.All(entry => entry.Parent is ExportEntry),
-                "At least one embedded alien texture was parented beneath an import.");
+            TestAssert.True(embedded.All(entry => entry.Parent?.ClassName == "Package"),
+                "At least one embedded alien texture lost its package parent.");
         });
     }
 

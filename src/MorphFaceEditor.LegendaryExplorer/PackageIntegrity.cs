@@ -24,26 +24,21 @@ internal static class PackageIntegrity
                 entry.ClassName.Equals(className, StringComparison.OrdinalIgnoreCase) &&
                 entry.InstancedFullPath.Equals(instancedPath, StringComparison.OrdinalIgnoreCase));
 
-    internal static ExportEntry? EnsurePackagePath(IMEPackage package, string assetPath, string? assetClass = null)
+    internal static IEntry? EnsurePackagePath(IMEPackage package, string assetPath, string? assetClass = null)
     {
-        // Check the entire path before creating anything: import promotion needs its own proven relink policy.
+        // Cooked MELE exports can live beneath imported packages. Reuse those
+        // parents without promoting them or creating duplicate package identities.
+        // A collision at the asset leaf itself remains a separate failure.
         var paths = assetPath.Split('.').SkipLast(1).ToArray();
+        if (assetClass is not null && FindExactEntry(package, assetPath, assetClass) is ImportEntry)
+            throw new InvalidDataException($"Cannot materialise '{assetPath}': an import occupies the required {assetClass} export identity.");
+        IEntry? parent = null;
         var path = string.Empty;
         foreach (var segment in paths)
         {
             path = path.Length == 0 ? segment : $"{path}.{segment}";
-            if (FindExactEntry(package, path, "Package") is ImportEntry)
-                throw new InvalidDataException($"Cannot materialise '{assetPath}': import ancestor or asset '{path}' occupies the required export identity.");
-        }
-        if (assetClass is not null && FindExactEntry(package, assetPath, assetClass) is ImportEntry)
-            throw new InvalidDataException($"Cannot materialise '{assetPath}': an import occupies the required {assetClass} export identity.");
-        ExportEntry? parent = null;
-        path = string.Empty;
-        foreach (var segment in paths)
-        {
-            path = path.Length == 0 ? segment : $"{path}.{segment}";
             var existing = FindExactEntry(package, path, "Package");
-            parent = existing as ExportEntry ?? package.CreatePackageExport(NameReference.FromInstancedString(segment), parent);
+            parent = existing ?? package.CreatePackageExport(NameReference.FromInstancedString(segment), parent);
         }
         return parent;
     }
@@ -74,9 +69,9 @@ internal static class PackageIntegrity
         {
             for (var link = export.idxLink; link != 0;)
             {
-                if (package.GetEntry(link) is not ExportEntry parent)
+                if (package.GetEntry(link) is not { } parent)
                 {
-                    issues.Add($"Export {Identity(export)} has import or missing parent #{link} {Identity(package.GetEntry(link))}.");
+                    issues.Add($"Export {Identity(export)} has missing parent #{link}.");
                     break;
                 }
                 link = parent.idxLink;

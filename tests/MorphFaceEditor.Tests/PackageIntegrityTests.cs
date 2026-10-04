@@ -17,34 +17,39 @@ internal static class PackageIntegrityTests
     internal static IReadOnlyList<TestCase> All { get; } =
     [
         new("interrupted PCC save preserves the source and isolates its candidate", InterruptedPccSavePreservesSource),
-        new("import ancestor collision preserves original PCC bytes on save", () => SaveFailurePreservesOriginal(true)),
-        new("required relink failure preserves original PCC bytes on save", () => SaveFailurePreservesOriginal(false)),
+        new("LE1 save materialises a mesh beneath an imported package parent", () => SaveWithImportedMeshParent(MEGame.LE1)),
+        new("LE2 save materialises a mesh beneath an imported package parent", () => SaveWithImportedMeshParent(MEGame.LE2)),
+        new("LE3 save materialises a mesh beneath an imported package parent", () => SaveWithImportedMeshParent(MEGame.LE3)),
+        new("required relink failure preserves original PCC bytes on save", SaveFailurePreservesOriginal),
         new("relink rejects a valid destination index pointing at the wrong asset", WrongReferenceRejected),
         new("relink reuses an existing export without rewriting its destination references", ExistingExportIsNotRelinked),
         new("relink processes a shared destination export once when donor aliases differ", SharedDestinationAliasRelinkedOnce),
         new("relink rejects retained binary failure reports even with valid references", BinaryReportRejected),
-        new("package integrity rejects duplicate identities and imported parents", InvalidHierarchyRejected),
+        new("package integrity rejects duplicate identities and missing parents", InvalidHierarchyRejected),
         new("package integrity permits only pre-existing structural issues", ExistingIssuesAreBaselined),
         new("package integrity rejects parent cycles before formatting entry paths", ParentCyclesRejected),
-        new("import ancestor preflight reuses export ancestors and rejects nested imports", AncestorPreflight),
+        new("package path construction reuses imported and exported ancestors", AncestorPreflight),
+        new("dependency materialisation preserves imported package ancestry through save reopen", () => ImportedAncestryRoundTrip(false)),
+        new("root-preserving export preserves imported package ancestry through save reopen", () => ImportedAncestryRoundTrip(true)),
         new("same-game skeletal materialisation verifies retained references", MaterialiseValidMesh),
         new("root-preserving export maps overridden supported dependencies to the official donor", RootExportUsesOfficialDonor),
         new("graph verification checks selected donor content and validates source aliases", StagedDonorOwnsAliasVerification),
         new("root-preserving export embeds only an explicitly selected texture over a native import role", RootExportEmbedsExplicitTextureLeaf),
         new("new-PCC writer preserves native texture role unless an external donor was explicitly selected", NewPackageTextureDonorIntent),
-        new("temporary edit round-trips a seekfree randomised texture at its canonical path", TemporaryEditSeekfreeTextureRoundTrip),
+        new("temporary edit round-trips a seekfree randomised texture beneath an imported package", TemporaryEditSeekfreeTextureRoundTrip),
         new("writer retains an exact Texture2D import instead of materialising a duplicate", () => WriterRetainsExactTextureImport(false)),
         new("explicit texture selection rejects an occupying import without changing the PCC", () => WriterRetainsExactTextureImport(true)),
         new("texture donor resolution qualifies local paths without trusting stale indices", TextureDonorResolution),
         new("Texture2D materialisation preserves a non-Package TextureCube parent", TextureCubeParentPreserved),
         new("relink preserves PROShort01 target donors and optional attachment omissions", HairDonorsAndOmissions),
-        new("relink preserves every LE1 Add and Tat fallback policy", TextureFallbacks)
+        new("relink preserves every LE1 Add and Tat fallback policy", () => TextureFallbacks(false)),
+        new("texture conversion embeds Add and Tat fallbacks beneath imported package parents", () => TextureFallbacks(true))
     ];
 
-    private static IMEPackage Empty(string name = "Integrity")
+    private static IMEPackage Empty(string name = "Integrity", MEGame game = MEGame.LE1)
     {
         LegendaryExplorerCoreRuntime.Initialize();
-        return MEPackageHandler.CreateMemoryEmptyPackage(name + ".pcc", MEGame.LE1);
+        return MEPackageHandler.CreateMemoryEmptyPackage(name + ".pcc", game);
     }
 
     private static void TextureDonorResolution()
@@ -125,10 +130,66 @@ internal static class PackageIntegrityTests
         var root = package.CreatePackageExport("Root");
         var group = package.CreateImport("Package", "Group", root);
         var count = package.ExportCount;
-        Reject(() => PackageIntegrity.EnsurePackagePath(package, "Root.Group.Asset"), "Root.Group");
+        TestAssert.Equal(group, PackageIntegrity.EnsurePackagePath(package, "Root.Group.Asset"));
         TestAssert.Equal(count, package.ExportCount);
         TestAssert.Equal(root, PackageIntegrity.EnsurePackagePath(package, "Root.Asset"));
         TestAssert.Equal(group, package.FindEntry("Root.Group", "Package"));
+        var nested = PackageIntegrity.EnsurePackagePath(package, "Root.Group.Nested.Asset");
+        TestAssert.True(nested is ExportEntry && nested.Parent == group,
+            "A missing export package was not created beneath the existing imported group.");
+        var occupied = package.CreateImport("Object", "Occupied", group);
+        count = package.ExportCount;
+        Reject(() => PackageIntegrity.EnsurePackagePath(package, occupied.InstancedFullPath, "Object"), "import occupies");
+        TestAssert.Equal(count, package.ExportCount);
+        PackageIntegrity.Verify(package);
+    }
+
+    private static void ImportedAncestryRoundTrip(bool preserveStructure)
+    {
+        foreach (var game in new[] { MEGame.LE1, MEGame.LE2, MEGame.LE3 })
+        {
+            var outputPath = Path.Combine(Path.GetTempPath(), $"MFE-ImportedAncestry-{Guid.NewGuid():N}.pcc");
+            try
+            {
+                using var source = Empty("ImportedAncestrySource", game);
+                var root = source.CreatePackageImport("BIOG_MFE_ImportedAncestry");
+                var group = source.CreatePackageImport("Group", root);
+                var nested = source.CreatePackageExport("Nested", group);
+                var dependency = source.CreateExport("Dependency", "Object", nested, indexed: false);
+                var asset = source.CreateExport("Asset", "Object", group, indexed: false);
+                asset.WriteProperty(new ObjectProperty(dependency, "Required"));
+                using var destination = Empty("ImportedAncestryDestination", game);
+                if (!preserveStructure)
+                {
+                    var existingRoot = destination.CreatePackageImport("BIOG_MFE_ImportedAncestry");
+                    destination.CreatePackageImport("Group", existingRoot);
+                }
+                var imported = preserveStructure
+                    ? PccPackageWorkflow.ImportRootPreservingStructure(destination, asset)
+                    : PccPackageWorkflow.ImportDependencyGraph(destination, asset, null, null, false,
+                        targetPathOverride: asset.InstancedFullPath);
+                TestAssert.Equal(asset.InstancedFullPath, imported.InstancedFullPath);
+                TestAssert.True(imported.Parent is ImportEntry,
+                    $"{game} changed the asset's imported parent into an export.");
+                var graph = PccPackageWorkflow.CaptureDependencyGraph(imported);
+                PackageIntegrity.Verify(destination);
+                destination.Save(outputPath);
+                using var reopened = MEPackageHandler.OpenMEPackage(outputPath, forceLoadFromDisk: true);
+                PackageIntegrity.Verify(reopened);
+                PccPackageWorkflow.VerifyDependencyGraph(reopened, graph);
+                var saved = reopened.FindExport(asset.InstancedFullPath, "Object")!;
+                TestAssert.True(saved.Parent is ImportEntry && saved.Parent.Parent is ImportEntry,
+                    $"{game} lost the imported package chain after reopening.");
+                TestAssert.True(saved.IsForcedExport, $"{game} lost the export's native ForcedExport flag.");
+                var savedDependency = saved.GetProperty<ObjectProperty>("Required")!.ResolveToEntry(reopened)!;
+                TestAssert.Equal(dependency.InstancedFullPath, savedDependency.InstancedFullPath);
+                TestAssert.True(savedDependency.Parent is ExportEntry && savedDependency.Parent.Parent is ImportEntry,
+                    $"{game} lost the mixed import/export package chain after reopening.");
+                TestAssert.Equal(0, reopened.Exports.Count(entry => entry.ClassName == "Package" &&
+                    (entry.InstancedFullPath == root.InstancedFullPath || entry.InstancedFullPath == group.InstancedFullPath)));
+            }
+            finally { File.Delete(outputPath); }
+        }
     }
 
     private static void InvalidHierarchyRejected()
@@ -136,7 +197,10 @@ internal static class PackageIntegrityTests
         using var package = Empty();
         var import = package.CreatePackageImport("Root");
         var export = package.CreateExport("Asset", "Object", import, indexed: false);
-        Reject(() => PackageIntegrity.Verify(package), "parent");
+        PackageIntegrity.Verify(package);
+        import.idxLink = -999999;
+        Reject(() => PackageIntegrity.Verify(package), "missing parent");
+        import.idxLink = 0;
         export.idxLink = 0;
         package.CreateExport("Asset", "Object", indexed: false);
         Reject(() => PackageIntegrity.Verify(package), "Duplicate");
@@ -250,13 +314,13 @@ internal static class PackageIntegrityTests
     private static void ExistingIssuesAreBaselined()
     {
         using var package = Empty();
-        var importedRoot = package.CreatePackageImport("ExistingRoot");
-        package.CreateExport("ExistingAsset", "Object", importedRoot, indexed: false);
+        var existing = package.CreateExport("ExistingAsset", "Object", indexed: false);
+        existing.idxLink = -999999;
         var baseline = PackageIntegrity.CaptureIssues(package);
         PackageIntegrity.Verify(package, baseline);
 
-        var newImportedRoot = package.CreatePackageImport("NewRoot");
-        package.CreateExport("NewAsset", "Object", newImportedRoot, indexed: false);
+        var added = package.CreateExport("NewAsset", "Object", indexed: false);
+        added.idxLink = -999999;
         Reject(() => PackageIntegrity.Verify(package, baseline), "NewAsset");
 
         using var duplicates = Empty("Duplicates");
@@ -709,7 +773,9 @@ internal static class PackageIntegrityTests
             {
                 TestAssert.True(PackageIntegrity.FindExactEntry(package, canonicalPath, "Texture2D") is null,
                     "The fixture unexpectedly contains an import or export at the selected texture identity.");
+                package.CreatePackageImport(canonicalPath.Split('.')[0]);
                 facePath = package.Exports.First(export => export.ClassName == "BioMorphFace").InstancedFullPath;
+                package.Save();
             }
             var loaded = reader.Load(destinationPath, facePath);
             var draft = loaded.Document with
@@ -732,6 +798,9 @@ internal static class PackageIntegrityTests
                 ?? throw new InvalidDataException("HED_Diff did not survive reopening.");
             TestAssert.True(string.Equals(canonicalPath, savedTexture.InstancedFullPath, StringComparison.OrdinalIgnoreCase),
                 $"The saved temporary edit changed the canonical selected texture path to '{savedTexture.InstancedFullPath}'.");
+            TestAssert.True(savedTexture is ExportEntry { IsForcedExport: true } &&
+                savedTexture.Parent is ExportEntry && savedTexture.Parent.Parent is ImportEntry,
+                "The saved texture lost its ForcedExport flag or mixed import/export package ancestry.");
         }
         finally
         {
@@ -822,20 +891,54 @@ internal static class PackageIntegrityTests
         package.Save(packagePath);
     }
 
-    private static void SaveFailurePreservesOriginal(bool collision)
+    private static void SaveWithImportedMeshParent(MEGame game)
+    {
+        var sourcePath = Path.Combine(Path.GetTempPath(), $"MFE-ImportedParentSave-{Guid.NewGuid():N}.pcc");
+        var donorPath = Path.Combine(Path.GetTempPath(), $"MFE-Donor-{Guid.NewGuid():N}.pcc");
+        try
+        {
+            File.Copy(Path.GetFullPath($"tests/Global Morphs/{game} GlobalMorphs.pcc"), sourcePath);
+            CreateDonor(donorPath, broken: false, game: game);
+            int parentIndex;
+            string facePath;
+            using (var package = MEPackageHandler.OpenMEPackage(sourcePath, forceLoadFromDisk: true))
+            {
+                parentIndex = package.CreatePackageImport("MFE_Donor").UIndex;
+                facePath = game == MEGame.LE2
+                    ? package.FindExport("ASA.asari_face_01", "BioMorphFace")!.InstancedFullPath
+                    : package.Exports.First(entry => entry.ClassName == "BioMorphFace").InstancedFullPath;
+                package.Save();
+            }
+            using var reader = new MorphFacePackageReader();
+            var draft = reader.Load(sourcePath, facePath).Document with
+            {
+                HairMeshReference = new(donorPath, "MFE_Donor.Asset", 2, "SkeletalMesh"),
+                OtherMeshReferences = []
+            };
+            _ = new MorphFacePackageWriter().SaveExisting(draft);
+            using var reopened = MEPackageHandler.OpenMEPackage(sourcePath, forceLoadFromDisk: true);
+            var mesh = reopened.FindExport("MFE_Donor.Asset", "SkeletalMesh")!;
+            TestAssert.True(mesh is not null && mesh.Parent is ImportEntry,
+                "The saved mesh was not materialised beneath the existing imported package.");
+            TestAssert.Equal(parentIndex, mesh!.idxLink);
+            TestAssert.True(mesh.IsForcedExport, "The embedded mesh lost its canonical ForcedExport identity.");
+            TestAssert.True(reopened.FindExport("MFE_Donor", "Package") is null,
+                "Saving created a duplicate package export alongside the imported package.");
+            var savedHair = reopened.FindExport(facePath, "BioMorphFace")!
+                .GetProperty<ObjectProperty>("m_oHairMesh")!.ResolveToEntry(reopened);
+            TestAssert.Equal(mesh.UIndex, savedHair!.UIndex);
+        }
+        finally { File.Delete(sourcePath); File.Delete(donorPath); }
+    }
+
+    private static void SaveFailurePreservesOriginal()
     {
         var sourcePath = Path.Combine(Path.GetTempPath(), $"MFE-Integrity-{Guid.NewGuid():N}.pcc");
         var donorPath = Path.Combine(Path.GetTempPath(), $"MFE-Donor-{Guid.NewGuid():N}.pcc");
         try
         {
             File.Copy(Path.GetFullPath("tests/Global Morphs/LE1 GlobalMorphs.pcc"), sourcePath);
-            CreateDonor(donorPath, broken: !collision);
-            if (collision)
-            {
-                using var package = MEPackageHandler.OpenMEPackage(sourcePath, forceLoadFromDisk: true);
-                package.CreatePackageImport("MFE_Donor");
-                package.Save();
-            }
+            CreateDonor(donorPath, broken: true);
             string facePath;
             using (var package = MEPackageHandler.OpenMEPackage(sourcePath, forceLoadFromDisk: true))
                 facePath = package.Exports.First(entry => entry.ClassName == "BioMorphFace").InstancedFullPath;
@@ -846,7 +949,7 @@ internal static class PackageIntegrityTests
                 OtherMeshReferences = []
             };
             var before = File.ReadAllBytes(sourcePath);
-            Reject(() => new MorphFacePackageWriter().SaveExisting(draft), collision ? "import ancestor" : "relink");
+            Reject(() => new MorphFacePackageWriter().SaveExisting(draft), "relink");
             TestAssert.True(before.SequenceEqual(File.ReadAllBytes(sourcePath)), "A failed save changed the original PCC.");
             using var reopened = MEPackageHandler.OpenMEPackage(sourcePath, forceLoadFromDisk: true);
             TestAssert.True(reopened.FindExport(facePath, "BioMorphFace") is not null, "The original PCC could not be reopened.");
@@ -961,9 +1064,9 @@ internal static class PackageIntegrityTests
         }
     }
 
-    private static void CreateDonor(string path, bool broken)
+    private static void CreateDonor(string path, bool broken, MEGame game = MEGame.LE1)
     {
-        using var donor = Empty("Donor");
+        using var donor = Empty("Donor", game);
         var parent = donor.CreatePackageExport("MFE_Donor");
         var mesh = donor.CreateExport("Asset", "SkeletalMesh", parent, indexed: false);
         var binary = SkeletalMesh.Create();
@@ -993,7 +1096,7 @@ internal static class PackageIntegrityTests
         }
     }
 
-    private static void TextureFallbacks()
+    private static void TextureFallbacks(bool importedParents)
     {
         LegendaryExplorerCoreRuntime.Initialize();
         var paths = new[]
@@ -1008,6 +1111,9 @@ internal static class PackageIntegrityTests
         foreach (var game in new[] { MEGame.LE2, MEGame.LE3 })
         {
             using var destination = Empty();
+            if (importedParents)
+                foreach (var root in paths.Select(path => path.Split('.')[0]).Distinct())
+                    destination.CreatePackageImport(root);
             var textures = paths.Select((path, index) => new TextureMaterialOverride($"Integrity{index}",
                 new AssetIdentity(string.Empty, path, 0, "Texture2D"))).ToArray();
             var result = MorphFaceTextureTransferEngine.Transfer(destination, new MorphFaceMaterialData([], [], textures),
@@ -1028,6 +1134,24 @@ internal static class PackageIntegrityTests
             TestAssert.True(result.Warnings.Count(warning => warning.StartsWith("Embedded '", StringComparison.Ordinal)) >= 3,
                 "The allowlist cases did not exercise missing-stock embedding.");
             PackageIntegrity.Verify(destination);
+            if (importedParents)
+            {
+                var outputPath = Path.Combine(Path.GetTempPath(), $"MFE-ImportedTextureConversion-{Guid.NewGuid():N}.pcc");
+                try
+                {
+                    var graphs = result.MaterialData.Textures.Select(texture => PccPackageWorkflow.CaptureDependencyGraph(
+                        destination.FindExport(texture.TextureReference!.InstancedPath, "Texture2D")!)).ToArray();
+                    destination.Save(outputPath);
+                    using var reopened = MEPackageHandler.OpenMEPackage(outputPath, forceLoadFromDisk: true);
+                    PackageIntegrity.Verify(reopened);
+                    foreach (var graph in graphs)
+                        PccPackageWorkflow.VerifyDependencyGraph(reopened, graph, verifyCorpusRoles: false);
+                    foreach (var root in paths.Select(path => path.Split('.')[0]).Distinct())
+                        TestAssert.True(reopened.FindEntry(root, "Package") is ImportEntry,
+                            $"Texture conversion changed imported parent '{root}' into an export.");
+                }
+                finally { File.Delete(outputPath); }
+            }
         }
     }
 

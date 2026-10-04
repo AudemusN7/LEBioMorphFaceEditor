@@ -102,9 +102,9 @@ internal static class ExternalSkeletalMeshMaterializer
     }
 
     /// <summary>
-    /// Reserves package ancestors as exports before LEC walks the dependency graph.
-    /// Otherwise a referenced export can cause LEC to create its root as an import
-    /// first, producing the invalid export-beneath-import hierarchy seen by Package Editor.
+    /// Stages package ancestors before LEC walks the dependency graph, retaining
+    /// existing destination parents and the source role of missing parents.
+    /// Cooked MELE packages support exports beneath imported package parents.
     /// </summary>
     internal static void PrepareReferencedPackagePaths(
         IMEPackage destination,
@@ -135,13 +135,16 @@ internal static class ExternalSkeletalMeshMaterializer
                 }
             }
 
-            ExportEntry? parent = null;
+            IEntry? parent = null;
             while (packages.TryPop(out var sourcePackage))
             {
                 var path = parent is null
                     ? sourcePackage.ObjectName.Instanced
                     : $"{parent.InstancedFullPath}.{sourcePackage.ObjectName.Instanced}";
-                parent = PackageIntegrity.EnsurePackagePath(destination, path + ".__reserved_asset");
+                parent = PackageIntegrity.FindExactEntry(destination, path, "Package") ??
+                    (sourcePackage is ImportEntry
+                        ? destination.CreatePackageImport(sourcePackage.ObjectName, parent)
+                        : destination.CreatePackageExport(sourcePackage.ObjectName, parent));
             }
         }
     }

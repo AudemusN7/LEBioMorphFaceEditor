@@ -98,7 +98,10 @@ public sealed class MorphFacePackageWriter
                     throw new InvalidDataException(
                         $"The destination is {destinationPackage.Game}, but the selected morph is {sourcePackage.Game}.");
                 }
-                if (destinationPackage.FindEntry(destinationFacePath) is not null)
+                var occupyingEntry = destinationPackage.FindEntry(destinationFacePath);
+                var existingFace = occupyingEntry as ExportEntry;
+                if (occupyingEntry is not null &&
+                    (existingFace is null || existingFace.ClassName != "BioMorphFace"))
                 {
                     throw new InvalidOperationException(
                         $"The destination already contains an entry named '{destinationFacePath}'.");
@@ -110,7 +113,8 @@ public sealed class MorphFacePackageWriter
                     destinationPackage,
                     sourceFace,
                     warnings,
-                    explicitTextureDonors: explicitTextureDonors);
+                    explicitTextureDonors: explicitTextureDonors,
+                    replacementRoot: existingFace);
                 if (destinationObjectName is not null)
                 {
                     portedFace.ObjectName = new NameReference(destinationObjectName);

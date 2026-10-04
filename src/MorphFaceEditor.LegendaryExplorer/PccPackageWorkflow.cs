@@ -77,10 +77,21 @@ internal static class PccPackageWorkflow
         ICollection<string>? warnings = null,
         bool checkImportsWhenExportingToPackage = true,
         IReadOnlyList<ExportEntry>? explicitTextureDonors = null,
-        InstalledGameAssetResolver? installedAssets = null)
+        InstalledGameAssetResolver? installedAssets = null,
+        ExportEntry? replacementRoot = null)
     {
         ArgumentNullException.ThrowIfNull(destination);
         ArgumentNullException.ThrowIfNull(source);
+        ExportEntry? sourceOverride = null;
+        ExportEntry? replacementOverride = null;
+        if (replacementRoot is not null)
+        {
+            if (source.ClassName != "BioMorphFace" || replacementRoot.ClassName != "BioMorphFace" ||
+                !ReferenceEquals(replacementRoot.FileRef, destination))
+                throw new InvalidDataException("Only a destination BioMorphFace and its BioMaterialOverride can be replaced.");
+            sourceOverride = MorphOverride(source);
+            replacementOverride = MorphOverride(replacementRoot);
+        }
         using var preparationCache = new PackageCache();
         using var preparedMesh = CanonicalAttachmentMaterialPolicy.PrepareMesh(source, preparationCache, installedAssets);
         source = preparedMesh?.Mesh ?? source;
@@ -114,11 +125,35 @@ internal static class PccPackageWorkflow
             return false;
         };
         ExternalSkeletalMeshMaterializer.PrepareReferencedPackagePaths(destination, source, plannedMappings);
-        var issues = EntryExporter.ExportExportToPackage(
-            source,
-            destination,
-            out var staged,
-            customROP: relinker);
+        IEntry staged;
+        IReadOnlyList<EntryStringPair> issues;
+        if (replacementRoot is null)
+        {
+            issues = EntryExporter.ExportExportToPackage(
+                source, destination, out staged, customROP: relinker);
+        }
+        else
+        {
+            // LEX's ReplaceSingularWithRelink uses these same LEC data-copy and
+            // relink operations. Bind both members before relinking so the face
+            // retains its destination BMO, including cycles between the pair.
+            relinker.CrossPackageMap[source] = replacementRoot;
+            relinker.CrossPackageMap[sourceOverride!] = replacementOverride!;
+            foreach (var (incoming, target) in new[]
+                     { (source, replacementRoot), (sourceOverride!, replacementOverride!) })
+            {
+                if (!EntryImporter.ReplaceExportDataWithAnother(incoming, target, relinker))
+                    throw new InvalidDataException($"LEC could not replace {target.ClassName} '{target.InstancedFullPath}'.");
+            }
+            // Existing dependencies contain destination indices already. Only
+            // the replaced pair and newly imported exports need a donor relink.
+            var preservedExports = preexistingExports.ToHashSet();
+            preservedExports.Remove(replacementRoot);
+            preservedExports.Remove(replacementOverride!);
+            MaterialisationVerifier.Relink(relinker, preservedExports);
+            issues = relinker.RelinkReport;
+            staged = replacementRoot;
+        }
         if (warnings is not null)
         {
             foreach (var issue in issues)
@@ -132,6 +167,12 @@ internal static class PccPackageWorkflow
         VerifyExplicitTextureLeaves(destination, GetExplicitTextureLeaves(destination));
         return root;
     }
+
+    private static ExportEntry MorphOverride(ExportEntry face) =>
+        face.GetProperty<ObjectProperty>("m_oMaterialOverrides")?.ResolveToEntry(face.FileRef)
+            is ExportEntry { ClassName: "BioMaterialOverride" } materialOverride
+            ? materialOverride
+            : throw new InvalidDataException($"BioMorphFace '{face.InstancedFullPath}' has no local BioMaterialOverride.");
 
     private static void PrestageExplicitTextureDonors(
         IMEPackage destination,

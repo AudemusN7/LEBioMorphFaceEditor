@@ -26,6 +26,7 @@ public static class PackageContextTests
         new("LE1 context delete trashes a face only in its package workspace", DeleteLe1Morph),
         new("morph deletion detects incoming references without modifying the PCC", MorphDeleteReferences),
         new("LE1 morph export creates and extends a dependency-only PCC without changing paths", ExportLe1MorphPackage),
+        new("morph re-export replaces only its face and override and imports missing dependencies", ReexportMorphPair),
         new("external hair and attachment meshes port their material chains on morph export", ExternalAttachmentsPortOnMorphExport),
         new("morph package export preserves paths across LE1, LE2, and LE3", ExportMorphPackagesAcrossGames),
         new("cross-game conversion rebakes LE2 to LE3 and LE3 to LE1 packages", ConvertMorphsAcrossGameBoundary),
@@ -324,6 +325,138 @@ public static class PackageContextTests
                     File.Delete(destination);
                 }
             }
+        });
+    }
+
+    private static void ReexportMorphPair()
+    {
+        WithPackageCopy("LE1 GlobalMorphs.pcc", sourcePath =>
+        {
+            var destinationPath = Path.Combine(Path.GetTempPath(), $"MFE-MorphReexport-{Guid.NewGuid():N}.pcc");
+            try
+            {
+                using var reader = new MorphFacePackageReader();
+                var facePath = ReadFaces(sourcePath).First().InstancedPath;
+                var writer = new MorphFacePackageWriter();
+                writer.SaveMorphToPackage(reader.Load(sourcePath, facePath).Document,
+                    sourcePath, destinationPath, createNewPackage: true);
+
+                int faceIndex;
+                int overrideIndex;
+                string overridePath;
+                string texturePath;
+                Dictionary<int, (string Path, string Class, byte[] Data)> preserved;
+                using (var destination = MEPackageHandler.OpenMEPackage(destinationPath, forceLoadFromDisk: true))
+                {
+                    var face = destination.FindExport(facePath, "BioMorphFace")!;
+                    var materialOverride = (ExportEntry)face.GetProperty<ObjectProperty>("m_oMaterialOverrides")!
+                        .ResolveToEntry(destination)!;
+                    // The replacement must follow the destination pair's link,
+                    // even when its BMO identity differs from the incoming BMO.
+                    materialOverride.ObjectName = new NameReference("MFE_DestinationOverride");
+                    faceIndex = face.UIndex;
+                    overrideIndex = materialOverride.UIndex;
+                    overridePath = materialOverride.InstancedFullPath;
+                    var existingDependency = destination.CreateExport("MFE_ExistingDependency", "Object", indexed: false);
+                    existingDependency.WriteProperty(new IntProperty(99, "Marker"));
+                    var consumer = destination.CreateExport("MFE_ExistingConsumer", "Object", indexed: false);
+                    consumer.WriteProperty(new ObjectProperty(face, "FaceReference"));
+                    consumer.WriteProperty(new ObjectProperty(materialOverride, "OverrideReference"));
+                    destination.Save();
+                    preserved = destination.Exports.Where(export => export != face && export != materialOverride)
+                        .ToDictionary(export => export.UIndex,
+                            export => (export.InstancedFullPath, export.ClassName, export.Data));
+                }
+
+                using (var source = MEPackageHandler.OpenMEPackage(sourcePath, forceLoadFromDisk: true))
+                {
+                    var face = source.FindExport(facePath, "BioMorphFace")!;
+                    var materialOverride = (ExportEntry)face.GetProperty<ObjectProperty>("m_oMaterialOverrides")!
+                        .ResolveToEntry(source)!;
+                    var existingDependency = source.CreateExport("MFE_ExistingDependency", "Object", indexed: false);
+                    existingDependency.WriteProperty(new IntProperty(1, "Marker"));
+                    var leaf = source.CreateExport("MFE_NewSharedLeaf", "Object", indexed: false);
+                    leaf.WriteProperty(new ObjectProperty(existingDependency, "ExistingReference"));
+                    leaf.WriteProperty(new ObjectProperty(face, "FaceReference"));
+                    leaf.WriteProperty(new ObjectProperty(materialOverride, "OverrideReference"));
+                    var faceDependency = source.CreateExport("MFE_NewFaceDependency", "Object", face, indexed: false);
+                    var overrideDependency = source.CreateExport("MFE_NewOverrideDependency", "Object", materialOverride, indexed: false);
+                    faceDependency.WriteProperty(new ObjectProperty(leaf, "LeafReference"));
+                    overrideDependency.WriteProperty(new ObjectProperty(leaf, "LeafReference"));
+                    face.WriteProperty(new ObjectProperty(faceDependency, "ReplacementDependency"));
+                    materialOverride.WriteProperty(new ObjectProperty(overrideDependency, "ReplacementDependency"));
+                    var donorTexture = source.Exports.First(export => export.ClassName == "Texture2D" &&
+                        new LecTexture2D(export).Mips.Any(mip => mip.storageType == StorageTypes.pccUnc));
+                    var newTexture = EntryCloner.CloneEntry(donorTexture);
+                    newTexture.ObjectName = new NameReference("MFE_ReexportTexture");
+                    texturePath = newTexture.InstancedFullPath;
+                    var textures = materialOverride.GetProperty<ArrayProperty<StructProperty>>("m_aTextureOverrides")
+                        ?? new ArrayProperty<StructProperty>([], "m_aTextureOverrides");
+                    textures.Add(new StructProperty("TextureParameter",
+                    [
+                        new NameProperty("HED_ReexportTexture", "nName"),
+                        new ObjectProperty(newTexture, "m_pTexture")
+                    ]));
+                    materialOverride.WriteProperty(textures);
+                    source.Save();
+                }
+
+                using var updatedReader = new MorphFacePackageReader();
+                var document = updatedReader.Load(sourcePath, facePath).Document;
+                var lods = document.BakedLods.Select(lod => lod.ToArray()).ToArray();
+                lods[0][0] += new Vector3(0.125f, 0, 0);
+                var draft = document with
+                {
+                    BakedLods = lods,
+                    MaterialOverrides = document.MaterialOverrides with
+                    {
+                        Scalars = [new ScalarMaterialOverride("HED_TestReplacement", 0.75f)]
+                    }
+                };
+                var result = writer.SaveMorphToPackage(draft, sourcePath, destinationPath, createNewPackage: false);
+
+                using var reopened = MEPackageHandler.OpenMEPackage(destinationPath, forceLoadFromDisk: true);
+                TestAssert.Equal(overridePath, result.MaterialOverrideInstancedPath);
+                TestAssert.Equal(facePath, reopened.GetUExport(faceIndex).InstancedFullPath);
+                TestAssert.Equal(overridePath, reopened.GetUExport(overrideIndex).InstancedFullPath);
+                TestAssert.Equal(lods[0][0], reopened.GetUExport(faceIndex).GetBinaryData<BioMorphFace>().LODs[0][0]);
+                TestAssert.Equal(0.75f, reopened.GetUExport(overrideIndex)
+                    .GetProperty<ArrayProperty<StructProperty>>("m_aScalarOverrides")!
+                    .Single().GetProp<FloatProperty>("sValue")!.Value);
+                using var savedSource = MEPackageHandler.OpenMEPackage(sourcePath, forceLoadFromDisk: true);
+                var savedTexture = reopened.FindExport(texturePath, "Texture2D")
+                    ?? throw new InvalidDataException("The replacement BMO's new texture was not imported.");
+                PccTextureDependencyResolver.VerifyBulkDataPreserved(
+                    savedSource.FindExport(texturePath, "Texture2D")!, savedTexture);
+                TestAssert.Equal(savedTexture.UIndex, reopened.GetUExport(overrideIndex)
+                    .GetProperty<ArrayProperty<StructProperty>>("m_aTextureOverrides")!
+                    .Single(item => item.GetProp<NameProperty>("nName")!.Value.Instanced == "HED_ReexportTexture")
+                    .GetProp<ObjectProperty>("m_pTexture")!.Value);
+                foreach (var (index, original) in preserved)
+                {
+                    var actual = reopened.GetUExport(index);
+                    TestAssert.Equal(original.Path, actual.InstancedFullPath);
+                    TestAssert.Equal(original.Class, actual.ClassName);
+                    TestAssert.True(original.Data.SequenceEqual(actual.Data),
+                        $"Re-export changed the existing dependency '{original.Path}'.");
+                }
+                var savedLeaf = reopened.FindExport("MFE_NewSharedLeaf", "Object")!;
+                TestAssert.Equal(faceIndex, savedLeaf.GetProperty<ObjectProperty>("FaceReference")!.Value);
+                TestAssert.Equal(overrideIndex, savedLeaf.GetProperty<ObjectProperty>("OverrideReference")!.Value);
+                var savedExisting = (ExportEntry)savedLeaf.GetProperty<ObjectProperty>("ExistingReference")!
+                    .ResolveToEntry(reopened)!;
+                TestAssert.Equal(99, savedExisting.GetProperty<IntProperty>("Marker")!.Value);
+                foreach (var (rootIndex, dependencyPath) in new[]
+                         { (faceIndex, $"{facePath}.MFE_NewFaceDependency"),
+                           (overrideIndex, $"{overridePath}.MFE_NewOverrideDependency") })
+                {
+                    var dependency = reopened.FindExport(dependencyPath, "Object")!;
+                    TestAssert.Equal(dependency.UIndex, reopened.GetUExport(rootIndex)
+                        .GetProperty<ObjectProperty>("ReplacementDependency")!.Value);
+                    TestAssert.Equal(savedLeaf.UIndex, dependency.GetProperty<ObjectProperty>("LeafReference")!.Value);
+                }
+            }
+            finally { File.Delete(destinationPath); }
         });
     }
 

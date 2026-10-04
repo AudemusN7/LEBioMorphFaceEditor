@@ -12,7 +12,8 @@ internal static class MaterialisationVerifier
 {
     internal static void Relink(
         RelinkerOptionsPackage options,
-        IReadOnlySet<ExportEntry>? preexistingExports = null)
+        IReadOnlySet<ExportEntry>? preexistingExports = null,
+        IReadOnlyDictionary<ExportEntry, (ExportEntry Source, string TargetPath)>? stagedCopies = null)
     {
         try
         {
@@ -21,10 +22,10 @@ internal static class MaterialisationVerifier
             // process the destination binary more than once: after the first pass
             // its UIndices are destination indices, so a second pass interprets
             // them as donor indices and corrupts otherwise valid references.
-            // Keep the first source->destination pair (the source used to stage the
-            // export) and process each destination at most once. The map may grow
-            // while Relinker adds imports, so keep scanning until no new source is
-            // available.
+            // Process each destination once, using its recorded staging donor
+            // when available. An alias may appear before that donor in the map.
+            // The map may grow while Relinker adds imports, so keep scanning
+            // until no new source is available.
             var processedTargets = new HashSet<ExportEntry>();
             var processedSources = new HashSet<IEntry>();
             while (true)
@@ -41,10 +42,19 @@ internal static class MaterialisationVerifier
                 {
                     continue;
                 }
-                if (preexistingExports is null || !preexistingExports.Contains(target))
+                if (preexistingExports?.Contains(target) == true)
                 {
-                    Relinker.Relink(source, target, options);
+                    continue;
                 }
+                if (stagedCopies?.TryGetValue(target, out var stagedCopy) == true)
+                {
+                    source = stagedCopy.Source;
+                    if (!options.CrossPackageMap.TryGetValue(source, out var stagedTarget) ||
+                        !ReferenceEquals(stagedTarget, target))
+                        throw new InvalidDataException(
+                            $"The recorded donor '{source.InstancedFullPath}' is not bound to its staged export.");
+                }
+                Relinker.Relink(source, target, options);
             }
         }
         catch (Exception exception)

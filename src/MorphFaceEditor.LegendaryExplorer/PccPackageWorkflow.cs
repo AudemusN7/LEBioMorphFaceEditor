@@ -627,7 +627,7 @@ internal static class PccPackageWorkflow
             var root = MaterializeExport(source, targetPath, destinationParent, forceExport: true) as ExportEntry
                        ?? throw new InvalidDataException(
                            $"The authored {source.ClassName} '{source.InstancedFullPath}' was not staged as an export.");
-            MaterialisationVerifier.Relink(_relinker, _preexistingExports);
+            MaterialisationVerifier.Relink(_relinker, _preexistingExports, stagedCopies: _stagedCopies);
             MaterialisationVerifier.Verify(root, source.Game, _relinker, _warnings, stagedCopies: _stagedCopies);
             foreach (var (textureSource, textureDestination) in _textures)
             {

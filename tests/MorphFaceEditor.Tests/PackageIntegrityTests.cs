@@ -23,7 +23,8 @@ internal static class PackageIntegrityTests
         new("required relink failure preserves original PCC bytes on save", SaveFailurePreservesOriginal),
         new("relink rejects a valid destination index pointing at the wrong asset", WrongReferenceRejected),
         new("relink reuses an existing export without rewriting its destination references", ExistingExportIsNotRelinked),
-        new("relink processes a shared destination export once when donor aliases differ", SharedDestinationAliasRelinkedOnce),
+        new("relink processes a shared destination export once when donor aliases differ", () => SharedDestinationAliasRelinkedOnce(false)),
+        new("relink shared destination preserves the staged donor when an alias is mapped first", () => SharedDestinationAliasRelinkedOnce(true)),
         new("relink rejects retained binary failure reports even with valid references", BinaryReportRejected),
         new("package integrity rejects duplicate identities and missing parents", InvalidHierarchyRejected),
         new("package integrity permits only pre-existing structural issues", ExistingIssuesAreBaselined),
@@ -249,7 +250,7 @@ internal static class PackageIntegrityTests
         Reject(() => MaterialisationVerifier.Verify(root, source.Game, options), "Required relink failed");
     }
 
-    private static void SharedDestinationAliasRelinkedOnce()
+    private static void SharedDestinationAliasRelinkedOnce(bool aliasFirst)
     {
         LegendaryExplorerCoreRuntime.Initialize();
         var destinationPath = Path.Combine(Path.GetTempPath(), $"MFE-RelinkAlias-{Guid.NewGuid():N}.pcc");
@@ -258,6 +259,7 @@ internal static class PackageIntegrityTests
             using var firstDonor = Empty("AliasDonorA");
             var firstMaterial = firstDonor.CreateExport("Material", "Object", indexed: false);
             var firstMesh = firstDonor.CreateExport("Asset", "SkeletalMesh", indexed: false);
+            firstMesh.WriteProperty(new IntProperty(42, "AuthoredMarker"));
             var firstBinary = SkeletalMesh.Create();
             firstBinary.Materials = [firstMaterial.UIndex];
             firstMesh.WriteBinary(firstBinary);
@@ -274,6 +276,7 @@ internal static class PackageIntegrityTests
             TestAssert.Equal(destinationMaterial.UIndex, collidingNumericEntry.UIndex);
             var secondMaterial = secondDonor.CreateExport("Material", "Object", indexed: false);
             var secondMesh = secondDonor.CreateExport("Asset", "SkeletalMesh", indexed: false);
+            secondMesh.WriteProperty(new IntProperty(7, "AuthoredMarker"));
             var secondBinary = SkeletalMesh.Create();
             secondBinary.Materials = [secondMaterial.UIndex];
             secondMesh.WriteBinary(secondBinary);
@@ -283,14 +286,29 @@ internal static class PackageIntegrityTests
 
             var options = new RelinkerOptionsPackage();
             var destinationMesh = (ExportEntry)EntryImporter.ImportExport(destination, firstMesh, 0, options);
+            if (aliasFirst)
+            {
+                // Put the alias before the donor that actually supplied the target's
+                // data. Shared-target relinking must not depend on map order.
+                options.CrossPackageMap.Remove(firstMesh);
+                options.CrossPackageMap[secondMesh] = destinationMesh;
+            }
             options.CrossPackageMap[firstMesh] = destinationMesh;
             options.CrossPackageMap[firstMaterial] = destinationMaterial;
             options.CrossPackageMap[secondMesh] = destinationMesh;
             options.CrossPackageMap[secondMaterial] = destinationMaterial;
             options.CrossPackageMap[collidingNumericEntry] = wrongMaterial;
 
-            MaterialisationVerifier.Relink(options);
-            MaterialisationVerifier.Verify(destinationMesh, firstDonor.Game, options);
+            var staged = aliasFirst
+                ? new Dictionary<ExportEntry, (ExportEntry Source, string TargetPath)>
+                {
+                    [destinationMesh] = (firstMesh, destinationMesh.InstancedFullPath),
+                    [destinationMaterial] = (firstMaterial, destinationMaterial.InstancedFullPath)
+                }
+                : null;
+            MaterialisationVerifier.Relink(options, stagedCopies: staged);
+            TestAssert.Equal(42, destinationMesh.GetProperty<IntProperty>("AuthoredMarker")!.Value);
+            MaterialisationVerifier.Verify(destinationMesh, firstDonor.Game, options, stagedCopies: staged);
             TestAssert.Equal(destinationMaterial.UIndex,
                 PackageIntegrity.References(destinationMesh)["binary.Materials[0]"]);
 
@@ -304,6 +322,7 @@ internal static class PackageIntegrityTests
                 "Saving and reopening lost the relinked mesh or its material.");
             TestAssert.Equal(reopenedMaterial!.UIndex,
                 PackageIntegrity.References(reopenedMesh!)["binary.Materials[0]"]);
+            TestAssert.Equal(42, reopenedMesh.GetProperty<IntProperty>("AuthoredMarker")!.Value);
         }
         finally
         {

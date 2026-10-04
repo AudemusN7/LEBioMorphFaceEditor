@@ -1076,9 +1076,9 @@ internal static class PccPackageWorkflow
         // The asset is an import, but the enclosing BIOG package can be an
         // export in a packaged PCC when another donor asset is embedded under
         // the same identity. Reuse the actual parent role, including imported
-        // LE1 Human chains staged by the source face. New package ancestors
-        // are exports unless they are already beneath an import; planning them
-        // as imports would make later embedded assets depend on slot order.
+        // LE1 Human chains staged by the source face. Missing ancestors retain
+        // this import path's construction policy; either role can also parent
+        // embedded exports in cooked MELE packages.
         IEntry? parent = null;
         var ancestorPath = string.Empty;
         foreach (var segment in segments[..^1])

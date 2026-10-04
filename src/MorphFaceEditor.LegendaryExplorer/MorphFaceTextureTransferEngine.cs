@@ -377,7 +377,7 @@ internal static class MorphFaceTextureTransferEngine
         return importedTexture;
     }
 
-    private static ExportEntry? EnsurePackagePath(IMEPackage destination, string assetPath)
+    private static IEntry? EnsurePackagePath(IMEPackage destination, string assetPath)
         => PackageIntegrity.EnsurePackagePath(destination, assetPath, "Texture2D");
 
     private static ExportEntry? ResolveSourceExport(

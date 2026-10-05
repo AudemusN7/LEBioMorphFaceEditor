@@ -68,6 +68,7 @@ internal static class QaUtilityTests
         TestAssert.Equal("failed", result.Status);
         TestAssert.Equal("Texture failure", result.Error);
         TestAssert.True(!QaPerformance.Exceeded(QaStageKind.Randomisation, 1500), "Limit boundary is inclusive.");
+        TestAssert.True(!QaPerformance.Exceeded(QaStageKind.ColdLoad, 10000), "Cold setup was judged against a warm-load limit.");
     }
 
     private static void Report()

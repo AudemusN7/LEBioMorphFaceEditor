@@ -145,7 +145,8 @@ internal static partial class QaCases
         for (var index = 0; index < 4; index++)
         {
             preview = await c.Measure(index == 0 ? "Cold load" : $"Warm load {index}",
-                () => loader.LoadAsync(source.PackagePath, source.FacePath, geometryMode: c.Face.GeometryMode), QaStageKind.Load);
+                () => loader.LoadAsync(source.PackagePath, source.FacePath, geometryMode: c.Face.GeometryMode),
+                index == 0 ? QaStageKind.ColdLoad : QaStageKind.Load);
             timings.Add(c.Current.Stages[^1].DurationMs);
             c.Current.Evidence[$"loadMetrics{index}"] = reader.LastLoadMetrics;
         }

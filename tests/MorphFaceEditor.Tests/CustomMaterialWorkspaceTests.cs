@@ -14,6 +14,7 @@ public static class CustomMaterialWorkspaceTests
         new("custom workspace rejects unknown assignment options", RejectsUnknown),
         new("custom workspace enforces role-specific material compatibility", EnforcesRoleSpecificCompatibility),
         new("custom material assignment undo is one semantic action", AssignmentUndoRedo),
+        new("custom template decodes on assignment and survives undo redo", DeferredTemplateAssignment),
         new("custom material defaults use the lowest assigned slot", LowestSlotWinsDefaults),
         new("custom material rebase exposes shared union and preserves overrides", RebasePreservesUnionAndOverrides),
         new("custom material parameters remain independent across racial scopes", RacialScopesRemainIndependent),
@@ -162,6 +163,25 @@ public static class CustomMaterialWorkspaceTests
         workspace.Redo();
         TestAssert.Equal(1, workspace.Assignments.Count);
         TestAssert.Equal(1, workspace.ActiveMaterials.Materials.Count);
+    }
+
+    private static void DeferredTemplateAssignment()
+    {
+        var template = Option("skin", "Skin", "human", "head", HeadMaterialFamily.Skin).Template;
+        var loads = 0;
+        var option = new CustomMaterialAssignmentOption("skin", "Skin", "human", "head",
+            HeadMaterialFamily.Skin, template).WithDeferredTemplate(() => { loads++; return template; });
+        var workspace = new CustomMaterialWorkspace(CreateSource(new ImportedMeshSection(0, "Face", 0, 3)));
+        TestAssert.Equal(0, loads);
+        workspace.Assign(0, option);
+        TestAssert.Equal(1, loads);
+        workspace.Assign(0, option);
+        workspace.Undo();
+        TestAssert.Equal(0, workspace.Assignments.Count);
+        workspace.Redo();
+        TestAssert.Equal(1, workspace.ActiveMaterials.Materials.Count);
+        TestAssert.Equal(1, loads);
+        TestAssert.True(ReferenceEquals(template, option.Template), "Assignment replaced the decoded template.");
     }
 
     private static void LowestSlotWinsDefaults()

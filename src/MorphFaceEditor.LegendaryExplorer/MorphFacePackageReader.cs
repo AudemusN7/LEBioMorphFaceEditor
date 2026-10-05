@@ -210,7 +210,7 @@ public sealed class MorphFacePackageReader : IDisposable
         var mesh = ReadSkeletalMesh(meshExport, materialExports);
         var materials = materialExports
             .DistinctBy(material => MaterialIdentityKey.Create(ToIdentity(material)!))
-            .Select(_materialReader.ReadMaterialEvidence)
+            .Select(material => _materialReader.ReadMaterialEvidence(material))
             .ToDictionary(material => material.Key, StringComparer.OrdinalIgnoreCase);
         return new LoadedAttachment(
             ToIdentity(meshExport)!, mesh, new ResolvedHeadMaterialSet(materials));
@@ -258,7 +258,8 @@ public sealed class MorphFacePackageReader : IDisposable
     /// </summary>
     public MeshMaterialEvidence LoadMeshMaterialEvidence(
         string packagePath,
-        string meshSelector)
+        string meshSelector,
+        bool decodeTextures = true)
     {
         ThrowIfDisposed();
         LegendaryExplorerCoreRuntime.Initialize();
@@ -311,7 +312,7 @@ public sealed class MorphFacePackageReader : IDisposable
                     meshExport, materialReference, _packageCache) ?? _referenceResolver.Require(
                     materialReference,
                     $"SkeletalMesh '{meshExport.InstancedFullPath}' material slot {pair.Key}");
-                var material = _materialReader.ReadMaterialEvidence(materialExport);
+                var material = _materialReader.ReadMaterialEvidence(materialExport, decodeTextures);
                 return new MeshMaterialEvidenceSlot(
                     pair.Key,
                     ToIdentity(materialExport)!,
@@ -321,6 +322,24 @@ public sealed class MorphFacePackageReader : IDisposable
             .ToArray();
 
         return new MeshMaterialEvidence(ToIdentity(meshExport)!, slots);
+    }
+
+    public IReadOnlySet<string> GetMaterialEvidenceDependencies(AssetIdentity source)
+    {
+        ThrowIfDisposed();
+        return _materialReader.GetEvidenceDependencies(source);
+    }
+
+    /// <summary>Materialises an exact detached template on selection, through the normal bounded pixel cache.</summary>
+    public ResolvedHeadMaterial LoadMaterialEvidence(AssetIdentity source)
+    {
+        ThrowIfDisposed();
+        LegendaryExplorerCoreRuntime.Initialize();
+        var package = PackageSourceCache.GetPackage(_packageCache, RequireFile(source.PackagePath))
+            ?? throw new InvalidDataException($"Could not open material source '{source.PackagePath}'.");
+        return _materialReader.ReadMaterialEvidence(
+            _referenceResolver.Require(ExportSelector.Find(package, source.InstancedPath, source.ClassName),
+                "custom material template"));
     }
 
     public DecodedTextureAsset LoadTexture(

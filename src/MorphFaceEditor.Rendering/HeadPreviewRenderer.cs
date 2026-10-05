@@ -185,6 +185,19 @@ public sealed class HeadPreviewRenderer : IDisposable
     public int MaterialAnisotropy => 8;
     public long GpuTextureBytes => _gpuTextureBytes;
 
+    /// <summary>Releases face resources while retaining the device, shaders and render targets.</summary>
+    public void ClearScene()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        // D3D bindings retain references too: unbind before releasing the old face.
+        _context.ClearState();
+        DisposeMeshes();
+        _materials.Clear();
+        DisposeMaterialTextures();
+        _skinningPaletteCount = 0;
+        _context.Flush();
+    }
+
     public void SetScene(HeadPreviewScene scene)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);

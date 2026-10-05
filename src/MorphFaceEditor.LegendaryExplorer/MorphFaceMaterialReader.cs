@@ -45,7 +45,7 @@ internal sealed class MorphFaceMaterialReader(
     /// override. This is the package adapter path used by Custom material
     /// evidence; the normal face loader continues to use <see cref="Read"/>.
     /// </summary>
-    internal ResolvedHeadMaterial ReadMaterialEvidence(ExportEntry materialExport)
+    internal ResolvedHeadMaterial ReadMaterialEvidence(ExportEntry materialExport, bool decodeTextures = true)
     {
         ArgumentNullException.ThrowIfNull(materialExport);
         var identity = MorphFacePackageReader.ToIdentity(materialExport)!;
@@ -56,15 +56,18 @@ internal sealed class MorphFaceMaterialReader(
             if (_materialCache.TryGetValue(materialKey, out cached))
             {
                 _materialCacheHits++;
-                return Materialize(cached, null);
+                return decodeTextures ? Materialize(cached, null) : cached.Material;
             }
         }
 
         _materialCacheMisses++;
         var material = ReadMaterialDefaults(ResolveMaterialSource(identity), identity, materialKey);
         _materialCache[materialKey] = material;
-        return Materialize(material, null);
+        return decodeTextures ? Materialize(material, null) : material.Material;
     }
+
+    internal IReadOnlySet<string> GetEvidenceDependencies(AssetIdentity source) =>
+        _materialCache[MaterialIdentityKey.Create(source)].Dependencies;
 
     public MorphRandomisationMaterialEvidence ReadRandomisationEvidence(
         ExportEntry face,

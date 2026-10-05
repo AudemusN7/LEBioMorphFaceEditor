@@ -33,6 +33,7 @@ public static class RenderingTests
         new("lit-translucent hair is excluded from AO", AmbientOcclusionExcludesHair),
         new("renderer clears to the selected background colour", RendererUsesSelectedBackgroundColor),
         new("renderer draws, reads back, and retains its device on resize", RendererDrawsAndRetainsDevice),
+        new("renderer releases face resources and draws again after clear", RendererReleasesFaceResourcesAfterClear),
         new("renderer can hide attachment meshes", RendererCanHideAttachments),
         new("scene factory builds the selected mesh LOD", SceneFactoryBuildsSelectedLod),
         new("scene factory maps non-contiguous LOD IDs to baked ordinals", SceneFactoryMapsNonContiguousLodIds),
@@ -711,6 +712,42 @@ public static class RenderingTests
         TestAssert.Equal(1, renderer.DeviceCreationCount);
     }
 
+    private static void RendererReleasesFaceResourcesAfterClear()
+    {
+        using var renderer = new HeadPreviewRenderer(64, 64);
+        var scene = CreateTriangleScene();
+        var material = scene.Meshes[0].Sections[0].Material with
+        {
+            Textures = new Dictionary<string, HeadPreviewTexture>
+            {
+                ["HED_Diff"] = new("face-texture", "HED_Diff", 1, 1, [255, 0, 0, 255],
+                    TextureRole.Diffuse, TextureColorSpace.Srgb, TextureAlphaPolicy.Ignore, false)
+            }
+        };
+        scene = scene with
+        {
+            Meshes = [scene.Meshes[0] with { Sections = [new HeadPreviewSection(0, 3, 0, material)] }]
+        };
+        var camera = new HeadOrbitCamera();
+        camera.Fit(scene.Bounds);
+        renderer.SetScene(scene);
+        renderer.Render(camera, new HeadPreviewOptions());
+        TestAssert.True(renderer.GpuTextureBytes > 0, "The fixture did not upload a face texture.");
+        var uploads = renderer.TextureUploadCount;
+
+        renderer.ClearScene();
+        renderer.ClearScene();
+        TestAssert.Equal(0L, renderer.GpuTextureBytes);
+        TestAssert.Equal(0, renderer.Render(camera, new HeadPreviewOptions()).DrawCalls);
+        renderer.Resize(80, 72);
+        renderer.SetScene(scene);
+        var frame = renderer.Render(camera, new HeadPreviewOptions());
+        TestAssert.Equal(1, frame.DrawCalls);
+        TestAssert.Equal(80, frame.Width);
+        TestAssert.True(renderer.TextureUploadCount > uploads, "The cleared texture was not uploaded again.");
+        TestAssert.Equal(1, renderer.DeviceCreationCount);
+    }
+
     private static void PreviewLifecycleBlocksInactiveStates()
     {
         var active = new PreviewActivityState(true, true, false, false, 800, 600);
@@ -766,7 +803,46 @@ public static class RenderingTests
                 TestAssert.Equal(2L, controller.Diagnostics.FramesRendered);
                 TestAssert.True(image.Source is System.Windows.Media.Imaging.WriteableBitmap,
                     "The settled frame was not presented to the WPF image.");
+                TestAssert.Near(DxMathUtil.DegreesToRadians(32), controller.Camera.Yaw, 1e-6f);
+                TestAssert.Near(DxMathUtil.DegreesToRadians(4), controller.Camera.Pitch, 1e-6f);
+                for (var load = 0; load < 3; load++)
+                {
+                    controller.Camera.Orbit(0.3f, 0.2f);
+                    controller.Camera.Pan(0.1f, 0.1f);
+                    controller.Camera.Zoom(120);
+                    var yaw = controller.Camera.Yaw;
+                    var pitch = controller.Camera.Pitch;
+                    var target = controller.Camera.Target;
+                    var distance = controller.Camera.Distance;
+                    controller.ClearScene();
+                    TestAssert.True(image.Source is null, "Clearing left the previous face visible.");
+                    var frameCount = controller.Diagnostics.FramesRendered;
+                    controller.RequestRender(allowInactive: true);
+                    PumpDispatcher();
+                    TestAssert.Equal(frameCount, controller.Diagnostics.FramesRendered);
+                    // A species change requests a framing reset, but even that
+                    // must retain the user's chosen rotation.
+                    var resetPosition = load == 1;
+                    controller.SetScene(CreateTriangleScene(), resetPosition);
+                    PumpDispatcher();
+                    TestAssert.Near(yaw, controller.Camera.Yaw, 1e-6f);
+                    TestAssert.Near(pitch, controller.Camera.Pitch, 1e-6f);
+                    if (resetPosition)
+                    {
+                        TestAssert.Equal(CreateTriangleScene().Bounds.Center, controller.Camera.Target);
+                    }
+                    else
+                    {
+                        TestAssert.Equal(target, controller.Camera.Target);
+                        TestAssert.Near(distance, controller.Camera.Distance, 1e-6f);
+                    }
+                    TestAssert.Equal(frameCount + 2, controller.Diagnostics.FramesRendered);
+                    TestAssert.Equal(1, controller.Diagnostics.RendererCreations);
+                    TestAssert.Equal(0, controller.Diagnostics.RendererDisposals);
+                    TestAssert.Equal(0, controller.Diagnostics.ResizeOperations);
+                }
                 window.Close();
+                TestAssert.Equal(1, controller.Diagnostics.RendererDisposals);
             }
             catch (Exception exception)
             {

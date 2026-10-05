@@ -1,6 +1,6 @@
 namespace MorphFaceEditor.QA;
 
-internal enum QaStageKind { Diagnostic, Load, Randomisation, FileTransfer, Render }
+internal enum QaStageKind { Diagnostic, ColdLoad, Load, Randomisation, FileTransfer, Render }
 
 internal static class QaPerformance
 {

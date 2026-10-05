@@ -195,6 +195,8 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     private IReadOnlyList<EditorFeatureCategoryViewModel> BuildCategories()
     {
         _subcategoryRandomiseCommands.Clear();
+        // Controls and material assignments stay fixed during this category build.
+        var eligibleTextures = EligibleMaterialTextureParameters();
         return _metadataCatalog.Categories
             .Select(category => new EditorFeatureCategoryViewModel(
                 category,
@@ -205,7 +207,6 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                 _metadataCatalog,
                 scope =>
                 {
-                    var eligibleTextures = EligibleMaterialTextureParameters();
                     if (!scope.HasValues ||
                         (scope.MorphFeatures.Count + scope.Scalars.Count + scope.Vectors.Count == 0 &&
                          !scope.Textures.Any(value => eligibleTextures.Contains(value.Name))))

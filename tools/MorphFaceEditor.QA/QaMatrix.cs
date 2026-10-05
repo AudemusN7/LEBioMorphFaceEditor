@@ -59,6 +59,7 @@ internal static partial class QaCases
                 c.Face = face;
                 c.PreparedPlayer = null;
                 c.Current.Evidence["archetype"] = face;
+                await c.WarmGame(face.Game);
                 if (face.IsPlayer) await PreparePlayer(c);
                 await run(c);
             }, group));
@@ -79,6 +80,7 @@ internal static partial class QaCases
                     c.Face = face;
                     c.PreparedPlayer = null;
                     c.Current.Evidence["archetype"] = face;
+                    await c.WarmGame(face.Game);
                     await Conversion(c, target);
                 }, "conversion"));
             }

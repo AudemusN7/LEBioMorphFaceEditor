@@ -294,9 +294,9 @@ public static class CustomMaterialEvidenceTests
                 $"The installed {game} human-male options did not retain their sex-specific compatibility key.");
             TestAssert.True(humanFemaleOptions.All(option => option.AppearanceCompatibilityKey == "human-female"),
                 $"The installed {game} human-female options did not retain their sex-specific compatibility key.");
-            TestAssert.True(result.Options.Any(option => option.Label == "Human Female/Asari Eyes") &&
-                            result.Options.Any(option => option.Label == "Human Female/Asari Lashes"),
-                $"The installed {game} catalogue did not expose the shared HMF/Asari eye and lash labels.");
+            TestAssert.True(humanFemaleOptions.Any(option => option.Family == HeadMaterialFamily.Eyes) &&
+                            humanFemaleOptions.Any(option => option.Family == HeadMaterialFamily.Lashes),
+                $"The installed {game} catalogue did not expose the shared HMF/Asari eye and lash templates.");
             TestAssert.True(result.Options.All(option => !string.IsNullOrWhiteSpace(option.RandomisationProfileKey)),
                 $"The installed {game} catalogue exposed an option without a randomisation profile.");
             TestAssert.True(result.Options.All(option =>

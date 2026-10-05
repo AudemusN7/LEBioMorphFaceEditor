@@ -28,6 +28,19 @@ public sealed record CustomMaterialAssignmentOption(
     HeadMaterialFamily Family,
     ResolvedHeadMaterial Template)
 {
+    private ResolvedHeadMaterial _template = Template;
+    private Lazy<ResolvedHeadMaterial>? _deferredTemplate;
+
+    public ResolvedHeadMaterial Template
+    {
+        get => _deferredTemplate?.Value ?? _template;
+        init { _template = value; _deferredTemplate = null; }
+    }
+
+    /// <summary>Creates a workspace-owned option whose pixels are decoded only when selected.</summary>
+    public CustomMaterialAssignmentOption WithDeferredTemplate(Func<ResolvedHeadMaterial> load) =>
+        this with { _deferredTemplate = new Lazy<ResolvedHeadMaterial>(load) };
+
     public HeadMaterialFamily MaterialFamily => Family;
     public string? RandomisationProfileKey { get; init; }
     public string? ParameterScopeKey { get; init; }

@@ -41,6 +41,7 @@ internal sealed class QaContext : IDisposable
     private QaResult? _sourceCase;
     private MorphFaceMeshReferences? _selectedSource;
     private readonly Dictionary<QaResult, List<string>> _recordedFailures = [];
+    private readonly HashSet<MorphFaceGame> _warmedGames = [];
     public string? RecordedFailureSummary => _recordedFailures.TryGetValue(Current, out var failures)
         ? string.Join(Environment.NewLine, failures) : null;
     public void ThrowRecordedFailures()
@@ -55,6 +56,23 @@ internal sealed class QaContext : IDisposable
         Directory.CreateDirectory(Output);
         LegendaryExplorerCoreRuntime.Initialize();
         Textures = new TextureCatalogService(Store);
+    }
+
+    public async Task WarmGame(MorphFaceGame game)
+    {
+        if (_warmedGames.Contains(game)) return;
+        var path = CorpusPackage(game);
+        await Measure($"Cold game warm-up · {game}", async () =>
+        {
+            var source = MorphFaceReferenceInspector.Inspect(path)
+                .OrderBy(value => value.FacePath, StringComparer.OrdinalIgnoreCase).First();
+            using var reader = new MorphFacePackageReader();
+            using var loader = new MorphFacePreviewLoadService(Scenes, Targets, Profiles, reader);
+            await loader.LoadAsync(path, source.FacePath);
+            Current.Evidence["coldGameWarmUp"] = new { Game = game, Package = path, source.FacePath,
+                Scope = "First game load in this QA session; OS disk caches are not flushed. No warm-load limit." };
+        }, QaStageKind.ColdLoad);
+        _warmedGames.Add(game);
     }
 
     public string Artifact(string filename)

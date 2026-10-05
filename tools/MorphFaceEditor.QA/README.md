@@ -34,6 +34,8 @@ Load and Randomisation stages are warned above **1,500 ms**; file transfer, Save
 
 Each stage name contains its sequence number, phase and purpose; run and case identity are supplied by the containing report record. `Player fixture preparation` covers stock loading/catalogue construction and fixture export; `Test workflow` covers the randomized-input test. Face/file names and Clipboard copy/paste roles distinguish repeated operations.
 
+Before the matrix tests a game's first face, it records a separate `ColdLoad` warm-up using that game's corpus package. Cold-load timings have no performance limit; subsequent face loads retain the 1,500 ms limit. This measures the first load in the QA session without flushing Windows file caches. The benchmark case likewise records its first load separately from its warm repeats.
+
 Load/export warnings include their phase, package and face. A relinker warning for an unresolved import is informational when a fresh read proves that the output contains exactly one export at the full path, its class matches the canonical oracle, and no matching import exists. The original message and export index remain in JSON evidence. Unverified warnings and duplicate import/export roles remain Warnings. Material RON diagnostics list differing parameters and canonical expected/actual texture identities. Clipboard diagnostics identify the disabled command and dirty/capability state. glTF reporting distinguishes raw Custom geometry checks from inverse-morph sidecar recovery.
 
 ## Commands

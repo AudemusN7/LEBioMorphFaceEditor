@@ -25,6 +25,7 @@ public sealed class HeadPreviewHostController : IDisposable
     private int _pixelHeight;
     private bool _renderQueued;
     private bool _queuedRenderMayRunInactive;
+    private bool _cameraInitialized;
     private long _scenePublicationVersion;
     private long _settledScenePublicationVersion;
     private bool _disposed;
@@ -56,13 +57,15 @@ public sealed class HeadPreviewHostController : IDisposable
     public void SetScene(HeadPreviewScene scene, bool resetPosition = false)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        var isFirstScene = _scene is null;
         _scene = scene ?? throw new ArgumentNullException(nameof(scene));
         _scenePublicationVersion++;
-        if (isFirstScene)
+        // Clearing a face releases its resources, but must not make the next
+        // face reset the user's orbit as if this were the first preview.
+        if (!_cameraInitialized)
         {
             _camera.Fit(scene.Bounds);
             ResetCamera(_camera.ResetThreeQuarter);
+            _cameraInitialized = true;
         }
         else
         {
@@ -88,12 +91,9 @@ public sealed class HeadPreviewHostController : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         _resizeTimer.Stop();
         _scene = null;
-        _renderer?.Dispose();
-        _renderer = null;
+        _renderer?.ClearScene();
         _bitmap = null;
         _pixelBuffer = null;
-        _pixelWidth = 0;
-        _pixelHeight = 0;
         _renderQueued = false;
         _queuedRenderMayRunInactive = false;
         _image.Source = null;
@@ -331,6 +331,7 @@ public sealed class HeadPreviewHostController : IDisposable
         _window.IsVisibleChanged -= OnVisibilityChanged;
         _window.Closed -= OnWindowClosed;
         _host.SizeChanged -= OnHostSizeChanged;
+        _scene = null;
         if (_renderer is not null)
         {
             _renderer.Dispose();

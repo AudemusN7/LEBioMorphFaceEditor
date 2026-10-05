@@ -29,6 +29,19 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
 {
     private readonly MorphFacePackageReader _reader;
     private readonly TextureRegistryStore _registry;
+    private readonly object _catalogLock = new();
+    private readonly Dictionary<MorphFaceGame, CachedCatalog> _catalogs = [];
+    private sealed record SourceStamp(string Path, long Length, DateTime LastWriteTimeUtc)
+    {
+        public static SourceStamp Read(string path)
+        {
+            var file = new FileInfo(path);
+            return new SourceStamp(path, file.Exists ? file.Length : -1,
+                file.Exists ? file.LastWriteTimeUtc : DateTime.MinValue);
+        }
+    }
+    private sealed record CachedCatalog(string CookedPath, TextureRegistrySnapshot? Registry,
+        CustomMaterialTemplateCatalogResult Metadata, IReadOnlyList<SourceStamp> Sources);
 
     public CustomMaterialTemplateCatalogService(
         MorphFacePackageReader reader,
@@ -66,6 +79,52 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
 
     public CustomMaterialTemplateCatalogResult Load(MorphFaceGame game)
     {
+        lock (_catalogLock)
+        {
+            if (game is not (MorphFaceGame.LE1 or MorphFaceGame.LE2 or MorphFaceGame.LE3))
+                return CustomMaterialTemplateCatalogResult.Empty;
+            var cookedPath = LegendaryExplorerCoreRuntime.GetCookedPath(game) ?? string.Empty;
+            TextureRegistrySnapshot? registry = null;
+            try { registry = _registry.ReadForLookup(game); }
+            catch (Exception) { /* BuildCatalog retains the existing missing/invalid-registry warning. */ }
+            if (!_catalogs.TryGetValue(game, out var cached) ||
+                registry is null ||
+                !string.Equals(cached.CookedPath, cookedPath, StringComparison.OrdinalIgnoreCase) ||
+                !ReferenceEquals(cached.Registry, registry) ||
+                cached.Sources.Any(source => source != SourceStamp.Read(source.Path)))
+            {
+                var sourceFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var metadata = BuildCatalog(game, sourceFiles);
+                var dependencies = metadata.Options.SelectMany(option =>
+                        _reader.GetMaterialEvidenceDependencies(option.Template.Source))
+                    .Concat(metadata.PreviewAttachments.Select(source => source.PackagePath))
+                    .Concat(sourceFiles)
+                    .Concat(new[] { "BIOG_HMF_HIR_PRO.pcc", "BIOG_HMM_HIR_PRO_R.pcc" }
+                        .Select(file => Path.Combine(cookedPath, file)))
+                    .Concat(Sources.Where(source => source.Games is null || source.Games.Contains(game))
+                        .Select(source => Path.Combine(cookedPath, source.PackageFileName)))
+                    .Distinct(StringComparer.OrdinalIgnoreCase).Select(SourceStamp.Read).ToArray();
+                cached = new CachedCatalog(cookedPath, registry, metadata, dependencies);
+                _catalogs[game] = cached;
+            }
+            // Cache metadata only. Each workspace owns its selected decoded templates;
+            // unused catalogue choices never retain full mip chains.
+            return cached.Metadata with
+            {
+                Options = cached.Metadata.Options.Select(option =>
+                {
+                    var source = option.Template.Source;
+                    return option.WithDeferredTemplate(() =>
+                    {
+                        lock (_catalogLock) return _reader.LoadMaterialEvidence(source);
+                    });
+                }).ToArray()
+            };
+        }
+    }
+
+    private CustomMaterialTemplateCatalogResult BuildCatalog(MorphFaceGame game, HashSet<string> sourceFiles)
+    {
         if (game is not (MorphFaceGame.LE1 or MorphFaceGame.LE2 or MorphFaceGame.LE3))
         {
             return CustomMaterialTemplateCatalogResult.Empty;
@@ -87,6 +146,7 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
             if (source.Games is not null && !source.Games.Contains(game)) continue;
             var packagePath = officialPackages.GetValueOrDefault(source.PackageFileName)
                 ?? Path.Combine(cookedPath, source.PackageFileName);
+            sourceFiles.Add(packagePath);
             if (!File.Exists(packagePath))
             {
                 warnings.Add(Loc.Format("loc_Services_CustomTemplate_SourceNotInstalled", source.PackageFileName, game));
@@ -96,7 +156,7 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
             MeshMaterialEvidence evidence;
             try
             {
-                evidence = _reader.LoadMeshMaterialEvidence(packagePath, source.MeshInstancedPath);
+                evidence = _reader.LoadMeshMaterialEvidence(packagePath, source.MeshInstancedPath, decodeTextures: false);
             }
             catch (Exception exception)
             {
@@ -133,7 +193,7 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
             }
         }
 
-        LoadIndexedOptions(game, options, warnings);
+        LoadIndexedOptions(game, options, warnings, sourceFiles);
 
         var previewAttachments = LoadPreviewAttachments(cookedPath, warnings);
         return new CustomMaterialTemplateCatalogResult(
@@ -145,7 +205,8 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
     private void LoadIndexedOptions(
         MorphFaceGame game,
         ICollection<CustomMaterialAssignmentOption> options,
-        ICollection<string> warnings)
+        ICollection<string> warnings,
+        HashSet<string> sourceFiles)
     {
         TextureRegistrySnapshot snapshot;
         try
@@ -166,9 +227,10 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
             Exception? lastFailure = null;
             foreach (var candidate in candidates)
             {
+                sourceFiles.Add(candidate.PackagePath);
                 try
                 {
-                    evidence = _reader.LoadMeshMaterialEvidence(candidate.PackagePath, candidate.MeshPath);
+                    evidence = _reader.LoadMeshMaterialEvidence(candidate.PackagePath, candidate.MeshPath, decodeTextures: false);
                     break;
                 }
                 catch (Exception exception)

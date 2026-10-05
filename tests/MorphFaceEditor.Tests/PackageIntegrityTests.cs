@@ -25,6 +25,8 @@ internal static class PackageIntegrityTests
         new("relink reuses an existing export without rewriting its destination references", ExistingExportIsNotRelinked),
         new("relink processes a shared destination export once when donor aliases differ", () => SharedDestinationAliasRelinkedOnce(false)),
         new("relink shared destination preserves the staged donor when an alias is mapped first", () => SharedDestinationAliasRelinkedOnce(true)),
+        new("relink worklist includes dependencies discovered during relinking across games", RelinkDiscoveredDependencies),
+        new("relink worklist observes a mapping becoming an export during relinking", RelinkChangedMapping),
         new("relink rejects retained binary failure reports even with valid references", BinaryReportRejected),
         new("package integrity rejects duplicate identities and missing parents", InvalidHierarchyRejected),
         new("package integrity permits only pre-existing structural issues", ExistingIssuesAreBaselined),
@@ -248,6 +250,90 @@ internal static class PackageIntegrityTests
         TestAssert.Equal(existing.UIndex, PackageIntegrity.References(existing)["property.Marker[0]"]);
         existing.WriteProperty(new ObjectProperty(destination.Exports[0], "Marker"));
         Reject(() => MaterialisationVerifier.Verify(root, source.Game, options), "Required relink failed");
+    }
+
+    private static void RelinkDiscoveredDependencies()
+    {
+        foreach (var game in new[] { MEGame.LE1, MEGame.LE2, MEGame.LE3 })
+        {
+            var outputPath = Path.Combine(Path.GetTempPath(), $"MFE-RelinkGrowth-{Guid.NewGuid():N}.pcc");
+            try
+            {
+                using var source = Empty("GrowthDonor", game);
+                using var destination = Empty("GrowthDestination", game);
+                var leaf = source.CreateExport("Leaf", "Object", indexed: false);
+                leaf.WriteProperty(new IntProperty(73, "AuthoredMarker"));
+                var branch = source.CreateExport("Branch", "Object", indexed: false);
+                branch.WriteProperty(new ObjectProperty(leaf, "Required"));
+                var donorRoot = source.CreateExport("Root", "Object", indexed: false);
+                donorRoot.WriteProperty(new ObjectProperty(branch, "Required"));
+                for (var i = 0; i < 12; i++)
+                    destination.CreateExport($"Filler{i}", "Object", indexed: false);
+                var options = new RelinkerOptionsPackage
+                {
+                    ImportExportDependencies = true,
+                    GenerateImportsForGlobalFiles = false,
+                    PortImportsMemorySafe = false
+                };
+                var root = (ExportEntry)EntryImporter.ImportExport(destination, donorRoot, 0, options);
+                TestAssert.True(!options.CrossPackageMap.ContainsKey(branch) && !options.CrossPackageMap.ContainsKey(leaf),
+                    "The growth fixture already mapped its dependencies before relinking.");
+
+                MaterialisationVerifier.Relink(options);
+                MaterialisationVerifier.Verify(root, game, options);
+                var targetBranch = (ExportEntry)options.CrossPackageMap[branch];
+                var targetLeaf = (ExportEntry)options.CrossPackageMap[leaf];
+                TestAssert.Equal(targetBranch.UIndex, PackageIntegrity.References(root)["property.Required[0]"]);
+                TestAssert.Equal(targetLeaf.UIndex, PackageIntegrity.References(targetBranch)["property.Required[0]"]);
+                TestAssert.Equal(73, targetLeaf.GetProperty<IntProperty>("AuthoredMarker")!.Value);
+                var graph = PccPackageWorkflow.CaptureDependencyGraph(root);
+                destination.Save(outputPath);
+                using var reopened = MEPackageHandler.OpenMEPackage(outputPath, forceLoadFromDisk: true);
+                PccPackageWorkflow.VerifyDependencyGraph(reopened, graph, verifyCorpusRoles: false);
+                TestAssert.Equal(73, reopened.FindExport(targetLeaf.InstancedFullPath, "Object")!
+                    .GetProperty<IntProperty>("AuthoredMarker")!.Value);
+            }
+            finally { File.Delete(outputPath); }
+        }
+    }
+
+    private static void RelinkChangedMapping()
+    {
+        using var source = Empty("ChangedMappingDonor");
+        using var destination = Empty("ChangedMappingDestination");
+        var queued = source.CreateExport("Queued", "Object", indexed: false);
+        queued.WriteProperty(new ObjectProperty(queued, "Marker"));
+        var discovered = source.CreateExport("Discovered", "Object", indexed: false);
+        var donorRoot = source.CreateExport("Root", "Object", indexed: false);
+        donorRoot.WriteProperty(new ObjectProperty(discovered, "Required"));
+        donorRoot.WriteProperty(new ObjectProperty(queued, "Queued"));
+        for (var i = 0; i < 12; i++)
+            destination.CreateExport($"Filler{i}", "Object", indexed: false);
+        var targetQueued = destination.CreateExport("Queued", "Object", indexed: false);
+        targetQueued.WriteProperties(queued.GetProperties());
+        var options = new RelinkerOptionsPackage
+        {
+            ImportExportDependencies = true,
+            GenerateImportsForGlobalFiles = false,
+            PortImportsMemorySafe = false
+        };
+        options.CrossPackageMap[queued] = destination.CreateImport("Object", "QueuedImport");
+        var root = (ExportEntry)EntryImporter.ImportExport(destination, donorRoot, 0, options);
+        var changed = false;
+        void ChangeQueuedMapping(object sender, DictionaryChangedEvent<IEntry, IEntry> change)
+        {
+            if (change.Type == DictChangeType.AddItem && ReferenceEquals(change.Key, discovered))
+            {
+                changed = true;
+                options.CrossPackageMap[queued] = targetQueued;
+            }
+        }
+        options.CrossPackageMap.OnDictionaryChanged += ChangeQueuedMapping;
+        try { MaterialisationVerifier.Relink(options); }
+        finally { options.CrossPackageMap.OnDictionaryChanged -= ChangeQueuedMapping; }
+        TestAssert.True(changed, "The fixture did not change a queued mapping during relinking.");
+        TestAssert.Equal(targetQueued.UIndex, PackageIntegrity.References(root)["property.Queued[0]"]);
+        TestAssert.Equal(targetQueued.UIndex, PackageIntegrity.References(targetQueued)["property.Marker[0]"]);
     }
 
     private static void SharedDestinationAliasRelinkedOnce(bool aliasFirst)

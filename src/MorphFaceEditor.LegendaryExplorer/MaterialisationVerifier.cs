@@ -1,3 +1,4 @@
+using LegendaryExplorerCore.Misc;
 using LegendaryExplorerCore.Packages;
 using LegendaryExplorerCore.Packages.CloningImportingAndRelinking;
 using LegendaryExplorerCore.Unreal.BinaryConverters;
@@ -24,37 +25,66 @@ internal static class MaterialisationVerifier
             // them as donor indices and corrupts otherwise valid references.
             // Process each destination once, using its recorded staging donor
             // when available. An alias may appear before that donor in the map.
-            // The map may grow while Relinker adds imports, so keep scanning
-            // until no new source is available.
+            // The map may grow while Relinker adds imports, so keep an ordered
+            // worklist and append newly added mappings as they arrive.
             var processedTargets = new HashSet<ExportEntry>();
             var processedSources = new HashSet<IEntry>();
-            while (true)
+            var pendingSources = GetPendingSources(options.CrossPackageMap);
+            var pendingIndex = 0;
+            var refreshPendingSources = false;
+            void OnMappingChanged(object sender, DictionaryChangedEvent<IEntry, IEntry> change)
             {
-                var next = options.CrossPackageMap.FirstOrDefault(pair =>
-                    pair.Key is ExportEntry && pair.Value is ExportEntry &&
-                    !processedSources.Contains(pair.Key));
-                if (next.Key is not ExportEntry source || next.Value is not ExportEntry target)
+                if (change.Type == DictChangeType.AddItem)
                 {
-                    break;
+                    if (change.Key is ExportEntry && change.Value is ExportEntry)
+                        pendingSources.Add(change.Key);
                 }
-                processedSources.Add(source);
-                if (!processedTargets.Add(target))
+                else
                 {
-                    continue;
+                    // Changes/removals are uncommon in the relinker path. Refresh
+                    // after the active Relink call so order matches a fresh map walk.
+                    refreshPendingSources = true;
                 }
-                if (preexistingExports?.Contains(target) == true)
+            }
+
+            options.CrossPackageMap.OnDictionaryChanged += OnMappingChanged;
+            try
+            {
+                while (true)
                 {
-                    continue;
+                    if (refreshPendingSources)
+                    {
+                        pendingSources = GetPendingSources(options.CrossPackageMap, processedSources);
+                        pendingIndex = 0;
+                        refreshPendingSources = false;
+                    }
+                    if (pendingIndex >= pendingSources.Count)
+                        break;
+
+                    var sourceEntry = pendingSources[pendingIndex++];
+                    if (sourceEntry is not ExportEntry source ||
+                        !options.CrossPackageMap.TryGetValue(sourceEntry, out var currentTarget) ||
+                        currentTarget is not ExportEntry target ||
+                        !processedSources.Add(sourceEntry))
+                        continue;
+                    if (!processedTargets.Add(target))
+                        continue;
+                    if (preexistingExports?.Contains(target) == true)
+                        continue;
+                    if (stagedCopies?.TryGetValue(target, out var stagedCopy) == true)
+                    {
+                        source = stagedCopy.Source;
+                        if (!options.CrossPackageMap.TryGetValue(source, out var stagedTarget) ||
+                            !ReferenceEquals(stagedTarget, target))
+                            throw new InvalidDataException(
+                                $"The recorded donor '{source.InstancedFullPath}' is not bound to its staged export.");
+                    }
+                    Relinker.Relink(source, target, options);
                 }
-                if (stagedCopies?.TryGetValue(target, out var stagedCopy) == true)
-                {
-                    source = stagedCopy.Source;
-                    if (!options.CrossPackageMap.TryGetValue(source, out var stagedTarget) ||
-                        !ReferenceEquals(stagedTarget, target))
-                        throw new InvalidDataException(
-                            $"The recorded donor '{source.InstancedFullPath}' is not bound to its staged export.");
-                }
-                Relinker.Relink(source, target, options);
+            }
+            finally
+            {
+                options.CrossPackageMap.OnDictionaryChanged -= OnMappingChanged;
             }
         }
         catch (Exception exception)
@@ -73,6 +103,14 @@ internal static class MaterialisationVerifier
             throw new InvalidDataException("Required relink failed: " + exception.Message, exception);
         }
     }
+
+    private static List<IEntry> GetPendingSources(
+        IDictionary<IEntry, IEntry> mappings,
+        IReadOnlySet<IEntry>? processedSources = null) =>
+        mappings.Where(pair => pair.Key is ExportEntry && pair.Value is ExportEntry &&
+                               processedSources?.Contains(pair.Key) != true)
+            .Select(pair => pair.Key)
+            .ToList();
 
     internal static void Verify(ExportEntry root, MEGame sourceGame, RelinkerOptionsPackage options,
         ICollection<string>? warnings = null, bool rootOnly = false,

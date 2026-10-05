@@ -99,6 +99,7 @@
                              x:Name="CandidateList"
                              ItemsSource="{Binding Candidates}"
                              MouseLeave="OnCandidateListMouseLeave"
+                             ScrollViewer.ScrollChanged="OnCandidateListScrollChanged"
                              Height="390"
                              MinHeight="80"
                              ScrollViewer.CanContentScroll="True"

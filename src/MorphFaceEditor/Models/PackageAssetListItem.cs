@@ -8,8 +8,9 @@ namespace MorphFaceEditor.Models;
 
 public sealed class PackageAssetListItem : ObservableObject
 {
-    private Func<Task<ImageSource>>? _thumbnailLoader;
+    private Func<CancellationToken, Task<ImageSource>>? _thumbnailLoader;
     private Task? _thumbnailTask;
+    private CancellationTokenSource? _thumbnailCancellation;
     private ImageSource? _thumbnail;
     private bool _isThumbnailLoading;
     private string? _thumbnailError;
@@ -20,6 +21,7 @@ public sealed class PackageAssetListItem : ObservableObject
     public int? BoneCount { get; init; }
     public string DisplayName => Identity.InstancedPath;
     public string ObjectName => Identity.InstancedPath.Split('.').Last();
+    public bool CanLoadThumbnail => _thumbnailLoader is not null && Thumbnail is null && ThumbnailError is null;
     public ImageSource? Thumbnail
     {
         get => _thumbnail;
@@ -36,10 +38,34 @@ public sealed class PackageAssetListItem : ObservableObject
         private set => SetProperty(ref _thumbnailError, value);
     }
 
-    public void ConfigureThumbnailLoader(Func<Task<ImageSource>> loader) =>
+    public void ConfigureThumbnailLoader(Func<Task<ImageSource>> loader)
+    {
+        ArgumentNullException.ThrowIfNull(loader);
+        _thumbnailLoader ??= _ => loader();
+    }
+
+    public void ConfigureThumbnailLoader(Func<CancellationToken, Task<ImageSource>> loader) =>
         _thumbnailLoader ??= loader ?? throw new ArgumentNullException(nameof(loader));
 
-    public Task EnsureThumbnailAsync() => _thumbnailTask ??= LoadThumbnailAsync();
+    public Task EnsureThumbnailAsync() => EnsureThumbnailAsync(CancellationToken.None);
+
+    public Task EnsureThumbnailAsync(CancellationToken cancellationToken)
+    {
+        if (_thumbnailLoader is null || Thumbnail is not null || ThumbnailError is not null)
+        {
+            return Task.CompletedTask;
+        }
+
+        if (_thumbnailTask is { IsCompleted: false } existing)
+        {
+            return existing.WaitAsync(cancellationToken);
+        }
+
+        var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _thumbnailCancellation = linkedCancellation;
+        _thumbnailTask = LoadThumbnailAsync(linkedCancellation);
+        return _thumbnailTask;
+    }
 
     public void SetThumbnail(DecodedTextureAsset texture)
     {
@@ -47,21 +73,23 @@ public sealed class PackageAssetListItem : ObservableObject
         if (Thumbnail is null)
         {
             Thumbnail = TextureThumbnailFactory.Create(texture);
+            _thumbnailCancellation?.Cancel();
         }
     }
 
-    private async Task LoadThumbnailAsync()
+    private async Task LoadThumbnailAsync(CancellationTokenSource cancellation)
     {
-        if (_thumbnailLoader is null || Thumbnail is not null)
-        {
-            return;
-        }
-
         IsThumbnailLoading = true;
         ThumbnailError = null;
         try
         {
-            Thumbnail = await _thumbnailLoader();
+            var thumbnail = await _thumbnailLoader!(cancellation.Token);
+            cancellation.Token.ThrowIfCancellationRequested();
+            Thumbnail = thumbnail;
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception exception)
         {
@@ -70,6 +98,12 @@ public sealed class PackageAssetListItem : ObservableObject
         finally
         {
             IsThumbnailLoading = false;
+            if (ReferenceEquals(_thumbnailCancellation, cancellation))
+            {
+                _thumbnailCancellation = null;
+                _thumbnailTask = null;
+            }
+            cancellation.Dispose();
         }
     }
 

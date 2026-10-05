@@ -26,6 +26,7 @@ public sealed class MorphFacePackageReader : IDisposable
     {
         _referenceResolver = new GamePackageReferenceResolver(_packageCache);
         _materialReader = new MorphFaceMaterialReader(_packageCache, _referenceResolver);
+        PackageSourceCache.RegisterInvalidation(_packageCache, InvalidatePackage);
     }
 
     public MorphFaceLoadMetrics? LastLoadMetrics { get; private set; }
@@ -37,7 +38,7 @@ public sealed class MorphFacePackageReader : IDisposable
         ThrowIfDisposed();
         LegendaryExplorerCoreRuntime.Initialize();
         var fullPath = RequireFile(packagePath);
-        var package = _packageCache.GetCachedPackage(fullPath)
+        var package = PackageSourceCache.GetPackage(_packageCache, fullPath)
             ?? throw new InvalidDataException($"Legendary Explorer Core could not open '{fullPath}'.");
         var face = ExportSelector.Find(package, exportSelector, "BioMorphFace");
         // Offline corpus evidence belongs to the reviewed package, not an
@@ -66,7 +67,7 @@ public sealed class MorphFacePackageReader : IDisposable
         ThrowIfDisposed();
         LegendaryExplorerCoreRuntime.Initialize();
         var fullPath = RequireFile(packagePath);
-        var package = _packageCache.GetCachedPackage(fullPath)
+        var package = PackageSourceCache.GetPackage(_packageCache, fullPath)
             ?? throw new InvalidDataException($"Legendary Explorer Core could not open '{fullPath}'.");
         var packageOpenTime = Mark(ref checkpoint);
         var export = ExportSelector.Find(package, exportSelector, "BioMorphFace");
@@ -157,9 +158,11 @@ public sealed class MorphFacePackageReader : IDisposable
         var fullPath = Path.GetFullPath(packagePath);
         _fingerprintCache.Remove(fullPath);
         _materialReader.InvalidatePackage(fullPath);
-        foreach (var key in _meshCache.Keys
-                     .Where(key => key.StartsWith(fullPath + "|", StringComparison.OrdinalIgnoreCase))
-                     .ToArray())
+        foreach (var key in _meshCache.Where(pair =>
+                     pair.Key.StartsWith(fullPath + "|", StringComparison.OrdinalIgnoreCase) ||
+                     pair.Value.Materials.Any(material => Path.GetFullPath(material.FileRef.FilePath)
+                         .Equals(fullPath, StringComparison.OrdinalIgnoreCase)))
+                     .Select(pair => pair.Key).ToArray())
         {
             _meshCache.Remove(key);
         }
@@ -177,7 +180,7 @@ public sealed class MorphFacePackageReader : IDisposable
         ThrowIfDisposed();
         LegendaryExplorerCoreRuntime.Initialize();
         var fullPath = RequireFile(packagePath);
-        var package = _packageCache.GetCachedPackage(fullPath)
+        var package = PackageSourceCache.GetPackage(_packageCache, fullPath)
             ?? throw new InvalidDataException($"Legendary Explorer Core could not open '{fullPath}'.");
         var face = ExportSelector.Find(package, faceSelector, "BioMorphFace");
         var meshEntry = package.FindEntry(meshSelector, "SkeletalMesh")
@@ -199,7 +202,7 @@ public sealed class MorphFacePackageReader : IDisposable
         ThrowIfDisposed();
         LegendaryExplorerCoreRuntime.Initialize();
         var fullPath = RequireFile(packagePath);
-        var package = _packageCache.GetCachedPackage(fullPath)
+        var package = PackageSourceCache.GetPackage(_packageCache, fullPath)
             ?? throw new InvalidDataException($"Legendary Explorer Core could not open '{fullPath}'.");
         var meshExport = _referenceResolver.Require(
             FindDetachedAttachmentExport(package, meshSelector), "selected attachment mesh");
@@ -224,7 +227,7 @@ public sealed class MorphFacePackageReader : IDisposable
         ThrowIfDisposed();
         LegendaryExplorerCoreRuntime.Initialize();
         var fullPath = RequireFile(packagePath);
-        var package = _packageCache.GetCachedPackage(fullPath)
+        var package = PackageSourceCache.GetPackage(_packageCache, fullPath)
             ?? throw new InvalidDataException($"Legendary Explorer Core could not open '{fullPath}'.");
         var meshExport = FindDetachedAttachmentExport(package, meshSelector);
         _ = ReadSkeletalMesh(meshExport, new List<ExportEntry>());
@@ -260,7 +263,7 @@ public sealed class MorphFacePackageReader : IDisposable
         ThrowIfDisposed();
         LegendaryExplorerCoreRuntime.Initialize();
         var fullPath = RequireFile(packagePath);
-        var package = _packageCache.GetCachedPackage(fullPath)
+        var package = PackageSourceCache.GetPackage(_packageCache, fullPath)
             ?? throw new InvalidDataException($"Legendary Explorer Core could not open '{fullPath}'.");
         var meshExport = _referenceResolver.Require(
             ExportSelector.Find(package, meshSelector, "SkeletalMesh"), "mesh material evidence");
@@ -328,7 +331,7 @@ public sealed class MorphFacePackageReader : IDisposable
         ThrowIfDisposed();
         LegendaryExplorerCoreRuntime.Initialize();
         var fullPath = RequireFile(packagePath);
-        var package = _packageCache.GetCachedPackage(fullPath)
+        var package = PackageSourceCache.GetPackage(_packageCache, fullPath)
             ?? throw new InvalidDataException($"Legendary Explorer Core could not open '{fullPath}'.");
         var entry = package.FindEntry(textureSelector, "Texture2D")
             ?? InstalledGameAssetResolver.RequireExact(_packageCache, fullPath, textureSelector, "Texture2D");
@@ -340,6 +343,28 @@ public sealed class MorphFacePackageReader : IDisposable
         // A seekfree donor may expose a package-local export path while the
         // picker requested its package-qualified identity. Keep the physical
         // package/UIndex, but return the canonical path that PCC writers use.
+        var canonicalPath = PccAssetPathPolicy.FromExport(texture);
+        return decoded.Source.InstancedPath.Equals(canonicalPath, StringComparison.OrdinalIgnoreCase)
+            ? decoded
+            : decoded with { Source = decoded.Source with { InstancedPath = canonicalPath } };
+    }
+
+    /// <summary>Loads one authored mip suitable for a small picker thumbnail without populating the full pixel cache.</summary>
+    public DecodedTextureAsset LoadTextureThumbnail(
+        string packagePath,
+        string textureSelector,
+        MaterialParameterDefinition definition)
+    {
+        ThrowIfDisposed();
+        LegendaryExplorerCoreRuntime.Initialize();
+        var fullPath = RequireFile(packagePath);
+        var package = PackageSourceCache.GetPackage(_packageCache, fullPath)
+            ?? throw new InvalidDataException($"Legendary Explorer Core could not open '{fullPath}'.");
+        var entry = package.FindEntry(textureSelector, "Texture2D")
+            ?? InstalledGameAssetResolver.RequireExact(_packageCache, fullPath, textureSelector, "Texture2D");
+        var texture = entry as ExportEntry ?? _referenceResolver.Require(
+            entry, $"Texture2D reference '{textureSelector}'");
+        var decoded = _materialReader.DecodeTextureThumbnailReference(texture, definition, maximumDimension: 128);
         var canonicalPath = PccAssetPathPolicy.FromExport(texture);
         return decoded.Source.InstancedPath.Equals(canonicalPath, StringComparison.OrdinalIgnoreCase)
             ? decoded

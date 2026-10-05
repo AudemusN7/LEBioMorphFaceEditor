@@ -13,6 +13,7 @@ public sealed class InstalledGameAssetResolver
     private readonly Func<MEGame, TextureRegistrySnapshot?> _snapshot;
     private readonly Dictionary<MEGame, IReadOnlyDictionary<string, string>> _packageFiles = [];
     private static readonly ConditionalWeakTable<TextureRegistrySnapshot, Dictionary<string, InstalledAssetOccurrence>> AssetIndices = new();
+    private static readonly ConditionalWeakTable<TextureRegistrySnapshot, HashSet<string>> ModPackages = new();
 
     internal InstalledGameAssetResolver(
         Func<MEGame, IReadOnlyDictionary<string, string>>? loadedFiles = null,
@@ -27,6 +28,36 @@ public sealed class InstalledGameAssetResolver
         if (!InstalledAssetOccurrence.IsSupportedClass(entry.ClassName)) return null;
         var path = entry is ExportEntry export ? PccAssetPathPolicy.FromExport(export) : entry.InstancedFullPath;
         return Resolve(entry.Game, path, entry.ClassName, cache);
+    }
+
+    internal bool CanUseLocalAsset(ExportEntry entry)
+    {
+        if (entry.Game is not (MEGame.LE1 or MEGame.LE2 or MEGame.LE3)) return true;
+        if (!IsOfficialPackage(entry.FileRef.FilePath, entry.Game))
+            return ResolveIndexedOfficial(entry.Game, entry.InstancedFullPath, entry.ClassName) is null;
+        if (_snapshot(entry.Game) is not { } snapshot) return true;
+        var mods = ModPackages.GetValue(snapshot, static value => value.Assets
+            .Where(asset => asset.Origin == TextureCatalogOrigin.Mod)
+            .Select(asset => Path.GetFullPath(asset.PackagePath)).ToHashSet(StringComparer.OrdinalIgnoreCase));
+        return !mods.Contains(Path.GetFullPath(entry.FileRef.FilePath)) ||
+            ResolveIndexedOfficial(entry.Game, entry.InstancedFullPath, entry.ClassName) is null;
+    }
+
+    private InstalledAssetOccurrence? ResolveIndexedOfficial(MEGame game, string path, string className)
+    {
+        if (_snapshot(game) is not { } snapshot) return null;
+        var index = AssetIndices.GetValue(snapshot, static value =>
+        {
+            var packages = value.OfficialPackagePaths.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            return value.Assets.Where(asset =>
+                    (asset.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc) &&
+                    packages.Contains(Path.GetFullPath(asset.PackagePath)))
+                .GroupBy(asset => Key(asset.ClassName, asset.InstancedPath), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.OrderByDescending(asset => asset.MountPriority)
+                    .ThenBy(asset => asset.PackagePath, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(asset => asset.ExportUIndex).First(), StringComparer.OrdinalIgnoreCase);
+        });
+        return index.GetValueOrDefault(Key(className, path));
     }
 
     internal ExportEntry? Resolve(MEGame game, AssetIdentity identity, PackageCache cache)
@@ -48,27 +79,9 @@ public sealed class InstalledGameAssetResolver
     {
         if (game is not (MEGame.LE1 or MEGame.LE2 or MEGame.LE3) ||
             !InstalledAssetOccurrence.IsSupportedClass(className)) return null;
-        if (_snapshot(game) is { } snapshot)
+        if (ResolveIndexedOfficial(game, path, className) is { } asset)
         {
-            var index = AssetIndices.GetValue(snapshot, static value =>
-            {
-                var packages = value.OfficialPackagePaths.ToHashSet(StringComparer.OrdinalIgnoreCase);
-                return value.Assets.Where(asset =>
-                        (asset.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc) &&
-                        packages.Contains(Path.GetFullPath(asset.PackagePath)))
-                    .GroupBy(asset => Key(asset.ClassName, asset.InstancedPath), StringComparer.OrdinalIgnoreCase)
-                    .ToDictionary(group => group.Key, group => group.OrderByDescending(asset => asset.MountPriority)
-                        .ThenBy(asset => asset.PackagePath, StringComparer.OrdinalIgnoreCase)
-                        .ThenBy(asset => asset.ExportUIndex).First(), StringComparer.OrdinalIgnoreCase);
-            });
-            if (index.TryGetValue(Key(className, path), out var asset))
-            {
-                var fingerprint = snapshot.MountedPackages.FirstOrDefault(file =>
-                    file.PackagePath.Equals(asset.PackagePath, StringComparison.OrdinalIgnoreCase));
-                if (fingerprint is not null && !fingerprint.IsCurrent())
-                    throw new InvalidDataException($"Official donor '{asset.PackagePath}' changed. Rebuild this game's asset database.");
-                return RequireExact(cache, asset.PackagePath, path, className, asset.ExportUIndex);
-            }
+            return TryExact(cache, asset.PackagePath, path, className, asset.ExportUIndex);
         }
         // Before a database is built, only the exact named official package is
         // searched. No mod lookup, alternate object names or topology fallback.
@@ -86,12 +99,11 @@ public sealed class InstalledGameAssetResolver
 
     internal static ExportEntry RequireExact(PackageCache cache, string packagePath, string path, string className, int index = 0) =>
         TryExact(cache, packagePath, path, className, index) ?? throw new InvalidDataException(
-            $"{className} '{path}' was not found in donor '{packagePath}'. Rebuild the asset database if this donor changed.");
+            $"{className} '{path}' was not found in donor '{packagePath}'.");
 
-    private static ExportEntry? TryExact(PackageCache cache, string packagePath, string path, string className, int index = 0)
+    internal static ExportEntry? TryExact(PackageCache cache, string packagePath, string path, string className, int index = 0)
     {
-        if (!File.Exists(packagePath)) return null;
-        var package = cache.GetCachedPackage(packagePath);
+        var package = PackageSourceCache.GetPackage(cache, packagePath);
         if (package is null) return null;
         bool Matches(ExportEntry export) => export.ClassName.Equals(className, StringComparison.OrdinalIgnoreCase) &&
             (PccAssetPathPolicy.FromExport(export).Equals(path, StringComparison.OrdinalIgnoreCase) ||

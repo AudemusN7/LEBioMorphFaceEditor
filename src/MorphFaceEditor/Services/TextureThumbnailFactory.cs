@@ -7,7 +7,7 @@ namespace MorphFaceEditor.Services;
 
 public static class TextureThumbnailFactory
 {
-    public static ImageSource Create(DecodedTextureAsset texture, int maximumDimension = 192)
+    public static ImageSource Create(DecodedTextureAsset texture, int maximumDimension = 128)
     {
         ArgumentNullException.ThrowIfNull(texture);
         if (texture.Width <= 0 || texture.Height <= 0 ||

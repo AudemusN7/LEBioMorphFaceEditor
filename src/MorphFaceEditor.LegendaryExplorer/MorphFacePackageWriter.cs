@@ -74,6 +74,22 @@ public sealed class MorphFacePackageWriter
                 EnsureSupportedGame(sourcePackage);
                 var sourceFace = FindExport(sourcePackage, draft.Source.InstancedPath, "BioMorphFace");
                 draft = FilterSupportedAttachments(draft, sourcePackage.Game, warnings);
+                using var explicitTextureCache = new PackageCache { CacheMaxSize = 8 };
+                var requestedTextures = draft.MaterialOverrides.Textures;
+                draft = draft with { MaterialOverrides = PccPackageWorkflow.OmitUnavailableSelectedTextures(
+                    draft.MaterialOverrides, explicitTextureCache, warnings) };
+                var omittedNames = requestedTextures.Except(draft.MaterialOverrides.Textures)
+                    .Select(value => value.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                if (omittedNames.Count > 0)
+                {
+                    var sourceOverride = ResolveMaterialOverride(sourceFace);
+                    var overrideProperties = sourceOverride.GetProperties();
+                    var retained = overrideProperties.GetProp<ArrayProperty<StructProperty>>("m_aTextureOverrides")?
+                        .Where(value => !omittedNames.Contains(value.GetProp<NameProperty>("nName")?.Value.Instanced ?? string.Empty))
+                        .ToArray() ?? [];
+                    overrideProperties.AddOrReplaceProp(new ArrayProperty<StructProperty>(retained, "m_aTextureOverrides"));
+                    sourceOverride.WriteProperties(overrideProperties);
+                }
                 // Keep the graph of retained attachments. Strip only outgoing
                 // or unsupported references before the authored face is ported.
                 var sourceProperties = sourceFace.GetProperties();
@@ -107,7 +123,6 @@ public sealed class MorphFacePackageWriter
                         $"The destination already contains an entry named '{destinationFacePath}'.");
                 }
 
-                using var explicitTextureCache = new PackageCache { CacheMaxSize = 8 };
                 var explicitTextureDonors = ResolveExplicitTextureDonors(draft, sourcePackage.Game, explicitTextureCache);
                 var portedFace = PccPackageWorkflow.ImportRootPreservingStructure(
                     destinationPackage,
@@ -194,7 +209,10 @@ public sealed class MorphFacePackageWriter
             {
                 EnsureSupportedGame(package);
                 var face = FindExport(package, draft.Source.InstancedPath, "BioMorphFace");
+                draft = FilterSupportedAttachments(draft, package.Game, warnings);
                 using var explicitTextureCache = new PackageCache { CacheMaxSize = 8 };
+                draft = draft with { MaterialOverrides = PccPackageWorkflow.OmitUnavailableSelectedTextures(
+                    draft.MaterialOverrides, explicitTextureCache, warnings) };
                 var explicitDonors = ResolveExplicitTextureDonors(draft, package.Game, explicitTextureCache)
                     .Where(donor => !Path.GetFullPath(donor.FileRef.FilePath).Equals(packagePath, StringComparison.OrdinalIgnoreCase) ||
                         package.FindExport(PccAssetPathPolicy.FromExport(donor), "Texture2D")?.UIndex != donor.UIndex)
@@ -381,14 +399,25 @@ public sealed class MorphFacePackageWriter
         var resolver = new GamePackageReferenceResolver(cache);
         AssetIdentity? Filter(AssetIdentity? identity)
         {
-            if (identity is null || !File.Exists(identity.PackagePath)) return identity;
-            var source = cache.GetCachedPackage(identity.PackagePath);
-            var entry = source?.GetEntry(identity.UIndex);
-            if (entry is null || !entry.ClassName.Equals("SkeletalMesh", StringComparison.OrdinalIgnoreCase) ||
-                !entry.InstancedFullPath.Equals(identity.InstancedPath, StringComparison.OrdinalIgnoreCase))
-                entry = source?.FindEntry(identity.InstancedPath, "SkeletalMesh");
+            if (identity is null) return null;
+            if (!File.Exists(identity.PackagePath))
+            {
+                warnings.Add($"Optional attachment '{identity.InstancedPath}' was omitted because '{identity.PackagePath}' is unavailable.");
+                return null;
+            }
+            // Native seekfree packages can omit the BIOG package prefix from
+            // disk paths. Use the same canonical identity lookup as the
+            // materialiser before deciding that an attachment is missing.
+            IEntry? entry = InstalledGameAssetResolver.TryExact(cache, identity.PackagePath,
+                identity.InstancedPath, "SkeletalMesh", identity.UIndex);
+            if (entry is null && identity.IsImport)
+                entry = cache.GetCachedPackage(identity.PackagePath)?.FindEntry(identity.InstancedPath, "SkeletalMesh");
             var mesh = resolver.Resolve(entry);
-            if (mesh is null) return identity; // The existing unresolved-reference guard reports this.
+            if (mesh is null)
+            {
+                warnings.Add($"Optional attachment '{identity.InstancedPath}' was omitted because its mesh could not be found.");
+                return null;
+            }
             if (MorphFaceAttachmentTransferEngine.HasSupportedMaterials(mesh.FileRef, mesh, out var unsupported))
                 return identity;
             warnings.Add($"Optional attachment '{identity.InstancedPath}' was omitted because {unsupported} is outside MFE's supported canonical materials.");

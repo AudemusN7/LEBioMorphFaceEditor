@@ -11,14 +11,23 @@ internal sealed class GamePackageReferenceResolver(PackageCache packageCache, In
 {
     private readonly InstalledGameAssetResolver _installedAssets = installedAssets ?? new();
 
-    public ExportEntry? Resolve(IEntry? entry) => entry is null ? null :
-        entry is ExportEntry instance && MaterialInstanceSourcePolicy.IsInstance(instance) ? instance :
-        _installedAssets.Resolve(entry, packageCache) ?? (entry switch
+    public ExportEntry? Resolve(IEntry? entry)
     {
-        ExportEntry export => export,
-        ImportEntry import => TryResolveImport(import),
-        _ => null
-    });
+        if (entry is null) return null;
+        if (entry is ExportEntry local && (MaterialInstanceSourcePolicy.IsInstance(local) ||
+            (local.ClassName is "Texture2D" or "TextureCube" or "SkeletalMesh") && _installedAssets.CanUseLocalAsset(local)))
+        {
+            // The open package already supplies these authored assets. Canonical
+            // effects/base material graphs still use the official resolver below.
+            return local;
+        }
+        return _installedAssets.Resolve(entry, packageCache) ?? (entry switch
+        {
+            ExportEntry export => export,
+            ImportEntry import => TryResolveImport(import),
+            _ => null
+        });
+    }
 
     public ExportEntry Require(IEntry entry, string purpose)
     {
@@ -51,7 +60,7 @@ internal sealed class GamePackageReferenceResolver(PackageCache packageCache, In
 
             try
             {
-                var package = packageCache.GetCachedPackage(packagePath);
+                var package = PackageSourceCache.GetPackage(packageCache, packagePath);
                 if (package is null)
                 {
                     continue;

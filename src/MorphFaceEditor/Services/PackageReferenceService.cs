@@ -17,6 +17,13 @@ public interface ITextureReferenceLoader
         string texturePath,
         MaterialParameterDefinition definition,
         CancellationToken cancellationToken = default);
+
+    async Task<System.Windows.Media.ImageSource> LoadTextureThumbnailAsync(
+        string packagePath,
+        string texturePath,
+        MaterialParameterDefinition definition,
+        CancellationToken cancellationToken = default) => TextureThumbnailFactory.Create(
+            await LoadTextureAsync(packagePath, texturePath, definition, cancellationToken), 128);
 }
 
 public sealed class PackageReferenceService(
@@ -71,17 +78,26 @@ public sealed class PackageReferenceService(
         var textures = Select("Texture2D");
         foreach (var texture in textures)
         {
-            texture.ConfigureThumbnailLoader(() => LoadTextureThumbnailAsync(
+            texture.ConfigureThumbnailLoader(cancellationToken => LoadTextureThumbnailAsync(
                 inventory.PackagePath,
-                texture.Identity.InstancedPath));
+                texture.Identity.InstancedPath,
+                cancellationToken));
         }
         return new PackageReferenceCatalog(textures, Select("SkeletalMesh"));
     }, cancellationToken);
 
     private Task<System.Windows.Media.ImageSource> LoadTextureThumbnailAsync(
         string packagePath,
-        string texturePath) => ReadAsync(() => TextureThumbnailFactory.Create(
-            reader.LoadTexture(packagePath, texturePath, ThumbnailDefinition)), CancellationToken.None);
+        string texturePath,
+        CancellationToken cancellationToken) => LoadTextureThumbnailAsync(
+            packagePath, texturePath, ThumbnailDefinition, cancellationToken);
+
+    public Task<System.Windows.Media.ImageSource> LoadTextureThumbnailAsync(
+        string packagePath,
+        string texturePath,
+        MaterialParameterDefinition definition,
+        CancellationToken cancellationToken = default) => ReadAsync(() => TextureThumbnailFactory.Create(
+            reader.LoadTextureThumbnail(packagePath, texturePath, definition), 128), cancellationToken);
 
     public Task<DecodedTextureAsset> LoadTextureAsync(
         string packagePath,

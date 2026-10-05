@@ -17,7 +17,21 @@ public static class AttachmentMeshNamePolicy
     public static bool IsInstalledHeadAttachment(string instancedPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(instancedPath);
-        return instancedPath.Split('.').Last().Contains("HIR", StringComparison.OrdinalIgnoreCase) &&
+        var objectName = instancedPath.Split('.').Last();
+        return objectName.Split('_').Any(token =>
+                   token.Equals("HIR", StringComparison.OrdinalIgnoreCase) ||
+                   token.Equals("HAT", StringComparison.OrdinalIgnoreCase)) &&
                !HasExcludedSuffix(instancedPath);
+    }
+
+    public static bool IsBaseHeadMesh(string instancedPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(instancedPath);
+        var objectName = instancedPath.Split('.').Last();
+        return objectName.Contains("_HED_PROBase_MDL", StringComparison.OrdinalIgnoreCase) ||
+               objectName.Contains("_HED_PROCustom_MDL", StringComparison.OrdinalIgnoreCase) ||
+               objectName.Contains("_HED_PROAverage_MDL", StringComparison.OrdinalIgnoreCase) ||
+               objectName.Contains("_HED_PROKaidan_MDL", StringComparison.OrdinalIgnoreCase) ||
+               objectName.StartsWith("HMF_Blank_World", StringComparison.OrdinalIgnoreCase);
     }
 }

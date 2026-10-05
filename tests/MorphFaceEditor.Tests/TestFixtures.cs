@@ -109,7 +109,7 @@ public static class TestFixtures
             }
         }
         // Corpus databases deliberately describe fixture files rather than the installed mounts.
-        return new TextureCatalogService(store, (_, _) => true);
+        return new TextureCatalogService(store);
     }
 
     private static string[] CorpusPackages(params string[] names) => names.Select(name =>

@@ -72,7 +72,7 @@ public static class TextureRegistrySettingsTests
 
         settings.UpdateProgress(new TextureRegistryBuildProgress(
             MorphFaceGame.LE2, TextureRegistryBuildPhase.ScanningPackages, 2418, 6594, "BioG.pcc", 700));
-        TestAssert.Equal("Scanning packages — 2,418 / 6,594", settings.ProgressLabel);
+        TestAssert.Equal("Scanning packages: 2,418 / 6,594", settings.ProgressLabel);
         settings.UpdateProgress(new TextureRegistryBuildProgress(
             MorphFaceGame.LE2, TextureRegistryBuildPhase.WritingRegistry, 6594, 6594, null, 1026));
         TestAssert.Equal("Writing compact registry", settings.ProgressLabel);
@@ -81,7 +81,7 @@ public static class TextureRegistrySettingsTests
         TestAssert.Equal("Verifying registry", settings.ProgressLabel);
         settings.UpdateProgress(new TextureRegistryBuildProgress(
             MorphFaceGame.LE2, TextureRegistryBuildPhase.Ready, 6594, 6594, null, 1026));
-        TestAssert.Equal("Ready — 1,026 textures", settings.ProgressLabel);
+        TestAssert.Equal("Ready: 1,026 textures", settings.ProgressLabel);
     }
 
     private static void IndividualBuildHidesUnrelatedActions()

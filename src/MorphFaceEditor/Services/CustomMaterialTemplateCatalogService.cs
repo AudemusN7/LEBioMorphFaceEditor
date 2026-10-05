@@ -150,7 +150,7 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
         TextureRegistrySnapshot snapshot;
         try
         {
-            snapshot = _registry.Read(game);
+            snapshot = _registry.ReadForLookup(game);
         }
         catch (Exception exception)
         {

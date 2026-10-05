@@ -559,11 +559,11 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
                         candidate.InstancedPath,
                         occurrence.ExportUIndex,
                         "Texture2D"));
-                    asset.ConfigureThumbnailLoader(async () => TextureThumbnailFactory.Create(
-                        await _references.LoadTextureAsync(
-                            occurrence.PackagePath,
-                            candidate.InstancedPath,
-                            _definition)));
+                    asset.ConfigureThumbnailLoader(cancellationToken => _references.LoadTextureThumbnailAsync(
+                        occurrence.PackagePath,
+                        candidate.InstancedPath,
+                        _definition,
+                        cancellationToken));
                     return new MaterialTextureOption(asset, RegistryCandidate: candidate);
                 }));
         }

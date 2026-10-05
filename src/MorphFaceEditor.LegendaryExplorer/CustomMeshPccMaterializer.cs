@@ -166,6 +166,8 @@ public sealed class CustomMeshPccMaterializer
         // material graph is imported. Otherwise a native corpus import can be
         // created first and block the selected texture at that same identity.
         var explicitTextureIdentities = new List<AssetIdentity?>();
+        using var explicitTextureCache = new PackageCache { CacheMaxSize = 8 };
+        var availableScopes = new Dictionary<string, MorphFaceMaterialData>(StringComparer.OrdinalIgnoreCase);
         foreach (var slot in used)
         {
             if (!assignments.TryGetValue(slot.MaterialIndex, out var assignment))
@@ -175,13 +177,16 @@ public sealed class CustomMeshPccMaterializer
             var option = assignment.Option;
             var sourceScope = GetScopeData(
                 request.MaterialData, scoped, option.EffectiveParameterScopeKey);
+            if (!availableScopes.TryGetValue(option.EffectiveParameterScopeKey, out var available))
+                availableScopes[option.EffectiveParameterScopeKey] = available = sourceScope with
+                { Textures = PccPackageWorkflow.OmitUnavailableSelectedTextures(sourceScope.Textures, explicitTextureCache, warnings) };
+            sourceScope = available;
             explicitTextureIdentities.AddRange(sourceScope.Textures
                 .Where(value => IsSerializableMaterialParameter(value.Name) &&
                                 option.Template.Supports(value.Name, MaterialParameterKind.Texture) &&
                                 value.TextureReference is { IsExplicitTextureDonor: true })
                 .Select(value => value.TextureReference));
         }
-        using var explicitTextureCache = new PackageCache { CacheMaxSize = 8 };
         var explicitTextureDonors = PccPackageWorkflow.ResolveExplicitTextureDonors(
             explicitTextureIdentities, destination.Game, explicitTextureCache);
         PccPackageWorkflow.StageExplicitTextureDonors(destination, packageRoot, explicitTextureDonors);
@@ -214,7 +219,7 @@ public sealed class CustomMeshPccMaterializer
                     MaterialToken(option),
                     usedNames);
                 material.ObjectName = new NameReference(materialName);
-                var sourceScope = GetScopeData(request.MaterialData, scoped, option.EffectiveParameterScopeKey);
+                var sourceScope = availableScopes[option.EffectiveParameterScopeKey];
                 var parameterNames = WriteMaterialParameters(
                     destination,
                     material,

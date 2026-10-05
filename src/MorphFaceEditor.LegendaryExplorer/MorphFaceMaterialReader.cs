@@ -21,13 +21,24 @@ internal sealed class MorphFaceMaterialReader(
 {
     private const long MaximumDecodedTextureBytes = 384L * 1024 * 1024;
     private readonly Dictionary<string, DecodedTextureAsset> _textureCache = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, ResolvedHeadMaterial> _materialCache = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Queue<string> _textureCacheOrder = new();
+    private readonly Dictionary<string, CachedMaterialMetadata> _materialCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly LinkedList<string> _textureCacheLru = new();
+    private readonly Dictionary<string, LinkedListNode<string>> _textureCacheLruNodes = new(StringComparer.OrdinalIgnoreCase);
     private long _decodedTextureBytes;
     private int _materialCacheHits;
     private int _materialCacheMisses;
 
     public MaterialReadMetrics LastReadMetrics { get; private set; } = new(TimeSpan.Zero, TimeSpan.Zero, 0, 0);
+
+    private sealed record TextureMetadata(AssetIdentity Source, MaterialParameterDefinition Definition);
+    private sealed record CubeMetadata(AssetIdentity Source, IReadOnlyList<AssetIdentity> Faces);
+    private sealed record CachedMaterialMetadata(
+        ResolvedHeadMaterial Material,
+        IReadOnlyDictionary<string, TextureMetadata> Textures,
+        CubeMetadata? FixedCube,
+        CubeMetadata? SecondaryCube,
+        IReadOnlySet<string> Dependencies,
+        bool TexturesAreDefaults = true);
 
     /// <summary>
     /// Reads one material's detached defaults without applying a BioMorphFace
@@ -41,14 +52,18 @@ internal sealed class MorphFaceMaterialReader(
         var materialKey = MaterialIdentityKey.Create(identity);
         if (_materialCache.TryGetValue(materialKey, out var cached))
         {
-            _materialCacheHits++;
-            return cached;
+            VerifyDependencies(cached.Dependencies);
+            if (_materialCache.TryGetValue(materialKey, out cached))
+            {
+                _materialCacheHits++;
+                return Materialize(cached, null);
+            }
         }
 
         _materialCacheMisses++;
-        var material = ReadMaterialDefaults(materialExport, identity, materialKey);
+        var material = ReadMaterialDefaults(ResolveMaterialSource(identity), identity, materialKey);
         _materialCache[materialKey] = material;
-        return material;
+        return Materialize(material, null);
     }
 
     public MorphRandomisationMaterialEvidence ReadRandomisationEvidence(
@@ -106,11 +121,11 @@ internal sealed class MorphFaceMaterialReader(
             : (MorphFaceMaterialOverrides.Empty,
                 (IReadOnlyDictionary<string, ExportEntry?>)new Dictionary<string, ExportEntry?>(StringComparer.OrdinalIgnoreCase));
         var overridesFinished = System.Diagnostics.Stopwatch.GetTimestamp();
+        var warnings = new List<string>();
         var resolved = baseMaterialExports
             .DistinctBy(export => MaterialIdentityKey.Create(MorphFacePackageReader.ToIdentity(export)!))
-            .Select(export => ReadMaterial(export, overrides, overrideTextures))
+            .Select(export => ReadMaterial(export, overrides, overrideTextures, warnings))
             .ToDictionary(material => material.Key, StringComparer.OrdinalIgnoreCase);
-        var warnings = new List<string>();
 
         foreach (var materialExport in attachmentMaterialExports.DistinctBy(
                      export => MaterialIdentityKey.Create(MorphFacePackageReader.ToIdentity(export)!)))
@@ -119,8 +134,8 @@ internal sealed class MorphFaceMaterialReader(
             try
             {
                 material = IsHatAttachment(materialExport)
-                    ? ReadHatPreviewMaterial(materialExport)
-                    : ReadMaterial(materialExport, overrides, overrideTextures);
+                    ? ReadHatPreviewMaterial(materialExport, warnings)
+                    : ReadMaterial(materialExport, overrides, overrideTextures, warnings);
             }
             catch (Exception exception)
             {
@@ -166,14 +181,43 @@ internal sealed class MorphFaceMaterialReader(
         return DecodeTexture(texture, definition);
     }
 
+    /// <summary>Decodes one authored mip for picker thumbnails without entering the full-preview cache.</summary>
+    internal DecodedTextureAsset DecodeTextureThumbnailReference(
+        ExportEntry texture,
+        MaterialParameterDefinition definition,
+        int maximumDimension = 128)
+    {
+        if (!texture.IsA("Texture2D"))
+            throw new InvalidDataException($"'{texture.InstancedFullPath}' is {texture.ClassName}, not Texture2D.");
+        if (maximumDimension < 1) throw new ArgumentOutOfRangeException(nameof(maximumDimension));
+        PackageSourceCache.Verify(packageCache, texture.FileRef.FilePath);
+        var current = ResolveTexture(MorphFacePackageReader.ToIdentity(texture)!);
+        var typed = new Texture2DClass(current);
+        var top = typed.GetTopMip() ?? throw new InvalidDataException($"Texture '{current.InstancedFullPath}' has no readable mip.");
+        var sourceFormat = LecImage.getPixelFormatType(typed.TextureFormat);
+        var valid = typed.Mips.Where(mip => mip.storageType != StorageTypes.empty && mip.width > 0 && mip.height > 0)
+            .OrderByDescending(mip => (long)mip.width * mip.height).ToArray();
+        var selected = valid.FirstOrDefault(mip => Math.Max(mip.width, mip.height) <= maximumDimension)
+            ?? valid.LastOrDefault()
+            ?? top;
+        var decodedMip = DecodeMip(selected, current.Game, sourceFormat);
+        var alpha = false;
+        for (var index = 3; index < decodedMip.Rgba8.Length; index += 4)
+            if (decodedMip.Rgba8[index] != byte.MaxValue) { alpha = true; break; }
+        var source = MorphFacePackageReader.ToIdentity(current)!;
+        var format = current.GetProperty<EnumProperty>("Format")?.Value.Name ?? typed.TextureFormat ?? "Unknown";
+        var cacheKey = Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(
+            $"thumbnail|{MaterialIdentityKey.Create(source)}|{PackageSourceCache.Version(packageCache, source.PackagePath)}|{decodedMip.Width}|{decodedMip.Height}|{format}")));
+        return new DecodedTextureAsset(source, decodedMip.Width, decodedMip.Height, decodedMip.Rgba8,
+            format, definition.TextureRole, definition.ColorSpace, definition.AlphaPolicy, alpha, cacheKey,
+            top.width, top.height, [decodedMip]);
+    }
+
     public void InvalidatePackage(string packagePath)
     {
         var fullPath = Path.GetFullPath(packagePath);
         foreach (var key in _materialCache
-                     .Where(pair => string.Equals(
-                         Path.GetFullPath(pair.Value.Source.PackagePath),
-                         fullPath,
-                         StringComparison.OrdinalIgnoreCase))
+                     .Where(pair => pair.Value.Dependencies.Contains(fullPath))
                      .Select(pair => pair.Key)
                      .ToArray())
         {
@@ -190,40 +234,127 @@ internal sealed class MorphFaceMaterialReader(
             if (_textureCache.Remove(key, out var removed))
             {
                 _decodedTextureBytes -= GetDecodedByteCount(removed);
-                EvictMaterialsReferencing(removed);
             }
-        }
-        if (_textureCacheOrder.Count > 0)
-        {
-            var retained = _textureCacheOrder.Where(_textureCache.ContainsKey).ToArray();
-            _textureCacheOrder.Clear();
-            foreach (var key in retained)
-            {
-                _textureCacheOrder.Enqueue(key);
-            }
+            RemoveTextureCacheLru(key);
         }
     }
 
-    private ResolvedHeadMaterial ReadHatPreviewMaterial(ExportEntry materialExport)
+    private ResolvedHeadMaterial Materialize(CachedMaterialMetadata metadata, List<string>? warnings)
+    {
+        var textures = new Dictionary<string, MaterialTextureBinding>(StringComparer.OrdinalIgnoreCase);
+        foreach (var pair in metadata.Textures)
+        {
+            try
+            {
+                var texture = DecodeTexture(ResolveTexture(pair.Value.Source), pair.Value.Definition);
+                textures[pair.Key] = new MaterialTextureBinding(pair.Key, texture);
+            }
+            catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
+            {
+                warnings?.Add($"Default texture '{pair.Key}' could not be previewed; inherited/default appearance is used. {exception.Message}");
+            }
+        }
+        var defaults = metadata.TexturesAreDefaults ? textures : new Dictionary<string, MaterialTextureBinding>();
+        return metadata.Material with
+        {
+            Textures = textures,
+            DefaultTextures = defaults,
+            FixedCubeTexture = MaterializeCube(metadata.FixedCube, warnings),
+            SecondaryFixedCubeTexture = MaterializeCube(metadata.SecondaryCube, warnings)
+        };
+    }
+
+    private DecodedTextureCubeAsset? MaterializeCube(CubeMetadata? metadata, List<string>? warnings)
+    {
+        if (metadata is null) return null;
+        var definition = new MaterialParameterDefinition("Cube", "Cube", "Internal", MaterialParameterKind.Texture,
+            HeadMaterialFamily.Eyes, TextureRole: TextureRole.Other, ColorSpace: TextureColorSpace.Srgb,
+            AlphaPolicy: TextureAlphaPolicy.Ignore);
+        var faces = new List<DecodedTextureAsset>(metadata.Faces.Count);
+        try
+        {
+            foreach (var identity in metadata.Faces) faces.Add(DecodeTexture(ResolveTexture(identity), definition));
+        }
+        catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
+        {
+            warnings?.Add($"Fixed reflection texture could not be previewed. {exception.Message}");
+            return null;
+        }
+        var size = faces[0].Width;
+        if (faces.Any(face => face.Width != size || face.Height != size))
+            throw new InvalidDataException($"Eye cube '{metadata.Source.InstancedPath}' does not contain six square, equally sized faces.");
+        return new DecodedTextureCubeAsset(metadata.Source, size, faces.Select(face => face.Rgba8).ToArray(),
+            definition.ColorSpace, $"cube|{MaterialIdentityKey.Create(metadata.Source)}|{string.Join('|', faces.Select(face => face.CacheKey))}", BuildCubeMipChain(faces));
+    }
+
+    private ExportEntry ResolveTexture(AssetIdentity identity)
+    {
+        PackageSourceCache.Verify(packageCache, identity.PackagePath);
+        var package = PackageSourceCache.GetPackage(packageCache, identity.PackagePath)
+            ?? throw new FileNotFoundException($"Package '{identity.PackagePath}' is unavailable.");
+        IEntry? entry = identity.UIndex > 0 ? package.GetEntry(identity.UIndex) : null;
+        if (entry is null || !entry.InstancedFullPath.Equals(identity.InstancedPath, StringComparison.OrdinalIgnoreCase) ||
+            !entry.ClassName.Equals(identity.ClassName, StringComparison.OrdinalIgnoreCase))
+        {
+            entry = package.FindEntry(identity.InstancedPath, identity.ClassName);
+        }
+        return entry as ExportEntry ?? throw new FileNotFoundException(
+            $"Texture '{identity.InstancedPath}' ({identity.ClassName}) was not found in '{identity.PackagePath}'.");
+    }
+
+    private ExportEntry ResolveMaterialSource(AssetIdentity identity)
+    {
+        PackageSourceCache.Verify(packageCache, identity.PackagePath);
+        var package = PackageSourceCache.GetPackage(packageCache, identity.PackagePath)
+            ?? throw new FileNotFoundException($"Material source package '{identity.PackagePath}' is unavailable.");
+        IEntry? entry = identity.UIndex > 0 ? package.GetEntry(identity.UIndex) : null;
+        if (entry is null || !entry.InstancedFullPath.Equals(identity.InstancedPath, StringComparison.OrdinalIgnoreCase) ||
+            !entry.ClassName.Equals(identity.ClassName, StringComparison.OrdinalIgnoreCase))
+        {
+            entry = package.FindEntry(identity.InstancedPath, identity.ClassName);
+        }
+        return entry as ExportEntry ?? throw new FileNotFoundException(
+            $"Material '{identity.InstancedPath}' ({identity.ClassName}) was not found in '{identity.PackagePath}'.");
+    }
+
+    private void VerifyDependencies(IReadOnlySet<string> dependencies)
+    {
+        foreach (var path in dependencies) PackageSourceCache.Verify(packageCache, path);
+    }
+
+    private static void AddCubeDependencies(CubeMetadata? cube, HashSet<string> dependencies)
+    {
+        if (cube is null) return;
+        dependencies.Add(Path.GetFullPath(cube.Source.PackagePath));
+        foreach (var face in cube.Faces) dependencies.Add(Path.GetFullPath(face.PackagePath));
+    }
+
+    private ResolvedHeadMaterial ReadHatPreviewMaterial(ExportEntry materialExport, List<string>? warnings = null)
     {
         var identity = MorphFacePackageReader.ToIdentity(materialExport)!;
         var materialKey = MaterialIdentityKey.Create(identity);
         if (_materialCache.TryGetValue(materialKey, out var cached))
         {
-            _materialCacheHits++;
-            return cached;
+            VerifyDependencies(cached.Dependencies);
+            if (_materialCache.TryGetValue(materialKey, out cached))
+            {
+                _materialCacheHits++;
+                return Materialize(cached, warnings) with { IsPreviewOnlyAttachment = true };
+            }
         }
         _materialCacheMisses++;
+        materialExport = ResolveMaterialSource(identity);
         var textureValues = new Dictionary<string, ExportEntry>(StringComparer.OrdinalIgnoreCase);
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var master = ReadTextureChain(
             materialExport,
             textureValues,
-            new HashSet<string>(StringComparer.OrdinalIgnoreCase)) ?? materialExport;
+            visited) ?? materialExport;
         var diffuse = textureValues
             .Where(pair => pair.Value.IsA("Texture2D") && IsDiffuseParameter(pair.Key))
             .OrderByDescending(pair => pair.Key.Contains("hat", StringComparison.OrdinalIgnoreCase))
             .FirstOrDefault();
-        var decodedTextures = new Dictionary<string, MaterialTextureBinding>(StringComparer.OrdinalIgnoreCase);
+        var textures = new Dictionary<string, TextureMetadata>(StringComparer.OrdinalIgnoreCase);
         if (diffuse.Value is not null)
         {
             var definition = new MaterialParameterDefinition(
@@ -236,9 +367,7 @@ internal sealed class MorphFaceMaterialReader(
                 ColorSpace: TextureColorSpace.Srgb,
                 AlphaPolicy: TextureAlphaPolicy.Ignore,
                 Description: "Default hat diffuse used for preview only.");
-            decodedTextures[definition.Name] = new MaterialTextureBinding(
-                definition.Name,
-                DecodeTexture(diffuse.Value, definition));
+            textures[definition.Name] = new TextureMetadata(MorphFacePackageReader.ToIdentity(diffuse.Value)!, definition);
         }
 
         var material = new ResolvedHeadMaterial(
@@ -250,12 +379,23 @@ internal sealed class MorphFaceMaterialReader(
             false,
             new Dictionary<string, float>(),
             new Dictionary<string, Vector4>(),
-            decodedTextures)
+            new Dictionary<string, MaterialTextureBinding>())
         {
             IsPreviewOnlyAttachment = true
         };
-        _materialCache[materialKey] = material;
-        return material;
+        var dependencies = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            Path.GetFullPath(identity.PackagePath)
+        };
+        foreach (var item in visited)
+        {
+            var separator = item.IndexOf('|');
+            if (separator > 0) dependencies.Add(Path.GetFullPath(item[..separator]));
+        }
+        foreach (var texture in textures.Values) dependencies.Add(Path.GetFullPath(texture.Source.PackagePath));
+        var metadata = new CachedMaterialMetadata(material, textures, null, null, dependencies);
+        _materialCache[materialKey] = metadata;
+        return Materialize(metadata, warnings) with { IsPreviewOnlyAttachment = true };
     }
 
     private ExportEntry? ReadTextureChain(
@@ -384,21 +524,33 @@ internal sealed class MorphFaceMaterialReader(
     private ResolvedHeadMaterial ReadMaterial(
         ExportEntry materialExport,
         MorphFaceMaterialOverrides overrides,
-        IReadOnlyDictionary<string, ExportEntry?> overrideTextures)
+        IReadOnlyDictionary<string, ExportEntry?> overrideTextures,
+        List<string>? warnings = null)
     {
         var identity = MorphFacePackageReader.ToIdentity(materialExport)!;
         var materialKey = MaterialIdentityKey.Create(identity);
-        if (!_materialCache.TryGetValue(materialKey, out var baseline))
+        if (!_materialCache.TryGetValue(materialKey, out var cached))
         {
             _materialCacheMisses++;
-            baseline = ReadMaterialDefaults(materialExport, identity, materialKey);
-            _materialCache[materialKey] = baseline;
+            cached = ReadMaterialDefaults(ResolveMaterialSource(identity), identity, materialKey);
+            _materialCache[materialKey] = cached;
         }
         else
         {
-            _materialCacheHits++;
+            VerifyDependencies(cached.Dependencies);
+            if (_materialCache.TryGetValue(materialKey, out cached))
+            {
+                _materialCacheHits++;
+            }
+            else
+            {
+                _materialCacheMisses++;
+                cached = ReadMaterialDefaults(ResolveMaterialSource(identity), identity, materialKey);
+                _materialCache[materialKey] = cached;
+            }
         }
 
+        var baseline = Materialize(cached, warnings);
         if (overrides.Scalars.Count == 0 && overrides.Vectors.Count == 0 && overrideTextures.Count == 0)
         {
             return baseline;
@@ -420,7 +572,18 @@ internal sealed class MorphFaceMaterialReader(
             if (pair.Value is not null)
             {
                 var definition = HumanMaterialProfiles.Describe(pair.Key, MaterialParameterKind.Texture, baseline.Family);
-                decodedTextures[pair.Key] = new MaterialTextureBinding(pair.Key, DecodeTexture(pair.Value, definition));
+                try
+                {
+                    decodedTextures[pair.Key] = new MaterialTextureBinding(pair.Key, DecodeTexture(pair.Value, definition));
+                }
+                catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
+                {
+                    warnings?.Add($"Texture override '{pair.Key}' could not be previewed; inherited material texture is shown. {exception.Message}");
+                }
+            }
+            else
+            {
+                warnings?.Add($"Texture override '{pair.Key}' could not be resolved; inherited material texture is shown.");
             }
         }
 
@@ -432,7 +595,7 @@ internal sealed class MorphFaceMaterialReader(
         };
     }
 
-    private ResolvedHeadMaterial ReadMaterialDefaults(
+    private CachedMaterialMetadata ReadMaterialDefaults(
         ExportEntry materialExport,
         AssetIdentity identity,
         string materialKey)
@@ -487,14 +650,15 @@ internal sealed class MorphFaceMaterialReader(
             }
         }
 
-        var decodedTextures = textureValues
+        var textureMetadata = textureValues
             .Where(pair => pair.Value.IsA("Texture2D"))
             .Select(pair =>
             {
                 var definition = DescribeTexture(pair.Key, family);
-                return new MaterialTextureBinding(pair.Key, DecodeTexture(pair.Value, definition));
+                return new KeyValuePair<string, TextureMetadata>(
+                    pair.Key, new TextureMetadata(MorphFacePackageReader.ToIdentity(pair.Value)!, definition));
             })
-            .ToDictionary(binding => binding.ParameterName, StringComparer.OrdinalIgnoreCase);
+            .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
         var fixedCubeTexture = family switch
         {
             HeadMaterialFamily.Eyes => ReadFixedCubeTexture(
@@ -543,8 +707,18 @@ internal sealed class MorphFaceMaterialReader(
                 .Where(name => !name.Equals("HED_Lash_Diff_Vector", StringComparison.OrdinalIgnoreCase))
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
         }
-        var editorDefaultScalars = GetEditorDefaultScalars(master.Game, family, scalarValues, decodedTextures);
-        return new ResolvedHeadMaterial(
+        var editorDefaultScalars = GetEditorDefaultScalars(master.Game, family, scalarValues);
+        if (master.Game == MEGame.LE1 && family == HeadMaterialFamily.Skin &&
+            editorDefaultScalars.ContainsKey("HED_Lips_Tint_Scalar") &&
+            textureMetadata.TryGetValue("HED_Makeup_Mask", out var makeupMask) &&
+            makeupMask.Source.InstancedPath.Equals("BIOG_Humanoid_MASTER_MTR_R.GBL_ARM_ALL_Black", StringComparison.OrdinalIgnoreCase))
+        {
+            editorDefaultScalars = new Dictionary<string, float>(editorDefaultScalars, StringComparer.OrdinalIgnoreCase)
+            {
+                ["HED_Lips_Tint_Scalar"] = 0
+            };
+        }
+        var template = new ResolvedHeadMaterial(
             materialKey,
             identity,
             master.ObjectNameString,
@@ -553,20 +727,35 @@ internal sealed class MorphFaceMaterialReader(
             HumanMaterialProfiles.IsTwoSided(family),
             scalarValues,
             vectorValues,
-            decodedTextures)
+            new Dictionary<string, MaterialTextureBinding>())
         {
             DefaultScalars = editorDefaultScalars,
             DefaultVectors = vectorValues,
-            DefaultTextures = decodedTextures,
+            DefaultTextures = new Dictionary<string, MaterialTextureBinding>(),
             SupportedScalars = supportedScalars,
             SupportedVectors = supportedVectors,
             SupportedTextures = (support?.Textures.AsEnumerable() ?? [])
                 .Concat(textureValues.Keys)
                 .Where(name => !name.StartsWith("__ASA_", StringComparison.OrdinalIgnoreCase))
                 .ToHashSet(StringComparer.OrdinalIgnoreCase),
-            FixedCubeTexture = fixedCubeTexture,
-            SecondaryFixedCubeTexture = secondaryFixedCubeTexture
+            FixedCubeTexture = null,
+            SecondaryFixedCubeTexture = null
         };
+        var dependencies = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            Path.GetFullPath(identity.PackagePath)
+        };
+        foreach (var item in visited)
+        {
+            var separator = item.IndexOf('|');
+            if (separator > 0) dependencies.Add(Path.GetFullPath(item[..separator]));
+        }
+        foreach (var texture in textureMetadata.Values)
+            dependencies.Add(Path.GetFullPath(texture.Source.PackagePath));
+        AddCubeDependencies(fixedCubeTexture, dependencies);
+        AddCubeDependencies(secondaryFixedCubeTexture, dependencies);
+        dependencies.Add(Path.GetFullPath(master.FileRef.FilePath));
+        return new CachedMaterialMetadata(template, textureMetadata, fixedCubeTexture, secondaryFixedCubeTexture, dependencies);
     }
 
     /// <summary>
@@ -603,7 +792,7 @@ internal sealed class MorphFaceMaterialReader(
         return defaults;
     }
 
-    private DecodedTextureCubeAsset? ReadFixedCubeTexture(
+    private CubeMetadata? ReadFixedCubeTexture(
         ExportEntry master,
         int expressionIndex,
         HeadMaterialFamily family,
@@ -656,17 +845,7 @@ internal sealed class MorphFaceMaterialReader(
 
         string[] faceNames = ["FacePosX", "FaceNegX", "FacePosY", "FaceNegY", "FacePosZ", "FaceNegZ"];
         var properties = cube.GetProperties(packageCache: packageCache);
-        var definition = new MaterialParameterDefinition(
-            parameterName,
-            label,
-            "Internal",
-            MaterialParameterKind.Texture,
-            family,
-            TextureRole: TextureRole.Other,
-            ColorSpace: TextureColorSpace.Srgb,
-            AlphaPolicy: TextureAlphaPolicy.Ignore,
-            Description: $"Fixed {cube.ObjectNameString} binding recovered from the compiled eye shader.");
-        var faces = new List<DecodedTextureAsset>(6);
+        var faces = new List<AssetIdentity>(6);
         foreach (var faceName in faceNames)
         {
             var face = ResolveOptional(
@@ -676,22 +855,10 @@ internal sealed class MorphFaceMaterialReader(
             {
                 return null;
             }
-            faces.Add(DecodeTexture(face, definition));
-        }
-
-        var size = faces[0].Width;
-        if (faces.Any(face => face.Width != size || face.Height != size))
-        {
-            throw new InvalidDataException($"Eye cube '{cube.InstancedFullPath}' does not contain six square, equally sized faces.");
+            faces.Add(MorphFacePackageReader.ToIdentity(face)!);
         }
         var identity = MorphFacePackageReader.ToIdentity(cube)!;
-        return new DecodedTextureCubeAsset(
-            identity,
-            size,
-            faces.Select(face => face.Rgba8).ToArray(),
-            faces[0].ColorSpace,
-            $"cube|{MaterialIdentityKey.Create(identity)}",
-            BuildCubeMipChain(faces));
+        return new CubeMetadata(identity, faces);
     }
 
     private void AddAsariLiteralTextures(
@@ -919,9 +1086,12 @@ internal sealed class MorphFaceMaterialReader(
     private DecodedTextureAsset DecodeTexture(ExportEntry export, MaterialParameterDefinition definition)
     {
         var source = MorphFacePackageReader.ToIdentity(export)!;
+        PackageSourceCache.Verify(packageCache, source.PackagePath);
+        export = ResolveTexture(source);
         var sourceKey = MaterialIdentityKey.Create(source);
         if (_textureCache.TryGetValue(sourceKey, out var cached))
         {
+            TouchTextureCache(sourceKey);
             return cached with
             {
                 Role = definition.TextureRole,
@@ -958,7 +1128,7 @@ internal sealed class MorphFaceMaterialReader(
         }
         var format = export.GetProperty<EnumProperty>("Format")?.Value.Name ?? texture.TextureFormat ?? "Unknown";
         var cacheKey = Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(
-            $"{sourceKey}|{top.Width}|{top.Height}|{authoredMips.Length}|{format}|{export.DataSize}")));
+            $"{sourceKey}|{PackageSourceCache.Version(packageCache, source.PackagePath)}|{top.Width}|{top.Height}|{authoredMips.Length}|{format}|{export.DataSize}")));
         var decoded = new DecodedTextureAsset(
             source,
             top.Width,
@@ -973,16 +1143,24 @@ internal sealed class MorphFaceMaterialReader(
             topMip.width,
             topMip.height,
             authoredMips);
-        _textureCache[sourceKey] = decoded;
-        _textureCacheOrder.Enqueue(sourceKey);
-        _decodedTextureBytes += GetDecodedByteCount(decoded);
-        while (_decodedTextureBytes > MaximumDecodedTextureBytes && _textureCacheOrder.Count > 1)
+        var decodedBytes = GetDecodedByteCount(decoded);
+        if (decodedBytes > MaximumDecodedTextureBytes)
         {
-            var expiredKey = _textureCacheOrder.Dequeue();
+            // Large one-off textures can still render for the active material,
+            // but must not turn the cache's budget into a soft limit.
+            return decoded;
+        }
+        _textureCache[sourceKey] = decoded;
+        var node = _textureCacheLru.AddLast(sourceKey);
+        _textureCacheLruNodes[sourceKey] = node;
+        _decodedTextureBytes += decodedBytes;
+        while (_decodedTextureBytes > MaximumDecodedTextureBytes && _textureCacheLru.Count > 0)
+        {
+            var expiredKey = _textureCacheLru.First!.Value;
+            RemoveTextureCacheLru(expiredKey);
             if (_textureCache.Remove(expiredKey, out var expired))
             {
                 _decodedTextureBytes -= GetDecodedByteCount(expired);
-                EvictMaterialsReferencing(expired);
             }
         }
         return decoded;
@@ -1013,22 +1191,16 @@ internal sealed class MorphFaceMaterialReader(
             ? texture.Mips.Sum(mip => mip.Rgba8.LongLength)
             : texture.Rgba8.LongLength;
 
-    private void EvictMaterialsReferencing(DecodedTextureAsset expired)
+    private void TouchTextureCache(string key)
     {
-        foreach (var key in _materialCache
-                     .Where(pair =>
-                         pair.Value.Textures.Values.Any(binding =>
-                             string.Equals(binding.Texture.CacheKey, expired.CacheKey, StringComparison.OrdinalIgnoreCase)) ||
-                         CubeReferences(pair.Value.FixedCubeTexture) ||
-                         CubeReferences(pair.Value.SecondaryFixedCubeTexture))
-                     .Select(pair => pair.Key)
-                     .ToArray())
-        {
-            _materialCache.Remove(key);
-        }
+        if (!_textureCacheLruNodes.TryGetValue(key, out var node)) return;
+        _textureCacheLru.Remove(node);
+        _textureCacheLruNodes[key] = _textureCacheLru.AddLast(key);
+    }
 
-        bool CubeReferences(DecodedTextureCubeAsset? cube) => cube is not null &&
-            cube.Rgba8Faces.Any(face => ReferenceEquals(expired.Rgba8, face));
+    private void RemoveTextureCacheLru(string key)
+    {
+        if (_textureCacheLruNodes.Remove(key, out var node)) _textureCacheLru.Remove(node);
     }
 
     private static IReadOnlyList<DecodedTextureCubeMip> BuildCubeMipChain(IReadOnlyList<DecodedTextureAsset> faces)

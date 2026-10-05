@@ -11,7 +11,9 @@ public static class HairMeshManualSelectionTests
     public static IReadOnlyList<TestCase> All { get; } =
     [
         new("manual hair mesh selection is distinct from programmatic changes", ManualSelectionIsDistinct),
-        new("hair mesh picker shows all physical registry occurrences beside local assets", RegistryShowsAllPhysicalOccurrences)
+        new("hair mesh picker keeps local and explicit sources but one official row per mesh", RegistryShowsAllPhysicalOccurrences),
+        new("randomised donor maps to the existing canonical picker row", RandomisedDonorUsesCanonicalPickerRow),
+        new("attachment choices exclude base heads and sort across local and external meshes", AttachmentChoicesExcludeHeadsAndSort)
     ];
 
     private static void ManualSelectionIsDistinct()
@@ -38,6 +40,27 @@ public static class HairMeshManualSelectionTests
         TestAssert.Equal(2, manualSelections);
     }
 
+    private static void AttachmentChoicesExcludeHeadsAndSort()
+    {
+        var head = new PackageAssetListItem(new AssetIdentity("Opened.pcc",
+            "BIOG_KRO_HED_PROMorph.Master.KRO_HED_PROBase_MDL", 1, "SkeletalMesh"));
+        var hair = new PackageAssetListItem(new AssetIdentity("Opened.pcc",
+            "BIOG_HMM_HIR_PRO.Hair.HMM_HIR_A_MDL", 2, "SkeletalMesh"));
+        using var editor = new HairMeshEditorViewModel(
+            new AssetReferenceEditingSession(head.Identity), [head, hair], "Hair", 0);
+        const string hatPath = "BIOG_HMF_HIR_PRO.Beanie.HMF_HAT_Bn1_MDL";
+        var hat = new AttachmentMeshOccurrence("External.pcc", hatPath, 3, 0,
+            TextureCatalogOrigin.Manual);
+        editor.UpdateRegistryCandidates([new AttachmentMeshCandidate(hatPath, hat, [hat])], false);
+        TestAssert.Equal(3, editor.Candidates.Count);
+        TestAssert.True(editor.Candidates[0].Identity is null, "None must remain first.");
+        TestAssert.Equal(hatPath, editor.Candidates[1].Identity?.InstancedPath);
+        TestAssert.Equal(hair.Identity.InstancedPath, editor.Candidates[2].Identity?.InstancedPath);
+        TestAssert.Equal(head.Identity, editor.Value);
+        editor.SearchText = "KRO";
+        TestAssert.Equal(1, editor.Candidates.Count);
+    }
+
     private static void RegistryShowsAllPhysicalOccurrences()
     {
         const string canonical = "BIOG_HMF_HIR_PRO.Hair.HMF_HIR_Custom_MDL";
@@ -62,15 +85,37 @@ public static class HairMeshManualSelectionTests
         editor.UpdateRegistryCandidates(
             [
                 new AttachmentMeshCandidate(canonical, officialWinner,
-                    [officialWinner, officialShadowed, mod, manual, local]),
+                    [officialWinner, officialShadowed, mod, manual, local])
+                {
+                    IsEligibleOfficialDefault = true
+                },
+                new AttachmentMeshCandidate(
+                    "BIOG_HMF_HIR_PRO.Hair.HMF_HIR_Other_MDL",
+                    new AttachmentMeshOccurrence("BIOG_HMF_HIR_PRO.pcc",
+                        "Hair.HMF_HIR_Other_MDL", 30, 100, TextureCatalogOrigin.BaseGame, 45),
+                    [
+                        new AttachmentMeshOccurrence("BIOG_HMF_HIR_PRO.pcc",
+                            "Hair.HMF_HIR_Other_MDL", 30, 100, TextureCatalogOrigin.BaseGame, 45),
+                        new AttachmentMeshOccurrence("DLC_CON_Hair.pcc",
+                            "Hair.HMF_HIR_Other_MDL", 31, 80, TextureCatalogOrigin.OfficialDlc, 46)
+                    ])
+                {
+                    IsEligibleOfficialDefault = true
+                },
                 new AttachmentMeshCandidate(excludedNonBiog.InstancedPath, excludedNonBiog, [excludedNonBiog])
             ],
             isPlayerWorkspace: true);
 
         var options = editor.Candidates.Skip(1).ToArray();
         TestAssert.Equal(local.PackagePath, options[0].Identity?.PackagePath);
-        TestAssert.Equal(officialWinner.PackagePath, options[1].Identity?.PackagePath);
-        foreach (var occurrence in new[] { officialWinner, officialShadowed, mod, manual })
+        TestAssert.True(!options.Any(option => option.Identity?.InstancedPath == canonical &&
+                option.Identity.PackagePath == officialWinner.PackagePath),
+            "A local authored source was duplicated by its official canonical donor row.");
+        TestAssert.Equal("BIOG_HMF_HIR_PRO.pcc", options.Single(option =>
+            option.Identity?.InstancedPath == "BIOG_HMF_HIR_PRO.Hair.HMF_HIR_Other_MDL").Identity?.PackagePath);
+        TestAssert.True(!options.Any(option => option.Identity?.PackagePath == officialShadowed.PackagePath),
+            "A second official donor row duplicated the same canonical mesh.");
+        foreach (var occurrence in new[] { mod, manual })
         {
             TestAssert.True(options.Any(option =>
                     string.Equals(option.Identity?.PackagePath, occurrence.PackagePath, StringComparison.OrdinalIgnoreCase) &&
@@ -81,8 +126,43 @@ public static class HairMeshManualSelectionTests
             .Where(option => option.Identity is not null)
             .Select(option => $"{Path.GetFullPath(option.Identity!.PackagePath)}|{option.Identity.UIndex}")
             .Distinct(StringComparer.OrdinalIgnoreCase).Count());
-        TestAssert.True(options.All(option => option.Identity?.InstancedPath == canonical),
+        TestAssert.True(options.All(option => option.Identity?.InstancedPath.StartsWith("BIOG_", StringComparison.OrdinalIgnoreCase) == true),
             "The player workspace exposed a non-BIOG mesh candidate or changed the canonical path.");
         TestAssert.Equal(localAsset.Identity, editor.Selected.Identity);
+    }
+
+    private static void RandomisedDonorUsesCanonicalPickerRow()
+    {
+        const string canonical = "BIOG_HMM_HIR_PRO.Hair.HMM_HIR_One_MDL";
+        var preferred = new AttachmentMeshOccurrence("BIOG_HMM_HIR_PRO.pcc",
+            canonical, 41, 100, TextureCatalogOrigin.BaseGame, 42);
+        var repeatedOfficial = new AttachmentMeshOccurrence("BIOA_TEST.pcc",
+            canonical, 42, 50, TextureCatalogOrigin.OfficialDlc, 42);
+        using var editor = new HairMeshEditorViewModel(new AssetReferenceEditingSession(null), [], "Hair", 0);
+        editor.UpdateRegistryCandidates(
+            [new AttachmentMeshCandidate(canonical, preferred, [preferred, repeatedOfficial])
+            {
+                IsEligibleOfficialDefault = true
+            }],
+            isPlayerWorkspace: false);
+        TestAssert.Equal(2, editor.Candidates.Count);
+
+        var randomisedIdentity = new AssetIdentity(repeatedOfficial.PackagePath, canonical,
+            repeatedOfficial.ExportUIndex, "SkeletalMesh");
+        TestAssert.True(editor.TrySetRandomisedSelection(randomisedIdentity),
+            "The randomiser did not preserve its selected physical donor.");
+        TestAssert.Equal(repeatedOfficial.PackagePath, editor.Value?.PackagePath);
+        TestAssert.Equal(2, editor.Candidates.Count);
+        TestAssert.Equal(preferred.PackagePath, editor.Selected.Identity?.PackagePath);
+
+        editor.UpdateRegistryCandidates(
+            [new AttachmentMeshCandidate(canonical, preferred, [preferred, repeatedOfficial])
+            {
+                IsEligibleOfficialDefault = true
+            }],
+            isPlayerWorkspace: false);
+        TestAssert.Equal(2, editor.Candidates.Count);
+        TestAssert.Equal(repeatedOfficial.PackagePath, editor.Value?.PackagePath);
+        TestAssert.Equal(preferred.PackagePath, editor.Selected.Identity?.PackagePath);
     }
 }

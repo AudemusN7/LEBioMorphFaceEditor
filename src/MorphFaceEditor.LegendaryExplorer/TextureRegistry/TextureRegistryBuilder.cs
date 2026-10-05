@@ -194,7 +194,23 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
         cancellationToken.ThrowIfCancellationRequested();
         progress?.Report(new TextureRegistryBuildProgress(
             game, TextureRegistryBuildPhase.WritingRegistry, files.Count, files.Count, null, candidates.Length));
-        _store.WriteAtomic(snapshot, cancellationToken, () =>
+        var officialIdentities = snapshot.Assets
+            .Where(value => value.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc)
+            .Select(value => AssetIdentity(value.InstancedPath, value.ClassName))
+            .Concat(snapshot.Candidates.Where(candidate => candidate.Occurrences.Any(value =>
+                    value.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc))
+                .Select(value => AssetIdentity(value.InstancedPath, "Texture2D")))
+            .Concat(snapshot.AttachmentMeshes.SelectMany(value => value.Occurrences)
+                .Where(value => value.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc)
+                .Select(value => AssetIdentity(value.InstancedPath, "SkeletalMesh")))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var installed = FilterSnapshot(snapshot, value => value.Origin is
+            TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc,
+            officialIdentities, includeModOnly: false);
+        var mods = FilterSnapshot(snapshot, value => value.Origin == TextureCatalogOrigin.Mod,
+            officialIdentities, includeModOnly: true);
+
+        _store.WriteInstalledAndModsAtomic(installed, mods, cancellationToken, () =>
         {
             if (fingerprints.Any(source => !source.IsCurrent()) ||
                 !MergeScanPaths(_physicalPackagePaths(game)).SequenceEqual(files, StringComparer.OrdinalIgnoreCase))
@@ -207,6 +223,86 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
             game, TextureRegistryBuildPhase.Ready, files.Count, files.Count, null, candidates.Length));
         return _store.GetStatus(game);
     }
+
+    private static TextureRegistrySnapshot FilterSnapshot(
+        TextureRegistrySnapshot source,
+        Func<TextureCatalogOccurrence, bool> includeTexture,
+        HashSet<string> officialIdentities,
+        bool includeModOnly)
+    {
+        var candidates = source.Candidates.Select(candidate =>
+        {
+            var occurrences = candidate.Occurrences.Where(includeTexture).ToArray();
+            return occurrences.Length == 0 ? null : candidate with
+            {
+                EffectiveOccurrence = !includeModOnly && occurrences.Contains(candidate.EffectiveOccurrence)
+                    ? candidate.EffectiveOccurrence : ChooseTextureOccurrence(occurrences),
+                Occurrences = occurrences,
+                IsEligibleOfficialDefault = includeModOnly ? false : candidate.IsEligibleOfficialDefault
+            };
+        }).Where(value => value is not null).Cast<TextureCatalogCandidate>()
+          .Where(candidate => !includeModOnly || !officialIdentities.Contains(AssetIdentity(candidate.InstancedPath, "Texture2D")))
+          .ToArray();
+
+        var meshes = source.AttachmentMeshes.Select(candidate =>
+        {
+            var occurrences = candidate.Occurrences.Where(value => includeModOnly
+                ? value.Origin == TextureCatalogOrigin.Mod
+                : value.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc).ToArray();
+            return occurrences.Length == 0 ? null : candidate with
+            {
+                EffectiveOccurrence = !includeModOnly && occurrences.Contains(candidate.EffectiveOccurrence)
+                    ? candidate.EffectiveOccurrence : ChooseMeshOccurrence(occurrences),
+                Occurrences = occurrences,
+                IsEligibleOfficialDefault = includeModOnly ? false : candidate.IsEligibleOfficialDefault
+            };
+        }).Where(value => value is not null).Cast<AttachmentMeshCandidate>()
+          .Where(candidate => !includeModOnly || !officialIdentities.Contains(AssetIdentity(candidate.EffectiveOccurrence.InstancedPath, "SkeletalMesh")))
+          .ToArray();
+
+        var assets = source.Assets.Where(asset => includeModOnly
+                ? asset.Origin == TextureCatalogOrigin.Mod && !officialIdentities.Contains(AssetIdentity(asset.InstancedPath, asset.ClassName))
+                : (asset.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc) &&
+                  source.OfficialPackagePaths.Contains(Path.GetFullPath(asset.PackagePath), StringComparer.OrdinalIgnoreCase))
+            .GroupBy(asset => AssetIdentity(asset.InstancedPath, asset.ClassName), StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.OrderByDescending(asset => asset.MountPriority)
+                .ThenBy(asset => asset.PackagePath, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(asset => asset.ExportUIndex).First())
+            .ToArray();
+        var game = source.Game switch
+        {
+            TextureCatalogGame.LE1 => MEGame.LE1,
+            TextureCatalogGame.LE2 => MEGame.LE2,
+            TextureCatalogGame.LE3 => MEGame.LE3,
+            _ => throw new ArgumentOutOfRangeException(nameof(source))
+        };
+        var packagePaths = source.MountedPackagePaths.Where(path => includeModOnly
+                ? LecTextureRegistryPackageScanner.GetOrigin(path, game) == TextureCatalogOrigin.Mod
+                : LecTextureRegistryPackageScanner.GetOrigin(path, game) != TextureCatalogOrigin.Mod)
+            .ToArray();
+        var includedPackages = packagePaths.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return source with
+        {
+            InstalledPackageCount = packagePaths.Length,
+            MountedPackagePaths = packagePaths,
+            MountedPackages = source.MountedPackages.Where(value => includedPackages.Contains(value.PackagePath)).ToArray(),
+            OfficialPackagePaths = includeModOnly ? [] : source.OfficialPackagePaths,
+            Candidates = candidates,
+            AttachmentMeshes = meshes,
+            Assets = assets,
+            MorphFaceTemplates = includeModOnly ? [] : source.MorphFaceTemplates
+        };
+    }
+
+    private static string AssetIdentity(string path, string className) => $"{className}|{path}";
+
+    private static TextureCatalogOccurrence ChooseTextureOccurrence(IReadOnlyList<TextureCatalogOccurrence> occurrences) =>
+        occurrences.OrderByDescending(value => value.MountPriority)
+            .ThenBy(value => value.PackagePath, StringComparer.OrdinalIgnoreCase).First();
+
+    private static AttachmentMeshOccurrence ChooseMeshOccurrence(IReadOnlyList<AttachmentMeshOccurrence> occurrences) =>
+        occurrences.OrderByDescending(value => value.MountPriority)
+            .ThenBy(value => value.PackagePath, StringComparer.OrdinalIgnoreCase).First();
 
     internal static IReadOnlyList<string> GetPhysicalPackagePaths(MorphFaceGame game)
     {

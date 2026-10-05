@@ -18,7 +18,7 @@ public static class CustomMaterialEvidenceTests
         new("custom material evidence tries highest mounted official source first", IndexedEvidencePrefersHighestOfficialSource),
         new("custom material evidence retains duplicate source material refs", RetainsDuplicateSourceMaterialRefs),
         new("custom material catalogue exposes only proven installed families", CatalogueExposesProvenFamilies),
-        new("attachment picker excludes only audited literal mesh suffixes", HirReviewMeshesAreExcluded),
+        new("attachment picker discovers hair and hat meshes while excluding audited suffixes", HirReviewMeshesAreExcluded),
         new("BIOG attachment preview loads package-qualified registry identity", BiogAttachmentPreviewLoadsCanonicalIdentity),
         new("LE3 Ssk 02 preview preserves its unused null material slot", Ssk02RetainsUnusedNullMaterialSlot),
         new("used null attachment material slots remain invalid", UsedNullAttachmentMaterialSlotsRemainInvalid),
@@ -102,6 +102,31 @@ public static class CustomMaterialEvidenceTests
                 @"C:\Games\LE3\BIOG_HMF_HIR_PRO.pcc",
                 "BIOG_HMF_HIR_PRO.Hair_Cute.HMF_HIR_Cte_MDL"),
             "A playable HIR attachment was incorrectly excluded.");
+        TestAssert.True(AttachmentMeshNamePolicy.IsInstalledHeadAttachment(
+                "BIOG_HMF_HIR_PRO.Beanie.HMF_HAT_Bn1_MDL"),
+            "A supported hat mesh was hidden because its leaf uses HAT rather than HIR.");
+        TestAssert.True(!AttachmentMeshNamePolicy.IsInstalledHeadAttachment(
+                "BIOG_HMF_HIR_PRO.Beanie.HMF_HAT_Bn1_MDL_Remaster"),
+            "A remaster review variant was admitted as a picker candidate.");
+        foreach (var path in new[]
+        {
+            "Biostage_bchlml.ST_bchlml_beachattack_d_mesh",
+            "Biostage_krokgl.ST_krokgl_grunthatercrater_mesh",
+            "biostage_twrasa.ST_twrasa_thirdworker_mesh",
+            "BioStage_ZyaVTL.ST_Bridge_chat_mesh",
+            "BioS_Collector_Mtl.EndGm2_Hatch_World",
+            "BioApl_ProMar_Vent.ProMar_VentHatch_World",
+            "biostage_kro002.ST_kro002_rachni_chat_mesh",
+            "BioStage_Lev001.ST_ClueChat_mesh"
+        })
+            TestAssert.True(!AttachmentMeshNamePolicy.IsInstalledHeadAttachment(path),
+                $"A scenery name containing incidental HIR/HAT letters was admitted: {path}");
+        TestAssert.True(AttachmentMeshNamePolicy.IsBaseHeadMesh("BIOG_HMF_HED_PROMorph.HMF_Blank_World_LOD0"),
+            "The LE1/LE2 female blank head was admitted as an attachment.");
+        TestAssert.True(AttachmentMeshNamePolicy.IsBaseHeadMesh("BIOG_HMM_HED_PROMorph.Kaidan.HMM_HED_PROKaidan_MDL"),
+            "Kaidan's base head was admitted as an attachment.");
+        TestAssert.True(!AttachmentMeshNamePolicy.IsBaseHeadMesh("BIOG_HMM_HIR_PRO_R.Kaidan.HMM_HIR_Kaidan_MDL"),
+            "Kaidan's hair was mistaken for his head mesh.");
     }
 
     private static void BiogAttachmentPreviewLoadsCanonicalIdentity()

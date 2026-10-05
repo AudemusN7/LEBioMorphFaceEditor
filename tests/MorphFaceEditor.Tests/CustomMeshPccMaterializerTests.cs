@@ -122,7 +122,7 @@ public static class CustomMeshPccMaterializerTests
         var option = new CustomMaterialTemplateCatalogService(new MorphFacePackageReader(), store)
             .Load(MorphFaceGame.LE1)
             .Options
-            .FirstOrDefault(value => value.Label == "Human Female/Asari Lashes");
+            .FirstOrDefault(value => value.AppearanceCompatibilityKey == "human-female" && value.Family == HeadMaterialFamily.Lashes);
         if (option is null)
         {
             throw new InvalidOperationException("The LE1 HMF lash material template is unavailable.");
@@ -186,7 +186,7 @@ public static class CustomMeshPccMaterializerTests
         var option = new CustomMaterialTemplateCatalogService(new MorphFacePackageReader(), store)
             .Load(MorphFaceGame.LE1)
             .Options
-            .FirstOrDefault(value => value.Label == "Human Female/Asari Lashes")
+            .FirstOrDefault(value => value.AppearanceCompatibilityKey == "human-female" && value.Family == HeadMaterialFamily.Lashes)
             ?? throw new InvalidOperationException("The LE1 HMF lash material template is unavailable.");
         var donorPath = Path.Combine(Path.GetTempPath(), $"BIOG_HMF_HIR_CustomLash-{Guid.NewGuid():N}.pcc");
         var outputPath = Path.Combine(Path.GetTempPath(), $"MFE-C4-ExplicitLash-{Guid.NewGuid():N}.pcc");
@@ -607,7 +607,7 @@ public static class CustomMeshPccMaterializerTests
             MaterialDependencyOracle.Instance.GetKind(MEGame.LE2, "Texture2D", expectedLashPath));
         WithInstalledMaterial(
             MorphFaceGame.LE2,
-            option => option.Label == "Human Female/Asari Lashes",
+            option => option.AppearanceCompatibilityKey == "human-female" && option.Family == HeadMaterialFamily.Lashes,
             package =>
             {
                 var referenced = ResolveTextureParameter(FindAuthoredMic(package), "HED_Lash_Diff");

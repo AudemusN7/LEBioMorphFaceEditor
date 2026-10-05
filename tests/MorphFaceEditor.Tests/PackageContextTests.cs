@@ -36,6 +36,7 @@ public static class PackageContextTests
         new("unsupported optional attachment material omits its mesh with a warning", UnsupportedAttachmentMaterialIsOmitted),
         new("attachment lookup rejects a same-named mesh at a different path", AttachmentLookupRejectsSameNameWrongPath),
         new("canonical stock hair and headwear MICs resolve their supported parent graphs", CanonicalHatMaterialsRemainSupported),
+        new("material cache retains identities rather than decoded mip chains", MaterialCacheRetainsMetadataOnly),
         new("reviewed Officer and Beret attachments survive their native-game conversions", StockHatAttachmentsSurviveReview),
         new("custom hair MIC is supported through its canonical hair parent", CustomHairMicUsesCanonicalParent),
         new("TUF and custom attachment MICs share the canonical Turian parent rule", CustomAttachmentsUseCanonicalTurianParent),
@@ -814,6 +815,53 @@ public static class PackageContextTests
         {
             File.Delete(packagePath);
         }
+    }
+
+    private static void MaterialCacheRetainsMetadataOnly()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        var packagePath = FixturePath("LE3 GlobalMorphs.pcc");
+        using var package = MEPackageHandler.OpenMEPackage(packagePath, forceLoadFromDisk: true);
+        using var cache = new PackageCache();
+        var reader = new MorphFaceMaterialReader(cache, new GamePackageReferenceResolver(cache));
+        ResolvedHeadMaterial? decoded = null;
+        foreach (var material in package.Exports.Where(entry => entry.ClassName == "MaterialInstanceConstant"))
+        {
+            try
+            {
+                var candidate = reader.ReadMaterialEvidence(material);
+                if (candidate.Textures.Count > 0)
+                {
+                    decoded = candidate;
+                    break;
+                }
+            }
+            catch (InvalidDataException)
+            {
+                // Some corpus materials are deliberately unsupported; find a normal graph.
+            }
+        }
+
+        TestAssert.True(decoded is not null, "No fixture material produced decoded texture defaults.");
+        TestAssert.True(decoded!.Textures.Count > 0, "Material rehydration did not restore its texture bindings.");
+        var cacheField = typeof(MorphFaceMaterialReader).GetField("_materialCache",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        var metadataCache = cacheField?.GetValue(reader) as System.Collections.IDictionary;
+        TestAssert.True(metadataCache is { Count: > 0 }, "No material metadata was retained.");
+        var cacheKey = MaterialIdentityKey.Create(decoded.Source);
+        var cached = metadataCache!.Keys.Cast<object>()
+            .Where(key => string.Equals(key as string, cacheKey, StringComparison.OrdinalIgnoreCase))
+            .Select(key => metadataCache[key]!)
+            .Single();
+        var materialProperty = cached.GetType().GetProperty("Material");
+        var template = materialProperty?.GetValue(cached) as ResolvedHeadMaterial;
+        TestAssert.True(template is not null, "The cached material metadata has no detached material template.");
+        TestAssert.Equal(0, template!.Textures.Count);
+        TestAssert.Equal(0, template.DefaultTextures.Count);
+        TestAssert.True(template.FixedCubeTexture is null && template.SecondaryFixedCubeTexture is null,
+            "Decoded reflection cube faces were retained in material metadata.");
+        var textureMetadata = cached.GetType().GetProperty("Textures")?.GetValue(cached) as System.Collections.IDictionary;
+        TestAssert.True(textureMetadata is { Count: > 0 }, "Source identities were not retained for later texture rehydration.");
     }
 
     private static void CorpusEdgeFacesLoad()

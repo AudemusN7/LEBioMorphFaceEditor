@@ -254,6 +254,28 @@ internal static class PccPackageWorkflow
             .DistinctBy(export => $"{export.FileRef.FilePath}|{export.UIndex}", StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
+    internal static MorphFaceMaterialOverrides OmitUnavailableSelectedTextures(
+        MorphFaceMaterialOverrides overrides, PackageCache cache, ICollection<string> warnings)
+    {
+        var retained = OmitUnavailableSelectedTextures(overrides.Textures, cache, warnings);
+        return retained.Count == overrides.Textures.Count ? overrides : overrides with { Textures = retained };
+    }
+
+    internal static IReadOnlyList<TextureMaterialOverride> OmitUnavailableSelectedTextures(
+        IReadOnlyList<TextureMaterialOverride> textures, PackageCache cache, ICollection<string> warnings)
+    {
+        return textures.Where(value =>
+        {
+            var identity = value.TextureReference;
+            if (identity is not { IsExplicitTextureDonor: true, IsImport: false } ||
+                InstalledGameAssetResolver.TryExact(cache, identity.PackagePath, identity.InstancedPath,
+                    "Texture2D", identity.UIndex) is not null) return true;
+            warnings.Add($"Texture '{identity.InstancedPath}' for '{value.Name}' is unavailable in '{identity.PackagePath}'. " +
+                "The selection was omitted from this export; the material default will be used.");
+            return false;
+        }).ToArray();
+    }
+
     internal static void StageExplicitTextureDonors(
         IMEPackage destination,
         ExportEntry sourceRoot,

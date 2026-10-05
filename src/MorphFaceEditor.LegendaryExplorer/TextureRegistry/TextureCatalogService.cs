@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
 
 namespace MorphFaceEditor.LegendaryExplorer.TextureRegistry;
@@ -12,116 +14,59 @@ public sealed record TextureCatalogReadResult(
     public IReadOnlyList<string> OfficialPackagePaths { get; init; } = [];
 }
 
-/// <summary>Loads and caches the compact registry without opening an installed package.</summary>
-public sealed class TextureCatalogService
+/// <summary>Reuses the registry until its files change. Assets are checked when requested.</summary>
+public sealed class TextureCatalogService(TextureRegistryStore store)
 {
-    private readonly TextureRegistryStore store;
-    private readonly Func<MorphFaceGame, IReadOnlyList<string>, bool> _mountedPackagesCurrent =
-        ArePhysicalPackagesCurrent;
-    private readonly Func<MorphFaceGame, TextureRegistryBuilder.PhysicalPackageLayoutSnapshot?>? _captureLayout;
-    private readonly Func<MorphFaceGame, TextureRegistryBuilder.PhysicalPackageLayoutSnapshot, bool>
-        _mountConfigurationCurrent = TextureRegistryBuilder.IsCurrentMountConfiguration;
-    private readonly Func<MorphFaceGame, TextureRegistrySnapshot,
-        TextureRegistryBuilder.PhysicalPackageLayoutSnapshot, bool> _snapshotMatchesLayout =
-        (game, snapshot, layout) => TextureRegistryBuilder.SnapshotMountPrioritiesMatch(snapshot, layout, game);
+    private readonly TextureRegistryStore _store = store ?? throw new ArgumentNullException(nameof(store));
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly object _cacheLock = new();
     private readonly Dictionary<MorphFaceGame, CachedCatalog> _cache = [];
-
-    public TextureCatalogService(TextureRegistryStore store)
-    {
-        this.store = store ?? throw new ArgumentNullException(nameof(store));
-        _captureLayout = TextureRegistryBuilder.CapturePhysicalPackageLayout;
-    }
-
-    internal TextureCatalogService(TextureRegistryStore store,
-        Func<MorphFaceGame, IReadOnlyList<string>, bool> mountedPackagesCurrent)
-    {
-        this.store = store ?? throw new ArgumentNullException(nameof(store));
-        _mountedPackagesCurrent = mountedPackagesCurrent ?? throw new ArgumentNullException(nameof(mountedPackagesCurrent));
-    }
-
-    internal TextureCatalogService(TextureRegistryStore store,
-        Func<MorphFaceGame, TextureRegistryBuilder.PhysicalPackageLayoutSnapshot?> captureLayout,
-        Func<MorphFaceGame, TextureRegistryBuilder.PhysicalPackageLayoutSnapshot, bool> mountConfigurationCurrent,
-        Func<MorphFaceGame, TextureRegistrySnapshot, TextureRegistryBuilder.PhysicalPackageLayoutSnapshot, bool> snapshotMatchesLayout)
-    {
-        this.store = store ?? throw new ArgumentNullException(nameof(store));
-        _captureLayout = captureLayout ?? throw new ArgumentNullException(nameof(captureLayout));
-        _mountConfigurationCurrent = mountConfigurationCurrent ?? throw new ArgumentNullException(nameof(mountConfigurationCurrent));
-        _snapshotMatchesLayout = snapshotMatchesLayout ?? throw new ArgumentNullException(nameof(snapshotMatchesLayout));
-    }
+    private static readonly ConditionalWeakTable<TextureRegistrySnapshot, TextureRegistrySnapshot> Projections = new();
 
     public async Task<TextureCatalogReadResult> ReadAsync(
-        MorphFaceGame game,
-        CancellationToken cancellationToken = default)
+        MorphFaceGame game, CancellationToken cancellationToken = default)
     {
-        var fingerprint = (Installed: store.GetFileFingerprint(game),
-            Manual: store.GetManualFileFingerprint(game));
+        cancellationToken.ThrowIfCancellationRequested();
+        var fingerprint = GetFingerprint(game);
         lock (_cacheLock)
-        {
             if (_cache.TryGetValue(game, out var cached) && cached.Fingerprint == fingerprint)
-            {
-                if (!IsCacheCurrent(game, cached, out var refreshed))
-                    return Outdated(cached.Status);
-                if (refreshed is not null) _cache[game] = refreshed;
-                return new TextureCatalogReadResult(cached.Status, cached.Candidates, cached.MorphFaceTemplates)
-                    { AttachmentMeshes = cached.AttachmentMeshes, OfficialPackagePaths = cached.OfficialPackagePaths };
-            }
-        }
+                return cached.Result;
 
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            fingerprint = (Installed: store.GetFileFingerprint(game),
-                Manual: store.GetManualFileFingerprint(game));
+            fingerprint = GetFingerprint(game);
             lock (_cacheLock)
-            {
                 if (_cache.TryGetValue(game, out var cached) && cached.Fingerprint == fingerprint)
-                {
-                    if (!IsCacheCurrent(game, cached, out var refreshed))
-                        return Outdated(cached.Status);
-                    if (refreshed is not null) _cache[game] = refreshed;
-                    return new TextureCatalogReadResult(cached.Status, cached.Candidates, cached.MorphFaceTemplates)
-                        { AttachmentMeshes = cached.AttachmentMeshes, OfficialPackagePaths = cached.OfficialPackagePaths };
-                }
-            }
+                    return cached.Result;
 
-            var stored = await Task.Run(() => store.ReadWithStatus(game), cancellationToken).ConfigureAwait(false);
-            var status = stored.Status;
-            if (stored.Snapshot is not { } snapshot)
-                return new TextureCatalogReadResult(status, [], []);
-            var layout = _captureLayout?.Invoke(game);
-            var packageSetCurrent = layout is not null
-                ? layout.PackagePaths.ToHashSet(StringComparer.OrdinalIgnoreCase)
-                    .SetEquals(snapshot.MountedPackagePaths) &&
-                  _snapshotMatchesLayout(game, snapshot, layout)
-                : _mountedPackagesCurrent(game, snapshot.MountedPackagePaths);
-            if (!packageSetCurrent || snapshot.MountedPackages.Any(file => !file.IsCurrent()))
-                return Outdated(status);
-            var manual = store.ReadManualWithStatus(game);
-            if (manual.Status.State == TextureRegistryState.Ready && manual.Snapshot is not null)
-                snapshot = TextureRegistryManualAssetService.Combine(snapshot, manual.Snapshot);
-            else if (manual.Status.State is not TextureRegistryState.Missing)
-                status = status with
-                {
-                    ErrorMessage = $"Custom asset database is {manual.Status.State}: {manual.Status.ErrorMessage}"
-                };
-            snapshot = ProjectOfficialDefaultEligibility(snapshot);
+            var result = await Task.Run(() => Read(game), cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
-            fingerprint = (Installed: store.GetFileFingerprint(game),
-                Manual: store.GetManualFileFingerprint(game));
-            lock (_cacheLock) _cache[game] = new CachedCatalog(
-                fingerprint, status, snapshot.Candidates, snapshot.MorphFaceTemplates,
-                snapshot.AttachmentMeshes, snapshot.OfficialPackagePaths, snapshot.MountedPackagePaths,
-                snapshot.MountedPackages, layout);
-            return new TextureCatalogReadResult(status, snapshot.Candidates, snapshot.MorphFaceTemplates)
-                { AttachmentMeshes = snapshot.AttachmentMeshes, OfficialPackagePaths = snapshot.OfficialPackagePaths };
+            // A concurrent rebuild must not label an older snapshot with the new file stamps.
+            if (fingerprint == GetFingerprint(game))
+                lock (_cacheLock) _cache[game] = new(fingerprint, result);
+            return result;
         }
-        finally
+        finally { _gate.Release(); }
+    }
+
+    private TextureCatalogReadResult Read(MorphFaceGame game)
+    {
+        var stored = _store.ReadWithStatus(game);
+        var status = stored.Status;
+        if (stored.Snapshot is not { } snapshot) return new(status, [], []);
+        snapshot = IncludeIndexedHatMeshes(snapshot);
+        foreach (var sidecar in new[] { _store.ReadModsWithStatus(game), _store.ReadManualWithStatus(game) })
         {
-            _gate.Release();
+            if (sidecar.Status.State == TextureRegistryState.Ready && sidecar.Snapshot is { } additional)
+                snapshot = TextureRegistryManualAssetService.Combine(snapshot, additional);
+            else if (sidecar.Status.State != TextureRegistryState.Missing)
+                status = status with { ErrorMessage = string.Join(" ", new[] { status.ErrorMessage,
+                    $"Asset sidecar is {sidecar.Status.State}: {sidecar.Status.ErrorMessage}" }.Where(value => value is not null)) };
         }
+        snapshot = Projections.GetValue(snapshot, ProjectOfficialDefaultEligibility);
+        return new(status, snapshot.Candidates, snapshot.MorphFaceTemplates)
+        { AttachmentMeshes = snapshot.AttachmentMeshes, OfficialPackagePaths = snapshot.OfficialPackagePaths };
     }
 
     public void Invalidate(MorphFaceGame game)
@@ -129,66 +74,64 @@ public sealed class TextureCatalogService
         lock (_cacheLock) _cache.Remove(game);
     }
 
-    private static TextureCatalogReadResult Outdated(TextureRegistryStatus status) =>
-        new(status with { State = TextureRegistryState.Outdated,
-            ErrorMessage = "The mounted game packages have changed. Rebuild this game's asset database." }, [], []);
-
-    private bool IsCacheCurrent(MorphFaceGame game, CachedCatalog cached, out CachedCatalog? refreshed)
-    {
-        refreshed = null;
-        if (cached.MountedPackages.Any(file => !file.IsCurrent())) return false;
-        if (cached.Layout is null)
-            return _mountedPackagesCurrent(game, cached.MountedPackagePaths);
-        if (!_mountConfigurationCurrent(game, cached.Layout)) return false;
-        if (cached.Layout.DirectoryStampsAreCurrent()) return true;
-
-        // A directory timestamp change may be unrelated to PCC membership. Re-enumerate
-        // only on that slow path, then keep the cache warm if the mounted package set and
-        // all relevant priorities still match.
-        var current = _captureLayout?.Invoke(game);
-        if (current is null) return false;
-        if (!cached.Layout.HasSameMountConfiguration(current) ||
-            !cached.Layout.HasSamePackageSet(current) ||
-            !current.PackagePaths.ToHashSet(StringComparer.OrdinalIgnoreCase)
-                .SetEquals(cached.MountedPackagePaths) ||
-            cached.MountedPackages.Any(file => !file.IsCurrent()))
-            return false;
-        refreshed = cached with { Layout = current };
-        return true;
-    }
-
-    private static bool ArePhysicalPackagesCurrent(MorphFaceGame game, IReadOnlyList<string> paths) =>
-        paths.ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(TextureRegistryBuilder.GetPhysicalPackagePaths(game));
+    private RegistryFingerprint GetFingerprint(MorphFaceGame game) => new(
+        _store.GetFileFingerprint(game), _store.GetModsFileFingerprint(game), _store.GetManualFileFingerprint(game));
 
     private static TextureRegistrySnapshot ProjectOfficialDefaultEligibility(TextureRegistrySnapshot snapshot)
     {
-        var officialPackages = snapshot.OfficialPackagePaths
-            .Select(Path.GetFullPath)
+        var officialPackages = snapshot.OfficialPackagePaths.Select(Path.GetFullPath)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var candidates = snapshot.Candidates.Select(candidate => candidate with
+        return snapshot with
         {
-            IsEligibleOfficialDefault =
-                (candidate.EffectiveOccurrence.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc) &&
-                officialPackages.Contains(Path.GetFullPath(candidate.EffectiveOccurrence.PackagePath))
-        }).ToArray();
-        var attachmentMeshes = snapshot.AttachmentMeshes.Select(candidate => candidate with
-        {
-            IsEligibleOfficialDefault =
-                (candidate.EffectiveOccurrence.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc) &&
-                officialPackages.Contains(Path.GetFullPath(candidate.EffectiveOccurrence.PackagePath))
-        }).ToArray();
-        return snapshot with { Candidates = candidates, AttachmentMeshes = attachmentMeshes };
+            Candidates = snapshot.Candidates.Select(candidate => candidate with
+            {
+                IsEligibleOfficialDefault =
+                    (candidate.EffectiveOccurrence.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc) &&
+                    officialPackages.Contains(Path.GetFullPath(candidate.EffectiveOccurrence.PackagePath))
+            }).ToArray(),
+            AttachmentMeshes = snapshot.AttachmentMeshes.Select(candidate => candidate with
+            {
+                IsEligibleOfficialDefault =
+                    AttachmentMeshNamePolicy.IsInstalledHeadAttachment(candidate.CanonicalPath) &&
+                    (candidate.EffectiveOccurrence.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc) &&
+                    officialPackages.Contains(Path.GetFullPath(candidate.EffectiveOccurrence.PackagePath))
+            }).ToArray()
+        };
     }
 
-    private sealed record CachedCatalog(
-        ((string Path, long Length, DateTime LastWriteTimeUtc)? Installed,
-            (string Path, long Length, DateTime LastWriteTimeUtc)? Manual) Fingerprint,
-        TextureRegistryStatus Status,
-        IReadOnlyList<TextureCatalogCandidate> Candidates,
-        IReadOnlyList<MorphFaceTemplateCandidate> MorphFaceTemplates,
-        IReadOnlyList<AttachmentMeshCandidate> AttachmentMeshes,
-        IReadOnlyList<string> OfficialPackagePaths,
-        IReadOnlyList<string> MountedPackagePaths,
-        IReadOnlyList<MountedPackageFingerprint> MountedPackages,
-        TextureRegistryBuilder.PhysicalPackageLayoutSnapshot? Layout);
+    private static TextureRegistrySnapshot IncludeIndexedHatMeshes(TextureRegistrySnapshot snapshot)
+    {
+        var officialPackages = snapshot.OfficialPackagePaths.Select(Path.GetFullPath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var known = snapshot.AttachmentMeshes.Select(candidate => candidate.CanonicalPath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var additions = snapshot.Assets.Where(asset =>
+                asset.ClassName.Equals("SkeletalMesh", StringComparison.OrdinalIgnoreCase) &&
+                (asset.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc) &&
+                officialPackages.Contains(Path.GetFullPath(asset.PackagePath)) &&
+                asset.InstancedPath.Split('.').Last().Contains("HAT", StringComparison.OrdinalIgnoreCase) &&
+                AttachmentMeshNamePolicy.IsInstalledHeadAttachment(asset.InstancedPath) &&
+                !known.Contains(asset.InstancedPath))
+            .GroupBy(asset => asset.InstancedPath, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.OrderByDescending(asset => asset.MountPriority)
+                .ThenBy(asset => asset.PackagePath, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(asset => asset.ExportUIndex).First())
+            .Select(asset =>
+            {
+                var occurrence = new AttachmentMeshOccurrence(asset.PackagePath, asset.InstancedPath,
+                    asset.ExportUIndex, asset.MountPriority, asset.Origin);
+                return new AttachmentMeshCandidate(asset.InstancedPath, occurrence, [occurrence]);
+            }).ToArray();
+        return additions.Length == 0 ? snapshot : snapshot with
+        {
+            AttachmentMeshes = snapshot.AttachmentMeshes.Concat(additions)
+                .OrderBy(candidate => candidate.CanonicalPath, StringComparer.OrdinalIgnoreCase).ToArray()
+        };
+    }
+
+    private readonly record struct RegistryFingerprint(
+        (string Path, long Length, DateTime LastWriteTimeUtc)? Installed,
+        (string Path, long Length, DateTime LastWriteTimeUtc)? Mods,
+        (string Path, long Length, DateTime LastWriteTimeUtc)? Manual);
+    private sealed record CachedCatalog(RegistryFingerprint Fingerprint, TextureCatalogReadResult Result);
 }

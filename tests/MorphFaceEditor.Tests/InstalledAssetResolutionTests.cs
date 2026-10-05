@@ -19,6 +19,10 @@ internal static class InstalledAssetResolutionTests
         new("official asset donors: unavailable selected texture cannot switch donors", UnavailableSelectedTextureFails),
         new("official asset donors: shadowed official package cannot supply a removed asset", ShadowedOfficialIsExcluded),
         new("official asset donors: unmatched explicit assets remain usable", UnmatchedExplicitRemainsUsable),
+        new("official asset donors: changed requested donor reloads without registry rescan", ChangedDonorReloads),
+        new("selected textures: unavailable donor omits override and preserves other edits", MissingSelectionFallsBack),
+        new("missing optional assets: PCC export omits missing texture and hair references", MissingOptionalAssetsExportWithDefaults),
+        new("installed player hair survives morph export and changed hair existing save", InstalledPlayerHairSaves),
         new("explicit stock-path texture survives PCC reopen and a second export", ExplicitTextureSurvivesSecondExport),
         new("seekfree PCC assets preserve memory paths and flags after reopen", SeekfreeAssetsRoundTrip),
         new("installed BIOG picker textures load by their canonical instanced path", InstalledPickerTexturesLoad),
@@ -26,6 +30,134 @@ internal static class InstalledAssetResolutionTests
     ];
 
     private const string AssetPath = "BIOG_MFE_Policy.Head.Asset";
+
+    private static void InstalledPlayerHairSaves()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        var sourcePath = Path.GetFullPath("tests/Global Morphs/LE1 GlobalMorphs.pcc");
+        var destination = Path.Combine(Path.GetTempPath(), $"MFE-Player-Hair-{Guid.NewGuid():N}.pcc");
+        using var donor = MEPackageHandler.OpenMEPackage(
+            InstalledGameAssetResolver.ResolvePackage(MorphFaceGame.LE1, "BIOG_HMF_HIR_PRO.pcc"), forceLoadFromDisk: true);
+        var hairs = donor.Exports.Where(entry => entry.ClassName == "SkeletalMesh" &&
+            entry.ObjectName.Name.StartsWith("HMF_HIR_PROCustomShort", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(entry => entry.InstancedFullPath).Take(2).ToArray();
+        TestAssert.Equal(2, hairs.Length);
+        AssetIdentity Identity(ExportEntry mesh) => new(donor.FilePath,
+            PccAssetPathPolicy.FromExport(mesh), mesh.UIndex, "SkeletalMesh");
+        void Verify(string facePath, AssetIdentity expected)
+        {
+            using var package = MEPackageHandler.OpenMEPackage(destination, forceLoadFromDisk: true);
+            var face = package.FindExport(facePath, "BioMorphFace")!;
+            var mesh = face.GetProperty<ObjectProperty>("m_oHairMesh")?.ResolveToEntry(package) as ExportEntry;
+            TestAssert.True(mesh is not null, "Saving omitted the available selected player hair.");
+            TestAssert.Equal(expected.InstancedPath, mesh!.InstancedFullPath);
+            TestAssert.True(MorphFaceAttachmentTransferEngine.HasSupportedMaterials(package, mesh, out _),
+                "The saved hair lost its supported material dependencies.");
+            var attachment = face.GetProperty<ArrayProperty<ObjectProperty>>("m_oOtherMeshes")?
+                .FirstOrDefault()?.ResolveToEntry(package) as ExportEntry;
+            TestAssert.True(attachment is not null, "Saving omitted the available selected secondary attachment.");
+            TestAssert.Equal(Identity(hairs[0]).InstancedPath, attachment!.InstancedFullPath);
+            PackageIntegrity.Verify(package);
+        }
+        try
+        {
+            using var reader = new MorphFacePackageReader();
+            var loaded = reader.Load(sourcePath, "HMF.BIOA_PRC2_HMF_Guard01");
+            var first = Identity(hairs[0]);
+            var writer = new MorphFacePackageWriter();
+            var exported = writer.SaveMorphToPackage(loaded.Document with
+                { HairMeshReference = first, OtherMeshReferences = [first] },
+                sourcePath, destination, createNewPackage: true);
+            Verify(exported.FaceInstancedPath, first);
+            var reopened = reader.Load(destination, exported.FaceInstancedPath);
+            var second = Identity(hairs[1]);
+            writer.SaveExisting(reopened.Document with { HairMeshReference = second });
+            Verify(exported.FaceInstancedPath, second);
+        }
+        finally { if (File.Exists(destination)) File.Delete(destination); }
+    }
+
+    private static void MissingOptionalAssetsExportWithDefaults()
+    {
+        var sourcePath = Path.GetFullPath("tests/Global Morphs/LE1 GlobalMorphs.pcc");
+        var destination = Path.Combine(Path.GetTempPath(), $"MFE-Missing-Optional-{Guid.NewGuid():N}.pcc");
+        try
+        {
+            using var reader = new MorphFacePackageReader();
+            var loaded = reader.Load(sourcePath, "HMF.BIOA_PRC2_HMF_Guard01");
+            var missingPath = Path.Combine(Path.GetTempPath(), $"MFE-Missing-{Guid.NewGuid():N}.pcc");
+            var draft = loaded.Document with
+            {
+                HairMeshReference = new AssetIdentity(missingPath, "BIOG_Missing.Hair.Mesh", 1, "SkeletalMesh"),
+                MaterialOverrides = loaded.Document.MaterialOverrides with
+                {
+                    Textures = loaded.Document.MaterialOverrides.Textures
+                        .Where(value => value.Name != "HED_Diff")
+                        .Append(new TextureMaterialOverride("HED_Diff", new AssetIdentity(
+                            missingPath, "BIOG_Missing.Head.Diff", 2, "Texture2D")
+                            { IsExplicitTextureDonor = true })).ToArray()
+                }
+            };
+            var result = new MorphFacePackageWriter().SaveMorphToPackage(
+                draft, sourcePath, destination, createNewPackage: true);
+            TestAssert.True(result.Warnings.Any(value => value.Contains("material default")),
+                "The saved fallback texture was not reported.");
+            TestAssert.True(result.Warnings.Any(value => value.Contains("Optional attachment")),
+                "The omitted attachment was not reported.");
+            var reopened = reader.Load(destination, result.FaceInstancedPath);
+            TestAssert.True(reopened.Document.HairMeshReference is null, "The export retained an unavailable hair reference.");
+            TestAssert.True(reopened.Document.MaterialOverrides.Textures.All(value => value.Name != "HED_Diff"),
+                "The export retained an unavailable texture override instead of inheriting its default.");
+            TestAssert.True(reopened.Materials.Materials.Values.Any(material => material.Textures.ContainsKey("HED_Diff")),
+                "The exported head did not recover a default diffuse texture.");
+            var existingDraft = reopened.Document with
+            {
+                HairMeshReference = draft.HairMeshReference ?? new AssetIdentity(missingPath, "BIOG_Missing.Hair.Mesh", 1, "SkeletalMesh"),
+                MaterialOverrides = reopened.Document.MaterialOverrides with
+                { Textures = draft.MaterialOverrides.Textures }
+            };
+            var saved = new MorphFacePackageWriter().SaveExisting(existingDraft);
+            TestAssert.True(saved.Warnings.Count >= 2, "An existing-package fallback was not reported.");
+            var savedFace = reader.Load(destination, result.FaceInstancedPath);
+            TestAssert.True(savedFace.Document.HairMeshReference is null &&
+                savedFace.Document.MaterialOverrides.Textures.All(value => value.Name != "HED_Diff"),
+                "Saving an existing PCC retained unavailable optional references.");
+        }
+        finally { if (File.Exists(destination)) File.Delete(destination); }
+    }
+
+    private static void ChangedDonorReloads() => WithDonors((root, lower, official, mod) =>
+    {
+        var snapshot = Snapshot(lower, official, mod) with
+        { MountedPackages = [MountedPackageFingerprint.Read(official.Path)] };
+        using var cache = new PackageCache();
+        var resolver = Resolver(snapshot);
+        TestAssert.Equal(100, resolver.Resolve(MEGame.LE1, AssetPath, "Texture2D", cache)!
+            .GetProperty<IntProperty>("DonorMarker")!.Value);
+        official.Asset.WriteProperty(new IntProperty(12345, "DonorMarker"));
+        official.Package.Save(official.Path);
+        File.SetLastWriteTimeUtc(official.Path, DateTime.UtcNow.AddSeconds(2));
+        TestAssert.Equal(12345, resolver.Resolve(MEGame.LE1, AssetPath, "Texture2D", cache)!
+            .GetProperty<IntProperty>("DonorMarker")!.Value);
+    });
+
+    private static void MissingSelectionFallsBack() => WithDonors((root, lower, official, mod) =>
+    {
+        using var cache = new PackageCache();
+        var missing = new AssetIdentity(Path.Combine(root, "Missing.pcc"), AssetPath, 1, "Texture2D")
+        { IsExplicitTextureDonor = true };
+        var retained = new AssetIdentity(mod.Path, AssetPath, mod.Asset.UIndex, "Texture2D")
+        { IsExplicitTextureDonor = true };
+        var input = new MorphFaceMaterialOverrides(null, [new("Scalar", 0.5f)], [],
+            [new("HED_Diff", missing), new("HED_Norm", retained)]);
+        var warnings = new List<string>();
+        var result = PccPackageWorkflow.OmitUnavailableSelectedTextures(input, cache, warnings);
+        TestAssert.Equal(1, result.Textures.Count);
+        TestAssert.Equal("HED_Norm", result.Textures[0].Name);
+        TestAssert.Equal(0.5f, result.Scalars[0].Value);
+        TestAssert.True(warnings.Single().Contains("material default", StringComparison.OrdinalIgnoreCase),
+            "An unavailable texture was omitted without explaining its fallback.");
+    });
 
     private static void HighestOfficialWins() => WithDonors((root, lower, official, mod) =>
     {
@@ -253,8 +385,17 @@ internal static class InstalledAssetResolutionTests
             var asset = donor.Exports.First(entry => entry.ClassName == "Texture2D" && !entry.IsDefaultObject &&
                 !PccAssetPathPolicy.FromExport(entry).Equals(entry.InstancedFullPath, StringComparison.OrdinalIgnoreCase));
             var canonical = PccAssetPathPolicy.FromExport(asset);
-            var decoded = reader.LoadTexture(donor.FilePath, canonical,
-                HumanMaterialProfiles.Describe("Hair_Diff", MaterialParameterKind.Texture, HeadMaterialFamily.Hair));
+            var definition = HumanMaterialProfiles.Describe(
+                "Hair_Diff", MaterialParameterKind.Texture, HeadMaterialFamily.Hair);
+            var thumbnail = reader.LoadTextureThumbnail(donor.FilePath, canonical, definition);
+            TestAssert.True(thumbnail.Mips is { Count: 1 }, "A picker thumbnail should retain only its decoded mip.");
+            TestAssert.Equal((long)thumbnail.Width * thumbnail.Height * 4, thumbnail.Rgba8.LongLength);
+
+            var decoded = reader.LoadTexture(donor.FilePath, canonical, definition);
+            TestAssert.Equal(decoded.SourceWidth, thumbnail.SourceWidth);
+            TestAssert.Equal(decoded.SourceHeight, thumbnail.SourceHeight);
+            TestAssert.Equal(decoded.SourceWidth, decoded.Width);
+            TestAssert.Equal(decoded.SourceHeight, decoded.Height);
             TestAssert.Equal(asset.UIndex, decoded.Source.UIndex);
             TestAssert.Equal(donor.FilePath, decoded.Source.PackagePath);
             TestAssert.Equal(canonical, decoded.Source.InstancedPath);

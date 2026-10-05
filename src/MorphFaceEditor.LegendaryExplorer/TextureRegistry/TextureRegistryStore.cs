@@ -15,6 +15,10 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
         PropertyNameCaseInsensitive = false,
         Converters = { new InstalledAssetOccurrenceListConverter() }
     };
+    private const int MaximumCachedRegistryFiles = 12;
+    private static readonly object ReadCacheLock = new();
+    private static readonly Dictionary<string, LinkedListNode<CachedRead>> ReadCache = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly LinkedList<CachedRead> ReadCacheLru = new();
 
     public TextureRegistryStatus GetStatus(MorphFaceGame game) => ReadWithStatus(game).Status;
     public TextureRegistryStatus GetManualStatus(MorphFaceGame game)
@@ -28,19 +32,54 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
     internal TextureRegistryReadResult ReadWithStatus(MorphFaceGame game) =>
         ReadWithStatus(game, paths.GetPath(game));
 
+    internal TextureRegistryReadResult ReadModsWithStatus(MorphFaceGame game) =>
+        ReadWithStatus(game, paths.GetModsPath(game));
+
     internal TextureRegistryReadResult ReadManualWithStatus(MorphFaceGame game) =>
         ReadWithStatus(game, paths.GetManualPath(game), allowLegacyManual: true);
 
     private static TextureRegistryReadResult ReadWithStatus(MorphFaceGame game, string path, bool allowLegacyManual = false)
     {
-        if (!File.Exists(path))
+        var fullPath = Path.GetFullPath(path);
+        lock (ReadCacheLock)
         {
-            return new TextureRegistryReadResult(
-                new TextureRegistryStatus(game, TextureRegistryState.Missing,
-                    null, null, null, null, null),
-                null);
-        }
+            var file = new FileInfo(fullPath);
+            var exists = file.Exists;
+            var length = exists ? file.Length : -1;
+            var stamp = exists ? file.LastWriteTimeUtc : DateTime.MinValue;
+            if (ReadCache.TryGetValue(fullPath, out var cachedNode))
+            {
+                var cached = cachedNode.Value;
+                if (cached.AllowLegacyManual == allowLegacyManual && cached.Game == game &&
+                    cached.Exists == exists && cached.Length == length && cached.LastWriteTimeUtc == stamp)
+                {
+                    ReadCacheLru.Remove(cachedNode);
+                    ReadCacheLru.AddFirst(cachedNode);
+                    return cached.Result;
+                }
+                ReadCache.Remove(fullPath);
+                ReadCacheLru.Remove(cachedNode);
+            }
 
+            var result = ReadFileWithStatus(game, fullPath, allowLegacyManual, file);
+            var node = ReadCacheLru.AddFirst(new CachedRead(fullPath, game, allowLegacyManual,
+                exists, length, stamp, result));
+            ReadCache[fullPath] = node;
+            while (ReadCache.Count > MaximumCachedRegistryFiles)
+            {
+                var last = ReadCacheLru.Last!;
+                ReadCache.Remove(last.Value.Path);
+                ReadCacheLru.RemoveLast();
+            }
+            return result;
+        }
+    }
+
+    private static TextureRegistryReadResult ReadFileWithStatus(
+        MorphFaceGame game, string path, bool allowLegacyManual, FileInfo file)
+    {
+        if (!file.Exists)
+            return new(new TextureRegistryStatus(game, TextureRegistryState.Missing, null, null, null, null, null), null);
         try
         {
             using (var stream = File.OpenRead(path))
@@ -53,17 +92,15 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
                 var version = reader.ReadInt32();
                 if (version != TextureRegistrySnapshot.CurrentSchemaVersion && !(allowLegacyManual && version is 10 or 11 or 12))
                 {
-                    var outdatedFile = new FileInfo(path);
                     return new TextureRegistryReadResult(
                         new TextureRegistryStatus(game, TextureRegistryState.Outdated, path,
-                            outdatedFile.Length, outdatedFile.LastWriteTimeUtc, null,
+                            file.Length, file.LastWriteTimeUtc, null,
                             $"Registry schema v{version} is not supported by this editor version."),
                         null);
                 }
             }
 
-            var snapshot = ReadFile(path, game, allowLegacyManual);
-            var file = new FileInfo(path);
+            var snapshot = CompactRuntimeAssetIndex(ReadFile(path, game, allowLegacyManual));
             var missing = snapshot.ManualAssets.Count(asset => asset.IsMissing);
             return new TextureRegistryReadResult(
                 new TextureRegistryStatus(game, TextureRegistryState.Ready, path,
@@ -75,7 +112,6 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
         }
         catch (Exception exception)
         {
-            var file = new FileInfo(path);
             return new TextureRegistryReadResult(
                 new TextureRegistryStatus(game, TextureRegistryState.Failed, path,
                     file.Exists ? file.Length : null, file.Exists ? file.LastWriteTimeUtc : null,
@@ -84,7 +120,35 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
         }
     }
 
+    private static TextureRegistrySnapshot CompactRuntimeAssetIndex(TextureRegistrySnapshot snapshot)
+    {
+        var officialPackages = snapshot.OfficialPackagePaths.Select(Path.GetFullPath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var official = snapshot.Assets.Where(asset =>
+                (asset.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc) &&
+                officialPackages.Contains(Path.GetFullPath(asset.PackagePath)))
+            .GroupBy(asset => $"{asset.ClassName}|{asset.InstancedPath}", StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.OrderByDescending(asset => asset.MountPriority)
+                .ThenBy(asset => asset.PackagePath, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(asset => asset.ExportUIndex).First());
+        var retainedOther = snapshot.Assets.Where(asset =>
+            asset.Origin is not (TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc));
+        var assets = official.Concat(retainedOther)
+            .DistinctBy(asset => $"{asset.ClassName}|{asset.InstancedPath}|{asset.PackagePath}|{asset.ExportUIndex}",
+                StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return assets.Length == snapshot.Assets.Count ? snapshot : snapshot with { Assets = assets };
+    }
+
     public TextureRegistrySnapshot Read(MorphFaceGame game) => ReadFile(paths.GetPath(game), game);
+    /// <summary>Shared compact lookup snapshot; raw Read remains the persistence round-trip API.</summary>
+    public TextureRegistrySnapshot ReadForLookup(MorphFaceGame game)
+    {
+        var result = ReadWithStatus(game);
+        return result.Snapshot ?? throw new InvalidDataException(result.Status.ErrorMessage ??
+            $"The {game} asset database is unavailable. Build it in Mesh/Texture Databases.");
+    }
+    public TextureRegistrySnapshot ReadMods(MorphFaceGame game) => ReadFile(paths.GetModsPath(game), game);
     public TextureRegistrySnapshot ReadManual(MorphFaceGame game) => ReadFile(paths.GetManualPath(game), game, allowLegacyManual: true);
     public bool HasManual(MorphFaceGame game) => File.Exists(paths.GetManualPath(game));
     public string GetManualReportPath(MorphFaceGame game) =>
@@ -94,6 +158,7 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
     {
         var path = paths.GetManualPath(game);
         if (File.Exists(path)) File.Delete(path);
+        InvalidateCachedPath(path);
         var report = GetManualReportPath(game);
         if (File.Exists(report)) File.Delete(report);
     }
@@ -110,6 +175,96 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
         var path = paths.GetManualPath(game);
         var file = new FileInfo(path);
         return file.Exists ? (path, file.Length, file.LastWriteTimeUtc) : null;
+    }
+
+    internal (string Path, long Length, DateTime LastWriteTimeUtc)? GetModsFileFingerprint(MorphFaceGame game)
+    {
+        var path = paths.GetModsPath(game);
+        var file = new FileInfo(path);
+        return file.Exists ? (Path.GetFullPath(path), file.Length, file.LastWriteTimeUtc) : null;
+    }
+
+    internal void WriteInstalledAndModsAtomic(
+        TextureRegistrySnapshot installed,
+        TextureRegistrySnapshot mods,
+        CancellationToken cancellationToken = default,
+        Action? beforeVerification = null)
+    {
+        ArgumentNullException.ThrowIfNull(installed);
+        ArgumentNullException.ThrowIfNull(mods);
+        var game = ToMorphFaceGame(installed.Game);
+        if (game != ToMorphFaceGame(mods.Game)) throw new InvalidDataException("Registry pair games do not match.");
+        Validate(installed, game);
+        Validate(mods, game);
+        cancellationToken.ThrowIfCancellationRequested();
+        var installedPath = paths.GetPath(game);
+        var modsPath = paths.GetModsPath(game);
+        Directory.CreateDirectory(Path.GetDirectoryName(installedPath)!);
+        var installedTemp = $"{installedPath}.{Guid.NewGuid():N}.tmp";
+        var modsTemp = $"{modsPath}.{Guid.NewGuid():N}.tmp";
+        var installedBackup = $"{installedPath}.{Guid.NewGuid():N}.bak";
+        var modsBackup = $"{modsPath}.{Guid.NewGuid():N}.bak";
+        var installedMoved = false;
+        var modsMoved = false;
+        var pairSettled = true;
+        try
+        {
+            WriteTemporary(installed, installedTemp);
+            WriteTemporary(mods, modsTemp);
+            beforeVerification?.Invoke();
+            VerifyTemporary(installed, installedTemp, game);
+            VerifyTemporary(mods, modsTemp, game);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            pairSettled = false;
+            if (File.Exists(installedPath)) File.Move(installedPath, installedBackup);
+            if (File.Exists(modsPath)) File.Move(modsPath, modsBackup);
+            File.Move(installedTemp, installedPath);
+            installedMoved = true;
+            File.Move(modsTemp, modsPath);
+            modsMoved = true;
+            pairSettled = true;
+            InvalidateCachedPath(installedPath);
+            InvalidateCachedPath(modsPath);
+        }
+        catch (Exception writeFailure)
+        {
+            if (!pairSettled)
+            {
+                List<Exception>? rollbackFailures = null;
+                void AttemptRollback(Action action)
+                {
+                    try { action(); }
+                    catch (Exception rollbackFailure) { (rollbackFailures ??= []).Add(rollbackFailure); }
+                }
+                if (installedMoved && File.Exists(installedPath)) AttemptRollback(() => File.Delete(installedPath));
+                if (modsMoved && File.Exists(modsPath)) AttemptRollback(() => File.Delete(modsPath));
+                if (File.Exists(installedBackup)) AttemptRollback(() => File.Move(installedBackup, installedPath, overwrite: true));
+                if (File.Exists(modsBackup)) AttemptRollback(() => File.Move(modsBackup, modsPath, overwrite: true));
+                pairSettled = rollbackFailures is null;
+                InvalidateCachedPath(installedPath);
+                InvalidateCachedPath(modsPath);
+                if (!pairSettled)
+                    throw new AggregateException(
+                        "Registry pair publication failed and rollback was incomplete; backup files were retained.",
+                        [writeFailure, .. rollbackFailures!]);
+            }
+            throw;
+        }
+        finally
+        {
+            foreach (var temporary in new[] { installedTemp, modsTemp })
+                if (File.Exists(temporary))
+                {
+                    try { File.Delete(temporary); } catch { }
+                }
+            if (pairSettled)
+                foreach (var backup in new[] { installedBackup, modsBackup })
+                    if (File.Exists(backup))
+                    {
+                        try { File.Delete(backup); } catch { }
+                    }
+        }
     }
 
     public void WriteAtomic(
@@ -142,27 +297,7 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
 
         try
         {
-            var json = JsonSerializer.SerializeToUtf8Bytes(snapshot, JsonOptions);
-            if (json.LongLength > MaximumJsonBytes)
-            {
-                throw new InvalidDataException("The texture registry payload exceeds the 256 MiB limit.");
-            }
-
-            using (var output = new FileStream(temporaryPath, FileMode.Create, FileAccess.Write, FileShare.None))
-            {
-                using (var writer = new BinaryWriter(output, System.Text.Encoding.UTF8, leaveOpen: true))
-                {
-                    writer.Write(Magic);
-                    writer.Write(TextureRegistrySnapshot.CurrentSchemaVersion);
-                    writer.Write((int)game);
-                    writer.Write((long)json.Length);
-                }
-                using (var brotli = new BrotliStream(output, CompressionLevel.Optimal, leaveOpen: true))
-                {
-                    brotli.Write(json);
-                }
-                output.Flush(flushToDisk: true);
-            }
+            WriteTemporary(snapshot, temporaryPath);
 
             beforeVerification?.Invoke();
             var verified = ReadFile(temporaryPath, game);
@@ -180,6 +315,7 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
 
             cancellationToken.ThrowIfCancellationRequested();
             File.Move(temporaryPath, targetPath, overwrite: true);
+            InvalidateCachedPath(targetPath);
         }
         catch
         {
@@ -187,6 +323,48 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
             throw;
         }
     }
+
+    private static void WriteTemporary(TextureRegistrySnapshot snapshot, string temporaryPath)
+    {
+        var json = JsonSerializer.SerializeToUtf8Bytes(snapshot, JsonOptions);
+        if (json.LongLength > MaximumJsonBytes)
+            throw new InvalidDataException("The texture registry payload exceeds the 256 MiB limit.");
+        using var output = new FileStream(temporaryPath, FileMode.Create, FileAccess.Write, FileShare.None);
+        using (var writer = new BinaryWriter(output, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            writer.Write(Magic);
+            writer.Write(TextureRegistrySnapshot.CurrentSchemaVersion);
+            writer.Write((int)ToMorphFaceGame(snapshot.Game));
+            writer.Write((long)json.Length);
+        }
+        using (var brotli = new BrotliStream(output, CompressionLevel.Optimal, leaveOpen: true))
+            brotli.Write(json);
+        output.Flush(flushToDisk: true);
+    }
+
+    private static void VerifyTemporary(TextureRegistrySnapshot expected, string temporaryPath, MorphFaceGame game)
+    {
+        var verified = ReadFile(temporaryPath, game);
+        if (verified.SchemaVersion != expected.SchemaVersion || verified.Game != expected.Game ||
+            verified.InstalledPackageCount != expected.InstalledPackageCount ||
+            verified.Candidates.Count != expected.Candidates.Count || verified.Assets.Count != expected.Assets.Count ||
+            verified.AttachmentMeshes.Count != expected.AttachmentMeshes.Count ||
+            verified.ManualAssets.Count != expected.ManualAssets.Count ||
+            verified.MorphFaceTemplates.Count != expected.MorphFaceTemplates.Count)
+            throw new InvalidDataException("The written texture registry failed verification.");
+    }
+
+    private static void InvalidateCachedPath(string path)
+    {
+        lock (ReadCacheLock)
+        {
+            var key = Path.GetFullPath(path);
+            if (ReadCache.Remove(key, out var node)) ReadCacheLru.Remove(node);
+        }
+    }
+
+    private sealed record CachedRead(string Path, MorphFaceGame Game, bool AllowLegacyManual,
+        bool Exists, long Length, DateTime LastWriteTimeUtc, TextureRegistryReadResult Result);
 
     private static TextureRegistrySnapshot ReadFile(string path, MorphFaceGame expectedGame, bool allowLegacyManual = false)
     {

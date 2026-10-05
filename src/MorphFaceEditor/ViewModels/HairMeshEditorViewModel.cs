@@ -128,17 +128,26 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
         var physicalOccurrences = options.Where(option => option.Identity is not null)
             .Select(option => PhysicalOccurrenceKey(option.Identity!))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var representedOfficialIdentities = options.Where(option => option.Identity is not null)
+            .Select(option => MeshIdentityKey(option.Identity!))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var candidate in candidates)
         {
             if (isPlayerWorkspace &&
                 !candidate.CanonicalPath.StartsWith("BIOG_", StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            Add(candidate.EffectiveOccurrence, candidate.CanonicalPath);
-            foreach (var occurrence in candidate.Occurrences)
+            if (candidate.IsEligibleOfficialDefault &&
+                (candidate.EffectiveOccurrence.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc) &&
+                representedOfficialIdentities.Add(MeshIdentityKey(candidate.CanonicalPath)))
+                Add(candidate.EffectiveOccurrence, candidate.CanonicalPath);
+            foreach (var occurrence in candidate.Occurrences.Where(value =>
+                         value.Origin is not (TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc)))
                 Add(occurrence, candidate.CanonicalPath);
         }
-        if (_session.Value is { } current && !options.Any(option => Same(option.Identity, current)))
+        if (_session.Value is { } current &&
+            !options.Any(option => Same(option.Identity, current)) &&
+            !representedOfficialIdentities.Contains(MeshIdentityKey(current)))
             options.Add(new HairMeshOption(Loc.Format("loc_VM_hairMesh_currentReference", current.InstancedPath), current));
         _options = options;
         _selected = Find(_session.Value);
@@ -172,7 +181,7 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
 
     public void SetImportedPreview(AssetIdentity? value)
     {
-        if (value is not null && !_options.Any(option => Same(option.Identity, value)))
+        if (value is not null && !_options.Any(option => SameCanonicalMesh(option.Identity, value)))
         {
             _options = [.. _options, new HairMeshOption(Loc.Format("loc_VM_hairMesh_importedPreview", value.InstancedPath), value)];
             OnPropertyChanged(nameof(Options));
@@ -185,7 +194,7 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
     public bool TrySetRandomisedSelection(AssetIdentity? value)
     {
         if (IsRandomisationLocked) return false;
-        if (value is not null && !_options.Any(option => Same(option.Identity, value)))
+        if (value is not null && !_options.Any(option => SameCanonicalMesh(option.Identity, value)))
         {
             _options = [.. _options, new HairMeshOption(value.InstancedPath, value,
                 Loc.Format("loc_VM_hairMesh_randomisedSource", Path.GetFileName(value.PackagePath)))];
@@ -235,13 +244,19 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
         Selected = candidate;
     }
 
-    private HairMeshOption Find(AssetIdentity? value) => Options.First(option => Same(option.Identity, value));
+    private HairMeshOption Find(AssetIdentity? value) =>
+        Options.FirstOrDefault(option => Same(option.Identity, value)) ??
+        Options.First(option => SameCanonicalMesh(option.Identity, value));
 
     private void ApplySearch()
     {
         var none = _options[0];
         var filtered = _options.Skip(1)
+            .Where(option => option.Identity is not { } identity ||
+                !AttachmentMeshNamePolicy.IsBaseHeadMesh(identity.InstancedPath))
             .Where(option => MatchesSearch(option, SearchText))
+            .OrderBy(option => option.Identity?.InstancedPath ?? option.DisplayName,
+                StringComparer.OrdinalIgnoreCase)
             .ToArray();
         Candidates = [none, .. filtered];
         OnPropertyChanged(nameof(Candidates));
@@ -260,6 +275,17 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
         left is null && right is null || left is not null && right is not null &&
         string.Equals(left.InstancedPath, right.InstancedPath, StringComparison.OrdinalIgnoreCase) &&
         string.Equals(left.PackagePath, right.PackagePath, StringComparison.OrdinalIgnoreCase);
+
+    private static bool SameCanonicalMesh(AssetIdentity? left, AssetIdentity? right) =>
+        left is null && right is null || left is not null && right is not null &&
+        left.ClassName.Equals("SkeletalMesh", StringComparison.OrdinalIgnoreCase) &&
+        right.ClassName.Equals("SkeletalMesh", StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(left.InstancedPath, right.InstancedPath, StringComparison.OrdinalIgnoreCase);
+
+    private static string MeshIdentityKey(AssetIdentity identity) =>
+        $"{identity.ClassName}|{identity.InstancedPath}";
+
+    private static string MeshIdentityKey(string instancedPath) => $"SkeletalMesh|{instancedPath}";
 
     private static string PhysicalOccurrenceKey(AssetIdentity identity) =>
         $"{Path.GetFullPath(identity.PackagePath)}|{identity.UIndex}";

@@ -39,12 +39,29 @@ internal static class MaterialInstanceSourcePolicy
         });
     }
 
-    private static PropertyCollection InstanceProperties(ExportEntry instance) =>
-        [.. instance.GetProperties().Where(property =>
+    private static PropertyCollection InstanceProperties(ExportEntry instance)
+    {
+        PropertyCollection properties = [.. instance.GetProperties().Where(property =>
             // Official copies in different cooked packages can have different
             // baked-lighting cache keys without changing any MIC override.
             !property.Name.Name.Equals("LightingGuid", StringComparison.OrdinalIgnoreCase) &&
             !property.Name.Name.Equals("ParentLightingGuid", StringComparison.OrdinalIgnoreCase))];
+
+        foreach (var name in new[] { "TextureParameterValues", "VectorParameterValues", "ScalarParameterValues" })
+        {
+            if (properties.GetProp<ArrayProperty<StructProperty>>(name) is not { } parameters) continue;
+            // LEX creates dynamic MIC parameters with zero ExpressionGUIDs. Compare
+            // their authored names/values independently of these bookkeeping IDs.
+            var comparisonParameters = parameters.DeepClone();
+            foreach (var parameter in comparisonParameters)
+            {
+                parameter.Properties.RemoveAll(property =>
+                    property.Name.Name.Equals("ExpressionGUID", StringComparison.OrdinalIgnoreCase));
+            }
+            properties.AddOrReplaceProp(comparisonParameters);
+        }
+        return properties;
+    }
 
     internal static string UniqueInstancePath(IMEPackage destination, string originalPath)
     {

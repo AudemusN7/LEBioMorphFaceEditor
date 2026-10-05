@@ -14,7 +14,7 @@ internal static class MaterialInstancePreservationTests
         new("authored MIC keeps its values when an official MIC shares its path", AuthoredInstanceWins),
         new("edited stock MIC is renamed and relinked through PCC graph save reopen", () => RoundTrip(false)),
         new("edited stock MIC is renamed through PCC structure-preserving export", () => RoundTrip(true)),
-        new("unchanged stock MIC copies keep their canonical identity", UnchangedInstanceKeepsName),
+        new("unchanged stock MIC copies keep their canonical identity despite parameter GUID differences", UnchangedInstanceKeepsName),
         new("cooked lighting GUID differences do not rename an unchanged stock MIC", LightingCacheDoesNotRename),
         new("installed LE1 Afro MIC keeps its name across official cooked copies", InstalledAfroKeepsName)
     ];
@@ -37,16 +37,56 @@ internal static class MaterialInstancePreservationTests
     {
         var mic = authored.FindExport(MicPath, "MaterialInstanceConstant")!;
         mic.WriteProperty(new FloatProperty(0.25f, "MFE_CustomScalar"));
+        var stock = official.FindExport(MicPath, "MaterialInstanceConstant")!;
+        WriteDynamicParameters(stock, 0);
+        WriteDynamicParameters(mic, 1);
+        official.Save(official.FilePath);
+        var authoredData = mic.Data.ToArray();
+        var officialData = stock.Data.ToArray();
         using var cache = new PackageCache();
         TestAssert.True(!MaterialInstanceSourcePolicy.OverridesOfficialInstance(mic, resolver, cache),
-            "Different package-local reference indices made an unchanged stock MIC look edited.");
+            "Different reference indices or parameter GUIDs made an unchanged stock MIC look edited.");
+        TestAssert.True(mic.Data.SequenceEqual(authoredData) && stock.Data.SequenceEqual(officialData),
+            "Donor comparison changed the original MIC data.");
         using var destination = MEPackageHandler.CreateMemoryEmptyPackage("MFE-UnchangedMic.pcc", MEGame.LE1);
         _ = PccPackageWorkflow.ImportDependencyGraph(destination,
             authored.FindExport(MeshPath, "SkeletalMesh")!, null, null, false,
             targetPathOverride: MeshPath, installedAssets: resolver);
         TestAssert.True(destination.FindExport(MicPath, "MaterialInstanceConstant") is not null,
             "An unchanged stock instance unnecessarily received a new export name.");
+        var scalars = mic.GetProperty<ArrayProperty<StructProperty>>("ScalarParameterValues")!;
+        scalars[0].GetProp<FloatProperty>("ParameterValue")!.Value = 0.75f;
+        mic.WriteProperty(scalars);
+        TestAssert.True(MaterialInstanceSourcePolicy.OverridesOfficialInstance(mic, resolver, cache),
+            "Ignoring parameter GUIDs also hid a real scalar parameter edit.");
     });
+
+    private static void WriteDynamicParameters(ExportEntry mic, int guidValue)
+    {
+        StructProperty Guid() => new("Guid", new PropertyCollection
+        {
+            new IntProperty(guidValue, "A"), new IntProperty(guidValue, "B"),
+            new IntProperty(guidValue, "C"), new IntProperty(guidValue, "D")
+        }, "ExpressionGUID", true);
+
+        mic.WriteProperty(new ArrayProperty<StructProperty>(
+        [new StructProperty("TextureParameterValue", false, Guid(),
+            new NameProperty("Diffuse", "ParameterName"),
+            new ObjectProperty(mic.FileRef.FindExport(TexturePath, "Texture2D")!, "ParameterValue"))],
+            "TextureParameterValues"));
+        mic.WriteProperty(new ArrayProperty<StructProperty>(
+        [new StructProperty("VectorParameterValue", false, Guid(),
+            new NameProperty("Tint", "ParameterName"),
+            new StructProperty("LinearColor", new PropertyCollection
+            {
+                new FloatProperty(0.1f, "R"), new FloatProperty(0.2f, "G"),
+                new FloatProperty(0.3f, "B"), new FloatProperty(1f, "A")
+            }, "ParameterValue", true))], "VectorParameterValues"));
+        mic.WriteProperty(new ArrayProperty<StructProperty>(
+        [new StructProperty("ScalarParameterValue", false, Guid(),
+            new NameProperty("Roughness", "ParameterName"), new FloatProperty(0.25f, "ParameterValue"))],
+            "ScalarParameterValues"));
+    }
 
     private static void RoundTrip(bool preserveStructure) => WithDonors((official, authored, resolver, output) =>
     {

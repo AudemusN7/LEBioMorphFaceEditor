@@ -550,7 +550,7 @@ public sealed class HeadPreviewRenderer : IDisposable
         if (_gpuTextures.TryGetValue(texture.Key, out var existing))
         {
             existing.LastUsed = ++_textureUseSerial;
-            return existing.View;
+            return existing.GetView(_device, texture.ColorSpace);
         }
         if (texture.Rgba8Faces.Count != 6)
         {
@@ -561,9 +561,6 @@ public sealed class HeadPreviewRenderer : IDisposable
         var streams = new List<DataStream>(authoredMips.Count * 6);
         try
         {
-            var format = texture.ColorSpace == TextureColorSpace.Srgb
-                ? Format.R8G8B8A8_UNorm_SRgb
-                : Format.R8G8B8A8_UNorm;
             var rectangles = new List<DataRectangle>(authoredMips.Count * 6);
             for (var faceIndex = 0; faceIndex < 6; faceIndex++)
             {
@@ -583,7 +580,7 @@ public sealed class HeadPreviewRenderer : IDisposable
                 Height = texture.Size,
                 MipLevels = authoredMips.Count,
                 ArraySize = 6,
-                Format = format,
+                Format = Format.R8G8B8A8_Typeless,
                 SampleDescription = new SampleDescription(1, 0),
                 Usage = ResourceUsage.Immutable,
                 BindFlags = BindFlags.ShaderResource,
@@ -592,11 +589,12 @@ public sealed class HeadPreviewRenderer : IDisposable
             }, rectangles.ToArray());
             var byteCount = authoredMips.Sum(mip => mip.Rgba8Faces.Sum(face => (long)face.Length));
             EvictGpuTexturesToFit(byteCount, texture.Key);
-            var gpuTexture = new GpuTexture(resource, new ShaderResourceView(_device, resource), byteCount, ++_textureUseSerial);
+            var gpuTexture = new GpuTexture(resource, byteCount, ++_textureUseSerial);
+            var view = gpuTexture.GetView(_device, texture.ColorSpace);
             _gpuTextures[texture.Key] = gpuTexture;
             _gpuTextureBytes += byteCount;
             _textureUploadCount++;
-            return gpuTexture.View;
+            return view;
         }
         finally
         {
@@ -616,7 +614,7 @@ public sealed class HeadPreviewRenderer : IDisposable
         if (_gpuTextures.TryGetValue(texture.Key, out var existing))
         {
             existing.LastUsed = ++_textureUseSerial;
-            return existing.View;
+            return existing.GetView(_device, texture.ColorSpace);
         }
 
         var authoredMips = GetValidMips(texture);
@@ -631,16 +629,13 @@ public sealed class HeadPreviewRenderer : IDisposable
                 streams.Add(stream);
                 return new DataRectangle(stream.DataPointer, checked(mip.Width * 4));
             }).ToArray();
-            var format = texture.ColorSpace == TextureColorSpace.Srgb
-                ? Format.R8G8B8A8_UNorm_SRgb
-                : Format.R8G8B8A8_UNorm;
             var resource = new Texture2D(_device, new Texture2DDescription
             {
                 Width = texture.Width,
                 Height = texture.Height,
                 MipLevels = authoredMips.Count,
                 ArraySize = 1,
-                Format = format,
+                Format = Format.R8G8B8A8_Typeless,
                 SampleDescription = new SampleDescription(1, 0),
                 Usage = ResourceUsage.Immutable,
                 BindFlags = BindFlags.ShaderResource,
@@ -649,11 +644,12 @@ public sealed class HeadPreviewRenderer : IDisposable
             }, rectangles);
             var byteCount = authoredMips.Sum(mip => (long)mip.Rgba8.Length);
             EvictGpuTexturesToFit(byteCount, texture.Key);
-            var gpuTexture = new GpuTexture(resource, new ShaderResourceView(_device, resource), byteCount, ++_textureUseSerial);
+            var gpuTexture = new GpuTexture(resource, byteCount, ++_textureUseSerial);
+            var view = gpuTexture.GetView(_device, texture.ColorSpace);
             _gpuTextures[texture.Key] = gpuTexture;
             _gpuTextureBytes += byteCount;
             _textureUploadCount++;
-            return gpuTexture.View;
+            return view;
         }
         finally
         {
@@ -1237,18 +1233,57 @@ public sealed class HeadPreviewRenderer : IDisposable
 
     private sealed class GpuTexture(
         Texture2D resource,
-        ShaderResourceView view,
         long byteCount,
         long lastUsed) : IDisposable
     {
+        private readonly Dictionary<TextureColorSpace, ShaderResourceView> _views = [];
         public Texture2D Resource { get; } = resource;
-        public ShaderResourceView View { get; } = view;
         public long ByteCount { get; } = byteCount;
         public long LastUsed { get; set; } = lastUsed;
 
+        // One uploaded image can be sampled as both colour and packed data.
+        public ShaderResourceView GetView(Device device, TextureColorSpace colorSpace)
+        {
+            if (_views.TryGetValue(colorSpace, out var existing))
+            {
+                return existing;
+            }
+            var textureDescription = Resource.Description;
+            var description = new ShaderResourceViewDescription
+            {
+                Format = colorSpace == TextureColorSpace.Srgb
+                    ? Format.R8G8B8A8_UNorm_SRgb
+                    : Format.R8G8B8A8_UNorm
+            };
+            if ((textureDescription.OptionFlags & ResourceOptionFlags.TextureCube) != 0)
+            {
+                description.Dimension = ShaderResourceViewDimension.TextureCube;
+                description.TextureCube = new ShaderResourceViewDescription.TextureCubeResource
+                {
+                    MostDetailedMip = 0,
+                    MipLevels = textureDescription.MipLevels
+                };
+            }
+            else
+            {
+                description.Dimension = ShaderResourceViewDimension.Texture2D;
+                description.Texture2D = new ShaderResourceViewDescription.Texture2DResource
+                {
+                    MostDetailedMip = 0,
+                    MipLevels = textureDescription.MipLevels
+                };
+            }
+            var view = new ShaderResourceView(device, Resource, description);
+            _views.Add(colorSpace, view);
+            return view;
+        }
+
         public void Dispose()
         {
-            View.Dispose();
+            foreach (var view in _views.Values)
+            {
+                view.Dispose();
+            }
             Resource.Dispose();
         }
     }

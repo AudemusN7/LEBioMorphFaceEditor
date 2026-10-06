@@ -64,12 +64,15 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
     public async Task RefreshAsync(CancellationToken cancellationToken = default)
     {
         var statuses = await Task.WhenAll(Rows.Select(row =>
-            Task.Run(() => _store.GetStatus(row.Game), cancellationToken)));
+            Task.Run(() => (Registry: _store.GetStatus(row.Game),
+                Custom: _store.GetCustomStatus(row.Game)), cancellationToken)));
         cancellationToken.ThrowIfCancellationRequested();
         foreach (var status in statuses)
-            Rows.Single(row => row.Game == status.Game).Update(status);
-        foreach (var row in Rows)
-            row.UpdateManual(_store.GetManualStatus(row.Game));
+        {
+            var row = Rows.Single(row => row.Game == status.Registry.Game);
+            row.Update(status.Registry);
+            row.UpdateManual(status.Custom);
+        }
     }
 
     public bool HasManualAssets(MorphFaceGame game) => _store.HasManual(game);
@@ -82,7 +85,11 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
         IReadOnlyList<MorphFaceEditor.Core.Materials.ManualRegistryAsset> selections)
     {
         if (IsBuilding) throw new InvalidOperationException(Loc.Text("loc_VM_textureRegistry_waitForBuild"));
-        var status = await Task.Run(() => _manualAssets.Append(game, selections));
+        var status = await Task.Run(() =>
+        {
+            _manualAssets.Append(game, selections);
+            return _store.GetCustomStatus(game);
+        });
         Rows.Single(row => row.Game == game).UpdateManual(status);
         _catalogInvalidator?.Invoke(game);
         DatabaseChanged?.Invoke(game);
@@ -108,7 +115,7 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
                 status = await FinishManualRebuildAsync(game, status, keepManualAssets,
                     _buildCancellation.Token);
             row.Update(status);
-            row.UpdateManual(_store.GetManualStatus(game));
+            row.UpdateManual(_store.GetCustomStatus(game));
             _catalogInvalidator?.Invoke(game);
             if (status.State == TextureRegistryState.Ready)
                 DatabaseChanged?.Invoke(game);
@@ -151,7 +158,7 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
                         status = await FinishManualRebuildAsync(row.Game, status, keepManualAssets,
                             _buildCancellation.Token);
                     row.Update(status);
-                    row.UpdateManual(_store.GetManualStatus(row.Game));
+                    row.UpdateManual(_store.GetCustomStatus(row.Game));
                     _catalogInvalidator?.Invoke(row.Game);
                     if (status.State == TextureRegistryState.Ready)
                         DatabaseChanged?.Invoke(row.Game);

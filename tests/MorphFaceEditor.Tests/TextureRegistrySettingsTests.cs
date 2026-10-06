@@ -10,6 +10,7 @@ public static class TextureRegistrySettingsTests
     public static IReadOnlyList<TestCase> All { get; } =
     [
         new("texture registry settings: row exposes user-facing state", RowExposesUserFacingState),
+        new("texture registry settings: custom status includes scanned mod assets", CustomStatusIncludesScannedAssets),
         new("texture registry settings: traffic lights distinguish outdated and failed", TrafficLightsDistinguishStates),
         new("texture registry settings: payload validation is deferred", PayloadValidationIsDeferred),
         new("texture registry settings: progress labels expose every phase", ProgressLabelsExposeEveryPhase),
@@ -39,6 +40,40 @@ public static class TextureRegistrySettingsTests
         TestAssert.Equal("StatusPending", outdated.StatusBrushKey);
         TestAssert.Equal("StatusFailed", failed.StatusBrushKey);
         TestAssert.Equal("StatusReady", Row(TextureRegistryState.Ready).StatusBrushKey);
+    }
+
+    private static void CustomStatusIncludesScannedAssets()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"MFE-CustomStatus-{Guid.NewGuid():N}");
+        try
+        {
+            var store = new TextureRegistryStore(new TextureRegistryPaths(root));
+            var empty = new TextureRegistrySnapshot(TextureRegistrySnapshot.CurrentSchemaVersion,
+                TextureCatalogGame.LE1, DateTimeOffset.UtcNow, 0, []);
+            var occurrence = new AttachmentMeshOccurrence(Path.Combine(root, "mod.pcc"),
+                "Hair.HMM_HIR_Custom_MDL", 1, 9000, TextureCatalogOrigin.Mod);
+            var populated = empty with
+            {
+                AttachmentMeshes = [new AttachmentMeshCandidate(occurrence.InstancedPath,
+                    occurrence, [occurrence])]
+            };
+            store.WriteInstalledAndModsAtomic(empty, populated);
+            var settings = new TextureRegistrySettingsViewModel(store, new FakeBuilder());
+            settings.RefreshAsync().GetAwaiter().GetResult();
+            var row = settings.Rows.Single(value => value.Game == MorphFaceGame.LE1);
+            TestAssert.Equal("Custom assets available", row.ManualStatusLabel);
+            TestAssert.True(!settings.HasManualAssets(MorphFaceGame.LE1),
+                "Scanned assets were incorrectly treated as manually added assets.");
+            settings.RebuildAsync(MorphFaceGame.LE1).GetAwaiter().GetResult();
+            TestAssert.Equal("Custom assets available", row.ManualStatusLabel);
+            store.WriteInstalledAndModsAtomic(empty, empty);
+            settings.RefreshAsync().GetAwaiter().GetResult();
+            TestAssert.Equal("No custom assets", row.ManualStatusLabel);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
     }
 
     private static void PayloadValidationIsDeferred()

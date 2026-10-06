@@ -29,6 +29,24 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
             : status;
     }
 
+    /// <summary>Status of automatically scanned and manually added custom assets for Settings.</summary>
+    public TextureRegistryStatus GetCustomStatus(MorphFaceGame game)
+    {
+        var manual = ReadManualWithStatus(game);
+        var mods = ReadModsWithStatus(game);
+        var manualStatus = GetManualStatus(game);
+        foreach (var status in new[] { manualStatus, mods.Status })
+            if (status.State is not (TextureRegistryState.Ready or TextureRegistryState.Missing))
+                return status;
+
+        foreach (var sidecar in new[] { manual, mods })
+            if (sidecar.Snapshot is { } snapshot &&
+                snapshot.Candidates.Count + snapshot.AttachmentMeshes.Count + snapshot.ManualAssets.Count > 0)
+                return sidecar == manual ? manualStatus : sidecar.Status;
+
+        return manualStatus with { State = TextureRegistryState.Missing };
+    }
+
     internal TextureRegistryReadResult ReadWithStatus(MorphFaceGame game) =>
         ReadWithStatus(game, paths.GetPath(game));
 

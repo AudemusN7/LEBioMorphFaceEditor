@@ -13,7 +13,8 @@ public static class MaterialRendererTests
     public static IReadOnlyList<TestCase> All { get; } =
     [
         new("renderer updates a material texture without recreating its device", RendererUpdatesMaterialTexture),
-        new("renderer uploads authored mip chains with anisotropic MSAA rendering", RendererUploadsAuthoredMipChain)
+        new("renderer uploads authored mip chains with anisotropic MSAA rendering", RendererUploadsAuthoredMipChain),
+        new("renderer samples a shared texture as both colour and linear data", RendererSamplesSharedTextureByColorSpace)
     ];
 
     private static void RendererUpdatesMaterialTexture()
@@ -71,6 +72,57 @@ public static class MaterialRendererTests
             TestAssert.Equal(84L, renderer.GpuTextureBytes);
             TestAssert.Equal(8, renderer.MaterialAnisotropy);
             TestAssert.True(renderer.MultisampleCount >= 2, "No multisampled render target was selected.");
+        }
+    }
+
+    private static void RendererSamplesSharedTextureByColorSpace()
+    {
+        var material = SpeciesMaterialTestFixtures.CreateAsariMaterial(
+            "shared-texture-material", [0, 0, 0, 255], Vector4.Zero, 0,
+            addition: [255, 128, 255, 255], additionMaskScalar: 0);
+        var vectors = new Dictionary<string, Vector4>(material.Vectors)
+        {
+            ["ASA_HED_Addn_Mask_Vector"] = new(1, 0, 0, 1)
+        };
+        var diffuse = material.Textures["ASA_HED_Diff"] with { Key = "shared-source" };
+        var mask = material.Textures["ASA_HED_Mask"] with
+        {
+            Key = diffuse.Key,
+            Rgba8 = diffuse.Rgba8
+        };
+        var textures = new Dictionary<string, HeadPreviewTexture>(material.Textures)
+        {
+            [diffuse.ParameterName] = diffuse,
+            [mask.ParameterName] = mask
+        };
+        material = material with { Textures = textures, Vectors = vectors };
+        var (renderer, camera) = CreateTriangleRenderer(material);
+        using (renderer)
+        {
+            var sharedPixels = renderer.Render(camera, new HeadPreviewOptions()).BgraPixels.ToArray();
+            var uploads = renderer.TextureUploadCount;
+            var bytes = renderer.GpuTextureBytes;
+            TestAssert.Equal(textures.Count - 1, uploads);
+            TestAssert.Equal((textures.Count - 1) * 4L, bytes);
+            renderer.Render(camera, new HeadPreviewOptions());
+            TestAssert.Equal(uploads, renderer.TextureUploadCount);
+
+            // Identical pixels under distinct source identities cannot collide in the cache.
+            textures = new Dictionary<string, HeadPreviewTexture>(textures)
+            {
+                [mask.ParameterName] = mask with { Key = "independent-mask-source" }
+            };
+            renderer.UpdateMaterials(new Dictionary<string, HeadPreviewMaterial>
+            {
+                [material.Key] = material with { Textures = textures }
+            });
+            var referencePixels = renderer.Render(camera, new HeadPreviewOptions()).BgraPixels;
+            TestAssert.True(sharedPixels.SequenceEqual(referencePixels),
+                "Shared colour/mask source used the first binding's colour space for both roles.");
+            TestAssert.Equal(uploads + 1, renderer.TextureUploadCount);
+            TestAssert.Equal(bytes + 4, renderer.GpuTextureBytes);
+            renderer.ClearScene();
+            TestAssert.Equal(0L, renderer.GpuTextureBytes);
         }
     }
 }

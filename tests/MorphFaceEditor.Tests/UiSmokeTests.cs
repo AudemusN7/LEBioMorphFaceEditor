@@ -102,6 +102,8 @@ public static class UiSmokeTests
         new("material editor hides Unreal selection colour parameters", MaterialEditorHidesSelectionColor),
         new("material texture details distinguish unresolved paths from physical donor changes", MaterialTextureDetailsUseCanonicalPath),
         new("texture picker preserves physical donors without duplicating one export", TexturePickerDeduplicatesPhysicalExports),
+        new("texture picker keeps only the latest full-resolution preview and reuses it on commit", TexturePickerBoundsPreviewCacheAndPreservesHistory),
+        new("stale texture previews cannot repopulate the picker cache", TexturePickerRejectsStalePreviewCacheResults),
         new("texture path lookups reuse their official donor index", TextureLookupsReuseOfficialDonorIndex),
         new("material randomisation availability stays fast with repeated physical texture donors", LargeTextureRegistryAvailability),
         new("installed material randomisation projects texture availability without opening donors", InstalledTextureAvailabilityPerformance),
@@ -3824,6 +3826,167 @@ public static class UiSmokeTests
         editor.ShowAllPhysicalSources = false;
         TestAssert.True(editor.SelectedTexture?.RegistryCandidate?.EffectiveOccurrence.PackagePath == mod.PackagePath,
             "Collapsing physical sources discarded the user's explicitly selected donor.");
+    }
+
+    private static void TexturePickerBoundsPreviewCacheAndPreservesHistory()
+    {
+        const string packagePath = "hover-donors.pcc";
+        var session = MaterialTestFixtures.CreateSession();
+        var loader = new SyntheticTextureLoader();
+        var candidates = CreateSyntheticTextureCandidates(packagePath, 4);
+        using var editor = new MaterialTextureEditorViewModel(
+            session,
+            HumanMaterialProfiles.Describe("HED_Diff", MaterialParameterKind.Texture, HeadMaterialFamily.Skin),
+            loader,
+            "opened.pcc",
+            candidates,
+            _ => { });
+        var options = editor.Candidates.Where(option => option.Asset?.Identity.PackagePath == packagePath)
+            .OrderBy(option => option.InstancedPath, StringComparer.OrdinalIgnoreCase).ToArray();
+        TestAssert.Equal(4, options.Length);
+
+        foreach (var option in options)
+        {
+            editor.PreviewTextureAsync(option).GetAwaiter().GetResult();
+            var cached = GetResolvedCandidateTextures(editor);
+            TestAssert.True(cached.Count <= 1,
+                "Hovering another donor left older full-mip previews pinned in the picker cache.");
+            TestAssert.True(cached.Values.Single().Mips is { Count: 3 },
+                "The cache optimization dropped authored mips needed by the live preview.");
+        }
+
+        TestAssert.Equal(4, loader.Calls);
+        var lastOption = options[^1];
+        var preview = session.GetPreviewTexture("HED_Diff");
+        TestAssert.Equal(lastOption.InstancedPath, preview?.Source.InstancedPath);
+        editor.CancelTexturePreview();
+        editor.CommitTexture(lastOption);
+
+        TestAssert.True(loader.Calls == 4,
+            "Committing the last hovered option decoded it again after the transient preview was cancelled.");
+        TestAssert.Equal(lastOption.InstancedPath,
+            session.GetTextureReference("HED_Diff")?.InstancedPath);
+        TestAssert.True(session.CanUndo, "Committing a preview did not create normal material history.");
+        session.Undo();
+        TestAssert.True(session.GetTextureReference("HED_Diff")?.InstancedPath != lastOption.InstancedPath,
+            "Undo did not restore the previously committed texture reference.");
+        session.Redo();
+        TestAssert.Equal(lastOption.InstancedPath,
+            session.GetTextureReference("HED_Diff")?.InstancedPath);
+        TestAssert.True(session.GetSelectedTexture("HED_Diff")?.Mips is { Count: 3 },
+            "Committing the bounded preview changed the full-mip texture used by the material.");
+    }
+
+    private static void TexturePickerRejectsStalePreviewCacheResults()
+    {
+        const string packagePath = "hover-race-donors.pcc";
+        var session = MaterialTestFixtures.CreateSession();
+        var loader = new ControlledTextureLoader();
+        using var editor = new MaterialTextureEditorViewModel(
+            session,
+            HumanMaterialProfiles.Describe("HED_Diff", MaterialParameterKind.Texture, HeadMaterialFamily.Skin),
+            loader,
+            "opened.pcc",
+            CreateSyntheticTextureCandidates(packagePath, 3),
+            _ => { });
+        var options = editor.Candidates.Where(option => option.Asset?.Identity.PackagePath == packagePath)
+            .OrderBy(option => option.InstancedPath, StringComparer.OrdinalIgnoreCase).ToArray();
+        TestAssert.Equal(3, options.Length);
+
+        var staleHover = editor.PreviewTextureAsync(options[0]);
+        var winningHover = editor.PreviewTextureAsync(options[1]);
+        loader.Complete(options[1].InstancedPath);
+        winningHover.GetAwaiter().GetResult();
+        var cache = GetResolvedCandidateTextures(editor);
+        TestAssert.Equal(options[1].InstancedPath, cache.Values.Single().Source.InstancedPath);
+
+        // Model a decode already in progress: it ignores cancellation but must not overwrite the newer hover.
+        loader.Complete(options[0].InstancedPath);
+        staleHover.GetAwaiter().GetResult();
+        TestAssert.Equal(1, cache.Count);
+        TestAssert.True(options[1].InstancedPath == cache.Values.Single().Source.InstancedPath,
+            "A late cancelled hover evicted the newer successful preview.");
+        TestAssert.True(options[1].InstancedPath == session.GetPreviewTexture("HED_Diff")?.Source.InstancedPath,
+            "A late cancelled hover replaced the newer live preview.");
+
+        var disposedHover = editor.PreviewTextureAsync(options[2]);
+        editor.Dispose();
+        loader.Complete(options[2].InstancedPath);
+        disposedHover.GetAwaiter().GetResult();
+        TestAssert.True(cache.Count == 0,
+            "A pending preview repopulated the cache after its editor was disposed.");
+    }
+
+    private static PackageAssetListItem[] CreateSyntheticTextureCandidates(string packagePath, int count) =>
+        Enumerable.Range(1, count).Select(index => new PackageAssetListItem(new AssetIdentity(
+            packagePath, $"BIOG_MFE_Test.Textures.Hover{index:D2}_Diff", 100 + index, "Texture2D"))).ToArray();
+
+    private static IReadOnlyDictionary<string, DecodedTextureAsset> GetResolvedCandidateTextures(
+        MaterialTextureEditorViewModel editor)
+    {
+        var field = typeof(MaterialTextureEditorViewModel).GetField(
+            "_resolvedCandidateTextures", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("The texture picker resolved-preview cache was not found.");
+        return (IReadOnlyDictionary<string, DecodedTextureAsset>)(field.GetValue(editor)
+            ?? throw new InvalidOperationException("The texture picker resolved-preview cache was null."));
+    }
+
+    private static DecodedTextureAsset CreateSyntheticFullMipTexture(
+        string packagePath,
+        string texturePath,
+        MaterialParameterDefinition definition)
+    {
+        var top = Enumerable.Repeat((byte)128, 4 * 4 * 4).ToArray();
+        var mid = Enumerable.Repeat((byte)128, 2 * 2 * 4).ToArray();
+        var bottom = Enumerable.Repeat((byte)128, 4).ToArray();
+        return new DecodedTextureAsset(
+            new AssetIdentity(packagePath, texturePath, 42, "Texture2D"),
+            4, 4, top, "PF_B8G8R8A8", definition.TextureRole, definition.ColorSpace,
+            definition.AlphaPolicy, false, texturePath, 4, 4,
+            [new DecodedTextureMip(4, 4, top), new DecodedTextureMip(2, 2, mid), new DecodedTextureMip(1, 1, bottom)]);
+    }
+
+    private sealed class SyntheticTextureLoader : ITextureReferenceLoader
+    {
+        public int Calls { get; private set; }
+
+        public Task<DecodedTextureAsset> LoadTextureAsync(
+            string packagePath,
+            string texturePath,
+            MaterialParameterDefinition definition,
+            CancellationToken cancellationToken = default)
+        {
+            Calls++;
+            return Task.FromResult(CreateSyntheticFullMipTexture(packagePath, texturePath, definition));
+        }
+    }
+
+    private sealed class ControlledTextureLoader : ITextureReferenceLoader
+    {
+        private readonly Dictionary<string, TaskCompletionSource<DecodedTextureAsset>> _pending =
+            new(StringComparer.OrdinalIgnoreCase);
+
+        public Task<DecodedTextureAsset> LoadTextureAsync(
+            string packagePath,
+            string texturePath,
+            MaterialParameterDefinition definition,
+            CancellationToken cancellationToken = default)
+        {
+            var source = new TaskCompletionSource<DecodedTextureAsset>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _pending.Add(texturePath, source);
+            // Deliberately do not observe cancellation: an already-running package decode may finish later.
+            _ = cancellationToken;
+            return source.Task;
+        }
+
+        public void Complete(string texturePath)
+        {
+            if (!_pending.TryGetValue(texturePath, out var source))
+                throw new InvalidOperationException($"No pending texture decode exists for '{texturePath}'.");
+            var definition = HumanMaterialProfiles.Describe(
+                "HED_Diff", MaterialParameterKind.Texture, HeadMaterialFamily.Skin);
+            source.TrySetResult(CreateSyntheticFullMipTexture("hover-race-donors.pcc", texturePath, definition));
+        }
     }
 
     private static void TextureLookupsReuseOfficialDonorIndex()

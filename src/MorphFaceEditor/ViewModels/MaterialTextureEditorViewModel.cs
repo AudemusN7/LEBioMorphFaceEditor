@@ -28,6 +28,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
     private readonly Dictionary<string, MaterialTextureOption> _exactPaths = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, MaterialTextureOption?> _objectNames = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, MaterialTextureOption> _physicalOptions = new(StringComparer.OrdinalIgnoreCase);
+    // Keep just the latest preview ready for a click. Older choices are cached by the reader.
     private readonly Dictionary<string, DecodedTextureAsset> _resolvedCandidateTextures =
         new(StringComparer.OrdinalIgnoreCase);
     private MaterialTextureOption? _selectedTexture;
@@ -381,6 +382,8 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
                 instancedPath,
                 _definition,
                 cancellation.Token);
+            if (_disposed || cancellation.IsCancellationRequested || generation != _selectionGeneration ||
+                !ReferenceEquals(selected, SelectedTexture)) return;
             CacheResolvedTexture(selected, texture);
             selected.Asset?.SetThumbnail(texture);
             if (generation == _selectionGeneration && ReferenceEquals(selected, SelectedTexture))
@@ -438,16 +441,16 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
                     selected.InstancedPath,
                     _definition,
                     cancellation.Token);
-                CacheResolvedTexture(selected, texture);
             }
 
-            if (generation != _previewGeneration)
+            if (_disposed || cancellation.IsCancellationRequested || generation != _previewGeneration)
             {
                 return;
             }
 
             if (texture is not null)
             {
+                CacheResolvedTexture(selected, texture);
                 selected.Asset?.SetThumbnail(texture);
             }
             _session.PreviewTexture(Name, texture);
@@ -478,6 +481,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
         CancelPendingSelection();
         CancelTexturePreview();
         _disposed = true;
+        _resolvedCandidateTextures.Clear();
     }
 
     private void CancelPendingSelection()
@@ -508,6 +512,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
     {
         if (!option.IsNone)
         {
+            _resolvedCandidateTextures.Clear();
             _resolvedCandidateTextures[CandidateCacheKey(option)] = texture;
         }
     }

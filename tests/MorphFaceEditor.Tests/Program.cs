@@ -80,37 +80,65 @@ if (tests.Length == 0)
 var failures = new List<string>();
 var skipped = 0;
 var partial = 0;
+
+void WriteResult(string message, ConsoleColor color, bool standardError = false)
+{
+    var previousColor = Console.ForegroundColor;
+    try
+    {
+        Console.ForegroundColor = color;
+        if (standardError)
+        {
+            Console.Error.WriteLine(message);
+        }
+        else
+        {
+            Console.WriteLine(message);
+        }
+    }
+    finally
+    {
+        Console.ForegroundColor = previousColor;
+    }
+}
+
 foreach (var test in tests)
 {
     try
     {
         test.Run();
-        Console.WriteLine($"PASS {test.Name}");
+        WriteResult($"PASS {test.Name}", ConsoleColor.Green);
     }
     catch (TestSkippedException exception)
     {
         skipped++;
-        Console.WriteLine($"SKIP {test.Name}: {exception.Message}");
+        WriteResult($"SKIP {test.Name}: {exception.Message}", ConsoleColor.Yellow);
     }
     catch (TestPartialException exception)
     {
         partial++;
-        Console.WriteLine($"PARTIAL {test.Name}: {exception.Message}");
+        WriteResult($"PARTIAL {test.Name}: {exception.Message}", ConsoleColor.Yellow);
     }
     catch (Exception exception)
     {
         failures.Add($"FAIL {test.Name}: {exception.Message}");
-        Console.Error.WriteLine(failures[^1]);
+        WriteResult(failures[^1], ConsoleColor.Red, standardError: true);
     }
 }
 
+var summaryColor = failures.Count > 0
+    ? ConsoleColor.Red
+    : skipped > 0 || partial > 0
+        ? ConsoleColor.Yellow
+        : ConsoleColor.Green;
+
 if (skipped == 0 && partial == 0)
 {
-    Console.WriteLine($"{tests.Length - failures.Count}/{tests.Length} tests passed.");
+    WriteResult($"{tests.Length - failures.Count}/{tests.Length} tests passed.", summaryColor);
 }
 else
 {
-    Console.WriteLine($"{tests.Length - failures.Count - skipped - partial} passed, {partial} partial, {skipped} skipped, " +
-                      $"{failures.Count} failed ({tests.Length} tests).");
+    WriteResult($"{tests.Length - failures.Count - skipped - partial} passed, {partial} partial, {skipped} skipped, " +
+                $"{failures.Count} failed ({tests.Length} tests).", summaryColor);
 }
 return failures.Count == 0 ? 0 : 1;

@@ -609,6 +609,10 @@ internal sealed class MorphFaceMaterialReader(
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var master = ReadMaterialChain(materialExport, scalarValues, vectorValues, textureValues, visited)
             ?? materialExport;
+        // These consumers inspect the same compiled map. Share it for this read only.
+        var shaderMap = new Lazy<MaterialShaderMap>(() =>
+            ShaderCacheManipulator.GetMaterialShaderMapAndShaders(master).Item1);
+        MaterialShaderMap GetShaderMap() => shaderMap.Value;
         // The effective master is the only family authority here. In
         // particular, an imported/custom material name must never select a
         // family merely because it resembles a stock mesh or character name.
@@ -623,11 +627,11 @@ internal sealed class MorphFaceMaterialReader(
 
         if (family == HeadMaterialFamily.AsariSkin)
         {
-            AddAsariLiteralTextures(master, textureValues);
+            AddAsariLiteralTextures(master, textureValues, GetShaderMap);
         }
         else if (family == HeadMaterialFamily.MaskedHair)
         {
-            AddMaskedHairLiteralTextures(master, textureValues);
+            AddMaskedHairLiteralTextures(master, textureValues, GetShaderMap);
         }
         if (master.Game == MEGame.LE1 && family == HeadMaterialFamily.Hair &&
             !textureValues.ContainsKey("HAIR_Diff"))
@@ -665,29 +669,29 @@ internal sealed class MorphFaceMaterialReader(
         var fixedCubeTexture = family switch
         {
             HeadMaterialFamily.Eyes => ReadFixedCubeTexture(
-                master, 0, family, "__HUM_Eye_Primary_Cube", "Human eye primary reflection cube"),
+                master, 0, family, "__HUM_Eye_Primary_Cube", "Human eye primary reflection cube", GetShaderMap),
             HeadMaterialFamily.KroganEyes => ReadFixedCubeTexture(
-                master, 0, family, "__KRO_Eye_Cube", "Krogan eye reflection cube"),
+                master, 0, family, "__KRO_Eye_Cube", "Krogan eye reflection cube", GetShaderMap),
             HeadMaterialFamily.SalarianEyes => ReadFixedCubeTexture(
-                master, 0, family, "__SAL_Eye_Chrome_Cube", "Salarian chrome reflection cube"),
+                master, 0, family, "__SAL_Eye_Chrome_Cube", "Salarian chrome reflection cube", GetShaderMap),
             HeadMaterialFamily.TurianEyes when master.Game == MEGame.LE3 => ReadFixedCubeTexture(
-                master, 0, family, "__TUR_Eye_Chrome_Cube", "LE3 Turian chrome reflection cube"),
+                master, 0, family, "__TUR_Eye_Chrome_Cube", "LE3 Turian chrome reflection cube", GetShaderMap),
             _ => null
         };
         var secondaryFixedCubeTexture = family switch
         {
             HeadMaterialFamily.Eyes => ReadFixedCubeTexture(
-                master, 1, family, "__HUM_Eye_Secondary_Cube", "Human eye secondary reflection cube"),
+                master, 1, family, "__HUM_Eye_Secondary_Cube", "Human eye secondary reflection cube", GetShaderMap),
             HeadMaterialFamily.SalarianEyes => ReadFixedCubeTexture(
-                master, 1, family, "__SAL_Eye_Visor_Cube", "Salarian visor reflection cube"),
+                master, 1, family, "__SAL_Eye_Visor_Cube", "Salarian visor reflection cube", GetShaderMap),
             HeadMaterialFamily.TurianEyes when master.Game == MEGame.LE3 => ReadFixedCubeTexture(
-                master, 1, family, "__TUR_Eye_Parameter_Cube", "LE3 Turian parameter reflection cube"),
+                master, 1, family, "__TUR_Eye_Parameter_Cube", "LE3 Turian parameter reflection cube", GetShaderMap),
             _ => null
         };
         MaterialShaderParameterSupport? support = null;
         try
         {
-            support = MaterialShaderUniformInspector.InspectSupport(master);
+            support = MaterialShaderUniformInspector.InspectSupport(master, GetShaderMap);
         }
         catch
         {
@@ -800,7 +804,8 @@ internal sealed class MorphFaceMaterialReader(
         int expressionIndex,
         HeadMaterialFamily family,
         string parameterName,
-        string label)
+        string label,
+        Func<MaterialShaderMap> shaderMapProvider)
     {
         var material = ObjectBinary.From<Material>(master);
         var uniformTextures = material.SM3MaterialResource.UniformExpressionTextures;
@@ -811,7 +816,7 @@ internal sealed class MorphFaceMaterialReader(
         }
         else
         {
-            var (shaderMap, _) = ShaderCacheManipulator.GetMaterialShaderMapAndShaders(master);
+            var shaderMap = shaderMapProvider();
             expressions = shaderMap.UniformCubeTextureExpressions;
         }
         var expression = expressions is not null && expressionIndex >= 0 && expressionIndex < expressions.Length
@@ -866,11 +871,12 @@ internal sealed class MorphFaceMaterialReader(
 
     private void AddAsariLiteralTextures(
         ExportEntry master,
-        Dictionary<string, ExportEntry> textures)
+        Dictionary<string, ExportEntry> textures,
+        Func<MaterialShaderMap> shaderMapProvider)
     {
         var material = ObjectBinary.From<Material>(master);
         var uniformTextures = material.SM3MaterialResource.UniformExpressionTextures;
-        var (shaderMap, _) = ShaderCacheManipulator.GetMaterialShaderMapAndShaders(master);
+        var shaderMap = shaderMapProvider();
         AddLiteral("__ASA_SkinNoise", 6);
         AddLiteral("__ASA_SpecMultiplierMask", 7);
         return;
@@ -898,11 +904,12 @@ internal sealed class MorphFaceMaterialReader(
 
     private void AddMaskedHairLiteralTextures(
         ExportEntry master,
-        Dictionary<string, ExportEntry> textures)
+        Dictionary<string, ExportEntry> textures,
+        Func<MaterialShaderMap> shaderMapProvider)
     {
         var material = ObjectBinary.From<Material>(master);
         var uniformTextures = material.SM3MaterialResource.UniformExpressionTextures;
-        var (shaderMap, _) = ShaderCacheManipulator.GetMaterialShaderMapAndShaders(master);
+        var shaderMap = shaderMapProvider();
         AddLiteral("__PROShort01_Opacity", 0);
         AddLiteral("__PROShort01_Diffuse", 1);
         AddLiteral("__PROShort01_Tangent", 2);

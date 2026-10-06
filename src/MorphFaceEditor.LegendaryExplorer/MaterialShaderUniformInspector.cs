@@ -14,9 +14,13 @@ internal sealed record MaterialShaderParameterSupport(
 /// <summary>Extracts only the compiled parameter capability data required by production material loading.</summary>
 internal static class MaterialShaderUniformInspector
 {
-    public static MaterialShaderParameterSupport InspectSupport(ExportEntry master)
+    public static MaterialShaderParameterSupport InspectSupport(
+        ExportEntry master,
+        Func<MaterialShaderMap>? shaderMapProvider = null)
     {
-        var (shaderMap, _) = ShaderCacheManipulator.GetMaterialShaderMapAndShaders(master);
+        var shaderMap = shaderMapProvider is null
+            ? ShaderCacheManipulator.GetMaterialShaderMapAndShaders(master).Item1
+            : shaderMapProvider();
         var expressions = GetUniformExpressions(master, shaderMap);
         return new MaterialShaderParameterSupport(
             ParameterNames(expressions.Scalars),

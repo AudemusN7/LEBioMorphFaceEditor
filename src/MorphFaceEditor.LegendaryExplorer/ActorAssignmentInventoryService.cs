@@ -15,6 +15,8 @@ public sealed partial class ActorAssignmentInventoryService
     private static readonly string[] HeadComponentProperties =
         ["m_oHeadMesh", "HeadMesh", "Mesh", "SkeletalMeshComponent"];
     private static readonly string[] HairComponentProperties = ["m_oHairMesh", "HairMesh"];
+    private static readonly string[] BodyComponentProperties =
+        ["m_oBodyMesh", "BodyMesh", "Mesh", "SkeletalMeshComponent"];
     private readonly Func<MorphFaceGame, int, string?> _gameNameResolver;
 
     public ActorAssignmentInventoryService(Func<MorphFaceGame, int, string?>? gameNameResolver = null)
@@ -50,6 +52,9 @@ public sealed partial class ActorAssignmentInventoryService
         }
 
         var face = ExportSelector.Find(package, selectedFaceSelector, "BioMorphFace");
+        var hasSkinVectors = (face.GetProperty<ObjectProperty>("m_oMaterialOverrides")?.ResolveToEntry(package)
+            as ExportEntry)?.GetProperty<ArrayProperty<StructProperty>>("m_aColorOverrides")?
+            .Any(value => IsBodySkinParameter(value.GetProp<NameProperty>("nName")?.Value.Name)) == true;
         var resolver = new GamePackageReferenceResolver(cache);
         var candidates = package.Exports
             .Where(export => !export.IsDefaultObject &&
@@ -57,7 +62,7 @@ public sealed partial class ActorAssignmentInventoryService
             .Select(export => (Export: export, Kind: GetTargetKind(export, game)))
             .Where(item => item.Kind is not null)
             .Select(item => BuildCandidate(
-                package, item.Export, item.Kind!.Value, game, selectedProfileKey, resolver, cache))
+                package, item.Export, item.Kind!.Value, game, selectedProfileKey, hasSkinVectors, resolver, cache))
             .OrderBy(candidate => candidate.TargetKind)
             .ThenBy(candidate => candidate.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(candidate => candidate.InstancedPath, StringComparer.OrdinalIgnoreCase)
@@ -77,6 +82,7 @@ public sealed partial class ActorAssignmentInventoryService
         ActorAssignmentTargetKind targetKind,
         MorphFaceGame game,
         string selectedProfileKey,
+        bool hasSkinVectors,
         GamePackageReferenceResolver resolver,
         PackageCache cache)
     {
@@ -126,7 +132,7 @@ public sealed partial class ActorAssignmentInventoryService
         foreach (var component in components)
         {
             InventoryComponentMaterials(
-                package, component, gamePrefix, selectedProfileKey, headProfileKey,
+                package, component, gamePrefix, selectedProfileKey, headProfileKey, hasSkinVectors,
                 resolver, cache, eligibleMaterials, skippedMaterials, warnings);
         }
         eligibleMaterials = eligibleMaterials
@@ -144,13 +150,14 @@ public sealed partial class ActorAssignmentInventoryService
 
         if (components.Any(component => component.Inherited))
         {
-            warnings.Add("One or more head/hair components are inherited; the chooser should expose their exact owner and slots.");
+            warnings.Add("One or more actor components are inherited; the chooser should expose their exact owner and slots.");
         }
         if (skippedMaterials.Any(material => material.Reason.Contains("import", StringComparison.OrdinalIgnoreCase)))
         {
             warnings.Add("Imported materials were inspected for classification but are never writable targets.");
         }
-        if (eligibleMaterials.Count == 0)
+        var hasHeadTargets = eligibleMaterials.Any(material => material.ComponentRole != ActorComponentRole.Body);
+        if (!hasHeadTargets)
         {
             warnings.Add("No safe compatible local head or hair MICs were found.");
         }
@@ -210,8 +217,8 @@ public sealed partial class ActorAssignmentInventoryService
             morphReason is null,
             morphReason,
             morphTarget,
-            eligibleMaterials.Count > 0,
-            eligibleMaterials.Count > 0 ? null : "No safe compatible local head or hair MICs were found.",
+            hasHeadTargets,
+            hasHeadTargets ? null : "No safe compatible local head or hair MICs were found.",
             components,
             eligibleMaterials,
             skippedMaterials,
@@ -363,6 +370,7 @@ public sealed partial class ActorAssignmentInventoryService
         var result = new List<ActorAssignmentComponent>();
         AddComponent(ActorComponentRole.Head, HeadComponentProperties);
         AddComponent(ActorComponentRole.Hair, HairComponentProperties);
+        AddComponent(ActorComponentRole.Body, BodyComponentProperties);
         return result.DistinctBy(component => (component.Role, component.UIndex)).ToArray();
 
         void AddComponent(ActorComponentRole role, IReadOnlyList<string> propertyNames)
@@ -381,6 +389,14 @@ public sealed partial class ActorAssignmentInventoryService
                 if (!component.IsA("SkeletalMeshComponent"))
                 {
                     warnings.Add($"{propertyName} resolved to {component.ClassName}, not a skeletal component.");
+                    continue;
+                }
+                // Mesh is a head fallback on skeletal actors, but the body on pawns with
+                // a separate HeadMesh. Do not inventory one component twice under both roles.
+                if (role == ActorComponentRole.Body && result.Any(value =>
+                        value.InstancedPath.Equals(component.InstancedFullPath, StringComparison.OrdinalIgnoreCase) &&
+                        value.PackagePath.Equals(component.FileRef.FilePath, StringComparison.OrdinalIgnoreCase)))
+                {
                     continue;
                 }
 

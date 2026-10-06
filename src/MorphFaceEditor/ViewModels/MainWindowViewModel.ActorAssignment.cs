@@ -133,6 +133,10 @@ public sealed partial class MainWindowViewModel
             text.AppendLine(Loc.Format("loc_Shell_ActorAssignment_ChangedRow",
                 target.UIndex, target.InstancedPath, LocalizedComponentRole(target.ComponentRole), target.SlotIndex, target.Family));
         }
+        if (changed.Any(target => target.ComponentRole == ActorComponentRole.Body))
+        {
+            text.AppendLine(Loc.Text("loc_Shell_ActorAssignment_BodySkinOnly"));
+        }
         text.AppendLine().AppendLine(Loc.Format("loc_Shell_ActorAssignment_SkippedSlots", result.SkippedMaterials.Count));
         foreach (var skipped in result.SkippedMaterials)
         {
@@ -147,6 +151,7 @@ public sealed partial class MainWindowViewModel
     {
         ActorComponentRole.Head => Loc.Text("loc_VM_actorAssignment_componentRoleHead"),
         ActorComponentRole.Hair => Loc.Text("loc_VM_actorAssignment_componentRoleHair"),
+        ActorComponentRole.Body => Loc.Text("loc_VM_actorAssignment_componentRoleBody"),
         _ => Loc.Text("loc_VM_actorAssignment_componentRoleOther")
     };
 }

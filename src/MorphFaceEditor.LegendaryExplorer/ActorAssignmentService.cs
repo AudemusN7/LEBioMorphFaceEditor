@@ -102,6 +102,13 @@ public sealed class ActorAssignmentService
                 {
                     var mic = RequireExport(package, target.UIndex, "MaterialInstanceConstant");
                     var properties = mic.GetProperties();
+                    if (target.ComponentRole == ActorComponentRole.Body)
+                    {
+                        UpdateBodySkinVectors(properties, plan.Vectors!);
+                        mic.WriteProperties(properties);
+                        plan.ExpectedBodyMicData.Add(target.UIndex, mic.Data.ToArray());
+                        continue;
+                    }
                     if (plan.Textures is not null)
                     {
                         properties.AddOrReplaceProp(BuildTextureValues(plan.Textures));
@@ -221,7 +228,8 @@ public sealed class ActorAssignmentService
             vectors,
             scalars,
             protectedData,
-            parents);
+            parents,
+            new Dictionary<int, byte[]>());
     }
 
     private static TextureValue ReadTexture(StructProperty value) => new(
@@ -273,6 +281,36 @@ public sealed class ActorAssignmentService
             new FloatProperty(value.Value, "ParameterValue"))),
         "ScalarParameterValues");
 
+    private static void UpdateBodySkinVectors(PropertyCollection properties, IReadOnlyList<VectorValue> source)
+    {
+        var vectors = properties.GetProp<ArrayProperty<StructProperty>>("VectorParameterValues")
+                      ?? new ArrayProperty<StructProperty>("VectorParameterValues");
+        foreach (var value in source.Where(value => ActorAssignmentInventoryService.IsBodySkinParameter(value.Name)))
+        {
+            var existing = vectors.Where(parameter => string.Equals(
+                parameter.GetProp<NameProperty>("ParameterName")?.Value.Name,
+                value.Name, StringComparison.OrdinalIgnoreCase)).ToArray();
+            if (existing.Length == 0)
+            {
+                vectors.Add(BuildVectorValues([value]).Single());
+            }
+            else
+            {
+                foreach (var parameter in existing)
+                {
+                    // Retain the authored name, ExpressionGUID and any extra struct fields.
+                    var color = parameter.GetProp<StructProperty>("ParameterValue")
+                                ?? throw new InvalidDataException("A body skin vector is missing ParameterValue.");
+                    color.Properties.AddOrReplaceProp(new FloatProperty(value.R, "R"));
+                    color.Properties.AddOrReplaceProp(new FloatProperty(value.G, "G"));
+                    color.Properties.AddOrReplaceProp(new FloatProperty(value.B, "B"));
+                    color.Properties.AddOrReplaceProp(new FloatProperty(value.A, "A"));
+                }
+            }
+        }
+        properties.AddOrReplaceProp(vectors);
+    }
+
     private static StructProperty ExpressionGuid()
     {
         var bytes = Guid.NewGuid().ToByteArray();
@@ -311,6 +349,15 @@ public sealed class ActorAssignmentService
             if ((mic.GetProperty<ObjectProperty>("Parent")?.Value ?? 0) != plan.ParentUIndices[target.UIndex])
             {
                 throw new InvalidDataException($"Verification failed: parent of '{target.InstancedPath}' changed.");
+            }
+            if (target.ComponentRole == ActorComponentRole.Body)
+            {
+                if (!mic.Data.SequenceEqual(plan.ExpectedBodyMicData[target.UIndex]))
+                {
+                    throw new InvalidDataException(
+                        $"Verification failed: body MIC '{target.InstancedPath}' does not match its surgical skin update.");
+                }
+                continue;
             }
             VerifyArray(mic, "TextureParameterValues", plan.Textures, ReadMicTexture);
             VerifyArray(mic, "VectorParameterValues", plan.Vectors, ReadMicVector);
@@ -407,7 +454,8 @@ public sealed class ActorAssignmentService
         IReadOnlyList<VectorValue>? Vectors,
         IReadOnlyList<ScalarValue>? Scalars,
         IReadOnlyDictionary<int, byte[]> ProtectedMicData,
-        IReadOnlyDictionary<int, int> ParentUIndices);
+        IReadOnlyDictionary<int, int> ParentUIndices,
+        Dictionary<int, byte[]> ExpectedBodyMicData);
 
     private sealed record TextureValue(string Name, int TextureUIndex);
     private sealed record VectorValue(string Name, float R, float G, float B, float A);

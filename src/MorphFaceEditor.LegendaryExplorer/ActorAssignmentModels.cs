@@ -17,7 +17,8 @@ public enum ActorAssignmentMode
 public enum ActorComponentRole
 {
     Head,
-    Hair
+    Hair,
+    Body
 }
 
 public enum ActorIdentityEvidenceKind
@@ -61,7 +62,7 @@ public sealed record ActorMaterialChainEntry(
     bool IsLocal,
     bool Resolved);
 
-/// <summary>A local MIC slot which passed family and selected-profile compatibility checks.</summary>
+/// <summary>A local MIC slot eligible for head/hair replacement or body skin-vector updates.</summary>
 public sealed record ActorAssignmentMaterialTarget(
     int UIndex,
     string ObjectName,

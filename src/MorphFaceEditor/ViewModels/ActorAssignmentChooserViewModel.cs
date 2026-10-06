@@ -234,7 +234,9 @@ public sealed class ActorAssignmentChoice
             {
                 if (targetIndex > 0) text.AppendLine();
                 var target = roleTargets[targetIndex];
-                text.AppendLine(Loc.Format("loc_VM_actorAssignment_slotFamily", target.SlotIndex, target.Family));
+                text.AppendLine(Loc.Format("loc_VM_actorAssignment_slotFamily", target.SlotIndex,
+                    target.ComponentRole == ActorComponentRole.Body
+                        ? Loc.Text("loc_VM_actorAssignment_bodySkinOnly") : target.Family));
                 AppendCompactChain(text, target.ObjectName, target.ParentChain);
             }
         }
@@ -289,6 +291,7 @@ public sealed class ActorAssignmentChoice
     {
         ActorComponentRole.Head => Loc.Text("loc_VM_actorAssignment_componentRoleHead"),
         ActorComponentRole.Hair => Loc.Text("loc_VM_actorAssignment_componentRoleHair"),
+        ActorComponentRole.Body => Loc.Text("loc_VM_actorAssignment_componentRoleBody"),
         _ => Loc.Text("loc_VM_actorAssignment_componentRoleOther")
     };
 

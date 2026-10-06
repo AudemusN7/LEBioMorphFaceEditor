@@ -12,6 +12,8 @@ public static class ActorAssignmentTransactionTests
         new("actor morph assignment writes and verifies the exact owner", AssignsExactMorphOwner),
         new("LE1 placed morph assignment leaves the shared spawn type untouched", LeavesSharedLe1TypeUntouched),
         new("actor material assignment converts BMO arrays and protects non-target MICs", ConvertsAndProtectsMaterials),
+        new("actor material assignment surgically updates body MIC skin vectors across all games", UpdatesBodySkinVectors),
+        new("actor material assignment adds only skin vectors present on the source", AddsOnlyPresentBodySkinVectors),
         new("actor material assignment preserves target categories missing from the BMO", PreservesMissingMaterialCategories)
     ];
 
@@ -176,10 +178,18 @@ public static class ActorAssignmentTransactionTests
             head.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(target)], "Materials"));
             var actor = package.CreateExport("TargetPawn", "BioPawn", indexed: false);
             actor.WriteProperty(new ObjectProperty(head, "HeadMesh"));
+            var bodyMic = CreateMic(package, "BodyMaterial", "UnrecognizedParent");
+            bodyMic.WriteProperty(new ArrayProperty<StructProperty>(
+                [MicVector("SkinTone", 0.9f)], "VectorParameterValues"));
+            var body = CreateHeadComponent(package, "Body_MDL", "BodyComponent");
+            body.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(bodyMic)], "Materials"));
+            actor.WriteProperty(new ObjectProperty(body, "Mesh"));
             package.Save();
             var faceId = face.UIndex;
             var actorId = actor.UIndex;
             var targetId = target.UIndex;
+            var bodyId = bodyMic.UIndex;
+            var bodyBefore = bodyMic.Data.ToArray();
 
             var result = new ActorAssignmentService(new ActorAssignmentInventoryService((_, _) => null))
                 .AssignMaterials(path, faceId.ToString(), "le2-human-male", actorId);
@@ -194,8 +204,147 @@ public static class ActorAssignmentTransactionTests
                 .GetProp<FloatProperty>("ParameterValue")!.Value);
             TestAssert.True(!result.ReplacedTextures && result.ReplacedScalars,
                 "Result did not preserve the missing/present category distinction.");
+            TestAssert.True(reopened.GetUExport(bodyId).Data.SequenceEqual(bodyBefore),
+                "A source with no skin vectors changed a body MIC.");
+            TestAssert.Equal(1, result.ChangedMaterials.Count);
         });
     }
+
+    private static void UpdatesBodySkinVectors()
+    {
+        foreach (var game in new[] { MEGame.LE1, MEGame.LE2, MEGame.LE3 })
+        {
+            WithPackage(game, (path, package) =>
+            {
+                var (face, bmo, actor, headMic, body) = CreateBodyAssignmentFixture(package,
+                    SourceVector("SkinTone", 0.1f, 0.2f, 0.3f, 0.4f),
+                    SourceVector("SkinLightScattering", 0.5f, 0.6f, 0.7f, 0.8f),
+                    SourceVector("HeadOnly", 1, 1, 1, 1));
+                bmo.WriteProperty(new ArrayProperty<StructProperty>("m_aTextureOverrides"));
+                bmo.WriteProperty(new ArrayProperty<StructProperty>("m_aScalarOverrides"));
+
+                // Unknown parents must still work. Neither their other parameters nor GUIDs may change.
+                var existing = CreateMic(package, "CustomBodyMaterial", "UnrecognizedParent");
+                var skin = MicVector("sKiNtOnE", 0.9f);
+                skin.GetProp<StructProperty>("ExpressionGUID")!.GetProp<IntProperty>("A")!.Value = 123;
+                skin.Properties.Add(new IntProperty(42, "AuthoredExtraField"));
+                existing.WriteProperty(new ArrayProperty<StructProperty>(
+                    [MicVector("GearTint", 0.25f), skin, MicVector("SkinLightScattering", 0.9f)], "VectorParameterValues"));
+                existing.WriteProperty(new ArrayProperty<StructProperty>(
+                [new StructProperty("ScalarParameterValue", false, GuidProperty(),
+                    new NameProperty("Roughness", "ParameterName"), new FloatProperty(0.75f, "ParameterValue"))
+                ], "ScalarParameterValues"));
+                existing.WriteProperty(new ArrayProperty<StructProperty>(
+                [new StructProperty("TextureParameterValue", false, GuidProperty(),
+                    new NameProperty("BodyDiffuse", "ParameterName"), new ObjectProperty(0, "ParameterValue"))
+                ], "TextureParameterValues"));
+                existing.WriteProperty(new BoolProperty(true, "bTwoSided"));
+                var empty = CreateMic(package, "SecondBodyMaterial", "AnotherUnknownParent");
+                var unrelated = CreateMic(package, "OtherActorsBodyMaterial", "UnrecognizedParent");
+                var imported = package.CreateImport("MaterialInstanceConstant", "ImportedBodyMaterial",
+                    package.CreatePackageImport("MFEFixture_BodyImport"));
+                body.WriteProperty(new ArrayProperty<ObjectProperty>(
+                    [new ObjectProperty(existing), new ObjectProperty(empty), new ObjectProperty(imported),
+                     new ObjectProperty(headMic)], "Materials"));
+                package.Save();
+                var before = existing.Data.ToArray();
+                var emptyBefore = empty.Data.ToArray();
+                var unrelatedBefore = unrelated.Data.ToArray();
+                var profile = game.ToString().ToLowerInvariant() + "-human-male";
+                var service = new ActorAssignmentService(new ActorAssignmentInventoryService((_, _) => null));
+                var candidate = service.ReadInventory(path, face.UIndex.ToString(), profile)
+                    .Candidates.Single(value => value.UIndex == actor.UIndex);
+                TestAssert.Equal(2, candidate.Components.Count);
+                TestAssert.True(candidate.Components.Single(value => value.Role == ActorComponentRole.Body).Inherited ==
+                                (game == MEGame.LE3), "Body component inheritance was lost.");
+
+                var result = service.AssignMaterials(path, face.UIndex.ToString(), profile, actor.UIndex);
+                // Reassignment must update the additions rather than append duplicate parameters.
+                service.AssignMaterials(path, face.UIndex.ToString(), profile, actor.UIndex);
+                using var reopened = MEPackageHandler.OpenMEPackage(path, forceLoadFromDisk: true);
+                TestAssert.Equal(3, result.ChangedMaterials.Select(value => value.UIndex).Distinct().Count());
+                TestAssert.True(result.SkippedMaterials.Any(value => value.UIndex == imported.UIndex),
+                    "An imported body MIC was not retained as a read-only skipped slot.");
+                TestAssert.Equal(3, reopened.GetUExport(headMic.UIndex)
+                    .GetProperty<ArrayProperty<StructProperty>>("VectorParameterValues")!.Count);
+                var changed = reopened.GetUExport(existing.UIndex);
+                var vectors = changed.GetProperty<ArrayProperty<StructProperty>>("VectorParameterValues")!;
+                TestAssert.Equal(3, vectors.Count);
+                TestAssert.Equal(0.3f, vectors[1].GetProp<StructProperty>("ParameterValue")!.GetProp<FloatProperty>("B")!.Value);
+                TestAssert.Equal(0.8f, vectors[2].GetProp<StructProperty>("ParameterValue")!.GetProp<FloatProperty>("A")!.Value);
+                // Undo only the two colour values in memory: the entire original MIC must be byte-identical.
+                vectors[1].Properties.AddOrReplaceProp(Color(0.9f, 0.9f, 0.9f, 0.9f, "ParameterValue"));
+                vectors[2].Properties.AddOrReplaceProp(Color(0.9f, 0.9f, 0.9f, 0.9f, "ParameterValue"));
+                changed.WriteProperty(vectors);
+                TestAssert.True(changed.Data.SequenceEqual(before), "Other authored body MIC data changed.");
+                var newMic = reopened.GetUExport(empty.UIndex);
+                var newVectors = newMic.GetProperty<ArrayProperty<StructProperty>>("VectorParameterValues")!;
+                TestAssert.Equal(2, newVectors.Count);
+                TestAssert.Equal("SkinTone", newVectors[0].GetProp<NameProperty>("ParameterName")!.Value.Name);
+                TestAssert.Equal("SkinLightScattering", newVectors[1].GetProp<NameProperty>("ParameterName")!.Value.Name);
+                TestAssert.Equal(0.4f, newVectors[0].GetProp<StructProperty>("ParameterValue")!.GetProp<FloatProperty>("A")!.Value);
+                TestAssert.Equal(0.7f, newVectors[1].GetProp<StructProperty>("ParameterValue")!.GetProp<FloatProperty>("B")!.Value);
+                var newProperties = newMic.GetProperties();
+                newProperties.RemoveNamedProperty("VectorParameterValues");
+                newMic.WriteProperties(newProperties);
+                TestAssert.True(newMic.Data.SequenceEqual(emptyBefore), "Adding skin vectors changed other body MIC data.");
+                TestAssert.True(reopened.GetUExport(unrelated.UIndex).Data.SequenceEqual(unrelatedBefore),
+                    "An unrelated actor's MIC changed.");
+            });
+        }
+    }
+
+    private static void AddsOnlyPresentBodySkinVectors()
+    {
+        WithPackage(MEGame.LE2, (path, package) =>
+        {
+            var (face, _, actor, _, body) = CreateBodyAssignmentFixture(package,
+                SourceVector("SkinTone", 0.1f, 0.2f, 0.3f, 0.4f));
+            var bodyMic = CreateMic(package, "BodyMaterial", "UnknownParent");
+            bodyMic.WriteProperty(new ArrayProperty<StructProperty>(
+                [MicVector("SkinLightScattering", 0.9f)], "VectorParameterValues"));
+            body.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(bodyMic)], "Materials"));
+            package.Save();
+            new ActorAssignmentService(new ActorAssignmentInventoryService((_, _) => null))
+                .AssignMaterials(path, face.UIndex.ToString(), "le2-human-male", actor.UIndex);
+            using var reopened = MEPackageHandler.OpenMEPackage(path, forceLoadFromDisk: true);
+            var vectors = reopened.GetUExport(bodyMic.UIndex).GetProperty<ArrayProperty<StructProperty>>("VectorParameterValues")!;
+            TestAssert.Equal(2, vectors.Count);
+            TestAssert.Equal(0.9f, vectors[0].GetProp<StructProperty>("ParameterValue")!.GetProp<FloatProperty>("B")!.Value);
+            TestAssert.Equal(0.3f, vectors[1].GetProp<StructProperty>("ParameterValue")!.GetProp<FloatProperty>("B")!.Value);
+        });
+    }
+
+    private static (ExportEntry Face, ExportEntry Override, ExportEntry Actor, ExportEntry HeadMic, ExportEntry Body)
+        CreateBodyAssignmentFixture(IMEPackage package, params StructProperty[] colors)
+    {
+        var face = package.CreateExport("SelectedFace", "BioMorphFace", indexed: false);
+        var bmo = package.CreateExport("SelectedFaceMaterials", "BioMaterialOverride", face, indexed: false);
+        bmo.WriteProperty(new ArrayProperty<StructProperty>(colors, "m_aColorOverrides"));
+        face.WriteProperty(new ObjectProperty(bmo, "m_oMaterialOverrides"));
+        var headMic = CreateMic(package, "HMM_HED_PRO_Face_Mat", "HMM_HED_PRO_Face_Master");
+        var head = CreateHeadComponent(package, "HMM_HED_PROBase_MDL", "HeadComponent");
+        head.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(headMic)], "Materials"));
+        var body = CreateHeadComponent(package, "Body_MDL", "BodyComponent");
+        var actor = package.CreateExport("TargetActor", package.Game == MEGame.LE3 ? "SFXStuntActor" : "BioPawn", indexed: false);
+        actor.WriteProperty(new ObjectProperty(head, package.Game == MEGame.LE1 ? "m_oHeadMesh" : "HeadMesh"));
+        // Cover inherited BodyMesh in LE3 and the pawn Mesh property in LE1/2.
+        if (package.Game == MEGame.LE3)
+        {
+            var archetype = package.CreateExport("Default__SFXStuntActor", "SFXStuntActor", indexed: false);
+            archetype.WriteProperty(new ObjectProperty(body, "BodyMesh"));
+            actor.Archetype = archetype;
+        }
+        else actor.WriteProperty(new ObjectProperty(body, "Mesh"));
+        return (face, bmo, actor, headMic, body);
+    }
+
+    private static StructProperty SourceVector(string name, float r, float g, float b, float a) => new(
+        "ColorParameter", false, new NameProperty(name, "nName"), Color(r, g, b, a, "cValue"));
+
+    private static StructProperty MicVector(string name, float value) => new(
+        "VectorParameterValue", false, GuidProperty(),
+        Color(value, value, value, value, "ParameterValue"), new NameProperty(name, "ParameterName"));
 
     private static ExportEntry CreateActorWithHead(
         IMEPackage package, string actorClass, string actorName, string meshName)

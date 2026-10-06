@@ -52,7 +52,7 @@ public sealed class MorphFacePackageReader : IDisposable
         return _materialReader.ReadRandomisationEvidence(face, materials);
     }
 
-    public LoadedMorphFace Load(string packagePath, string exportSelector)
+    public LoadedMorphFace Load(string packagePath, string exportSelector, bool decodeTextures = true)
     {
         var started = Stopwatch.GetTimestamp();
         var checkpoint = started;
@@ -121,7 +121,8 @@ public sealed class MorphFacePackageReader : IDisposable
                 : throw new InvalidDataException($"m_oOtherMeshes[{item.Index}] resolved to {item.Entry.ClassName}, not SkeletalMesh."))
             .ToArray();
         var attachmentTime = Mark(ref checkpoint);
-        var materialResult = _materialReader.Read(export, baseMaterialExports, attachmentMaterialExports);
+        var materialResult = _materialReader.Read(export, baseMaterialExports, attachmentMaterialExports,
+            decodeTextures: decodeTextures);
         var materialTime = Mark(ref checkpoint);
         document = document with { MaterialOverrides = materialResult.Overrides };
         var diagnostics = TopologyDiagnostics.Analyze(baseHead, document);

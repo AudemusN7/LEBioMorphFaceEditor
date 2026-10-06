@@ -111,7 +111,8 @@ internal sealed class MorphFaceMaterialReader(
         ExportEntry face,
         IReadOnlyCollection<ExportEntry> baseMaterialExports,
         IReadOnlyCollection<ExportEntry> attachmentMaterialExports,
-        bool applyFaceOverrides = true)
+        bool applyFaceOverrides = true,
+        bool decodeTextures = true)
     {
         ArgumentNullException.ThrowIfNull(face);
         ArgumentNullException.ThrowIfNull(baseMaterialExports);
@@ -127,7 +128,7 @@ internal sealed class MorphFaceMaterialReader(
         var warnings = new List<string>();
         var resolved = baseMaterialExports
             .DistinctBy(export => MaterialIdentityKey.Create(MorphFacePackageReader.ToIdentity(export)!))
-            .Select(export => ReadMaterial(export, overrides, overrideTextures, warnings))
+            .Select(export => ReadMaterial(export, overrides, overrideTextures, warnings, decodeTextures))
             .ToDictionary(material => material.Key, StringComparer.OrdinalIgnoreCase);
 
         foreach (var materialExport in attachmentMaterialExports.DistinctBy(
@@ -137,8 +138,8 @@ internal sealed class MorphFaceMaterialReader(
             try
             {
                 material = IsHatAttachment(materialExport)
-                    ? ReadHatPreviewMaterial(materialExport, warnings)
-                    : ReadMaterial(materialExport, overrides, overrideTextures, warnings);
+                    ? ReadHatPreviewMaterial(materialExport, warnings, decodeTextures)
+                    : ReadMaterial(materialExport, overrides, overrideTextures, warnings, decodeTextures);
             }
             catch (Exception exception)
             {
@@ -332,7 +333,10 @@ internal sealed class MorphFaceMaterialReader(
         foreach (var face in cube.Faces) dependencies.Add(Path.GetFullPath(face.PackagePath));
     }
 
-    private ResolvedHeadMaterial ReadHatPreviewMaterial(ExportEntry materialExport, List<string>? warnings = null)
+    private ResolvedHeadMaterial ReadHatPreviewMaterial(
+        ExportEntry materialExport,
+        List<string>? warnings = null,
+        bool decodeTextures = true)
     {
         var identity = MorphFacePackageReader.ToIdentity(materialExport)!;
         var materialKey = MaterialIdentityKey.Create(identity);
@@ -342,7 +346,7 @@ internal sealed class MorphFaceMaterialReader(
             if (_materialCache.TryGetValue(materialKey, out cached))
             {
                 _materialCacheHits++;
-                return Materialize(cached, warnings) with { IsPreviewOnlyAttachment = true };
+                return (decodeTextures ? Materialize(cached, warnings) : cached.Material) with { IsPreviewOnlyAttachment = true };
             }
         }
         _materialCacheMisses++;
@@ -398,7 +402,7 @@ internal sealed class MorphFaceMaterialReader(
         foreach (var texture in textures.Values) dependencies.Add(Path.GetFullPath(texture.Source.PackagePath));
         var metadata = new CachedMaterialMetadata(material, textures, null, null, dependencies);
         _materialCache[materialKey] = metadata;
-        return Materialize(metadata, warnings) with { IsPreviewOnlyAttachment = true };
+        return (decodeTextures ? Materialize(metadata, warnings) : metadata.Material) with { IsPreviewOnlyAttachment = true };
     }
 
     private ExportEntry? ReadTextureChain(
@@ -528,7 +532,8 @@ internal sealed class MorphFaceMaterialReader(
         ExportEntry materialExport,
         MorphFaceMaterialOverrides overrides,
         IReadOnlyDictionary<string, ExportEntry?> overrideTextures,
-        List<string>? warnings = null)
+        List<string>? warnings = null,
+        bool decodeTextures = true)
     {
         var identity = MorphFacePackageReader.ToIdentity(materialExport)!;
         var materialKey = MaterialIdentityKey.Create(identity);
@@ -553,7 +558,7 @@ internal sealed class MorphFaceMaterialReader(
             }
         }
 
-        var baseline = Materialize(cached, warnings);
+        var baseline = decodeTextures ? Materialize(cached, warnings) : cached.Material;
         if (overrides.Scalars.Count == 0 && overrides.Vectors.Count == 0 && overrideTextures.Count == 0)
         {
             return baseline;
@@ -577,7 +582,8 @@ internal sealed class MorphFaceMaterialReader(
                 var definition = HumanMaterialProfiles.Describe(pair.Key, MaterialParameterKind.Texture, baseline.Family);
                 try
                 {
-                    decodedTextures[pair.Key] = new MaterialTextureBinding(pair.Key, DecodeTexture(pair.Value, definition));
+                    if (decodeTextures)
+                        decodedTextures[pair.Key] = new MaterialTextureBinding(pair.Key, DecodeTexture(pair.Value, definition));
                 }
                 catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
                 {

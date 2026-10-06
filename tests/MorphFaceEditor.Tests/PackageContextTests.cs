@@ -30,6 +30,7 @@ public static class PackageContextTests
         new("external hair and attachment meshes port their material chains on morph export", ExternalAttachmentsPortOnMorphExport),
         new("morph package export preserves paths across LE1, LE2, and LE3", ExportMorphPackagesAcrossGames),
         new("cross-game conversion rebakes LE2 to LE3 and LE3 to LE1 packages", ConvertMorphsAcrossGameBoundary),
+        new("metadata-only face loads preserve conversion evidence without decoded pixels", MetadataOnlyFaceLoadsPreserveConversionEvidence),
         new("cross-game conversion requires current texture databases", ConversionRequiresTextureDatabases),
         new("all six cross-game directions preserve canonical hair donors", PreserveCanonicalHairAcrossAllDirections),
         new("LE2 human attachment to LE1 preserves material graph", Le2HumanAttachmentToLe1),
@@ -690,6 +691,79 @@ public static class PackageContextTests
             TestAssert.Equal(originalDestinationCount + 1, ReadFaces(le1Destination).Count);
             AssertConvertedFaceIsEditable(le1Destination, result.SaveResult.FaceInstancedPath, profiles, targets);
         }));
+    }
+
+    private static void MetadataOnlyFaceLoadsPreserveConversionEvidence()
+    {
+        var path = FixturePath("LE3 GlobalMorphs.pcc");
+        var faces = ReadFaces(path);
+        foreach (var profileKey in new[] { "le3-human-male", "le3-asari" })
+        {
+            var face = faces.First(value => value.ProfileKey == profileKey);
+            var selector = face.UIndex.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+            // Separate readers keep a warm decoded-material cache from masking a
+            // metadata-only path that accidentally materialises pixels.
+            using var fullReader = new MorphFacePackageReader();
+            var full = fullReader.Load(path, selector);
+            using var metadataReader = new MorphFacePackageReader();
+            var metadata = metadataReader.Load(path, selector, decodeTextures: false);
+
+            TestAssert.Equal(full.Document.Source, metadata.Document.Source);
+            TestAssert.Equal(full.Document.BaseHeadReference, metadata.Document.BaseHeadReference);
+            TestAssert.Equal(full.Document.HairMeshReference, metadata.Document.HairMeshReference);
+            TestAssert.True(full.Document.OtherMeshReferences.SequenceEqual(metadata.Document.OtherMeshReferences),
+                $"{profileKey} changed its authored attachment identities in metadata-only mode.");
+            TestAssert.Equal(full.Document.MaterialOverrides.Source, metadata.Document.MaterialOverrides.Source);
+            TestAssert.True(full.Document.MaterialOverrides.Scalars.SequenceEqual(metadata.Document.MaterialOverrides.Scalars),
+                $"{profileKey} changed authored scalar overrides in metadata-only mode.");
+            TestAssert.True(full.Document.MaterialOverrides.Vectors.SequenceEqual(metadata.Document.MaterialOverrides.Vectors),
+                $"{profileKey} changed authored vector overrides in metadata-only mode.");
+            TestAssert.True(full.Document.MaterialOverrides.Textures.SequenceEqual(metadata.Document.MaterialOverrides.Textures),
+                $"{profileKey} changed authored texture identities in metadata-only mode.");
+
+            TestAssert.Equal(full.BaseHead.Source, metadata.BaseHead.Source);
+            TestAssert.Equal(full.HairMesh?.Source, metadata.HairMesh?.Source);
+            TestAssert.True(full.OtherMeshes.Select(mesh => mesh.Source)
+                    .SequenceEqual(metadata.OtherMeshes.Select(mesh => mesh.Source)),
+                $"{profileKey} changed resolved attachment mesh identities in metadata-only mode.");
+            TestAssert.True(full.Materials.Materials.Keys.Order(StringComparer.OrdinalIgnoreCase)
+                    .SequenceEqual(metadata.Materials.Materials.Keys.Order(StringComparer.OrdinalIgnoreCase),
+                        StringComparer.OrdinalIgnoreCase),
+                $"{profileKey} changed its resolved material set in metadata-only mode.");
+
+            foreach (var (key, fullMaterial) in full.Materials.Materials)
+            {
+                var metadataMaterial = metadata.Materials.Materials[key];
+                TestAssert.Equal(fullMaterial.Source, metadataMaterial.Source);
+                TestAssert.Equal(fullMaterial.Family, metadataMaterial.Family);
+                TestAssert.True(fullMaterial.Scalars.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
+                        .SequenceEqual(metadataMaterial.Scalars.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)),
+                    $"{profileKey} changed scalar material values for {key}.");
+                TestAssert.True(fullMaterial.Vectors.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
+                        .SequenceEqual(metadataMaterial.Vectors.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)),
+                    $"{profileKey} changed vector material values for {key}.");
+                TestAssert.True(fullMaterial.SupportedScalars.SetEquals(metadataMaterial.SupportedScalars) &&
+                                fullMaterial.SupportedVectors.SetEquals(metadataMaterial.SupportedVectors) &&
+                                fullMaterial.SupportedTextures.SetEquals(metadataMaterial.SupportedTextures),
+                    $"{profileKey} changed supported material parameters for {key}.");
+                TestAssert.Equal(0, metadataMaterial.Textures.Count);
+                TestAssert.Equal(0, metadataMaterial.DefaultTextures.Count);
+                TestAssert.True(metadataMaterial.FixedCubeTexture is null &&
+                                metadataMaterial.SecondaryFixedCubeTexture is null,
+                    $"{profileKey} retained decoded reflection cube pixels for {key}.");
+            }
+
+            var fullEyes = full.Materials.Materials.Values
+                .Where(material => material.Family == HeadMaterialFamily.Eyes)
+                .ToArray();
+            TestAssert.True(fullEyes.Length > 0 && fullEyes.All(material =>
+                    material.FixedCubeTexture is not null && material.SecondaryFixedCubeTexture is not null),
+                $"{profileKey} did not exercise decoded fixed eye-reflection cubes.");
+            TestAssert.True(full.Materials.Materials.Values.Any(material =>
+                    material.Textures.Count > 0 || material.DefaultTextures.Count > 0),
+                $"{profileKey} did not exercise decoded 2D texture pixels.");
+        }
     }
 
     private static void ApplyReviewedTextureTransferPolicy()

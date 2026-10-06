@@ -50,7 +50,8 @@ public sealed class MorphFaceConversionService(
         }
 
         using var reader = new MorphFacePackageReader();
-        var source = reader.Load(sourcePath, request.SourceFacePath);
+        // Conversion ports authored texture references; it never uses preview pixels.
+        var source = reader.Load(sourcePath, request.SourceFacePath, decodeTextures: false);
         var sourceProfile = profiles.Require(
             source.Game,
             source.Document.Source.InstancedPath,
@@ -277,7 +278,7 @@ public sealed class MorphFaceConversionService(
             try
             {
                 var loaded = reader.Load(templatePath, reference.FaceUIndex.ToString(
-                    System.Globalization.CultureInfo.InvariantCulture));
+                    System.Globalization.CultureInfo.InvariantCulture), decodeTextures: false);
                 var session = CreateSession(loaded, profile, templatePath);
                 if (session.CanEdit)
                 {

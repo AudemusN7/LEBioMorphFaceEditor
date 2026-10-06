@@ -35,6 +35,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     private BoneTransformEditorViewModel? _selectedBoneTransform;
     private bool _isDirty;
     private bool _disposed;
+    private long _randomisationGeneration;
     private int _morphRandomisationStrength = 50;
     private int _materialRandomisationStrength = 50;
     private bool _randomiseMorphs = true;
@@ -430,6 +431,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     }
     private void SetToDefaults()
     {
+        _randomisationGeneration++;
         using var aggregate = _history.BeginAggregate();
         if (CanEditMorphFeatures || CanEditBones) _session.ResetToDefaults();
         Material.ResetToDefaults();
@@ -457,9 +459,10 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         {
             if (requested.InclusionKey is { } key && !_randomisationInclusionState.IsIncluded(key)) return;
             requested = CoordinateHairMorphScope(requested);
+            var generation = ++_randomisationGeneration;
             if (CursedMode)
             {
-                await RandomiseCursedAsync(requested, includeCursedBones);
+                await RandomiseCursedAsync(requested, includeCursedBones, generation);
                 return;
             }
 
@@ -566,6 +569,8 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                     npcHairRules: playerContext is null,
                     retainCurrentMesh: retainNpcHairMesh)
                 : null;
+            // Reset or a newer roll supersedes this result before it can enter history.
+            if (generation != _randomisationGeneration) return;
             var preparedMaterial = MergePreparedMaterial(npcMaterial, playerDetails,
                 playerHair?.Material, playerFaceScar, playerColours);
 
@@ -609,7 +614,8 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         }
     }
 
-    private async Task RandomiseCursedAsync(EditorRandomisationScope requested, bool includeBones)
+    private async Task RandomiseCursedAsync(EditorRandomisationScope requested, bool includeBones,
+        long generation)
     {
         _cursedBaseline ??= CaptureCursedBaseline();
         var seed = _randomSeedFactory();
@@ -722,6 +728,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                 requested.InclusionKey is not null, npcHairRules: playerContext is null,
                 retainCurrentMesh: retainNpcHairMesh)
             : null;
+        if (generation != _randomisationGeneration) return;
         var preparedMaterial = MergePreparedMaterial(npcMaterial, playerDetails,
             playerHair?.Material, playerFaceScar, playerColours)!;
         CursedMorphRandomisationExtras? boneValues = null;

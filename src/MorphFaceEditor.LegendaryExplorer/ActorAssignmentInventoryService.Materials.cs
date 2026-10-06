@@ -14,6 +14,7 @@ public sealed partial class ActorAssignmentInventoryService
         string gamePrefix,
         string selectedProfileKey,
         string? headProfileKey,
+        bool hasSkinVectors,
         GamePackageReferenceResolver resolver,
         PackageCache cache,
         ICollection<ActorAssignmentMaterialTarget> eligible,
@@ -59,6 +60,12 @@ public sealed partial class ActorAssignmentInventoryService
                     ? "Imported materials are read-only and are never assignment targets."
                     : $"{rawEntry.ClassName} is not a local MIC export.";
             }
+            else if (component.Role == ActorComponentRole.Body)
+            {
+                // Body slots are surgical targets regardless of their parent material family.
+                if (!hasSkinVectors)
+                    reason = "The selected face has no SkinTone or SkinLightScattering value to assign to body MICs.";
+            }
             else if (!HeadMaterialClassifier.IsAssignableHeadFamily(family))
             {
                 reason = family == HeadMaterialFamily.Accessory
@@ -95,6 +102,10 @@ public sealed partial class ActorAssignmentInventoryService
             }
         }
     }
+
+    internal static bool IsBodySkinParameter(string? name) =>
+        string.Equals(name, "SkinTone", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(name, "SkinLightScattering", StringComparison.OrdinalIgnoreCase);
 
     private static IReadOnlyList<ActorMaterialChainEntry> BuildMaterialChain(
         IEntry start,

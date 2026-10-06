@@ -1042,7 +1042,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         var hasRawNumericMaterial = RandomiseMaterials &&
                                     (scope.Scalars.Count + scope.Vectors.Count > 0);
         var materialProfiles = GetMaterialRandomisationProfiles();
-        var eligibleTextures = EligibleMaterialTextureParameters();
+        var eligibleTextures = EligibleMaterialTextureParameters(materialProfiles);
         var hasPlayerPalette = RandomiseMaterials && playerContext is { } paletteContext &&
             scope.Scalars.Select(value => value.Name)
                 .Concat(scope.Vectors.Select(value => value.Name))
@@ -1781,15 +1781,20 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         return cleared;
     }
 
-    private IReadOnlySet<string> EligibleMaterialTextureParameters()
+    private IReadOnlySet<string> EligibleMaterialTextureParameters(
+        IReadOnlyList<MaterialProfileContext>? materialProfiles = null)
     {
-        var profiles = GetMaterialRandomisationProfiles();
+        var profiles = materialProfiles ?? GetMaterialRandomisationProfiles();
+        // Donor eligibility is shared by every texture control using the same profile.
+        var eligibleParameters = profiles.Select(context => context.Key)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(key => key, key => _randomisationCatalog.EligibleTextureParameters(key),
+                StringComparer.OrdinalIgnoreCase);
         var player = GetPlayerRandomisationContext();
         return Material.Textures
             .Where(texture => profiles.Any(context =>
                     context.Supports(Material, texture.Name, MaterialParameterKind.Texture) &&
-                    _randomisationCatalog.EligibleTextureParameters(context.Key)
-                        .Contains(Material.SourceParameterName(texture.Name))) ||
+                    eligibleParameters[context.Key].Contains(Material.SourceParameterName(texture.Name))) ||
                 player is { } context &&
                 string.Equals(Material.ParameterScopeKey(texture.Name), context.ScopeKey,
                     StringComparison.OrdinalIgnoreCase) &&

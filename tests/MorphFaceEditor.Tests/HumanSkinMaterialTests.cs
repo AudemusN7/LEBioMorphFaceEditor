@@ -19,6 +19,7 @@ public static class HumanSkinMaterialTests
         new("Addn blue selects the secondary blonde colour", AdditionBlueSelectsBlondeColour),
         new("freckle blue replaces the underlying diffuse", FreckleBlueReplacesDiffuse),
         new("Human Female makeup mask controls brow tint", FemaleMakeupMaskControlsBrowTint),
+        new("Human Female eye makeup excludes lips and retains eye coverage", FemaleEyeMakeupExcludesLips),
         new("Human Female blush uses makeup blue-alpha coverage", FemaleBlushUsesMakeupCoverage),
         new("Human Female addition power cannot alter unmasked face specular", FemaleAdditionPowerIsMaskBound),
         new("custom player brow and scar textures affect the live preview", CustomPlayerBrowAndScarAffectPreview),
@@ -140,6 +141,28 @@ public static class HumanSkinMaterialTests
             renderer.UpdateMaterials(new Dictionary<string, HeadPreviewMaterial> { [active.Key] = active });
             var second = renderer.Render(camera, new HeadPreviewOptions()).BgraPixels;
             TestAssert.True(!first.SequenceEqual(second), "HED_Makeup_Mask red did not expose the HMF brow tint branch.");
+        }
+    }
+
+    private static void FemaleEyeMakeupExcludesLips()
+    {
+        foreach (var blue in new byte[] { 0, 255 })
+        {
+            // Green marks both regions; blue distinguishes eyes from lips.
+            byte[] mask = [0, 255, blue, (byte)(255 - blue)];
+            var disabled = CreateFemaleSkinMaterial("skin", 0, makeupRgba: mask, eyeStrength: 0);
+            var enabled = CreateFemaleSkinMaterial("skin", 0, makeupRgba: mask, eyeStrength: 1);
+            var (renderer, camera) = CreateTriangleRenderer(disabled);
+            using (renderer)
+            {
+                var first = renderer.Render(camera, new HeadPreviewOptions()).BgraPixels.ToArray();
+                renderer.UpdateMaterials(new Dictionary<string, HeadPreviewMaterial> { [enabled.Key] = enabled });
+                var second = renderer.Render(camera, new HeadPreviewOptions()).BgraPixels;
+                TestAssert.True(first.SequenceEqual(second) == (blue == 0),
+                    blue == 0
+                        ? "Eye makeup tinted the lip region excluded by the blue channel."
+                        : "Eye makeup lost the green-blue eye region.");
+            }
         }
     }
 

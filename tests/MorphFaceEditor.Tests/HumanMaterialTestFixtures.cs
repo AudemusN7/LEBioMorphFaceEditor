@@ -135,10 +135,12 @@ public static class HumanMaterialTestFixtures
         float additionPower = 0,
         Vector4? specularColour = null,
         float blushStrength = 0,
-        Vector4? blushColour = null)
+        Vector4? blushColour = null,
+        byte[]? makeupRgba = null,
+        float eyeStrength = 0)
     {
         var diffuse = CreateTexture("HED_Diff", [96, 72, 56, 255], TextureRole.Diffuse);
-        var makeup = CreateTexture("HED_Makeup_Mask", [255, 0, 255, 255], TextureRole.Other);
+        var makeup = CreateTexture("HED_Makeup_Mask", makeupRgba ?? [255, 0, 255, 255], TextureRole.Other);
         return new HeadPreviewMaterial(
             key,
             key,
@@ -148,7 +150,7 @@ public static class HumanMaterialTestFixtures
             new Dictionary<string, float>
             {
                 ["HED_Brow_Tint_Scalar"] = browStrength,
-                ["HED_EyeShadow_Tint_Scalar"] = 0,
+                ["HED_EyeShadow_Tint_Scalar"] = eyeStrength,
                 ["HED_Lips_Tint_Scalar"] = 0,
                 ["HED_Addn_SPwr_Add_Scalar"] = additionPower,
                 ["HED_Blush_Scalar"] = blushStrength,

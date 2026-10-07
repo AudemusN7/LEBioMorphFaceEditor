@@ -200,8 +200,8 @@
   <system:String x:Key="loc_Services_MetadataText_Archetype_HumanFemale_hed_addn_spec_lips_scalar_49f34f_Label" xml:space="preserve">Glanzstärke der Lippen</system:String>
   <system:String x:Key="loc_Services_MetadataText_Archetype_HumanFemale_hed_brow_tint_scalar_835792_Label" xml:space="preserve">Lidschattenstärke</system:String>
   <system:String x:Key="loc_Services_MetadataText_Archetype_HumanFemale_hed_brow_tint_vector_6da571_Label" xml:space="preserve">Lidschattenfarbe</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Archetype_HumanFemale_hed_eyeshadow_tint_scalar_32e85d_Label" xml:space="preserve">Make-up-Stärke</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Archetype_HumanFemale_hed_eyeshadow_tint_vector_735da0_Label" xml:space="preserve">Make-up-Farbe</system:String>
+  <system:String x:Key="loc_Services_MetadataText_Archetype_HumanFemale_hed_eyeshadow_tint_scalar_32e85d_Label" xml:space="preserve">Eyeliner-Stärke</system:String>
+  <system:String x:Key="loc_Services_MetadataText_Archetype_HumanFemale_hed_eyeshadow_tint_vector_735da0_Label" xml:space="preserve">Eyeliner-Farbe</system:String>
   <!--localiser: {"Key":"loc_Services_MetadataText_Archetype_HumanFemale_mask_8e2d06_Description","ReviewedHash":null,"DoNotTranslate":false,"Note":"Don\u0027t translate the name, only second half","SourceHash":null}-->
   <system:String x:Key="loc_Services_MetadataText_Archetype_HumanFemale_mask_8e2d06_Label" xml:space="preserve">Kopfhaut-Deckkraft</system:String>
   <system:String x:Key="loc_Services_MetadataText_Archetype_HumanFemale_mouth_cheekmass_07a337_Label" xml:space="preserve">Wangenfülle</system:String>

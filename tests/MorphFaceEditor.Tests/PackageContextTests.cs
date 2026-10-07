@@ -39,6 +39,7 @@ public static class PackageContextTests
         new("canonical stock hair and headwear MICs resolve their supported parent graphs", CanonicalHatMaterialsRemainSupported),
         new("material cache retains identities rather than decoded mip chains", MaterialCacheRetainsMetadataOnly),
         new("reviewed Officer and Beret attachments survive their native-game conversions", StockHatAttachmentsSurviveReview),
+        new("MotoGlasses conversion preserves both authored MIC slots and visor graph after reopen", MotoGlassesConversionPreservesAuthoredMaterials),
         new("custom hair MIC is supported through its canonical hair parent", CustomHairMicUsesCanonicalParent),
         new("TUF and custom attachment MICs share the canonical Turian parent rule", CustomAttachmentsUseCanonicalTurianParent),
         new("installed LE1 Asari template survives a shadowing mod", InstalledLe1AsariTemplateSurvivesMod),
@@ -1131,6 +1132,8 @@ public static class PackageContextTests
             (MEGame.LE1, "MaterialInstanceConstant", "BIOG_HMM_HIR_PRO_R.Cap.HMM_HAT_Cap_MAT_1a"),
             (MEGame.LE2, "MaterialInstanceConstant", "BIOG_HMM_HIR_PRO_R.Cap.HMM_HAT_Cap_Mat_2b"),
             (MEGame.LE2, "MaterialInstanceConstant", "BIOG_HMM_HIR_PRO_R.Moto.HMM_HAT_Mtr_MAT_1a"),
+            (MEGame.LE1, "MaterialInstanceConstant", "BIOG_HMM_HIR_PRO_R.MotoGlasses.HMM_HAT_Mtg_MAT_1b"),
+            (MEGame.LE2, "MaterialInstanceConstant", "BIOG_HMM_HIR_PRO_R.MotoGlasses.HMM_HAT_Mtg_MAT_1b"),
             (MEGame.LE3, "MaterialInstanceConstant", "BIOG_HMM_HIR_PRO_R.Hat_Beret.HMM_HAT_Brt_MAT_1a"),
             (MEGame.LE3, "MaterialInstanceConstant", "BIOG_HMM_HIR_PRO_R.Hat_Officer.HMM_HAT_Off_MAT_1a"),
             (MEGame.LE2, "MaterialInstanceConstant", "BIOG_HMM_HIR_PRO_R.Beret.HMM_HAT_Brt_MAT_1a"),
@@ -1192,6 +1195,65 @@ public static class PackageContextTests
         finally
         {
             if (File.Exists(donorPath)) File.Delete(donorPath);
+        }
+    }
+
+    private static void MotoGlassesConversionPreservesAuthoredMaterials()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        const string meshPath = "BIOG_HMF_HIR_PRO.MotoGlasses.HMF_HAT_MTG_MDL";
+        var destination = Path.Combine(Path.GetTempPath(), $"MFE-MotoGlasses-{Guid.NewGuid():N}.pcc");
+        try
+        {
+            var service = new MorphFaceConversionService(
+                MorphFaceProfileRegistry.CreateDefault(), new MorphTargetCatalog(),
+                new MorphFacePackageContextService(), TestFixtures.GetCorpusTextureCatalogService());
+            var result = service.Convert(new MorphFaceConversionRequest(
+                FixturePath("LE2 GlobalMorphs.pcc"), "HMF.BioFace_RandomHumanFemale2",
+                MorphFaceGame.LE1, destination, true, FixturePath("LE1 GlobalMorphs.pcc")));
+            TestAssert.True(!result.SaveResult.Warnings.Any(value => value.Contains("unsupported material",
+                    StringComparison.OrdinalIgnoreCase)),
+                "MotoGlasses was rejected: " + string.Join(" | ", result.SaveResult.Warnings));
+
+            using var reopened = MEPackageHandler.OpenMEPackage(destination, forceLoadFromDisk: true);
+            var face = reopened.FindExport(result.SaveResult.FaceInstancedPath, "BioMorphFace")!;
+            var attachment = face.GetProperty<ArrayProperty<ObjectProperty>>("m_oOtherMeshes")?
+                .Select(value => value.ResolveToEntry(reopened)).OfType<ExportEntry>()
+                .SingleOrDefault(value => value.InstancedFullPath.Equals(meshPath, StringComparison.OrdinalIgnoreCase));
+            TestAssert.True(attachment is not null, "The authored MotoGlasses attachment was missing after reopen.");
+            using var cache = new PackageCache { CacheMaxSize = 8 };
+            var officialAssets = new InstalledGameAssetResolver();
+            var donor = officialAssets.Resolve(MEGame.LE1, meshPath, "SkeletalMesh", cache)!;
+            var donorSlots = donor.GetBinaryData<SkeletalMesh>().Materials;
+            var savedSlots = attachment!.GetBinaryData<SkeletalMesh>().Materials;
+            TestAssert.Equal(donorSlots.Length, savedSlots.Length);
+            TestAssert.Equal(2, savedSlots.Length);
+            var resolver = new GamePackageReferenceResolver(cache, officialAssets);
+            for (var slot = 0; slot < donorSlots.Length; slot++)
+            {
+                var authored = resolver.Resolve(donor.FileRef.GetEntry(donorSlots[slot])!)!;
+                var saved = reopened.GetEntry(savedSlots[slot]) as ExportEntry;
+                TestAssert.True(saved is not null, $"MotoGlasses material slot {slot} was not materialised.");
+                TestAssert.Equal(PccPackageWorkflow.CanonicalPath(authored), saved!.InstancedFullPath);
+                TestAssert.Equal(authored.ClassName, saved.ClassName);
+                TestAssert.True(authored.GetProperties().Equivalent(saved.GetProperties(), (left, right) =>
+                {
+                    if (left == 0 || right == 0) return left == right;
+                    var sourceEntry = authored.FileRef.GetEntry(left);
+                    var savedEntry = reopened.GetEntry(right);
+                    return sourceEntry is not null && savedEntry is not null &&
+                        sourceEntry.ClassName == savedEntry.ClassName &&
+                        PccPackageWorkflow.CanonicalPath(sourceEntry).Equals(savedEntry.InstancedFullPath,
+                            StringComparison.OrdinalIgnoreCase);
+                }), $"MotoGlasses material slot {slot} lost authored properties or dependency identities.");
+                TestAssert.True(SupportedMaterialGraphPolicy.IsSupported(MEGame.LE1, saved, resolver, out var failure),
+                    $"Saved MotoGlasses parent graph could not be resolved: {failure}");
+            }
+            PackageIntegrity.Verify(reopened);
+        }
+        finally
+        {
+            if (File.Exists(destination)) File.Delete(destination);
         }
     }
 

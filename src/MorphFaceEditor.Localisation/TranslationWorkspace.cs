@@ -73,6 +73,7 @@ public sealed class TranslationEntry : INotifyPropertyChanged
 public sealed class TranslationWorkspace
 {
     private byte[]? _fingerprint;
+    private byte[]? _sourceBytes;
     private readonly IReadOnlyDictionary<string, ReviewEntry> _sources;
     private HashSet<string> _savedExclusions;
     public string? Path { get; private set; }
@@ -101,7 +102,7 @@ public sealed class TranslationWorkspace
         var keys = master.Entries.Select(entry => entry.Key).ToHashSet(StringComparer.Ordinal);
         foreach (var key in data.Strings.Keys.Concat(data.Annotations.Keys)) if (!keys.Contains(key)) throw new FormatException($"Unknown localisation key: {key}");
         // Invalid wording is retained in the table so it can be repaired before saving.
-        return new TranslationWorkspace(master, path, data, SHA256.HashData(bytes));
+        return new TranslationWorkspace(master, path, data, SHA256.HashData(bytes)) { _sourceBytes = bytes };
     }
 
     public void SaveAs(string path, ReviewWorkspace master)
@@ -117,6 +118,7 @@ public sealed class TranslationWorkspace
         CatalogueFileWriter.Write(writes.ToArray());
         if (master.IsDirty) master.AcceptSaved(masterWrite);
         Path = path; _fingerprint = SHA256.HashData(bytes);
+        _sourceBytes = bytes;
         foreach (var entry in Entries.Values) entry.AcceptSaved();
         _savedExclusions = _sources.Values.Where(entry => entry.DoNotTranslate).Select(entry => entry.Key).ToHashSet(StringComparer.Ordinal);
     }
@@ -144,6 +146,6 @@ public sealed class TranslationWorkspace
         using var stream = new MemoryStream();
         using (var writer = XmlWriter.Create(stream, new XmlWriterSettings { Encoding = new UTF8Encoding(false), Indent = true, OmitXmlDeclaration = true, NewLineHandling = NewLineHandling.None }))
             new XDocument(root).Save(writer);
-        return stream.ToArray();
+        return _sourceBytes is null ? stream.ToArray() : CatalogueLayout.Preserve(_sourceBytes, stream.ToArray());
     }
 }

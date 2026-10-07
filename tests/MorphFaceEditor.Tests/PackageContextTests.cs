@@ -37,8 +37,14 @@ public static class PackageContextTests
         new("unsupported optional attachment material omits its mesh with a warning", UnsupportedAttachmentMaterialIsOmitted),
         new("attachment lookup rejects a same-named mesh at a different path", AttachmentLookupRejectsSameNameWrongPath),
         new("canonical stock hair and headwear MICs resolve their supported parent graphs", CanonicalHatMaterialsRemainSupported),
+        new("reviewed canonical hat donors resolve exact native paths in all game directions", CanonicalHatDonorsResolveExactPaths),
+        new("reviewed hair proxies use exact directional donor identities", ReviewedHairProxiesAreDirectional),
+        new("reviewed hair material graphs and destination donors survive save and reopen", ReviewedHairGraphsSurviveConversion),
+        new("reviewed excluded native attachments are omitted before export with warnings", ReviewedExcludedAttachmentsAreOmitted),
         new("material cache retains identities rather than decoded mip chains", MaterialCacheRetainsMetadataOnly),
         new("reviewed Officer and Beret attachments survive their native-game conversions", StockHatAttachmentsSurviveReview),
+        new("reviewed male Beanie01 in Other converts LE2 to LE3 and reopens with native donor identity", MaleBeanie01OtherConvertsToLe3),
+        new("reviewed female Cap in Hair converts LE3 to LE2 and reopens with native donor identity", FemaleCapHairConvertsToLe2),
         new("MotoGlasses conversion preserves both authored MIC slots and visor graph after reopen", MotoGlassesConversionPreservesAuthoredMaterials),
         new("custom hair MIC is supported through its canonical hair parent", CustomHairMicUsesCanonicalParent),
         new("TUF and custom attachment MICs share the canonical Turian parent rule", CustomAttachmentsUseCanonicalTurianParent),
@@ -1121,6 +1127,137 @@ public static class PackageContextTests
         }
     }
 
+    private static void ReviewedHairProxiesAreDirectional()
+    {
+        TestAssert.True(CanonicalHairDonorPolicy.TryResolve(MEGame.LE2, MEGame.LE3,
+            "BIOG_HMM_HIR_PRO_R.FauxHawk.HMM_HIR_Fhwk_01_MDL", out var proxy), "Reviewed proxy was not resolved.");
+        TestAssert.Equal("BIOG_HMM_HIR_PRO_R.Hair_SargeSpike.HMM_HIR_Ssk_01_MDL", proxy);
+        TestAssert.True(!CanonicalHairDonorPolicy.TryResolve(MEGame.LE2, MEGame.LE3,
+            "WrongPackage.FauxHawk.HMM_HIR_Fhwk_01_MDL", out _), "A same-leaf lookalike was mapped.");
+        TestAssert.True(CanonicalHairDonorPolicy.TryResolve(MEGame.LE3, MEGame.LE2,
+            "BIOG_HMF_HIR_PRO.Hair_PROMiranda.HMF_HIR_PROMiranda_MDL", out var miranda), "LE2 Miranda was not resolved.");
+        TestAssert.Equal("BIOG_HMF_HIR_PRO.Hair_PROMiranda.HMF_HIR_MIR_MDL", miranda);
+        TestAssert.True(CanonicalHairDonorPolicy.TryResolve(MEGame.LE3, MEGame.LE1,
+            "BIOG_HMF_HIR_PRO.Hair_PROMiranda.HMF_HIR_PROMiranda_MDL", out var absent) && absent is null,
+            "LE2 Miranda mapping was incorrectly reused for LE1.");
+        TestAssert.True(CanonicalHairDonorPolicy.TryResolve(MEGame.LE3, MEGame.LE2,
+            "BIOG_HMM_HIR_PRO_R.Hair_James.HMM_HIR_PROJames_MDL", out var james) && james is null,
+            "LE3 James should be an explicit destination omission.");
+    }
+
+    private static void ReviewedHairGraphsSurviveConversion()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        var cases = new (MorphFaceGame Source, MorphFaceGame Target, string Face, string SourceMesh, string? TargetMesh)[]
+        {
+            (MorphFaceGame.LE2, MorphFaceGame.LE3, "HMM.BioFace_Archer",
+                "BIOG_HMM_HIR_PRO_R.PROCustomBraids01.HMM_HIR_PROCustomBraids01_MDL",
+                "BIOG_HMM_HIR_PRO_R.PROCustomBraids01.HMM_HIR_PROCustomBraids01_MDL"),
+            (MorphFaceGame.LE3, MorphFaceGame.LE2, "HMF.Asari",
+                "BIOG_HMF_HIR_PRO.Hair_PROCustomShortAfro.HMF_HIR_PROCustomShortAfro_MDL",
+                "BIOG_HMF_HIR_PRO.PROCustomShortAfro.HMF_HIR_PROCustomShortAfro_MDL"),
+            (MorphFaceGame.LE2, MorphFaceGame.LE3, "HMM.BioFace_Archer",
+                "BIOG_HMM_HIR_PRO_R.Kaiden.HMM_HIR_Kai_MDL",
+                "BIOG_HMM_HIR_PRO_R.Hair_Kaiden.HMM_HIR_Kai_MDL"),
+            (MorphFaceGame.LE3, MorphFaceGame.LE2, "HMM.Archer_Face",
+                "BIOG_HMM_HIR_PRO_R.Hair_Kaiden.HMM_HIR_Kai_MDL",
+                "BIOG_HMM_HIR_PRO_R.Kaiden.HMM_HIR_Kai_MDL"),
+            (MorphFaceGame.LE2, MorphFaceGame.LE3, "HMM.BioFace_Archer",
+                "BIOG_HMM_HIR_PRO_R.FauxHawk.HMM_HIR_Fhwk_01_MDL",
+                "BIOG_HMM_HIR_PRO_R.Hair_SargeSpike.HMM_HIR_Ssk_01_MDL"),
+            (MorphFaceGame.LE3, MorphFaceGame.LE2, "HMM.Archer_Face",
+                "BIOG_HMM_HIR_PRO_R.Hair_James.HMM_HIR_PROJames_MDL", null)
+        };
+        foreach (var item in cases)
+        {
+            var sourcePackage = FixturePath($"{item.Source} GlobalMorphs.pcc");
+            var stagedPath = Path.Combine(Path.GetTempPath(), $"MFE-ReviewedHair-Source-{Guid.NewGuid():N}.pcc");
+            var targetPath = Path.Combine(Path.GetTempPath(), $"MFE-ReviewedHair-Target-{Guid.NewGuid():N}.pcc");
+            try
+            {
+                using var reader = new MorphFacePackageReader();
+                var loaded = reader.Load(sourcePackage, item.Face, decodeTextures: false);
+                using var cache = new PackageCache { CacheMaxSize = 8 };
+                var donor = new InstalledGameAssetResolver().Resolve(ToMeGame(item.Source), item.SourceMesh, "SkeletalMesh", cache)!;
+                var draft = loaded.Document with
+                {
+                    HairMeshReference = new AssetIdentity(donor.FileRef.FilePath, item.SourceMesh, donor.UIndex, "SkeletalMesh"),
+                    OtherMeshReferences = []
+                };
+                var staged = new MorphFacePackageWriter().SaveMorphToPackage(draft, sourcePackage, stagedPath, createNewPackage: true);
+                TestAssert.True(!staged.Warnings.Any(value => value.Contains("omitted", StringComparison.OrdinalIgnoreCase)),
+                    "Reviewed source hair was omitted: " + string.Join(" | ", staged.Warnings));
+                AssertReopenedHatIdentity(stagedPath, draft.Source.InstancedPath, "m_oHairMesh", item.SourceMesh, ToMeGame(item.Source));
+                var service = new MorphFaceConversionService(MorphFaceProfileRegistry.CreateDefault(), new MorphTargetCatalog(),
+                    new MorphFacePackageContextService(), TestFixtures.GetCorpusTextureCatalogService());
+                var result = service.Convert(new MorphFaceConversionRequest(stagedPath, draft.Source.InstancedPath,
+                    item.Target, targetPath, CreateNewPackage: true, FixturePath($"{item.Target} GlobalMorphs.pcc")));
+                if (item.TargetMesh is not null)
+                    AssertReopenedHatIdentity(targetPath, result.SaveResult.FaceInstancedPath, "m_oHairMesh", item.TargetMesh, ToMeGame(item.Target));
+                else
+                {
+                    using var reopened = MEPackageHandler.OpenMEPackage(targetPath, forceLoadFromDisk: true);
+                    var face = reopened.FindExport(result.SaveResult.FaceInstancedPath, "BioMorphFace")!;
+                    TestAssert.True(face.GetProperty<ObjectProperty>("m_oHairMesh")?.Value is null or 0, "James destination did not skip.");
+                    TestAssert.True(result.SaveResult.Warnings.Any(value => value.Contains(item.SourceMesh, StringComparison.OrdinalIgnoreCase) &&
+                        value.Contains("unset", StringComparison.OrdinalIgnoreCase)), "James omission lacked its reviewed warning.");
+                    PackageIntegrity.Verify(reopened);
+                }
+            }
+            finally
+            {
+                if (File.Exists(stagedPath)) File.Delete(stagedPath);
+                if (File.Exists(targetPath)) File.Delete(targetPath);
+            }
+        }
+    }
+
+    private static MEGame ToMeGame(MorphFaceGame game) => game switch
+    {
+        MorphFaceGame.LE1 => MEGame.LE1,
+        MorphFaceGame.LE2 => MEGame.LE2,
+        MorphFaceGame.LE3 => MEGame.LE3,
+        _ => throw new ArgumentOutOfRangeException(nameof(game))
+    };
+
+    private static void ReviewedExcludedAttachmentsAreOmitted()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        var sourcePackage = FixturePath("LE2 GlobalMorphs.pcc");
+        using var reader = new MorphFacePackageReader();
+        var loaded = reader.Load(sourcePackage, "HMF.arv_kenson", decodeTextures: false);
+        var paths = new[]
+        {
+            "BIOG_HMF_HIR_PRO.Mira.HMF_HIR_MIR_LOD0",
+            "BIOG_HMF_HIR_PRO.PROCustomBraids01.HMM_HIR_PROCustomBraids01_MDL_LOD0",
+            "BIOG_HMF_HIR_PRO.Hair_PROCustomBraids01.HMM_HIR_PROCustomBraids01_MDL_LOD0",
+            "BIOG_HMF_HIR_PRO.Hair_VI.HMF_HIR_VI_MDL"
+        };
+        foreach (var path in paths)
+        {
+            TestAssert.True(!AttachmentMeshNamePolicy.IsInstalledHeadAttachment(path), "Excluded native mesh remained selectable.");
+            var target = Path.Combine(Path.GetTempPath(), $"MFE-ExcludedAttachment-{Guid.NewGuid():N}.pcc");
+            try
+            {
+                var draft = loaded.Document with
+                {
+                    HairMeshReference = new AssetIdentity(sourcePackage, path, 0, "SkeletalMesh"), OtherMeshReferences = []
+                };
+                var result = new MorphFacePackageWriter().SaveMorphToPackage(draft, sourcePackage, target, createNewPackage: true);
+                TestAssert.True(result.Warnings.Any(value => value.Contains(path, StringComparison.OrdinalIgnoreCase) &&
+                    value.Contains("reviewed excluded", StringComparison.OrdinalIgnoreCase)), "Excluded source omission lacked its reason.");
+                using var reopened = MEPackageHandler.OpenMEPackage(target, forceLoadFromDisk: true);
+                var face = reopened.FindExport(draft.Source.InstancedPath, "BioMorphFace")!;
+                TestAssert.True(face.GetProperty<ObjectProperty>("m_oHairMesh")?.Value is null or 0, "Excluded source mesh was retained.");
+                TestAssert.True(reopened.FindExport(path, "SkeletalMesh") is null, "Excluded source mesh was materialised.");
+                PackageIntegrity.Verify(reopened);
+            }
+            finally { if (File.Exists(target)) File.Delete(target); }
+        }
+        TestAssert.True(AttachmentMeshNamePolicy.IsInstalledHeadAttachment("BIOG_HMF_HIR_PRO.Hair_PROMiranda.HMF_HIR_MIR_MDL"),
+            "Valid Miranda counterpart was excluded with the malformed mesh.");
+    }
+
     private static void CanonicalHatMaterialsRemainSupported()
     {
         LegendaryExplorerCoreRuntime.Initialize();
@@ -1155,6 +1292,72 @@ public static class PackageContextTests
                     example.Game, material, referenceResolver, out var failure),
                 $"Canonical {example.Game} stock attachment material '{example.Path}' was rejected: {failure}");
         }
+    }
+
+    private static void CanonicalHatDonorsResolveExactPaths()
+    {
+        // Independent reviewed identities: LE1/LE2 share the first path; LE3 uses
+        // the second path when it has a native equivalent. Null means absent.
+        var reviewed = new (string? Le12, string? Le3)[]
+        {
+            ("BIOG_HMF_HIR_PRO.Beanie.HMF_HAT_Bn1_MDL", "BIOG_HMF_HIR_PRO.Hat_Beanie.HMF_HAT_Bn1_MDL"),
+            ("BIOG_HMF_HIR_PRO.Beanie02.HMF_HAT_Bn2_MDL", "BIOG_HMF_HIR_PRO.Hat_Beanie02.HMF_HAT_Bn2_MDL"),
+            ("BIOG_HMF_HIR_PRO.Beret.HMF_HAT_Brt_MDL", "BIOG_HMF_HIR_PRO.Hat_Beret.HMF_HAT_Brt_MDL"),
+            ("BIOG_HMF_HIR_PRO.Cap.HMF_HAT_Cap_MDL", "BIOG_HMF_HIR_PRO.Hat_Cap.HMF_HAT_Cap_MDL"),
+            ("BIOG_HMF_HIR_PRO.Cosmo.HMF_HAT_Cos_MDL", null),
+            ("BIOG_HMF_HIR_PRO.Cuban.HMF_HAT_Cub_MDL", "BIOG_HMF_HIR_PRO.Hat_Cuban.HMF_HAT_Cub_MDL"),
+            ("BIOG_HMF_HIR_PRO.Cyclops.HMF_HAT_CYC_MDL", null),
+            ("BIOG_HMF_HIR_PRO.Earrings.HMF_HAT_Er1_MDL", null),
+            ("BIOG_HMF_HIR_PRO.Earrings.HMF_HAT_Er2_MDL", null),
+            ("BIOG_HMF_HIR_PRO.Earrings.HMF_HAT_Er3_MDL", null),
+            ("BIOG_HMF_HIR_PRO.Earrings.HMF_HAT_Er4_MDL", null),
+            ("BIOG_HMF_HIR_PRO.Earrings.HMF_HAT_Er5_MDL", null),
+            ("BIOG_HMF_HIR_PRO.Earrings.HMF_HAT_Er6_MDL", null),
+            ("BIOG_HMF_HIR_PRO.Earrings.HMF_HAT_Er7_MDL", null),
+            ("BIOG_HMF_HIR_PRO.GlassesFull.HMF_HAT_GLA_MDL", null),
+            ("BIOG_HMF_HIR_PRO.GlassesHalf.HMF_HAT_GLH_MDL", null),
+            ("BIOG_HMF_HIR_PRO.HairClip.HMF_HAT_Hcp_MDL", "BIOG_HMF_HIR_PRO.Hat_HairClip.HMF_HAT_Hcp_MDL"),
+            ("BIOG_HMF_HIR_PRO.Moto.HMF_HAT_MTR_MDL", "BIOG_HMF_HIR_PRO.Hat_Moto.HMF_HAT_MTR_MDL"),
+            ("BIOG_HMF_HIR_PRO.MotoGlasses.HMF_HAT_MTG_MDL", null),
+            ("BIOG_HMF_HIR_PRO.Officer.HMF_HAT_Off_MDL", "BIOG_HMF_HIR_PRO.Hat_Officer.HMF_HAT_Off_MDL"),
+            ("BIOG_HMM_HIR_PRO_R.Beanie01.HMM_HAT_Bn1_MDL", "BIOG_HMM_HIR_PRO_R.Hat_Beanie01.HMM_HAT_Bn1_MDL"),
+            ("BIOG_HMM_HIR_PRO_R.Beanie02.HMM_HAT_Bn2_MDL", "BIOG_HMM_HIR_PRO_R.Hat_Beanie02.HMM_HAT_Bn2_MDL"),
+            ("BIOG_HMM_HIR_PRO_R.Beret.HMM_HAT_Brt_MDL", "BIOG_HMM_HIR_PRO_R.Hat_Beret.HMM_HAT_Brt_MDL"),
+            ("BIOG_HMM_HIR_PRO_R.Cap.HMM_HAT_Cap_MDL", "BIOG_HMM_HIR_PRO_R.Hat_Cap.HMM_HAT_Cap_MDL"),
+            ("BIOG_HMM_HIR_PRO_R.Cosmo.HMM_HAT_Cos_MDL", null),
+            ("BIOG_HMM_HIR_PRO_R.Cuban.HMM_HAT_Cub_MDL", "BIOG_HMM_HIR_PRO_R.Hat_Cuban.HMM_HAT_Cub_MDL"),
+            ("BIOG_HMM_HIR_PRO_R.Cyclops.HMM_HAT_CYC_MDL", null),
+            ("BIOG_HMM_HIR_PRO_R.GlassesFull.HMM_HAT_Glf_MDL", null),
+            ("BIOG_HMM_HIR_PRO_R.GlassesHalf.HMM_HAT_GLH_MDL", null),
+            ("BIOG_HMM_HIR_PRO_R.Moto.HMM_HAT_MTR_MDL", "BIOG_HMM_HIR_PRO_R.Hat_Moto.HMM_HAT_MTR_MDL"),
+            ("BIOG_HMM_HIR_PRO_R.MotoGlasses.HMM_HAT_MTG_MDL", null),
+            ("BIOG_HMM_HIR_PRO_R.Officer.HMM_HAT_Off_MDL", "BIOG_HMM_HIR_PRO_R.Hat_Officer.HMM_HAT_Off_MDL"),
+            ("BIOG_HMM_HIR_PRO_R.Visor.HMM_HAT_VSR_MDL", null),
+            (null, "BIOG_HMM_HIR_PRO_R.Hat_Hackett.HMM_HAT_Hac_MDL")
+        };
+
+        var games = new[] { MEGame.LE1, MEGame.LE2, MEGame.LE3 };
+        foreach (var (le12Path, le3Path) in reviewed)
+        foreach (var sourceGame in games)
+        foreach (var targetGame in games.Where(game => game != sourceGame))
+        {
+            var sourcePath = sourceGame == MEGame.LE3 ? le3Path : le12Path;
+            if (sourcePath is null)
+            {
+                continue;
+            }
+            var expected = targetGame == MEGame.LE3 ? le3Path : le12Path;
+            TestAssert.True(CanonicalHatDonorPolicy.TryResolve(
+                    sourceGame, targetGame, sourcePath, out var actual),
+                $"Reviewed hat donor was not recognized: {sourceGame}->{targetGame} {sourcePath}.");
+            TestAssert.Equal(expected, actual);
+        }
+
+        TestAssert.True(!CanonicalHatDonorPolicy.TryResolve(
+                MEGame.LE2, MEGame.LE3,
+                "BIOG_HMF_HIR_PRO.Custom.HMF_HAT_Bn1_MDL", out var lookalikeTarget),
+            "A lookalike mesh outside the reviewed full path was treated as a canonical hat.");
+        TestAssert.Equal<string?>(null, lookalikeTarget);
     }
 
     private static void AttachmentLookupRejectsSameNameWrongPath()
@@ -1322,6 +1525,136 @@ public static class PackageContextTests
                 if (File.Exists(destination)) File.Delete(destination);
             }
         }
+    }
+
+    private static void MaleBeanie01OtherConvertsToLe3()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        const string sourcePath = "BIOG_HMM_HIR_PRO_R.Beanie01.HMM_HAT_Bn1_MDL";
+        const string targetPath = "BIOG_HMM_HIR_PRO_R.Hat_Beanie01.HMM_HAT_Bn1_MDL";
+        var sourcePackage = FixturePath("LE2 GlobalMorphs.pcc");
+        var alteredSource = Path.Combine(Path.GetTempPath(), $"MFE-Beanie01-Other-Source-{Guid.NewGuid():N}.pcc");
+        var destination = Path.Combine(Path.GetTempPath(), $"MFE-Beanie01-Other-LE3-{Guid.NewGuid():N}.pcc");
+        try
+        {
+            using var reader = new MorphFacePackageReader();
+            var loaded = reader.Load(sourcePackage, "HMM.BioFace_Archer");
+            using var cache = new PackageCache { CacheMaxSize = 8 };
+            var sourceDonor = new InstalledGameAssetResolver().Resolve(MEGame.LE2, sourcePath, "SkeletalMesh", cache)!;
+            var movedToOther = loaded.Document with
+            {
+                HairMeshReference = null,
+                OtherMeshReferences = [new AssetIdentity(
+                    sourceDonor.FileRef.FilePath, sourcePath, sourceDonor.UIndex, "SkeletalMesh")]
+            };
+            new MorphFacePackageWriter().SaveMorphToPackage(
+                movedToOther, sourcePackage, alteredSource, createNewPackage: true);
+
+            var service = new MorphFaceConversionService(
+                MorphFaceProfileRegistry.CreateDefault(), new MorphTargetCatalog(),
+                new MorphFacePackageContextService(), TestFixtures.GetCorpusTextureCatalogService());
+            var result = service.Convert(new MorphFaceConversionRequest(
+                alteredSource, movedToOther.Source.InstancedPath, MorphFaceGame.LE3, destination,
+                CreateNewPackage: true, FixturePath("LE3 GlobalMorphs.pcc")));
+            AssertReopenedHatIdentity(destination, result.SaveResult.FaceInstancedPath,
+                "m_oOtherMeshes", targetPath, MEGame.LE3);
+        }
+        finally
+        {
+            if (File.Exists(alteredSource)) File.Delete(alteredSource);
+            if (File.Exists(destination)) File.Delete(destination);
+        }
+    }
+
+    private static void FemaleCapHairConvertsToLe2()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        const string sourcePath = "BIOG_HMF_HIR_PRO.Hat_Cap.HMF_HAT_Cap_MDL";
+        const string targetPath = "BIOG_HMF_HIR_PRO.Cap.HMF_HAT_Cap_MDL";
+        var sourcePackage = FixturePath("LE3 GlobalMorphs.pcc");
+        var alteredSource = Path.Combine(Path.GetTempPath(), $"MFE-HMF-Cap-Source-{Guid.NewGuid():N}.pcc");
+        var destination = Path.Combine(Path.GetTempPath(), $"MFE-HMF-Cap-LE2-{Guid.NewGuid():N}.pcc");
+        try
+        {
+            using var reader = new MorphFacePackageReader();
+            var loaded = reader.Load(sourcePackage, "HMF.Asari");
+            using var cache = new PackageCache { CacheMaxSize = 8 };
+            var sourceDonor = new InstalledGameAssetResolver().Resolve(MEGame.LE3, sourcePath, "SkeletalMesh", cache)!;
+            var withCap = loaded.Document with
+            {
+                HairMeshReference = new AssetIdentity(
+                    sourceDonor.FileRef.FilePath, sourcePath, sourceDonor.UIndex, "SkeletalMesh"),
+                OtherMeshReferences = []
+            };
+            new MorphFacePackageWriter().SaveMorphToPackage(
+                withCap, sourcePackage, alteredSource, createNewPackage: true);
+            var service = new MorphFaceConversionService(
+                MorphFaceProfileRegistry.CreateDefault(), new MorphTargetCatalog(),
+                new MorphFacePackageContextService(), TestFixtures.GetCorpusTextureCatalogService());
+            var result = service.Convert(new MorphFaceConversionRequest(
+                alteredSource, withCap.Source.InstancedPath, MorphFaceGame.LE2,
+                destination, CreateNewPackage: true, FixturePath("LE2 GlobalMorphs.pcc")));
+            AssertReopenedHatIdentity(destination, result.SaveResult.FaceInstancedPath,
+                "m_oHairMesh", targetPath, MEGame.LE2);
+        }
+        finally
+        {
+            if (File.Exists(alteredSource)) File.Delete(alteredSource);
+            if (File.Exists(destination)) File.Delete(destination);
+        }
+    }
+
+    private static void AssertReopenedHatIdentity(
+        string packagePath, string facePath, string propertyName, string expectedMeshPath, MEGame game)
+    {
+        using var reopened = MEPackageHandler.OpenMEPackage(packagePath, forceLoadFromDisk: true);
+        var face = reopened.FindExport(facePath, "BioMorphFace")
+                   ?? throw new InvalidDataException($"Converted face '{facePath}' is missing after reopen.");
+        var attachment = propertyName.Equals("m_oHairMesh", StringComparison.Ordinal)
+            ? face.GetProperty<ObjectProperty>(propertyName)?.ResolveToEntry(reopened) as ExportEntry
+            : face.GetProperty<ArrayProperty<ObjectProperty>>(propertyName)?
+                .Select(value => value.ResolveToEntry(reopened)).OfType<ExportEntry>()
+                .SingleOrDefault(value => value.InstancedFullPath.Equals(expectedMeshPath,
+                    StringComparison.OrdinalIgnoreCase));
+        TestAssert.True(attachment is not null, $"Converted {propertyName} hat was omitted after reopen.");
+        TestAssert.True(expectedMeshPath.Equals(attachment!.InstancedFullPath, StringComparison.OrdinalIgnoreCase),
+            $"Expected exact mesh '{expectedMeshPath}', got '{attachment.InstancedFullPath}'.");
+
+        using var cache = new PackageCache { CacheMaxSize = 8 };
+        var donor = new InstalledGameAssetResolver().Resolve(game, expectedMeshPath, "SkeletalMesh", cache)
+                    ?? throw new InvalidDataException($"Official {game} hat donor '{expectedMeshPath}' was not found.");
+        var expectedSlots = donor.GetBinaryData<SkeletalMesh>().Materials;
+        var actualSlots = attachment.GetBinaryData<SkeletalMesh>().Materials;
+        TestAssert.Equal(expectedSlots.Length, actualSlots.Length);
+        var resolver = new GamePackageReferenceResolver(cache);
+        for (var index = 0; index < expectedSlots.Length; index++)
+        {
+            var expected = donor.FileRef.GetEntry(expectedSlots[index])
+                           ?? throw new InvalidDataException($"Native donor slot {index} is unresolved.");
+            var actual = reopened.GetEntry(actualSlots[index]);
+            TestAssert.True(actual is not null, $"Saved slot {index} for '{expectedMeshPath}' is unresolved.");
+            TestAssert.Equal(expected.ClassName, actual!.ClassName);
+            TestAssert.True(PccPackageWorkflow.CanonicalPath(expected).Equals(actual.InstancedFullPath,
+                StringComparison.OrdinalIgnoreCase), "Saved material slot identity differs from its official donor.");
+            var authoredMaterial = resolver.Resolve(expected)!;
+            var savedMaterial = resolver.Resolve(actual)!;
+            TestAssert.True(authoredMaterial.GetProperties().Equivalent(savedMaterial.GetProperties(), (left, right) =>
+            {
+                if (left == 0 || right == 0) return left == right;
+                var authoredEntry = authoredMaterial.FileRef.GetEntry(left);
+                var savedEntry = savedMaterial.FileRef.GetEntry(right);
+                return authoredEntry is not null && savedEntry is not null &&
+                    authoredEntry.ClassName == savedEntry.ClassName &&
+                    PccPackageWorkflow.CanonicalPath(authoredEntry).Equals(
+                        PccPackageWorkflow.CanonicalPath(savedEntry), StringComparison.OrdinalIgnoreCase);
+            }), $"Saved hat slot {index} lost authored material properties or dependency identities.");
+            TestAssert.True(SupportedMaterialGraphPolicy.IsSupported(game, savedMaterial, resolver, out var failure),
+                $"Saved hat slot {index} has an unresolved parent graph: {failure}");
+        }
+        PackageIntegrity.Verify(reopened);
+        var snapshot = PccPackageWorkflow.CaptureDependencyGraph(attachment);
+        using var independentlyReopened = MEPackageHandler.OpenMEPackage(packagePath, forceLoadFromDisk: true);
+        PccPackageWorkflow.VerifyDependencyGraph(independentlyReopened, snapshot, true);
     }
 
     private static void CustomHairMicUsesCanonicalParent()

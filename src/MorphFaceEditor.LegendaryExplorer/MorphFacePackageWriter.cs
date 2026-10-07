@@ -400,6 +400,11 @@ public sealed class MorphFacePackageWriter
         AssetIdentity? Filter(AssetIdentity? identity)
         {
             if (identity is null) return null;
+            if (AttachmentMeshNamePolicy.IsExcludedNativeAttachment(identity.InstancedPath))
+            {
+                warnings.Add($"Optional attachment '{identity.InstancedPath}' was omitted because it is a reviewed excluded native mesh.");
+                return null;
+            }
             if (!File.Exists(identity.PackagePath))
             {
                 warnings.Add($"Optional attachment '{identity.InstancedPath}' was omitted because '{identity.PackagePath}' is unavailable.");

@@ -114460,6 +114460,41 @@
           "ClassName": "WwiseEvent",
           "Path": "Wwise_Generic_Physics.Play_Human_Bodyfall",
           "Kind": "Export"
+        },
+        {
+          "ClassName": "RvrEffectsMaterialUser",
+          "Path": "EffectsMaterials.Users.Human.HMN_HED_PRO_MASTER_HAIR_MAT_USER_CC",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Material",
+          "Path": "BIOG_Humanoid_MASTER_MTR_R.Human.HMN_HED_PRO_MASTER_HAIR_MAT_CC",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "RvrEffectsMaterialUser",
+          "Path": "EffectsMaterials.Users.HMM_HED_PRO_USER_SCALP_MAT_CC",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Material",
+          "Path": "BIOG_Humanoid_MASTER_MTR_R.Human.HMM_HED_PRO_MASTER_SCALP_MAT_CC",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "RvrEffectsMaterialUser",
+          "Path": "BIOG_HMM_HED_PROMorph.Kaiden.Master.BIOG_HMM_HED_Kaiden_USER",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Material",
+          "Path": "BIOG_HMM_HED_PROMorph.Kaiden.Master.BIOG_HMM_HED_Kaiden_MASTER",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Material",
+          "Path": "BIOG_Humanoid_MASTER_MTR_R.Human.Hair.Human_Hair_MASTER",
+          "Kind": "Export"
         }
       ]
     }

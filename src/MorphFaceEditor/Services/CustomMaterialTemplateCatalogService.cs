@@ -366,10 +366,11 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
         path.Contains("_Old", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Excludes only the audited literal object-name suffixes from attachment choices.
+    /// Excludes reviewed native leftovers and audited literal object-name suffixes.
     /// </summary>
     internal static bool IsUnsafeAttachment(string packagePath, string meshPath) =>
-        AttachmentMeshNamePolicy.HasExcludedSuffix(meshPath);
+        AttachmentMeshNamePolicy.HasExcludedSuffix(meshPath) ||
+        AttachmentMeshNamePolicy.IsExcludedNativeAttachment(meshPath);
 
     private static string Role(HeadMaterialFamily family) => family switch
     {

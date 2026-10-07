@@ -117,7 +117,8 @@ internal static class SupportedMaterialGraphPolicy
         // graphs whose names do not describe their headwear or preview family.
         return HeadMaterialClassifier.IsAssignableHeadFamily(HeadMaterialClassifier.Classify(path)) ||
                IsRecognizedHeadwearPath(path) ||
-               IsReviewedSharedHatRoot(game, className, path);
+               IsReviewedSharedHatRoot(game, className, path) ||
+               IsReviewedSharedHairRoot(game, className, path);
     }
 
     private static bool IsRecognizedHeadwearPath(string path) =>
@@ -140,6 +141,16 @@ internal static class SupportedMaterialGraphPolicy
             "RvrEffectsMaterialUser|BIOG_HMM_ARM_AND_R.Master.Andersonb_MASTER_MAT_USER",
             "Material|BIOG_HMM_ARM_AND_R.Master.Andersonb_MASTER_MAT"));
     }
+
+    private static bool IsReviewedSharedHairRoot(MEGame game, string className, string path) =>
+        game == MEGame.LE3 && IsOneOf($"{className}|{path}",
+            "RvrEffectsMaterialUser|EffectsMaterials.Users.Human.HMN_HED_PRO_MASTER_HAIR_MAT_USER_CC",
+            "Material|BIOG_Humanoid_MASTER_MTR_R.Human.HMN_HED_PRO_MASTER_HAIR_MAT_CC",
+            "RvrEffectsMaterialUser|EffectsMaterials.Users.HMM_HED_PRO_USER_SCALP_MAT_CC",
+            "Material|BIOG_Humanoid_MASTER_MTR_R.Human.HMM_HED_PRO_MASTER_SCALP_MAT_CC",
+            "RvrEffectsMaterialUser|BIOG_HMM_HED_PROMorph.Kaiden.Master.BIOG_HMM_HED_Kaiden_USER",
+            "Material|BIOG_HMM_HED_PROMorph.Kaiden.Master.BIOG_HMM_HED_Kaiden_MASTER",
+            "Material|BIOG_Humanoid_MASTER_MTR_R.Human.Hair.Human_Hair_MASTER");
 
     private static bool IsOneOf(string identity, params string[] reviewedIdentities) =>
         reviewedIdentities.Contains(identity, StringComparer.OrdinalIgnoreCase);

@@ -113,8 +113,8 @@ internal static class SupportedMaterialGraphPolicy
 
         // The oracle is a dependency projection and includes body and VFX
         // materials. Ordinary roots must classify as an assignable head family
-        // or recognized headwear; the Anderson exception covers the shared body-
-        // derived graph used by stock LE3 Beret and Officer materials.
+        // or recognized headwear. Reviewed shared roots also cover attachment
+        // graphs whose names do not describe their headwear or preview family.
         return HeadMaterialClassifier.IsAssignableHeadFamily(HeadMaterialClassifier.Classify(path)) ||
                IsRecognizedHeadwearPath(path) ||
                IsReviewedSharedHatRoot(game, className, path);
@@ -129,9 +129,16 @@ internal static class SupportedMaterialGraphPolicy
     private static bool IsReviewedSharedHatRoot(MEGame game, string className, string path)
     {
         var identity = $"{className}|{path}";
-        return game == MEGame.LE3 && IsOneOf(identity,
+        // Stock MotoGlasses uses this visor graph for its second MIC slot.
+        // Authored dependency porting does not require an editable material
+        // family or preview shader. The oracle check above still establishes
+        // the reviewed game's native identity and import/export role.
+        return (game is MEGame.LE1 or MEGame.LE2 && IsOneOf(identity,
+            "RvrEffectsMaterialUser|EffectsMaterials.Users.HMF_VSR_MASTER_MAT_USER",
+            "Material|BIOG_Humanoid_MASTER_MTR_R.Human.HMF_VSR_MASTER_MAT")) ||
+            (game == MEGame.LE3 && IsOneOf(identity,
             "RvrEffectsMaterialUser|BIOG_HMM_ARM_AND_R.Master.Andersonb_MASTER_MAT_USER",
-            "Material|BIOG_HMM_ARM_AND_R.Master.Andersonb_MASTER_MAT");
+            "Material|BIOG_HMM_ARM_AND_R.Master.Andersonb_MASTER_MAT"));
     }
 
     private static bool IsOneOf(string identity, params string[] reviewedIdentities) =>

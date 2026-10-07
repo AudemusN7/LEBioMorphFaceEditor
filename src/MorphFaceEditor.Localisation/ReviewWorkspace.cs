@@ -9,6 +9,7 @@ public sealed class ReviewWorkspace
 {
     private CatalogueData _catalogue;
     private byte[] _fingerprint;
+    private byte[] _sourceBytes;
     public string Path { get; private set; }
     public string BackupPath => Path + ".localiser.bak";
     public IReadOnlyList<ReviewEntry> Entries { get; }
@@ -16,7 +17,7 @@ public sealed class ReviewWorkspace
 
     private ReviewWorkspace(string path, byte[] bytes, CatalogueData catalogue)
     {
-        Path = path; _fingerprint = SHA256.HashData(bytes); _catalogue = catalogue;
+        Path = path; _fingerprint = SHA256.HashData(bytes); _catalogue = catalogue; _sourceBytes = bytes;
         Entries = catalogue.Items.Select(item => new ReviewEntry(item, catalogue.Annotations.GetValueOrDefault(item.Key))).ToArray();
     }
 
@@ -59,7 +60,7 @@ public sealed class ReviewWorkspace
         using (var writer = XmlWriter.Create(stream, new XmlWriterSettings
         { Encoding = new UTF8Encoding(false), Indent = false, OmitXmlDeclaration = document.Declaration is null, NewLineHandling = NewLineHandling.None }))
             document.Save(writer);
-        var bytes = stream.ToArray();
+        var bytes = CatalogueLayout.Preserve(_sourceBytes, stream.ToArray());
         using var validation = new MemoryStream(bytes); _ = StringCatalogue.Read(validation);
         return new CatalogueWrite(path, bytes, string.Equals(path, Path, StringComparison.OrdinalIgnoreCase) ? _fingerprint : CatalogueFileWriter.Fingerprint(path));
     }
@@ -68,6 +69,7 @@ public sealed class ReviewWorkspace
     {
         using var stream = new MemoryStream(write.Bytes); _catalogue = StringCatalogue.Read(stream);
         Path = write.Path; _fingerprint = SHA256.HashData(write.Bytes);
+        _sourceBytes = write.Bytes;
         foreach (var entry in Entries) entry.AcceptSaved();
     }
 }

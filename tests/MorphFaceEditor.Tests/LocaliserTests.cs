@@ -14,6 +14,8 @@ internal static class LocaliserTests
     internal static IReadOnlyList<TestCase> All { get; } =
     [
         new("localiser: full master review round-trip preserves every key and string", CorpusRoundTrip),
+        new("localiser: a wording edit preserves master and translation file layout", WordingPreservesLayout),
+        new("localiser: editing a real English label changes only its wording bytes", RealLabelPreservesLayout),
         new("localiser: wording changes invalidate reviews and revert restores them", ReviewLifecycle),
         new("localiser: notes and protection survive XML-sensitive characters", AnnotationRoundTrip),
         new("localiser: excluded strings cannot be translated and are omitted from saved languages", ProtectedStrings),
@@ -27,6 +29,65 @@ internal static class LocaliserTests
         new("localiser: inline typing retains editors caret and selection until filtered edits finish", InlineTyping),
         new("localiser: dark table bulk edits 200 rows and retains all language drafts", WindowSmoke)
     ];
+
+    private static void WordingPreservesLayout() => Scratch(root =>
+    {
+        var original = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n" +
+            "<ResourceDictionary xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" xmlns:system=\"clr-namespace:System;assembly=mscorlib\" xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\">\r\n" +
+            "    <!-- Keep this section comment -->\r\n" +
+            "    <system:String xml:space='preserve' x:Key='loc_First'>First &amp; original</system:String>\r\n" +
+            "    <system:String x:Key=\"loc_Second\" xml:space=\"preserve\"><![CDATA[Second < untouched]]></system:String>\r\n" +
+            "</ResourceDictionary>\r\n";
+        var masterPath = Path.Combine(root, "master.xaml");
+        var languagePath = Path.Combine(root, "language.xaml");
+        var encoding = new UTF8Encoding(true);
+        File.WriteAllText(masterPath, original, encoding);
+        File.WriteAllText(languagePath, original, encoding);
+        var master = ReviewWorkspace.Open(masterPath);
+        var language = TranslationWorkspace.Open(master, languagePath);
+        master.Entries.Single(entry => entry.Key == "loc_First").Text = "Master & changed";
+        master.Save();
+        TestAssert.True(File.ReadAllBytes(masterPath).SequenceEqual(encoding.GetPreamble().Concat(
+            encoding.GetBytes(original.Replace("First &amp; original", "Master &amp; changed", StringComparison.Ordinal)))),
+            "Master save changed untouched bytes, comments, CDATA, BOM or line endings.");
+        language.Entries["loc_First"].Text = "Translated & changed";
+        language.SaveAs(languagePath, master);
+        TestAssert.True(File.ReadAllBytes(languagePath).SequenceEqual(encoding.GetPreamble().Concat(
+            encoding.GetBytes(original.Replace("First &amp; original", "Translated &amp; changed", StringComparison.Ordinal)))),
+            "Translation save reformatted untouched content.");
+        var saved = File.ReadAllBytes(languagePath);
+        language.SaveAs(languagePath, master);
+        TestAssert.True(saved.SequenceEqual(File.ReadAllBytes(languagePath)), "Repeated translation save changed bytes.");
+    });
+
+    private static void RealLabelPreservesLayout() => Scratch(root =>
+    {
+        var source = FindMaster();
+        var masterPath = Path.Combine(root, "Strings.en-GB.xaml");
+        var languagePath = Path.Combine(root, "Strings.en-US.xaml");
+        File.Copy(source, masterPath);
+        File.Copy(Path.Combine(Path.GetDirectoryName(source)!, "Strings.en-US.xaml"), languagePath);
+        var master = ReviewWorkspace.Open(masterPath);
+        var language = TranslationWorkspace.Open(master, languagePath);
+        const string key = "loc_Services_MetadataText_Archetype_HumanFemale_hed_eyeshadow_tint_scalar_32e85d_Label";
+        foreach (var path in new[] { masterPath, languagePath })
+        {
+            var original = File.ReadAllText(path);
+            if (path == masterPath)
+            {
+                master.Entries.Single(entry => entry.Key == key).Text = "Eyeliner Strength QA";
+                master.Save();
+            }
+            else
+            {
+                language.Entries[key].Text = "Eyeliner Strength QA";
+                language.SaveAs(path, master);
+            }
+            TestAssert.Equal(original.Replace(
+                ">Eyeliner Strength</system:String>", ">Eyeliner Strength QA</system:String>", StringComparison.Ordinal),
+                File.ReadAllText(path));
+        }
+    });
 
     private static void CorpusRoundTrip() => Scratch(root =>
     {

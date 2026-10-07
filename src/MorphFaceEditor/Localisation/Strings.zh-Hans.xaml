@@ -200,8 +200,8 @@
   <system:String x:Key="loc_Services_MetadataText_Archetype_HumanFemale_hed_addn_spec_lips_scalar_49f34f_Label" xml:space="preserve">嘴唇高光强度</system:String>
   <system:String x:Key="loc_Services_MetadataText_Archetype_HumanFemale_hed_brow_tint_scalar_835792_Label" xml:space="preserve">眼影强度</system:String>
   <system:String x:Key="loc_Services_MetadataText_Archetype_HumanFemale_hed_brow_tint_vector_6da571_Label" xml:space="preserve">眼影颜色</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Archetype_HumanFemale_hed_eyeshadow_tint_scalar_32e85d_Label" xml:space="preserve">妆容强度</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Archetype_HumanFemale_hed_eyeshadow_tint_vector_735da0_Label" xml:space="preserve">妆容颜色</system:String>
+  <system:String x:Key="loc_Services_MetadataText_Archetype_HumanFemale_hed_eyeshadow_tint_scalar_32e85d_Label" xml:space="preserve">眼线强度</system:String>
+  <system:String x:Key="loc_Services_MetadataText_Archetype_HumanFemale_hed_eyeshadow_tint_vector_735da0_Label" xml:space="preserve">眼线颜色</system:String>
   <!--localiser: {"Key":"loc_Services_MetadataText_Archetype_HumanFemale_mask_8e2d06_Description","ReviewedHash":null,"DoNotTranslate":false,"Note":"Don\u0027t translate the name, only second half","SourceHash":null}-->
   <system:String x:Key="loc_Services_MetadataText_Archetype_HumanFemale_mask_8e2d06_Label" xml:space="preserve">头皮不透明度</system:String>
   <system:String x:Key="loc_Services_MetadataText_Archetype_HumanFemale_mouth_cheekmass_07a337_Label" xml:space="preserve">脸颊丰满度</system:String>

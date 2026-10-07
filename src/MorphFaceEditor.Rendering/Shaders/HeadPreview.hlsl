@@ -1136,7 +1136,7 @@ float4 PSMain(
             albedo = lerp(
                 albedo,
                 makeupBase * QuaternaryColor.rgb,
-                saturate(makeupSample.g * SkinParameters0.w));
+                saturate(makeupSample.g * makeupSample.b * SkinParameters0.w));
             float lipMask = saturate(
                 (1 - makeupSample.b) * makeupSample.a * GeneralParameters.z);
             albedo = lerp(

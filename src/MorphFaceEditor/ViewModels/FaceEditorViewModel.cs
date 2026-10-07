@@ -43,6 +43,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     private bool _cursedMode;
     private CursedRandomisationBaseline? _cursedBaseline;
     private readonly Dictionary<string, System.Numerics.Vector3> _cursedBoneOffsets = new(StringComparer.OrdinalIgnoreCase);
+    private readonly CursedBoneOffsetHistory _cursedBoneHistory;
     private readonly IReadOnlySet<int> _morphGeometryLods;
     private readonly IReadOnlyList<MorphFaceEditor.Core.Domain.AssetIdentity?> _preservedOtherMeshes;
     private readonly RandomisationInclusionState _randomisationInclusionState;
@@ -145,9 +146,10 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             .Select(index => new AssetReferenceEditingSession(otherMeshReferences.ElementAtOrDefault(index)))
             .ToArray();
         _preservedOtherMeshes = otherMeshReferences.Skip(1).ToArray();
+        _cursedBoneHistory = new CursedBoneOffsetHistory(_cursedBoneOffsets);
         var historySources = new List<IUndoableEditSource>
         {
-            session, materialSession, hairSession
+            session, materialSession, hairSession, _cursedBoneHistory
         };
         historySources.AddRange(otherMeshSessions);
         if (customMaterialWorkspace is not null) historySources.Add(customMaterialWorkspace);
@@ -338,7 +340,6 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                 if (!value)
                 {
                     _cursedBaseline = null;
-                    _cursedBoneOffsets.Clear();
                 }
                 RaiseRandomisationCanExecuteChanged();
             }
@@ -435,9 +436,9 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         using var aggregate = _history.BeginAggregate();
         if (CanEditMorphFeatures || CanEditBones) _session.ResetToDefaults();
         Material.ResetToDefaults();
+        _cursedBoneHistory.Set(new Dictionary<string, System.Numerics.Vector3>());
         aggregate.Commit();
         _cursedBaseline = null;
-        _cursedBoneOffsets.Clear();
     }
 
     private bool CanSetToDefaults() => CanEditMorphFeatures || CanEditBones || AllowsMaterialRandomisation;
@@ -586,6 +587,18 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                 morphValues = WithExclusivePlayerIconicMorphs(morphValues, playerContext,
                     morphSeed ?? materialSeed ?? 0);
                 if (morphValues.Count > 0) _session.SetFeatures(morphValues);
+                if (includeCursedBones && RandomiseMorphs && CanEditBones)
+                {
+                    // Keep the new morph's skeleton and remove only the previous Cursed contribution.
+                    foreach (var bone in _session.FinalSkeleton.ToArray())
+                    {
+                        if (!_cursedBoneOffsets.TryGetValue(bone.BoneName, out var offset)) continue;
+                        var clean = bone.Translation - offset;
+                        _session.SetBoneAxis(bone.BoneName, 0, clean.X);
+                        _session.SetBoneAxis(bone.BoneName, 1, clean.Y);
+                        _session.SetBoneAxis(bone.BoneName, 2, clean.Z);
+                    }
+                }
                 if (preparedMaterial is not null) Material.ApplyRandomisation(preparedMaterial);
                 if (playerHair is { } hair)
                 {
@@ -599,6 +612,8 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                             break;
                     }
                 }
+                if (includeCursedBones && RandomiseMorphs && CanEditBones)
+                    _cursedBoneHistory.Set(new Dictionary<string, System.Numerics.Vector3>());
                 aggregate.Commit();
             }
             AppLog.Information(Loc.Format(
@@ -784,12 +799,8 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                         break;
                 }
             }
+            if (nextBoneOffsets is not null) _cursedBoneHistory.Set(nextBoneOffsets);
             aggregate.Commit();
-        }
-        if (nextBoneOffsets is not null)
-        {
-            _cursedBoneOffsets.Clear();
-            foreach (var value in nextBoneOffsets) _cursedBoneOffsets[value.Key] = value.Value;
         }
         AppLog.Information(Loc.Format(
             "loc_VM_faceEditor_cursedRandomisationLog",

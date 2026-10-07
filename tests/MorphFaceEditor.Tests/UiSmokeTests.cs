@@ -81,6 +81,7 @@ public static class UiSmokeTests
         new("LE3 HMM scalp randomisation preserves its required texture pair", Le3HmmScalpRandomisationAppliesCorePair),
         new("manual hair scalp prompt survives an optional Mask decode failure", ManualHairScalpPromptKeepsRequiredPairWhenOptionalMapFails),
         new("cursed mode randomises morph bones and materials as one undo step", CursedModeRandomisesOneUndoStep),
+        new("normal global morph randomisation removes previous cursed bone offsets", NormalRollRemovesCursedBones),
         new("awaitable randomisation completes the real edit and supports aggregate undo", AwaitableRandomisationCompletes),
         new("awaitable randomisation propagates seed failures without partial edits", AwaitableRandomisationPropagatesFailure),
         new("Cursed material-only rolls leave morphs and bones unchanged", CursedMaterialOnlyLeavesBonesUnchanged),
@@ -1799,6 +1800,47 @@ public static class UiSmokeTests
                         defaults.MaterialOverrides.Scalars.Count == 0 &&
                         defaults.MaterialOverrides.Vectors.Count == 0,
             "Set to Defaults did not remove the complete cursed state.");
+    }
+
+    private static void NormalRollRemovesCursedBones()
+    {
+        using var reader = new MorphFacePackageReader();
+        using var editor = CreateRandomisationEditor(reader);
+        using var cleanEditor = CreateRandomisationEditor(reader);
+        editor.CursedMode = true;
+        editor.RandomiseMaterials = false;
+        editor.RandomisationStrength = 100;
+        editor.RandomiseAsync().GetAwaiter().GetResult();
+        var cursed = editor.CreateDraft();
+        editor.CursedMode = false;
+        TestAssert.True(cursed.FinalSkeleton.SequenceEqual(editor.CreateDraft().FinalSkeleton),
+            "Toggling Cursed off changed bones before the next roll.");
+        editor.RandomiseAsync().GetAwaiter().GetResult();
+        cleanEditor.RandomiseMaterials = false;
+        cleanEditor.RandomisationStrength = 100;
+        cleanEditor.RandomiseAsync().GetAwaiter().GetResult();
+        var normal = editor.CreateDraft();
+        var clean = cleanEditor.CreateDraft();
+        TestAssert.True(normal.MorphFeatures.SequenceEqual(clean.MorphFeatures), "Normal morph rolls differed.");
+        foreach (var bone in clean.FinalSkeleton)
+        {
+            var actual = normal.FinalSkeleton.Single(value => value.BoneName == bone.BoneName).Translation;
+            TestAssert.True(Vector3.Distance(actual, bone.Translation) < 0.0001f,
+                $"Normal global roll retained a Cursed offset on {bone.BoneName}: {actual} versus {bone.Translation}.");
+        }
+        editor.UndoCommand.Execute(null);
+        TestAssert.True(MorphFaceEditorStateComparer.Equals(cursed, editor.CreateDraft()),
+            "Undo did not restore the Cursed face in one step.");
+        editor.RedoCommand.Execute(null);
+        TestAssert.True(MorphFaceEditorStateComparer.Equals(normal, editor.CreateDraft()),
+            "Redo did not restore the normal face in one step.");
+        editor.UndoCommand.Execute(null);
+        editor.RandomiseAsync().GetAwaiter().GetResult();
+        var rerolled = editor.CreateDraft();
+        foreach (var bone in normal.FinalSkeleton)
+            TestAssert.True(Vector3.Distance(bone.Translation,
+                rerolled.FinalSkeleton.Single(value => value.BoneName == bone.BoneName).Translation) < 0.0001f,
+                "A normal roll after Undo retained Cursed bone offsets.");
     }
 
     private static void CursedMaterialOnlyLeavesBonesUnchanged()

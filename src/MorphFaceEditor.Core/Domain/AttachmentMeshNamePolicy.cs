@@ -21,8 +21,15 @@ public static class AttachmentMeshNamePolicy
         return objectName.Split('_').Any(token =>
                    token.Equals("HIR", StringComparison.OrdinalIgnoreCase) ||
                    token.Equals("HAT", StringComparison.OrdinalIgnoreCase)) &&
-               !HasExcludedSuffix(instancedPath);
+               !HasExcludedSuffix(instancedPath) && !IsExcludedNativeAttachment(instancedPath);
     }
+
+    /// <summary>Reviewed malformed, duplicate or unsupported native attachment identities.</summary>
+    public static bool IsExcludedNativeAttachment(string instancedPath) =>
+        instancedPath.Equals("BIOG_HMF_HIR_PRO.Mira.HMF_HIR_MIR_LOD0", StringComparison.OrdinalIgnoreCase) ||
+        instancedPath.Equals("BIOG_HMF_HIR_PRO.PROCustomBraids01.HMM_HIR_PROCustomBraids01_MDL_LOD0", StringComparison.OrdinalIgnoreCase) ||
+        instancedPath.Equals("BIOG_HMF_HIR_PRO.Hair_PROCustomBraids01.HMM_HIR_PROCustomBraids01_MDL_LOD0", StringComparison.OrdinalIgnoreCase) ||
+        instancedPath.Equals("BIOG_HMF_HIR_PRO.Hair_VI.HMF_HIR_VI_MDL", StringComparison.OrdinalIgnoreCase);
 
     public static bool IsBaseHeadMesh(string instancedPath)
     {

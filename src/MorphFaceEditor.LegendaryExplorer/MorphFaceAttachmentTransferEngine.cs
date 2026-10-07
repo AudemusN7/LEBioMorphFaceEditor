@@ -46,14 +46,25 @@ internal static class MorphFaceAttachmentTransferEngine
         {
             return null;
         }
+        if (AttachmentMeshNamePolicy.IsExcludedNativeAttachment(source.InstancedPath))
+        {
+            warnings.Add(
+                $"Optional attachment '{source.InstancedPath}' was omitted because it is a reviewed excluded native mesh.");
+            return null;
+        }
+
         var requestedPath = source.InstancedPath;
-        if (CrossGameAssetReconciliationCatalog.TryResolve(
-                sourceGame, destination.Game, kind, null, source.InstancedPath, out var reviewedPath))
+        if ((source.ClassName.Equals("SkeletalMesh", StringComparison.OrdinalIgnoreCase) &&
+             ((kind.Equals("Hair", StringComparison.OrdinalIgnoreCase) &&
+               CanonicalHairDonorPolicy.TryResolve(sourceGame, destination.Game, source.InstancedPath, out var reviewedPath)) ||
+              CanonicalHatDonorPolicy.TryResolve(sourceGame, destination.Game, source.InstancedPath, out reviewedPath))) ||
+            CrossGameAssetReconciliationCatalog.TryResolve(
+                sourceGame, destination.Game, kind, null, source.InstancedPath, out reviewedPath))
         {
             if (reviewedPath is null)
             {
                 warnings.Add(
-                    $"The canonical {sourceGame}->{destination.Game} corpora omit {kind.ToLowerInvariant()} " +
+                    $"The reviewed {sourceGame}->{destination.Game} donors omit {kind.ToLowerInvariant()} " +
                     $"mesh '{source.InstancedPath}'; the converted face leaves it unset.");
                 return null;
             }

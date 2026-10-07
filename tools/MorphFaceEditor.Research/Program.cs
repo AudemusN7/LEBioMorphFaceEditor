@@ -218,6 +218,46 @@ if (args.Length == 3 && args[0].Equals("material-oracle", StringComparison.Ordin
                             : entry).ToArray();
             }
         }
+        if (gameName.Equals("LE3", StringComparison.OrdinalIgnoreCase))
+        {
+            // These exact LE3 attachment-hair parents are exported by reviewed
+            // official basegame/DLC donors but are absent from the GlobalMorphs
+            // projection. Retain their native export roles so attachment
+            // material support remains independent of preview shader support.
+            var reviewedHairExports = new[]
+            {
+                new MaterialOracleEntry("RvrEffectsMaterialUser",
+                    "EffectsMaterials.Users.Human.HMN_HED_PRO_MASTER_HAIR_MAT_USER_CC", "Export"),
+                new MaterialOracleEntry("Material",
+                    "BIOG_Humanoid_MASTER_MTR_R.Human.HMN_HED_PRO_MASTER_HAIR_MAT_CC", "Export"),
+                new MaterialOracleEntry("RvrEffectsMaterialUser",
+                    "EffectsMaterials.Users.HMM_HED_PRO_USER_SCALP_MAT_CC", "Export"),
+                new MaterialOracleEntry("Material",
+                    "BIOG_Humanoid_MASTER_MTR_R.Human.HMM_HED_PRO_MASTER_SCALP_MAT_CC", "Export"),
+                new MaterialOracleEntry("RvrEffectsMaterialUser",
+                    "BIOG_HMM_HED_PROMorph.Kaiden.Master.BIOG_HMM_HED_Kaiden_USER", "Export"),
+                new MaterialOracleEntry("Material",
+                    "BIOG_HMM_HED_PROMorph.Kaiden.Master.BIOG_HMM_HED_Kaiden_MASTER", "Export"),
+                new MaterialOracleEntry("Material",
+                    "BIOG_Humanoid_MASTER_MTR_R.Human.Hair.Human_Hair_MASTER", "Export")
+            };
+            foreach (var reviewedHairExport in reviewedHairExports)
+            {
+                var matches = entries.Where(entry =>
+                        entry.ClassName.Equals(reviewedHairExport.ClassName, StringComparison.OrdinalIgnoreCase) &&
+                        entry.Path.Equals(reviewedHairExport.Path, StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+                if (matches.Length > 1)
+                {
+                    throw new InvalidDataException(
+                        $"Expected at most one LE3 GlobalMorphs role for '{reviewedHairExport.Path}', found {matches.Length}.");
+                }
+                if (matches.Any(entry => !entry.Kind.Equals("Export", StringComparison.OrdinalIgnoreCase)))
+                    throw new InvalidDataException($"Reviewed LE3 hair role conflicts with corpus role for '{reviewedHairExport.Path}'.");
+                if (matches.Length == 0)
+                    entries = entries.Append(reviewedHairExport).ToArray();
+            }
+        }
         oracleGames.Add(gameName, new MaterialOracleGame(entries));
         Console.WriteLine($"{gameName}: {entries.Length} material/texture identities");
     }

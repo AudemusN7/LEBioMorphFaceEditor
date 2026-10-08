@@ -29,6 +29,7 @@ public static class RandomisationTests
         new("LE1 Batarian specular power stays between 0.4 and 0.7", Le1BatarianSpecularPowerIsBounded),
         new("material colours interpolate perceptually while selectors stay discrete", MaterialVectorsRespectSemantics),
         new("LE3 HMF highlight colours share one complete donor and interpolation", Le3FemaleHighlightsStayPaired),
+        new("new human hair colours reuse corpus colours under native names", HumanHairColoursReuseCorpus),
         new("material safety policy constrains or excludes hazardous numeric parameters", MaterialSafetyPolicyProtectsNumericParameters),
         new("material texture selection balances variants and rejects unsafe families", MaterialTextureSelectionIsCurated),
         new("texture-dependent selector rules remain valid", TextureDependentSelectorsRemainValid),
@@ -806,6 +807,54 @@ public static class RandomisationTests
         TestAssert.Equal(new Vector4(0, 0, 0, 1), turianProposal.Vectors["TUR_HED_Addn_Mask_Vector"]);
     }
 
+    private static void HumanHairColoursReuseCorpus()
+    {
+        var originals = new[] { "HED_Hair_Colour_Vector", "Highlight1Color", "Highlight2Colour_Vector" };
+        var names = new[] { "Hair_Color", "Aniso_Color_1", "Aniso_Color_2" };
+        foreach (var key in new[] { "le1-human-male", "le2-human-female", "le3-human-male", "le3-human-female" })
+        {
+            var donor = PolicyDonor(key) with
+            {
+                MaterialVectors = originals.Select((name, index) => (name, value: new Vector4(0.2f + index * 0.1f)))
+                    .ToDictionary(item => item.name, item => item.value)
+            };
+            var profile = PolicyProfile(key, [], originals.Select(name => new MaterialVectorStatistics(
+                name, MaterialVectorRandomisationKind.PerceptualColour, Vector4.Zero, Vector4.One, [])).ToArray());
+            var corpus = new MorphRandomisationCorpus(MorphRandomisationCorpus.CurrentFormatVersion,
+                new Dictionary<MorphRandomisationPoolKey, IReadOnlyList<MorphRandomisationDonor>>
+                    { [MorphRandomisationPoolRouter.Resolve(key)] = [donor] })
+            {
+                MaterialProfiles = new Dictionary<string, MaterialRandomisationProfile> { [key] = profile }
+            };
+            var catalog = new MorphRandomisationCatalog(corpus);
+            var projected = catalog.CompatibleMaterialDonors(key).Single();
+            var projectedProfile = catalog.GetMaterialProfile(key)!;
+            var current = names.ToDictionary(name => name, _ => Vector4.One);
+            var result = MaterialRandomiser.CreateProposal(projected, [projected], projectedProfile,
+                Values(), current, [], new HashSet<string>(), new HashSet<string>(names), new HashSet<string>(), 0, 42);
+            for (var index = 0; index < names.Length; index++)
+            {
+                TestAssert.Equal(donor.MaterialVectors[originals[index]], result.Vectors[names[index]]);
+                TestAssert.Equal(names[index], projectedProfile.Vectors[names[index]].Name);
+            }
+            TestAssert.True(!donor.MaterialVectors.ContainsKey("Hair_Color") && !profile.Vectors.ContainsKey("Hair_Color"),
+                "Runtime aliases mutated the original corpus evidence.");
+            TestAssert.Equal(3, result.Vectors.Count);
+        }
+        var embedded = MorphRandomisationCatalog.LoadEmbedded();
+        foreach (var key in new[] { "le1-human-male", "le1-human-female", "le2-human-male",
+                     "le2-human-female", "le3-human-male", "le3-human-female" })
+        {
+            foreach (var name in names)
+            {
+                TestAssert.True(embedded.GetMaterialProfile(key)!.Vectors.ContainsKey(name),
+                    $"The shipped {key} profile has no colour statistics for {name}: {string.Join(", ", embedded.GetMaterialProfile(key)!.Vectors.Keys)}.");
+                TestAssert.True(embedded.CompatibleMaterialDonors(key).Any(donor => donor.MaterialVectors.ContainsKey(name)),
+                    $"The shipped {key} pool has no colour donors for {name}.");
+            }
+        }
+    }
+
     private static void Le3FemaleHighlightsStayPaired()
     {
         static MaterialVectorStatistics Stats(string name) => new(
@@ -860,6 +909,16 @@ public static class RandomisationTests
         TestAssert.Equal(seedValue, single.Vectors["Highlight2Colour_Vector"]);
         TestAssert.True(single.Vectors["Highlight1Color"] != seedValue,
             "The in-scope highlight did not randomise by itself.");
+
+        var mixed = new Dictionary<string, Vector4>(current)
+        {
+            ["Aniso_Color_1"] = seedValue,
+            ["Aniso_Color_2"] = seedValue
+        };
+        var mixedResult = MaterialRandomiser.CreateProposal(pairedTarget, [pairedTarget], profile,
+            Values(), mixed, [], new HashSet<string>(), new HashSet<string>(mixed.Keys), new HashSet<string>(), 50, 438);
+        TestAssert.Equal(mixedResult.Vectors["Highlight1Color"], mixedResult.Vectors["Aniso_Color_1"]);
+        TestAssert.Equal(mixedResult.Vectors["Highlight2Colour_Vector"], mixedResult.Vectors["Aniso_Color_2"]);
     }
 
     private static void Le1BatarianUsesCompatibleMaterialDonors()

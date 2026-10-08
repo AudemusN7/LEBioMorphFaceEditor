@@ -1154,7 +1154,14 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 return;
             }
 
-            if (_dialogs.ConfirmHairScalpTextureSwitch(mesh.InstancedPath) &&
+            if (prepared.RequiresCcScalpMaterial)
+                prepared = prepared with
+                {
+                    ScalpMaterial = await _referenceService.LoadLe3CcScalpMaterialAsync(prepared.FemaleScalp)
+                };
+
+            if (Editor == editor && changedSlot.Value == mesh &&
+                _dialogs.ConfirmHairScalpTextureSwitch(mesh.InstancedPath, prepared.RequiresCcScalpMaterial) &&
                 Editor == editor && changedSlot.Value == mesh)
             {
                 editor.ApplyManualHairScalpPair(prepared);

@@ -404,6 +404,8 @@ public sealed class HeadPreviewSceneFactory
             textures)
         {
             SupportedScalars = resolved.SupportedScalars,
+            PreviewModel = resolved.PreviewModel,
+            HasCompiledParameterSupport = resolved.HasCompiledParameterSupport,
             SupportedVectors = resolved.SupportedVectors,
             SupportedTextures = resolved.SupportedTextures,
             IsLe2 = game == MorphFaceGame.LE2,

@@ -141,7 +141,8 @@ public sealed partial class MainWindowViewModel
         foreach (var skipped in result.SkippedMaterials)
         {
             text.AppendLine(Loc.Format("loc_Shell_ActorAssignment_SkippedRow",
-                skipped.UIndex, skipped.InstancedPath, skipped.Reason));
+                skipped.UIndex, skipped.InstancedPath,
+                skipped.UserReason is { } reason ? UserFacingMessageFormatter.Format(reason) : skipped.Reason));
         }
         text.AppendLine().Append(Loc.Text("loc_Shell_ActorAssignment_TemporaryWorkspaceSaveNote"));
         return text.ToString();

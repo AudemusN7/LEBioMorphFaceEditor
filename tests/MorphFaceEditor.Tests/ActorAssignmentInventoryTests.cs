@@ -17,6 +17,7 @@ public static class ActorAssignmentInventoryTests
         new("LE1 actor inventory separates local appearance owners from spawn templates", SeparatesLe1Owners),
         new("actor inventory scopes morph and material profile compatibility independently", ScopesOperationCompatibility),
         new("actor inventory discovers inherited components and safe MICs deterministically", DiscoversMaterialsDeterministically),
+        new("actor inventory localises missing body skin values without masking imported read-only reasons", LocalizesBodySkinReasonsPrecisely),
         new("actor inventory honors approved shared alien material schemas", HonorsSharedAlienMaterialSchemas),
         new("actor inventory follows effective roots for shared eyes lashes scalp and hair", FollowsEffectiveRootsForSharedFamilies)
     ];
@@ -269,6 +270,34 @@ public static class ActorAssignmentInventoryTests
                 "Imported MIC was not retained as a read-only skipped slot.");
             TestAssert.True(candidate.CanAssignMaterials && candidate.SafeMaterialCount == 1,
                 "Valid face MIC was suppressed by unsafe sibling slots.");
+        });
+    }
+
+    private static void LocalizesBodySkinReasonsPrecisely()
+    {
+        WithPackage(MEGame.LE2, (path, package) =>
+        {
+            var face = package.CreateExport("SelectedFace", "BioMorphFace", indexed: false);
+            var localBodyMic = CreateMic(package, "LocalBodyMaterial", "UnknownBodyParent");
+            var importRoot = package.CreatePackageImport("MFEFixture_ImportedBody");
+            var importedBodyMic = package.CreateImport("MaterialInstanceConstant", "ImportedBodyMaterial", importRoot);
+            var body = CreateHeadComponent(package, "Body_MDL", "BodyComponent");
+            body.WriteProperty(new ArrayProperty<ObjectProperty>(
+                [new ObjectProperty(localBodyMic), new ObjectProperty(importedBodyMic)], "Materials"));
+            var actor = package.CreateExport("TargetPawn", "BioPawn", indexed: false);
+            actor.WriteProperty(new ObjectProperty(body, "BodyMesh"));
+            package.Save();
+
+            var candidate = new ActorAssignmentInventoryService((_, _) => null)
+                .Read(path, face.UIndex.ToString(), "le2-human-male")
+                .Candidates.Single(value => value.UIndex == actor.UIndex);
+            var localSkipped = candidate.SkippedMaterials.Single(value => value.UIndex == localBodyMic.UIndex);
+            var importedSkipped = candidate.SkippedMaterials.Single(value => value.InstancedPath == importedBodyMic.InstancedFullPath);
+
+            TestAssert.Equal("loc_VM_actorAssignment_bodySkinParametersMissing", localSkipped.UserReason?.LocalizationKey);
+            TestAssert.True(importedSkipped.Reason.Contains("Imported materials are read-only", StringComparison.Ordinal) &&
+                            importedSkipped.UserReason is null,
+                "The missing body skin value message replaced the imported/read-only reason.");
         });
     }
 

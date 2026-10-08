@@ -15,7 +15,8 @@ var suites = new Dictionary<string, IReadOnlyList<TestCase>>(StringComparer.Ordi
         .Concat(PlayerFaceScarTexturePolicyTests.All)
         .Concat(Player2DaRandomisationPolicyTests.All).ToArray(),
     ["materials"] = MaterialTests.All,
-    ["rendering"] = RenderingTests.All,
+    ["rendering"] = RenderingTests.All.Concat(NativeHairPreviewTests.All)
+        .Concat(NativeKaidanAndCcHairPreviewTests.All).ToArray(),
     ["ui"] = UiSmokeTests.All.Concat(AutomationCommandTests.All).Concat(NpcHairRandomisationTests.All)
         .Concat(RandomisationPublicationTests.All)
         .Concat(ApplicationSettingsTests.All)
@@ -26,13 +27,15 @@ var suites = new Dictionary<string, IReadOnlyList<TestCase>>(StringComparer.Ordi
         .Concat(MorphTargetCatalogTests.All).Concat(MorphFaceCatalogTests.All)
         .Concat(CustomMeshTests.All).Concat(MaterialInterchangeTests.All)
         .Concat(Le2PlayerMaterialRonIdentityTests.All).ToArray(),
-    ["package"] = PackageContextTests.All.Concat(PackageIntegrityTests.All).Concat(ActorAssignmentInventoryTests.All)
+    ["package"] = PackageContextTests.All.Concat(PackageIntegrityTests.All).Concat(CcScalpGraphSaveTests.All).Concat(ActorAssignmentInventoryTests.All)
         .Concat(ActorAssignmentTransactionTests.All).Concat(CustomMaterialEvidenceTests.All)
         .Concat(RonStressTests.All).Concat(InstalledAssetResolutionTests.All)
         .Concat(TextureTransferDonorPolicyTests.All)
         .Concat(SupportedMaterialGraphPolicyTests.All)
         .Concat(MaterialInstancePreservationTests.All).Concat(Le2LocalizedEyeOverrideImportRoleTests.All)
-        .Concat(HeadHairTextureOwnershipTests.All).Concat(MorphFaceInterchangeExportTests.All).ToArray(),
+        .Concat(HeadHairTextureOwnershipTests.All).Concat(NativeHairMaterialSupportTests.All)
+        .Concat(CustomHumanMaterialCatalogTests.All)
+        .Concat(MorphFaceInterchangeExportTests.All).ToArray(),
     ["c4"] = ImportedSkeletalMeshWriterTests.All
         .Concat(CustomMeshPccMaterializerTests.All)
         .Concat(CustomMeshForcedExportTests.All)

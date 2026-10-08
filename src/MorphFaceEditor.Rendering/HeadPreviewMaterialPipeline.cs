@@ -31,18 +31,24 @@ internal readonly record struct HeadPreviewMaterialBindings(
 
         if (material.Family is HeadMaterialFamily.Hair or HeadMaterialFamily.Lashes)
         {
-            // The supplied LE1 hair and lash pixel permutations compile to one
-            // texture uniform apiece. HAIR_Norm/Mask/Tang/SpecShift remain in
-            // package data for round-trip fidelity, but are dead in this master.
+            // LE1 hair and lash permutations use their own narrow texture
+            // contracts. Human_Hair_MASTER is the exception: its packed
+            // Hair_Stack supplies both layered colour and opacity.
             return new HeadPreviewMaterialBindings(
-                Select(material, PrimaryDiffuseName(material), TextureRole.Diffuse),
-                null, null, null, null, null, null, null, null, null);
+                material.PreviewModel == HumanMaterialPreviewModel.HumanHair
+                    ? null
+                    : Select(material, PrimaryDiffuseName(material), TextureRole.Diffuse),
+                null, null, null,
+                material.PreviewModel == HumanMaterialPreviewModel.HumanHair
+                    ? SelectByName(material, "Hair_Stack")
+                    : null,
+                null, null, null, null, null);
         }
 
         return new HeadPreviewMaterialBindings(
             Select(material, PrimaryDiffuseName(material), TextureRole.Diffuse),
             Select(material, PrimaryNormalName(material), TextureRole.Normal),
-            Select(material, PrimaryMaskName(material.Family), TextureRole.Mask, TextureRole.Specular),
+            Select(material, PrimaryMaskName(material), TextureRole.Mask, TextureRole.Specular),
             Select(material, PrimaryDetailName(material.Family), TextureRole.Detail, TextureRole.Tangent),
             SelectByName(material, Auxiliary1Name(material.Family)),
             SelectByName(material, Auxiliary2Name(material.Family)),
@@ -75,7 +81,11 @@ internal readonly record struct HeadPreviewMaterialBindings(
         MaterialParameterKind kind) =>
         name.StartsWith("__", StringComparison.Ordinal) || material.Supports(name, kind);
 
-    private static string? PrimaryDiffuseName(HeadPreviewMaterial material) => material.Family switch
+    private static string? PrimaryDiffuseName(HeadPreviewMaterial material) => material.PreviewModel switch
+    {
+        HumanMaterialPreviewModel.Kaiden => "HED_Face_Diff",
+        HumanMaterialPreviewModel.HumanHair => null,
+        _ => material.Family switch
     {
         HeadMaterialFamily.VorchaSkin => "TUR_HED_Diff",
         HeadMaterialFamily.VorchaEyes => "ALN_HED_Diff",
@@ -95,9 +105,12 @@ internal readonly record struct HeadPreviewMaterialBindings(
         HeadMaterialFamily.Hair when material.Textures.ContainsKey("HAIR_ADDN_Diff") => "HAIR_ADDN_Diff",
         HeadMaterialFamily.Hair => "HAIR_Diff",
         _ => null
-    };
+    }};
 
-    private static string? PrimaryNormalName(HeadPreviewMaterial material) => material.Family switch
+    private static string? PrimaryNormalName(HeadPreviewMaterial material) => material.PreviewModel switch
+    {
+        HumanMaterialPreviewModel.Kaiden => "Nm",
+        _ => material.Family switch
     {
         HeadMaterialFamily.VorchaSkin => "ALN_HED_Norm",
         HeadMaterialFamily.VorchaEyes => "Eye_Norm",
@@ -114,7 +127,12 @@ internal readonly record struct HeadPreviewMaterialBindings(
         HeadMaterialFamily.Scalp => "HED_Scalp_Norm",
         HeadMaterialFamily.Eyes => "EYE_Iris_Norm",
         _ => null
-    };
+    }};
+
+    private static string? PrimaryMaskName(HeadPreviewMaterial material) =>
+        material.PreviewModel == HumanMaterialPreviewModel.Kaiden
+            ? "Spec"
+            : PrimaryMaskName(material.Family);
 
     private static string? PrimaryMaskName(HeadMaterialFamily family) => family switch
     {
@@ -331,7 +349,7 @@ internal struct HeadPreviewMaterialConstants
             TextureFlags2 = new Vector4(
                 bindings.Auxiliary5 is null ? 0 : 1,
                 bindings.Auxiliary6 is null ? 0 : 1,
-                0,
+                (float)material.PreviewModel,
                 0),
             CustomSkinParameters = new Vector4(
                 GetScalar(material, "HED_Custom_Scar_Scalar", 0),
@@ -341,10 +359,14 @@ internal struct HeadPreviewMaterialConstants
             CustomScarColor = GetVector(material, "HED_Scar_Vector", Vector4.Zero),
             GeneralParameters = new Vector4(
                 GetScalar(material, "HED_TMis_Scalar", 1),
-                GetScalar(material, "HED_SPwr_Scalar", 5),
-                femaleFace
-                    ? GetScalar(material, "HED_Lips_Tint_Scalar", 0)
-                    : GetScalar(material, "HED_Mask_Scalar", 0),
+                material.PreviewModel == HumanMaterialPreviewModel.Kaiden
+                    ? GetScalar(material, "HED_Spwr", 15)
+                    : GetScalar(material, "HED_SPwr_Scalar", 5),
+                material.PreviewModel == HumanMaterialPreviewModel.Kaiden
+                    ? GetScalar(material, "HED_Spec_Scalar", 1)
+                    : femaleFace
+                        ? GetScalar(material, "HED_Lips_Tint_Scalar", 0)
+                        : GetScalar(material, "HED_Mask_Scalar", 0),
                 GetScalar(material, "HED_Scar_Scalar", 0)),
             SkinParameters0 = new Vector4(
                 GetScalar(material, "HED_Norm_Blend", 0),
@@ -392,7 +414,13 @@ internal struct HeadPreviewMaterialConstants
                 GetScalar(material, "HED_Teeth_Scalar", 0.75f),
                 GetScalar(material, "HED_Scalp_PhongSpec_Scalar", 1),
                 GetScalar(material, "HED_Spec_Aniso_Exp_Scalar", 3)),
-            ScalpParameters2 = material.Family == HeadMaterialFamily.Hair && HasLayeredHairHighlights(material)
+            ScalpParameters2 = material.Family == HeadMaterialFamily.Hair && material.PreviewModel == HumanMaterialPreviewModel.HumanHair
+                ? new Vector4(
+                    0,
+                    GetScalar(material, "Aniso_Highlight_1", 15),
+                    GetScalar(material, "Aniso_Highlight_2", 1500),
+                    0)
+                : material.Family == HeadMaterialFamily.Hair && HasLayeredHairHighlights(material)
                 ? new Vector4(
                     GetFirstScalar(material, 50,
                         "Highlight1SpecExp_Scalar", "Highlight1Specularity", "Highlight1Colour_Specularity"),
@@ -797,16 +825,23 @@ internal struct HeadPreviewMaterialConstants
         _ => 0.48f
     };
 
-    private static Vector4 ResolveBaseColor(HeadPreviewMaterial material) => material.Family switch
+    private static Vector4 ResolveBaseColor(HeadPreviewMaterial material) => material.PreviewModel switch
+    {
+        HumanMaterialPreviewModel.Kaiden => Vector4.One,
+        HumanMaterialPreviewModel.HumanHair => GetVector(material, "Hair_Color", new Vector4(0.04324168f, 0.02237726f, 0.01053152f, 1)),
+        _ => material.Family switch
     {
         HeadMaterialFamily.Skin or HeadMaterialFamily.AsariSkin or HeadMaterialFamily.SalarianSkin or HeadMaterialFamily.TurianSkin or HeadMaterialFamily.Scalp => GetVector(material, "SkinTone", new Vector4(0.58f, 0.34f, 0.26f, 1)),
         HeadMaterialFamily.Eyes => GetVector(material, "EYE_Iris_Colour_Vector", new Vector4(0.12f, 0.27f, 0.31f, 1)),
         HeadMaterialFamily.Lashes => GetVector(material, "HED_Lash_Diff_Vector", new Vector4(0.025f, 0.02f, 0.018f, 1)),
         HeadMaterialFamily.Hair => GetVector(material, "HED_Hair_Colour_Vector", new Vector4(0.07f, 0.045f, 0.03f, 1)),
         _ => new Vector4(0.42f, 0.45f, 0.5f, 1)
-    };
+    }};
 
-    private static Vector4 ResolveSecondaryColor(HeadPreviewMaterial material) => material.Family switch
+    private static Vector4 ResolveSecondaryColor(HeadPreviewMaterial material) => material.PreviewModel switch
+    {
+        HumanMaterialPreviewModel.HumanHair => GetVector(material, "Aniso_Color_1", new Vector4(0.12431984f, 0.01809168f, 0.01344398f, 1)),
+        _ => material.Family switch
     {
         HeadMaterialFamily.Eyes => GetVector(material, "EYE_White_Colour_Vector", Vector4.One),
         HeadMaterialFamily.Skin => GetVector(material, "HED_Addn_Colour_Vector", Vector4.Zero),
@@ -814,9 +849,12 @@ internal struct HeadPreviewMaterialConstants
         HeadMaterialFamily.Hair when HasLayeredHairHighlights(material) => GetFirstVector(
             material, Vector4.One, "Highlight1Color", "Highlight1Colour_Vector"),
         _ => Vector4.One
-    };
+    }};
 
-    private static Vector4 ResolveTertiaryColor(HeadPreviewMaterial material) => material.Family switch
+    private static Vector4 ResolveTertiaryColor(HeadPreviewMaterial material) => material.PreviewModel switch
+    {
+        HumanMaterialPreviewModel.HumanHair => GetVector(material, "Aniso_Color_2", new Vector4(0.79456598f, 0.45715508f, 0.44239265f, 1)),
+        _ => material.Family switch
     {
         HeadMaterialFamily.Skin => GetVector(material, "HED_Mask_Vector", Vector4.Zero),
         HeadMaterialFamily.Scalp => GetVector(material, "HED_Teeth_Vector", Vector4.One),
@@ -824,7 +862,7 @@ internal struct HeadPreviewMaterialConstants
         HeadMaterialFamily.Hair when HasLayeredHairHighlights(material) => GetFirstVector(
             material, Vector4.One, "Highlight2Color", "Highlight2Colour_Vector"),
         _ => Vector4.Zero
-    };
+    }};
 
     private static Vector4 ResolveQuaternaryColor(HeadPreviewMaterial material) => material.Family switch
     {

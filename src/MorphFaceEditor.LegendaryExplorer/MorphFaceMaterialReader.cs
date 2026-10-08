@@ -69,6 +69,15 @@ internal sealed class MorphFaceMaterialReader(
     internal IReadOnlySet<string> GetEvidenceDependencies(AssetIdentity source) =>
         _materialCache[MaterialIdentityKey.Create(source)].Dependencies;
 
+    // Native attachment controls do not establish Custom Mode editability.
+    internal ResolvedHeadMaterial ReadFaceAttachmentEvidence(ExportEntry materialExport) =>
+        ForFaceControls(ReadMaterialEvidence(materialExport));
+
+    private static ResolvedHeadMaterial ForFaceControls(ResolvedHeadMaterial material) => material with
+    {
+        ContributesFaceControls = material.PreviewModel != HumanMaterialPreviewModel.Kaiden
+    };
+
     public MorphRandomisationMaterialEvidence ReadRandomisationEvidence(
         ExportEntry face,
         IReadOnlyCollection<ExportEntry> baseMaterialExports)
@@ -558,7 +567,7 @@ internal sealed class MorphFaceMaterialReader(
             }
         }
 
-        var baseline = decodeTextures ? Materialize(cached, warnings) : cached.Material;
+        var baseline = ForFaceControls(decodeTextures ? Materialize(cached, warnings) : cached.Material);
         if (overrides.Scalars.Count == 0 && overrides.Vectors.Count == 0 && overrideTextures.Count == 0)
         {
             return baseline;
@@ -579,7 +588,7 @@ internal sealed class MorphFaceMaterialReader(
         {
             if (pair.Value is not null)
             {
-                var definition = HumanMaterialProfiles.Describe(pair.Key, MaterialParameterKind.Texture, baseline.Family);
+                var definition = DescribeTexture(pair.Key, baseline.Family, baseline.PreviewModel);
                 try
                 {
                     if (decodeTextures)
@@ -615,6 +624,9 @@ internal sealed class MorphFaceMaterialReader(
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var master = ReadMaterialChain(materialExport, scalarValues, vectorValues, textureValues, visited)
             ?? materialExport;
+        var previewModel = master.Game == MEGame.LE3
+            ? HumanMaterialProfiles.Le3PreviewModelForMaster(master.ClassName, PccAssetPathPolicy.FromExport(master))
+            : HumanMaterialPreviewModel.Default;
         // These consumers inspect the same compiled map. Share it for this read only.
         var shaderMap = new Lazy<MaterialShaderMap>(() =>
             ShaderCacheManipulator.GetMaterialShaderMapAndShaders(master).Item1);
@@ -667,7 +679,7 @@ internal sealed class MorphFaceMaterialReader(
             .Where(pair => pair.Value.IsA("Texture2D"))
             .Select(pair =>
             {
-                var definition = DescribeTexture(pair.Key, family);
+                var definition = DescribeTexture(pair.Key, family, previewModel);
                 return new KeyValuePair<string, TextureMetadata>(
                     pair.Key, new TextureMetadata(MorphFacePackageReader.ToIdentity(pair.Value)!, definition));
             })
@@ -706,6 +718,14 @@ internal sealed class MorphFaceMaterialReader(
         }
         var supportedScalars = support?.Scalars ?? scalarValues.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var supportedVectors = support?.Vectors ?? vectorValues.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (previewModel == HumanMaterialPreviewModel.CcScalp)
+        {
+            // Declared in the CC graph, but never read in its recovered pixel passes.
+            // Keep the authored value and overrides; only omit the ineffective control.
+            supportedScalars = supportedScalars
+                .Where(name => !name.Equals("HAIR_Mask_Alpha_Scalar", StringComparison.OrdinalIgnoreCase))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
         if (family == HeadMaterialFamily.Lashes)
         {
             // The trilogy lash base-pass bytecode reads opacity but has no
@@ -746,6 +766,8 @@ internal sealed class MorphFaceMaterialReader(
             DefaultVectors = vectorValues,
             DefaultTextures = new Dictionary<string, MaterialTextureBinding>(),
             SupportedScalars = supportedScalars,
+            HasCompiledParameterSupport = support is not null,
+            PreviewModel = previewModel,
             SupportedVectors = supportedVectors,
             SupportedTextures = (support?.Textures.AsEnumerable() ?? [])
                 .Concat(textureValues.Keys)
@@ -943,29 +965,47 @@ internal sealed class MorphFaceMaterialReader(
         }
     }
 
-    private static MaterialParameterDefinition DescribeTexture(string name, HeadMaterialFamily family) => name switch
+    private static MaterialParameterDefinition DescribeTexture(
+        string name, HeadMaterialFamily family, HumanMaterialPreviewModel previewModel = HumanMaterialPreviewModel.Default)
     {
-        "__ASA_SkinNoise" => new MaterialParameterDefinition(
-            name, "Asari skin noise", "Internal", MaterialParameterKind.Texture, family,
-            TextureRole: TextureRole.Detail, ColorSpace: TextureColorSpace.Srgb),
-        "__ASA_SpecMultiplierMask" => new MaterialParameterDefinition(
-            name, "Asari specular multiplier mask", "Internal", MaterialParameterKind.Texture, family,
-            TextureRole: TextureRole.Specular, ColorSpace: TextureColorSpace.Linear),
-        "__PROShort01_Opacity" => new MaterialParameterDefinition(
-            name, "PROShort01 opacity", "Internal", MaterialParameterKind.Texture, family,
-            TextureRole: TextureRole.Mask, ColorSpace: TextureColorSpace.Linear,
-            AlphaPolicy: TextureAlphaPolicy.Mask),
-        "__PROShort01_Diffuse" => new MaterialParameterDefinition(
-            name, "PROShort01 diffuse", "Internal", MaterialParameterKind.Texture, family,
-            TextureRole: TextureRole.Diffuse, ColorSpace: TextureColorSpace.Srgb),
-        "__PROShort01_Tangent" => new MaterialParameterDefinition(
-            name, "PROShort01 fibre tangent", "Internal", MaterialParameterKind.Texture, family,
-            TextureRole: TextureRole.Tangent, ColorSpace: TextureColorSpace.Linear),
-        "__PROShort01_Specular" => new MaterialParameterDefinition(
-            name, "PROShort01 specular", "Internal", MaterialParameterKind.Texture, family,
-            TextureRole: TextureRole.Specular, ColorSpace: TextureColorSpace.Linear),
-        _ => HumanMaterialProfiles.Describe(name, MaterialParameterKind.Texture, family)
-    };
+        if (previewModel == HumanMaterialPreviewModel.Kaiden)
+        {
+            // Exact native sampler roles for preview, not editable parameter metadata.
+            var role = name.ToUpperInvariant() switch
+            {
+                "HED_FACE_DIFF" => TextureRole.Diffuse,
+                "NM" => TextureRole.Normal,
+                "SPEC" => TextureRole.Specular,
+                _ => TextureRole.Other
+            };
+            if (role != TextureRole.Other)
+                return new MaterialParameterDefinition(name, name, "Internal", MaterialParameterKind.Texture, family,
+                    TextureRole: role, ColorSpace: role == TextureRole.Diffuse ? TextureColorSpace.Srgb : TextureColorSpace.Linear);
+        }
+        return name switch
+        {
+            "__ASA_SkinNoise" => new MaterialParameterDefinition(
+                name, "Asari skin noise", "Internal", MaterialParameterKind.Texture, family,
+                TextureRole: TextureRole.Detail, ColorSpace: TextureColorSpace.Srgb),
+            "__ASA_SpecMultiplierMask" => new MaterialParameterDefinition(
+                name, "Asari specular multiplier mask", "Internal", MaterialParameterKind.Texture, family,
+                TextureRole: TextureRole.Specular, ColorSpace: TextureColorSpace.Linear),
+            "__PROShort01_Opacity" => new MaterialParameterDefinition(
+                name, "PROShort01 opacity", "Internal", MaterialParameterKind.Texture, family,
+                TextureRole: TextureRole.Mask, ColorSpace: TextureColorSpace.Linear,
+                AlphaPolicy: TextureAlphaPolicy.Mask),
+            "__PROShort01_Diffuse" => new MaterialParameterDefinition(
+                name, "PROShort01 diffuse", "Internal", MaterialParameterKind.Texture, family,
+                TextureRole: TextureRole.Diffuse, ColorSpace: TextureColorSpace.Srgb),
+            "__PROShort01_Tangent" => new MaterialParameterDefinition(
+                name, "PROShort01 fibre tangent", "Internal", MaterialParameterKind.Texture, family,
+                TextureRole: TextureRole.Tangent, ColorSpace: TextureColorSpace.Linear),
+            "__PROShort01_Specular" => new MaterialParameterDefinition(
+                name, "PROShort01 specular", "Internal", MaterialParameterKind.Texture, family,
+                TextureRole: TextureRole.Specular, ColorSpace: TextureColorSpace.Linear),
+            _ => HumanMaterialProfiles.Describe(name, MaterialParameterKind.Texture, family)
+        };
+    }
 
     private ExportEntry? ReadMaterialChain(
         ExportEntry material,

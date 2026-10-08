@@ -23,7 +23,6 @@ public class HumanFemaleFeatureMetadataCatalog : HumanMaleFeatureMetadataCatalog
     private const string RaceMouth = "race-mouth";
     private const string ShapeMouth = "shape-mouth";
     private const string Makeup = "makeup";
-    private const string MaterialHair = "material-hair";
 
     // Internal, zero-effect and metadata controls remain preserved but are intentionally absent from the UI.
     private static readonly IReadOnlySet<string> HiddenFeatures = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -81,7 +80,8 @@ public class HumanFemaleFeatureMetadataCatalog : HumanMaleFeatureMetadataCatalog
         {
             Group = GetMaterialCategory(definition.Name, definition.Kind)
         };
-        return MetadataTextCatalog.Apply(TextArchetype, described, TextGame);
+        // The base catalog has already applied localized text and the mesh-only suffix.
+        return described;
     }
 
     public override string GetMaterialCategory(string parameterName, MaterialParameterKind kind)
@@ -102,8 +102,7 @@ public class HumanFemaleFeatureMetadataCatalog : HumanMaleFeatureMetadataCatalog
     {
         var name = parameterName.ToLowerInvariant();
         if (IsMakeupParameter(name)) return Makeup;
-        if (IsHairHighlightColourVector(name, kind)) return "scalp";
-        if (IsHairHighlightParameter(name)) return MaterialHair;
+        if (IsHairMaterialParameter(parameterName, kind)) return "hair";
         if (name.Contains("spec_lips") || name.Contains("spwr_lips")) return "lips";
         if (name == "hed_lash_opac_scalar") return Surface;
         return base.GetMaterialSubcategory(parameterName, kind);
@@ -246,9 +245,9 @@ public class HumanFemaleFeatureMetadataCatalog : HumanMaleFeatureMetadataCatalog
                 Description = Loc.Text("loc_Services_Taxonomy_makeup_hair_highlights_surface_additions_face_ov_50a0f9b7"),
                 SliderGroups =
                 [
+                    category.SliderGroups.First(group => group.Key == "hair"),
                     new EditorSubcategoryDefinition(Makeup, Loc.Text("loc_Services_Taxonomy_makeup_0be431f7")),
-                    new EditorSubcategoryDefinition(MaterialHair, Loc.Text("loc_Services_Taxonomy_hair_3ba4bcee")),
-                    .. category.SliderGroups
+                    .. category.SliderGroups.Where(group => group.Key != "hair")
                 ]
             },
             _ => category

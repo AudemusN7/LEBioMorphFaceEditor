@@ -154,7 +154,7 @@ public sealed class EditorFeatureCategoryViewModel
                 var command = createRandomiseCommand?.Invoke(new EditorRandomisationScope([], [], values, [], inclusionKey));
                 return new EditorVectorGroupViewModel(
                     group.Key,
-                    definition.Key == HumanMaleFeatureMetadataCatalog.Additions && group.Key == "scalp"
+                    definition.Key == HumanMaleFeatureMetadataCatalog.Additions && group.Key == "hair"
                         ? Loc.Text("loc_VM_featureGroup_hairColours")
                         : Loc.Format("loc_VM_featureGroup_colours", group.Label),
                     values, command,

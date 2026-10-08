@@ -36,6 +36,8 @@ public interface IEditorDialogService
         string assetPath,
         UnsavedChangesScope scope = UnsavedChangesScope.Package);
     bool ConfirmHairScalpTextureSwitch(string hairMeshPath) => false;
+    bool ConfirmHairScalpTextureSwitch(string hairMeshPath, bool switchMaterialGraph) =>
+        ConfirmHairScalpTextureSwitch(hairMeshPath);
     void ShowInformation(string title, string message);
     void ShowTextureRegistrySettings();
 }

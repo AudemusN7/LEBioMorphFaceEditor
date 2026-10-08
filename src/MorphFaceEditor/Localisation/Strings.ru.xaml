@@ -221,7 +221,7 @@
   <system:String x:Key="loc_Services_MetadataText_Archetype_HumanMale_eyeshape_oldblk_5ddf5a_Label" xml:space="preserve">Пожилой темнокожий</system:String>
   <system:String x:Key="loc_Services_MetadataText_Archetype_HumanMale_eyeshape_sleepy_8a736a_Label" xml:space="preserve">Сонные</system:String>
   <system:String x:Key="loc_Services_MetadataText_Archetype_HumanMale_eyeshape_yngasn_1c63a8_Label" xml:space="preserve">Молодая азиатка</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Archetype_HumanMale_hed_lips_tint_vector_2067f2_Label" xml:space="preserve">Цвет тонировки губ</system:String>
+  <system:String x:Key="loc_Services_MetadataText_Archetype_HumanMale_hed_lips_tint_vector_2067f2_Label" xml:space="preserve">Цвет помады</system:String>
   <system:String x:Key="loc_Services_MetadataText_Archetype_HumanMale_hed_spec_nobrow_a131ce_Label" xml:space="preserve">Без бровей</system:String>
   <!--localiser: {"Key":"loc_Services_MetadataText_Archetype_HumanMale_mask_3b2c53_Description","ReviewedHash":null,"DoNotTranslate":false,"Note":"Don\u0027t translate the name, only second half","SourceHash":null}-->
   <system:String x:Key="loc_Services_MetadataText_Archetype_HumanMale_mask_3b2c53_Description" xml:space="preserve">Mask · При низких значениях обычно скрывается вся кожа головы</system:String>
@@ -585,7 +585,7 @@
   <system:String x:Key="loc_Services_MetadataText_Shared_hed_lash_diff_vector_0fc43b_Label" xml:space="preserve">Цвет ресниц</system:String>
   <system:String x:Key="loc_Services_MetadataText_Shared_hed_lash_opac_scalar_94e16f_Label" xml:space="preserve">Непрозрачность ресниц</system:String>
   <system:String x:Key="loc_Services_MetadataText_Shared_hed_lash_spec_scalar_1397b8_Label" xml:space="preserve">Блики ресниц</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_hed_lips_tint_scalar_4411b6_Label" xml:space="preserve">Интенсивность тонировки губ</system:String>
+  <system:String x:Key="loc_Services_MetadataText_Shared_hed_lips_tint_scalar_4411b6_Label" xml:space="preserve">Насыщенность помады</system:String>
   <system:String x:Key="loc_Services_MetadataText_Shared_hed_lips_tint_vector_ff9c9a_Label" xml:space="preserve">Цвет тонировки губ</system:String>
   <!--localiser: {"Key":"loc_Services_MetadataText_Shared_hed_makeup_mask_018fd3_Description","ReviewedHash":null,"DoNotTranslate":false,"Note":"Don\u0027t translate the name, only second half","SourceHash":null}-->
   <system:String x:Key="loc_Services_MetadataText_Shared_hed_makeup_mask_018fd3_Description" xml:space="preserve">HED_Makeup_Mask · Красный = тени для век / зелёный = тушь и помада / синий = выбор помады / альфа = румяна и помада</system:String>
@@ -1798,4 +1798,29 @@
   <system:String x:Key="loc_WpfEditorDialogService_SaveMeshMaterialsTitle" xml:space="preserve">Сохранить модель и материалы в PCC</system:String>
   <system:String x:Key="loc_WpfEditorDialogService_SwitchScalp" xml:space="preserve">Переключить кожу головы</system:String>
   <system:String x:Key="loc_WpfEditorDialogService_UModelExportFolderTitle" xml:space="preserve">Выбрать папку для экспорта модели через UModel</system:String>
+  <system:String x:Key="loc_Services_Taxonomy_MeshOnlyMaterialLabel" xml:space="preserve">{0} (сетка)</system:String>
+  <system:String x:Key="loc_Services_MetadataText_Shared_aniso_highlight_1_Label" xml:space="preserve">Мощность первого блика волос</system:String>
+  <system:String x:Key="loc_Services_MetadataText_Shared_aniso_highlight_1_Description" xml:space="preserve">Aniso_Highlight_1</system:String>
+  <system:String x:Key="loc_Services_MetadataText_Shared_aniso_highlight_2_Label" xml:space="preserve">Мощность второго блика волос</system:String>
+  <system:String x:Key="loc_Services_MetadataText_Shared_aniso_highlight_2_Description" xml:space="preserve">Aniso_Highlight_2</system:String>
+  <system:String x:Key="loc_Services_MetadataText_Shared_aniso_color_1_Label" xml:space="preserve">Цвет первого блика волос</system:String>
+  <system:String x:Key="loc_Services_MetadataText_Shared_aniso_color_1_Description" xml:space="preserve">Aniso_Color_1</system:String>
+  <system:String x:Key="loc_Services_MetadataText_Shared_aniso_color_2_Label" xml:space="preserve">Цвет второго блика волос</system:String>
+  <system:String x:Key="loc_Services_MetadataText_Shared_aniso_color_2_Description" xml:space="preserve">Aniso_Color_2</system:String>
+  <system:String x:Key="loc_Services_MetadataText_Shared_hair_color_Label" xml:space="preserve">Цвет волос</system:String>
+  <system:String x:Key="loc_Services_MetadataText_Shared_hair_color_Description" xml:space="preserve">Hair_Color</system:String>
+  <system:String x:Key="loc_Services_MetadataText_Shared_hair_stack_Label" xml:space="preserve">Текстура волос Джеймса Веги</system:String>
+  <system:String x:Key="loc_Services_MetadataText_Shared_hair_stack_Description" xml:space="preserve">Hair_Stack</system:String>
+  <system:String x:Key="loc_VM_actorAssignment_bodySkinParametersMissing" xml:space="preserve">В выбранном лице нет значения SkinTone или SkinLightScattering для назначения MIC материалов тела.</system:String>
+  <system:String x:Key="loc_Services_AttachmentTransfer_ExcludedNativeMesh" xml:space="preserve">Дополнительный элемент «{0}» пропущен: он повреждён, является лишним дубликатом или намеренно не поддерживается.</system:String>
+  <system:String x:Key="loc_Services_AttachmentTransfer_ReviewedDonorMissing" xml:space="preserve">В проверенных парах доноров {0}→{1} отсутствует сетка элемента «{2}»; Morph Face Editor не поддерживает её перенос в эту игру.</system:String>
+  <system:String x:Key="loc_WpfEditorDialogService_MatchScalpTexturesAndMaterialMessage" xml:space="preserve">Для выбранной причёски используется материал кожи головы игрока. Переключить текстуры и материал кожи головы, чтобы они соответствовали {0}?
+
+Выберите «Нет», чтобы сохранить текущие текстуры и материал кожи головы.</system:String>
+  <system:String x:Key="loc_Services_CustomTemplate_FaceNpc" xml:space="preserve">Лицо (NPC)</system:String>
+  <system:String x:Key="loc_Services_CustomTemplate_FacePlayer" xml:space="preserve">Лицо (игрок)</system:String>
+  <system:String x:Key="loc_Services_CustomTemplate_ScalpNpc" xml:space="preserve">Кожа головы (NPC)</system:String>
+  <system:String x:Key="loc_Services_CustomTemplate_ScalpPlayer" xml:space="preserve">Кожа головы (игрок)</system:String>
+  <system:String x:Key="loc_Services_CustomTemplate_AdvancedHair" xml:space="preserve">Продвинутая причёска человека</system:String>
+  <system:String x:Key="loc_Services_CustomTemplate_JamesHair" xml:space="preserve">Причёска Джеймса Веги</system:String>
 </ResourceDictionary>

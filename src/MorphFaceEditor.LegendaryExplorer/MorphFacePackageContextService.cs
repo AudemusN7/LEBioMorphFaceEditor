@@ -174,7 +174,8 @@ public sealed class MorphFacePackageContextService
                     Warnings = stagingWarnings
                         .Concat(transfer.Warnings)
                         .Concat(attachments.Warnings)
-                        .ToArray()
+                        .ToArray(),
+                    UserWarnings = attachments.UserWarnings
                 },
                 transfer.MaterialData);
         }
@@ -373,7 +374,8 @@ public sealed class MorphFacePackageContextService
                 materialOverride.InstancedFullPath,
                 morphData,
                 transfer.MaterialData,
-                transfer.Warnings.Concat(attachments.Warnings).ToArray());
+                transfer.Warnings.Concat(attachments.Warnings).ToArray(),
+                attachments.UserWarnings);
         });
         return new TransferredMaterialSaveResult(saveResult, transfer!.MaterialData);
     }
@@ -758,7 +760,8 @@ public sealed class MorphFacePackageContextService
                 materialOverride.InstancedFullPath,
                 ReadMorphData(face),
                 transfer.MaterialData,
-                transfer.Warnings.Concat(attachments.Warnings).ToArray());
+                transfer.Warnings.Concat(attachments.Warnings).ToArray(),
+                attachments.UserWarnings);
         });
         return new TransferredMaterialSaveResult(saveResult, transfer!.MaterialData);
     }
@@ -920,7 +923,8 @@ public sealed class MorphFacePackageContextService
                 pending.MorphData.BakedLods.Count,
                 pending.MaterialData.Textures.Count)
             {
-                Warnings = pending.Warnings ?? []
+                Warnings = pending.Warnings ?? [],
+                UserWarnings = pending.UserWarnings ?? []
             };
         }
         finally
@@ -1751,5 +1755,6 @@ public sealed class MorphFacePackageContextService
         string MaterialOverridePath,
         MorphFaceMorphData MorphData,
         MorphFaceMaterialData MaterialData,
-        IReadOnlyList<string>? Warnings = null);
+        IReadOnlyList<string>? Warnings = null,
+        IReadOnlyList<UserFacingMessage>? UserWarnings = null);
 }

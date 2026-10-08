@@ -16,6 +16,7 @@ public sealed record MorphFaceSaveResult(
     int TextureReferenceCount)
 {
     public IReadOnlyList<string> Warnings { get; init; } = [];
+    public IReadOnlyList<UserFacingMessage> UserWarnings { get; init; } = [];
 }
 
 /// <summary>
@@ -74,6 +75,16 @@ public sealed class MorphFacePackageWriter
                 EnsureSupportedGame(sourcePackage);
                 var sourceFace = FindExport(sourcePackage, draft.Source.InstancedPath, "BioMorphFace");
                 draft = FilterSupportedAttachments(draft, sourcePackage.Game, warnings);
+                if (draft.ScalpMaterialSelection is not null)
+                {
+                    // Materialize the selected graph on the source package's
+                    // in-memory snapshot before importing the face. This keeps
+                    // the original head graph out of a new PCC, where it would
+                    // otherwise be imported first and then left orphaned after
+                    // replacing the face's head reference.
+                    draft = ApplyScalpMaterialSelection(sourcePackage, sourceFace, draft, warnings);
+                    WriteFace(sourcePackage, sourceFace, draft, warnings);
+                }
                 using var explicitTextureCache = new PackageCache { CacheMaxSize = 8 };
                 var requestedTextures = draft.MaterialOverrides.Textures;
                 draft = draft with { MaterialOverrides = PccPackageWorkflow.OmitUnavailableSelectedTextures(
@@ -140,6 +151,21 @@ public sealed class MorphFacePackageWriter
                         $"The exported morph path changed from '{destinationFacePath}' to '{portedFace.InstancedFullPath}'.");
                 }
 
+                if (draft.ScalpMaterialSelection is not null)
+                {
+                    var importedHead = portedFace.GetProperty<ObjectProperty>("m_oBaseHead")?.ResolveToEntry(destinationPackage)
+                        ?? throw new InvalidDataException("The selected scalp graph did not import with the face.");
+                    draft = draft with
+                    {
+                        BaseHeadReference = new AssetIdentity(
+                            destinationPackage.FilePath,
+                            importedHead is ExportEntry importedHeadExport
+                                ? PccAssetPathPolicy.FromExport(importedHeadExport)
+                                : importedHead.InstancedFullPath,
+                            importedHead.UIndex,
+                            importedHead.ClassName)
+                    };
+                }
                 WriteFace(destinationPackage, portedFace, draft, warnings);
                 var materialOverride = ResolveMaterialOverride(portedFace);
                 WriteMaterialOverride(destinationPackage, materialOverride, draft.MaterialOverrides, warnings);
@@ -218,11 +244,13 @@ public sealed class MorphFacePackageWriter
                         package.FindExport(PccAssetPathPolicy.FromExport(donor), "Texture2D")?.UIndex != donor.UIndex)
                     .ToArray();
                 PccPackageWorkflow.StageExplicitTextureDonors(package, face, explicitDonors);
+                draft = ApplyScalpMaterialSelection(package, face, draft, warnings);
                 WriteFace(package, face, draft, warnings);
                 var materialOverride = ResolveMaterialOverride(face);
                 WriteMaterialOverride(package, materialOverride, draft.MaterialOverrides, warnings);
                 overridePath = materialOverride.InstancedFullPath;
-                if (explicitDonors.Length > 0) dependencyGraph = PccPackageWorkflow.CaptureDependencyGraph(face);
+                if (draft.ScalpMaterialSelection is not null || explicitDonors.Length > 0)
+                    dependencyGraph = PccPackageWorkflow.CaptureDependencyGraph(face);
                 package.Save(temporaryPath);
             }
 
@@ -286,6 +314,31 @@ public sealed class MorphFacePackageWriter
         face.WritePropertiesAndBinary(properties, binary);
     }
 
+    private static MorphFaceDocument ApplyScalpMaterialSelection(
+        IMEPackage package,
+        ExportEntry face,
+        MorphFaceDocument draft,
+        ICollection<string> warnings)
+    {
+        if (draft.ScalpMaterialSelection is not { } selection) return draft;
+        if (package.Game != MEGame.LE3)
+            throw new InvalidDataException(
+                "The selected LE3 CC scalp graph cannot be saved into a different game's package. Select that game's scalp material instead.");
+
+        var clone = ScalpMaterialGraphMaterializer.Apply(
+            package, face, draft.BaseHeadReference ?? throw new InvalidDataException(
+                "A base-head reference is required to save the selected CC scalp material graph."),
+            selection, warnings);
+        return draft with
+        {
+            BaseHeadReference = new AssetIdentity(
+                package.FilePath,
+                PccAssetPathPolicy.FromExport(clone),
+                clone.UIndex,
+                clone.ClassName)
+        };
+    }
+
     private static void WriteMaterialOverride(
         IMEPackage package,
         ExportEntry materialOverride,
@@ -344,10 +397,43 @@ public sealed class MorphFacePackageWriter
 
         var baseHead = properties.GetProp<ObjectProperty>("m_oBaseHead")?.ResolveToEntry(package);
         VerifyReference(baseHead, expected.BaseHeadReference, "base head");
+        VerifyScalpMaterialSelection(baseHead, expected.ScalpMaterialSelection);
         VerifyHairReference(package, properties, expected);
 
         var materialOverride = ResolveMaterialOverride(face);
         VerifyMaterialOverrides(package, materialOverride, expected.MaterialOverrides);
+    }
+
+    private static void VerifyScalpMaterialSelection(
+        IEntry? baseHeadEntry,
+        ScalpMaterialSelection? selection)
+    {
+        if (selection is null) return;
+        if (baseHeadEntry is not ExportEntry baseHead ||
+            !baseHead.ClassName.Equals("SkeletalMesh", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("The selected CC scalp graph did not reopen through a local head-mesh export.");
+        if (baseHead.Parent is null)
+            throw new InvalidDataException("The saved CC scalp head lost its native ancestry.");
+
+        var expectedPath = selection.DonorMaterial.InstancedPath;
+        var matches = (baseHead.GetBinaryData<LegendaryExplorerCore.Unreal.BinaryConverters.SkeletalMesh>().Materials ?? [])
+            .Select(index => baseHead.FileRef.GetEntry(index))
+            .Where(entry => entry is not null)
+            .Count(entry => (entry is ExportEntry export
+                    ? PccAssetPathPolicy.FromExport(export)
+                    : entry!.InstancedFullPath)
+                .Equals(expectedPath, StringComparison.OrdinalIgnoreCase));
+        if (matches != 1)
+            throw new InvalidDataException(
+                $"The saved CC scalp head contains {matches} slots for exact donor '{expectedPath}'; exactly one is required.");
+        using var cache = new PackageCache();
+        var resolver = new GamePackageReferenceResolver(cache);
+        var donorEntry = PackageIntegrity.FindExactEntry(
+            baseHead.FileRef, expectedPath, selection.DonorMaterial.ClassName)
+            ?? throw new InvalidDataException($"The saved CC scalp graph is missing exact donor '{expectedPath}'.");
+        var donor = resolver.Resolve(donorEntry)
+            ?? throw new InvalidDataException($"The saved CC scalp donor '{expectedPath}' cannot be reopened.");
+        ScalpMaterialGraphMaterializer.EnsureCanonicalCcScalpGraph(donor, cache);
     }
 
     private static void VerifyMaterialOverrides(

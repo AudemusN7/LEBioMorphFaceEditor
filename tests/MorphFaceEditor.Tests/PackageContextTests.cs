@@ -1201,6 +1201,12 @@ public static class PackageContextTests
                     TestAssert.True(face.GetProperty<ObjectProperty>("m_oHairMesh")?.Value is null or 0, "James destination did not skip.");
                     TestAssert.True(result.SaveResult.Warnings.Any(value => value.Contains(item.SourceMesh, StringComparison.OrdinalIgnoreCase) &&
                         value.Contains("unset", StringComparison.OrdinalIgnoreCase)), "James omission lacked its reviewed warning.");
+                    var warning = result.SaveResult.UserWarnings.Single(value =>
+                        value.LocalizationKey == "loc_Services_AttachmentTransfer_ReviewedDonorMissing");
+                    TestAssert.True(warning.Arguments.Contains(item.SourceMesh) &&
+                                    warning.DiagnosticText is not null &&
+                                    result.SaveResult.Warnings.Contains(warning.DiagnosticText),
+                        "Reviewed donor omission lost its source identity or raw diagnostic.");
                     PackageIntegrity.Verify(reopened);
                 }
             }

@@ -74,12 +74,14 @@ public static class UiSmokeTests
         new("global morph and material randomisation uses separate donors", GlobalRandomisationUsesSeparateDonors),
         new("subcategory padlocks protect randomisation and persist in-session", SubcategoryInclusionsFilterGlobalScope),
         new("normal material randomisation obeys its independent toggle and undo", MaterialRandomisationObeysToggle),
+        new("new hair colour controls randomise in native and custom workspaces", NewHairColourControlsRandomise),
         new("detached material randomisation uses its compatible human donor profile", DetachedMaterialRandomisationUsesCompatibleProfile),
         new("detached mixed-species materials randomise from each assigned profile", DetachedMixedSpeciesMaterialsRandomiseByProfile),
         new("material vector subcategories expose independent randomise commands", MaterialVectorSubcategoriesRandomiseIndependently),
         new("exhausted texture randomisation is reported without discarding numeric values", ExhaustedTextureRandomisationIsReported),
         new("LE3 HMM scalp randomisation preserves its required texture pair", Le3HmmScalpRandomisationAppliesCorePair),
         new("manual hair scalp prompt survives an optional Mask decode failure", ManualHairScalpPromptKeepsRequiredPairWhenOptionalMapFails),
+        new("confirmed CC scalp graph and texture pair undo together", CcScalpGraphAndTexturesUndoTogether),
         new("cursed mode randomises morph bones and materials as one undo step", CursedModeRandomisesOneUndoStep),
         new("normal global morph randomisation removes previous cursed bone offsets", NormalRollRemovesCursedBones),
         new("awaitable randomisation completes the real edit and supports aggregate undo", AwaitableRandomisationCompletes),
@@ -1378,6 +1380,35 @@ public static class UiSmokeTests
         TestAssert.Equal(expected.Key, second.SelectedCategory?.Key);
     }
 
+    private static void NewHairColourControlsRandomise()
+    {
+        using var reader = new MorphFacePackageReader();
+        foreach (var custom in new[] { false, true })
+        {
+            using var editor = CreateRandomisationEditor(reader, mixedCustomMaterials: custom,
+                includeNewHairColours: true);
+            editor.RandomiseMorphs = false;
+            editor.RandomiseMaterials = true;
+            editor.MaterialRandomisationStrength = 0;
+            TestAssert.True(editor.RandomiseCommand.CanExecute(null), "Hair colours could not randomise.");
+            editor.RandomiseCommand.Execute(null);
+            var expected = new Dictionary<string, Vector4>
+            {
+                ["Hair_Color"] = new(0.2f), ["Aniso_Color_1"] = new(0.3f), ["Aniso_Color_2"] = new(0.4f)
+            };
+            foreach (var item in expected)
+            {
+                var control = editor.Material.Vectors.Single(value =>
+                    editor.Material.SourceParameterName(value.Name) == item.Key);
+                TestAssert.Equal(item.Value, control.Value);
+            }
+            editor.UndoCommand.Execute(null);
+            foreach (var name in expected.Keys)
+                TestAssert.Equal(Vector4.One, editor.Material.Vectors.Single(value =>
+                    editor.Material.SourceParameterName(value.Name) == name).Value);
+        }
+    }
+
     private static void RandomisationCommandsHonorScopes()
     {
         using var reader = new MorphFacePackageReader();
@@ -2235,7 +2266,8 @@ public static class UiSmokeTests
         bool mixedCustomMaterials = false,
         bool includePlayerHairMorph = false,
         bool includePlayerHairColours = false,
-        MorphFaceGame? playerGame = null)
+        MorphFaceGame? playerGame = null,
+        bool includeNewHairColours = false)
     {
         var sourceMesh = TestFixtures.CreateMesh();
         var mesh = sourceMesh with
@@ -2284,6 +2316,9 @@ public static class UiSmokeTests
             ["Emis_Color"] = Vector4.One
         };
         var materialTextures = new Dictionary<string, MaterialTextureBinding>();
+        if (includeNewHairColours)
+            foreach (var name in new[] { "Hair_Color", "Aniso_Color_1", "Aniso_Color_2" })
+                materialVectors[name] = Vector4.One;
         if (includePlayerHairColours)
         {
             materialVectors["HED_Hair_Colour_Vector"] = new Vector4(0.13f, 0.27f, 0.39f, 0.7f);
@@ -2360,6 +2395,16 @@ public static class UiSmokeTests
                 ["Emis_Color"] = new(0.4f, 0.3f, 0.2f, 1)
             }
         };
+        if (includeNewHairColours)
+            donor = donor with
+            {
+                MaterialVectors = donor.MaterialVectors.Concat(new Dictionary<string, Vector4>
+                {
+                    ["HED_Hair_Colour_Vector"] = new(0.2f),
+                    ["HED_Aniso_Colour01_Vector"] = new(0.3f),
+                    ["HED_Aniso_Colour02_Vector"] = new(0.4f)
+                }).ToDictionary(value => value.Key, value => value.Value)
+            };
         var secondDonor = new MorphRandomisationDonor(
             "LE1:SecondSeed", "le1-human-male",
             new HashSet<string>(["nose_BridgeIn", "eyes_Big"], StringComparer.OrdinalIgnoreCase),
@@ -2419,6 +2464,15 @@ public static class UiSmokeTests
                 },
                 new HashSet<string>());
         }
+        if (includeNewHairColours && includeDonor)
+            profiles["le1-human-male"] = profiles["le1-human-male"] with
+            {
+                Vectors = profiles["le1-human-male"].Vectors.Concat(
+                    new[] { "HED_Hair_Colour_Vector", "HED_Aniso_Colour01_Vector", "HED_Aniso_Colour02_Vector" }
+                        .Select(name => new KeyValuePair<string, MaterialVectorStatistics>(name,
+                            new(name, MaterialVectorRandomisationKind.PerceptualColour, Vector4.Zero, Vector4.One, []))))
+                    .ToDictionary(value => value.Key, value => value.Value)
+            };
         if (mixedCustomMaterials)
         {
             profiles["le1-krogan"] = new MaterialRandomisationProfile(
@@ -3681,6 +3735,56 @@ public static class UiSmokeTests
             "The manual prompt must still apply the required Diff/Norm pair.");
         TestAssert.True(!prepared.Textures.ContainsKey("HED_Scalp_Spec"),
             "The unresolved optional Mask should be omitted from the prompt result.");
+    }
+
+    private static void CcScalpGraphAndTexturesUndoTogether()
+    {
+        using var reader = new MorphFacePackageReader();
+        var mesh = TestFixtures.CreateMesh();
+        var document = new MorphFaceDocument(TestFixtures.CreateIdentity("Face", "BioMorphFace"),
+            new PackageFingerprint(1, DateTime.UnixEpoch, new string('0', 64)), mesh.Source, null,
+            [new MorphFeatureValue("Target", 0)], [new BoneTranslation("root", Vector3.Zero)],
+            MorphFaceMaterialOverrides.Empty, [mesh.Positions.ToArray()], []);
+        var targetIdentity = TestFixtures.CreateIdentity("OriginalScalp", "MaterialInstanceConstant");
+        var textureNames = new[] { "HED_Scalp_Diff", "HED_Scalp_Norm" };
+        var original = new ResolvedHeadMaterial(MaterialIdentityKey.Create(targetIdentity), targetIdentity,
+            "HMM_HED_PRO_MASTER_SCALP_MAT", HeadMaterialFamily.Scalp, HeadMaterialBlendMode.Opaque, false,
+            new Dictionary<string, float>(), new Dictionary<string, Vector4>(),
+            textureNames.ToDictionary(name => name, name => new MaterialTextureBinding(name,
+                CreateTestTexture("fixture.pcc", $"Original.{name}", name))));
+        var donorIdentity = new AssetIdentity("donor.pcc", Le3CcScalpMaterialPolicy.MaleDonorPath, 1, "MaterialInstanceConstant");
+        var donor = original with
+        {
+            Key = MaterialIdentityKey.Create(donorIdentity), Source = donorIdentity,
+            MasterMaterialName = "HMM_HED_PRO_MASTER_SCALP_MAT_CC", PreviewModel = HumanMaterialPreviewModel.CcScalp
+        };
+        var materialSession = new MaterialEditingSession(MorphFaceMaterialOverrides.Empty,
+            new ResolvedHeadMaterialSet(new Dictionary<string, ResolvedHeadMaterial> { [original.Key] = original }));
+        using var editor = new FaceEditorViewModel(new MorphFaceEditingSession(document, mesh, [TestFixtures.CreateTarget()]),
+            new HumanMaleFeatureMetadataCatalog(), materialSession, new StubColorDialog(),
+            new PackageReferenceService(reader, TestFixtures.CreateMissingTextureCatalogService()),
+            "fixture.pcc", [], [], null, [], _ => { }, "le3-human-male");
+        var pair = new PreparedManualHairScalpPair(new PreparedMaterialRandomisation(
+            new Dictionary<string, float>(), new Dictionary<string, Vector4>(),
+            textureNames.ToDictionary(name => name, name => (DecodedTextureAsset?)CreateTestTexture(
+                "donor.pcc", $"Afro.{name}", name)), 1, new HashSet<string>()), "hmm-short-afro")
+        { RequiresCcScalpMaterial = true, ScalpMaterial = donor };
+
+        editor.ApplyManualHairScalpPair(pair);
+        var selected = editor.CreateDraft();
+        TestAssert.Equal(donorIdentity, selected.ScalpMaterialSelection!.DonorMaterial);
+        TestAssert.Equal(targetIdentity, selected.ScalpMaterialSelection.TargetMaterial);
+        TestAssert.Equal(2, selected.MaterialOverrides.Textures.Count);
+        TestAssert.Equal(HumanMaterialPreviewModel.CcScalp, editor.Material.Materials.Materials[original.Key].PreviewModel);
+        TestAssert.True(editor.IsDirty, "The graph selection did not mark the face dirty.");
+        editor.UndoCommand.Execute(null);
+        TestAssert.True(editor.CreateDraft().ScalpMaterialSelection is null &&
+                        editor.CreateDraft().MaterialOverrides.Textures.Count == 0 && !editor.IsDirty,
+            "Undo did not restore the original graph and paired maps in one action.");
+        TestAssert.Equal(HumanMaterialPreviewModel.Default, editor.Material.Materials.Materials[original.Key].PreviewModel);
+        editor.RedoCommand.Execute(null);
+        TestAssert.True(MorphFaceEditorStateComparer.Equals(selected, editor.CreateDraft()),
+            "Redo did not restore the exact donor selection and texture pair.");
     }
 
     private static void ExhaustedTextureRandomisationIsReported()

@@ -258,7 +258,8 @@ public sealed class ActorAssignmentChoice
                 var skipped = roleTargets[targetIndex];
                 text.AppendLine(Loc.Format("loc_VM_actorAssignment_slotFamily", skipped.SlotIndex, skipped.Family));
                 AppendCompactChain(text, skipped.ObjectName, skipped.ParentChain);
-                text.AppendLine(Loc.Format("loc_VM_actorAssignment_skippedReason", skipped.Reason));
+                text.AppendLine(Loc.Format("loc_VM_actorAssignment_skippedReason",
+                    skipped.UserReason is { } reason ? UserFacingMessageFormatter.Format(reason) : skipped.Reason));
             }
         }
     }

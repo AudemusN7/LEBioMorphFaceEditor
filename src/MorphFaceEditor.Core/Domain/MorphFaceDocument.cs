@@ -7,6 +7,9 @@ public sealed record MorphFeatureValue(string Name, float Offset);
 
 public sealed record BoneTranslation(string BoneName, Vector3 Translation);
 
+/// <summary>An explicit, detached scalp-slot replacement awaiting verified PCC materialisation.</summary>
+public sealed record ScalpMaterialSelection(AssetIdentity TargetMaterial, AssetIdentity DonorMaterial);
+
 /// <summary>
 /// Package-detached data owned by a BioMorphFace. It deliberately contains no LEC types.
 /// </summary>
@@ -27,6 +30,7 @@ public sealed record MorphFaceDocument(
     /// corpus-authored entries during a round trip.
     /// </summary>
     public IReadOnlyList<AssetIdentity?> OtherMeshReferences { get; init; } = [];
+    public ScalpMaterialSelection? ScalpMaterialSelection { get; init; }
 
     public float GetFeatureOffset(string featureName)
     {

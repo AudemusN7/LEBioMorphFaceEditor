@@ -34,6 +34,16 @@ public enum HeadMaterialBlendMode
     Translucent
 }
 
+/// <summary>Recovered native preview graphs, independent of editing and package support.</summary>
+public enum HumanMaterialPreviewModel
+{
+    Default = 0,
+    CcHair = 1,
+    CcScalp = 2,
+    Kaiden = 3,
+    HumanHair = 4
+}
+
 public enum MaterialParameterKind
 {
     Scalar,
@@ -131,17 +141,29 @@ public sealed record ResolvedHeadMaterial(
     public IReadOnlySet<string> SupportedScalars { get; init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     public IReadOnlySet<string> SupportedVectors { get; init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     public IReadOnlySet<string> SupportedTextures { get; init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    // A valid compiled graph can expose zero parameters of a given kind. Keep
+    // that distinct from missing shader evidence, where values are the fallback.
+    public bool HasCompiledParameterSupport { get; init; }
     public DecodedTextureCubeAsset? FixedCubeTexture { get; init; }
     public DecodedTextureCubeAsset? SecondaryFixedCubeTexture { get; init; }
     public string? ParameterScopeKey { get; init; }
     public string? ParameterScopeLabel { get; init; }
     public bool IsPreviewOnlyAttachment { get; init; }
+    // Control contribution is separate from shader support and authored override preservation.
+    public bool ContributesFaceControls { get; init; } = true;
+    public HumanMaterialPreviewModel PreviewModel { get; init; }
 
     public bool Supports(string name, MaterialParameterKind kind) => kind switch
     {
-        MaterialParameterKind.Scalar => SupportedScalars.Count == 0 ? Scalars.ContainsKey(name) : SupportedScalars.Contains(name),
-        MaterialParameterKind.Vector => SupportedVectors.Count == 0 ? Vectors.ContainsKey(name) : SupportedVectors.Contains(name),
-        MaterialParameterKind.Texture => SupportedTextures.Count == 0 ? Textures.ContainsKey(name) : SupportedTextures.Contains(name),
+        MaterialParameterKind.Scalar => HasCompiledParameterSupport || SupportedScalars.Count > 0
+            ? SupportedScalars.Contains(name)
+            : Scalars.ContainsKey(name),
+        MaterialParameterKind.Vector => HasCompiledParameterSupport || SupportedVectors.Count > 0
+            ? SupportedVectors.Contains(name)
+            : Vectors.ContainsKey(name),
+        MaterialParameterKind.Texture => HasCompiledParameterSupport || SupportedTextures.Count > 0
+            ? SupportedTextures.Contains(name)
+            : Textures.ContainsKey(name),
         _ => false
     };
 }

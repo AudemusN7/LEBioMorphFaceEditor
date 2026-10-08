@@ -51,6 +51,7 @@ public sealed partial class ActorAssignmentInventoryService
                 : null;
 
             string? reason = null;
+            UserFacingMessage? userReason = null;
             var localMic = rawEntry is ExportEntry local && ReferenceEquals(local.FileRef, package) &&
                            (local.IsA("MaterialInstanceConstant") ||
                             local.ClassName.Equals("BioMaterialInstanceConstant", StringComparison.OrdinalIgnoreCase));
@@ -64,7 +65,10 @@ public sealed partial class ActorAssignmentInventoryService
             {
                 // Body slots are surgical targets regardless of their parent material family.
                 if (!hasSkinVectors)
+                {
                     reason = "The selected face has no SkinTone or SkinLightScattering value to assign to body MICs.";
+                    userReason = UserFacingMessage.Create("loc_VM_actorAssignment_bodySkinParametersMissing");
+                }
             }
             else if (!HeadMaterialClassifier.IsAssignableHeadFamily(family))
             {
@@ -98,7 +102,10 @@ public sealed partial class ActorAssignmentInventoryService
                 skipped.Add(new ActorAssignmentSkippedMaterial(
                     rawEntry.UIndex, rawEntry.ObjectNameString, rawEntry.InstancedFullPath,
                     component.Role, component.InstancedPath, slot, family, materialProfileKey,
-                    reason, chain, materialsProperty.Inherited));
+                    reason, chain, materialsProperty.Inherited)
+                {
+                    UserReason = userReason
+                });
             }
         }
     }

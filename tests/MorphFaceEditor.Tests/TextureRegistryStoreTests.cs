@@ -32,7 +32,7 @@ public static class TextureRegistryStoreTests
         new("texture registry builder: cancelled rebuild preserves active file", CancelledBuildPreservesActiveFile),
         new("texture registry builder: rebuild all is sequential", BuilderRebuildAllIsSequential),
         new("texture registry runtime: reads compact file without source packages", RuntimeReadsWithoutSourcePackages)
-        ,new("texture registry runtime: restores hat mesh choices from legacy asset index", RuntimeRestoresLegacyHatMeshes)
+        ,new("texture registry runtime: restores hats and CC hair from legacy asset index", RuntimeRestoresLegacyHatMeshes)
         ,new("texture registry runtime: changed or removed package leaves catalogue available", ChangedPackageInvalidatesCachedCatalogue)
         ,new("texture registry runtime: warm reads reuse catalogue and refresh only registry files", WarmReadsUseLayoutStamps)
         ,new("custom assets: sidecar merges without changing installed registry", ManualSidecarMergesWithoutChangingInstalled)
@@ -110,6 +110,8 @@ public static class TextureRegistryStoreTests
         const string excludedPath = @"C:\Games\LE1\BioGame\CookedPCConsole\BIOG_HMF_HIR_PRO.pcc";
         var hatPath = "BIOG_HMF_HIR_PRO.Beanie.HMF_HAT_Bn1_MDL";
         var excludedPathName = "BIOG_HMF_HIR_PRO.Beanie.HMF_HAT_Bn1_MDL_Remaster";
+        const string ccHair = "BIOG_HMF_HIR_PRO.Hair_PROCustom.HMF_HIR_PROCustom01_MDL_CC";
+        const string ccHat = "BIOG_HMF_HIR_PRO.Beanie.HMF_HAT_Bn1_MDL_CC";
         fixture.Store.WriteAtomic(new TextureRegistrySnapshot(TextureRegistrySnapshot.CurrentSchemaVersion,
             TextureCatalogGame.LE1, DateTimeOffset.UtcNow, 1, [])
         {
@@ -126,6 +128,10 @@ public static class TextureRegistryStoreTests
             Assets =
             [
                 new InstalledAssetOccurrence(hatPath, "SkeletalMesh", officialPath, 17, 0,
+                    TextureCatalogOrigin.BaseGame),
+                new InstalledAssetOccurrence(ccHair, "SkeletalMesh", officialPath, 22, 0,
+                    TextureCatalogOrigin.BaseGame),
+                new InstalledAssetOccurrence(ccHat, "SkeletalMesh", officialPath, 23, 0,
                     TextureCatalogOrigin.BaseGame),
                 new InstalledAssetOccurrence(excludedPathName, "SkeletalMesh", excludedPath, 18, 0,
                     TextureCatalogOrigin.BaseGame),
@@ -144,6 +150,10 @@ public static class TextureRegistryStoreTests
         TestAssert.Equal(officialPath, restored.EffectiveOccurrence.PackagePath);
         TestAssert.True(restored.IsEligibleOfficialDefault,
             "A legacy hat recovered from indexed metadata was not an eligible official donor.");
+        TestAssert.True(catalog.AttachmentMeshes.Single(candidate => candidate.CanonicalPath == ccHair).IsEligibleOfficialDefault,
+            "Supported CC hair was not recovered from the existing all-asset index.");
+        TestAssert.True(!catalog.AttachmentMeshes.Any(candidate => candidate.CanonicalPath == ccHat),
+            "The CC hair exception enabled excluded CC hats.");
         TestAssert.True(!catalog.AttachmentMeshes.Any(candidate => candidate.CanonicalPath == excludedPathName),
             "The excluded remaster variant was recovered from the all-asset index.");
         TestAssert.True(!catalog.AttachmentMeshes.Any(candidate => candidate.CanonicalPath.Contains("chat_mesh")),

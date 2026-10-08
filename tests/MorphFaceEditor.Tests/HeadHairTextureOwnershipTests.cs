@@ -15,8 +15,52 @@ internal static class HeadHairTextureOwnershipTests
         new("hair mesh maps are absent from a saved BMO while scalp maps and MIC textures survive",
             () => RoundTrip(exportNew: false)),
         new("hair mesh maps are absent from an exported BMO while scalp maps and MIC textures survive",
-            () => RoundTrip(exportNew: true))
+            () => RoundTrip(exportNew: true)),
+        new("null texture overrides inherit silently while unresolved nonzero references still warn",
+            NullTextureOverrideInherits)
     ];
+
+    private static void NullTextureOverrideInherits()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        var path = Path.Combine(Path.GetTempPath(), "MFE-NullTexture-" + Guid.NewGuid().ToString("N") + ".pcc");
+        try
+        {
+            using var package = MEPackageHandler.CreateMemoryEmptyPackage(path, MEGame.LE3);
+            var root = package.CreatePackageExport("MFE_TextureInheritance");
+            var texture = package.CreateExport("GBL_ARM_ALL_Norm", "Texture2D", root, indexed: false);
+            texture.WriteBinary(UTexture2D.Create());
+            var material = package.CreateExport("InheritedMaterial", "MaterialInstanceConstant", root, indexed: false);
+            material.WriteBinary(MaterialInstance.Create());
+            material.WriteProperty(new ArrayProperty<StructProperty>([new StructProperty("TextureParameterValue",
+                new PropertyCollection { new NameProperty("HED_Tang", "ParameterName"),
+                    new ObjectProperty(texture, "ParameterValue") }, "None", false)], "TextureParameterValues"));
+            var face = package.CreateExport("Face", "BioMorphFace", root, indexed: false);
+            var bmo = package.CreateExport("Overrides", "BioMaterialOverride", face, indexed: false);
+            face.WriteProperty(new ObjectProperty(bmo, "m_oMaterialOverrides"));
+            package.Save(path);
+            using var cache = new PackageCache();
+            var resolver = new InstalledGameAssetResolver(_ => new Dictionary<string, string>(), _ => null);
+            var reader = new MorphFaceMaterialReader(cache, new GamePackageReferenceResolver(cache, resolver));
+            foreach (var reference in new[] { 0, int.MaxValue })
+            {
+                bmo.WriteProperty(new ArrayProperty<StructProperty>([new StructProperty("TextureParameter",
+                    new PropertyCollection { new NameProperty("HED_Tang", "nName"),
+                        new ObjectProperty(reference, "m_pTexture") }, "None", false)], "m_aTextureOverrides"));
+                var result = reader.Read(face, [material], [], decodeTextures: false);
+                TestAssert.True(result.Materials.Materials.Values.Single().SupportedTextures.Contains("HED_Tang"),
+                    "The inherited tangent texture disappeared from material support.");
+                TestAssert.Equal("HED_Tang", result.Overrides.Textures.Single().Name);
+                TestAssert.True(result.Overrides.Textures.Single().TextureReference is null,
+                    "Reading an empty or invalid override substituted a donor into authored data.");
+                TestAssert.Equal(reference != 0, result.Warnings.Any(value =>
+                    value.Contains("Texture override 'HED_Tang' could not be resolved", StringComparison.Ordinal)));
+                TestAssert.Equal(reference, bmo.GetProperty<ArrayProperty<StructProperty>>("m_aTextureOverrides")!
+                    .Single().GetProp<ObjectProperty>("m_pTexture")!.Value);
+            }
+        }
+        finally { File.Delete(path); }
+    }
 
     private static void RoundTrip(bool exportNew)
     {

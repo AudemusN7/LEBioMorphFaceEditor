@@ -53,8 +53,10 @@ internal static partial class QaCases
     private static IReadOnlyList<QaCase> BuildMatrix()
     {
         var cases = new List<QaCase>();
-        void Add(string group, string description, QaFaceSpec face, Func<QaContext, Task> run) =>
-            cases.Add(new(group + "/" + face.Id, description + " — " + face.Id, async c =>
+        void Add(string group, string description, QaFaceSpec face, Func<QaContext, Task> run,
+            string? variant = null) =>
+            cases.Add(new(group + "/" + face.Id + (variant is null ? "" : "/" + variant),
+                description + " — " + face.Id, async c =>
             {
                 c.Face = face;
                 c.PreparedPlayer = null;
@@ -95,6 +97,35 @@ internal static partial class QaCases
             Add("mesh-" + format.ToString().ToLowerInvariant(), "Randomised HMM baked mesh export and Custom reimport",
                 MeshFace, c => MeshRoundTrip(c, format));
         Add("custom-randomisation", "Four-slot HMM custom head with random material families", MeshFace, CustomRandomisation);
+        foreach (var route in QaHumanMaterialCoverage.All)
+        {
+            var face = Archetypes.Single(value => value.Game == route.Game && value.Family == route.Family &&
+                value.IsPlayer == route.Player);
+            var description = route.Group switch
+            {
+                "custom-human-materials" => "Every Human Face/Scalp NPC/Player choice, edit/RON/history/PCC",
+                "custom-human-hair" => "Explicit hair graph with shared scalp controls, textures, 100 rolls and PCC readback",
+                "native-human-hair" => "Native attachment graph, BMO hair controls, history, 100 rolls and PCC readback",
+                "cc-scalp-switch" => "ShortAfro paired texture/material transaction, existing save and fresh export",
+                "player-cc-scalp" => "Official LE3 Player scalp defaults to the CC graph",
+                "kaidan-preview" => "Native Kaidan graph renders while remaining outside authoring capabilities",
+                _ => throw new InvalidOperationException("Unknown Human material QA group: " + route.Group)
+            };
+            Func<QaContext, Task> run = route.Group switch
+            {
+                "custom-human-materials" => c => HumanCustomMaterials(c,
+                    route.Family == "HMM" ? "human-male" : "human-female"),
+                "custom-human-hair" => c => HumanCustomHair(c, route.SourceKey!),
+                "native-human-hair" => c => NativeHairMaterials(c, route.SourceKey!),
+                "cc-scalp-switch" => NativeCcScalpSwitch,
+                "player-cc-scalp" => PlayerCcScalpDefault,
+                "kaidan-preview" => KaidanPreviewBoundary,
+                _ => throw new InvalidOperationException("Unknown Human material QA group: " + route.Group)
+            };
+            Add(route.Group, description, face, run, route.SourceKey);
+            if (cases[^1].Id != route.Id)
+                throw new InvalidOperationException("Human material QA route registration changed its stable ID.");
+        }
         cases.Add(new("pcc-audit", "Fresh structural/reference/installed-identity audit of every output PCC", c =>
         {
             c.Face = DefaultFace;

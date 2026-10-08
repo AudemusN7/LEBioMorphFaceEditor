@@ -8,11 +8,23 @@ internal static class QaUtilityTests
     internal static IReadOnlyList<TestCase> All { get; } =
     [
         new("QA coverage streams reproduce filtered cases and vary donors", Selection),
+        new("QA LE1 HMM conversion donors exclude Hench Human Male", ConversionDonorExclusion),
+        new("QA unused Asari morph exclusion preserves neighbouring face identities", UnusedCorpusFaceExclusion),
+        new("QA default matrix includes every human material and scalp regression route", HumanMaterialMatrix),
         new("QA 100-roll batch retains failures and continues to the final outcome", () => Batch().GetAwaiter().GetResult()),
         new("QA final roll failure remains explicit", () => FinalFailure().GetAwaiter().GetResult()),
         new("QA performance warnings retain functional failures", Performance),
         new("QA report presents warning category roll average and escaped evidence", Report)
     ];
+
+    private static void UnusedCorpusFaceExclusion()
+    {
+        string[] candidates = ["HMF.Asari", "hmf.asari", "ASA.Asari", "HMF.AsariVariant", "HMF.cithub_csec_officer_b"];
+        var selected = QaCoverageSelection.ExcludePaths(candidates, value => value,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+        TestAssert.True(selected.SequenceEqual(candidates.Skip(2)),
+            "Known unused morph exclusion either retained HMF.Asari or removed a different face identity.");
+    }
 
     private static void Selection()
     {
@@ -25,6 +37,60 @@ internal static class QaUtilityTests
         TestAssert.Equal(3, donors.Count);
         TestAssert.True(QaCoverageSelection.Stream(123, "case", "source").Next() !=
             QaCoverageSelection.Stream(123, "case", "editor").Next(), "Donor and operation streams overlap.");
+    }
+
+    private static void ConversionDonorExclusion()
+    {
+        var excluded = QaCoverageSelection.ConversionSourceExclusions(MorphFaceEditor.LegendaryExplorer.MorphFaceGame.LE1, "HMM");
+        TestAssert.True(excluded.Contains("HMM.hench_humanmale"),
+            "LE1 HMM conversion cases did not exclude Hench Human Male.");
+        TestAssert.Equal(0, QaCoverageSelection.ConversionSourceExclusions(
+            MorphFaceEditor.LegendaryExplorer.MorphFaceGame.LE2, "HMM").Count);
+        TestAssert.Equal(0, QaCoverageSelection.ConversionSourceExclusions(
+            MorphFaceEditor.LegendaryExplorer.MorphFaceGame.LE1, "HMF").Count);
+
+        var candidates = new[] { "HMM.alternate_a", "HMM.hench_humanmale", "HMM.alternate_b" };
+        var eligible = QaCoverageSelection.ExcludePaths(candidates, path => path, excluded);
+        TestAssert.True(eligible.SequenceEqual(["HMM.alternate_a", "HMM.alternate_b"]),
+            "Conversion donor filtering removed an allowed face or retained the excluded face.");
+        for (var seed = 1; seed <= 100; seed++)
+        {
+            var selected = QaCoverageSelection.Pick(eligible, QaCoverageSelection.Stream(seed, "conversion/le1-hmm", "source"));
+            TestAssert.True(!excluded.Contains(selected), "A seeded LE1 HMM conversion selected the excluded face.");
+        }
+    }
+
+    private static void HumanMaterialMatrix()
+    {
+        var routes = QaHumanMaterialCoverage.All;
+        static QaHumanMaterialRoute[] InGroup(string group) => QaHumanMaterialCoverage.All
+            .Where(value => value.Group.Equals(group, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        TestAssert.Equal(6, InGroup("custom-human-materials").Length);
+        TestAssert.Equal(7, InGroup("custom-human-hair").Length);
+        TestAssert.Equal(7, InGroup("native-human-hair").Length);
+        TestAssert.Equal(2, InGroup("cc-scalp-switch").Length);
+        TestAssert.Equal(2, InGroup("player-cc-scalp").Length);
+        TestAssert.Equal(1, InGroup("kaidan-preview").Length);
+
+        foreach (var game in new[] { "le1", "le2", "le3" })
+        foreach (var sex in new[] { "hmm", "hmf" })
+            TestAssert.True(InGroup("custom-human-materials").Any(route =>
+                    route.Id.Contains($"/{game}-{sex}-npc", StringComparison.OrdinalIgnoreCase)),
+                $"The default QA matrix is missing {game} {sex} human material coverage.");
+
+        var expectedHairRoutes = new[]
+        {
+            "le1-hmm-npc/human-hair", "le1-hmf-npc/human-iconic-femshep-hair",
+            "le2-hmm-npc/human-hair", "le2-hmf-npc/human-iconic-femshep-hair",
+            "le3-hmm-npc/human-hair", "le3-hmm-npc/human-advanced-hair", "le3-hmm-npc/human-james-hair"
+        };
+        foreach (var route in expectedHairRoutes)
+            TestAssert.True(InGroup("custom-human-hair").Any(actual => actual.Id.EndsWith("/" + route,
+                    StringComparison.OrdinalIgnoreCase)),
+                $"The default QA matrix is missing Custom hair route '{route}'.");
+        TestAssert.Equal(routes.Count, routes.Select(value => value.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count());
     }
 
     private static async Task Batch()

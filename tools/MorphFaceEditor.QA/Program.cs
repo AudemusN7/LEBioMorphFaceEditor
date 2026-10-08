@@ -1,6 +1,8 @@
 using System.Diagnostics;
+using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Windows.Threading;
+using MorphFaceEditor.LegendaryExplorer;
 
 namespace MorphFaceEditor.QA;
 
@@ -76,6 +78,8 @@ internal static class Program
             Console.WriteLine($"START {QaDisplay.Case(item.Id)}");
             var result = new QaResult(item.Id, item.Description) { Group = item.Group };
             context.Current = result;
+            var materialComparisons = new ConcurrentQueue<MaterialInstanceComparisonDiagnostic>();
+            using var comparisonObserver = MaterialInstanceSourcePolicy.ObserveComparisons(materialComparisons.Enqueue);
             var clock = Stopwatch.StartNew();
             try
             {
@@ -100,6 +104,8 @@ internal static class Program
             }
             finally
             {
+                if (!materialComparisons.IsEmpty)
+                    result.Evidence["materialInstanceComparisons"] = materialComparisons.ToArray();
                 try { context.VerifyInputs(); }
                 catch (Exception error)
                 {

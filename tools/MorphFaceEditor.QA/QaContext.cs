@@ -200,22 +200,24 @@ internal sealed class QaContext : IDisposable
         return result;
     }
 
-    public MorphFaceMeshReferences Source()
+    public MorphFaceMeshReferences Source(IReadOnlySet<string>? excludedFacePaths = null)
     {
         if (PreparedPlayer is not null) { Current.Evidence["sourceFace"] = PreparedPlayer; return PreparedPlayer; }
         if (ReferenceEquals(_sourceCase, Current) && _selectedSource is not null) return _selectedSource;
         var packagePath = Face.Package(this);
         var references = MeasureSync($"Inspect faces · {Path.GetFileName(packagePath)}",
             () => MorphFaceReferenceInspector.Inspect(packagePath), QaStageKind.Load);
-        var candidates = (Face.IsPlayer
+        var candidates = QaCoverageSelection.ExcludePaths((Face.IsPlayer
             ? references.Where(value => value.FacePath.Equals(Face.Selector, StringComparison.OrdinalIgnoreCase))
             : references.Where(value => Face.Family == "TUF" ||
                 value.FacePath.StartsWith(Face.Family + ".", StringComparison.OrdinalIgnoreCase)))
-            .OrderBy(value => value.FacePath, StringComparer.OrdinalIgnoreCase).ToArray();
+            .OrderBy(value => value.FacePath, StringComparer.OrdinalIgnoreCase),
+            value => value.FacePath,
+            excludedFacePaths ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase));
         var source = QaCoverageSelection.Pick(candidates, RandomFor("source"));
         _sourceCase = Current;
         _selectedSource = source;
-        Current.Evidence["sourceSelection"] = new { Candidates = candidates.Length, Seed, source.FacePath };
+        Current.Evidence["sourceSelection"] = new { Candidates = candidates.Count, Seed, source.FacePath };
         Current.Evidence["sourceFace"] = source;
         return source;
     }
@@ -297,7 +299,7 @@ internal sealed class QaContext : IDisposable
     }
 
     public async Task<QaRollSummary> Randomise100(FaceEditorViewModel editor, string purpose = "Production randomisation",
-        Action? beforeFinalRoll = null)
+        Action? beforeFinalRoll = null, Action<int>? afterRoll = null)
     {
         var diagnostics = new List<string>();
         void Observe(string level, string message)
@@ -313,7 +315,11 @@ internal sealed class QaContext : IDisposable
             {
                 lock (diagnostics) diagnostics.Clear();
                 if (roll == QaRandomisationBatch.RollCount) beforeFinalRoll?.Invoke();
-                try { await editor.RandomiseAsync(); }
+                try
+                {
+                    await editor.RandomiseAsync();
+                    afterRoll?.Invoke(roll);
+                }
                 catch (Exception error)
                 {
                     lock (diagnostics) diagnostics.Add(error.ToString());

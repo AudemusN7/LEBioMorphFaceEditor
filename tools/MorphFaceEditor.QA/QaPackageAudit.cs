@@ -44,14 +44,18 @@ internal static partial class QaCases
         QaContext.Require(report.RootElement.GetProperty("Complete").GetBoolean(), "Re-audit requires a completed run.");
         var restored = new List<object>();
         foreach (var result in report.RootElement.GetProperty("Results").EnumerateArray()
-            .Where(value => value.GetProperty("Group").GetString() == "clipboard"))
+            .Where(value => value.GetProperty("Group").GetString() is "clipboard" or "cc-scalp-switch"))
         {
             var evidence = result.GetProperty("Evidence");
-            var output = evidence.TryGetProperty("clipboardPackagePath", out var recorded)
-                ? recorded.GetString()! : Path.Combine(directory, result.GetProperty("Id").GetString()!, "clipboard-workspace.pcc");
+            var scalpCase = result.GetProperty("Group").GetString() == "cc-scalp-switch";
+            if (scalpCase && !evidence.TryGetProperty("existingPackagePath", out _)) continue;
+            var output = scalpCase ? evidence.GetProperty("existingPackagePath").GetString()!
+                : evidence.TryGetProperty("clipboardPackagePath", out var recorded)
+                    ? recorded.GetString()! : Path.Combine(directory, result.GetProperty("Id").GetString()!, "clipboard-workspace.pcc");
             output = Path.GetFullPath(output);
             if (!File.Exists(output)) continue;
-            var source = evidence.GetProperty("sourceFace").GetProperty("PackagePath").GetString()!;
+            var source = scalpCase ? evidence.GetProperty("existingPackageSource").GetString()!
+                : evidence.GetProperty("sourceFace").GetProperty("PackagePath").GetString()!;
             IReadOnlySet<string> baseline;
             var captured = evidence.TryGetProperty("existingPackageBaseline", out var stored);
             if (captured) baseline = stored.EnumerateArray().Select(value => value.GetString()!).ToHashSet();
@@ -69,7 +73,7 @@ internal static partial class QaCases
         }
         c.Current.Evidence["existingPackageBaselineSources"] = restored;
         if (restored.Count > 0 && report.RootElement.GetProperty("Results").EnumerateArray()
-            .Any(value => value.GetProperty("Group").GetString() == "clipboard" &&
+            .Any(value => value.GetProperty("Group").GetString() is "clipboard" or "cc-scalp-switch" &&
                 !value.GetProperty("Evidence").TryGetProperty("existingPackageBaseline", out _)))
             c.Current.Warnings.Add("This older run did not persist its baseline sets. Structural baselines were reconstructed from current original inputs; this does not baseline or excuse unresolved imports.");
     }

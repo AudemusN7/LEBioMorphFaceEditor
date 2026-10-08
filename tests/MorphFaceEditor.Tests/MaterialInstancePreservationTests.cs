@@ -16,10 +16,14 @@ internal static class MaterialInstancePreservationTests
         new("edited stock MIC is renamed through PCC structure-preserving export", () => RoundTrip(true)),
         new("unchanged stock MIC copies keep their canonical identity despite parameter GUID differences", UnchangedInstanceKeepsName),
         new("cooked lighting GUID differences do not rename an unchanged stock MIC", LightingCacheDoesNotRename),
+        new("whole official MIC variants retain donor parents and overrides after save reopen", OfficialVariantsKeepDonor),
+        new("installed LE2 LE3 template eye variants keep vanilla identities", InstalledEyesKeepName),
+        new("opt-in MIC comparison observer reports normalized differences and recursive parents", ComparisonObserverCapturesRecursiveDifferences),
         new("installed LE1 Afro MIC keeps its name across official cooked copies", InstalledAfroKeepsName)
     ];
 
     private const string MicPath = "BIOG_HMM_HIR_PRO_R.Cap.HMM_HAT_Cap_MAT_1a";
+    private const string ParentMicPath = "BIOG_HMM_HIR_PRO_R.Cap.HMM_HAT_Cap_Parent_MAT";
     private const string BasePath = "BIOG_Humanoid_MASTER_MTR_R.Human.HMN_HED_PRO_MASTER_HAIR_MAT";
     private const string TexturePath = "BIOG_MFE_CustomTextures.Hair_Diff";
     private const string MeshPath = "BIOG_MFE_CustomMeshes.Hair";
@@ -148,6 +152,46 @@ internal static class MaterialInstancePreservationTests
             "Ignoring cache GUIDs also hid a real MIC parameter edit.");
     });
 
+    private static void ComparisonObserverCapturesRecursiveDifferences() => WithDonors((official, authored, resolver, _) =>
+    {
+        var source = authored.FindExport(MicPath, "MaterialInstanceConstant")!;
+        var stock = official.FindExport(MicPath, "MaterialInstanceConstant")!;
+        var sourceParent = authored.FindExport(ParentMicPath, "MaterialInstanceConstant")!;
+        var stockParent = official.FindExport(ParentMicPath, "MaterialInstanceConstant")!;
+        source.WriteProperty(new ObjectProperty(sourceParent, "Parent"));
+        stock.WriteProperty(new ObjectProperty(stockParent, "Parent"));
+        official.Save(official.FilePath);
+
+        using var cache = new PackageCache();
+        var records = new List<MaterialInstanceComparisonDiagnostic>();
+        using (MaterialInstanceSourcePolicy.ObserveComparisons(records.Add))
+        {
+            TestAssert.True(MaterialInstanceSourcePolicy.OverridesOfficialInstance(source, resolver, cache),
+                "The fixture's authored MIC should still require a unique stock-path copy.");
+        }
+
+        TestAssert.True(records.Count == 2,
+            "The observer should capture the recursive parent MIC and the outer MIC comparison once each.");
+        var nested = records.Single(record => record.Source.InstancedPath.Equals(ParentMicPath, StringComparison.OrdinalIgnoreCase));
+        var outer = records.Single(record => record.Source.InstancedPath.Equals(MicPath, StringComparison.OrdinalIgnoreCase));
+        TestAssert.Equal(MorphFaceGame.LE1, nested.SourceGame);
+        TestAssert.Equal(MorphFaceGame.LE1, nested.OfficialGame);
+        TestAssert.Equal(authored.FilePath, nested.Source.PackagePath);
+        TestAssert.Equal(official.FilePath, nested.Official.PackagePath);
+        TestAssert.True(nested.Differences.Any(difference => difference.PropertyName == "MFE_CustomScalar"),
+            "The recursive diagnostic should identify the authored parent scalar difference.");
+        TestAssert.True(outer.Differences.Any(difference => difference.PropertyName == "Parent"),
+            "The outer diagnostic should identify that its parent MIC is edited.");
+        TestAssert.True(outer.Differences.Any(difference => difference.PropertyName == "MFE_CustomScalar"),
+            "The outer diagnostic should also retain its independent scalar difference.");
+
+        using (MaterialInstanceSourcePolicy.ObserveComparisons(_ => throw new InvalidOperationException("observer failure")))
+        {
+            TestAssert.True(MaterialInstanceSourcePolicy.OverridesOfficialInstance(source, resolver, cache),
+                "A failing diagnostic callback must not change the material rename decision.");
+        }
+    });
+
     private static void InstalledAfroKeepsName()
     {
         LegendaryExplorerCoreRuntime.Initialize();
@@ -163,7 +207,87 @@ internal static class MaterialInstancePreservationTests
         TestAssert.Equal("BIOG_HMF_HIR_PRO.Afro.HMF_HIR_Afr_MAT_1a", copied.InstancedFullPath);
     }
 
+    private static void InstalledEyesKeepName()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        foreach (var game in new[] { "LE2", "LE3" })
+        {
+            using var package = MEPackageHandler.OpenMEPackage(
+                Path.Combine("tests", "Global Morphs", game + " GlobalMorphs.pcc"), forceLoadFromDisk: true);
+            using var cache = new PackageCache();
+            var eyes = package.Exports.Where(export => MaterialInstanceSourcePolicy.IsInstance(export) &&
+                export.ObjectName.Name.Contains("EYE", StringComparison.OrdinalIgnoreCase) &&
+                PccPackageWorkflow.CanonicalPath(export).StartsWith("BIOG_", StringComparison.OrdinalIgnoreCase)).ToArray();
+            TestAssert.True(eyes.Length >= 3, "The template eye fixture is incomplete.");
+            foreach (var eye in eyes)
+            {
+                var records = new List<MaterialInstanceComparisonDiagnostic>();
+                using (MaterialInstanceSourcePolicy.ObserveComparisons(records.Add))
+                    TestAssert.True(!MaterialInstanceSourcePolicy.OverridesOfficialInstance(eye, new InstalledGameAssetResolver(), cache),
+                        $"{game} official template eye '{PccPackageWorkflow.CanonicalPath(eye)}' still requires _MFE: " +
+                        string.Join(" | ", records.SelectMany(record => record.Differences)));
+            }
+        }
+    }
+
     private static float Scalar(ExportEntry mic) => mic.GetProperty<FloatProperty>("MFE_CustomScalar")!.Value;
+
+    private static void OfficialVariantsKeepDonor() => WithDonors((official, authored, _, output) =>
+    {
+        using var variant = CreateDonor(Path.Combine(Path.GetDirectoryName(output)!, "Variant.pcc"), 0.75f, false);
+        var source = authored.FindExport(MicPath, "MaterialInstanceConstant")!;
+        var stockVariant = variant.FindExport(MicPath, "MaterialInstanceConstant")!;
+        // This whole variant has a different parent and an extra override. Neither
+        // difference is safe to ignore independently of its official occurrence.
+        foreach (var mic in new[] { source, stockVariant })
+        {
+            mic.WriteProperty(new ObjectProperty(mic.FileRef.FindExport(ParentMicPath, "MaterialInstanceConstant")!, "Parent"));
+            WriteDynamicParameters(mic, 3);
+            var parameters = mic.GetProperty<ArrayProperty<StructProperty>>("ScalarParameterValues")!;
+            parameters.Add(new StructProperty("ScalarParameterValue", false,
+                new NameProperty("Extra", "ParameterName"), new FloatProperty(0.6f, "ParameterValue")));
+            mic.WriteProperty(parameters);
+        }
+        var reordered = source.GetProperty<ArrayProperty<StructProperty>>("ScalarParameterValues")!;
+        source.WriteProperty(new ArrayProperty<StructProperty>(reordered.Reverse().ToList(), "ScalarParameterValues"));
+        source.WriteProperty(new StructProperty("Guid", new PropertyCollection
+        {
+            new IntProperty(9, "A"), new IntProperty(8, "B"), new IntProperty(7, "C"), new IntProperty(6, "D")
+        }, "m_Guid", true));
+        variant.Save(variant.FilePath);
+        var snapshot = new TextureRegistrySnapshot(TextureRegistrySnapshot.CurrentSchemaVersion,
+            TextureCatalogGame.LE1, DateTimeOffset.UtcNow, 1, [])
+        {
+            Assets = new[] { official, variant }.SelectMany(package => new[] { MicPath, ParentMicPath }.Select(path =>
+                new InstalledAssetOccurrence(path, "MaterialInstanceConstant", package.FilePath,
+                    package.FindExport(path, "MaterialInstanceConstant")!.UIndex, 0, TextureCatalogOrigin.BaseGame))).ToArray(),
+            OfficialPackagePaths = [official.FilePath, variant.FilePath]
+        };
+        var resolver = new InstalledGameAssetResolver(_ => new Dictionary<string, string>(), _ => snapshot);
+        using var cache = new PackageCache();
+        var records = new List<MaterialInstanceComparisonDiagnostic>();
+        using (MaterialInstanceSourcePolicy.ObserveComparisons(records.Add))
+            TestAssert.True(!MaterialInstanceSourcePolicy.OverridesOfficialInstance(source, resolver, cache),
+                "The intact official variant was not recognized: " + string.Join(" | ", records.SelectMany(record => record.Differences)));
+        using (var destination = MEPackageHandler.CreateMemoryEmptyPackage(output, MEGame.LE1))
+        {
+            PccPackageWorkflow.ImportDependencyGraph(destination, source, null, null, false,
+                targetPathOverride: MicPath, installedAssets: resolver);
+            destination.Save(output);
+        }
+        using var reopened = MEPackageHandler.OpenMEPackage(output, forceLoadFromDisk: true);
+        var saved = reopened.FindExport(MicPath, "MaterialInstanceConstant")!;
+        TestAssert.Equal(ParentMicPath, saved.GetProperty<ObjectProperty>("Parent")!.ResolveToEntry(reopened)!.InstancedFullPath);
+        TestAssert.Equal(0.75f, Scalar(saved));
+        TestAssert.Equal(2, saved.GetProperty<ArrayProperty<StructProperty>>("ScalarParameterValues")!.Count);
+        source.WriteProperty(new FloatProperty(0.4f, "MFE_CustomScalar"));
+        TestAssert.True(MaterialInstanceSourcePolicy.OverridesOfficialInstance(source, resolver, cache),
+            "A hybrid of official variants hid an authored value change.");
+        source.WriteProperty(new FloatProperty(0.75f, "MFE_CustomScalar"));
+        authored.FindExport(ParentMicPath, "MaterialInstanceConstant")!.WriteProperty(new FloatProperty(0.9f, "MFE_CustomScalar"));
+        TestAssert.True(MaterialInstanceSourcePolicy.OverridesOfficialInstance(source, resolver, cache),
+            "An intact leaf hid an edited parent instance.");
+    });
 
     private static void WithDonors(Action<IMEPackage, IMEPackage, InstalledGameAssetResolver, string> test)
     {
@@ -179,6 +303,9 @@ internal static class MaterialInstancePreservationTests
             {
                 Assets = [new InstalledAssetOccurrence(MicPath, "MaterialInstanceConstant",
                     official.FilePath, official.FindExport(MicPath, "MaterialInstanceConstant")!.UIndex,
+                    0, TextureCatalogOrigin.BaseGame),
+                new InstalledAssetOccurrence(ParentMicPath, "MaterialInstanceConstant",
+                    official.FilePath, official.FindExport(ParentMicPath, "MaterialInstanceConstant")!.UIndex,
                     0, TextureCatalogOrigin.BaseGame)],
                 OfficialPackagePaths = [official.FilePath]
             };
@@ -204,6 +331,10 @@ internal static class MaterialInstancePreservationTests
         mic.WriteProperty(new ObjectProperty(baseMaterial, "Parent"));
         mic.WriteProperty(new FloatProperty(scalar, "MFE_CustomScalar"));
         mic.WriteProperty(new ObjectProperty(texture, "MFE_CustomTexture"));
+        var parentMic = CreateExport(package, ParentMicPath, "MaterialInstanceConstant");
+        parentMic.WriteBinary(MaterialInstance.Create());
+        parentMic.WriteProperty(new ObjectProperty(baseMaterial, "Parent"));
+        parentMic.WriteProperty(new FloatProperty(scalar, "MFE_CustomScalar"));
         var mesh = CreateExport(package, MeshPath, "SkeletalMesh");
         var binary = SkeletalMesh.Create();
         binary.Materials = [mic.UIndex];

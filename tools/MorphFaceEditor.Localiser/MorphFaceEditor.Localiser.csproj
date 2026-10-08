@@ -5,7 +5,7 @@
     <UseWPF>true</UseWPF>
     <AssemblyName>MorphFaceEditor.Localiser</AssemblyName>
     <RootNamespace>MorphFaceEditor.Localiser</RootNamespace>
-    <ApplicationIcon>..\..\icon.ico</ApplicationIcon>
+    <ApplicationIcon>..\..\icon_2.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\MorphFaceEditor.Localisation\MorphFaceEditor.Localisation.csproj" />

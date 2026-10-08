@@ -204,9 +204,19 @@ public sealed partial class MainWindowViewModel
             var geometryWarning = result.SourceGeometryValidated
                 ? string.Empty
                 : Loc.Text("loc_Shell_Conversion_BakedGeometryWarning");
+            var localizedAttachmentWarnings = result.SaveResult.UserWarnings
+                .Where(message => message.DiagnosticText is not null)
+                .GroupBy(message => message.DiagnosticText!, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => UserFacingMessageFormatter.Format(group.First()),
+                    StringComparer.Ordinal);
+            var displayedWarnings = result.SaveResult.Warnings
+                .Select(warning => localizedAttachmentWarnings.TryGetValue(warning, out var localized)
+                    ? localized
+                    : warning)
+                .ToArray();
             var textureWarnings = result.SaveResult.Warnings.Count == 0
                 ? string.Empty
-                : Loc.Format("loc_Shell_Conversion_TextureDependencyReport", string.Join("\n- ", result.SaveResult.Warnings));
+                : Loc.Format("loc_Shell_Conversion_TextureDependencyReport", string.Join("\n- ", displayedWarnings));
             if (result.SaveResult.Warnings.Count > 0)
             {
                 AppLog.Warning(

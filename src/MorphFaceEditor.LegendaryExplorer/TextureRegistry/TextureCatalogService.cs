@@ -55,7 +55,7 @@ public sealed class TextureCatalogService(TextureRegistryStore store)
         var stored = _store.ReadWithStatus(game);
         var status = stored.Status;
         if (stored.Snapshot is not { } snapshot) return new(status, [], []);
-        snapshot = IncludeIndexedHatMeshes(snapshot);
+        snapshot = IncludeIndexedAttachmentMeshes(snapshot);
         foreach (var sidecar in new[] { _store.ReadModsWithStatus(game), _store.ReadManualWithStatus(game) })
         {
             if (sidecar.Status.State == TextureRegistryState.Ready && sidecar.Snapshot is { } additional)
@@ -99,7 +99,7 @@ public sealed class TextureCatalogService(TextureRegistryStore store)
         };
     }
 
-    private static TextureRegistrySnapshot IncludeIndexedHatMeshes(TextureRegistrySnapshot snapshot)
+    private static TextureRegistrySnapshot IncludeIndexedAttachmentMeshes(TextureRegistrySnapshot snapshot)
     {
         var officialPackages = snapshot.OfficialPackagePaths.Select(Path.GetFullPath)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -109,7 +109,8 @@ public sealed class TextureCatalogService(TextureRegistryStore store)
                 asset.ClassName.Equals("SkeletalMesh", StringComparison.OrdinalIgnoreCase) &&
                 (asset.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc) &&
                 officialPackages.Contains(Path.GetFullPath(asset.PackagePath)) &&
-                asset.InstancedPath.Split('.').Last().Contains("HAT", StringComparison.OrdinalIgnoreCase) &&
+                (asset.InstancedPath.Split('.').Last().Contains("HAT", StringComparison.OrdinalIgnoreCase) ||
+                 AttachmentMeshNamePolicy.IsCcHairMesh(asset.InstancedPath)) &&
                 AttachmentMeshNamePolicy.IsInstalledHeadAttachment(asset.InstancedPath) &&
                 !known.Contains(asset.InstancedPath))
             .GroupBy(asset => asset.InstancedPath, StringComparer.OrdinalIgnoreCase)

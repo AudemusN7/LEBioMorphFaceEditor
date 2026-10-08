@@ -110,7 +110,7 @@ public class HumanMaleFeatureMetadataCatalog : IHeadEditorUiProfile
         new(NeckJaw, Loc.Text("loc_Services_Taxonomy_neck_jaw_7d7d03d1"), Loc.Text("loc_Services_Taxonomy_chin_jaw_neck_adam_s_apple_and_lower_face_struct_c0fb74b0"),
             [new(Jaw, Loc.Text("loc_Services_Taxonomy_jaw_296d1292")), new(Chin, Loc.Text("loc_Services_Taxonomy_chin_cfa4ce51")), new(Neck, Loc.Text("loc_Services_Taxonomy_neck_00020b4f"))]),
         new(Additions, Loc.Text("loc_Services_Taxonomy_additions_966ff941"), Loc.Text("loc_Services_Taxonomy_surface_additions_face_overlays_freckles_scars_a_1f3ef8ca"),
-            [new(Addition, Loc.Text("loc_Services_Taxonomy_addition_63d99162")), new(Face, Loc.Text("loc_Services_Taxonomy_face_215db504")), new(Scalp, Loc.Text("loc_Services_Taxonomy_scalp_91d59546"))])
+            [new(Hair, Loc.Text("loc_Services_Taxonomy_hair_3ba4bcee")), new(Addition, Loc.Text("loc_Services_Taxonomy_addition_63d99162")), new(Face, Loc.Text("loc_Services_Taxonomy_face_215db504")), new(Scalp, Loc.Text("loc_Services_Taxonomy_scalp_91d59546"))])
     ];
 
     public virtual MorphFeatureMetadata Describe(ResolvedMorphFeature feature, bool sessionCanEdit)
@@ -144,7 +144,10 @@ public class HumanMaleFeatureMetadataCatalog : IHeadEditorUiProfile
             Group = category,
             Description = definition.Description
         };
-        return MetadataTextCatalog.Apply(TextArchetype, described, TextGame);
+        var localised = MetadataTextCatalog.Apply(TextArchetype, described, TextGame);
+        return IsMeshOnlyHairParameter(definition.Name, definition.Kind)
+            ? localised with { Label = Loc.Format("loc_Services_Taxonomy_MeshOnlyMaterialLabel", localised.Label) }
+            : localised;
     }
 
     public virtual bool IsMaterialVisible(string parameterName, MaterialParameterKind kind)
@@ -162,6 +165,7 @@ public class HumanMaleFeatureMetadataCatalog : IHeadEditorUiProfile
     {
         var definition = HumanMaterialProfiles.Describe(parameterName, kind);
         var name = parameterName.ToLowerInvariant();
+        if (IsHairMaterialParameter(parameterName, kind)) return Additions;
         // The packed teeth selector belongs in Mouth despite using the scalp material family.
         if (kind == MaterialParameterKind.Texture && name == "hed_teeth_diff")
         {
@@ -178,6 +182,7 @@ public class HumanMaleFeatureMetadataCatalog : IHeadEditorUiProfile
         {
             return Additions;
         }
+        if (kind == MaterialParameterKind.Scalar && name == "hed_spec_aniso_exp_scalar") return Additions;
         if ((name == "hed_mask" && kind == MaterialParameterKind.Texture) ||
             (name == "hed_mask_vector" && kind == MaterialParameterKind.Vector))
         {
@@ -208,10 +213,7 @@ public class HumanMaleFeatureMetadataCatalog : IHeadEditorUiProfile
         var name = parameterName.ToLowerInvariant();
         if (GetMaterialCategory(parameterName, kind) == Additions)
         {
-            if (kind == MaterialParameterKind.Vector && IsHairHighlightColourVector(name))
-            {
-                return Scalp;
-            }
+            if (IsHairMaterialParameter(parameterName, kind)) return Hair;
             if (name == "mask" && kind == MaterialParameterKind.Scalar)
             {
                 return Scalp;
@@ -241,9 +243,16 @@ public class HumanMaleFeatureMetadataCatalog : IHeadEditorUiProfile
         return Face;
     }
 
-    private static bool IsHairHighlightColourVector(string name) => name is
-        "highlight1color" or "highlight2color" or
-        "highlight1colour_vector" or "highlight2colour_vector";
+    protected static bool IsHairMaterialParameter(string name, MaterialParameterKind kind) =>
+        name.Equals("HED_Hair_Colour_Vector", StringComparison.OrdinalIgnoreCase) ||
+        HumanMaterialProfiles.Describe(name, kind).Family == HeadMaterialFamily.Hair;
+
+    // The common HairColour uniform and scalp/CC alpha controls are deliberately absent.
+    // Only names proven exclusive to the mesh graph receive the presentation suffix.
+    protected static bool IsMeshOnlyHairParameter(string name, MaterialParameterKind kind) =>
+        !name.Equals("HED_Hair_Colour_Vector", StringComparison.OrdinalIgnoreCase) &&
+        (HumanMaterialProfiles.Describe(name, kind).Family == HeadMaterialFamily.Hair ||
+         kind == MaterialParameterKind.Texture && HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(name));
 
     public virtual int GetMaterialSortOrder(string parameterName, MaterialParameterKind kind)
     {
@@ -272,6 +281,9 @@ public class HumanMaleFeatureMetadataCatalog : IHeadEditorUiProfile
                 "hed_tclr_vector" => 60,
                 "skinlightscattering" => 61,
                 "hed_hair_colour_vector" => 0,
+                "hair_color" => 0,
+                "aniso_color_1" => 1,
+                "aniso_color_2" => 2,
                 _ => 1000
             };
         }
@@ -345,6 +357,8 @@ public class HumanMaleFeatureMetadataCatalog : IHeadEditorUiProfile
             "mask" => 5,
             "hed_scalp_phongspec_scalar" => 10,
             "hed_spec_aniso_exp_scalar" => 11,
+            "aniso_highlight_1" => 12,
+            "aniso_highlight_2" => 13,
             _ => 1000
         };
         return order;

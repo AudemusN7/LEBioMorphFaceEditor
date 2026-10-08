@@ -65,14 +65,28 @@ public sealed class MaterialEditingSession : IUndoableEditSource
 
     public IReadOnlyList<string> ScalarNames => _scalars.Keys
         .Where(name => _originalMaterials.Materials.Values.Any(material =>
-            AppliesTo(material, name, MaterialParameterKind.Scalar)))
+            material.ContributesFaceControls && AppliesTo(material, name, MaterialParameterKind.Scalar)))
         .OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray();
     public IReadOnlyList<string> VectorNames => _vectors.Keys
         .Where(name => _originalMaterials.Materials.Values.Any(material =>
-            AppliesTo(material, name, MaterialParameterKind.Vector)))
+            material.ContributesFaceControls && AppliesTo(material, name, MaterialParameterKind.Vector)))
         .OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray();
     public IReadOnlyList<TextureMaterialOverride> TextureParameters { get; private set; }
     public ResolvedHeadMaterialSet Materials { get; private set; }
+    public ResolvedHeadMaterialSet BaseMaterials => _baseMaterials;
+
+    /// <summary>Projects an explicitly selected native scalp donor onto its head slot.</summary>
+    public void ReplaceScalpMaterial(string targetKey, ResolvedHeadMaterial material)
+    {
+        if (!_baseMaterials.Materials.TryGetValue(targetKey, out var target) ||
+            target.Family != HeadMaterialFamily.Scalp || material.Family != HeadMaterialFamily.Scalp)
+            throw new InvalidOperationException("A scalp replacement requires an existing scalp slot and a scalp donor.");
+        var materials = new Dictionary<string, ResolvedHeadMaterial>(_baseMaterials.Materials, StringComparer.OrdinalIgnoreCase)
+        {
+            [targetKey] = material with { Key = targetKey }
+        };
+        RebaseMaterialSurface(new ResolvedHeadMaterialSet(materials), firstWins: _hasScopedMaterials);
+    }
     public bool CanUndo => _history.CanUndo;
     public bool CanRedo => _history.CanRedo;
     public int ChangedTextureCount => _textureReferences.Count;
@@ -105,7 +119,7 @@ public sealed class MaterialEditingSession : IUndoableEditSource
                 .Select(value => new VectorMaterialOverride(value.Key, value.Value)).ToArray(),
             TextureParameters.Select(value => value.Name).Concat(_originalOverrides.Textures.Select(value => value.Name))
                 .Concat(_textureReferences.Keys).Distinct(StringComparer.OrdinalIgnoreCase)
-                .Where(name => !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(name) &&
+                .Where(name => (_hasScopedMaterials || !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(name)) &&
                                !IsPreviewOnlyAttachmentTexture(name))
                 .Order(StringComparer.OrdinalIgnoreCase)
                 .Select(name => new TextureMaterialOverride(name, GetTextureReference(name))).ToArray());
@@ -224,7 +238,7 @@ public sealed class MaterialEditingSession : IUndoableEditSource
                 .Select(value => new ScalarMaterialOverride(value.Key, value.Value)).ToArray(),
             vectors.OrderBy(value => value.Key, StringComparer.OrdinalIgnoreCase)
                 .Select(value => new VectorMaterialOverride(value.Key, value.Value)).ToArray(),
-            textures.Where(value => !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(value.Key) &&
+            textures.Where(value => (_hasScopedMaterials || !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(value.Key)) &&
                                     !IsPreviewOnlyAttachmentTexture(value.Key))
                 .OrderBy(value => value.Key, StringComparer.OrdinalIgnoreCase)
                 .Select(value => new TextureMaterialOverride(value.Key, value.Value)).ToArray());
@@ -275,7 +289,10 @@ public sealed class MaterialEditingSession : IUndoableEditSource
     /// no second history item is recorded. Custom surfaces are ordered by the
     /// workspace from lowest material slot first, so the first default wins.
     /// </summary>
-    public void RebaseMaterialSurface(ResolvedHeadMaterialSet materials)
+    public void RebaseMaterialSurface(ResolvedHeadMaterialSet materials) =>
+        RebaseMaterialSurface(materials, firstWins: true);
+
+    private void RebaseMaterialSurface(ResolvedHeadMaterialSet materials, bool firstWins)
     {
         ArgumentNullException.ThrowIfNull(materials);
         var previousScalars = new Dictionary<string, float>(_scalars, StringComparer.OrdinalIgnoreCase);
@@ -286,8 +303,8 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         _baseMaterials = materials;
         _originalMaterials = MergeMaterialSets(_baseMaterials, _attachmentMaterials);
         _hasScopedMaterials = HasScopedMaterials(_baseMaterials);
-        _defaultScalars = BuildDefaultScalars(_originalMaterials, firstWins: true);
-        _defaultVectors = BuildDefaultVectors(_originalMaterials, firstWins: true);
+        _defaultScalars = BuildDefaultScalars(_originalMaterials, firstWins);
+        _defaultVectors = BuildDefaultVectors(_originalMaterials, firstWins);
         RebaseNumericValues(previousScalars, previousVectors);
 
         TextureParameters = BuildTextureParameters(_originalMaterials, _originalOverrides.Textures);
@@ -806,6 +823,7 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         var values = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
         foreach (var material in materials.Materials.Values)
         {
+            if (!material.ContributesFaceControls) continue;
             var defaults = material.DefaultScalars.Count == 0 ? material.Scalars : material.DefaultScalars;
             foreach (var value in defaults)
             {
@@ -847,6 +865,7 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         var values = new Dictionary<string, Vector4>(StringComparer.OrdinalIgnoreCase);
         foreach (var material in materials.Materials.Values)
         {
+            if (!material.ContributesFaceControls) continue;
             var defaults = material.DefaultVectors.Count == 0 ? material.Vectors : material.DefaultVectors;
             foreach (var value in defaults)
             {
@@ -878,7 +897,7 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         var values = new Dictionary<string, AssetIdentity?>(StringComparer.OrdinalIgnoreCase);
         foreach (var material in materials.Materials.Values)
         {
-            if (material.IsPreviewOnlyAttachment) continue;
+            if (material.IsPreviewOnlyAttachment || !material.ContributesFaceControls) continue;
             foreach (var value in material.Textures.Values)
                 values.TryAdd(ControlName(material, value.ParameterName), value.Texture.Source);
             foreach (var value in material.DefaultTextures.Values)
@@ -889,6 +908,7 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         return values
             .Where(value => materials.Materials.Values.Any(material =>
                 !material.IsPreviewOnlyAttachment &&
+                material.ContributesFaceControls &&
                 AppliesTo(material, value.Key, MaterialParameterKind.Texture)))
             .Select(value => new TextureMaterialOverride(value.Key, value.Value))
             .ToArray();

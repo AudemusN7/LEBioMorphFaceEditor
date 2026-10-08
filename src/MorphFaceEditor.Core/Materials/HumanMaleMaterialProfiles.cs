@@ -25,10 +25,29 @@ public static class HumanMaterialProfiles
             ["HMM_HED_PRO_MASTER_SCALP_MAT"] = HeadMaterialFamily.Scalp,
             ["HMM_HIR_PROShort01_MAT_1a"] = HeadMaterialFamily.MaskedHair,
             ["HMN_HED_PRO_MASTER_HAIR_MAT"] = HeadMaterialFamily.Hair,
+            ["HMN_HED_PRO_MASTER_HAIR_MAT_CC"] = HeadMaterialFamily.Hair,
+            ["HMM_HED_PRO_MASTER_SCALP_MAT_CC"] = HeadMaterialFamily.Scalp,
+            ["BIOG_HMM_HED_Kaiden_MASTER"] = HeadMaterialFamily.Skin,
+            ["Human_Hair_MASTER"] = HeadMaterialFamily.Hair,
             ["HMN_HED_PRO_MASTER_ADDN_HAIR_MAT"] = HeadMaterialFamily.Hair
         };
 
     public static IReadOnlyList<MaterialParameterDefinition> Definitions { get; } = CreateDefinitions();
+
+    /// <summary>Exact LE3 graph identities; the package reader owns the game check.</summary>
+    public static HumanMaterialPreviewModel Le3PreviewModelForMaster(string className, string canonicalPath)
+    {
+        if (!className.Equals("Material", StringComparison.OrdinalIgnoreCase))
+            return HumanMaterialPreviewModel.Default;
+        return canonicalPath.ToUpperInvariant() switch
+        {
+            "BIOG_HUMANOID_MASTER_MTR_R.HUMAN.HMN_HED_PRO_MASTER_HAIR_MAT_CC" => HumanMaterialPreviewModel.CcHair,
+            "BIOG_HUMANOID_MASTER_MTR_R.HUMAN.HMM_HED_PRO_MASTER_SCALP_MAT_CC" => HumanMaterialPreviewModel.CcScalp,
+            "BIOG_HMM_HED_PROMORPH.KAIDEN.MASTER.BIOG_HMM_HED_KAIDEN_MASTER" => HumanMaterialPreviewModel.Kaiden,
+            "BIOG_HUMANOID_MASTER_MTR_R.HUMAN.HAIR.HUMAN_HAIR_MASTER" => HumanMaterialPreviewModel.HumanHair,
+            _ => HumanMaterialPreviewModel.Default
+        };
+    }
 
     public static HeadMaterialFamily ClassifyMaster(string? masterMaterialName) =>
         masterMaterialName is not null && MasterFamilies.TryGetValue(masterMaterialName, out var family)
@@ -427,6 +446,16 @@ public static class HumanMaterialProfiles
         AddVector(result, HeadMaterialFamily.Hair, "Highlight2Color", "Highlight 2 colour", "Hair");
         AddVector(result, HeadMaterialFamily.Hair, "Highlight1Colour_Vector", "Highlight 1 colour", "Hair");
         AddVector(result, HeadMaterialFamily.Hair, "Highlight2Colour_Vector", "Highlight 2 colour", "Hair");
+        AddScalar(result, HeadMaterialFamily.Hair, "Aniso_Highlight_1", "Hair", 0.1f, 2000, 1,
+            "Primary anisotropic highlight power in the LE3 Human_Hair graph.", "Highlight 1 power");
+        AddScalar(result, HeadMaterialFamily.Hair, "Aniso_Highlight_2", "Hair", 0.1f, 2000, 1,
+            "Secondary anisotropic highlight power in the LE3 Human_Hair graph.", "Highlight 2 power");
+        AddVector(result, HeadMaterialFamily.Hair, "Hair_Color", "Hair colour", "Hair");
+        AddVector(result, HeadMaterialFamily.Hair, "Aniso_Color_1", "Highlight 1 colour", "Hair");
+        AddVector(result, HeadMaterialFamily.Hair, "Aniso_Color_2", "Highlight 2 colour", "Hair");
+        AddTexture(result, HeadMaterialFamily.Hair, "Hair_Stack", "Hair stack", "Hair", TextureRole.Diffuse,
+            TextureColorSpace.Linear, TextureAlphaPolicy.Translucency,
+            "Packed colour, highlight and opacity data; preview samples its channels linearly. Owned by the hair MIC.");
         return result;
     }
 
@@ -446,9 +475,10 @@ public static class HumanMaterialProfiles
         float minimum,
         float maximum,
         float step,
-        string description) =>
+        string description,
+        string? label = null) =>
         values.Add(new MaterialParameterDefinition(
-            name, Humanize(name), group, MaterialParameterKind.Scalar, family,
+            name, label ?? Humanize(name), group, MaterialParameterKind.Scalar, family,
             minimum, maximum, step, Description: description));
 
     private static void AddVector(List<MaterialParameterDefinition> values, HeadMaterialFamily family, string name, string label, string group) =>

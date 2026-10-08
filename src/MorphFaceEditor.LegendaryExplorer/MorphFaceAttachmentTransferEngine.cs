@@ -9,7 +9,8 @@ namespace MorphFaceEditor.LegendaryExplorer;
 internal sealed record AttachmentTransferResult(
     IEntry? Hair,
     IReadOnlyList<IEntry> OtherMeshes,
-    IReadOnlyList<string> Warnings);
+    IReadOnlyList<string> Warnings,
+    IReadOnlyList<UserFacingMessage> UserWarnings);
 
 internal static class MorphFaceAttachmentTransferEngine
 {
@@ -21,16 +22,17 @@ internal static class MorphFaceAttachmentTransferEngine
         string? targetTemplatePackagePath)
     {
         var warnings = new List<string>();
+        var userWarnings = new List<UserFacingMessage>();
         using var donors = new DonorPackages();
         var hair = ResolveOne(
-            destination, sourceHair, sourceGame, "Hair", targetTemplatePackagePath, donors, warnings);
+            destination, sourceHair, sourceGame, "Hair", targetTemplatePackagePath, donors, warnings, userWarnings);
         var others = sourceOtherMeshes
             .Select(value => ResolveOne(
-                destination, value, sourceGame, "Other", targetTemplatePackagePath, donors, warnings))
+                destination, value, sourceGame, "Other", targetTemplatePackagePath, donors, warnings, userWarnings))
             .Where(value => value is not null)
             .Cast<IEntry>()
             .ToArray();
-        return new AttachmentTransferResult(hair, others, warnings);
+        return new AttachmentTransferResult(hair, others, warnings, userWarnings);
     }
 
     private static IEntry? ResolveOne(
@@ -40,7 +42,8 @@ internal static class MorphFaceAttachmentTransferEngine
         string kind,
         string? targetTemplatePackagePath,
         DonorPackages donors,
-        ICollection<string> warnings)
+        ICollection<string> warnings,
+        ICollection<UserFacingMessage> userWarnings)
     {
         if (source is null)
         {
@@ -48,8 +51,10 @@ internal static class MorphFaceAttachmentTransferEngine
         }
         if (AttachmentMeshNamePolicy.IsExcludedNativeAttachment(source.InstancedPath))
         {
-            warnings.Add(
-                $"Optional attachment '{source.InstancedPath}' was omitted because it is a reviewed excluded native mesh.");
+            var diagnostic = $"Optional attachment '{source.InstancedPath}' was omitted because it is a reviewed excluded native mesh.";
+            warnings.Add(diagnostic);
+            userWarnings.Add(UserFacingMessage.CreateWarning(
+                "loc_Services_AttachmentTransfer_ExcludedNativeMesh", diagnostic, source.InstancedPath));
             return null;
         }
 
@@ -63,9 +68,14 @@ internal static class MorphFaceAttachmentTransferEngine
         {
             if (reviewedPath is null)
             {
-                warnings.Add(
+                var diagnostic =
                     $"The reviewed {sourceGame}->{destination.Game} donors omit {kind.ToLowerInvariant()} " +
-                    $"mesh '{source.InstancedPath}'; the converted face leaves it unset.");
+                    $"mesh '{source.InstancedPath}'; the converted face leaves it unset.";
+                warnings.Add(diagnostic);
+                userWarnings.Add(UserFacingMessage.CreateWarning(
+                    "loc_Services_AttachmentTransfer_ReviewedDonorMissing",
+                    diagnostic,
+                    sourceGame.ToString(), destination.Game.ToString(), source.InstancedPath));
                 return null;
             }
             return MaterializeTargetMesh(

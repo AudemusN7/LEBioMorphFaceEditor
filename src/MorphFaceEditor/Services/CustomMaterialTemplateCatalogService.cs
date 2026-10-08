@@ -55,15 +55,37 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
     [
         new("human-male", "loc_Services_CustomTemplate_HumanMale", "human-male", "BIOG_HMM_HED_PROMorph.pcc",
             "Custom.HMM_HED_PROCustom_MDL"),
+        new("human-male-npc-face", "loc_Services_CustomTemplate_HumanMale", "human-male", "BIOG_HMM_HED_PROMorph.pcc",
+            "Average.HMM_HED_PROAverage_MDL", NpcFace: true),
+        new("human-male-player", "loc_Services_CustomTemplate_HumanMale", "human-male", "EntryMenu.pcc",
+            "BIOG_HMM_HED_PROMorph.Custom.HMM_HED_PROCustom_MDL", Games: [MorphFaceGame.LE1], PlayerScalp: true),
+        new("human-male-player", "loc_Services_CustomTemplate_HumanMale", "human-male", "BioP_Char.pcc",
+            "BIOG_HMM_HED_PROMorph.Custom.HMM_HED_PROCustom_MDL", Games: [MorphFaceGame.LE2], PlayerScalp: true),
+        new("human-male-player", "loc_Services_CustomTemplate_HumanMale", "human-male", "BioP_Char.pcc",
+            "BIOG_HMM_HED_PROMorph.Custom.HMM_HED_PROCustom_MDL_CC", Games: [MorphFaceGame.LE3], PlayerScalp: true),
         new("human-female", "loc_Services_CustomTemplate_HumanFemale", "human-female", "BIOG_HMF_HED_PROMorph_R.pcc",
             "Custom.HMF_HED_PROCustom_MDL"),
+        new("human-female-npc-face", "loc_Services_CustomTemplate_HumanFemale", "human-female", "BIOG_HMF_HED_PROMorph_R.pcc",
+            "Average.HMF_Blank_World_LOD0", Games: [MorphFaceGame.LE1, MorphFaceGame.LE2], NpcFace: true),
+        new("human-female-npc-face", "loc_Services_CustomTemplate_HumanFemale", "human-female", "BIOG_HMF_HED_PROMorph_R.pcc",
+            "Average.HMF_HED_PROBase_MDL", Games: [MorphFaceGame.LE3], NpcFace: true),
+        new("human-female-player", "loc_Services_CustomTemplate_HumanFemale", "human-female", "EntryMenu.pcc",
+            "BIOG_HMF_HED_PROMorph_R.Custom.HMF_HED_PROCustom_MDL", Games: [MorphFaceGame.LE1], PlayerScalp: true),
+        new("human-female-player", "loc_Services_CustomTemplate_HumanFemale", "human-female", "BioP_Char.pcc",
+            "BIOG_HMF_HED_PROMorph_R.Custom.HMF_HED_PROCustom_MDL", Games: [MorphFaceGame.LE2], PlayerScalp: true),
+        new("human-female-player", "loc_Services_CustomTemplate_HumanFemale", "human-female", "BioP_Char.pcc",
+            "BIOG_HMF_HED_PROMorph_R.Custom.HMF_HED_PROCustom_MDL_CC", Games: [MorphFaceGame.LE3], PlayerScalp: true),
         new("human-hair", "loc_Services_CustomTemplate_HumanHair", "human", "BIOG_HMM_HIR_PRO_R.pcc",
             "Short02.HMM_HIR_PROShort02_MDL", "loc_Services_CustomTemplate_HumanHair", [MorphFaceGame.LE1, MorphFaceGame.LE2]),
         new("human-hair", "loc_Services_CustomTemplate_HumanHair", "human", "BIOG_HMM_HIR_PRO_R.pcc",
             "Hair_Short02.HMM_HIR_PROShort02_MDL_CC", "loc_Services_CustomTemplate_HumanHair", [MorphFaceGame.LE3]),
         new("human-iconic-femshep-hair", "loc_Services_CustomTemplate_IconicFemShepHair", "human-female", "BIOG_HMF_HIR_PRO.pcc",
-            "Hair_PROShepard.HMF_HIR_PROShepard_MDL", "loc_Services_CustomTemplate_IconicFemShepHairOption",
-            [MorphFaceGame.LE1, MorphFaceGame.LE2])
+            "Hair_PROShepard.HMF_HIR_PROShepard_MDL", "loc_Services_CustomTemplate_AdvancedHair",
+            [MorphFaceGame.LE1, MorphFaceGame.LE2]),
+        new("human-advanced-hair", "loc_Services_CustomTemplate_HumanHair", "human", "BIOG_HMM_HIR_PRO_R.pcc",
+            "Hair_Short02.HMM_HIR_PROShort02_MDL", "loc_Services_CustomTemplate_AdvancedHair", [MorphFaceGame.LE3]),
+        new("human-james-hair", "loc_Services_CustomTemplate_HumanHair", "human", "BIOG_HMM_HIR_PRO_R.pcc",
+            "Hair_James.HMM_HIR_PROJames_MDL", "loc_Services_CustomTemplate_JamesHair", [MorphFaceGame.LE3])
     ];
 
     private static readonly IReadOnlyList<IndexedTemplateSource> IndexedSources =
@@ -169,6 +191,12 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
             foreach (var slot in evidence.Slots)
             {
                 var material = slot.Material;
+                // The original Custom head supplies the Player face, NPC scalp
+                // and existing eye/lash choices. Average supplies the NPC face;
+                // the native Player seed supplies the Player scalp occurrence.
+                if (source.PlayerScalp && material.Family != HeadMaterialFamily.Scalp ||
+                    source.NpcFace && material.Family != HeadMaterialFamily.Skin)
+                    continue;
                 if (material.Family == HeadMaterialFamily.Unknown ||
                     !HeadMaterialClassifier.IsAssignableHeadFamily(material.Family))
                 {
@@ -186,7 +214,8 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
                     material.Family,
                     material)
                 {
-                    RandomisationProfileKey = RandomisationProfileKey(game, source.Key),
+                    RandomisationProfileKey = RandomisationProfileKey(game, source.PlayerScalp || source.NpcFace
+                        ? source.AppearanceCompatibilityKey : source.Key),
                     ParameterScopeKey = "human",
                     ParameterScopeLabel = Loc.Text("loc_Services_CustomTemplate_HumanScope")
                 });
@@ -197,7 +226,8 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
 
         var previewAttachments = LoadPreviewAttachments(cookedPath, warnings);
         return new CustomMaterialTemplateCatalogResult(
-            options.DistinctBy(option => option.Id, StringComparer.OrdinalIgnoreCase).ToArray(),
+            options.DistinctBy(option => option.Id, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(HumanChoiceOrder).ToArray(),
             warnings.Distinct(StringComparer.Ordinal).ToArray(),
             previewAttachments);
     }
@@ -400,13 +430,42 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
     };
 
     private static string HumanLabel(TemplateSource source, HeadMaterialFamily family) =>
-        source.Key == "human-female" && family == HeadMaterialFamily.Eyes
+        family is HeadMaterialFamily.Skin or HeadMaterialFamily.Scalp
+            ? Loc.Format("loc_Services_CustomTemplate_HumanOptionLabel", Loc.Text(source.LabelKey),
+                Loc.Text((family, source.PlayerScalp) switch
+                {
+                    (HeadMaterialFamily.Skin, _) => source.NpcFace
+                        ? "loc_Services_CustomTemplate_FaceNpc" : "loc_Services_CustomTemplate_FacePlayer",
+                    (HeadMaterialFamily.Scalp, false) => "loc_Services_CustomTemplate_ScalpNpc",
+                    _ => "loc_Services_CustomTemplate_ScalpPlayer"
+                }))
+        : source.Key == "human-female" && family == HeadMaterialFamily.Eyes
             ? Loc.Text("loc_Services_CustomTemplate_HumanFemaleAsariEyes")
             : source.Key == "human-female" && family == HeadMaterialFamily.Lashes
                 ? Loc.Text("loc_Services_CustomTemplate_HumanFemaleAsariLashes")
                 : Loc.Format("loc_Services_CustomTemplate_HumanOptionLabel", Loc.Text(source.LabelKey), FamilyLabel(family));
 
     private static string SourceLabel(IndexedTemplateSource source) => Loc.Text(source.LabelKey);
+
+    private static int HumanChoiceOrder(CustomMaterialAssignmentOption option)
+    {
+        if (option.AppearanceCompatibilityKey is "human-male" or "human-female" &&
+            option.Family is HeadMaterialFamily.Skin or HeadMaterialFamily.Scalp or HeadMaterialFamily.Eyes or HeadMaterialFamily.Lashes)
+        {
+            var female = option.AppearanceCompatibilityKey == "human-female";
+            var offset = female ? 6 : 0;
+            if (option.Family == HeadMaterialFamily.Eyes) return offset + 4;
+            if (option.Family == HeadMaterialFamily.Lashes) return offset + 5;
+            var scalp = option.Family == HeadMaterialFamily.Scalp;
+            var player = scalp ? option.Id.Contains("-player:", StringComparison.OrdinalIgnoreCase)
+                : !option.Id.Contains("-npc-face:", StringComparison.OrdinalIgnoreCase);
+            return offset + (scalp ? 2 : 0) + (player ? 1 : 0);
+        }
+        if (option.Family == HeadMaterialFamily.Hair)
+            return option.Id.Contains(":human-hair:", StringComparison.OrdinalIgnoreCase) ? 12
+                : option.Id.Contains(":human-james-hair:", StringComparison.OrdinalIgnoreCase) ? 14 : 13;
+        return option.EffectiveParameterScopeKey == "human" ? 15 : 16;
+    }
 
     private static string RandomisationProfileKey(MorphFaceGame game, string archetype)
     {
@@ -415,6 +474,7 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
             // Hair has no standalone donor corpus. Its parameters are part of the
             // audited human material profiles used by the corresponding head.
             "human-hair" => "human-male",
+            "human-advanced-hair" or "human-james-hair" => "human-male",
             "human-iconic-femshep-hair" => "human-female",
             _ => archetype
         };
@@ -428,7 +488,9 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
         string PackageFileName,
         string MeshInstancedPath,
         string? OptionLabelKey = null,
-        IReadOnlyList<MorphFaceGame>? Games = null);
+        IReadOnlyList<MorphFaceGame>? Games = null,
+        bool PlayerScalp = false,
+        bool NpcFace = false);
 
     private sealed record IndexedTemplateSource(
         string Key,

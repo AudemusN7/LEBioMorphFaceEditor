@@ -82,10 +82,14 @@ public static class CustomMaterialEvidenceTests
 
     private static void HirReviewMeshesAreExcluded()
     {
-        foreach (var suffix in new[] { "_CC", "_Copy", "_old", "_Remaster", "_Review", "_Test" })
+        foreach (var suffix in new[] { "_Copy", "_old", "_Remaster", "_Review", "_Test" })
             TestAssert.True(AttachmentMeshNamePolicy.HasExcludedSuffix(
                     $"BIOG_HMF_HIR_PRO.Hair.HMF_HIR_Custom{suffix}"),
                 $"The {suffix} mesh suffix was not excluded.");
+        TestAssert.True(AttachmentMeshNamePolicy.IsInstalledHeadAttachment(
+            "BIOG_HMM_HIR_PRO_R.Hair_Short03.HMM_HIR_PROShort03_MDL_CC"), "Playable CC hair remained hidden.");
+        TestAssert.True(AttachmentMeshNamePolicy.HasExcludedSuffix(
+            "BIOG_HMM_HIR_PRO_R.Hats.HMM_HAT_Test_MDL_CC"), "The hair exception admitted a CC hat.");
         TestAssert.True(CustomMaterialTemplateCatalogService.IsUnsafeAttachment(
                 @"C:\Games\LE3\BIOG_HMF_HIR_PRO.pcc",
                 "BIOG_HMF_HIR_PRO.Review.HMF_HIR_Review"),
@@ -205,7 +209,7 @@ public static class CustomMaterialEvidenceTests
                 .Load(game)
                 .Options
                 .First(option =>
-                    option.AppearanceCompatibilityKey.Equals("human-female", StringComparison.OrdinalIgnoreCase) &&
+                    option.Id.StartsWith($"{game}:human-female:", StringComparison.OrdinalIgnoreCase) &&
                     option.Family == family);
 
         var le1Skin = Find(MorphFaceGame.LE1, HeadMaterialFamily.Skin).Template;
@@ -304,7 +308,7 @@ public static class CustomMaterialEvidenceTests
                     randomisation.HasMaterialDonors(option.RandomisationProfileKey!)),
                 $"The installed {game} catalogue exposed an option whose randomisation profile has no material donors.");
             var iconicHair = result.Options.SingleOrDefault(option =>
-                option.Label == "Human Iconic FemShep - Hair");
+                option.Id.Contains(":human-iconic-femshep-hair:", StringComparison.OrdinalIgnoreCase));
             TestAssert.True((game is MorphFaceGame.LE1 or MorphFaceGame.LE2) == (iconicHair is not null),
                 $"The installed {game} catalogue exposed iconic FemShep hair in the wrong game set.");
             if (iconicHair is not null)

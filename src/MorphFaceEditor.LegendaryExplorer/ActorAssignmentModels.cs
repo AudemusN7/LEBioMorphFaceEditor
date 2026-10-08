@@ -87,7 +87,10 @@ public sealed record ActorAssignmentSkippedMaterial(
     string? ProfileKey,
     string Reason,
     IReadOnlyList<ActorMaterialChainEntry> ParentChain,
-    bool InheritedSlot);
+    bool InheritedSlot)
+{
+    public UserFacingMessage? UserReason { get; init; }
+}
 
 /// <summary>The exact export/property which a later morph-assignment transaction may author.</summary>
 public sealed record ActorAssignmentMorphTarget(

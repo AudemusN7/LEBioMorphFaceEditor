@@ -14,8 +14,8 @@ public static class MaterialRandomiser
         "HED_EyeShadow_Tint_Scalar",
         "HED_Lips_Tint_Scalar"
     };
-    private static readonly string[] Highlight1Names = ["Highlight1Color", "Highlight1Colour_Vector"];
-    private static readonly string[] Highlight2Names = ["Highlight2Color", "Highlight2Colour_Vector"];
+    private static readonly string[] Highlight1Names = ["Highlight1Color", "Highlight1Colour_Vector", "Aniso_Color_1"];
+    private static readonly string[] Highlight2Names = ["Highlight2Color", "Highlight2Colour_Vector", "Aniso_Color_2"];
 
     public static MaterialRandomisationProposal CreateProposal(
         MorphRandomisationDonor donor,
@@ -138,10 +138,10 @@ public static class MaterialRandomiser
         MorphRandomiser.StableRandom random,
         IDictionary<string, Vector4> result)
     {
-        var slot1 = FindScopedHighlightName(Highlight1Names, currentVectors, vectorScope);
-        var slot2 = FindScopedHighlightName(Highlight2Names, currentVectors, vectorScope);
+        var slot1 = FindScopedHighlightNames(Highlight1Names, currentVectors, vectorScope);
+        var slot2 = FindScopedHighlightNames(Highlight2Names, currentVectors, vectorScope);
         var targetNames = new[] { slot1, slot2 };
-        if (targetNames[requestedHighlight - 1] is null) return;
+        if (targetNames[requestedHighlight - 1].Length == 0) return;
 
         // Match FindColourTarget's per-vector eligibility, but require both members of the pair.
         var pairedDonors = compatibleDonors.Where(value =>
@@ -163,14 +163,15 @@ public static class MaterialRandomiser
         var active = new List<(int Index, string Name, MaterialVectorStatistics Statistics)>();
         for (var index = 0; index < targetNames.Length; index++)
         {
-            var name = targetNames[index];
-            if (name is null) continue;
-            var aliases = index == 0 ? Highlight1Names : Highlight2Names;
-            var statisticsName = profile.Vectors.ContainsKey(name)
-                ? name
-                : FindAlias(profile.Vectors.Keys, aliases);
-            if (statisticsName is null || !profile.Vectors.TryGetValue(statisticsName, out var statistics)) continue;
-            active.Add((index, name, statistics));
+            foreach (var name in targetNames[index])
+            {
+                var aliases = index == 0 ? Highlight1Names : Highlight2Names;
+                var statisticsName = profile.Vectors.ContainsKey(name)
+                    ? name
+                    : FindAlias(profile.Vectors.Keys, aliases);
+                if (statisticsName is null || !profile.Vectors.TryGetValue(statisticsName, out var statistics)) continue;
+                active.Add((index, name, statistics));
+            }
         }
         if (active.Count == 0) return;
 
@@ -187,13 +188,13 @@ public static class MaterialRandomiser
         }
     }
 
-    private static string? FindScopedHighlightName(
+    private static string[] FindScopedHighlightNames(
         IReadOnlyList<string> aliases,
         IReadOnlyDictionary<string, Vector4> currentVectors,
         IReadOnlySet<string> vectorScope)
     {
-        var actual = FindAlias(vectorScope, aliases);
-        return actual is not null && currentVectors.ContainsKey(actual) ? actual : null;
+        return vectorScope.Where(name => aliases.Contains(name, StringComparer.OrdinalIgnoreCase) &&
+            currentVectors.ContainsKey(name)).ToArray();
     }
 
     private static bool TryGetVector(

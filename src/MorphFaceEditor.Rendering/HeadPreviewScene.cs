@@ -62,14 +62,16 @@ public sealed record HeadPreviewMaterial(
     public IReadOnlySet<string> SupportedTextures { get; init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     public bool IsLe2 { get; init; }
     public bool IsLe3 { get; init; }
+    public HumanMaterialPreviewModel PreviewModel { get; init; }
+    public bool HasCompiledParameterSupport { get; init; }
     public HeadPreviewCubeTexture? FixedCubeTexture { get; init; }
     public HeadPreviewCubeTexture? SecondaryFixedCubeTexture { get; init; }
 
     public bool Supports(string name, MaterialParameterKind kind) => kind switch
     {
-        MaterialParameterKind.Scalar => SupportedScalars.Count == 0 ? Scalars.ContainsKey(name) : SupportedScalars.Contains(name),
-        MaterialParameterKind.Vector => SupportedVectors.Count == 0 ? Vectors.ContainsKey(name) : SupportedVectors.Contains(name),
-        MaterialParameterKind.Texture => SupportedTextures.Count == 0 ? Textures.ContainsKey(name) : SupportedTextures.Contains(name),
+        MaterialParameterKind.Scalar => !HasCompiledParameterSupport && SupportedScalars.Count == 0 ? Scalars.ContainsKey(name) : SupportedScalars.Contains(name),
+        MaterialParameterKind.Vector => !HasCompiledParameterSupport && SupportedVectors.Count == 0 ? Vectors.ContainsKey(name) : SupportedVectors.Contains(name),
+        MaterialParameterKind.Texture => !HasCompiledParameterSupport && SupportedTextures.Count == 0 ? Textures.ContainsKey(name) : SupportedTextures.Contains(name),
         _ => false
     };
 

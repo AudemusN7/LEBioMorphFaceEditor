@@ -127,6 +127,10 @@ public sealed class PackageReferenceService(
             () => reader.LoadDetachedAttachment(packagePath, meshPath),
             cancellationToken);
 
+    public Task<ResolvedHeadMaterial> LoadLe3CcScalpMaterialAsync(
+        bool female, CancellationToken cancellationToken = default) =>
+        ReadAsync(() => reader.LoadLe3CcScalpMaterial(female), cancellationToken);
+
     public async Task ValidateDetachedAttachmentAsync(
         string packagePath,
         string meshPath,

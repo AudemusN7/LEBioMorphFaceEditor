@@ -8,7 +8,12 @@ using MorphFaceEditor.Core.Materials;
 namespace MorphFaceEditor.ViewModels;
 
 public sealed record PreparedManualHairScalpPair(
-    PreparedMaterialRandomisation Material, string StyleId);
+    PreparedMaterialRandomisation Material, string StyleId)
+{
+    public bool RequiresCcScalpMaterial { get; init; }
+    public bool FemaleScalp { get; init; }
+    public ResolvedHeadMaterial? ScalpMaterial { get; init; }
+}
 
 /// <summary>
 /// Composes one detached editing session into category controls, semantic history and scoped
@@ -26,6 +31,9 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     private readonly List<RelayCommand> _subcategoryRandomiseCommands = [];
     private readonly MorphRandomisationCatalog _randomisationCatalog;
     private readonly string _profileKey;
+    private readonly AssetReferenceEditingSession _scalpMaterialSession = new(null);
+    private readonly ResolvedHeadMaterial? _sourceScalpMaterial;
+    private readonly Dictionary<string, ResolvedHeadMaterial> _scalpMaterialDonors = new(StringComparer.OrdinalIgnoreCase);
     private readonly string _materialRandomisationProfileKey;
     private readonly bool _allowsMorphRandomisation;
     private readonly Func<int> _randomSeedFactory;
@@ -85,6 +93,9 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         MorphFaceEditor.LegendaryExplorer.MorphFaceGame? playerRandomisationGame = null)
     {
         _session = session;
+        var scalpMaterials = materialSession.BaseMaterials.Materials.Values
+            .Where(material => material.Family == HeadMaterialFamily.Scalp).ToArray();
+        _sourceScalpMaterial = scalpMaterials.Length == 1 ? scalpMaterials[0] : null;
         _metadataCatalog = metadataCatalog;
         _customMaterialWorkspace = customMaterialWorkspace;
         _customMaterialOptions = customMaterialOptions ?? [];
@@ -149,7 +160,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         _cursedBoneHistory = new CursedBoneOffsetHistory(_cursedBoneOffsets);
         var historySources = new List<IUndoableEditSource>
         {
-            session, materialSession, hairSession, _cursedBoneHistory
+            session, materialSession, hairSession, _scalpMaterialSession, _cursedBoneHistory
         };
         historySources.AddRange(otherMeshSessions);
         if (customMaterialWorkspace is not null) historySources.Add(customMaterialWorkspace);
@@ -191,6 +202,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         _history.HistoryChanged += OnHistoryChanged;
         Material.PreviewChanged += OnMaterialPreviewChanged;
         Material.ControlsChanged += OnMaterialControlsChanged;
+        _scalpMaterialSession.ValueChanged += OnScalpMaterialSelectionChanged;
         _cleanState = CreateDraft();
         _cleanMaterialAssignments = CaptureMaterialAssignments();
     }
@@ -419,7 +431,12 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             OtherMeshes.Select(mesh => mesh.Value)
                 .Concat(_preservedOtherMeshes)
                 .ToArray(),
-            Material.CreateOverrides());
+            Material.CreateOverrides()) with
+        {
+            ScalpMaterialSelection = _scalpMaterialSession.Value is { } donor && _sourceScalpMaterial is { } target
+                ? new MorphFaceEditor.Core.Domain.ScalpMaterialSelection(target.Source, donor)
+                : null
+        };
     public void FixMorph()
     {
         _session.FixMorph();
@@ -435,6 +452,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         _randomisationGeneration++;
         using var aggregate = _history.BeginAggregate();
         if (CanEditMorphFeatures || CanEditBones) _session.ResetToDefaults();
+        _scalpMaterialSession.Set(null);
         Material.ResetToDefaults();
         _cursedBoneHistory.Set(new Dictionary<string, System.Numerics.Vector3>());
         aggregate.Commit();
@@ -1305,15 +1323,41 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         if (prepared.FailedTextureFamilySignatures.Count > 0 ||
             !prepared.Textures.ContainsKey(diffuseControl) ||
             !prepared.Textures.ContainsKey(normalControl)) return null;
-        return new PreparedManualHairScalpPair(prepared, style.Id);
+        var requiresCc = _customMaterialWorkspace is null && context.Game == TextureCatalogGame.LE3 &&
+            style.Id is "hmm-short-afro" or "hmf-short-afro" &&
+            _sourceScalpMaterial?.PreviewModel != HumanMaterialPreviewModel.CcScalp;
+        if (requiresCc && _sourceScalpMaterial is null)
+            throw new InvalidOperationException("The head must have one identifiable scalp material before switching its graph.");
+        return new PreparedManualHairScalpPair(prepared, style.Id)
+        {
+            RequiresCcScalpMaterial = requiresCc,
+            FemaleScalp = context.Sex == PlayerHairSex.Female
+        };
     }
 
     public void ApplyManualHairScalpPair(PreparedManualHairScalpPair prepared)
     {
         ArgumentNullException.ThrowIfNull(prepared);
+        if (prepared.RequiresCcScalpMaterial &&
+            prepared.ScalpMaterial?.PreviewModel != HumanMaterialPreviewModel.CcScalp)
+            throw new InvalidOperationException("The matching CC scalp material has not been prepared.");
         using var aggregate = _history.BeginAggregate();
+        if (prepared.RequiresCcScalpMaterial && prepared.ScalpMaterial is { } scalp)
+        {
+            _scalpMaterialDonors[scalp.Key] = scalp;
+            _scalpMaterialSession.Set(scalp.Source);
+        }
         Material.ApplyRandomisation(prepared.Material);
         aggregate.Commit();
+    }
+
+    private void OnScalpMaterialSelectionChanged(object? sender, EventArgs e)
+    {
+        if (_sourceScalpMaterial is not { } original) return;
+        var selected = _scalpMaterialSession.Value is { } donor
+            ? _scalpMaterialDonors[MaterialIdentityKey.Create(donor)]
+            : original;
+        Material.ReplaceScalpMaterial(original.Key, selected);
     }
 
     private async Task<PreparedMaterialRandomisation?> PreparePlayer2DaAsync(
@@ -2041,6 +2085,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         _history.HistoryChanged -= OnHistoryChanged;
         Material.PreviewChanged -= OnMaterialPreviewChanged;
         Material.ControlsChanged -= OnMaterialControlsChanged;
+        _scalpMaterialSession.ValueChanged -= OnScalpMaterialSelectionChanged;
         HairMesh.PropertyChanged -= OnHairMeshPropertyChanged;
         foreach (var slot in CustomMaterialSlots) slot.Dispose();
         Material.Dispose();

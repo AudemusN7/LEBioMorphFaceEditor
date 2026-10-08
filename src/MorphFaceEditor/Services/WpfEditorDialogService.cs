@@ -236,9 +236,14 @@ public sealed class WpfEditorDialogService : IEditorDialogService
     }
 
     public bool ConfirmHairScalpTextureSwitch(string hairMeshPath) =>
+        ConfirmHairScalpTextureSwitch(hairMeshPath, switchMaterialGraph: false);
+
+    public bool ConfirmHairScalpTextureSwitch(string hairMeshPath, bool switchMaterialGraph) =>
         new EditorMessageWindow(
             Loc.Text("loc_WpfEditorDialogService_MatchScalpTexturesTitle"),
-            Loc.Format("loc_WpfEditorDialogService_MatchScalpTexturesMessage", hairMeshPath),
+            Loc.Format(switchMaterialGraph
+                ? "loc_WpfEditorDialogService_MatchScalpTexturesAndMaterialMessage"
+                : "loc_WpfEditorDialogService_MatchScalpTexturesMessage", hairMeshPath),
             confirmation: true,
             primaryLabel: Loc.Text("loc_WpfEditorDialogService_SwitchScalp"),
             secondaryLabel: Loc.Text("loc_WpfEditorDialogService_KeepCurrent"))

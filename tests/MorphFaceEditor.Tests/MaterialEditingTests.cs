@@ -29,12 +29,101 @@ public static class MaterialEditingTests
         new("None restores the rendered material default after replacement", NoneRestoresRenderedDefault),
         new("failed attachment replacement can restore material state", AttachmentMaterialStateRestores),
         new("attachment selection rebases live numeric material controls", AttachmentNumericControlsRebase),
+        new("compiled empty hair support hides ineffective highlight controls and preserves authored overrides", EmptyCompiledHairSupportHidesHighlights),
         new("attachment numeric edits remain undoable after selection changes", AttachmentNumericEditsRemainUndoable),
         new("multi-slot attachment keeps each material's own hair diffuse", MultiSlotAttachmentKeepsOwnDiffuse),
         new("attachment Diffuseuse stays out of head material output", AttachmentTextureIsNotHeadOutput),
         new("saved Hat preview diffuse stays out of reloaded head controls and exports", SavedHatDiffuseIsPreviewOnly),
-        new("duplicate face texture overrides remain loadable", DuplicateTextureOverridesRemainLoadable)
+        new("duplicate face texture overrides remain loadable", DuplicateTextureOverridesRemainLoadable),
+        new("preview-only Kaidan controls preserve authored data and shared head controls", KaidanPreviewDoesNotContributeControls),
+        new("Human Hair numeric edits remain BioMaterialOverrides and preserve the preview model", HumanHairEditsRemainBioMaterialOverrides)
     ];
+
+    private static void HumanHairEditsRemainBioMaterialOverrides()
+    {
+        var identity = TestFixtures.CreateIdentity("JamesHair", "MaterialInstanceConstant");
+        var hair = new ResolvedHeadMaterial(MaterialIdentityKey.Create(identity), identity,
+            "Human_Hair_MASTER", HeadMaterialFamily.Hair, HeadMaterialBlendMode.Translucent, true,
+            new Dictionary<string, float> { ["Aniso_Highlight_1"] = 15, ["Aniso_Highlight_2"] = 1500 },
+            new Dictionary<string, Vector4>
+            {
+                ["Hair_Color"] = new Vector4(0.1f, 0.08f, 0.02f, 1),
+                ["Aniso_Color_1"] = Vector4.One,
+                ["Aniso_Color_2"] = Vector4.One
+            }, new Dictionary<string, MaterialTextureBinding>())
+        {
+            PreviewModel = HumanMaterialPreviewModel.HumanHair
+        };
+        var materials = new ResolvedHeadMaterialSet(new Dictionary<string, ResolvedHeadMaterial> { [hair.Key] = hair });
+        var session = new MaterialEditingSession(MorphFaceMaterialOverrides.Empty, materials);
+        session.SetScalar("Aniso_Highlight_1", 40);
+        session.SetScalar("Aniso_Highlight_2", 300);
+        foreach (var name in new[] { "Hair_Color", "Aniso_Color_1", "Aniso_Color_2" })
+            session.SetVector(name, new Vector4(0.8f, 0.2f, 0.1f, 1));
+        var saved = session.CreateOverrides();
+        TestAssert.Equal(2, saved.Scalars.Count);
+        TestAssert.Equal(3, saved.Vectors.Count);
+        var reloaded = new MaterialEditingSession(saved, materials);
+        foreach (var value in saved.Scalars)
+            TestAssert.Near(value.Value, reloaded.Materials.Materials[hair.Key].Scalars[value.Name], 0);
+        foreach (var value in saved.Vectors)
+            TestAssert.Equal(value.Value, reloaded.Materials.Materials[hair.Key].Vectors[value.Name]);
+        TestAssert.Equal(HumanMaterialPreviewModel.HumanHair, reloaded.Materials.Materials[hair.Key].PreviewModel);
+        TestAssert.Equal(hair.Scalars["Aniso_Highlight_1"], 15f);
+        TestAssert.Equal(hair.Vectors["Aniso_Color_1"], Vector4.One);
+    }
+
+    private static void KaidanPreviewDoesNotContributeControls()
+    {
+        var identity = TestFixtures.CreateIdentity("KaidanScalp", "MaterialInstanceConstant");
+        var textureIdentity = TestFixtures.CreateIdentity("KaidanNormal", "Texture2D");
+        var texture = new DecodedTextureAsset(textureIdentity, 1, 1, [128, 128, 255, 255],
+            "PF_B8G8R8A8", TextureRole.Normal, TextureColorSpace.Linear, TextureAlphaPolicy.Ignore, false, "kaidan");
+        var kaidan = new ResolvedHeadMaterial(MaterialIdentityKey.Create(identity), identity,
+            "BIOG_HMM_HED_Kaiden_MASTER", HeadMaterialFamily.Skin, HeadMaterialBlendMode.Opaque, false,
+            new Dictionary<string, float> { ["HED_Spec_Scalar"] = 1, ["HED_TMis_Scalar"] = 0.25f },
+            new Dictionary<string, Vector4> { ["HED_TClr_Vector"] = Vector4.One },
+            new Dictionary<string, MaterialTextureBinding> { ["Nm"] = new("Nm", texture) })
+        {
+            PreviewModel = HumanMaterialPreviewModel.Kaiden,
+            ContributesFaceControls = false
+        };
+        var overrides = new MorphFaceMaterialOverrides(null,
+            [new ScalarMaterialOverride("HED_Spec_Scalar", 2)],
+            [new VectorMaterialOverride("HED_TClr_Vector", new Vector4(0.1f, 0.2f, 0.3f, 1))],
+            [new TextureMaterialOverride("Nm", textureIdentity)]);
+        var session = new MaterialEditingSession(overrides, new ResolvedHeadMaterialSet(
+            new Dictionary<string, ResolvedHeadMaterial> { [kaidan.Key] = kaidan }));
+        TestAssert.Equal(0, session.ScalarNames.Count);
+        TestAssert.Equal(0, session.VectorNames.Count);
+        TestAssert.Equal(0, session.TextureParameters.Count);
+        TestAssert.Equal(overrides.Scalars.Single(), session.CreateOverrides().Scalars.Single());
+        TestAssert.Equal(overrides.Vectors.Single(), session.CreateOverrides().Vectors.Single());
+        TestAssert.Equal(overrides.Textures.Single(), session.CreateOverrides().Textures.Single());
+        TestAssert.Equal(overrides.Textures.Single(), session.CaptureInterchangeData().Textures.Single());
+        TestAssert.True(session.Materials.Materials[kaidan.Key].Textures.ContainsKey("Nm"),
+            "Hiding controls removed the authored preview normal.");
+        TestAssert.Near(0.25f, session.Materials.Materials[kaidan.Key].Scalars["HED_TMis_Scalar"], 0);
+
+        var head = CreateSession().Materials.Materials.Values.Single() with
+        {
+            Scalars = new Dictionary<string, float> { ["HED_TMis_Scalar"] = 0.75f },
+            DefaultScalars = new Dictionary<string, float> { ["HED_TMis_Scalar"] = 0.75f }
+        };
+        var shared = new MaterialEditingSession(MorphFaceMaterialOverrides.Empty,
+            new ResolvedHeadMaterialSet(new Dictionary<string, ResolvedHeadMaterial>
+            {
+                [head.Key] = head, [kaidan.Key] = kaidan
+            }), [head.Key]);
+        TestAssert.True(shared.ScalarNames.Contains("HED_TMis_Scalar"), "Kaidan hid a valid head control.");
+        TestAssert.Near(0.75f, shared.GetScalar("HED_TMis_Scalar"), 0);
+        shared.SetScalar("HED_TMis_Scalar", 0.5f);
+        TestAssert.Near(0.5f, shared.Materials.Materials[kaidan.Key].Scalars["HED_TMis_Scalar"], 0);
+        TestAssert.Near(1, shared.Materials.Materials[kaidan.Key].Scalars["HED_Spec_Scalar"], 0);
+        shared.ReplaceAttachmentMaterials(new ResolvedHeadMaterialSet(
+            new Dictionary<string, ResolvedHeadMaterial> { [kaidan.Key] = kaidan }));
+        TestAssert.True(!shared.ScalarNames.Contains("HED_Spec_Scalar"), "Replacement exposed a Kaidan-only control.");
+    }
 
     private static void MaterialHistoryIsSemantic()
     {
@@ -559,6 +648,47 @@ public static class MaterialEditingTests
         TestAssert.True(!session.ScalarNames.Contains("Hightlight1Intensity", StringComparer.OrdinalIgnoreCase) &&
                         !session.VectorNames.Contains("Highlight1Color", StringComparer.OrdinalIgnoreCase),
             "Clearing the hair attachment left unsupported highlight controls visible.");
+    }
+
+    private static void EmptyCompiledHairSupportHidesHighlights()
+    {
+        var identity = new AssetIdentity("C:\\game\\BioGame\\CookedPCConsole\\BioP_Char.pcc",
+            "BIOG_Humanoid_MASTER_MTR_R.Human.HMN_HED_PRO_MASTER_HAIR_MAT", -1, "Material");
+        var source = new ResolvedHeadMaterial(MaterialIdentityKey.Create(identity), identity,
+            "HMN_HED_PRO_MASTER_HAIR_MAT", HeadMaterialFamily.Hair, HeadMaterialBlendMode.Translucent, true,
+            new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Highlight1SpecExp_Scalar"] = 80,
+                ["Hightlight1Intensity"] = 1.5f
+            },
+            new Dictionary<string, Vector4>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Highlight1Color"] = new(0.3f, 0.2f, 0.1f, 1)
+            },
+            new Dictionary<string, MaterialTextureBinding>(StringComparer.OrdinalIgnoreCase))
+        {
+            SupportedScalars = new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            SupportedVectors = new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            HasCompiledParameterSupport = true
+        };
+        var authored = new MorphFaceMaterialOverrides(null,
+            [new ScalarMaterialOverride("Highlight1SpecExp_Scalar", 80),
+             new ScalarMaterialOverride("Hightlight1Intensity", 1.5f)],
+            [new VectorMaterialOverride("Highlight1Color", new(0.3f, 0.2f, 0.1f, 1))],
+            []);
+        var session = new MaterialEditingSession(authored, new ResolvedHeadMaterialSet(
+            new Dictionary<string, ResolvedHeadMaterial>(StringComparer.OrdinalIgnoreCase) { [source.Key] = source }));
+
+        TestAssert.True(!session.ScalarNames.Contains("Highlight1SpecExp_Scalar", StringComparer.OrdinalIgnoreCase) &&
+                        !session.ScalarNames.Contains("Hightlight1Intensity", StringComparer.OrdinalIgnoreCase),
+            "Scalars absent from the compiled Hair graph appeared as controls.");
+        TestAssert.True(!session.VectorNames.Contains("Highlight1Color", StringComparer.OrdinalIgnoreCase),
+            "Vectors absent from the compiled Hair graph appeared as controls.");
+        var roundTrip = session.CreateOverrides();
+        TestAssert.Equal(80f, roundTrip.Scalars.Single(value => value.Name == "Highlight1SpecExp_Scalar").Value);
+        TestAssert.Equal(1.5f, roundTrip.Scalars.Single(value => value.Name == "Hightlight1Intensity").Value);
+        TestAssert.Equal(new Vector4(0.3f, 0.2f, 0.1f, 1),
+            roundTrip.Vectors.Single(value => value.Name == "Highlight1Color").Value);
     }
 
     private static void AttachmentNumericEditsRemainUndoable()

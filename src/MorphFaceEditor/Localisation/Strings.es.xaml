@@ -221,7 +221,8 @@
   <system:String x:Key="loc_Services_MetadataText_Archetype_HumanMale_eyeshape_oldblk_5ddf5a_Label" xml:space="preserve">Negro antiguo</system:String>
   <system:String x:Key="loc_Services_MetadataText_Archetype_HumanMale_eyeshape_sleepy_8a736a_Label" xml:space="preserve">Somnoliento</system:String>
   <system:String x:Key="loc_Services_MetadataText_Archetype_HumanMale_eyeshape_yngasn_1c63a8_Label" xml:space="preserve">Joven asiático</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Archetype_HumanMale_hed_lips_tint_vector_2067f2_Label" xml:space="preserve">Color de tinte de los labios</system:String>
+  <!--localiser: {"Note":"","DoNotTranslate":false,"SourceHash":"2A21EE12C9B2710834B7514FE40ACA380ECE285026031B2D78A8DB3EB6BF0F52","ReviewedHash":"325DF630857D44E0428A9C0E59A3594FF267659CC52EC154B10F62D8A4EC0BC9","Key":"loc_Services_MetadataText_Archetype_HumanMale_hed_lips_tint_vector_2067f2_Label"}-->
+  <system:String x:Key="loc_Services_MetadataText_Archetype_HumanMale_hed_lips_tint_vector_2067f2_Label" xml:space="preserve">Color del pintalabios</system:String>
   <system:String x:Key="loc_Services_MetadataText_Archetype_HumanMale_hed_spec_nobrow_a131ce_Label" xml:space="preserve">Potencia especular sin cejas</system:String>
   <!--localiser: {"Key":"loc_Services_MetadataText_Archetype_HumanMale_mask_3b2c53_Description","ReviewedHash":null,"DoNotTranslate":false,"Note":"Don\u0027t translate the name, only second half","SourceHash":null}-->
   <system:String x:Key="loc_Services_MetadataText_Archetype_HumanMale_mask_3b2c53_Description" xml:space="preserve">Mask · Los valores bajos suelen ocultar todo el cuero cabelludo</system:String>
@@ -585,7 +586,8 @@
   <system:String x:Key="loc_Services_MetadataText_Shared_hed_lash_diff_vector_0fc43b_Label" xml:space="preserve">Color de las pestañas</system:String>
   <system:String x:Key="loc_Services_MetadataText_Shared_hed_lash_opac_scalar_94e16f_Label" xml:space="preserve">Opacidad de las pestañas</system:String>
   <system:String x:Key="loc_Services_MetadataText_Shared_hed_lash_spec_scalar_1397b8_Label" xml:space="preserve">Especular de las pestañas</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_hed_lips_tint_scalar_4411b6_Label" xml:space="preserve">Intensidad del tinte de labios</system:String>
+  <!--localiser: {"Note":"","DoNotTranslate":false,"SourceHash":"48BB6A8D1DC89636C063D4632CF7B18BF472B39BBE80D2BAD9AEF5CD661E7C88","ReviewedHash":"4208B6808625632C23C2D0C1C5B4ACF112A87780FA89A15C7B4BB85261917DC2","Key":"loc_Services_MetadataText_Shared_hed_lips_tint_scalar_4411b6_Label"}-->
+  <system:String x:Key="loc_Services_MetadataText_Shared_hed_lips_tint_scalar_4411b6_Label" xml:space="preserve">Intensidad del pintalabios</system:String>
   <system:String x:Key="loc_Services_MetadataText_Shared_hed_lips_tint_vector_ff9c9a_Label" xml:space="preserve">Color del tinte de labios</system:String>
   <!--localiser: {"Key":"loc_Services_MetadataText_Shared_hed_makeup_mask_018fd3_Description","ReviewedHash":null,"DoNotTranslate":false,"Note":"Don\u0027t translate the name, only second half","SourceHash":null}-->
   <system:String x:Key="loc_Services_MetadataText_Shared_hed_makeup_mask_018fd3_Description" xml:space="preserve">HED_Makeup_Mask · Rojo = sombra de ojos / verde = máscara de pestañas y pintalabios / azul = selector de pintalabios / alfa = colorete y pintalabios</system:String>
@@ -1798,4 +1800,52 @@ Elige «No» para conservar las texturas actuales del cuero cabelludo.</system:S
   <system:String x:Key="loc_WpfEditorDialogService_SaveMeshMaterialsTitle" xml:space="preserve">Guardar malla y materiales en PCC</system:String>
   <system:String x:Key="loc_WpfEditorDialogService_SwitchScalp" xml:space="preserve">Cambiar cuero cabelludo</system:String>
   <system:String x:Key="loc_WpfEditorDialogService_UModelExportFolderTitle" xml:space="preserve">Selecciona una carpeta para exportar la malla con UModel</system:String>
+  <!--localiser: {"Note":"","DoNotTranslate":false,"SourceHash":"51A21E1A71DF111C3D7D87D3C6F5D3F5F8491749AADDF05B0EC00A96F699DC41","ReviewedHash":"64F7F6AE3D44F702FF22C004D62631E6AE1A1CBF3C5689C98C6C13B789FAE2BD","Key":"loc_Services_MetadataText_Shared_aniso_highlight_1_Label"}-->
+  <system:String x:Key="loc_Services_MetadataText_Shared_aniso_highlight_1_Label" xml:space="preserve">Intensidad del reflejo del pelo 1</system:String>
+  <!--localiser: {"Note":"","DoNotTranslate":false,"SourceHash":"54F6C374C776867F4573A5098F208BF35A27A8AE6573312937C94467DAE681EA","ReviewedHash":"8127B5BCD83233692A8D4F7BA20142EF576DC5B6EA55A2DA104458FF357FC900","Key":"loc_Services_CustomTemplate_ScalpPlayer"}-->
+  <system:String x:Key="loc_Services_CustomTemplate_ScalpPlayer" xml:space="preserve">Cuero cabelludo (jugador)</system:String>
+  <!--localiser: {"Note":"","DoNotTranslate":false,"SourceHash":"7D253D5474C7BC7FB884E964ACBB300C2DF6A63FF4843DDEA9BCB58A4591FD8D","ReviewedHash":"27286C22162C6CE4DA29B6D504555C3CFCB52639EC1F7A4090A470BE39AA1303","Key":"loc_Services_CustomTemplate_AdvancedHair"}-->
+  <system:String x:Key="loc_Services_CustomTemplate_AdvancedHair" xml:space="preserve">Pelo humano avanzado</system:String>
+  <!--localiser: {"Note":"","DoNotTranslate":true,"SourceHash":"E63210F4B47956A8BD5EB33D565FC64530560F4650D363FD33CCB6C167514C75","ReviewedHash":"E63210F4B47956A8BD5EB33D565FC64530560F4650D363FD33CCB6C167514C75","Key":"loc_Services_MetadataText_Shared_aniso_color_1_Description"}-->
+  <system:String x:Key="loc_Services_MetadataText_Shared_aniso_color_1_Description" xml:space="preserve">Aniso_Color_1</system:String>
+  <!--localiser: {"Note":"","DoNotTranslate":false,"SourceHash":"552966D04730D4A3F074E68CE15F17371A17654AB88019CA629D9F1E2380A787","ReviewedHash":"BF9783D1861CA10626D16DA7044CB97367046EA8ECB5C136EF5C3A32BD7AB68D","Key":"loc_Services_MetadataText_Shared_aniso_highlight_2_Label"}-->
+  <system:String x:Key="loc_Services_MetadataText_Shared_aniso_highlight_2_Label" xml:space="preserve">Intensidad del reflejo del pelo 2</system:String>
+  <!--localiser: {"Note":"","DoNotTranslate":false,"SourceHash":"0006E47F74CE32AEE32AA1FC3707416A8EA6619F02E75CE768C58B16065165C6","ReviewedHash":"90AF85892E2A52A403C6498A1224AC32A5CCDAB532188455EFA4E4D4D8CDFC96","Key":"loc_Services_MetadataText_Shared_aniso_color_1_Label"}-->
+  <system:String x:Key="loc_Services_MetadataText_Shared_aniso_color_1_Label" xml:space="preserve">Color del reflejo del pelo 1</system:String>
+  <!--localiser: {"Note":"","DoNotTranslate":true,"SourceHash":"82B2D3C2C45C0A6DBCBE6D27BEAB993B2CEC5F3627F51F47DB995543F5C25347","ReviewedHash":"82B2D3C2C45C0A6DBCBE6D27BEAB993B2CEC5F3627F51F47DB995543F5C25347","Key":"loc_Services_MetadataText_Shared_aniso_color_2_Description"}-->
+  <system:String x:Key="loc_Services_MetadataText_Shared_aniso_color_2_Description" xml:space="preserve">Aniso_Color_2</system:String>
+  <!--localiser: {"Note":"","DoNotTranslate":false,"SourceHash":"82DD54ED20251135DF040E279D8895CDD6264A825BC54397304D9058328BE301","ReviewedHash":"C5EB028EDDE8915D0E3C26F55FE955ABEF95ADE80CF12F99B0936DA4E6DE6853","Key":"loc_Services_CustomTemplate_FacePlayer"}-->
+  <system:String x:Key="loc_Services_CustomTemplate_FacePlayer" xml:space="preserve">Rostro (jugador)</system:String>
+  <!--localiser: {"Note":"","DoNotTranslate":false,"SourceHash":"E2AA20736CB6AC493FB3C24545352F7B069C9E770742E7E0DE5D0ED2D31E7E5D","ReviewedHash":"36C039E17AE95DA96C76ACD5040979AAD6F427A4A0D55D311656AA66E08EDA90","Key":"loc_Services_AttachmentTransfer_ReviewedDonorMissing"}-->
+  <system:String x:Key="loc_Services_AttachmentTransfer_ReviewedDonorMissing" xml:space="preserve">Los donantes revisados para {0}→{1} no incluyen la malla del accesorio «{2}» porque Morph Face Editor no permite transferirla a ese juego.</system:String>
+  <!--localiser: {"Note":"","DoNotTranslate":false,"SourceHash":"E76F8843F45EAD00511AD2EFF2DBF63BFB02EC9379FC06C9B76554DFF660BB96","ReviewedHash":"B8CADE3F6A93FF8C8D8550B624A1D3EE47F2ACE2892F057E8EC5383E1286F27A","Key":"loc_Services_CustomTemplate_FaceNpc"}-->
+  <system:String x:Key="loc_Services_CustomTemplate_FaceNpc" xml:space="preserve">Rostro (NPC)</system:String>
+  <!--localiser: {"Note":"","DoNotTranslate":true,"SourceHash":"CC3EAC3CFBACF8AA89F0A5BD1691FB1E1A57BE897B00D3E3ADC73DB061912816","ReviewedHash":"CC3EAC3CFBACF8AA89F0A5BD1691FB1E1A57BE897B00D3E3ADC73DB061912816","Key":"loc_Services_MetadataText_Shared_hair_stack_Description"}-->
+  <system:String x:Key="loc_Services_MetadataText_Shared_hair_stack_Description" xml:space="preserve">Hair_Stack</system:String>
+  <!--localiser: {"Note":"","DoNotTranslate":true,"SourceHash":"7B4498EEB5B8C43850DC3790AC4C20F6C2B425F9CCE2BE83A8021D96DE8DC32F","ReviewedHash":"7B4498EEB5B8C43850DC3790AC4C20F6C2B425F9CCE2BE83A8021D96DE8DC32F","Key":"loc_Services_MetadataText_Shared_aniso_highlight_1_Description"}-->
+  <system:String x:Key="loc_Services_MetadataText_Shared_aniso_highlight_1_Description" xml:space="preserve">Aniso_Highlight_1</system:String>
+  <!--localiser: {"Note":"","DoNotTranslate":true,"SourceHash":"94C7BD6AD54E37459F4E8AAAC3B2ACC268480D618E9703DCD9749035D6D7A217","ReviewedHash":"94C7BD6AD54E37459F4E8AAAC3B2ACC268480D618E9703DCD9749035D6D7A217","Key":"loc_Services_MetadataText_Shared_aniso_highlight_2_Description"}-->
+  <system:String x:Key="loc_Services_MetadataText_Shared_aniso_highlight_2_Description" xml:space="preserve">Aniso_Highlight_2</system:String>
+  <!--localiser: {"Note":"","DoNotTranslate":false,"SourceHash":"D3911E80C9CC804A53604460BA4F696D3D971B1A580B262EA4AAEE8479EBF52B","ReviewedHash":"8B12FEA8A6EE272C9D03CA34C721CB8C0DA8051D92D4212A8DF294A3E6D4E571","Key":"loc_Services_AttachmentTransfer_ExcludedNativeMesh"}-->
+  <system:String x:Key="loc_Services_AttachmentTransfer_ExcludedNativeMesh" xml:space="preserve">Se omitió el accesorio opcional «{0}» porque está mal formado, es un duplicado redundante o no se admite intencionadamente.</system:String>
+  <!--localiser: {"Note":"","DoNotTranslate":false,"SourceHash":"81D9EDEDC450F0119D7D4F32E81774FF2B80116C18686559ABC1F7EC70823E69","ReviewedHash":"BF68CEFCF5E9390D46234C19C1A5B762BDAF50640A94FCC538FCB71D2DF75EDB","Key":"loc_Services_MetadataText_Shared_aniso_color_2_Label"}-->
+  <system:String x:Key="loc_Services_MetadataText_Shared_aniso_color_2_Label" xml:space="preserve">Color del reflejo del pelo 2</system:String>
+  <!--localiser: {"Note":"","DoNotTranslate":false,"SourceHash":"B305646554210ABE960F6E68D2B0D6F76E74228B2C7DFA90FFB1681847035096","ReviewedHash":"378449E27457F95B1FE4FA6C40A699B57059760DDD09BB24A66F0AE27DB918D8","Key":"loc_Services_Taxonomy_MeshOnlyMaterialLabel"}-->
+  <system:String x:Key="loc_Services_Taxonomy_MeshOnlyMaterialLabel" xml:space="preserve">{0} (malla)</system:String>
+  <!--localiser: {"Note":"","DoNotTranslate":false,"SourceHash":"F072529CB93A8D2FB52E2103BE576856452F320A110AD08A7E83BADD8140CD70","ReviewedHash":"9951962FD9C0074AB0B102E721D3E9C4AD3A4A0042279BB15BA20A96C070871A","Key":"loc_WpfEditorDialogService_MatchScalpTexturesAndMaterialMessage"}-->
+  <system:String x:Key="loc_WpfEditorDialogService_MatchScalpTexturesAndMaterialMessage" xml:space="preserve">El pelo seleccionado usa el material de cuero cabelludo del jugador. ¿Cambiar las texturas y el material del cuero cabelludo para que coincidan con {0}?
+
+Elige No para conservar las texturas y el material actuales del cuero cabelludo.</system:String>
+  <!--localiser: {"Note":"","DoNotTranslate":false,"SourceHash":"F12FD20A733C5D739BF1B6A2800B037E5E0A9457DF2DFAEF4642D0BAD06453FB","ReviewedHash":"B5F1BAB1F450FEF0B6786282C4A2CD5CBD678E5B6A19E3451A385142FA9F5A66","Key":"loc_VM_actorAssignment_bodySkinParametersMissing"}-->
+  <system:String x:Key="loc_VM_actorAssignment_bodySkinParametersMissing" xml:space="preserve">La cara seleccionada no contiene ningún valor SkinTone ni SkinLightScattering para asignar a los MIC del cuerpo.</system:String>
+  <!--localiser: {"Note":"","DoNotTranslate":false,"SourceHash":"8B42C9F862E90CFFA47971FC0ADB06BD1B13BDBD316EFED5673C809C609434BC","ReviewedHash":"FFD57D896F03D8ED59BBAAD476385947DB6909DAE845802C6C64D17D486C56F5","Key":"loc_Services_MetadataText_Shared_hair_color_Label"}-->
+  <system:String x:Key="loc_Services_MetadataText_Shared_hair_color_Label" xml:space="preserve">Color del pelo</system:String>
+  <!--localiser: {"Note":"","DoNotTranslate":false,"SourceHash":"29D403544DB610D9CE2D655B9D840165DEC29B46CE7259FDA5F171C8CB251DE5","ReviewedHash":"217CD9C09AB05ABF39AEC67EF565B48D65137CB984E9125B257BA17BF80F1CEC","Key":"loc_Services_CustomTemplate_JamesHair"}-->
+  <system:String x:Key="loc_Services_CustomTemplate_JamesHair" xml:space="preserve">Pelo de James Vega</system:String>
+  <!--localiser: {"Note":"","DoNotTranslate":false,"SourceHash":"368DE3EBC2CEB64F211F6C024A5C70A1D34073CAE1A674ECA1FCFDDF2F0C4DEF","ReviewedHash":"6A1B236C6143C16DC9DEEEBC82F9AB6E7428BFBE800C017F8ED4FEACE4AAE926","Key":"loc_Services_MetadataText_Shared_hair_stack_Label"}-->
+  <system:String x:Key="loc_Services_MetadataText_Shared_hair_stack_Label" xml:space="preserve">Textura del pelo de James Vega</system:String>
+  <!--localiser: {"Note":"","DoNotTranslate":false,"SourceHash":"C115D0BD467E7F7BAA231C0B6EA4AC087805A11E1BCAEAE8080B3341E1CB5D63","ReviewedHash":"1345D311C9D68D02D2601CCD460ACD534EFEDD74288D02F10A7E4E5D6BF205C9","Key":"loc_Services_CustomTemplate_ScalpNpc"}-->
+  <system:String x:Key="loc_Services_CustomTemplate_ScalpNpc" xml:space="preserve">Cuero cabelludo (NPC)</system:String>
+  <!--localiser: {"Note":"","DoNotTranslate":true,"SourceHash":"FBE25E7696C72308B2A00F22582FF3A7DD7A1EEF2A625FDF174AD77E637A9085","ReviewedHash":"FBE25E7696C72308B2A00F22582FF3A7DD7A1EEF2A625FDF174AD77E637A9085","Key":"loc_Services_MetadataText_Shared_hair_color_Description"}-->
+  <system:String x:Key="loc_Services_MetadataText_Shared_hair_color_Description" xml:space="preserve">Hair_Color</system:String>
 </ResourceDictionary>

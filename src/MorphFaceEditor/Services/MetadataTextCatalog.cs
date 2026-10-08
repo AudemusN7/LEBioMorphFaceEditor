@@ -30,6 +30,12 @@ internal static class MetadataTextCatalog
     private static readonly IReadOnlyDictionary<string, MetadataText> Shared =
         new Dictionary<string, MetadataText>(StringComparer.OrdinalIgnoreCase)
         {
+            ["Aniso_Highlight_1"] = new(Loc.Text("loc_Services_MetadataText_Shared_aniso_highlight_1_Label"), Loc.Text("loc_Services_MetadataText_Shared_aniso_highlight_1_Description")),
+            ["Aniso_Highlight_2"] = new(Loc.Text("loc_Services_MetadataText_Shared_aniso_highlight_2_Label"), Loc.Text("loc_Services_MetadataText_Shared_aniso_highlight_2_Description")),
+            ["Aniso_Color_1"] = new(Loc.Text("loc_Services_MetadataText_Shared_aniso_color_1_Label"), Loc.Text("loc_Services_MetadataText_Shared_aniso_color_1_Description")),
+            ["Aniso_Color_2"] = new(Loc.Text("loc_Services_MetadataText_Shared_aniso_color_2_Label"), Loc.Text("loc_Services_MetadataText_Shared_aniso_color_2_Description")),
+            ["Hair_Color"] = new(Loc.Text("loc_Services_MetadataText_Shared_hair_color_Label"), Loc.Text("loc_Services_MetadataText_Shared_hair_color_Description")),
+            ["Hair_Stack"] = new(Loc.Text("loc_Services_MetadataText_Shared_hair_stack_Label"), Loc.Text("loc_Services_MetadataText_Shared_hair_stack_Description")),
             ["Afro"] = new(Loc.Text("loc_Services_MetadataText_Shared_afro_29a31b_Label"), Loc.Text("loc_Services_MetadataText_Shared_afro_29a31b_Description")),
             ["ALN_HED_Brows_Up_MDL_LOD0"] = new(Loc.Text("loc_Services_MetadataText_Shared_aln_hed_brows_up_mdl_lod0_2e5cea_Label"), Loc.Text("loc_Services_MetadataText_Shared_aln_hed_brows_up_mdl_lod0_2e5cea_Description")),
             ["ALN_HED_Cheeks_Wide_MDL_LOD0"] = new(Loc.Text("loc_Services_MetadataText_Shared_aln_hed_cheeks_wide_mdl_lod0_50bda3_Label"), Loc.Text("loc_Services_MetadataText_Shared_aln_hed_cheeks_wide_mdl_lod0_50bda3_Description")),

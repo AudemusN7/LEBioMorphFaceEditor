@@ -167,12 +167,87 @@ float Luminance(float3 color)
     return dot(color, float3(0.299, 0.587, 0.114));
 }
 
+bool IsCcScalpPreview()
+{
+    // Preview model 2 is selected only for the exact LE3 CC scalp master.
+    return TextureFlags2.z > 1.5 && TextureFlags2.z < 2.5;
+}
+
+struct CcScalpMasks
+{
+    float3 Mask;
+    float3 Overlay;
+    float3 Buzzcut;
+};
+
+CcScalpMasks EvaluateCcScalpMasks(float4 scalpSpec)
+{
+    // These terms follow the recovered CC scalp FXC register use:
+    //   Mask     = HED_Scalp_Spec.rgb * HED_Scalp_Mask_Scalar
+    //   Overlay  = 1 - HED_Scalp_Mask_OverlayKill_Scalar * Mask
+    //   Buzzcut  = Mask * HED_Scalp_Buzzcut_Alpha_Scalar
+    // HAIR_Mask_Alpha_Scalar occupies the next uniform slot, but is not read
+    // by the inspected base or directional-light permutations.
+    CcScalpMasks masks;
+    masks.Mask = scalpSpec.rgb * ScalpParameters0.x;
+    masks.Overlay = 1 - ScalpParameters0.z * masks.Mask;
+    masks.Buzzcut = masks.Mask * ScalpParameters0.y;
+    return masks;
+}
+
+bool IsCcHairPreview()
+{
+    return TextureFlags2.z > 0.5 && TextureFlags2.z < 1.5;
+}
+
+bool IsKaidenPreview()
+{
+    return TextureFlags2.z > 2.5 && TextureFlags2.z < 3.5;
+}
+
+bool IsHumanHairPreview()
+{
+    return TextureFlags2.z > 3.5 && TextureFlags2.z < 4.5;
+}
+
+void CcScalpFibreDirections(float3 normal, float3 tangent, float3 bitangent,
+    float3 packedTangent, float2 uv, out float3 firstFibre, out float3 secondFibre)
+{
+    float shift = TextureFlags1.z > 0.5
+        ? AuxiliaryTexture3.Sample(MaterialSampler, uv * 2).g - 0.5 : 0;
+    float3 first = packedTangent * 2 - 1 + shift * 0.5;
+    float3 second = packedTangent * 2 - 1 + shift * 0.3;
+    firstFibre = normalize(tangent * first.x + bitangent * first.y + normal * first.z);
+    secondFibre = normalize(tangent * second.x + bitangent * second.y + normal * second.z);
+}
+
+float FibreLobe(float3 fibre, float3 halfDirection, float power)
+{
+    float tangentDot = dot(fibre, halfDirection);
+    return pow(max(sqrt(saturate(1 - tangentDot * tangentDot)), 0.0001), power);
+}
+
+float3 EvaluateHumanHairStack(float4 stack, float3 tangent, float3 halfDirection)
+{
+    float tangentDot = dot(tangent, halfDirection);
+    float lobe = sqrt(saturate(1 - tangentDot * tangentDot));
+    float primary = pow(max(lobe, 0.0001), max(ScalpParameters2.y, 0.1));
+    float secondary = pow(max(lobe, 0.0001), max(ScalpParameters2.z, 0.1));
+    // Native vectors 0..3 are SelectionColor, Hair_Color, Aniso_Color_1/2.
+    // The (1 - vector0) term is editor selection tint, not inverse Hair_Color.
+    // SelectionColor is zero in MFE. Stack A belongs to blending, not lighting.
+    return stack.r * (primary * max(SecondaryColor.rgb, 0)
+        + secondary * max(TertiaryColor.rgb, 0))
+        + stack.g * max(BaseColor.rgb * BaseColor.rgb, 0);
+}
+
 float3 EvaluateSpecular(
     float family,
     float3 normal,
     float3 lensNormal,
     float3 outerLensNormal,
     float3 tangent,
+    float3 bitangent,
     float3 view,
     float3 light,
     float4 diffuseSample,
@@ -213,6 +288,18 @@ float3 EvaluateSpecular(
     }
     if (family == 1)
     {
+        if (IsKaidenPreview())
+        {
+            // Kaiden's scalp graph supplies its own Spec map, HED_Spec_Scalar,
+            // and HED_Spwr. The directional FXC uses Spec.r as the power
+            // selector and Spec.g as the intensity selector; multiplying all
+            // RGB channels into the lobe produced an overly broad, bright
+            // preview.
+            float kaidenPower = max(maskSample.r * GeneralParameters.y, 0.1);
+            float kaidenIntensity = max(maskSample.g * GeneralParameters.z, 0);
+            return pow(max(reflectedViewLight, 0.0001), kaidenPower)
+                * kaidenIntensity;
+        }
         float femaleFace = SkinParameters3.w;
         if (femaleFace > 0.5)
         {
@@ -506,6 +593,53 @@ float3 EvaluateSpecular(
     {
         if (le3)
         {
+            if (IsCcScalpPreview())
+            {
+                CcScalpMasks scalpMasks = EvaluateCcScalpMasks(maskSample);
+                // The directional FXC builds two shifted tangent lobes from
+                // normalized |HairColor| raised to HED_Spec_Aniso_Exp. The
+                // second tint is a desaturated copy of that powered colour.
+                float3 hairColor = abs(SecondaryColor.rgb);
+                float hairLength = max(length(hairColor), 0.0001);
+                float3 normalizedHair = hairColor / hairLength;
+                float3 primaryTint = pow(max(normalizedHair, 0.0001),
+                    max(ScalpParameters1.w, 0.1));
+                float3 secondaryTint = lerp(primaryTint,
+                    Luminance(primaryTint), saturate(ScalpParameters2.x));
+
+                float3 halfDirection = normalize(light + view);
+                float3 firstFibre, secondFibre;
+                CcScalpFibreDirections(normal, tangent, bitangent, detailSample.rgb,
+                    materialUv, firstFibre, secondFibre);
+                float3 specShift = 1;
+                if (TextureFlags1.y > 0.5)
+                {
+                    specShift = AuxiliaryTexture2.Sample(MaterialSampler, materialUv).rgb;
+                }
+                float primaryPower = hairColor.r <= 0.09
+                    ? 400 : (hairColor.r < 0.4 ? 200 : 100);
+                float secondaryPower = hairColor.r <= 0.09 ? 30 : 15;
+                float primaryLobe = FibreLobe(secondFibre, halfDirection, primaryPower);
+                float secondaryLobe = FibreLobe(firstFibre, halfDirection, secondaryPower);
+                float3 hairSpecular = (primaryLobe * primaryTint
+                    + secondaryLobe * secondaryTint)
+                    * specShift
+                    * diffuseSample.a
+                    * scalpMasks.Mask
+                    * ScalpParameters1.z;
+
+                float teeth = TextureFlags1.x > 0.5
+                    ? AuxiliaryTexture1.Sample(MaterialSampler, materialUv).g
+                    : 0;
+                float3 baseSpecular = SpecularColor.rgb
+                    * diffuseSample.a
+                    * (1 - teeth * ScalpParameters1.y)
+                    * scalpMasks.Overlay;
+                float phong = pow(max(reflectedViewLight, 0.0001),
+                    max(GeneralParameters.y, 0.1));
+                return phong * max(baseSpecular + hairSpecular, 0);
+            }
+
             // LE3's scalp master has no packed hair-mask/anisotropic branch.
             // HED_Scalp_Spec is a direct RGB blend between dielectric scalp
             // specular and the ordinary HED_Spec_Add response.
@@ -592,6 +726,14 @@ float3 EvaluateSpecular(
     {
         float tangentDot = saturate(abs(dot(tangent, halfDirection)));
         float tangentLobe = sqrt(saturate(1 - tangentDot * tangentDot));
+        if (IsHumanHairPreview())
+        {
+            float4 hairStack = TextureFlags1.x > 0.5
+                ? AuxiliaryTexture1.Sample(MaterialSampler, materialUv)
+                : float4(0, 0, 0, 1);
+            return saturate(dot(normal, light))
+                * EvaluateHumanHairStack(hairStack, tangent, halfDirection);
+        }
         bool layeredHair = SkinParameters3.w > 0.5;
         if (layeredHair)
         {
@@ -613,7 +755,9 @@ float3 EvaluateSpecular(
         // hair permutations compile them out. The directional-light FXC keeps
         // the narrow lobe at 400 until light hair (>= 0.4), then uses 100;
         // the broad lobe changes from 30 to 15 at the 0.09 threshold.
-        float primaryPower = BaseColor.r < 0.4 ? 400 : 100;
+        float primaryPower = IsCcHairPreview()
+            ? (BaseColor.r < 0.09 ? 400 : (BaseColor.r < 0.4 ? 200 : 100))
+            : (BaseColor.r < 0.4 ? 400 : 100);
         float secondaryPower = BaseColor.r < 0.09 ? 30 : 15;
         float primary = pow(max(tangentLobe, 0.0001), primaryPower);
         float secondary = pow(max(tangentLobe, 0.0001), secondaryPower);
@@ -627,7 +771,9 @@ float3 EvaluateSpecular(
         float fibreIntensity = abs(diffuseSample.g);
         float diffuseGain = BaseColor.r < 0.09 ? 0.5 : 0.25;
         float3 baseDiffuse = fibreIntensity * diffuseGain * max(BaseColor.rgb, 0);
-        float3 lobeColour = 0.5 * (fibreIntensity + baseDiffuse);
+        float3 lobeColour = IsCcHairPreview()
+            ? 0.5 * fibreIntensity + 0.75 * baseDiffuse
+            : 0.5 * (fibreIntensity + baseDiffuse);
         float lobeGain = BaseColor.r < 0.09 ? 1 : 0.5;
         float lightFacing = saturate(dot(normal, light));
         return lightFacing
@@ -1533,11 +1679,45 @@ float4 PSMain(
             // selector is green. It bypasses both skin tint and specular/hair
             // tinting; scalp-spec RGB blends between SkinTone and HairColor^2.
             float teeth = saturate(teethSample.g);
+            CcScalpMasks ccScalpMasks;
             float3 packedSpec = saturate(maskSample.rgb);
+            if (IsCcScalpPreview())
+            {
+                ccScalpMasks = EvaluateCcScalpMasks(maskSample);
+                packedSpec = saturate(ccScalpMasks.Mask);
+            }
             float3 scalp = teeth
                 + (1 - teeth) * max(BaseColor.rgb, 0) * (1 - packedSpec)
                 + packedSpec * max(SecondaryColor.rgb * SecondaryColor.rgb, 0);
             albedo = diffuseSample.rgb * scalp;
+            if (IsCcScalpPreview())
+            {
+                // CC's base pass includes two fibre lobes and a component-wise
+                // blend into the buzzcut layer. Keep this independent of opacity.
+                float3 firstFibre, secondFibre;
+                CcScalpFibreDirections(normal, tangent, bitangent, detailSample.rgb,
+                    materialUv, firstFibre, secondFibre);
+                float3 ccView = normalize(CameraPosition.xyz - input.WorldPosition);
+                float3 ambientHalf = normalize(ccView + geometricNormal);
+                float hairLevel = SecondaryColor.r;
+                float primaryPower = hairLevel <= 0.09 ? 400 : (hairLevel < 0.4 ? 200 : 100);
+                float secondaryPower = hairLevel <= 0.09 ? 30 : 15;
+                float primaryGain = hairLevel < 0.0125 ? 20
+                    : hairLevel <= 0.09 ? 2.5
+                    : hairLevel < 0.4 ? 2 : 1.25;
+                float secondaryGain = hairLevel < 0.0125 ? 8
+                    : hairLevel <= 0.09 ? 1 : hairLevel < 0.4 ? 1.5 : 1;
+                float3 diffuseMask = diffuseSample.rgb * ccScalpMasks.Mask;
+                float3 hairBase = diffuseMask * (
+                        FibreLobe(firstFibre, ambientHalf, primaryPower) * saturate(SecondaryColor.rgb * primaryGain)
+                        + FibreLobe(secondFibre, ambientHalf, secondaryPower) * saturate(SecondaryColor.rgb * secondaryGain))
+                    * (hairLevel <= 0.09 ? 1 : 0.5)
+                    + 1.5 * max(abs(diffuseMask), 0.01) * (hairLevel <= 0.09 ? 0.5 : 0.25) * SecondaryColor.rgb;
+                float3 maskedHair = maskSample.rgb * hairBase;
+                float3 skinBase = diffuseSample.rgb
+                    * (teeth + (1 - teeth) * BaseColor.rgb * ccScalpMasks.Overlay);
+                albedo = lerp(skinBase + maskedHair, maskedHair, ccScalpMasks.Buzzcut);
+            }
             transmissionFactor = diffuseSample.b * max(GeneralParameters.x, 0);
         }
         else
@@ -1609,20 +1789,33 @@ float4 PSMain(
     }
     else if (family == 5)
     {
-        // The LE1 hair master treats HAIR_Diff as a packed map: green is the
-        // diffuse intensity and alpha is opacity. The direct-light FXC uses the
-        // gained HairColour product as its diffuse term; the brighter half-
-        // green blend belongs only to the two anisotropic highlight lobes.
-        bool additionalHair = SkinParameters3.z > 0.5;
-        bool layeredHair = SkinParameters3.w > 0.5;
-        float hairDiffuseGain = BaseColor.r >= 0.09 ? 0.25 : 0.5;
-        albedo = abs(diffuseSample.g)
-            * (layeredHair ? 1 : hairDiffuseGain)
-            * (additionalHair ? max(BaseColor.rgb * BaseColor.rgb, 0) : max(BaseColor.rgb, 0));
-        // The translucent master always writes HAIR_Diff alpha. DXT1 textures
-        // naturally decode to alpha=1; substituting luminance made them
-        // incorrectly semi-transparent.
-        alpha = diffuseSample.a;
+        if (IsHumanHairPreview())
+        {
+            float4 hairStack = TextureFlags1.x > 0.5
+                ? AuxiliaryTexture1.Sample(MaterialSampler, materialUv)
+                : float4(0, 0, 0, 1);
+            // The James master is driven by its packed stack texture. Its
+            // direct-light branch supplies diffuse and both anisotropic lobes
+            // through EvaluateSpecular; alpha remains the translucent card.
+            albedo = 0;
+            alpha = hairStack.a;
+        }
+        else
+        {
+            // The LE1 hair master treats HAIR_Diff as a packed map: green is the
+            // diffuse intensity and alpha is opacity. The direct-light FXC uses the
+            // gained HairColour product as its diffuse term; the brighter half-
+            // green blend belongs only to the two anisotropic highlight lobes.
+            bool additionalHair = SkinParameters3.z > 0.5;
+            bool layeredHair = SkinParameters3.w > 0.5;
+            float hairDiffuseGain = BaseColor.r >= 0.09 ? 0.25 : 0.5;
+            albedo = abs(diffuseSample.g)
+                * (layeredHair ? 1 : hairDiffuseGain)
+                * (additionalHair ? max(BaseColor.rgb * BaseColor.rgb, 0) : max(BaseColor.rgb, 0));
+            // DXT1 textures naturally decode to alpha=1; substituting luminance
+            // made them incorrectly semi-transparent.
+            alpha = diffuseSample.a;
+        }
         if (SurfaceParameters.x < 0)
         {
             // Hair depth-only pass. The renderer supplies 1.0 for UE3's lit
@@ -1755,11 +1948,11 @@ float4 PSMain(
         + FillLightColor.rgb * fillDiffuse
         + RimLightColor.rgb * rimDiffuse;
     float3 specularLighting =
-        EvaluateSpecular(family, normal, lensNormal, outerLensNormal, tangent, view, keyLight, diffuseSample, maskSample, detailSample, faceSelector, albedo, materialUv)
+        EvaluateSpecular(family, normal, lensNormal, outerLensNormal, tangent, bitangent, view, keyLight, diffuseSample, maskSample, detailSample, faceSelector, albedo, materialUv)
             * KeyLightColor.rgb
-        + EvaluateSpecular(family, normal, lensNormal, outerLensNormal, tangent, view, fillLight, diffuseSample, maskSample, detailSample, faceSelector, albedo, materialUv)
+        + EvaluateSpecular(family, normal, lensNormal, outerLensNormal, tangent, bitangent, view, fillLight, diffuseSample, maskSample, detailSample, faceSelector, albedo, materialUv)
             * FillLightColor.rgb
-        + EvaluateSpecular(family, normal, lensNormal, outerLensNormal, tangent, view, rimLight, diffuseSample, maskSample, detailSample, faceSelector, albedo, materialUv)
+        + EvaluateSpecular(family, normal, lensNormal, outerLensNormal, tangent, bitangent, view, rimLight, diffuseSample, maskSample, detailSample, faceSelector, albedo, materialUv)
             * RimLightColor.rgb;
     float3 subsurfaceLighting =
         EvaluateSubsurfaceLight(family, le3, normal, view, keyLight, diffuseSample, albedo, scatteringAlbedo, surfaceSelector, transmissionFactor)
@@ -1771,6 +1964,17 @@ float4 PSMain(
 
     float3 lit = (albedo * diffuseLighting + specularLighting + subsurfaceLighting) * LightingParameters.x
         + eyeBaseReflection;
+
+    if (family == 5 && IsHumanHairPreview() && diagnostic < 0.5)
+    {
+        float4 hairStack = TextureFlags1.x > 0.5
+            ? AuxiliaryTexture1.Sample(MaterialSampler, materialUv)
+            : float4(0, 0, 0, 1);
+        // The native base pass supplies the same stack response with a
+        // view/normal half-vector, scaled by the engine ambient colour.
+        lit += EvaluateHumanHairStack(hairStack, tangent, normalize(view + geometricNormal))
+            * environmentLighting * LightingParameters.x;
+    }
 
     if (family == 14 && diagnostic < 0.5)
     {

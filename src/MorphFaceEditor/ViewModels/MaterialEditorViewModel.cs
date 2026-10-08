@@ -210,6 +210,7 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
     {
         var parameterName = _session.GetSourceParameterName(controlName);
         return !(kind == MaterialParameterKind.Texture &&
+                 _session.GetParameterScopeKey(controlName) is null &&
                  HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(parameterName)) &&
                !IsEngineEditorOnlyParameter(parameterName) &&
                _uiProfile.IsMaterialVisible(parameterName, kind);
@@ -271,6 +272,8 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
         }
     }
     public ResolvedHeadMaterialSet Materials => _session.Materials;
+    public void ReplaceScalpMaterial(string targetKey, ResolvedHeadMaterial material) =>
+        _session.ReplaceScalpMaterial(targetKey, material);
     public MorphFaceMaterialOverrides CreateOverrides() => _session.CreateOverrides();
     public void SetNumericValues(
         IReadOnlyDictionary<string, float> scalars,

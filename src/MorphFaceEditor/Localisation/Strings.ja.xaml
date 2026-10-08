@@ -221,7 +221,7 @@
   <system:String x:Key="loc_Services_MetadataText_Archetype_HumanMale_eyeshape_oldblk_5ddf5a_Label" xml:space="preserve">年配の黒人</system:String>
   <system:String x:Key="loc_Services_MetadataText_Archetype_HumanMale_eyeshape_sleepy_8a736a_Label" xml:space="preserve">眠そうな目</system:String>
   <system:String x:Key="loc_Services_MetadataText_Archetype_HumanMale_eyeshape_yngasn_1c63a8_Label" xml:space="preserve">若いアジア系</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Archetype_HumanMale_hed_lips_tint_vector_2067f2_Label" xml:space="preserve">唇の色味</system:String>
+  <system:String x:Key="loc_Services_MetadataText_Archetype_HumanMale_hed_lips_tint_vector_2067f2_Label" xml:space="preserve">口紅の色</system:String>
   <system:String x:Key="loc_Services_MetadataText_Archetype_HumanMale_hed_spec_nobrow_a131ce_Label" xml:space="preserve">眉なしスペキュラー</system:String>
   <!--localiser: {"Key":"loc_Services_MetadataText_Archetype_HumanMale_mask_3b2c53_Description","ReviewedHash":null,"DoNotTranslate":false,"Note":"Don\u0027t translate the name, only second half","SourceHash":null}-->
   <system:String x:Key="loc_Services_MetadataText_Archetype_HumanMale_mask_3b2c53_Description" xml:space="preserve">Mask · 値を下げると頭皮全体が隠れることがあります</system:String>
@@ -585,7 +585,7 @@
   <system:String x:Key="loc_Services_MetadataText_Shared_hed_lash_diff_vector_0fc43b_Label" xml:space="preserve">まつげの色</system:String>
   <system:String x:Key="loc_Services_MetadataText_Shared_hed_lash_opac_scalar_94e16f_Label" xml:space="preserve">まつげの不透明度</system:String>
   <system:String x:Key="loc_Services_MetadataText_Shared_hed_lash_spec_scalar_1397b8_Label" xml:space="preserve">まつげのスペキュラー</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_hed_lips_tint_scalar_4411b6_Label" xml:space="preserve">唇の色味の強さ</system:String>
+  <system:String x:Key="loc_Services_MetadataText_Shared_hed_lips_tint_scalar_4411b6_Label" xml:space="preserve">口紅の濃さ</system:String>
   <system:String x:Key="loc_Services_MetadataText_Shared_hed_lips_tint_vector_ff9c9a_Label" xml:space="preserve">唇の色味</system:String>
   <!--localiser: {"Key":"loc_Services_MetadataText_Shared_hed_makeup_mask_018fd3_Description","ReviewedHash":null,"DoNotTranslate":false,"Note":"Don\u0027t translate the name, only second half","SourceHash":null}-->
   <system:String x:Key="loc_Services_MetadataText_Shared_hed_makeup_mask_018fd3_Description" xml:space="preserve">HED_Makeup_Mask · 赤 = アイシャドウ / 緑 = マスカラ・口紅 / 青 = 口紅の選択 / アルファ = 頬紅・口紅</system:String>
@@ -1798,4 +1798,29 @@
   <system:String x:Key="loc_WpfEditorDialogService_SaveMeshMaterialsTitle" xml:space="preserve">メッシュとマテリアルを PCC に保存</system:String>
   <system:String x:Key="loc_WpfEditorDialogService_SwitchScalp" xml:space="preserve">頭皮を切り替える</system:String>
   <system:String x:Key="loc_WpfEditorDialogService_UModelExportFolderTitle" xml:space="preserve">UModel メッシュエクスポート先のフォルダーを選択</system:String>
+  <system:String x:Key="loc_Services_Taxonomy_MeshOnlyMaterialLabel" xml:space="preserve">{0}（メッシュ）</system:String>
+  <system:String x:Key="loc_Services_MetadataText_Shared_aniso_highlight_1_Label" xml:space="preserve">髪のハイライト1の強さ</system:String>
+  <system:String x:Key="loc_Services_MetadataText_Shared_aniso_highlight_1_Description" xml:space="preserve">Aniso_Highlight_1</system:String>
+  <system:String x:Key="loc_Services_MetadataText_Shared_aniso_highlight_2_Label" xml:space="preserve">髪のハイライト2の強さ</system:String>
+  <system:String x:Key="loc_Services_MetadataText_Shared_aniso_highlight_2_Description" xml:space="preserve">Aniso_Highlight_2</system:String>
+  <system:String x:Key="loc_Services_MetadataText_Shared_aniso_color_1_Label" xml:space="preserve">髪のハイライト1の色</system:String>
+  <system:String x:Key="loc_Services_MetadataText_Shared_aniso_color_1_Description" xml:space="preserve">Aniso_Color_1</system:String>
+  <system:String x:Key="loc_Services_MetadataText_Shared_aniso_color_2_Label" xml:space="preserve">髪のハイライト2の色</system:String>
+  <system:String x:Key="loc_Services_MetadataText_Shared_aniso_color_2_Description" xml:space="preserve">Aniso_Color_2</system:String>
+  <system:String x:Key="loc_Services_MetadataText_Shared_hair_color_Label" xml:space="preserve">髪の色</system:String>
+  <system:String x:Key="loc_Services_MetadataText_Shared_hair_color_Description" xml:space="preserve">Hair_Color</system:String>
+  <system:String x:Key="loc_Services_MetadataText_Shared_hair_stack_Label" xml:space="preserve">ジェームズ・ヴェガの髪テクスチャ</system:String>
+  <system:String x:Key="loc_Services_MetadataText_Shared_hair_stack_Description" xml:space="preserve">Hair_Stack</system:String>
+  <system:String x:Key="loc_VM_actorAssignment_bodySkinParametersMissing" xml:space="preserve">選択した顔には、ボディMICに割り当てるSkinToneまたはSkinLightScatteringの値がありません。</system:String>
+  <system:String x:Key="loc_Services_AttachmentTransfer_ExcludedNativeMesh" xml:space="preserve">オプションのアタッチメント「{0}」は、破損している、不要な重複である、または意図的に非対応のため省略されました。</system:String>
+  <system:String x:Key="loc_Services_AttachmentTransfer_ReviewedDonorMissing" xml:space="preserve">確認済みのドナー対応 {0}→{1} にアタッチメントメッシュ「{2}」がありません。Morph Face Editorはこのゲームへの移植をサポートしていません。</system:String>
+  <system:String x:Key="loc_WpfEditorDialogService_MatchScalpTexturesAndMaterialMessage" xml:space="preserve">選択したヘアはプレイヤーのスカルプマテリアルを使用しています。{0}に合わせてスカルプのテクスチャとマテリアルを切り替えますか？
+
+「いいえ」を選ぶと現在のスカルプテクスチャとマテリアルを維持します。</system:String>
+  <system:String x:Key="loc_Services_CustomTemplate_FaceNpc" xml:space="preserve">顔（NPC）</system:String>
+  <system:String x:Key="loc_Services_CustomTemplate_FacePlayer" xml:space="preserve">顔（プレイヤー）</system:String>
+  <system:String x:Key="loc_Services_CustomTemplate_ScalpNpc" xml:space="preserve">スカルプ（NPC）</system:String>
+  <system:String x:Key="loc_Services_CustomTemplate_ScalpPlayer" xml:space="preserve">スカルプ（プレイヤー）</system:String>
+  <system:String x:Key="loc_Services_CustomTemplate_AdvancedHair" xml:space="preserve">ヒューマン上級ヘア</system:String>
+  <system:String x:Key="loc_Services_CustomTemplate_JamesHair" xml:space="preserve">ジェームズ・ヴェガのヘア</system:String>
 </ResourceDictionary>

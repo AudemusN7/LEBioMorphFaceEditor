@@ -13,6 +13,8 @@ public static class MorphFaceEditorStateComparer
     public static bool Equals(MorphFaceDocument left, MorphFaceDocument right) =>
         SameReference(left.HairMeshReference, right.HairMeshReference) &&
         SameReferences(left.OtherMeshReferences, right.OtherMeshReferences) &&
+        SameReference(left.ScalpMaterialSelection?.TargetMaterial, right.ScalpMaterialSelection?.TargetMaterial) &&
+        SameReference(left.ScalpMaterialSelection?.DonorMaterial, right.ScalpMaterialSelection?.DonorMaterial) &&
         left.MorphFeatures.SequenceEqual(right.MorphFeatures) &&
         left.FinalSkeleton.SequenceEqual(right.FinalSkeleton) &&
         SameMaterials(left.MaterialOverrides, right.MaterialOverrides);

@@ -211,7 +211,7 @@ public sealed class MorphFacePackageReader : IDisposable
         var mesh = ReadSkeletalMesh(meshExport, materialExports);
         var materials = materialExports
             .DistinctBy(material => MaterialIdentityKey.Create(ToIdentity(material)!))
-            .Select(material => _materialReader.ReadMaterialEvidence(material))
+            .Select(material => _materialReader.ReadFaceAttachmentEvidence(material))
             .ToDictionary(material => material.Key, StringComparer.OrdinalIgnoreCase);
         return new LoadedAttachment(
             ToIdentity(meshExport)!, mesh, new ResolvedHeadMaterialSet(materials));
@@ -341,6 +341,22 @@ public sealed class MorphFacePackageReader : IDisposable
         return _materialReader.ReadMaterialEvidence(
             _referenceResolver.Require(ExportSelector.Find(package, source.InstancedPath, source.ClassName),
                 "custom material template"));
+    }
+
+    public ResolvedHeadMaterial LoadLe3CcScalpMaterial(bool female)
+    {
+        var path = Le3CcScalpMaterialPolicy.CanonicalDonorPath(female);
+        var source = InstalledGameAssetResolver.ResolveInstalledReferences(
+            MorphFaceGame.LE3, [path], "MaterialInstanceConstant").GetValueOrDefault(path);
+        if (source is null)
+        {
+            var seedPath = StandalonePlayerMorphImportService.ResolveInstalledSeed(MorphFaceGame.LE3);
+            source = new AssetIdentity(seedPath, path, 0, "MaterialInstanceConstant");
+        }
+        var material = LoadMaterialEvidence(source);
+        if (material.PreviewModel != HumanMaterialPreviewModel.CcScalp)
+            throw new InvalidDataException($"The official scalp donor '{path}' does not use the CC scalp graph.");
+        return material;
     }
 
     public DecodedTextureAsset LoadTexture(

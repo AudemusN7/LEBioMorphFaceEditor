@@ -10,8 +10,17 @@ public static class AttachmentMeshNamePolicy
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(instancedPath);
         var objectName = instancedPath.Split('.').Last();
+        if (IsCcHairMesh(instancedPath)) return false;
         return ExcludedSuffixes.Any(suffix =>
             objectName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase));
+    }
+
+    public static bool IsCcHairMesh(string instancedPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(instancedPath);
+        var objectName = instancedPath.Split('.').Last();
+        return objectName.EndsWith("_CC", StringComparison.OrdinalIgnoreCase) &&
+               objectName.Split('_').Any(token => token.Equals("HIR", StringComparison.OrdinalIgnoreCase));
     }
 
     public static bool IsInstalledHeadAttachment(string instancedPath)

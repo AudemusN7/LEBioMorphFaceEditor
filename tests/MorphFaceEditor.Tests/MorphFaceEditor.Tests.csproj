@@ -8,6 +8,7 @@
   <ItemGroup>
     <Compile Include="../MorphFaceEditor.TestData/ConversionMatrix.cs" Link="Fixtures/ConversionMatrix.cs" />
     <Compile Include="../../tools/MorphFaceEditor.QA/QaCoverageSelection.cs" Link="Qa/QaCoverageSelection.cs" />
+    <Compile Include="../../tools/MorphFaceEditor.QA/QaHumanMaterialCoverage.cs" Link="Qa/QaHumanMaterialCoverage.cs" />
     <Compile Include="../../tools/MorphFaceEditor.QA/QaRandomisationBatch.cs" Link="Qa/QaRandomisationBatch.cs" />
     <Compile Include="../../tools/MorphFaceEditor.QA/QaPerformance.cs" Link="Qa/QaPerformance.cs" />
     <Compile Include="../../tools/MorphFaceEditor.QA/QaReport.cs" Link="Qa/QaReport.cs" />

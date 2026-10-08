@@ -503,7 +503,8 @@ internal sealed class MorphFaceMaterialReader(
             .Select(value =>
             {
                 var name = value.GetProp<NameProperty>("nName")?.Value.Instanced ?? string.Empty;
-                var entry = value.GetProp<ObjectProperty>("m_pTexture")?.ResolveToEntry(materialOverride.FileRef);
+                var textureReference = value.GetProp<ObjectProperty>("m_pTexture");
+                var entry = textureReference?.ResolveToEntry(materialOverride.FileRef);
                 // A small number of shipped/retained faces reference textures
                 // absent from the installed game (for example LE1's unused
                 // Salarian Add6 override). Keep the import identity for an
@@ -514,7 +515,10 @@ internal sealed class MorphFaceMaterialReader(
                                          PccPackageWorkflow.HasPersistedExplicitTextureLeaf(
                                              materialOverride.FileRef, localTexture.InstancedFullPath);
                 var export = explicitlyEmbedded ? (ExportEntry)entry! : referenceResolver.Resolve(entry);
-                if (!string.IsNullOrWhiteSpace(name))
+                // A null override means inherit, not a failed texture lookup.
+                // Retain the authored row below, but only attempt to apply an
+                // actual reference. Nonzero unresolved references still warn.
+                if (!string.IsNullOrWhiteSpace(name) && textureReference is { Value: not 0 })
                 {
                     textureExports[name] = export;
                 }

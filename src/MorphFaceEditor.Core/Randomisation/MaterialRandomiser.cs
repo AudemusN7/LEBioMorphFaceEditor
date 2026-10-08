@@ -112,10 +112,24 @@ public static class MaterialRandomiser
                 }
                 continue;
             }
-            if (!vectors.ContainsKey(name) || !donor.MaterialVectors.TryGetValue(name, out var seedValue) ||
-                !profile.Vectors.TryGetValue(name, out var statistics))
+            if (!vectors.ContainsKey(name) || !profile.Vectors.TryGetValue(name, out var statistics))
             {
                 continue;
+            }
+            if (!donor.MaterialVectors.TryGetValue(name, out var seedValue))
+            {
+                // Human hair graphs can expose highlight aliases that most face
+                // donors do not store. Keep the live material value as the seed
+                // when this selected donor lacks that supported hair parameter,
+                // but only randomise it when a compatible donor can supply it.
+                // Leave all other vector and selector behavior donor-driven.
+                if (!TryGetHighlightIndex(name, out _) ||
+                    statistics.Kind != MaterialVectorRandomisationKind.PerceptualColour ||
+                    !compatibleDonors.Any(value => value.MaterialVectors.ContainsKey(name)))
+                {
+                    continue;
+                }
+                seedValue = vectors[name];
             }
             vectors[name] = statistics.Kind == MaterialVectorRandomisationKind.Selector
                 ? SampleSelector(seedValue, statistics.SelectorStates, strengthPercent, numericRandom)

@@ -27,7 +27,7 @@ internal static partial class QaCases
 
     private static async Task Conversion(QaContext c, MorphFaceGame targetGame)
     {
-        var source = c.Source();
+        var source = c.Source(QaCoverageSelection.ConversionSourceExclusions(c.Face.Game, c.Face.Family));
         var target = c.CorpusPackage(targetGame);
         var destination = c.Artifact($"{source.Game}-to-{targetGame}.pcc");
         var service = new MorphFaceConversionService(c.Profiles, c.Targets, new MorphFacePackageContextService(), c.Textures);

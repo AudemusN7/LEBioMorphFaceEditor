@@ -30,6 +30,7 @@ public static class RandomisationTests
         new("material colours interpolate perceptually while selectors stay discrete", MaterialVectorsRespectSemantics),
         new("LE3 HMF highlight colours share one complete donor and interpolation", Le3FemaleHighlightsStayPaired),
         new("new human hair colours reuse corpus colours under native names", HumanHairColoursReuseCorpus),
+        new("missing selected hair highlights fall back to compatible corpus colours", MissingSelectedHairHighlightsUseCompatibleDonors),
         new("material safety policy constrains or excludes hazardous numeric parameters", MaterialSafetyPolicyProtectsNumericParameters),
         new("material texture selection balances variants and rejects unsafe families", MaterialTextureSelectionIsCurated),
         new("texture-dependent selector rules remain valid", TextureDependentSelectorsRemainValid),
@@ -919,6 +920,79 @@ public static class RandomisationTests
             Values(), mixed, [], new HashSet<string>(), new HashSet<string>(mixed.Keys), new HashSet<string>(), 50, 438);
         TestAssert.Equal(mixedResult.Vectors["Highlight1Color"], mixedResult.Vectors["Aniso_Color_1"]);
         TestAssert.Equal(mixedResult.Vectors["Highlight2Colour_Vector"], mixedResult.Vectors["Aniso_Color_2"]);
+    }
+
+    private static void MissingSelectedHairHighlightsUseCompatibleDonors()
+    {
+        static MaterialVectorStatistics Colour(string name) => new(
+            name, MaterialVectorRandomisationKind.PerceptualColour, Vector4.Zero, Vector4.One, []);
+        static MaterialVectorStatistics Selector(string name) => new(
+            name, MaterialVectorRandomisationKind.Selector, Vector4.Zero, Vector4.One,
+            [new(Vector4.UnitX, 1), new(Vector4.UnitY, 1)]);
+
+        const string profileKey = "le2-human-female";
+        var selectedDonor = PolicyDonor(profileKey) with
+        {
+            Id = "selected-without-highlights",
+            MaterialVectors = new Dictionary<string, Vector4>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["HED_Hair_Colour_Vector"] = new(0.2f, 0.1f, 0.05f, 1)
+            }
+        };
+        var firstHighlightDonor = PolicyDonor(profileKey) with
+        {
+            Id = "highlight-donor-a",
+            MaterialVectors = new Dictionary<string, Vector4>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Highlight1Colour_Vector"] = new(0.1f, 0.8f, 0.2f, 1),
+                ["Highlight2Colour_Vector"] = new(0.8f, 0.1f, 0.2f, 1),
+                ["UnrelatedMissingVector"] = new(0.9f, 0.2f, 0.1f, 1),
+                ["UnrelatedSelector"] = Vector4.UnitY
+            }
+        };
+        var secondHighlightDonor = PolicyDonor(profileKey) with
+        {
+            Id = "highlight-donor-b",
+            MaterialVectors = new Dictionary<string, Vector4>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Highlight1Colour_Vector"] = new(0.8f, 0.2f, 0.7f, 1),
+                ["Highlight2Colour_Vector"] = new(0.2f, 0.7f, 0.8f, 1),
+                ["UnrelatedMissingVector"] = new(0.1f, 0.8f, 0.2f, 1),
+                ["UnrelatedSelector"] = Vector4.UnitY
+            }
+        };
+        var compatibleDonors = new[] { selectedDonor, firstHighlightDonor, secondHighlightDonor };
+        var profile = PolicyProfile(profileKey, [],
+        [
+            Colour("Highlight1Colour_Vector"), Colour("Highlight2Colour_Vector"),
+            Colour("UnrelatedMissingVector"), Selector("UnrelatedSelector")
+        ]);
+        var current = new Dictionary<string, Vector4>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Highlight1Colour_Vector"] = new(0.9f, 0.2f, 0.15f, 1),
+            ["Highlight2Colour_Vector"] = new(0.2f, 0.1f, 0.02f, 1),
+            ["UnrelatedMissingVector"] = new(0.3f, 0.4f, 0.5f, 1),
+            ["UnrelatedSelector"] = Vector4.UnitX
+        };
+        var vectorScope = new HashSet<string>(current.Keys, StringComparer.OrdinalIgnoreCase);
+
+        var fullStrength = MaterialRandomiser.CreateProposal(
+            selectedDonor, compatibleDonors, profile, Values(), current, [],
+            new HashSet<string>(), vectorScope, new HashSet<string>(), 100, 4321);
+        TestAssert.True(fullStrength.Vectors["Highlight1Colour_Vector"] != current["Highlight1Colour_Vector"],
+            "Highlight 1 stayed unchanged when the selected donor lacked it but compatible donors supplied it.");
+        TestAssert.True(fullStrength.Vectors["Highlight2Colour_Vector"] != current["Highlight2Colour_Vector"],
+            "Highlight 2 stayed unchanged when the selected donor lacked it but compatible donors supplied it.");
+        TestAssert.Equal(current["UnrelatedMissingVector"], fullStrength.Vectors["UnrelatedMissingVector"]);
+        TestAssert.Equal(current["UnrelatedSelector"], fullStrength.Vectors["UnrelatedSelector"]);
+
+        var zeroStrength = MaterialRandomiser.CreateProposal(
+            selectedDonor, compatibleDonors, profile, Values(), current, [],
+            new HashSet<string>(), vectorScope, new HashSet<string>(), 0, 4321);
+        TestAssert.Equal(current["Highlight1Colour_Vector"], zeroStrength.Vectors["Highlight1Colour_Vector"]);
+        TestAssert.Equal(current["Highlight2Colour_Vector"], zeroStrength.Vectors["Highlight2Colour_Vector"]);
+        TestAssert.Equal(current["UnrelatedMissingVector"], zeroStrength.Vectors["UnrelatedMissingVector"]);
+        TestAssert.Equal(current["UnrelatedSelector"], zeroStrength.Vectors["UnrelatedSelector"]);
     }
 
     private static void Le1BatarianUsesCompatibleMaterialDonors()

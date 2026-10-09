@@ -10,6 +10,7 @@ public static class MaterialTests
             .Concat(TextureCatalogTests.All)
             .Concat(MaterialRendererTests.All)
             .Concat(HumanSkinMaterialTests.All)
+            .Concat(HumanScalpRegressionTests.All)
             .Concat(HairMaterialTests.All)
             .Concat(EyeMaterialTests.All)
             .Concat(AsariMaterialTests.All)

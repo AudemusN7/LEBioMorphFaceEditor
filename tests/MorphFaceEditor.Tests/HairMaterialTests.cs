@@ -61,6 +61,14 @@ public static class HairMaterialTests
             "scalp", 1, 1, new Vector4(0.01f, 0.01f, 0.01f, 1));
         var maskedRedHair = CreateScalpMaterial(
             "scalp", 1, 1, new Vector4(1, 0, 0, 1));
+        // Native scalp composition retains a small hair floor with a white
+        // packed map even at zero mask scalar. Black RGB isolates bare skin.
+        var bareTextures = new Dictionary<string, HeadPreviewTexture>(darkHair.Textures)
+        {
+            ["HED_Scalp_Spec"] = CreateTexture("HED_Scalp_Spec", [0, 0, 0, 255], TextureRole.Specular)
+        };
+        darkHair = darkHair with { Textures = bareTextures };
+        redHair = redHair with { Textures = bareTextures };
         var (renderer, camera) = CreateTriangleRenderer(darkHair);
         using (renderer)
         {
@@ -69,7 +77,7 @@ public static class HairMaterialTests
             var second = renderer.Render(camera, new HeadPreviewOptions()).BgraPixels;
             TestAssert.True(
                 first.SequenceEqual(second),
-                "HED_Hair_Colour_Vector affected scalp output while HED_Scalp_Mask_Scalar was zero.");
+                "HED_Hair_Colour_Vector affected scalp output outside the packed hair mask.");
 
             renderer.UpdateMaterials(new Dictionary<string, HeadPreviewMaterial>
             {

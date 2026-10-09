@@ -23,6 +23,7 @@ public static class ArchetypeTag
         new("TUF", Loc.Text("loc_ArchetypeTag_FemaleTurian")),
         new("KRO", Loc.Text("loc_ArchetypeTag_Krogan")),
         new("BAT", Loc.Text("loc_ArchetypeTag_Batarian")),
+        new("BAF", Loc.Text("loc_ArchetypeTag_FemaleBatarian")),
         new("ALN", Loc.Text("loc_ArchetypeTag_Vorcha")),
         new("CUSTOM", Loc.Text("loc_ArchetypeTag_Custom")),
         new("MESH", Loc.Text("loc_ArchetypeTag_Mesh"))

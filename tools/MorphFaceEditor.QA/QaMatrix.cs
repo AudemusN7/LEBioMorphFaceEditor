@@ -16,13 +16,14 @@ internal sealed record QaFaceSpec(MorphFaceGame Game, string Family, string? Fac
     public string ProfileSuffix => Family switch
     {
         "HMM" => "human-male", "HMF" => "human-female", "ASA" => "asari", "SAL" => "salarian",
-        "TUR" => "turian", "TUF" => "female-turian", "KRO" => "krogan", "BAT" => "batarian", "ALN" => "vorcha",
+        "TUR" => "turian", "TUF" => "female-turian", "KRO" => "krogan", "BAT" => "batarian", "BAF" => "female-batarian", "ALN" => "vorcha",
         _ => throw new ArgumentException("Unknown QA archetype: " + Family)
     };
     public string Package(QaContext c)
     {
         var path = IsPlayer ? StandalonePlayerMorphImportService.ResolveInstalledSeed(Game)
-            : Family == "TUF" ? Path.Combine(c.Corpus, "TUF", $"{Game} TUF.pcc") : c.CorpusPackage(Game);
+            : Family == "TUF" ? Path.Combine(c.Corpus, "TUF", $"{Game} TUF.pcc")
+            : Family == "BAF" ? Path.Combine(c.Corpus, "BAF", $"BAF {Game}.pcc") : c.CorpusPackage(Game);
         c.TrackInput(path);
         return path;
     }
@@ -44,6 +45,7 @@ internal static partial class QaCases
         foreach (var game in new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 })
         {
             result.Add(new(game, "TUF", null));
+            result.Add(new(game, "BAF", null));
             result.Add(new(game, "HMM", null, StandalonePlayerSex.Male));
             result.Add(new(game, "HMF", null, StandalonePlayerSex.Female));
         }
@@ -88,6 +90,10 @@ internal static partial class QaCases
             }
         if (cases.Count(item => item.Group == "conversion") != ConversionMatrix.ExpectedCount)
             throw new InvalidOperationException("Shared conversion matrix no longer contains 68 directions.");
+        foreach (var face in Archetypes.Where(face => face.Family == "BAF"))
+            foreach (var target in new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 }.Where(game => game != face.Game))
+                Add("conversion", $"BAF conversion {face.Game} → {target}", face,
+                    c => Conversion(c, target), target.ToString().ToLowerInvariant());
         foreach (var face in Archetypes.Where(face => !face.IsPlayer))
             Add("npc-randomisation", "One 100% production roll, export/reopen/render", face, NpcRandomisation);
         foreach (var face in Archetypes.Where(face => face.IsPlayer))

@@ -1823,4 +1823,10 @@
   <system:String x:Key="loc_Services_CustomTemplate_ScalpPlayer" xml:space="preserve">スカルプ（プレイヤー）</system:String>
   <system:String x:Key="loc_Services_CustomTemplate_AdvancedHair" xml:space="preserve">ヒューマン上級ヘア</system:String>
   <system:String x:Key="loc_Services_CustomTemplate_JamesHair" xml:space="preserve">ジェームズ・ヴェガのヘア</system:String>
+    <!--localiser: {"Key":"loc_ArchetypeTag_FemaleBatarian","ReviewedHash":null,"DoNotTranslate":false,"Note":"Do not translate [TAG]","SourceHash":null}-->
+    <system:String x:Key="loc_ArchetypeTag_FemaleBatarian" xml:space="preserve">女性バタリアン [BAF]</system:String>
+    <!--localiser: {"Key":"loc_Services_ProfileArchetype_FemaleBatarian","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_Services_ProfileArchetype_FemaleBatarian" xml:space="preserve">女性バタリアン</system:String>
+    <!--localiser: {"Key":"loc_Shell_ProfileSpecies_FemaleBatarian","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_Shell_ProfileSpecies_FemaleBatarian" xml:space="preserve">女性バタリアン</system:String>
 </ResourceDictionary>

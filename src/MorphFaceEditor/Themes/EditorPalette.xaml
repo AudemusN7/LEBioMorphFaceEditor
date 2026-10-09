@@ -28,6 +28,7 @@
     <theme:ThemeColour x:Key="Palette.Tag.TUF" Value="{StaticResource Default.Tag.TUF}" />
     <theme:ThemeColour x:Key="Palette.Tag.KRO" Value="{StaticResource Default.Tag.KRO}" />
     <theme:ThemeColour x:Key="Palette.Tag.BAT" Value="{StaticResource Default.Tag.BAT}" />
+    <theme:ThemeColour x:Key="Palette.Tag.BAF" Value="{StaticResource Default.Tag.BAF}" />
     <theme:ThemeColour x:Key="Palette.Tag.ALN" Value="{StaticResource Default.Tag.ALN}" />
     <theme:ThemeColour x:Key="Palette.Tag.CUSTOM" Value="{StaticResource Default.Tag.CUSTOM}" />
     <theme:ThemeColour x:Key="Palette.Tag.MESH" Value="{StaticResource Default.Tag.MESH}" />
@@ -86,6 +87,7 @@
     <SolidColorBrush x:Key="ArchetypeTag.TUF" Color="{Binding Value, Source={StaticResource Palette.Tag.TUF}}" />
     <SolidColorBrush x:Key="ArchetypeTag.KRO" Color="{Binding Value, Source={StaticResource Palette.Tag.KRO}}" />
     <SolidColorBrush x:Key="ArchetypeTag.BAT" Color="{Binding Value, Source={StaticResource Palette.Tag.BAT}}" />
+    <SolidColorBrush x:Key="ArchetypeTag.BAF" Color="{Binding Value, Source={StaticResource Palette.Tag.BAF}}" />
     <SolidColorBrush x:Key="ArchetypeTag.ALN" Color="{Binding Value, Source={StaticResource Palette.Tag.ALN}}" />
     <SolidColorBrush x:Key="ArchetypeTag.CUSTOM" Color="{Binding Value, Source={StaticResource Palette.Tag.CUSTOM}}" />
     <SolidColorBrush x:Key="ArchetypeTag.MESH" Color="{Binding Value, Source={StaticResource Palette.Tag.MESH}}" />

@@ -183,6 +183,8 @@ public sealed class MorphRandomisationCatalog
 
     private string? ResolveMaterialProfileKey(string profileKey)
     {
+        // BAF uses BAT's complete material population, including the LE1 fallback.
+        profileKey = profileKey.Replace("-female-batarian", "-batarian", StringComparison.OrdinalIgnoreCase);
         if (Corpus.MaterialProfiles.ContainsKey(profileKey)) return profileKey;
         // LE1 contains no stock Batarian donor faces. Their LE1 editor material schema is
         // compatible with the pooled alien system, so LE2 is the nearest audited source.

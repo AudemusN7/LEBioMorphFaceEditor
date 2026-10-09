@@ -121,6 +121,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             .Select(lod => lod.LodIndex)
             .ToHashSet();
         Features = session.Evaluation.Resolution.Features
+            .Where(_ => !ignoresAuthoredGeometry)
             .Select(feature => new MorphFeatureEditorViewModel(
                 session,
                 MorphFeatureLodMetadata.MarkLodCoverage(

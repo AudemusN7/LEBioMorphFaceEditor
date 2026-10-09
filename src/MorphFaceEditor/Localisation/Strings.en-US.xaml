@@ -1823,4 +1823,10 @@ Choose No to keep the current scalp textures and material.</system:String>
   <system:String x:Key="loc_Services_CustomTemplate_ScalpPlayer" xml:space="preserve">Scalp (Player)</system:String>
   <system:String x:Key="loc_Services_CustomTemplate_AdvancedHair" xml:space="preserve">Human Advanced Hair</system:String>
   <system:String x:Key="loc_Services_CustomTemplate_JamesHair" xml:space="preserve">James Vega Hair</system:String>
+    <!--localiser: {"Key":"loc_ArchetypeTag_FemaleBatarian","ReviewedHash":null,"DoNotTranslate":false,"Note":"Do not translate [TAG]","SourceHash":null}-->
+    <system:String x:Key="loc_ArchetypeTag_FemaleBatarian" xml:space="preserve">Female Batarian [BAF]</system:String>
+    <!--localiser: {"Key":"loc_Services_ProfileArchetype_FemaleBatarian","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_Services_ProfileArchetype_FemaleBatarian" xml:space="preserve">Female Batarian</system:String>
+    <!--localiser: {"Key":"loc_Shell_ProfileSpecies_FemaleBatarian","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_Shell_ProfileSpecies_FemaleBatarian" xml:space="preserve">Female Batarian</system:String>
 </ResourceDictionary>

@@ -233,7 +233,9 @@ internal sealed class QaContext : IDisposable
             () => MorphFaceReferenceInspector.Inspect(packagePath), QaStageKind.Load);
         var candidates = QaCoverageSelection.ExcludePaths((Face.IsPlayer
             ? references.Where(value => value.FacePath.Equals(Face.Selector, StringComparison.OrdinalIgnoreCase))
-            : references.Where(value => Face.Family == "TUF" ||
+            : references.Where(value => Face.Family == "BAF"
+                ? Profiles.Find(value.Game, value.FacePath, value.BaseHeadPath)?.Key == $"{Face.Game.ToString().ToLowerInvariant()}-{Face.ProfileSuffix}"
+                : Face.Family == "TUF" ||
                 value.FacePath.StartsWith(Face.Family + ".", StringComparison.OrdinalIgnoreCase)))
             .OrderBy(value => value.FacePath, StringComparer.OrdinalIgnoreCase),
             value => value.FacePath,

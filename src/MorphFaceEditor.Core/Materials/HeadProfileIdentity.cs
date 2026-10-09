@@ -13,6 +13,7 @@ public static class HeadProfileIdentity
         ArgumentNullException.ThrowIfNull(evidence);
         var text = string.Join('|', evidence.Where(value => !string.IsNullOrWhiteSpace(value)));
         if (ContainsAny(text, "TUF_", "Female Turian")) return "female-turian";
+        if (ContainsAny(text, "BAF_", "BAF.", "Female Batarian")) return "female-batarian";
         if (ContainsAny(text, "ALN_", "Vorcha")) return "vorcha";
         if (ContainsAny(text, "BAT_", "Batarian")) return "batarian";
         if (ContainsAny(text, "KRO_", "Krogan")) return "krogan";
@@ -49,6 +50,8 @@ public static class HeadProfileIdentity
         // Female Turians intentionally reuse the complete male Turian material schema.
         return (selectedProfileKey.EndsWith("-female-turian", StringComparison.OrdinalIgnoreCase) &&
                 materialProfileKey.EndsWith("-turian", StringComparison.OrdinalIgnoreCase)) ||
+               (selectedProfileKey.EndsWith("-female-batarian", StringComparison.OrdinalIgnoreCase) &&
+                materialProfileKey.EndsWith("-batarian", StringComparison.OrdinalIgnoreCase)) ||
                (selectedProfileKey.Equals("le3-vorcha", StringComparison.OrdinalIgnoreCase) &&
                 materialProfileKey.Equals("le3-turian", StringComparison.OrdinalIgnoreCase) &&
                 family == HeadMaterialFamily.TurianEyes);

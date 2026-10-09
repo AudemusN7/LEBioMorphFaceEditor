@@ -10,12 +10,12 @@ dotnet run --project tools/MorphFaceEditor.QA -c Release --
 
 Every run chooses a fresh random seed. Cases that select a corpus donor choose a face randomly from the available Global Morphs for that game and archetype. Pass `--seed <integer>` to reproduce the run's choices. Random choices can coincide by chance.
 
-Requires the repository's .NET SDK, corpus PCCs in `tests/Global Morphs` (including TUF), installed LE1/LE2/LE3, current MFE asset databases, and Legendary Explorer's installed UModel build 1589 or newer. Missing prerequisites are reported and do not count as passes. Player and Clipboard workflows use MFE's temporary AppData workspaces. The Windows Clipboard and installed PCCs are untouched.
+Requires the repository's .NET SDK, corpus PCCs in `tests/Global Morphs` (including TUF and `BAF/BAF LE1.pcc`, `BAF/BAF LE2.pcc`, `BAF/BAF LE3.pcc`), installed LE1/LE2/LE3, current MFE asset databases, and Legendary Explorer's installed UModel build 1589 or newer. Missing prerequisites are reported and do not count as passes. Player and Clipboard workflows use MFE's temporary AppData workspaces. The Windows Clipboard and installed PCCs are untouched.
 
 ## Coverage
 
-- `load`, `material-ron`, `clipboard`, `undo-redo` and `benchmark` cover supported game/archetype combinations, including HMM/HMF NPC and Player workflows, Asari, Salarian, male/female Turian, Batarian, Krogan and Vorcha where supported. Player cases start from the installed sex-specific template and create a randomized fixture before testing it.
-- `conversion` exercises the full set of supported routes in the shared test conversion matrix. Each route chooses its source face randomly from the matching family in Global Morphs; the report records the selected donor. It keeps PCCs and freshly loads and renders each result.
+- `load`, `material-ron`, `clipboard`, `undo-redo` and `benchmark` cover supported game/archetype combinations, including HMM/HMF NPC and Player workflows, Asari, Salarian, male/female Turian, male/female Batarian, Krogan and Vorcha where supported. Player cases start from the installed sex-specific template and create a randomized fixture before testing it.
+- `conversion` exercises the full set of supported routes in the shared test conversion matrix, plus all six BAF game directions using the dedicated BAF destination packages. Each route chooses its source face randomly from the matching family in Global Morphs; the report records the selected donor. It keeps PCCs and freshly loads and renders each result.
 - `npc-randomisation` runs a 100% production Randomisation for each supported game/NPC archetype, including material-only profiles, and checks persisted geometry and Material values.
 - `player-randomisation` covers male and female Players in each game: installed Player → RON → detached RelativeBake workspace → 100% Randomisation → PCC/reload/image.
 - `mesh-psk` and `mesh-gltf` randomize HMM morph sliders, save and reopen the bake, then export and import a real mesh into a detached Custom workspace. They check the bake, four Material slots, raw Custom vertex correspondence and inverse-bake recovery.
@@ -71,7 +71,7 @@ dotnet run --project tools/MorphFaceEditor.QA -c Release -- --audit-output artif
 dotnet run --project tools/MorphFaceEditor.QA -c Release -- --self-check
 ```
 
-`--case` accepts a utility group, an exact case ID from `--list`, or a comma-separated selection. `--corpus` selects another corpus directory. Output directories must be new or empty; reruns never overwrite evidence. `--audit-output` audits a completed run and writes a separate report. It leaves previous evidence untouched. Older reports without persisted baseline sets reconstruct them from current original inputs and report that limitation; unresolved imports are never excused by a structural baseline.
+`--case` accepts a utility group, an exact case ID from `--list`, an archetype code such as `BAF`, or a comma-separated selection. For BAF alone, including the final audit of its outputs, run `Run_MFE_QA.bat --case BAF,pcc-audit` (24 BAF workflows plus one audit). BAF donor selection requires the female Batarian mesh profile, so an accidentally retained male head cannot count as BAF coverage. `--corpus` selects another corpus directory. Output directories must be new or empty; reruns never overwrite evidence. `--audit-output` audits a completed run and writes a separate report. It leaves previous evidence untouched. Older reports without persisted baseline sets reconstruct them from current original inputs and report that limitation; unresolved imports are never excused by a structural baseline.
 
 The self-check covers timing boundaries, render exclusion, failure propagation, unique stage phases, saved-export warning reconciliation and safe trash exemptions. It also decodes two renamed glTF fixtures after flattening them into one folder; it does not run the game corpus.
 

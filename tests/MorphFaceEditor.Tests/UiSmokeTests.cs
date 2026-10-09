@@ -2618,10 +2618,13 @@ public static class UiSmokeTests
             "Hair.HMF_HIR_Custom_MDL", 7, 0, TextureCatalogOrigin.BaseGame, 42);
         var mod = new AttachmentMeshOccurrence("DLC_MOD_Test/ModHair.pcc",
             canonical, 8, 9000, TextureCatalogOrigin.Mod, 47);
+        var modCopy = mod with { PackagePath = "DLC_MOD_Test/AnotherHair.pcc", ExportUIndex = 12 };
+        var otherMod = mod with { PackagePath = "DLC_MOD_Other/ModHair.pcc" };
         using var editor = new HairMeshEditorViewModel(
             new AssetReferenceEditingSession(null), [], "Hair", 0);
 
-        editor.UpdateRegistryCandidates([new AttachmentMeshCandidate(canonical, biog, [biog, mod])],
+        editor.UpdateRegistryCandidates([new AttachmentMeshCandidate(canonical, biog, [biog, mod])
+            { IsEligibleOfficialDefault = true }],
             isPlayerWorkspace: false);
         TestAssert.Equal(3, editor.Candidates.Count);
         TestAssert.Equal(biog.PackagePath, editor.Candidates[1].Identity?.PackagePath);
@@ -2633,10 +2636,39 @@ public static class UiSmokeTests
             "The mod mesh row omitted its source and bone count.");
         editor.Selected = editor.Candidates[2];
         TestAssert.Equal(mod.PackagePath, editor.Selected.Identity?.PackagePath);
+        editor.UpdateRegistryCandidates(
+            [new AttachmentMeshCandidate(canonical, biog, [biog, modCopy, mod, otherMod])
+                { IsEligibleOfficialDefault = true }],
+            isPlayerWorkspace: false);
+        TestAssert.Equal(3, editor.Candidates.Count);
+        TestAssert.Equal(mod.PackagePath, editor.Selected.Identity?.PackagePath);
+        TestAssert.True(!editor.Candidates.Any(option => option.Identity?.PackagePath == modCopy.PackagePath),
+            "Repeated copies within one DLC mod bloated the attachment picker.");
+        TestAssert.True(!editor.Candidates.Any(option => option.Identity?.PackagePath == otherMod.PackagePath),
+            "A copy in another DLC folder duplicated the same mod mesh identity.");
+        var seekfree = new AssetIdentity("DLC_MOD_Test/BIOG_HMF_HIR_PRO.pcc",
+            "Hair.HMF_HIR_Custom_MDL", 7, "SkeletalMesh");
+        using var localEditor = new HairMeshEditorViewModel(
+            new AssetReferenceEditingSession(seekfree), [new PackageAssetListItem(seekfree)], "Hair", 0);
+        localEditor.UpdateRegistryCandidates(
+            [new AttachmentMeshCandidate(canonical, mod, [mod, modCopy, otherMod])], false);
+        TestAssert.Equal(2, localEditor.Candidates.Count);
+        TestAssert.Equal(seekfree, localEditor.Selected.Identity);
+        TestAssert.True(!localEditor.Candidates.Any(option => option.Identity?.PackagePath == mod.PackagePath),
+            "The level-file copy duplicated the open seekfree mesh from the same DLC mod.");
+        var levelCopy = otherMod with { PackagePath = "DLC_MOD_Level/BioA_STA20_10_DSG.pcc" };
+        var levelIdentity = new AssetIdentity(levelCopy.PackagePath, canonical, 8, "SkeletalMesh");
+        using var levelEditor = new HairMeshEditorViewModel(
+            new AssetReferenceEditingSession(levelIdentity), [new PackageAssetListItem(levelIdentity)], "Hair", 0);
+        levelEditor.UpdateRegistryCandidates(
+            [new AttachmentMeshCandidate(canonical, mod, [mod])], false);
+        TestAssert.Equal(2, levelEditor.Candidates.Count);
+        TestAssert.Equal(levelIdentity, levelEditor.Selected.Identity);
         var manual = new AttachmentMeshOccurrence("C:\\Custom\\BIOG_HMF_HIR_Custom.pcc",
             "Hair.HMF_HIR_Custom_MDL", 2, 0, TextureCatalogOrigin.Manual, 48);
         editor.UpdateRegistryCandidates(
-            [new AttachmentMeshCandidate(canonical, biog, [biog, mod]),
+            [new AttachmentMeshCandidate(canonical, biog, [biog, mod])
+                { IsEligibleOfficialDefault = true },
              new AttachmentMeshCandidate("BIOG_HMF_HIR_Custom.Hair.HMF_HIR_Custom_MDL", manual, [manual])],
             isPlayerWorkspace: true);
         TestAssert.True(editor.Candidates.Any(option => option.Identity?.PackagePath == manual.PackagePath &&

@@ -131,6 +131,9 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
         var representedOfficialIdentities = options.Where(option => option.Identity is not null)
             .Select(option => MeshIdentityKey(option.Identity!))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var representedModIdentities = options.Where(option => option.Identity is not null)
+            .Select(option => ModMeshKey(option.Identity!))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var candidate in candidates)
         {
             if (isPlayerWorkspace &&
@@ -142,7 +145,16 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
                 representedOfficialIdentities.Add(MeshIdentityKey(candidate.CanonicalPath)))
                 Add(candidate.EffectiveOccurrence, candidate.CanonicalPath);
             foreach (var occurrence in candidate.Occurrences.Where(value =>
-                         value.Origin is not (TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc)))
+                         value.Origin is not (TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc))
+                         .GroupBy(value => ModSourceKey(value), StringComparer.OrdinalIgnoreCase)
+                         .Select(group => group
+                             .OrderByDescending(value => Same(_session.Value, new AssetIdentity(
+                                 value.PackagePath, candidate.CanonicalPath, value.ExportUIndex, "SkeletalMesh")))
+                             .ThenByDescending(value => Path.GetFileNameWithoutExtension(value.PackagePath)
+                                 .Equals(candidate.CanonicalPath.Split('.')[0], StringComparison.OrdinalIgnoreCase))
+                             .ThenByDescending(value => value.MountPriority)
+                             .ThenBy(value => value.PackagePath, StringComparer.OrdinalIgnoreCase)
+                             .ThenBy(value => value.ExportUIndex).First()))
                 Add(occurrence, candidate.CanonicalPath);
         }
         if (_session.Value is { } current &&
@@ -159,6 +171,8 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
         {
             var identity = new AssetIdentity(occurrence.PackagePath, canonicalPath,
                 occurrence.ExportUIndex, "SkeletalMesh");
+            if (occurrence.Origin == TextureCatalogOrigin.Mod &&
+                !representedModIdentities.Add(ModMeshKey(identity))) return;
             if (!physicalOccurrences.Add(PhysicalOccurrenceKey(identity))) return;
             var origin = occurrence.Origin switch
             {
@@ -283,12 +297,22 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
         string.Equals(left.InstancedPath, right.InstancedPath, StringComparison.OrdinalIgnoreCase);
 
     private static string MeshIdentityKey(AssetIdentity identity) =>
-        $"{identity.ClassName}|{identity.InstancedPath}";
+        $"{identity.ClassName}|{TextureCatalogPicker.CanonicalPath(identity.InstancedPath, identity.PackagePath)}";
+
+    private static string ModMeshKey(AssetIdentity identity) =>
+        MeshIdentityKey(identity);
 
     private static string MeshIdentityKey(string instancedPath) => $"SkeletalMesh|{instancedPath}";
 
     private static string PhysicalOccurrenceKey(AssetIdentity identity) =>
         $"{Path.GetFullPath(identity.PackagePath)}|{identity.UIndex}";
+
+    private static string ModSourceKey(AttachmentMeshOccurrence occurrence)
+    {
+        if (occurrence.Origin == TextureCatalogOrigin.Mod)
+            return "Mod";
+        return $"{occurrence.Origin}|{Path.GetFullPath(occurrence.PackagePath)}|{occurrence.ExportUIndex}";
+    }
 
     private void OnValueChanged(object? sender, EventArgs e)
     {

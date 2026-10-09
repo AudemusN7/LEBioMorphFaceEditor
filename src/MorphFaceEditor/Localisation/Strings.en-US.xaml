@@ -1800,17 +1800,17 @@ Choose No to keep the current scalp textures.</system:String>
   <system:String x:Key="loc_WpfEditorDialogService_UModelExportFolderTitle" xml:space="preserve">Select a folder for the UModel mesh export</system:String>
   <system:String x:Key="loc_Services_Taxonomy_MeshOnlyMaterialLabel" xml:space="preserve">{0} (Mesh)</system:String>
   <system:String x:Key="loc_Services_MetadataText_Shared_aniso_highlight_1_Label" xml:space="preserve">Hair Highlight 1 Power</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_aniso_highlight_1_Description" xml:space="preserve">Aniso_Highlight_1</system:String>
+
   <system:String x:Key="loc_Services_MetadataText_Shared_aniso_highlight_2_Label" xml:space="preserve">Hair Highlight 2 Power</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_aniso_highlight_2_Description" xml:space="preserve">Aniso_Highlight_2</system:String>
+
   <system:String x:Key="loc_Services_MetadataText_Shared_aniso_color_1_Label" xml:space="preserve">Hair Highlight 1 Color</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_aniso_color_1_Description" xml:space="preserve">Aniso_Color_1</system:String>
+
   <system:String x:Key="loc_Services_MetadataText_Shared_aniso_color_2_Label" xml:space="preserve">Hair Highlight 2 Color</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_aniso_color_2_Description" xml:space="preserve">Aniso_Color_2</system:String>
+
   <system:String x:Key="loc_Services_MetadataText_Shared_hair_color_Label" xml:space="preserve">Hair Color</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_hair_color_Description" xml:space="preserve">Hair_Color</system:String>
+
   <system:String x:Key="loc_Services_MetadataText_Shared_hair_stack_Label" xml:space="preserve">James Vega Hair Texture</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_hair_stack_Description" xml:space="preserve">Hair_Stack</system:String>
+
   <system:String x:Key="loc_VM_actorAssignment_bodySkinParametersMissing" xml:space="preserve">The selected face has no SkinTone or SkinLightScattering value to assign to body MICs.</system:String>
   <system:String x:Key="loc_Services_AttachmentTransfer_ExcludedNativeMesh" xml:space="preserve">Optional attachment '{0}' was omitted because it is either malformed, a redundant duplicate, or intentionally unsupported.</system:String>
   <system:String x:Key="loc_Services_AttachmentTransfer_ReviewedDonorMissing" xml:space="preserve">The reviewed {0}→{1} donors omit attachment mesh '{2}' because Morph Face Editor does not support porting it to that game.</system:String>
@@ -1825,8 +1825,8 @@ Choose No to keep the current scalp textures and material.</system:String>
   <system:String x:Key="loc_Services_CustomTemplate_JamesHair" xml:space="preserve">James Vega Hair</system:String>
     <!--localiser: {"Key":"loc_ArchetypeTag_FemaleBatarian","ReviewedHash":null,"DoNotTranslate":false,"Note":"Do not translate [TAG]","SourceHash":null}-->
     <system:String x:Key="loc_ArchetypeTag_FemaleBatarian" xml:space="preserve">Female Batarian [BAF]</system:String>
-    <!--localiser: {"Key":"loc_Services_ProfileArchetype_FemaleBatarian","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+
     <system:String x:Key="loc_Services_ProfileArchetype_FemaleBatarian" xml:space="preserve">Female Batarian</system:String>
-    <!--localiser: {"Key":"loc_Shell_ProfileSpecies_FemaleBatarian","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+
     <system:String x:Key="loc_Shell_ProfileSpecies_FemaleBatarian" xml:space="preserve">Female Batarian</system:String>
 </ResourceDictionary>

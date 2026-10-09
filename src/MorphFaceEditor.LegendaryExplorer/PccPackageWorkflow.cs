@@ -67,6 +67,107 @@ internal static class PccPackageWorkflow
     }
 
     /// <summary>
+    /// The Package Editor's Clone All References endpoint, applied only after
+    /// materialisation and reference editing have finished in an in-memory PCC.
+    /// No donor selection or material policy is repeated during this final copy.
+    /// </summary>
+    internal static ExportEntry CloneCompletedRoot(
+        IMEPackage destination,
+        ExportEntry source,
+        ICollection<string>? warnings = null,
+        ExportEntry? replacementRoot = null)
+    {
+        if (source.Game != destination.Game)
+            throw new InvalidDataException("The completed PCC must be cloned into the same game.");
+        var sourceEntries = DependencyEntries(source);
+        var preexistingEntries = destination.Exports.Cast<IEntry>().Concat(destination.Imports).ToHashSet();
+        foreach (var entry in sourceEntries.Where(entry => entry.ClassName != "Package"))
+        {
+            var occupying = destination.FindEntry(entry.InstancedFullPath);
+            if (occupying is not null && (occupying.ClassName != entry.ClassName ||
+                (occupying is ExportEntry) != (entry is ExportEntry)))
+                throw new InvalidDataException(
+                    $"Cannot clone {entry.ClassName} '{entry.InstancedFullPath}': a conflicting import/export identity occupies the destination.");
+        }
+
+        using var cache = new PackageCache();
+        var relinker = new RelinkerOptionsPackage
+        {
+            Cache = cache,
+            ImportExportDependencies = true,
+            GenerateImportsForGlobalFiles = false,
+            ImportChildrenOfPackages = false
+        };
+        var preservedExports = preexistingEntries.OfType<ExportEntry>().ToHashSet();
+        ExportEntry root;
+        if (replacementRoot is null)
+        {
+            var parent = EntryExporter.PortParents(source, destination, cache: cache, customROP: relinker);
+            EntryImporter.ImportAndRelinkEntries(EntryImporter.PortingOption.CloneAllDependencies,
+                source, destination, parent, true, relinker, out var cloned);
+            root = cloned as ExportEntry ?? throw new InvalidDataException("LEC did not clone the completed root as an export.");
+        }
+        else
+        {
+            if (source.ClassName != "BioMorphFace" || replacementRoot.ClassName != "BioMorphFace" ||
+                !ReferenceEquals(replacementRoot.FileRef, destination))
+                throw new InvalidDataException("Only the destination BioMorphFace and its BioMaterialOverride can be replaced.");
+            var incomingOverride = MorphOverride(source);
+            var existingOverride = MorphOverride(replacementRoot);
+            relinker.CrossPackageMap[source] = replacementRoot;
+            relinker.CrossPackageMap[incomingOverride] = existingOverride;
+            preservedExports.Remove(replacementRoot);
+            preservedExports.Remove(existingOverride);
+            foreach (var (incoming, target) in new[] { (source, replacementRoot), (incomingOverride, existingOverride) })
+                if (!EntryImporter.ReplaceExportDataWithAnother(incoming, target, relinker))
+                    throw new InvalidDataException($"LEC could not replace '{target.InstancedFullPath}'.");
+            MaterialisationVerifier.Relink(relinker, preservedExports);
+            root = replacementRoot;
+        }
+        MaterialisationVerifier.Verify(root, source.Game, relinker, warnings, preservedExports: preservedExports);
+        foreach (var texture in sourceEntries.OfType<ExportEntry>().Where(entry => entry.ClassName == "Texture2D"))
+        {
+            var target = relinker.CrossPackageMap.TryGetValue(texture, out var mapped)
+                ? mapped : destination.FindEntry(texture.InstancedFullPath, texture.ClassName);
+            if (target is ExportEntry copied && !preservedExports.Contains(copied))
+                PccTextureDependencyResolver.VerifyBulkDataPreserved(texture, copied);
+            if (target is ExportEntry selected &&
+                (IsRegisteredExplicitTexture(source.FileRef, texture.InstancedFullPath) ||
+                 HasPersistedExplicitTextureLeaf(source.FileRef, texture.InstancedFullPath)))
+                RegisterExplicitTextureLeaf(destination, selected.InstancedFullPath);
+        }
+        VerifyNoUnreachableEntries(root, preexistingEntries);
+        return root;
+    }
+
+    // Verification only: LEC owns copying/relinking. Follow imported ancestry as
+    // well as exported parents, without treating every package sibling as owned.
+    internal static HashSet<IEntry> DependencyEntries(ExportEntry root)
+    {
+        var entries = new HashSet<IEntry>();
+        var pending = new Queue<IEntry>();
+        pending.Enqueue(root);
+        while (pending.TryDequeue(out var entry))
+        {
+            if (!entries.Add(entry)) continue;
+            if (entry.Parent is { } parent) pending.Enqueue(parent);
+            if (entry is ExportEntry export)
+                foreach (var index in PackageIntegrity.References(export).Values)
+                    if (root.FileRef.GetEntry(index) is { } reference) pending.Enqueue(reference);
+        }
+        return entries;
+    }
+
+    internal static void VerifyNoUnreachableEntries(ExportEntry root, IReadOnlySet<IEntry>? preexistingEntries = null)
+    {
+        var reachable = DependencyEntries(root);
+        var orphan = root.FileRef.Exports.Cast<IEntry>().Concat(root.FileRef.Imports)
+            .FirstOrDefault(entry => preexistingEntries?.Contains(entry) != true && !reachable.Contains(entry));
+        if (orphan is not null)
+            throw new InvalidDataException($"Completed PCC contains an unused {orphan.ClassName} '{orphan.InstancedFullPath}'.");
+    }
+
+    /// <summary>
     /// Ports an ordinary PCC root using Legendary Explorer's mature parent and
     /// linker policy. Callers retain their source hierarchy; the corpus oracle
     /// is not used as a generic path builder.

@@ -114,7 +114,8 @@ internal static class MaterialisationVerifier
 
     internal static void Verify(ExportEntry root, MEGame sourceGame, RelinkerOptionsPackage options,
         ICollection<string>? warnings = null, bool rootOnly = false,
-        IReadOnlyDictionary<ExportEntry, (ExportEntry Source, string TargetPath)>? stagedCopies = null)
+        IReadOnlyDictionary<ExportEntry, (ExportEntry Source, string TargetPath)>? stagedCopies = null,
+        IReadOnlySet<ExportEntry>? preservedExports = null)
     {
         var issues = new List<MaterialisationDiagnostic>();
         var checkedEntries = new HashSet<IEntry>();
@@ -128,7 +129,7 @@ internal static class MaterialisationVerifier
             {
                 if (pair.Key is not ExportEntry source || pair.Value is not ExportEntry target ||
                     !ReferenceEquals(target.FileRef, root.FileRef) ||
-                    rootOnly && !ReferenceEquals(target, root)) continue;
+                    rootOnly && !ReferenceEquals(target, root) || preservedExports?.Contains(target) == true) continue;
 
                 (ExportEntry Source, string TargetPath)? stagedCopy = null;
                 if (stagedCopies?.TryGetValue(target, out var recordedCopy) == true)

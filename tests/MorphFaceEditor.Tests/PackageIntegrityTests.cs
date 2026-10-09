@@ -42,6 +42,7 @@ internal static class PackageIntegrityTests
         new("temporary edit round-trips a seekfree randomised texture beneath an imported package", TemporaryEditSeekfreeTextureRoundTrip),
         new("writer retains an exact Texture2D import instead of materialising a duplicate", () => WriterRetainsExactTextureImport(false)),
         new("explicit texture selection rejects an occupying import without changing the PCC", () => WriterRetainsExactTextureImport(true)),
+        new("explicit texture selection rejects an occupying export through staged re-export", () => WriterRetainsExactTextureImport(true, exportCollision: true)),
         new("texture donor resolution qualifies local paths without trusting stale indices", TextureDonorResolution),
         new("Texture2D materialisation preserves a non-Package TextureCube parent", TextureCubeParentPreserved),
         new("relink preserves PROShort01 target donors and optional attachment omissions", HairDonorsAndOmissions),
@@ -914,16 +915,27 @@ internal static class PackageIntegrityTests
         }
     }
 
-    private static void WriterRetainsExactTextureImport(bool explicitSelection)
+    private static void WriterRetainsExactTextureImport(bool explicitSelection, bool exportCollision = false)
     {
         LegendaryExplorerCoreRuntime.Initialize();
         var destinationPath = Path.Combine(Path.GetTempPath(), $"MFE-ExactImport-{Guid.NewGuid():N}.pcc");
         var donorPath = Path.Combine(Path.GetTempPath(), $"MFE-ExactImportDonor-{Guid.NewGuid():N}.pcc");
+        var reexportPath = Path.Combine(Path.GetTempPath(), $"MFE-ExactImportReexport-{Guid.NewGuid():N}.pcc");
         const string texturePath = "MFE_ExactImport.Eye.EYE_Diff";
         try
         {
             File.Copy(Path.GetFullPath("tests/Global Morphs/LE3 GlobalMorphs.pcc"), destinationPath);
-            CreateTextureImport(destinationPath, texturePath);
+            if (exportCollision)
+            {
+                using var destination = MEPackageHandler.OpenMEPackage(destinationPath, forceLoadFromDisk: true);
+                var parent = destination.CreatePackageExport("MFE_ExactImport");
+                var eye = destination.CreatePackageExport("Eye", parent);
+                var texture = EntryCloner.CloneEntry(destination.Exports.First(entry => entry.ClassName == "Texture2D"));
+                texture.ObjectName = new NameReference("EYE_Diff");
+                texture.idxLink = eye.UIndex;
+                destination.Save();
+            }
+            else CreateTextureImport(destinationPath, texturePath);
             using (var donor = MEPackageHandler.CreateMemoryEmptyPackage("MFE_ExactImportDonor.pcc", MEGame.LE3))
             {
                 var root = donor.CreatePackageExport("MFE_ExactImport");
@@ -953,12 +965,21 @@ internal static class PackageIntegrityTests
             if (explicitSelection)
             {
                 var originalBytes = File.ReadAllBytes(destinationPath);
-                Reject(() => new MorphFacePackageWriter().SaveExisting(draft), "import occupies");
+                var collisionMessage = exportCollision ? "different export" : "import occupies";
+                Reject(() => new MorphFacePackageWriter().SaveExisting(draft), collisionMessage);
+                File.Copy(destinationPath, reexportPath);
+                Reject(() => new MorphFacePackageWriter().SaveMorphToPackage(
+                    draft, destinationPath, reexportPath, createNewPackage: false), collisionMessage);
                 TestAssert.True(originalBytes.SequenceEqual(File.ReadAllBytes(destinationPath)),
                     "A rejected explicit texture selection changed the PCC bytes.");
+                TestAssert.True(originalBytes.SequenceEqual(File.ReadAllBytes(reexportPath)),
+                    "A rejected staged re-export changed the destination PCC bytes.");
                 TestAssert.True(!Directory.EnumerateFiles(Path.GetDirectoryName(destinationPath)!,
                     $".{Path.GetFileName(destinationPath)}.*.tmp").Any(),
                     "A rejected texture collision retained a temporary PCC candidate.");
+                TestAssert.True(!Directory.EnumerateFiles(Path.GetDirectoryName(reexportPath)!,
+                    $".{Path.GetFileName(reexportPath)}.*.tmp").Any(),
+                    "A rejected staged re-export retained a temporary PCC candidate.");
             }
             else new MorphFacePackageWriter().SaveExisting(draft);
             using var reopened = MEPackageHandler.OpenMEPackage(destinationPath, forceLoadFromDisk: true);
@@ -966,13 +987,14 @@ internal static class PackageIntegrityTests
                 entry.ClassName == "Texture2D" && entry.InstancedFullPath == texturePath);
             var exports = reopened.Exports.Count(entry =>
                 entry.ClassName == "Texture2D" && entry.InstancedFullPath == texturePath);
-            TestAssert.Equal(1, imports);
-            TestAssert.Equal(0, exports);
+            TestAssert.Equal(exportCollision ? 0 : 1, imports);
+            TestAssert.Equal(exportCollision ? 1 : 0, exports);
         }
         finally
         {
             File.Delete(destinationPath);
             File.Delete(donorPath);
+            File.Delete(reexportPath);
         }
     }
 

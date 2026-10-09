@@ -151,10 +151,13 @@ public sealed class MorphFacePackageContextService
                 WriteMorphData(face, new MorphFaceMorphData(
                     draft.MorphFeatures, draft.FinalSkeleton, draft.BakedLods));
                 WriteAttachments(face, attachments);
+                using var completedPackage = MEPackageHandler.CreateMemoryEmptyPackage(destination, package.Game);
+                face = PccPackageWorkflow.CloneCompletedRoot(completedPackage, face, stagingMessages);
+                materialOverride = ResolveMaterialOverride(face);
                 facePath = face.InstancedFullPath;
                 materialPath = materialOverride.InstancedFullPath;
                 dependencyGraph = PccPackageWorkflow.CaptureDependencyGraph(face);
-                package.Save(temporaryPath);
+                completedPackage.Save(temporaryPath);
             }
 
             VerifyMinimalConvertedPackage(temporaryPath, facePath, materialPath, dependencyGraph);
@@ -821,6 +824,7 @@ public sealed class MorphFacePackageContextService
         _ = package.FindExport(materialPath, "BioMaterialOverride")
             ?? throw new InvalidDataException("The converted material override was not saved.");
         PccPackageWorkflow.VerifyDependencyGraph(package, dependencyGraph, verifyCorpusRoles: false);
+        PccPackageWorkflow.VerifyNoUnreachableEntries(face);
         var malformed = package.Exports
             .Where(export => export.GetProperties().Any(ContainsUnknownProperty))
             .Select(export => export.InstancedFullPath)

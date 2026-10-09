@@ -239,6 +239,8 @@ public static class CustomMeshPccMaterializerTests
                 "The selected explicit texture was not embedded at its exact stock identity.");
             TestAssert.True(textureExport!.IsForcedExport,
                 "The explicit texture leaf lost its package-qualified ForcedExport identity.");
+            TestAssert.True(PccPackageWorkflow.HasPersistedExplicitTextureLeaf(package, lashPath),
+                "Final clone discarded the texture picker's persisted intent marker.");
             TestAssert.Equal(1, package.Exports.Count(entry => entry.ClassName == "Texture2D" &&
                 entry.InstancedFullPath.Equals(lashPath, StringComparison.OrdinalIgnoreCase)));
             TestAssert.Equal(0, package.Imports.Count(entry => entry.ClassName == "Texture2D" &&

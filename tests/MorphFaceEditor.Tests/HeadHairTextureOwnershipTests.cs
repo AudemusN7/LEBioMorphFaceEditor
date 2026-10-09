@@ -79,6 +79,8 @@ internal static class HeadHairTextureOwnershipTests
                 var root = source.CreatePackageExport(rootPath);
                 var texture = source.CreateExport("CustomHairTexture", "Texture2D", root, indexed: false);
                 texture.WriteBinary(UTexture2D.Create());
+                var staleTexture = source.CreateExport("StaleBmoHairTexture", "Texture2D", root, indexed: false);
+                staleTexture.WriteBinary(UTexture2D.Create());
                 var mic = source.CreateExport("CustomHair_MIC", "MaterialInstanceConstant", root, indexed: false);
                 mic.WriteBinary(MaterialInstance.Create());
                 mic.WriteProperty(new ArrayProperty<StructProperty>([new StructProperty("TextureParameterValue",
@@ -92,7 +94,8 @@ internal static class HeadHairTextureOwnershipTests
                 var bmo = source.CreateExport("MaterialOverrides", "BioMaterialOverride", face, indexed: false);
                 bmo.WriteProperty(new ArrayProperty<StructProperty>(scalpNames.Concat(hairNames).Select(name =>
                     new StructProperty("TextureParameter", new PropertyCollection {
-                        new NameProperty(name, "nName"), new ObjectProperty(texture, "m_pTexture") }, "None", false)),
+                        new NameProperty(name, "nName"), new ObjectProperty(
+                            hairNames.Contains(name) ? staleTexture : texture, "m_pTexture") }, "None", false)),
                     "m_aTextureOverrides"));
                 face.WriteProperty(new ObjectProperty(bmo, "m_oMaterialOverrides"));
                 face.WriteProperty(new ObjectProperty(mesh, "m_oBaseHead"));
@@ -113,7 +116,28 @@ internal static class HeadHairTextureOwnershipTests
             var writer = new MorphFacePackageWriter();
             if (exportNew) writer.SaveMorphToPackage(draft, sourcePath, output, createNewPackage: true);
             else writer.SaveExisting(draft);
+            if (exportNew)
+            {
+                var failedOutput = Path.Combine(directory, "Rejected.pcc");
+                var fingerprint = PackageFingerprint.Capture(sourcePath);
+                PccPackageWorkflow.BeforeAtomicReplaceForTesting = (_, _) => throw new IOException("Test publication failure");
+                try
+                {
+                    try
+                    {
+                        writer.SaveMorphToPackage(draft, sourcePath, failedOutput, createNewPackage: true);
+                        throw new InvalidOperationException("Expected publication to fail.");
+                    }
+                    catch (IOException exception) when (exception.Message == "Test publication failure") { }
+                    TestAssert.True(!File.Exists(failedOutput), "Failed export published a PCC.");
+                    TestAssert.Equal(fingerprint, PackageFingerprint.Capture(sourcePath));
+                    TestAssert.True(!Directory.EnumerateFiles(directory, "*.tmp").Any(), "Failed export left its disk candidate behind.");
+                    TestAssert.Equal(2, Directory.EnumerateFiles(directory).Count()); // Source plus successful output; no staging PCC.
+                }
+                finally { PccPackageWorkflow.BeforeAtomicReplaceForTesting = null; }
+            }
             using var reopened = MEPackageHandler.OpenMEPackage(output, forceLoadFromDisk: true);
+            TestAssert.Equal(!exportNew, reopened.FindExport(rootPath + ".StaleBmoHairTexture", "Texture2D") is not null);
             var bmoSaved = reopened.FindExport(rootPath + ".Face.MaterialOverrides", "BioMaterialOverride")!;
             var saved = bmoSaved.GetProperty<ArrayProperty<StructProperty>>("m_aTextureOverrides")!;
             TestAssert.True(saved.Select(item => item.GetProp<NameProperty>("nName")!.Value.Instanced)

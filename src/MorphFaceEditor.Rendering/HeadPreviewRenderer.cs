@@ -20,12 +20,14 @@ public sealed class HeadPreviewRenderer : IDisposable
 {
     private const int MaximumBoneCount = 128;
     private const long MaximumGpuTextureBytes = 512L * 1024 * 1024;
+    private const int ShadowMapSize = 2048;
     private readonly Device _device;
     private readonly DeviceContext _context;
     private readonly string _deviceKind;
     private readonly Stopwatch _animationClock = Stopwatch.StartNew();
     private readonly VertexShader _vertexShader;
     private readonly PixelShader _pixelShader;
+    private readonly PixelShader _shadowPixelShader;
     private readonly VertexShader _postVertexShader;
     private readonly PixelShader _postPixelShader;
     private readonly InputLayout _inputLayout;
@@ -34,7 +36,9 @@ public sealed class HeadPreviewRenderer : IDisposable
     private readonly Buffer _skinningBuffer;
     private readonly Buffer _meshBuffer;
     private readonly Buffer _postProcessBuffer;
+    private readonly Buffer _shadowBuffer;
     private readonly RasterizerState _solidRasterizer;
+    private readonly RasterizerState _shadowRasterizer;
     private readonly RasterizerState _wireframeRasterizer;
     private readonly RasterizerState _solidBackFacesRasterizer;
     private readonly RasterizerState _solidFrontFacesRasterizer;
@@ -42,12 +46,14 @@ public sealed class HeadPreviewRenderer : IDisposable
     private readonly RasterizerState _wireframeFrontFacesRasterizer;
     private readonly DepthStencilState _depthState;
     private readonly DepthStencilState _depthReadState;
+    private readonly DepthStencilState _shadowDepthState;
     private readonly BlendState _opaqueBlendState;
     private readonly BlendState _translucentBlendState;
     private readonly BlendState _additiveBlendState;
     private readonly BlendState _depthOnlyBlendState;
     private readonly SamplerState _materialSampler;
     private readonly SamplerState _postSampler;
+    private readonly SamplerState _shadowSampler;
     private readonly SampleDescription _sampleDescription;
     private readonly List<MeshBuffers> _meshes = [];
     private readonly Dictionary<string, HeadPreviewMaterial> _materials = new(StringComparer.OrdinalIgnoreCase);
@@ -70,7 +76,12 @@ public sealed class HeadPreviewRenderer : IDisposable
     private Texture2D _postTexture = null!;
     private RenderTargetView _postTarget = null!;
     private Texture2D _stagingTexture = null!;
+    private Texture2D _shadowTexture = null!;
+    private DepthStencilView _shadowDepthView = null!;
+    private ShaderResourceView _shadowShaderView = null!;
     private int _skinningPaletteCount;
+    private System.Numerics.Matrix4x4[] _skinningPalette = [];
+    private float _shadowRadius;
     private int _textureUploadCount;
     private long _gpuTextureBytes;
     private long _textureUseSerial;
@@ -97,12 +108,14 @@ public sealed class HeadPreviewRenderer : IDisposable
 
         using var vertexBytecode = CompileShader("VSMain", "vs_5_0");
         using var pixelBytecode = CompileShader("PSMain", "ps_5_0");
+        using var shadowPixelBytecode = CompileShader("PSShadow", "ps_5_0");
         using var postVertexBytecode = CompileShader("VSPostProcess", "vs_5_0");
         using var postPixelBytecode = CompileShader(
             _sampleDescription.Count > 1 ? "PSPostProcessMsaa" : "PSPostProcessSingle",
             "ps_5_0");
         _vertexShader = new VertexShader(_device, vertexBytecode);
         _pixelShader = new PixelShader(_device, pixelBytecode);
+        _shadowPixelShader = new PixelShader(_device, shadowPixelBytecode);
         _postVertexShader = new VertexShader(_device, postVertexBytecode);
         _postPixelShader = new PixelShader(_device, postPixelBytecode);
         _inputLayout = new InputLayout(
@@ -128,7 +141,9 @@ public sealed class HeadPreviewRenderer : IDisposable
             0);
         _meshBuffer = CreateConstantBuffer<MeshConstants>();
         _postProcessBuffer = CreateConstantBuffer<PostProcessConstants>();
+        _shadowBuffer = CreateConstantBuffer<ShadowConstants>();
         _solidRasterizer = CreateRasterizer(FillMode.Solid, CullMode.None);
+        _shadowRasterizer = CreateRasterizer(FillMode.Solid, CullMode.None);
         _wireframeRasterizer = CreateRasterizer(FillMode.Wireframe, CullMode.None);
         _solidBackFacesRasterizer = CreateRasterizer(FillMode.Solid, CullMode.Front);
         _solidFrontFacesRasterizer = CreateRasterizer(FillMode.Solid, CullMode.Back);
@@ -145,6 +160,13 @@ public sealed class HeadPreviewRenderer : IDisposable
         {
             IsDepthEnabled = true,
             DepthWriteMask = DepthWriteMask.Zero,
+            DepthComparison = Comparison.LessEqual,
+            IsStencilEnabled = false
+        });
+        _shadowDepthState = new DepthStencilState(_device, new DepthStencilStateDescription
+        {
+            IsDepthEnabled = true,
+            DepthWriteMask = DepthWriteMask.All,
             DepthComparison = Comparison.LessEqual,
             IsStencilEnabled = false
         });
@@ -178,7 +200,21 @@ public sealed class HeadPreviewRenderer : IDisposable
             MaximumLod = 0,
             MipLodBias = 0
         });
+        _shadowSampler = new SamplerState(_device, new SamplerStateDescription
+        {
+            Filter = Filter.ComparisonMinMagMipPoint,
+            AddressU = TextureAddressMode.Border,
+            AddressV = TextureAddressMode.Border,
+            AddressW = TextureAddressMode.Border,
+            MaximumAnisotropy = 1,
+            ComparisonFunction = Comparison.LessEqual,
+            BorderColor = Color.White,
+            MinimumLod = 0,
+            MaximumLod = 0,
+            MipLodBias = 0
+        });
         CreateRenderTargets();
+        CreateShadowMap();
     }
 
     public string DeviceKind => _deviceKind;
@@ -195,6 +231,7 @@ public sealed class HeadPreviewRenderer : IDisposable
         // D3D bindings retain references too: unbind before releasing the old face.
         _context.ClearState();
         DisposeMeshes();
+        _shadowRadius = 0;
         _materials.Clear();
         DisposeMaterialTextures();
         _skinningPaletteCount = 0;
@@ -206,6 +243,7 @@ public sealed class HeadPreviewRenderer : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(scene);
         DisposeMeshes();
+        _shadowRadius = 0;
         _materials.Clear();
         SetSkinningPalette(scene.SkinningPalette ?? []);
         foreach (var mesh in scene.Meshes)
@@ -222,7 +260,8 @@ public sealed class HeadPreviewRenderer : IDisposable
                 mesh.IsAttachment,
                 mesh.ApplySkinning,
                 mesh.Name,
-                vertices.Length));
+                vertices.Length,
+                mesh.Vertices.ToArray()));
             foreach (var material in mesh.Sections.Select(section => section.Material))
             {
                 _materials[material.Key] = material;
@@ -255,7 +294,9 @@ public sealed class HeadPreviewRenderer : IDisposable
         {
             throw new InvalidDataException($"Preview mesh '{meshName}' expects {mesh.VertexCount} vertices; received {vertices.Count}.");
         }
-        WriteDynamicVertices(mesh.VertexBuffer, vertices.Select(ToGpuVertex).ToArray());
+        var cachedVertices = vertices.ToArray();
+        mesh.CachedVertices = cachedVertices;
+        WriteDynamicVertices(mesh.VertexBuffer, cachedVertices.Select(ToGpuVertex).ToArray());
     }
 
     public unsafe void SetSkinningPalette(IReadOnlyList<System.Numerics.Matrix4x4> palette)
@@ -281,6 +322,7 @@ public sealed class HeadPreviewRenderer : IDisposable
             _context.UnmapSubresource(_skinningBuffer, 0);
         }
         _skinningPaletteCount = palette.Count;
+        _skinningPalette = palette.ToArray();
     }
 
     public void Resize(int width, int height)
@@ -320,7 +362,6 @@ public sealed class HeadPreviewRenderer : IDisposable
 
         var frameAnimationTime = animationTimeSeconds ?? (float)_animationClock.Elapsed.TotalSeconds;
         var stopwatch = Stopwatch.StartNew();
-        ConfigurePipeline(options);
         var world = Matrix.Identity;
         var view = camera.CreateViewMatrix();
         var projection = camera.CreateProjectionMatrix(_width / (float)_height);
@@ -353,8 +394,6 @@ public sealed class HeadPreviewRenderer : IDisposable
             HorizonColor = new Vector4(lighting.HorizonColor.X, lighting.HorizonColor.Y, lighting.HorizonColor.Z, 0),
             EnvironmentParameters = new Vector4(lighting.AmbientIntensity, 0, 0, 0)
         };
-        _context.UpdateSubresource(ref scene, _sceneBuffer);
-
         var draws = _meshes
             .Where(mesh => !mesh.IsAttachment || options.ShowAttachment)
             .SelectMany(mesh => mesh.Sections
@@ -364,6 +403,21 @@ public sealed class HeadPreviewRenderer : IDisposable
                     Section: section,
                     Material: _materials.GetValueOrDefault(section.Material.Key, section.Material))))
             .ToArray();
+        var shadowDrawCalls = 0;
+        var shadowsEnabled = options.RenderMode == HeadPreviewRenderMode.Shaded && options.ShadowsEnabled;
+        if (shadowsEnabled)
+        {
+            shadowDrawCalls = RenderShadowMap(draws, ref scene, camera, lighting, options, frameAnimationTime);
+        }
+        else
+        {
+            SetShadowConstants(Matrix.Identity, enabled: false, options);
+            _context.PixelShader.SetShaderResources(17, new ShaderResourceView?[] { null });
+        }
+
+        ConfigurePipeline(options);
+        _context.UpdateSubresource(ref scene, _sceneBuffer);
+        _context.PixelShader.SetShaderResources(17, shadowsEnabled ? _shadowShaderView : null);
         var drawCalls = 0;
         foreach (var draw in draws.Where(draw => !IsTranslucent(draw.Material, options.RenderMode)))
         {
@@ -445,7 +499,206 @@ public sealed class HeadPreviewRenderer : IDisposable
 
         var pixels = ReadTexture(destination);
         stopwatch.Stop();
-        return new HeadPreviewFrame(_width, _height, pixels, stopwatch.Elapsed, drawCalls, _deviceKind);
+        return new HeadPreviewFrame(_width, _height, pixels, stopwatch.Elapsed, drawCalls, _deviceKind)
+        {
+            ShadowDrawCalls = shadowDrawCalls
+        };
+    }
+
+    private int RenderShadowMap(
+        IReadOnlyList<(MeshBuffers Mesh, HeadPreviewSection Section, HeadPreviewMaterial Material)> draws,
+        ref SceneConstants scene,
+        HeadOrbitCamera camera,
+        HeadPreviewLightingRig lighting,
+        HeadPreviewOptions options,
+        float animationTimeSeconds)
+    {
+        var casters = draws.Where(IsShadowCaster).ToArray();
+        if (casters.Length == 0)
+        {
+            SetShadowConstants(Matrix.Identity, enabled: false, options);
+            _context.PixelShader.SetShaderResources(17, new ShaderResourceView?[] { null });
+            return 0;
+        }
+
+        var lightDirection4 = ToDirection(lighting.Key, camera);
+        var lightDirection = new System.Numerics.Vector3(lightDirection4.X, lightDirection4.Y, lightDirection4.Z);
+        if (lightDirection.LengthSquared() < 1e-8f)
+        {
+            SetShadowConstants(Matrix.Identity, enabled: false, options);
+            _context.PixelShader.SetShaderResources(17, new ShaderResourceView?[] { null });
+            return 0;
+        }
+
+        var center = ComputeShadowCenter(casters);
+        var radius = ComputeShadowRadius(casters, center);
+        // Grow only when a pose extends beyond the current fit. That keeps a
+        // stable texel scale during ordinary facial animation and morph edits.
+        _shadowRadius = Math.Max(_shadowRadius, radius * 1.12f);
+        radius = Math.Max(_shadowRadius, 0.01f);
+        var texelSize = (2 * radius) / ShadowMapSize;
+        var forward = System.Numerics.Vector3.Normalize(-lightDirection);
+        var referenceUp = Math.Abs(System.Numerics.Vector3.Dot(forward, System.Numerics.Vector3.UnitY)) > 0.98f
+            ? System.Numerics.Vector3.UnitZ
+            : System.Numerics.Vector3.UnitY;
+        var right = System.Numerics.Vector3.Normalize(System.Numerics.Vector3.Cross(forward, referenceUp));
+        var up = System.Numerics.Vector3.Normalize(System.Numerics.Vector3.Cross(right, forward));
+        var rightOffset = MathF.Round(System.Numerics.Vector3.Dot(center, right) / texelSize) * texelSize
+                          - System.Numerics.Vector3.Dot(center, right);
+        var upOffset = MathF.Round(System.Numerics.Vector3.Dot(center, up) / texelSize) * texelSize
+                       - System.Numerics.Vector3.Dot(center, up);
+        center += right * rightOffset + up * upOffset;
+
+        var eye = center - forward * (radius * 2.5f);
+        var view = Matrix.LookAtRH(ToDx(eye), ToDx(center), ToDx(up));
+        var projection = Matrix.OrthoOffCenterRH(-radius, radius, -radius, radius, 0.01f, radius * 5f);
+        var lightViewProjection = view * projection;
+        scene.WorldViewProjection = lightViewProjection;
+        _context.UpdateSubresource(ref scene, _sceneBuffer);
+        SetShadowConstants(lightViewProjection, enabled: false, options);
+
+        // t17 aliases the depth resource used as the DSV below. Explicitly
+        // unbind it first to avoid D3D11's read/write resource hazard.
+        _context.PixelShader.SetShaderResources(17, new ShaderResourceView?[] { null });
+        _context.OutputMerger.SetTargets(_shadowDepthView);
+        _context.ClearDepthStencilView(_shadowDepthView, DepthStencilClearFlags.Depth, 1, 0);
+        _context.Rasterizer.SetViewport(0, 0, ShadowMapSize, ShadowMapSize);
+        _context.Rasterizer.State = _shadowRasterizer;
+        _context.OutputMerger.SetDepthStencilState(_shadowDepthState);
+        _context.OutputMerger.SetBlendState(_depthOnlyBlendState);
+        _context.InputAssembler.InputLayout = _inputLayout;
+        _context.InputAssembler.PrimitiveTopology = PrimitiveTopology.TriangleList;
+        _context.VertexShader.Set(_vertexShader);
+        _context.VertexShader.SetConstantBuffer(0, _sceneBuffer);
+        _context.VertexShader.SetConstantBuffer(2, _skinningBuffer);
+        _context.VertexShader.SetConstantBuffer(3, _meshBuffer);
+        _context.PixelShader.Set(_shadowPixelShader);
+        _context.PixelShader.SetConstantBuffer(0, _sceneBuffer);
+        _context.PixelShader.SetConstantBuffer(1, _materialBuffer);
+        _context.PixelShader.SetConstantBuffer(5, _shadowBuffer);
+        _context.PixelShader.SetSampler(0, _materialSampler);
+
+        foreach (var draw in casters)
+        {
+            DrawShadowSection(draw.Mesh, draw.Section, draw.Material, animationTimeSeconds);
+        }
+
+        _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
+        scene.WorldViewProjection = Matrix.Identity * camera.CreateViewMatrix() * camera.CreateProjectionMatrix(_width / (float)_height);
+        _context.UpdateSubresource(ref scene, _sceneBuffer);
+        SetShadowConstants(lightViewProjection, enabled: true, options);
+        return casters.Length;
+    }
+
+    private void DrawShadowSection(
+        MeshBuffers mesh,
+        HeadPreviewSection section,
+        HeadPreviewMaterial definition,
+        float animationTimeSeconds)
+    {
+        _context.InputAssembler.SetVertexBuffers(0, new VertexBufferBinding(mesh.VertexBuffer, Marshal.SizeOf<GpuVertex>(), 0));
+        _context.InputAssembler.SetIndexBuffer(mesh.IndexBuffer, Format.R32_UInt, 0);
+        var meshConstants = new MeshConstants
+        {
+            SkinningParameters = new Vector4(mesh.ApplySkinning && _skinningPaletteCount > 0 ? 1 : 0, _skinningPaletteCount, 0, 0)
+        };
+        _context.UpdateSubresource(ref meshConstants, _meshBuffer);
+        var bindings = HeadPreviewMaterialBindings.Create(definition);
+        var material = HeadPreviewMaterialConstants.Create(definition, HeadPreviewRenderMode.Shaded, bindings);
+        if (definition.PreviewModel == HumanMaterialPreviewModel.VisorLens)
+        {
+            material.SecondaryColor = new Vector4(0, PeriodicPhase(animationTimeSeconds * 0.2f), 0, 0);
+            material.TertiaryColor = new Vector4(0, PeriodicPhase(animationTimeSeconds * -0.01f), 0, 0);
+            material.QuaternaryColor = new Vector4(0, PeriodicPhase(animationTimeSeconds * -0.05f), 0, 0);
+        }
+        _context.UpdateSubresource(ref material, _materialBuffer);
+        BindMaterial(definition, bindings, HeadPreviewRenderMode.Shaded);
+        // BindMaterial selects camera-view blend/depth states; the shadow pass
+        // always writes opaque depth after PSShadow has clipped coverage.
+        _context.OutputMerger.SetBlendState(_depthOnlyBlendState);
+        _context.OutputMerger.SetDepthStencilState(_shadowDepthState);
+        _context.Rasterizer.State = _shadowRasterizer;
+        _context.DrawIndexed(section.IndexCount, section.BaseIndex, 0);
+    }
+
+    private static bool IsShadowCaster((MeshBuffers Mesh, HeadPreviewSection Section, HeadPreviewMaterial Material) draw) =>
+        draw.Material.PreviewModel != HumanMaterialPreviewModel.VisorLens &&
+        (draw.Material.BlendMode is HeadMaterialBlendMode.Opaque or HeadMaterialBlendMode.Masked ||
+         draw.Material.BlendMode == HeadMaterialBlendMode.Translucent && draw.Material.Family == HeadMaterialFamily.Hair);
+
+    private System.Numerics.Vector3 ComputeShadowCenter(
+        IReadOnlyList<(MeshBuffers Mesh, HeadPreviewSection Section, HeadPreviewMaterial Material)> draws)
+    {
+        var min = new System.Numerics.Vector3(float.PositiveInfinity);
+        var max = new System.Numerics.Vector3(float.NegativeInfinity);
+        foreach (var mesh in draws.Select(draw => draw.Mesh).Distinct())
+        foreach (var vertex in mesh.CachedVertices)
+        {
+            var position = GetPosedPosition(mesh, vertex);
+            min = System.Numerics.Vector3.Min(min, position);
+            max = System.Numerics.Vector3.Max(max, position);
+        }
+        return IsFinite(min) && IsFinite(max)
+            ? (min + max) * 0.5f
+            : System.Numerics.Vector3.Zero;
+    }
+
+    private float ComputeShadowRadius(
+        IReadOnlyList<(MeshBuffers Mesh, HeadPreviewSection Section, HeadPreviewMaterial Material)> draws,
+        System.Numerics.Vector3 center)
+    {
+        var radiusSquared = 0f;
+        foreach (var mesh in draws.Select(draw => draw.Mesh).Distinct())
+        foreach (var vertex in mesh.CachedVertices)
+        {
+            radiusSquared = Math.Max(radiusSquared, System.Numerics.Vector3.DistanceSquared(GetPosedPosition(mesh, vertex), center));
+        }
+        return Math.Max(MathF.Sqrt(radiusSquared), 0.01f);
+    }
+
+    private System.Numerics.Vector3 GetPosedPosition(MeshBuffers mesh, HeadPreviewVertex vertex)
+    {
+        if (!mesh.ApplySkinning || _skinningPaletteCount == 0)
+        {
+            return vertex.Position;
+        }
+        Span<uint> indices = stackalloc uint[] { vertex.BoneIndex0, vertex.BoneIndex1, vertex.BoneIndex2, vertex.BoneIndex3 };
+        Span<float> weights = stackalloc float[] { vertex.BoneWeights.X, vertex.BoneWeights.Y, vertex.BoneWeights.Z, vertex.BoneWeights.W };
+        if (weights[0] + weights[1] + weights[2] + weights[3] <= 0.000001f)
+        {
+            weights[0] = 1;
+        }
+        var result = System.Numerics.Vector3.Zero;
+        var totalWeight = 0f;
+        for (var influence = 0; influence < 4; influence++)
+        {
+            var weight = weights[influence];
+            if (weight <= 0) continue;
+            var boneIndex = (int)indices[influence];
+            // The GPU palette is identity-filled past its active entries.
+            // Preserve that behavior for valid, unused slots here too.
+            result += boneIndex >= 0 && boneIndex < _skinningPalette.Length
+                ? System.Numerics.Vector3.Transform(vertex.Position, _skinningPalette[boneIndex]) * weight
+                : vertex.Position * weight;
+            totalWeight += weight;
+        }
+        return totalWeight > 0.000001f ? result / totalWeight : vertex.Position;
+    }
+
+    private void SetShadowConstants(Matrix lightViewProjection, bool enabled, HeadPreviewOptions options)
+    {
+        var parameters = new ShadowConstants
+        {
+            LightViewProjection = lightViewProjection,
+            ShadowParameters = new Vector4(
+                enabled ? 1 : 0,
+                1f / ShadowMapSize,
+                Math.Clamp(options.ShadowDepthBias, 0, 0.01f),
+                Math.Clamp(options.ShadowNormalBias, 0, 0.1f) * Math.Max(_shadowRadius, 0.01f))
+        };
+        _context.UpdateSubresource(ref parameters, _shadowBuffer);
+        _context.PixelShader.SetConstantBuffer(5, _shadowBuffer);
+        _context.PixelShader.SetSampler(2, _shadowSampler);
     }
 
     private void DrawSection(
@@ -534,7 +787,9 @@ public sealed class HeadPreviewRenderer : IDisposable
         _context.PixelShader.Set(_pixelShader);
         _context.PixelShader.SetConstantBuffer(0, _sceneBuffer);
         _context.PixelShader.SetConstantBuffer(1, _materialBuffer);
+        _context.PixelShader.SetConstantBuffer(5, _shadowBuffer);
         _context.PixelShader.SetSampler(0, _materialSampler);
+        _context.PixelShader.SetSampler(2, _shadowSampler);
     }
 
     private static Vector4 ToDirection(HeadPreviewDirectionalLight light, HeadOrbitCamera camera)
@@ -846,6 +1101,36 @@ public sealed class HeadPreviewRenderer : IDisposable
     private static float ClampFinite(float value, float fallback, float minimum, float maximum) =>
         float.IsFinite(value) ? Math.Clamp(value, minimum, maximum) : fallback;
 
+    private void CreateShadowMap()
+    {
+        _shadowTexture = new Texture2D(_device, new Texture2DDescription
+        {
+            Width = ShadowMapSize,
+            Height = ShadowMapSize,
+            MipLevels = 1,
+            ArraySize = 1,
+            Format = Format.R32_Typeless,
+            SampleDescription = new SampleDescription(1, 0),
+            Usage = ResourceUsage.Default,
+            BindFlags = BindFlags.DepthStencil | BindFlags.ShaderResource,
+            CpuAccessFlags = CpuAccessFlags.None,
+            OptionFlags = ResourceOptionFlags.None
+        });
+        _shadowDepthView = new DepthStencilView(_device, _shadowTexture, new DepthStencilViewDescription
+        {
+            Format = Format.D32_Float,
+            Dimension = DepthStencilViewDimension.Texture2D,
+            Flags = DepthStencilViewFlags.None,
+            Texture2D = new DepthStencilViewDescription.Texture2DResource { MipSlice = 0 }
+        });
+        _shadowShaderView = new ShaderResourceView(_device, _shadowTexture, new ShaderResourceViewDescription
+        {
+            Format = Format.R32_Float,
+            Dimension = ShaderResourceViewDimension.Texture2D,
+            Texture2D = new ShaderResourceViewDescription.Texture2DResource { MostDetailedMip = 0, MipLevels = 1 }
+        });
+    }
+
     private void CreateRenderTargets()
     {
         _renderTexture = new Texture2D(_device, new Texture2DDescription
@@ -1104,6 +1389,9 @@ public sealed class HeadPreviewRenderer : IDisposable
         value.M31, value.M32, value.M33, value.M34,
         value.M41, value.M42, value.M43, value.M44);
 
+    private static bool IsFinite(System.Numerics.Vector3 value) =>
+        float.IsFinite(value.X) && float.IsFinite(value.Y) && float.IsFinite(value.Z);
+
     private void DisposeMeshes()
     {
         foreach (var mesh in _meshes)
@@ -1204,6 +1492,10 @@ public sealed class HeadPreviewRenderer : IDisposable
         DisposeMeshes();
         DisposeMaterialTextures();
         DisposeRenderTargets();
+        _shadowShaderView.Dispose();
+        _shadowDepthView.Dispose();
+        _shadowTexture.Dispose();
+        _shadowSampler.Dispose();
         _postSampler.Dispose();
         _materialSampler.Dispose();
         _depthOnlyBlendState.Dispose();
@@ -1211,6 +1503,7 @@ public sealed class HeadPreviewRenderer : IDisposable
         _translucentBlendState.Dispose();
         _opaqueBlendState.Dispose();
         _depthReadState.Dispose();
+        _shadowDepthState.Dispose();
         _depthState.Dispose();
         _wireframeFrontFacesRasterizer.Dispose();
         _wireframeBackFacesRasterizer.Dispose();
@@ -1218,13 +1511,16 @@ public sealed class HeadPreviewRenderer : IDisposable
         _solidBackFacesRasterizer.Dispose();
         _wireframeRasterizer.Dispose();
         _solidRasterizer.Dispose();
+        _shadowRasterizer.Dispose();
         _materialBuffer.Dispose();
+        _shadowBuffer.Dispose();
         _postProcessBuffer.Dispose();
         _meshBuffer.Dispose();
         _skinningBuffer.Dispose();
         _sceneBuffer.Dispose();
         _inputLayout.Dispose();
         _pixelShader.Dispose();
+        _shadowPixelShader.Dispose();
         _vertexShader.Dispose();
         _postPixelShader.Dispose();
         _postVertexShader.Dispose();
@@ -1273,6 +1569,13 @@ public sealed class HeadPreviewRenderer : IDisposable
         public Vector4 GroundColor;
         public Vector4 HorizonColor;
         public Vector4 EnvironmentParameters;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ShadowConstants
+    {
+        public Matrix LightViewProjection;
+        public Vector4 ShadowParameters;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -1354,8 +1657,11 @@ public sealed class HeadPreviewRenderer : IDisposable
         bool IsAttachment,
         bool ApplySkinning,
         string Name,
-        int VertexCount) : IDisposable
+        int VertexCount,
+        HeadPreviewVertex[] CpuVertices) : IDisposable
     {
+        public HeadPreviewVertex[] CachedVertices { get; set; } = CpuVertices;
+
         public void Dispose()
         {
             IndexBuffer.Dispose();

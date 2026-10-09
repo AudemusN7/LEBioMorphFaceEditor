@@ -67,6 +67,39 @@ Texture2D CustomBrowTexture : register(t15);
 Texture2D CustomScarTexture : register(t16);
 SamplerState MaterialSampler : register(s0);
 
+cbuffer ShadowConstants : register(b5)
+{
+    row_major float4x4 LightViewProjection;
+    // Enabled, texel size, comparison-depth bias, world-space normal bias.
+    float4 ShadowParameters;
+};
+Texture2D<float> KeyShadowTexture : register(t17);
+SamplerComparisonState ShadowSampler : register(s2);
+
+float KeyShadowVisibility(float3 worldPosition, float3 geometricNormal)
+{
+    if (ShadowParameters.x < 0.5) return 1;
+    float facing = dot(geometricNormal, normalize(KeyLightDirection.xyz));
+    float3 offset = geometricNormal * (facing >= 0 ? 1 : -1)
+        * ShadowParameters.w * (1 - saturate(abs(facing)));
+    float4 projected = mul(float4(worldPosition + offset, 1), LightViewProjection);
+    float3 lightPosition = projected.xyz / projected.w;
+    float2 uv = lightPosition.xy * float2(0.5, -0.5) + 0.5;
+    if (any(uv < 0) || any(uv > 1) || lightPosition.z < 0 || lightPosition.z > 1)
+        return 1;
+    float visibility = 0;
+    [unroll]
+    for (int y = -1; y <= 1; ++y)
+    {
+        [unroll]
+        for (int x = -1; x <= 1; ++x)
+            visibility += KeyShadowTexture.SampleCmpLevelZero(ShadowSampler,
+                uv + float2(x, y) * ShadowParameters.y,
+                lightPosition.z - ShadowParameters.z);
+    }
+    return visibility / 9;
+}
+
 cbuffer PostProcessConstants : register(b4)
 {
     row_major float4x4 InverseProjection;
@@ -1093,6 +1126,7 @@ float4 AttachmentPreview(VertexOutput input, bool isFrontFace, out float4 aoNorm
     float3 bitangent = normalize(cross(geometricNormal, tangent)) * input.Tangent.w;
     float3 view = normalize(CameraPosition.xyz - input.WorldPosition);
     float3 key = normalize(KeyLightDirection.xyz);
+    float3 shadowedKeyColor = KeyLightColor.rgb * KeyShadowVisibility(input.WorldPosition, geometricNormal);
     float3 fill = normalize(FillLightDirection.xyz);
     float3 rim = normalize(RimLightDirection.xyz);
     if (SurfaceParameters.y > 0.5)
@@ -1191,7 +1225,7 @@ float4 AttachmentPreview(VertexOutput input, bool isFrontFace, out float4 aoNorm
     if (LightingParameters.w > 0.5)
         return float4(pow(saturate(albedo + emissive), 1.0 / 2.2), alpha);
     float3 lit = ambientAlbedo * AmbientColor.rgb
-        + AttachmentDirectLight(model, le3, rawNormal, normal, view, key, albedo, diffuse, specMap, viewFactor) * KeyLightColor.rgb
+        + AttachmentDirectLight(model, le3, rawNormal, normal, view, key, albedo, diffuse, specMap, viewFactor) * shadowedKeyColor
         + AttachmentDirectLight(model, le3, rawNormal, normal, view, fill, albedo, diffuse, specMap, viewFactor) * FillLightColor.rgb
         + AttachmentDirectLight(model, le3, rawNormal, normal, view, rim, albedo, diffuse, specMap, viewFactor) * RimLightColor.rgb;
     return float4(pow(saturate(lit * LightingParameters.x + emissive), 1.0 / 2.2), alpha);
@@ -2051,7 +2085,7 @@ float4 PSMain(
         {
             // Hair depth-only pass. The renderer supplies 1.0 for UE3's lit
             // translucency ScreenDoor prepass and 1/255 for its post-render
-            // depth pass; the material's 0.333 mask clip belongs to shadows.
+            // depth pass; shadow alpha testing is a separate preview pass.
             clip(alpha + SurfaceParameters.x);
             return 0;
         }
@@ -2154,6 +2188,7 @@ float4 PSMain(
     // CPU-side camera parenting converts the rig into world-space directions
     // for this frame. Orbiting therefore rotates the rig around the head.
     float3 keyLight = normalize(KeyLightDirection.xyz);
+    float3 shadowedKeyColor = KeyLightColor.rgb * KeyShadowVisibility(input.WorldPosition, geometricNormal);
     float3 fillLight = normalize(FillLightDirection.xyz);
     float3 rimLight = normalize(RimLightDirection.xyz);
     // A compact UE3-era environment model: soft-edged directional sources,
@@ -2175,19 +2210,19 @@ float4 PSMain(
     // crushed by a wholesale relight.
     float3 environmentLighting = lerp(AmbientColor.rgb, shapedEnvironment, 0.1);
     float3 diffuseLighting = environmentLighting
-        + KeyLightColor.rgb * keyDiffuse
+        + shadowedKeyColor * keyDiffuse
         + FillLightColor.rgb * fillDiffuse
         + RimLightColor.rgb * rimDiffuse;
     float3 specularLighting =
         EvaluateSpecular(family, normal, lensNormal, outerLensNormal, tangent, bitangent, view, keyLight, diffuseSample, maskSample, detailSample, faceSelector, albedo, materialUv)
-            * KeyLightColor.rgb
+            * shadowedKeyColor
         + EvaluateSpecular(family, normal, lensNormal, outerLensNormal, tangent, bitangent, view, fillLight, diffuseSample, maskSample, detailSample, faceSelector, albedo, materialUv)
             * FillLightColor.rgb
         + EvaluateSpecular(family, normal, lensNormal, outerLensNormal, tangent, bitangent, view, rimLight, diffuseSample, maskSample, detailSample, faceSelector, albedo, materialUv)
             * RimLightColor.rgb;
     float3 subsurfaceLighting =
         EvaluateSubsurfaceLight(family, le3, normal, view, keyLight, diffuseSample, albedo, scatteringAlbedo, surfaceSelector, transmissionFactor)
-            * KeyLightColor.rgb
+            * shadowedKeyColor
         + EvaluateSubsurfaceLight(family, le3, normal, view, fillLight, diffuseSample, albedo, scatteringAlbedo, surfaceSelector, transmissionFactor)
             * FillLightColor.rgb
         + EvaluateSubsurfaceLight(family, le3, normal, view, rimLight, diffuseSample, albedo, scatteringAlbedo, surfaceSelector, transmissionFactor)
@@ -2202,7 +2237,7 @@ float4 PSMain(
             ? AuxiliaryTexture1.Sample(MaterialSampler, materialUv).g : 0;
         lit = (albedo * environmentLighting
             + LegacyScalpDirectLight(normal, geometricNormal, tangent, bitangent, view, keyLight,
-                diffuseSample, maskSample.rgb, teeth, materialUv) * KeyLightColor.rgb
+                diffuseSample, maskSample.rgb, teeth, materialUv) * shadowedKeyColor
             + LegacyScalpDirectLight(normal, geometricNormal, tangent, bitangent, view, fillLight,
                 diffuseSample, maskSample.rgb, teeth, materialUv) * FillLightColor.rgb
             + LegacyScalpDirectLight(normal, geometricNormal, tangent, bitangent, view, rimLight,
@@ -2249,7 +2284,7 @@ float4 PSMain(
         float3 maskedHairLighting = environmentLighting * (
             diffuseSample.rgb * tangentEnergy
             + specularColour * ambientSpecular);
-        maskedHairLighting += KeyLightColor.rgb * EvaluateMaskedHairLight(
+        maskedHairLighting += shadowedKeyColor * EvaluateMaskedHairLight(
             geometricNormal, fibreTangent, view, keyLight, diffuseSample.rgb, specularColour);
         maskedHairLighting += FillLightColor.rgb * EvaluateMaskedHairLight(
             geometricNormal, fibreTangent, view, fillLight, diffuseSample.rgb, specularColour);
@@ -2298,6 +2333,18 @@ float4 PSMain(
         alpha = 1;
     }
     return float4(pow(saturate(lit), 1.0 / 2.2), saturate(alpha));
+}
+
+void PSShadow(VertexOutput input)
+{
+    // Reuse the material pass's coverage decisions, including masked scalp,
+    // alien faces and PROShort01's 0.15 red clip. The compiler discards the
+    // unused lighting result. Translucent cards retain their authored opacity
+    // map with a 0.333 preview cutoff, independently of their camera-view
+    // depth pre/post passes (continuous transparency needs a binary depth test).
+    float4 unusedNormal;
+    float opacity = PSMain(input, true, unusedNormal).a;
+    clip(opacity - 0.3333);
 }
 
 struct PostVertexOutput

@@ -55,6 +55,7 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
     public event EventHandler? ManualSelectionCommitted;
 
     public string Label { get; }
+    public string HoverText => SlotIndex == 0 ? "m_oHairMesh" : "m_oOtherMeshes";
     public int SlotIndex { get; }
     /// <summary>Command supplied by the face editor for hair-specific randomisation.</summary>
     public ICommand? RandomiseCommand => _randomiseCommand;

@@ -1471,7 +1471,7 @@ No: descarta las bases de datos de recursos personalizados después de reconstru
   <system:String x:Key="loc_VM_actorAssignment_unresolved" xml:space="preserve">sin resolver</system:String>
   <system:String x:Key="loc_VM_actorAssignment_warningsHeading" xml:space="preserve">ADVERTENCIAS</system:String>
   <system:String x:Key="loc_VM_boneTransform_invalidAxes" xml:space="preserve">Una transformación de hueso requiere controles para los ejes X, Y y Z.</system:String>
-  <system:String x:Key="loc_VM_faceEditor_accessoryMesh" xml:space="preserve">Malla accesoria</system:String>
+  <system:String x:Key="loc_VM_faceEditor_accessoryMesh" xml:space="preserve">Otra malla</system:String>
   <system:String x:Key="loc_VM_faceEditor_attachmentHeading" xml:space="preserve">MALLAS DE CABELLO / ACCESORIOS</system:String>
   <system:String x:Key="loc_VM_faceEditor_attachmentHeadingPreviewOnly" xml:space="preserve">MALLAS DE CABELLO / ACCESORIOS (solo vista previa)</system:String>
   <system:String x:Key="loc_VM_faceEditor_cursedRandomisationLog" xml:space="preserve">Aleatorización caótica: {0} deslizadores de morph, {1} huesos faciales y {2} valores de materiales, con intensidades de morph y materiales del {3}%/{4}% y semilla del generador aleatorio {5}.</system:String>

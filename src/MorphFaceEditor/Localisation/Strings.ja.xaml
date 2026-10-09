@@ -1469,7 +1469,7 @@
   <system:String x:Key="loc_VM_actorAssignment_unresolved" xml:space="preserve">未解決</system:String>
   <system:String x:Key="loc_VM_actorAssignment_warningsHeading" xml:space="preserve">警告</system:String>
   <system:String x:Key="loc_VM_boneTransform_invalidAxes" xml:space="preserve">ボーン変換には、X、Y、Z 軸それぞれの編集コントロールが必要です。</system:String>
-  <system:String x:Key="loc_VM_faceEditor_accessoryMesh" xml:space="preserve">アクセサリメッシュ</system:String>
+  <system:String x:Key="loc_VM_faceEditor_accessoryMesh" xml:space="preserve">その他のメッシュ</system:String>
   <system:String x:Key="loc_VM_faceEditor_attachmentHeading" xml:space="preserve">髪／アクセサリメッシュ</system:String>
   <system:String x:Key="loc_VM_faceEditor_attachmentHeadingPreviewOnly" xml:space="preserve">髪／アクセサリメッシュ (プレビューのみ)</system:String>
   <system:String x:Key="loc_VM_faceEditor_cursedRandomisationLog" xml:space="preserve">ランダム化モーフスライダー {0} 個、顔ボーン {1} 個、マテリアル値 {2} 個。モーフ／マテリアル強度 {3}%/{4}%、乱数シード {5}。</system:String>

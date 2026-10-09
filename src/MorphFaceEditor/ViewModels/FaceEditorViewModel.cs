@@ -175,7 +175,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             ? Loc.Text("loc_VM_faceEditor_attachmentHeadingPreviewOnly")
             : Loc.Text("loc_VM_faceEditor_attachmentHeading");
         HairMesh = new HairMeshEditorViewModel(
-            hairSession, meshCandidates, previewOnlyAttachments ? Loc.Text("loc_VM_faceEditor_hairMesh") : "m_oHairMesh", 0);
+            hairSession, meshCandidates, Loc.Text("loc_VM_faceEditor_hairMesh"), 0);
         _hairRandomiseCommand = new RelayCommand(
             () => Randomise(HairRandomisationScope(), includeCursedBones: false),
             CanRandomiseHair);
@@ -185,7 +185,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             .Select((otherSession, index) => new HairMeshEditorViewModel(
                 otherSession,
                 meshCandidates,
-                previewOnlyAttachments ? Loc.Text("loc_VM_faceEditor_accessoryMesh") : "m_oOtherMeshes",
+                Loc.Text("loc_VM_faceEditor_accessoryMesh"),
                 index + 1))
             .ToArray();
         AttachmentMeshes = [HairMesh, .. OtherMeshes];

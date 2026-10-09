@@ -1471,7 +1471,7 @@ No: elimina i database delle risorse personalizzate dopo una ricostruzione riusc
   <system:String x:Key="loc_VM_actorAssignment_unresolved" xml:space="preserve">non risolto</system:String>
   <system:String x:Key="loc_VM_actorAssignment_warningsHeading" xml:space="preserve">AVVISI</system:String>
   <system:String x:Key="loc_VM_boneTransform_invalidAxes" xml:space="preserve">Una trasformazione ossea richiede editor degli assi X, Y e Z corrispondenti.</system:String>
-  <system:String x:Key="loc_VM_faceEditor_accessoryMesh" xml:space="preserve">Mesh accessoria</system:String>
+  <system:String x:Key="loc_VM_faceEditor_accessoryMesh" xml:space="preserve">Altra mesh</system:String>
   <system:String x:Key="loc_VM_faceEditor_attachmentHeading" xml:space="preserve">MESH DEI CAPELLI / ACCESSORI</system:String>
   <system:String x:Key="loc_VM_faceEditor_attachmentHeadingPreviewOnly" xml:space="preserve">MESH DEI CAPELLI / ACCESSORI (solo anteprima)</system:String>
   <system:String x:Key="loc_VM_faceEditor_cursedRandomisationLog" xml:space="preserve">Randomizzazione caotica: {0} slider morph, {1} ossa facciali e {2} valori dei materiali. Intensità morph/materiali: {3}%/{4}%; seme RNG: {5}.</system:String>

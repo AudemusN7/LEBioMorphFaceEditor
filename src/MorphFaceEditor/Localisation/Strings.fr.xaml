@@ -1471,7 +1471,7 @@ Non : supprimer les bases de données de ressources personnalisées après une r
   <system:String x:Key="loc_VM_actorAssignment_unresolved" xml:space="preserve">non résolu</system:String>
   <system:String x:Key="loc_VM_actorAssignment_warningsHeading" xml:space="preserve">AVERTISSEMENTS</system:String>
   <system:String x:Key="loc_VM_boneTransform_invalidAxes" xml:space="preserve">Une transformation d’os nécessite des éditeurs d’axes X, Y et Z correspondants.</system:String>
-  <system:String x:Key="loc_VM_faceEditor_accessoryMesh" xml:space="preserve">Maillage accessoire</system:String>
+  <system:String x:Key="loc_VM_faceEditor_accessoryMesh" xml:space="preserve">Autre maillage</system:String>
   <system:String x:Key="loc_VM_faceEditor_attachmentHeading" xml:space="preserve">MAILLAGES DE CHEVEUX / ACCESSOIRES</system:String>
   <system:String x:Key="loc_VM_faceEditor_attachmentHeadingPreviewOnly" xml:space="preserve">MAILLAGES DE CHEVEUX / ACCESSOIRES (aperçu uniquement)</system:String>
   <system:String x:Key="loc_VM_faceEditor_cursedRandomisationLog" xml:space="preserve">Randomisation maudite : {0} curseurs de morph, {1} os du visage et {2} valeurs de matériau aux intensités morph/matériau {3}%/{4}%, avec la graine RNG {5}.</system:String>

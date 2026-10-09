@@ -50,7 +50,7 @@ cbuffer MaterialConstants : register(b1)
     float4 EyeParameters2;
     float4 EyeEmissiveColor;
     float4 BlushColor;
-    float4 FemaleParameters;
+    float4 HumanParameters;
 };
 
 Texture2D DiffuseTexture : register(t0);
@@ -227,6 +227,111 @@ float FibreLobe(float3 fibre, float3 halfDirection, float power)
     return pow(max(sqrt(saturate(1 - tangentDot * tangentDot)), 0.0001), power);
 }
 
+struct LegacyScalpLobes
+{
+    float3 First;
+    float3 Second;
+    float PrimaryPower;
+    float SecondaryPower;
+    float PrimaryGain;
+    float SecondaryGain;
+    float DiffuseGain;
+    float LobeScale;
+};
+
+LegacyScalpLobes LegacyScalpDirections(float3 geometricNormal, float3 tangent,
+    float3 bitangent, float2 uv)
+{
+    // LE1/LE2 reconstruct HED_Tang.Z from RG, then shift all three components
+    // with SpecShift2.G sampled at twice the material UV. This is independent
+    // of the scalp surface normal used for the ordinary Phong reflection.
+    float3 fibre = TextureFlags0.w > 0.5
+        ? DecodeNormal(DetailTexture.Sample(MaterialSampler, uv)) : float3(0, 0, 1);
+    float shift = TextureFlags1.z > 0.5
+        ? AuxiliaryTexture3.Sample(MaterialSampler, uv * 2).g - 0.5 : 0;
+    float3 first = normalize(fibre + shift * 0.5);
+    float3 second = normalize(fibre + shift * 0.3);
+    LegacyScalpLobes lobes;
+    lobes.First = normalize(tangent * first.x + bitangent * first.y + geometricNormal * first.z);
+    lobes.Second = normalize(tangent * second.x + bitangent * second.y + geometricNormal * second.z);
+    float level = SecondaryColor.r;
+    lobes.PrimaryPower = level <= 0.09 ? 400 : (level < 0.4 ? 200 : 100);
+    lobes.SecondaryPower = level <= 0.09 ? 30 : 15;
+    lobes.PrimaryGain = level <= 0.09 ? 2.5 : (level < 0.4 ? 2 : 1.25);
+    lobes.SecondaryGain = level <= 0.09 ? 1 : (level < 0.4 ? 1.5 : 1);
+    if (HumanParameters.y > 0.5 && level < 0.0125)
+    {
+        lobes.PrimaryGain = 20;
+        lobes.SecondaryGain = 8;
+    }
+    lobes.DiffuseGain = level <= 0.09 ? 0.5 : 0.25;
+    lobes.LobeScale = level <= 0.09 ? 1 : 0.5;
+    return lobes;
+}
+
+float3 LegacyScalpAlbedo(float3 diffuse, float3 packedMask, float teeth,
+    LegacyScalpLobes lobes, float3 halfDirection)
+{
+    // Recovered LE1/LE2 base and directional passes share this composition.
+    // Colour magnitude remains in the raw HairColour term; threshold bands
+    // select lobe powers/gains, rather than replacing the diffuse brightness.
+    float3 mask = packedMask * ScalpParameters0.x;
+    float3 overlay = 1 - ScalpParameters0.z * mask;
+    float3 maskedDiffuse = diffuse * mask;
+    float3 hair = maskedDiffuse * (
+        FibreLobe(lobes.First, halfDirection, lobes.PrimaryPower) * saturate(SecondaryColor.rgb * lobes.PrimaryGain)
+        + FibreLobe(lobes.Second, halfDirection, lobes.SecondaryPower) * saturate(SecondaryColor.rgb * lobes.SecondaryGain))
+        * lobes.LobeScale;
+    float3 rawHair = sqrt(max(maskedDiffuse * maskedDiffuse, 0.0001))
+        * lobes.DiffuseGain * SecondaryColor.rgb;
+    hair += rawHair * (HumanParameters.y > 0.5 ? 1.5 : 1);
+    float3 maskedHair = packedMask * hair;
+    float3 teethColour = HumanParameters.y > 0.5
+        ? float3(0.723, 0.311, 0.184) : TertiaryColor.rgb;
+    float3 skin = diffuse * BaseColor.rgb * overlay * (1 - teeth);
+    float3 composed = skin + diffuse * teeth * teethColour + maskedHair;
+    return lerp(composed, maskedHair, mask * ScalpParameters0.y);
+}
+
+float3 LegacyScalpDirectLight(float3 normal, float3 geometricNormal, float3 tangent,
+    float3 bitangent, float3 view, float3 light, float4 diffuse, float3 packedMask,
+    float teeth, float2 uv)
+{
+    LegacyScalpLobes lobes = LegacyScalpDirections(geometricNormal, tangent, bitangent, uv);
+    float3 halfDirection = normalize(view + light);
+    float3 albedo = LegacyScalpAlbedo(diffuse.rgb, packedMask, teeth, lobes, halfDirection);
+    float3 mask = packedMask * ScalpParameters0.x;
+    float3 overlay = 1 - ScalpParameters0.z * mask;
+    float3 hairColour = abs(SecondaryColor.rgb);
+    float3 poweredTint = pow(max(hairColour / max(length(hairColour), 0.0001), 0.0001),
+        max(ScalpParameters1.w, 0.1));
+    float3 desaturatedTint = lerp(poweredTint,
+        dot(poweredTint, float3(0.3, 0.59, 0.11)), ScalpParameters2.x);
+    float shift = TextureFlags1.y > 0.5
+        ? AuxiliaryTexture2.Sample(MaterialSampler, uv).r : 1;
+    // Native direct specular crosses the powers of the two shifted lobes.
+    float3 hairSpecular = (
+        FibreLobe(lobes.First, halfDirection, lobes.SecondaryPower) * desaturatedTint
+        + FibreLobe(lobes.Second, halfDirection, lobes.PrimaryPower) * poweredTint)
+        * shift * diffuse.a * mask * ScalpParameters1.z;
+    float3 skinSpecular = diffuse.a * (1 - teeth * ScalpParameters1.y)
+        * overlay * SpecularColor.rgb;
+    float phong = pow(max(saturate(dot(reflect(-view, normal), light)), 0.0001),
+        max(GeneralParameters.y, 0.1));
+    float normalLight = dot(normal, light);
+    float3 wrap = (1 - diffuse.a) * (1 - teeth) * overlay * ScatterColor.rgb * 0.5;
+    float3 diffuseResponse = saturate((normalLight + wrap) / max(1 + wrap, 0.0001));
+    if (HumanParameters.y > 0.5)
+    {
+        // LE2 scalp uses Diff.B * TMis * TClr as both target and blend weight,
+        // exactly like the face. N.L belongs only to the wrapped-light input.
+        // LE1's scalp permutation has no live transmission input.
+        float3 transmission = diffuse.b * GeneralParameters.x * TransmissionColor.rgb;
+        diffuseResponse = lerp(diffuseResponse, transmission, transmission);
+    }
+    return albedo * diffuseResponse + max(skinSpecular + hairSpecular, 0) * phong;
+}
+
 float3 EvaluateHumanHairStack(float4 stack, float3 tangent, float3 halfDirection)
 {
     float tangentDot = dot(tangent, halfDirection);
@@ -308,6 +413,13 @@ float3 EvaluateSpecular(
                 : 0;
             float lipMask = saturate(
                 (1 - makeupSample.b) * makeupSample.a * GeneralParameters.z);
+            // LE2's shine controls use independent makeup selectors: green
+            // for intensity and alpha for power. Lip colour strength is not
+            // part of either compiled specular selector.
+            float lipSpecularMask = HumanParameters.y > 0.5
+                ? (1 - makeupSample.b) * makeupSample.g : lipMask;
+            float lipPowerMask = HumanParameters.y > 0.5
+                ? (1 - makeupSample.b) * makeupSample.a : lipMask;
             float additionAlpha = TextureFlags0.w > 0.5 ? detailSample.a : 0;
             float baseCoverage = saturate(diffuseSample.a);
             float additionSuppression = lerp(
@@ -315,14 +427,14 @@ float3 EvaluateSpecular(
                 1 - saturate(additionAlpha),
                 saturate(SkinParameters1.z));
             float3 femaleTint = SpecularColor.rgb * baseCoverage * additionSuppression
-                + lipMask * max(SkinParameters1.w, 0);
+                + lipSpecularMask * max(SkinParameters1.w, 0);
             // HMF direct-light FXC: base HED_SPwr remains active outside the
             // addition mask. The mask replaces/suppresses that base exponent
             // with the addition exponent; lips then add their own exponent.
             float femalePower = max(
                 GeneralParameters.y
                 + additionAlpha * (SkinParameters2.z - SkinParameters1.z * GeneralParameters.y)
-                + lipMask * SkinParameters2.w,
+                + lipPowerMask * SkinParameters2.w,
                 0.1);
             return pow(max(reflectedViewLight, 0.0001), femalePower) * max(femaleTint, 0);
         }
@@ -650,54 +762,9 @@ float3 EvaluateSpecular(
                 * max(le3Tint, 0);
         }
 
-        // The compiled LE1 scalp material has two deliberately separate
-        // specular regions. HED_Spec_Add_Vector is the ordinary scalp/skin
-        // response outside the packed hair mask; the anisotropic response is
-        // inside that mask and is scaled by HED_Scalp_PhongSpec. Treating the
-        // vector as a tint for both lobes produces a broad glossy shell over
-        // buzz-cut hair.
-        float3 scalpHairMask = TextureFlags0.z > 0.5
-            ? saturate(maskSample.rgb * max(ScalpParameters0.x, 0))
-            : 0;
-        float teethSelector = TextureFlags1.x > 0.5
-            ? AuxiliaryTexture1.Sample(MaterialSampler, materialUv).g
-            : 0;
-        float3 baseSpecularCoverage = saturate(
-            diffuseSample.a
-            * saturate(1 - teethSelector * ScalpParameters1.y)
-            * (1 - scalpHairMask * max(ScalpParameters0.z, 0)));
-        float hairLevel = max(max(SecondaryColor.r, SecondaryColor.g), SecondaryColor.b);
-        float3 normalizedHair = max(SecondaryColor.rgb / max(hairLevel, 0.001), 0.0001);
-        float3 anisotropicTint = pow(normalizedHair, max(ScalpParameters1.w, 0.1));
-        anisotropicTint = lerp(
-            anisotropicTint,
-            Luminance(anisotropicTint),
-            saturate(ScalpParameters2.x));
-
-        float tangentDot = saturate(abs(dot(tangent, halfDirection)));
-        float tangentLobe = sqrt(saturate(1 - tangentDot * tangentDot));
-        float highlightPower = hairLevel < 0.09 ? 400 : (hairLevel < 0.4 ? 200 : 100);
-        float anisotropic = pow(max(tangentLobe, 0.0001), highlightPower);
-        float shift = 1;
-        if (TextureFlags1.y > 0.5)
-        {
-            shift = AuxiliaryTexture2.Sample(MaterialSampler, materialUv).r;
-        }
-        if (TextureFlags1.z > 0.5)
-        {
-            shift = 0.5 * (shift + AuxiliaryTexture3.Sample(MaterialSampler, materialUv).r);
-        }
-
-        float phong = pow(max(reflectedViewLight, 0.0001), max(GeneralParameters.y, 0.1));
-        float phongStrength = max(ScalpParameters1.z, 0);
-        float3 baseSpecular = max(SpecularColor.rgb, 0) * baseSpecularCoverage;
-        float3 hairSpecular = anisotropicTint
-            * scalpHairMask
-            * phongStrength
-            * anisotropic
-            * saturate(shift)
-            * 0.12;
-        return phong * (baseSpecular + hairSpecular);
+        // LegacyScalpDirectLight evaluates diffuse and both native hair lobes
+        // together, because its diffuse composition also depends on the light.
+        return 0;
     }
     else if (family == 3)
     {
@@ -807,6 +874,10 @@ float3 EvaluateSubsurfaceLight(
     float4 surfaceSelector,
     float transmissionFactor)
 {
+    if (family == 2 && !le3)
+    {
+        return 0; // Evaluated with the native scalp's diffuse response below.
+    }
     if (family != 1 && family != 2 && family != 3 && family != 6 && family != 7 && family != 9 && family != 11 && family != 13 && family != 15)
     {
         return 0;
@@ -881,13 +952,18 @@ float3 EvaluateSubsurfaceLight(
     float directDiffuse = saturate(normalLight);
     float3 wrapContribution = max(wrappedDiffuse - directDiffuse, 0);
 
-    if (le3 && (family == 1 || family == 2))
+    if (family == 1 || (le3 && family == 2))
     {
-        // The compiled LE3 human face and scalp permutations share this
-        // component-wise transmission equation. Both localise HED_TMis with
-        // diffuse blue; using face alpha here made their shared edge diverge.
+        // Native human direct-light passes blend wrapped diffuse toward the
+        // localized transmission colour, using that colour as the blend weight.
+        // LE1 male faces additionally multiply the target by diffuse RGB;
+        // female faces and LE2/LE3 faces do not.
         float3 localizedTransmission = max(TransmissionColor.rgb, 0)
             * max(transmissionFactor, 0);
+        if (family == 1 && !le3 && HumanParameters.y < 0.5 && SkinParameters3.w < 0.5)
+        {
+            localizedTransmission *= diffuseSample.rgb;
+        }
         float3 compiledLighting = lerp(
             wrappedDiffuse,
             localizedTransmission,
@@ -1404,13 +1480,13 @@ float4 PSMain(
     }
     else if (family == 1)
     {
-        // LE3 consumes SkinTone directly; the 3.5 gain belongs only to the
-        // original LE1/LE2 human face graph.
-        float3 skinTint = le3 ? max(BaseColor.rgb, 0) : max(BaseColor.rgb * 3.5, 0.08);
+        // LE1/LE2 HMM and HMF base passes consume SkinTone directly, like LE3.
+        // The female graph's 3.5 gain belongs only to its lip-colour branch.
+        float3 skinTint = max(BaseColor.rgb, 0);
         // HED_TMis controls the direct-light transmission branch in LE1; it
         // never disables SkinTone in the base diffuse branch.
         albedo = diffuseSample.rgb * skinTint;
-        transmissionFactor = (le3 ? diffuseSample.b : diffuseSample.a)
+        transmissionFactor = (le3 || HumanParameters.y > 0.5 ? diffuseSample.b : diffuseSample.a)
             * max(GeneralParameters.x, 0);
 
         if (TextureFlags1.x > 0.5)
@@ -1480,7 +1556,7 @@ float4 PSMain(
             // follows brow, eyeshadow, lips, and both Addn colour layers.
             float blushMask = makeupSample.b * makeupSample.a;
             float3 blushFactor = lerp(1, BlushColor.rgb, blushMask);
-            albedo = lerp(albedo, albedo * blushFactor, FemaleParameters.x);
+            albedo = lerp(albedo, albedo * blushFactor, HumanParameters.x);
         }
         else if (TextureFlags0.w > 0.5)
         {
@@ -1897,35 +1973,15 @@ float4 PSMain(
         }
         else
         {
-        float3 scalpMask = TextureFlags0.z > 0.5
-            ? saturate(maskSample.rgb * ScalpParameters0.x)
-            : 0;
-        float hairCoverage = saturate(Luminance(scalpMask));
-        float3 skinTint = max(BaseColor.rgb * 3.5, 0.08);
-        float3 skinAlbedo = diffuseSample.rgb * skinTint;
-        // The compiled base pass uses HED_Scalp_Spec * Mask_Scalar as the
-        // spatial selector for its HairColour composition. Treating this as a
-        // lighting-only term left the packed scalp diffuse at its source colour.
-        float hairLevel = max(max(SecondaryColor.r, SecondaryColor.g), SecondaryColor.b);
-        float3 normalizedHair = max(SecondaryColor.rgb / max(hairLevel, 0.001), 0.0001);
-        float hairGain = hairLevel < 0.09 ? 0.25 : (hairLevel < 0.4 ? 0.5 : 1);
-        float3 hairAlbedo = diffuseSample.rgb * normalizedHair * hairGain;
-        float hairBlend = saturate(hairCoverage * max(ScalpParameters0.z, 0));
-        float3 scalpAlbedo = lerp(skinAlbedo, hairAlbedo, hairBlend);
-        // HED_Teeth_Vector is compiled in LE1 but absent from the LE2 scalp
-        // shader. Do not let a preserved package override affect LE2 output.
-        float3 teethTint = lerp(1, max(TertiaryColor.rgb, 0.02), ScalpParameters2.w);
-        float3 teethAlbedo = diffuseSample.rgb * teethTint;
-        albedo = lerp(scalpAlbedo, teethAlbedo, saturate(teethSample.g));
-        transmissionFactor = diffuseSample.a
-            * saturate(1 - teethSample.g * ScalpParameters1.y)
-            * saturate(Luminance(1 - scalpMask * ScalpParameters0.z));
-
-        if (SurfaceParameters.w > 0)
-        {
-            float coverage = lerp(teethSample.r, 1, saturate(ScalpParameters1.x));
-            clip(coverage - 0.3333);
-        }
+            LegacyScalpLobes lobes = LegacyScalpDirections(geometricNormal, tangent, bitangent, materialUv);
+            float3 scalpView = normalize(CameraPosition.xyz - input.WorldPosition);
+            albedo = LegacyScalpAlbedo(diffuseSample.rgb, maskSample.rgb, teethSample.g,
+                lobes, normalize(scalpView + geometricNormal));
+            if (SurfaceParameters.w > 0)
+            {
+                float coverage = lerp(teethSample.r, 1, saturate(ScalpParameters1.x));
+                clip(coverage - 0.3333);
+            }
         }
     }
     else if (family == 3)
@@ -2139,6 +2195,19 @@ float4 PSMain(
 
     float3 lit = (albedo * diffuseLighting + specularLighting + subsurfaceLighting) * LightingParameters.x
         + eyeBaseReflection;
+
+    if (family == 2 && !le3 && diagnostic < 0.5)
+    {
+        float teeth = TextureFlags1.x > 0.5
+            ? AuxiliaryTexture1.Sample(MaterialSampler, materialUv).g : 0;
+        lit = (albedo * environmentLighting
+            + LegacyScalpDirectLight(normal, geometricNormal, tangent, bitangent, view, keyLight,
+                diffuseSample, maskSample.rgb, teeth, materialUv) * KeyLightColor.rgb
+            + LegacyScalpDirectLight(normal, geometricNormal, tangent, bitangent, view, fillLight,
+                diffuseSample, maskSample.rgb, teeth, materialUv) * FillLightColor.rgb
+            + LegacyScalpDirectLight(normal, geometricNormal, tangent, bitangent, view, rimLight,
+                diffuseSample, maskSample.rgb, teeth, materialUv) * RimLightColor.rgb) * LightingParameters.x;
+    }
 
     if (family == 5 && IsHumanHairPreview() && diagnostic < 0.5)
     {

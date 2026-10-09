@@ -258,7 +258,7 @@ internal partial struct HeadPreviewMaterialConstants
     public Vector4 EyeParameters2;
     public Vector4 EyeEmissiveColor;
     public Vector4 BlushColor;
-    public Vector4 FemaleParameters;
+    public Vector4 HumanParameters;
 
     public static HeadPreviewMaterialConstants Create(
         HeadPreviewMaterial material,
@@ -460,9 +460,10 @@ internal partial struct HeadPreviewMaterialConstants
             BlushColor = femaleFace
                 ? GetVector(material, "HED_Blush_Vector", Vector4.One)
                 : Vector4.One,
-            FemaleParameters = new Vector4(
+            // Human face/scalp shaders need the game identity independently of masked coverage.
+            HumanParameters = new Vector4(
                 femaleFace ? GetScalar(material, "HED_Blush_Scalar", 0) : 0,
-                0, 0, 0)
+                material.IsLe2 ? 1 : 0, 0, 0)
         };
     }
 

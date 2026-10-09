@@ -23,12 +23,44 @@ public static class PccTextureDependencyResolverTests
         new("D1 installed non-corpus BIOG texture becomes a package-qualified PCC export", InstalledNonCorpusTextureUsesDonorIdentity),
         new("D1 arbitrary custom texture materialises without corpus knowledge", ArbitraryCustomTextureUsesDonorIdentity),
         new("PCC direct texture materializer honors explicit donor intent", DirectMaterializerHonorsSelection),
+        new("PCC direct texture materializer rejects a non-texture donor", DirectMaterializerRejectsNonTexture),
         new("PCC texture resolver: exact path never remaps by object name", ExactPathNeverRemapsByObjectName),
         new("PCC texture resolver: human falls back to character creator", HumanFallsBackToCharacterCreator),
         new("PCC texture resolver: alien uses the highest eligible official occurrence", AlienRetainsEffectiveOccurrence),
         new("PCC texture resolver: duplicate object names do not make exact identity ambiguous", DuplicateObjectNamesDoNotAffectExactIdentity),
         new("PCC texture materializer: external mip storage survives import", ExternalMipStorageSurvivesImport)
     ];
+
+    private static void DirectMaterializerRejectsNonTexture()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        var sourcePath = Path.Combine(Path.GetTempPath(), $"MFE-NonTexture-{Guid.NewGuid():N}.pcc");
+        try
+        {
+            using (var source = MEPackageHandler.CreateMemoryEmptyPackage(sourcePath, MEGame.LE3))
+            {
+                var parent = source.CreatePackageExport("MFE_NotTexture");
+                var mesh = source.CreateExport("Mesh", "SkeletalMesh", parent, indexed: false);
+                mesh.WriteBinary(LegendaryExplorerCore.Unreal.BinaryConverters.SkeletalMesh.Create());
+                source.Save(sourcePath);
+            }
+            using var destination = MEPackageHandler.CreateMemoryEmptyPackage("MFE-TextureTarget.pcc", MEGame.LE3);
+            try
+            {
+                PccTextureDependencyResolver.MaterializeDirect(destination,
+                    new AssetIdentity(sourcePath, "MFE_NotTexture.Mesh", 2, "SkeletalMesh")
+                        { IsExplicitTextureDonor = true });
+                throw new InvalidOperationException("A skeletal mesh was accepted as a texture donor.");
+            }
+            catch (InvalidDataException exception)
+            {
+                TestAssert.True(exception.Message.Contains("Texture2D"), "The texture class rejection was unclear.");
+            }
+            TestAssert.Equal(0, destination.ExportCount);
+            TestAssert.Equal(0, destination.ImportCount);
+        }
+        finally { File.Delete(sourcePath); }
+    }
 
     private static void HumanPrefersBiog()
     {

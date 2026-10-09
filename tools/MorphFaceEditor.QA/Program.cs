@@ -68,7 +68,8 @@ internal static class Program
         var filters = filter?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var selected = args.Contains("--self-check")
             ? new[] { new QaCase("runner-self-check", "Naming, flattened companions and timing enforcement", QaRunnerCheck.Run, "runner-self-check") }
-            : QaCases.All.Where(item => filters is null || filters.Any(value => item.Id == value || item.Group == value)).ToArray();
+            : QaCases.All.Where(item => filters is null || filters.Any(value =>
+                QaCoverageSelection.MatchesCaseFilter(item.Id, item.Group, value))).ToArray();
         if (selected.Length == 0) throw new ArgumentException($"Unknown case '{filter}'. Use --list.");
         var report = new QaReport(output, context.Seed, selected.Select(item => item.Id).ToArray(), context.RunToken);
         Console.WriteLine($"MFE QA | {selected.Length} cases | Seed {context.Seed}\nEvidence: {output}");

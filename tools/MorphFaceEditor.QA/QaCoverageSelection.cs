@@ -6,6 +6,12 @@ namespace MorphFaceEditor.QA;
 
 internal static class QaCoverageSelection
 {
+    internal static bool MatchesCaseFilter(string id, string group, string filter) =>
+        id.Equals(filter, StringComparison.OrdinalIgnoreCase) ||
+        group.Equals(filter, StringComparison.OrdinalIgnoreCase) ||
+        id.Split('/').Any(segment => segment.EndsWith("-" + filter, StringComparison.OrdinalIgnoreCase) ||
+            segment.StartsWith(filter + ".", StringComparison.OrdinalIgnoreCase));
+
     // Retained in GlobalMorphs, but unused and malformed in the shipped corpus.
     // Keep this exact exclusion in the harness; geometry validation stays strict.
     internal static IReadOnlySet<string> KnownUnusedCorpusFacePaths { get; } =

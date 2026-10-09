@@ -8,6 +8,7 @@ internal static class QaUtilityTests
     internal static IReadOnlyList<TestCase> All { get; } =
     [
         new("QA coverage streams reproduce filtered cases and vary donors", Selection),
+        new("QA BAF filter selects all games and conversion directions without BAT", BafSelection),
         new("QA LE1 HMM conversion donors exclude Hench Human Male", ConversionDonorExclusion),
         new("QA unused Asari morph exclusion preserves neighbouring face identities", UnusedCorpusFaceExclusion),
         new("QA default matrix includes every human material and scalp regression route", HumanMaterialMatrix),
@@ -24,6 +25,16 @@ internal static class QaUtilityTests
             new HashSet<string>(StringComparer.OrdinalIgnoreCase));
         TestAssert.True(selected.SequenceEqual(candidates.Skip(2)),
             "Known unused morph exclusion either retained HMF.Asari or removed a different face identity.");
+    }
+
+    private static void BafSelection()
+    {
+        foreach (var id in new[] { "load/le1-baf", "clipboard/le2-baf", "npc-randomisation/le3-baf",
+                     "conversion/le1-baf/le2", "conversion/le3-baf/le1" })
+            TestAssert.True(QaCoverageSelection.MatchesCaseFilter(id, id.Split('/')[0], "BAF"), $"BAF filter missed {id}.");
+        foreach (var id in new[] { "load/le1-bat", "clipboard/le2-tuf", "npc-randomisation/le3-hmf-player" })
+            TestAssert.True(!QaCoverageSelection.MatchesCaseFilter(id, id.Split('/')[0], "BAF"), $"BAF filter included {id}.");
+        TestAssert.True(QaCoverageSelection.MatchesCaseFilter("pcc-audit", "pcc-audit", "pcc-audit"), "Audit selection broke.");
     }
 
     private static void Selection()

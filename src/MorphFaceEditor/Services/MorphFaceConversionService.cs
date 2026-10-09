@@ -76,7 +76,10 @@ public sealed class MorphFaceConversionService(
         var sourceSession = CreateSession(source, sourceProfile, sourcePath);
         var transfer = sourceSession.CaptureSemanticTransferData();
         var targetSession = CreateSession(template, targetProfile, templatePath);
-        targetSession.ApplySemanticTransferData(transfer);
+        if (!targetProfile.IgnoresAuthoredGeometry)
+        {
+            targetSession.ApplySemanticTransferData(transfer);
+        }
         var convertedDraft = targetSession.CreateDraft(
             hairMeshReference: null,
             otherMeshReferences: [],
@@ -216,7 +219,7 @@ public sealed class MorphFaceConversionService(
         var match = candidates.FirstOrDefault(candidate =>
             candidate.Origin != TextureCatalogOrigin.Mod &&
             profiles.Find(profile.Game, candidate.FacePath, candidate.BaseHeadPath)?.Key == profile.Key &&
-            profile.GeometryEditBlockReason(candidate.BaseHeadPath) is null &&
+            (profile.IgnoresAuthoredGeometry || profile.GeometryEditBlockReason(candidate.BaseHeadPath) is null) &&
             File.Exists(candidate.PackagePath));
         if (match is null)
         {
@@ -270,7 +273,8 @@ public sealed class MorphFaceConversionService(
                 reference.Game,
                 reference.FacePath,
                 reference.BaseHeadPath)?.Key == profile.Key)
-            .Where(reference => profile.GeometryEditBlockReason(reference.BaseHeadPath) is null)
+            .Where(reference => profile.IgnoresAuthoredGeometry ||
+                                profile.GeometryEditBlockReason(reference.BaseHeadPath) is null)
             .OrderBy(reference => reference.FacePath, StringComparer.OrdinalIgnoreCase)
             .ToArray();
         foreach (var reference in candidates)
@@ -280,7 +284,7 @@ public sealed class MorphFaceConversionService(
                 var loaded = reader.Load(templatePath, reference.FaceUIndex.ToString(
                     System.Globalization.CultureInfo.InvariantCulture), decodeTextures: false);
                 var session = CreateSession(loaded, profile, templatePath);
-                if (session.CanEdit)
+                if (session.CanEdit || profile.IgnoresAuthoredGeometry)
                 {
                     return (reference, loaded);
                 }
@@ -301,12 +305,13 @@ public sealed class MorphFaceConversionService(
         string packagePath) => new(
         loaded.Document,
         loaded.BaseHead,
-        targets.Load(profile, loaded.Game, packagePath),
+        profile.IgnoresAuthoredGeometry ? [] : targets.Load(profile, loaded.Game, packagePath),
         profile.MetadataOnlyFeatures,
         profile.DisplayName,
         profile.FeatureAliases,
         profile.RecognizesBaseVariant,
-        profile.GeometryEditBlockReason(loaded.BaseHead.Source.InstancedPath));
+        profile.GeometryEditBlockReason(loaded.BaseHead.Source.InstancedPath),
+        ignoreAuthoredGeometry: profile.IgnoresAuthoredGeometry);
 
     private static MaterialSupport GetBaseMaterialSupport(LoadedMorphFace loaded)
     {

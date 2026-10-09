@@ -27,6 +27,7 @@ public static class MorphFaceMetadataCatalogRegistry
             [Turian] = Loc.Text("loc_Services_ProfileArchetype_Turian"),
             [FemaleTurian] = Loc.Text("loc_Services_ProfileArchetype_FemaleTurian"),
             [Batarian] = Loc.Text("loc_Services_ProfileArchetype_Batarian"),
+            [FemaleBatarian] = Loc.Text("loc_Services_ProfileArchetype_FemaleBatarian"),
             [Krogan] = Loc.Text("loc_Services_ProfileArchetype_Krogan"),
             [Vorcha] = Loc.Text("loc_Services_ProfileArchetype_Vorcha")
         };
@@ -38,6 +39,7 @@ public static class MorphFaceMetadataCatalogRegistry
     public const string Turian = "turian";
     public const string FemaleTurian = "female-turian";
     public const string Batarian = "batarian";
+    public const string FemaleBatarian = "female-batarian";
     public const string Krogan = "krogan";
     public const string Vorcha = "vorcha";
 

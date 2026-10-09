@@ -115,6 +115,7 @@ public sealed class MorphFaceProfileRegistry
         CreateTurianProfile(MorphFaceGame.LE1),
         CreateFemaleTurianProfile(MorphFaceGame.LE1),
         CreateBatarianProfile(MorphFaceGame.LE1),
+        CreateFemaleBatarianProfile(MorphFaceGame.LE1),
         CreateKroganProfile(MorphFaceGame.LE1),
         new MorphFaceProfile(
             "le2-human-male",
@@ -149,6 +150,7 @@ public sealed class MorphFaceProfileRegistry
         CreateTurianProfile(MorphFaceGame.LE2),
         CreateFemaleTurianProfile(MorphFaceGame.LE2),
         CreateBatarianProfile(MorphFaceGame.LE2),
+        CreateFemaleBatarianProfile(MorphFaceGame.LE2),
         CreateKroganProfile(MorphFaceGame.LE2),
         CreateVorchaProfile(MorphFaceGame.LE2),
         new MorphFaceProfile(
@@ -186,6 +188,7 @@ public sealed class MorphFaceProfileRegistry
         CreateTurianProfile(MorphFaceGame.LE3),
         CreateFemaleTurianProfile(MorphFaceGame.LE3),
         CreateBatarianProfile(MorphFaceGame.LE3),
+        CreateFemaleBatarianProfile(MorphFaceGame.LE3),
         CreateKroganProfile(MorphFaceGame.LE3),
         CreateVorchaProfile(MorphFaceGame.LE3)
     ]);
@@ -391,6 +394,31 @@ public sealed class MorphFaceProfileRegistry
                     : null
                 : _ => null
         };
+
+    private static MorphFaceProfile CreateFemaleBatarianProfile(MorphFaceGame game) =>
+        CreateBatarianProfile(game) with
+        {
+            Key = $"{game.ToString().ToLowerInvariant()}-female-batarian",
+            DisplayName = MorphFaceMetadataCatalogRegistry.ProfileDisplayName(
+                game, MorphFaceMetadataCatalogRegistry.FemaleBatarian),
+            ExportTag = "[BAF]",
+            ExportTagColor = "#A85B21FF",
+            Matches = MatchesFemaleBatarian,
+            IgnoresAuthoredGeometry = true,
+            GeometryEditBlockReason = _ =>
+                "Female Batarian morph, bone, and baked LOD data contains inherited male Batarian payloads and is intentionally ignored. Material editing remains available."
+        };
+
+    private static bool MatchesFemaleBatarian(string facePath, string? baseHeadPath)
+    {
+        if (!string.IsNullOrWhiteSpace(baseHeadPath))
+        {
+            return HeadProfileIdentity.InferSuffix(baseHeadPath) == "female-batarian" &&
+                   baseHeadPath.Contains("BAF_HED_PROBase_MDL", StringComparison.OrdinalIgnoreCase);
+        }
+        return facePath.StartsWith("BAF.", StringComparison.OrdinalIgnoreCase) ||
+               facePath.StartsWith("Female Batarian.", StringComparison.OrdinalIgnoreCase);
+    }
 
     private static bool MatchesBatarian(string facePath, string? baseHeadPath)
     {

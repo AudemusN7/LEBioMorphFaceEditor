@@ -120,6 +120,7 @@ public static class UiSmokeTests
         new("Krogan UI profile separates head plates and Wrex character controls", KroganProfileOrganizesFeatures),
         new("Vorcha UI keeps reconstructed morphs hidden and bones editable", VorchaProfileIsMaterialAndBoneOnly),
         new("Female Turian UI exposes Turian materials without inherited geometry controls", FemaleTurianProfileIsMaterialOnly),
+        new("BAF UI reuses BAT materials without inherited geometry controls", FemaleBatarianProfileIsMaterialOnly),
         new("detached mesh UI reuses racial material presentation", DetachedMeshProfileUsesRacialMaterialPresentation),
         new("metadata text inherits shared archetype and game variants", MetadataTextInheritsAcrossProfiles)
     ];
@@ -1092,6 +1093,37 @@ public static class UiSmokeTests
         ((AsyncRelayCommand)viewModel.PasteMorphDataCommand).ExecuteAsync().GetAwaiter().GetResult();
         TestAssert.Equal(0, clipboard.Writes);
         TestAssert.Equal(0, clipboard.Reads);
+    }
+
+    private static void FemaleBatarianProfileIsMaterialOnly()
+    {
+        using var reader = new MorphFacePackageReader();
+        var registry = MorphFaceProfileRegistry.CreateDefault();
+        var corpus = MorphRandomisationCatalog.LoadEmbedded();
+        foreach (var game in new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 })
+        {
+            var key = game.ToString().ToLowerInvariant();
+            var profile = registry.Require(game, "BAF.BAT_Face01",
+                "BIOG_BAT_HED_PROMorph_R.PROBase.BAF_HED_PROBase_MDL");
+            var bat = registry.Profiles.Single(value => value.Key == $"{key}-batarian");
+            TestAssert.Equal("[BAF]", profile.ExportTag);
+            TestAssert.True(ReferenceEquals(bat.UiProfile, profile.UiProfile), "BAF duplicated BAT's UI schema.");
+            TestAssert.True(ReferenceEquals(corpus.GetMaterialProfile(bat.Key), corpus.GetMaterialProfile(profile.Key)),
+                "BAF did not reuse BAT's material randomisation profile.");
+            TestAssert.True(corpus.CompatibleMaterialDonors(profile.Key).SequenceEqual(corpus.CompatibleMaterialDonors(bat.Key)),
+                "BAF material donors differ from BAT.");
+            TestAssert.True(HeadProfileIdentity.IsMaterialCompatible(profile.Key, bat.Key, HeadMaterialFamily.BatarianSkin),
+                "BAF rejected BAT material assignment.");
+            TestAssert.True(!HeadProfileIdentity.IsGeometryCompatible(profile.Key, bat.Key), "BAF accepted male BAT geometry.");
+            var textures = TextureCatalogProfiles.For(profile);
+            TestAssert.True(textures.PreferredPathFragments.SequenceEqual(TextureCatalogProfiles.For(bat).PreferredPathFragments),
+                "BAF texture discovery differs from BAT.");
+            using var editor = CreateEditor(reader, profile.UiProfile, profile.Key, ignoresAuthoredGeometry: true);
+            TestAssert.Equal(0, editor.Features.Count);
+            TestAssert.Equal(0, editor.Bones.Count);
+            TestAssert.True(!editor.AllowsMorphRandomisation && editor.AllowsMaterialRandomisation,
+                "BAF randomisation capabilities were not material-only.");
+        }
     }
 
     private static void FemaleTurianProfileIsMaterialOnly()

@@ -1,5 +1,9 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">
     <!-- English (UK) master. Edit values, keep keys and formatting placeholders. -->
+    <!--localiser: {"Key":"loc_Services_ProfileArchetype_FemaleBatarian","ReviewedHash":"AE7EB65F561C4F65C405BA82E875D116B664E0F71B63730CCF84B5749F2E52E0","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_Services_ProfileArchetype_FemaleBatarian" xml:space="preserve">Female Batarian</system:String>
+    <!--localiser: {"Key":"loc_ArchetypeTag_FemaleBatarian","ReviewedHash":"2AB807AC972AC70606600941431B7AE5A9900E1C46B0976DC1ACC1D72B875455","DoNotTranslate":false,"Note":"Do not translate [TAG]","SourceHash":null}-->
+    <system:String x:Key="loc_ArchetypeTag_FemaleBatarian" xml:space="preserve">Female Batarian [BAF]</system:String>
     <!--localiser: {"Key":"loc_Services_Taxonomy_MeshOnlyMaterialLabel","ReviewedHash":"B305646554210ABE960F6E68D2B0D6F76E74228B2C7DFA90FFB1681847035096","DoNotTranslate":false,"Note":"","SourceHash":null}-->
 <system:String x:Key="loc_Services_Taxonomy_MeshOnlyMaterialLabel" xml:space="preserve">{0} (Mesh)</system:String>
     <!-- Native Human Hair material metadata -->
@@ -2523,4 +2527,6 @@ Choose No to keep the current scalp textures and material.</system:String>
 <system:String x:Key="loc_Services_CustomTemplate_AdvancedHair" xml:space="preserve">Human Advanced Hair</system:String>
 <!--localiser: {"Key":"loc_Services_CustomTemplate_JamesHair","ReviewedHash":"29D403544DB610D9CE2D655B9D840165DEC29B46CE7259FDA5F171C8CB251DE5","DoNotTranslate":false,"Note":"","SourceHash":null}-->
 <system:String x:Key="loc_Services_CustomTemplate_JamesHair" xml:space="preserve">James Vega Hair</system:String>
+    <!--localiser: {"Key":"loc_Shell_ProfileSpecies_FemaleBatarian","ReviewedHash":"AE7EB65F561C4F65C405BA82E875D116B664E0F71B63730CCF84B5749F2E52E0","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_Shell_ProfileSpecies_FemaleBatarian" xml:space="preserve">Female Batarian</system:String>
 </ResourceDictionary>

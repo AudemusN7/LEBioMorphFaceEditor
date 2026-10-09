@@ -24,6 +24,7 @@
     <Color x:Key="Default.Tag.TUF">#FF99597D</Color>
     <Color x:Key="Default.Tag.KRO">#FF781400</Color>
     <Color x:Key="Default.Tag.BAT">#FFA16F10</Color>
+    <Color x:Key="Default.Tag.BAF">#A85B21FF</Color>
     <Color x:Key="Default.Tag.ALN">#FF909110</Color>
     <Color x:Key="Default.Tag.CUSTOM">#FF66717D</Color>
     <Color x:Key="Default.Tag.MESH">#FF66717D</Color>

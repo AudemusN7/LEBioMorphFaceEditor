@@ -479,6 +479,7 @@ public sealed partial class MainWindowViewModel
             "human-male" => "loc_Shell_ProfileSpecies_HumanMale",
             "human-female" => "loc_Shell_ProfileSpecies_HumanFemale",
             "female-turian" => "loc_Shell_ProfileSpecies_FemaleTurian",
+            "female-batarian" => "loc_Shell_ProfileSpecies_FemaleBatarian",
             "asari" => "loc_Shell_ProfileSpecies_Asari",
             "salarian" => "loc_Shell_ProfileSpecies_Salarian",
             "turian" => "loc_Shell_ProfileSpecies_Turian",

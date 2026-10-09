@@ -1848,4 +1848,10 @@ Nein wählen, um die aktuellen Kopfhauttexturen und das aktuelle Material beizub
   <system:String x:Key="loc_Services_CustomTemplate_ScalpNpc" xml:space="preserve">Kopfhaut (NPC)</system:String>
   <!--localiser: {"Note":"","DoNotTranslate":true,"SourceHash":"FBE25E7696C72308B2A00F22582FF3A7DD7A1EEF2A625FDF174AD77E637A9085","ReviewedHash":"FBE25E7696C72308B2A00F22582FF3A7DD7A1EEF2A625FDF174AD77E637A9085","Key":"loc_Services_MetadataText_Shared_hair_color_Description"}-->
   <system:String x:Key="loc_Services_MetadataText_Shared_hair_color_Description" xml:space="preserve">Hair_Color</system:String>
+    <!--localiser: {"Key":"loc_ArchetypeTag_FemaleBatarian","ReviewedHash":null,"DoNotTranslate":false,"Note":"Do not translate [TAG]","SourceHash":null}-->
+    <system:String x:Key="loc_ArchetypeTag_FemaleBatarian" xml:space="preserve">Batarianerin [BAF]</system:String>
+    <!--localiser: {"Key":"loc_Services_ProfileArchetype_FemaleBatarian","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_Services_ProfileArchetype_FemaleBatarian" xml:space="preserve">Batarianerin</system:String>
+    <!--localiser: {"Key":"loc_Shell_ProfileSpecies_FemaleBatarian","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_Shell_ProfileSpecies_FemaleBatarian" xml:space="preserve">Batarianerin</system:String>
 </ResourceDictionary>

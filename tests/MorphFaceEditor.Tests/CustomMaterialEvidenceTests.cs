@@ -17,6 +17,7 @@ public static class CustomMaterialEvidenceTests
         new("custom material evidence enumerates used mesh slots deterministically", EnumeratesUsedMeshSlotsDeterministically),
         new("custom material evidence tries highest mounted official source first", IndexedEvidencePrefersHighestOfficialSource),
         new("custom material evidence retains duplicate source material refs", RetainsDuplicateSourceMaterialRefs),
+        new("custom material shader maps follow explicit and automatic source invalidation", ShaderMapsFollowSourceInvalidation),
         new("custom material catalogue exposes only proven installed families", CatalogueExposesProvenFamilies),
         new("attachment picker discovers hair and hat meshes while excluding audited suffixes", HirReviewMeshesAreExcluded),
         new("BIOG attachment preview loads package-qualified registry identity", BiogAttachmentPreviewLoadsCanonicalIdentity),
@@ -24,6 +25,64 @@ public static class CustomMaterialEvidenceTests
         new("used null attachment material slots remain invalid", UsedNullAttachmentMaterialSlotsRemainInvalid),
         new("D1 human scar and teeth support follows compiled material evidence", HumanScarAndTeethSupportFollowsEvidence)
     ];
+
+    private static void ShaderMapsFollowSourceInvalidation()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        var path = Path.Combine(Path.GetTempPath(), $"MFE-ShaderMaps-{Guid.NewGuid():N}.pcc");
+        var firstId = Guid.NewGuid();
+        var secondId = Guid.NewGuid();
+        void WriteSource(string firstParameter, string secondParameter)
+        {
+            using var package = MEPackageHandler.CreateMemoryEmptyPackage(path, MEGame.LE3);
+            var cache = ShaderCache.Create();
+            foreach (var (name, id, parameter) in new[]
+                     { ("First", firstId, firstParameter), ("Second", secondId, secondParameter) })
+            {
+                var material = Material.Create();
+                material.SM3MaterialResource.ID = id;
+                package.CreateExport(name, "Material", indexed: false).WriteBinary(material);
+                var key = (StaticParameterSet)id;
+                cache.MaterialShaderMaps.Add(key, new MaterialShaderMap
+                {
+                    ID = id, FriendlyName = name, StaticParameters = key,
+                    Shaders = [], MeshShaderMaps = [],
+                    UniformPixelScalarExpressions = [new MaterialUniformExpressionScalarParameter
+                    {
+                        ExpressionType = "FMaterialUniformExpressionScalarParameter",
+                        ParameterName = parameter
+                    }],
+                    UniformPixelVectorExpressions = [], Uniform2DTextureExpressions = [],
+                    UniformCubeTextureExpressions = [], UniformVertexVectorExpressions = [],
+                    UniformVertexScalarExpressions = []
+                });
+            }
+            package.CreateExport("SeekFreeShaderCache", "ShaderCache", indexed: false).WriteBinary(cache);
+            package.Save(path);
+        }
+        try
+        {
+            WriteSource("InitialFirst", "InitialSecond");
+            using var reader = new MorphFacePackageReader();
+            ResolvedHeadMaterial Read(string name) => reader.LoadMaterialEvidence(
+                new AssetIdentity(path, name, 0, "Material"));
+            TestAssert.True(Read("First").SupportedScalars.SetEquals(["InitialFirst"]),
+                "The first material received the wrong compiled map.");
+            TestAssert.True(Read("Second").SupportedScalars.SetEquals(["InitialSecond"]),
+                "Different materials in one package shared the wrong compiled map.");
+
+            WriteSource("ExplicitFirst", "ExplicitSecond");
+            reader.InvalidatePackage(path);
+            TestAssert.True(Read("First").SupportedScalars.SetEquals(["ExplicitFirst"]),
+                "Explicit invalidation retained an old shader map.");
+
+            WriteSource("AutomaticFirst", "AutomaticSecond");
+            File.SetLastWriteTimeUtc(path, File.GetLastWriteTimeUtc(path).AddSeconds(2));
+            TestAssert.True(Read("Second").SupportedScalars.SetEquals(["AutomaticSecond"]),
+                "A changed source file retained an old shader map without explicit invalidation.");
+        }
+        finally { File.Delete(path); }
+    }
 
     private static void IndexedEvidencePrefersHighestOfficialSource()
     {

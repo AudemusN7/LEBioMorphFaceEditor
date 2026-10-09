@@ -1,11 +1,13 @@
 using System.Numerics;
 using System.Security.Cryptography;
+using System.Runtime.CompilerServices;
 using LegendaryExplorerCore.Packages;
 using LegendaryExplorerCore.Packages.CloningImportingAndRelinking;
 using LegendaryExplorerCore.Shaders;
 using LegendaryExplorerCore.Unreal;
 using LegendaryExplorerCore.Unreal.BinaryConverters;
 using LegendaryExplorerCore.Unreal.Classes;
+using LegendaryExplorerCore.Unreal.Collections;
 using LegendaryExplorerCore.Unreal.ObjectInfo;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
@@ -22,6 +24,7 @@ internal sealed class MorphFaceMaterialReader(
     private const long MaximumDecodedTextureBytes = 384L * 1024 * 1024;
     private readonly Dictionary<string, DecodedTextureAsset> _textureCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, CachedMaterialMetadata> _materialCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConditionalWeakTable<ExportEntry, UMultiMap<StaticParameterSet, MaterialShaderMap>> _shaderMaps = new();
     private readonly LinkedList<string> _textureCacheLru = new();
     private readonly Dictionary<string, LinkedListNode<string>> _textureCacheLruNodes = new(StringComparer.OrdinalIgnoreCase);
     private long _decodedTextureBytes;
@@ -229,6 +232,7 @@ internal sealed class MorphFaceMaterialReader(
     public void InvalidatePackage(string packagePath)
     {
         var fullPath = Path.GetFullPath(packagePath);
+        _shaderMaps.Clear();
         foreach (var key in _materialCache
                      .Where(pair => pair.Value.Dependencies.Contains(fullPath))
                      .Select(pair => pair.Key)
@@ -617,6 +621,27 @@ internal sealed class MorphFaceMaterialReader(
         };
     }
 
+    private MaterialShaderMap ReadShaderMap(ExportEntry master)
+    {
+        // LEC's general shader lookup parses every shader bytecode in the local
+        // cache. Material evidence only needs the maps; retain those once per
+        // source package and allow the parsed shader bytecode to be collected.
+        var parameters = master.ClassName == "Material"
+            ? (StaticParameterSet)ObjectBinary.From<Material>(master).SM3MaterialResource.ID
+            : ObjectBinary.From<MaterialInstance>(master).SM3StaticParameterSet;
+        if (master.FileRef.FindExport("SeekFreeShaderCache", "ShaderCache") is { } localCache)
+        {
+            // Key by the actual export, not its filename: reopening a changed
+            // package cannot reuse old maps. Weak keys do not keep evicted
+            // packages (or their map indexes) alive for the app's lifetime.
+            var maps = _shaderMaps.GetValue(localCache,
+                export => ObjectBinary.From<ShaderCache>(export).MaterialShaderMaps);
+            if (maps.TryGetValue(parameters, out var map)) return map;
+        }
+        return RefShaderCacheReader.GetMaterialShaderMap(master.Game, parameters, out _)
+            ?? throw new InvalidDataException($"No compiled shader map was found for '{master.InstancedFullPath}'.");
+    }
+
     private CachedMaterialMetadata ReadMaterialDefaults(
         ExportEntry materialExport,
         AssetIdentity identity,
@@ -632,8 +657,7 @@ internal sealed class MorphFaceMaterialReader(
             ? HumanMaterialProfiles.Le3PreviewModelForMaster(master.ClassName, PccAssetPathPolicy.FromExport(master))
             : HumanMaterialPreviewModel.Default;
         // These consumers inspect the same compiled map. Share it for this read only.
-        var shaderMap = new Lazy<MaterialShaderMap>(() =>
-            ShaderCacheManipulator.GetMaterialShaderMapAndShaders(master).Item1);
+        var shaderMap = new Lazy<MaterialShaderMap>(() => ReadShaderMap(master));
         MaterialShaderMap GetShaderMap() => shaderMap.Value;
         // The effective master is the only family authority here. In
         // particular, an imported/custom material name must never select a

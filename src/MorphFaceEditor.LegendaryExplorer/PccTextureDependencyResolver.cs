@@ -105,22 +105,9 @@ internal static class PccTextureDependencyResolver
         using var cache = new PackageCache();
         var donor = new InstalledGameAssetResolver().Resolve(destination.Game, identity, cache)
             ?? throw new InvalidDataException($"Texture2D '{identity.InstancedPath}' has no exact official or authored donor.");
-        var source = new PccTextureSource(
-            identity.InstancedPath,
-            PccAssetPathPolicy.FromExport(donor),
-            new TextureCatalogOccurrence(
-                donor.FileRef.FilePath,
-                donor.UIndex,
-                0,
-                TextureCatalogOrigin.BaseGame,
-                0,
-                0,
-                string.Empty,
-                string.Empty,
-                false,
-                null),
-            IsExplicitDonor: true);
-        return MaterializeResolved(destination, source, warnings);
+        // Keep this resolved donor alive through its owning cache. Resolving it
+        // again in MaterializeResolved opens the same PCC a second time.
+        return ImportDonor(destination, donor, identity.InstancedPath, warnings);
     }
 
     internal static ExportEntry MaterializeResolved(
@@ -145,9 +132,18 @@ internal static class PccTextureDependencyResolver
         if (donorTexture is null)
             throw new InvalidDataException(
                 $"Texture2D '{source.InstancedPath}' has no exact official installed donor.");
+        return ImportDonor(destination, donorTexture, source.InstancedPath, warnings);
+    }
+
+    private static ExportEntry ImportDonor(
+        IMEPackage destination, ExportEntry donorTexture, string requestedPath,
+        ICollection<string>? warnings)
+    {
+        if (!donorTexture.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException($"Texture2D '{requestedPath}' has no exact texture donor.");
         if (donorTexture.Game != destination.Game)
-            throw new InvalidDataException($"Texture '{source.InstancedPath}' is from {donorTexture.Game}, but the destination is {destination.Game}.");
-        source = source with { InstancedPath = PccAssetPathPolicy.FromExport(donorTexture) };
+            throw new InvalidDataException($"Texture '{requestedPath}' is from {donorTexture.Game}, but the destination is {destination.Game}.");
+        var path = PccAssetPathPolicy.FromExport(donorTexture);
         var textureExport = PccPackageWorkflow.ImportDependencyGraph(
             destination,
             donorTexture,
@@ -156,11 +152,11 @@ internal static class PccTextureDependencyResolver
             preferBiogTextures: false,
             warnings: warnings,
             applyCorpusMaterialPolicy: false,
-            targetPathOverride: source.InstancedPath);
-        if (!textureExport.InstancedFullPath.Equals(source.InstancedPath, StringComparison.OrdinalIgnoreCase))
+            targetPathOverride: path);
+        if (!textureExport.InstancedFullPath.Equals(path, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidDataException(
-                $"The materialised Texture2D path changed from '{source.InstancedPath}' " +
+                $"The materialised Texture2D path changed from '{path}' " +
                 $"to '{textureExport.InstancedFullPath}'.");
         }
 

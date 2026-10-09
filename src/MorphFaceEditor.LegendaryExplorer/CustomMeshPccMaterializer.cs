@@ -109,9 +109,11 @@ public sealed class CustomMeshPccMaterializer
                         $"The custom mesh writer placed '{mesh.InstancedFullPath}' outside '{packageRoot.InstancedFullPath}'.");
                 }
 
+                using var completedPackage = MEPackageHandler.CreateMemoryEmptyPackage(destination, package.Game);
+                mesh = PccPackageWorkflow.CloneCompletedRoot(completedPackage, mesh, warnings);
                 meshPath = mesh.InstancedFullPath;
                 dependencyGraph = PccPackageWorkflow.CaptureDependencyGraph(mesh);
-                package.Save(temporaryPath);
+                completedPackage.Save(temporaryPath);
             }
 
             Verify(temporaryPath, request, materialResults, meshPath, dependencyGraph);
@@ -518,6 +520,7 @@ public sealed class CustomMeshPccMaterializer
                    ?? throw new InvalidDataException("The custom mesh PCC has no MorphFaceEditor package export.");
         var mesh = package.FindExport(expectedMeshPath, "SkeletalMesh")
                    ?? throw new InvalidDataException("The custom mesh PCC has no written SkeletalMesh export.");
+        PccPackageWorkflow.VerifyNoUnreachableEntries(mesh);
         if (!root.IsForcedExport || !mesh.IsForcedExport)
         {
             throw new InvalidDataException("The custom mesh package root and SkeletalMesh must retain ForcedExport after reopening.");

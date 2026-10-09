@@ -119,6 +119,13 @@ public sealed class MorphFacePackageWriter
                 using var destinationPackage = createNewPackage
                     ? MEPackageHandler.CreateMemoryEmptyPackage(destination, sourcePackage.Game)
                     : MEPackageHandler.OpenMEPackage(destination, forceLoadFromDisk: true);
+                // The stage never reaches disk or AppData. Only its completed
+                // root graph is cloned into the actual destination candidate.
+                using var stagingStream = createNewPackage ? null : destinationPackage.SaveToStream(compress: false);
+                if (stagingStream is not null) stagingStream.Position = 0;
+                using var stagingPackage = stagingStream is null
+                    ? MEPackageHandler.CreateMemoryEmptyPackage(destination, sourcePackage.Game)
+                    : MEPackageHandler.OpenMEPackageFromStream(stagingStream, destination);
                 EnsureSupportedGame(destinationPackage);
                 if (destinationPackage.Game != sourcePackage.Game)
                 {
@@ -136,11 +143,12 @@ public sealed class MorphFacePackageWriter
 
                 var explicitTextureDonors = ResolveExplicitTextureDonors(draft, sourcePackage.Game, explicitTextureCache);
                 var portedFace = PccPackageWorkflow.ImportRootPreservingStructure(
-                    destinationPackage,
+                    stagingPackage,
                     sourceFace,
                     warnings,
                     explicitTextureDonors: explicitTextureDonors,
-                    replacementRoot: existingFace);
+                    replacementRoot: existingFace is null ? null
+                        : stagingPackage.FindExport(existingFace.InstancedFullPath, "BioMorphFace"));
                 if (destinationObjectName is not null)
                 {
                     portedFace.ObjectName = new NameReference(destinationObjectName);
@@ -153,12 +161,12 @@ public sealed class MorphFacePackageWriter
 
                 if (draft.ScalpMaterialSelection is not null)
                 {
-                    var importedHead = portedFace.GetProperty<ObjectProperty>("m_oBaseHead")?.ResolveToEntry(destinationPackage)
+                    var importedHead = portedFace.GetProperty<ObjectProperty>("m_oBaseHead")?.ResolveToEntry(stagingPackage)
                         ?? throw new InvalidDataException("The selected scalp graph did not import with the face.");
                     draft = draft with
                     {
                         BaseHeadReference = new AssetIdentity(
-                            destinationPackage.FilePath,
+                            stagingPackage.FilePath,
                             importedHead is ExportEntry importedHeadExport
                                 ? PccAssetPathPolicy.FromExport(importedHeadExport)
                                 : importedHead.InstancedFullPath,
@@ -166,16 +174,18 @@ public sealed class MorphFacePackageWriter
                             importedHead.ClassName)
                     };
                 }
-                WriteFace(destinationPackage, portedFace, draft, warnings);
+                WriteFace(stagingPackage, portedFace, draft, warnings);
                 var materialOverride = ResolveMaterialOverride(portedFace);
-                WriteMaterialOverride(destinationPackage, materialOverride, draft.MaterialOverrides, warnings);
+                WriteMaterialOverride(stagingPackage, materialOverride, draft.MaterialOverrides, warnings);
+                portedFace = PccPackageWorkflow.CloneCompletedRoot(destinationPackage, portedFace, warnings, existingFace);
+                materialOverride = ResolveMaterialOverride(portedFace);
                 facePath = portedFace.InstancedFullPath;
                 overridePath = materialOverride.InstancedFullPath;
                 dependencyGraph = PccPackageWorkflow.CaptureDependencyGraph(portedFace);
                 destinationPackage.Save(temporaryPath);
             }
 
-            Verify(temporaryPath, facePath, draft, destinationIntegrityBaseline, dependencyGraph);
+            Verify(temporaryPath, facePath, draft, destinationIntegrityBaseline, dependencyGraph, requireMinimal: createNewPackage);
             if (PackageFingerprint.Capture(sourcePath) != draft.SourceFingerprint)
             {
                 throw new IOException("The source PCC changed while the morph package was being written. Nothing was replaced.");
@@ -378,7 +388,8 @@ public sealed class MorphFacePackageWriter
         string facePath,
         MorphFaceDocument expected,
         IReadOnlySet<string>? allowedExistingIntegrityIssues = null,
-        PccDependencyGraphSnapshot? dependencyGraph = null)
+        PccDependencyGraphSnapshot? dependencyGraph = null,
+        bool requireMinimal = false)
     {
         using var package = MEPackageHandler.OpenMEPackage(packagePath, forceLoadFromDisk: true);
         PackageIntegrity.Verify(package, allowedExistingIntegrityIssues);
@@ -387,6 +398,7 @@ public sealed class MorphFacePackageWriter
             PccPackageWorkflow.VerifyDependencyGraph(package, dependencyGraph, verifyCorpusRoles: false);
         }
         var face = FindExport(package, facePath, "BioMorphFace");
+        if (requireMinimal) PccPackageWorkflow.VerifyNoUnreachableEntries(face);
         var properties = face.GetProperties();
         var binary = face.GetBinaryData<BinaryMorphFace>();
         IReadOnlyCollection<StructProperty> features = properties.GetProp<ArrayProperty<StructProperty>>("m_aMorphFeatures")?.ToArray() ?? [];

@@ -47,7 +47,8 @@ public static class RenderingTests
         new("preview lifecycle blocks inactive window states", PreviewLifecycleBlocksInactiveStates),
         new("explicit preview updates render while inactive but realized", ExplicitPreviewUpdatesRenderWhileInactive),
         new("scene publication settles with a second viewport frame", ScenePublicationSettlesWithSecondFrame),
-        new("renderer rejects work after deterministic disposal", RendererRejectsWorkAfterDisposal)
+        new("renderer rejects work after deterministic disposal", RendererRejectsWorkAfterDisposal),
+        .. ShadowRenderingTests.All
     ];
 
     private static void OrbitCameraFitsAndClamps()

@@ -130,7 +130,12 @@ public sealed record HeadPreviewOptions(
     bool ShowAttachment = true,
     HeadPreviewLightingPreset LightingPreset = HeadPreviewLightingPreset.Studio,
     Vector3? BackgroundColor = null,
-    bool AmbientOcclusionEnabled = true);
+    bool AmbientOcclusionEnabled = true,
+    bool ShadowsEnabled = true,
+    // ShadowDepthBias uses normalized shadow-map depth units.
+    float ShadowDepthBias = 0.0003f,
+    // ShadowNormalBias is a fraction of the fitted shadow radius.
+    float ShadowNormalBias = 0.002f);
 
 public sealed record HeadPreviewFrame(
     int Width,
@@ -138,4 +143,8 @@ public sealed record HeadPreviewFrame(
     byte[] BgraPixels,
     TimeSpan RenderTime,
     int DrawCalls,
-    string DeviceKind);
+    string DeviceKind)
+{
+    /// <summary>Depth-only caster draws performed before the camera-view passes.</summary>
+    public int ShadowDrawCalls { get; init; }
+}

@@ -144,6 +144,17 @@ internal static class QaUtilityTests
         {
             var report = new QaReport(directory, 123, ["material-ron/le2-asa"], "synthetic") { Complete = true };
             var result = new QaResult("material-ron/le2-asa", "case") { Group = "material-ron", Status = "warning" };
+            result.Stages.Add(new QaStage("Fixture export", 5900, 1024, 2048, 0, 0, 0, 0, 0, QaStageKind.FileTransfer)
+                { Phase = "Player fixture preparation" });
+            result.Stages.Add(new QaStage("Cold catalogue", 3000, 1024, 2048, 0, 0, 0, 0, 0, QaStageKind.Load)
+                { Phase = "First-use catalogue" });
+            result.Stages.Add(new QaStage("Cached catalogue", 1, 1024, 2048, 0, 0, 0, 0, 0, QaStageKind.Load)
+                { Phase = "Session catalogue access" });
+            result.Stages.Add(new QaStage("Actual load", 1000, 1024, 2048, 0, 0, 0, 0, 0, QaStageKind.Load)
+            {
+                BreakdownMs = new Dictionary<string, double> { ["Materials <detail>"] = 900 },
+                CacheHits = 1, CacheMisses = 2
+            });
             result.PerformanceWarnings.Add("Slow <script>stage</script>");
             result.Evidence["rolls"] = new QaRollSummary(100, 100, 12.5, 1250, true, []);
             report.Results.Add(result); report.Write();
@@ -153,6 +164,15 @@ internal static class QaUtilityTests
             using var json = JsonDocument.Parse(File.ReadAllText(report.ResultsPath));
             TestAssert.Equal(1, json.RootElement.GetProperty("Warnings").GetInt32());
             TestAssert.Equal(0, json.RootElement.GetProperty("Failed").GetInt32());
+            var phases = json.RootElement.GetProperty("PerformanceWarningsByPhase");
+            TestAssert.Equal(1, phases.GetProperty("Player fixture preparation").GetInt32());
+            TestAssert.Equal(1, phases.GetProperty("First-use catalogue").GetInt32());
+            TestAssert.True(!phases.TryGetProperty("Session catalogue access", out _) &&
+                !phases.TryGetProperty("Test workflow", out _),
+                "Setup/cold warnings were attributed to passing warm workflow stages.");
+            TestAssert.True(html.Contains("Materials &lt;detail&gt;") && html.Contains("cache hits 1, misses 2") &&
+                html.Contains("not peak or retained memory") && html.Contains("Do not sum"),
+                "Load breakdown, scope or allocation interpretation was omitted from the report.");
             result.Status = "failed"; result.Error = "Missing required texture";
             report.Write();
             using var failed = JsonDocument.Parse(File.ReadAllText(report.ResultsPath));

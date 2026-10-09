@@ -28,6 +28,10 @@ internal sealed record QaStage(string Name, double DurationMs, long ManagedAlloc
     public double? LimitMs => QaPerformance.Limit(Kind);
     public bool ExceededLimit => QaPerformance.Exceeded(Kind, DurationMs);
     public int SampleCount { get; init; } = 1;
+    public string Phase { get; init; } = "Test workflow";
+    public IReadOnlyDictionary<string, double>? BreakdownMs { get; init; }
+    public int? CacheHits { get; init; }
+    public int? CacheMisses { get; init; }
     public double? TotalDurationMs { get; init; }
 }
 
@@ -56,6 +60,10 @@ internal sealed class QaReport(string directory, int seed, string[] planned, str
             Planned = planned, Passed = Count("passed"), Warnings = Count("warning"),
             PerformanceWarningCases = Results.Count(item => item.PerformanceWarnings.Count > 0),
             PerformanceWarningCount = Results.Sum(item => item.PerformanceWarnings.Count),
+            PerformanceWarningsByPhase = Results.SelectMany(item => item.Stages)
+                .Where(stage => stage.ExceededLimit).GroupBy(stage => stage.Phase)
+                .ToDictionary(group => group.Key, group => group.Count()),
+            TimingPolicy = "Serial stages; Custom catalogue/reader reused for the run with normal invalidation. First-use catalogue costs remain limited and reported separately. Preview loads and saved-candidate verification use fresh readers. OS caches are not flushed. Allocation is process-wide volume, not peak heap.",
             Failed = Count("failed"), Blocked = Count("blocked"), Results
         };
         var json = JsonSerializer.Serialize(data, JsonOptions);
@@ -84,6 +92,10 @@ internal sealed class QaReport(string directory, int seed, string[] planned, str
         html.Append($"<p class='muted'>Seed {seed} · {Results.Count}/{planned.Length} cases completed · {(Complete ? "Run finished" : "Run in progress")}</p>");
         html.Append($"<div class='cards'><div class='summary passed'><strong>{passed}</strong>Passed</div><div class='summary warning'><strong>{warnings}</strong>Warnings</div><div class='summary failed'><strong>{failedCount}</strong>Failed</div><div class='summary blocked'><strong>{blocked}</strong>Blocked</div></div>");
         html.Append($"<p class='warning'>Performance: {Results.Sum(item => item.PerformanceWarnings.Count)} timing warnings across {Results.Count(item => item.PerformanceWarnings.Count > 0)} cases, including functional failures.</p>");
+        foreach (var phase in Results.SelectMany(item => item.Stages).Where(stage => stage.ExceededLimit)
+                     .GroupBy(stage => stage.Phase))
+            html.Append($"<p class='warning'>{H(phase.Key)}: {phase.Count()} slow stages.</p>");
+        html.Append("<p class='muted'>Catalogue first use and session cache access are measured separately from Custom geometry/workspace construction. Fixture setup warnings describe setup operations, not the later test workflow. Readers for face loads and saved-output verification remain fresh. Stages run serially; Windows file caches are not flushed. Managed allocation is cumulative process-wide allocation during a stage, not peak or retained memory. Working set is a whole-process snapshot at stage end.</p>");
         html.Append($"<p><a href='{H(Path.GetFileName(ResultsPath))}'>Full JSON evidence and stage metrics</a></p><p class='muted'>Timing limits: Load and Randomisation 1,500 ms; file transfer 5,000 ms. Render and PNG readback are excluded. Limit breaches appear as warnings after evidence is collected.</p></header>");
 
         html.Append("<article><h2>Results by utility</h2><div class='scroll'><table><thead><tr><th>Utility</th><th>Passed</th><th>Warnings</th><th>Failed</th><th>Blocked</th></tr></thead><tbody>");
@@ -111,9 +123,13 @@ internal sealed class QaReport(string directory, int seed, string[] planned, str
             html.Append($"<details><summary>Evidence and asset donors</summary><pre>{H(JsonSerializer.Serialize(result.Evidence, JsonOptions))}</pre></details>");
             if (result.Stages.Count > 0)
             {
-                html.Append("<div class='scroll'><table><thead><tr><th>Stage</th><th>Time</th><th>Limit</th><th>Managed allocation</th><th>Working set</th></tr></thead><tbody>");
+                html.Append("<div class='scroll'><table><thead><tr><th>Phase / stage</th><th>Time</th><th>Limit</th><th>Allocation volume</th><th>Process working set</th></tr></thead><tbody>");
                 foreach (var stage in result.Stages)
-                    html.Append($"<tr class='{(stage.ExceededLimit ? "warning" : "")}'><td>{H(stage.Name)}</td><td>{stage.DurationMs:F1} ms{(stage.SampleCount > 1 ? $" average ({stage.SampleCount} rolls)" : "")}</td><td>{(stage.LimitMs is { } limit ? $"{limit:F0} ms" : "Excluded")}</td><td>{stage.ManagedAllocatedBytes / 1048576.0:F2} MiB{(stage.SampleCount > 1 ? " total" : "")}</td><td>{stage.WorkingSetBytes / 1048576.0:F1} MiB</td></tr>");
+                {
+                    html.Append($"<tr class='{(stage.ExceededLimit ? "warning" : "")}'><td><small>{H(stage.Phase)}</small><br>{H(stage.Name)}</td><td>{stage.DurationMs:F1} ms{(stage.SampleCount > 1 ? $" average ({stage.SampleCount} rolls)" : "")}</td><td>{(stage.LimitMs is { } limit ? $"{limit:F0} ms" : "Excluded")}</td><td>{stage.ManagedAllocatedBytes / 1048576.0:F2} MiB{(stage.SampleCount > 1 ? " total" : "")}</td><td>{stage.WorkingSetBytes / 1048576.0:F1} MiB</td></tr>");
+                    if (stage.BreakdownMs is { } breakdown)
+                        html.Append($"<tr><td colspan='5'><details><summary>Load breakdown · cache hits {stage.CacheHits}, misses {stage.CacheMisses}</summary><p>Reader total includes its component stages; material substeps are within Materials. Do not sum these overlapping timings.</p><ul>{string.Concat(breakdown.Select(pair => $"<li>{H(pair.Key)}: {pair.Value:F1} ms</li>"))}</ul></details></td></tr>");
+                }
                 html.Append("</tbody></table></div>");
             }
             foreach (var artifact in result.Artifacts.Distinct())

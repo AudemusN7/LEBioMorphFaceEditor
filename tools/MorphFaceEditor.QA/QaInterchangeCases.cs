@@ -106,11 +106,7 @@ internal static partial class QaCases
     private static async Task MeshRoundTrip(QaContext c, MorphMeshFormat format)
     {
         var (path, mesh) = await ExportMesh(c, format);
-        using var reader = new MorphFacePackageReader();
-        var loader = new DetachedMeshPreviewLoadService(c.Scenes,
-            materialCatalog: new CustomMaterialTemplateCatalogService(reader, c.Store));
-        var detached = await c.Measure("Custom Mode workspace construction", () => Task.Run(() =>
-            loader.Load(MorphFaceGame.LE2, mesh)), QaStageKind.Load);
+        var detached = await c.LoadCustomWorkspace(mesh, MorphFaceGame.LE2);
         QaContext.Require(detached.CustomMaterials is not null, "Mesh import did not create a Custom material workspace.");
         QaContext.Require(!detached.Preview.EditingSession.CanEditMorphFeatures, "Imported custom mesh exposed unproven morph controls.");
         QaContext.Require(detached.Detached.Source.Positions.Length == mesh.Positions.Length, "Custom import changed the vertex stream length.");
@@ -128,10 +124,8 @@ internal static partial class QaCases
         // same donor and bake as a full run, regardless of earlier mesh cases.
         var (path, mesh) = await ExportMesh(c, MorphMeshFormat.Gltf);
         c.Current.Artifacts.Add(path);
-        using var reader = new MorphFacePackageReader();
-        var loader = new DetachedMeshPreviewLoadService(c.Scenes,
-            materialCatalog: new CustomMaterialTemplateCatalogService(reader, c.Store));
-        var detached = c.MeasureSync("Custom Mode workspace load", () => loader.Load(MorphFaceGame.LE2, mesh), QaStageKind.Load);
+        var reader = c.CustomReader;
+        var detached = await c.LoadCustomWorkspace(mesh, MorphFaceGame.LE2);
         var workspace = detached.CustomMaterials ?? throw new InvalidDataException("Custom material workspace was not created.");
         QaContext.Require(workspace.UsedSlots.Count == 4, "Custom randomisation must cover the four HMM material slots.");
         var skins = new[] { HeadMaterialFamily.Skin, HeadMaterialFamily.AsariSkin, HeadMaterialFamily.SalarianSkin, HeadMaterialFamily.BatarianSkin,

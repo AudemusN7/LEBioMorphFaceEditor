@@ -1469,11 +1469,11 @@ No: discard custom asset databases after a successful rebuild.</system:String>
   <system:String x:Key="loc_VM_actorAssignment_unresolved" xml:space="preserve">unresolved</system:String>
   <system:String x:Key="loc_VM_actorAssignment_warningsHeading" xml:space="preserve">WARNINGS</system:String>
   <system:String x:Key="loc_VM_boneTransform_invalidAxes" xml:space="preserve">A bone transform requires matching X, Y and Z axis editors.</system:String>
-  <system:String x:Key="loc_VM_faceEditor_accessoryMesh" xml:space="preserve">Accessory mesh</system:String>
+  <system:String x:Key="loc_VM_faceEditor_accessoryMesh" xml:space="preserve">Other Mesh</system:String>
   <system:String x:Key="loc_VM_faceEditor_attachmentHeading" xml:space="preserve">HAIR / ACCESSORY MESHES</system:String>
   <system:String x:Key="loc_VM_faceEditor_attachmentHeadingPreviewOnly" xml:space="preserve">HAIR / ACCESSORY MESHES (preview only)</system:String>
   <system:String x:Key="loc_VM_faceEditor_cursedRandomisationLog" xml:space="preserve">Cursed-randomized {0} morph sliders, {1} facial bones and {2} material values at morph/material strengths {3}%/{4}% with RNG seed {5}.</system:String>
-  <system:String x:Key="loc_VM_faceEditor_hairMesh" xml:space="preserve">Hair mesh</system:String>
+  <system:String x:Key="loc_VM_faceEditor_hairMesh" xml:space="preserve">Hair Mesh</system:String>
   <system:String x:Key="loc_VM_faceEditor_meshWorkspaceRequired" xml:space="preserve">A MESH material workspace is required.</system:String>
   <system:String x:Key="loc_VM_faceEditor_noRandomisationScope" xml:space="preserve">This workspace has no eligible randomization scope.</system:String>
   <system:String x:Key="loc_VM_faceEditor_noReadableTextureFamily" xml:space="preserve">No readable texture family was available; numeric material values were still randomized.</system:String>

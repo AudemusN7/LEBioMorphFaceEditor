@@ -1469,7 +1469,7 @@ Nie: po pomyślnej odbudowie usuń własne bazy zasobów.</system:String>
   <system:String x:Key="loc_VM_actorAssignment_unresolved" xml:space="preserve">nierozpoznane</system:String>
   <system:String x:Key="loc_VM_actorAssignment_warningsHeading" xml:space="preserve">OSTRZEŻENIA</system:String>
   <system:String x:Key="loc_VM_boneTransform_invalidAxes" xml:space="preserve">Edycja transformacji kości wymaga osobnych edytorów osi X, Y i Z.</system:String>
-  <system:String x:Key="loc_VM_faceEditor_accessoryMesh" xml:space="preserve">Siatka akcesorium</system:String>
+  <system:String x:Key="loc_VM_faceEditor_accessoryMesh" xml:space="preserve">Inna siatka</system:String>
   <system:String x:Key="loc_VM_faceEditor_attachmentHeading" xml:space="preserve">SIATKI WŁOSÓW / AKCESORIÓW</system:String>
   <system:String x:Key="loc_VM_faceEditor_attachmentHeadingPreviewOnly" xml:space="preserve">SIATKI WŁOSÓW / AKCESORIÓW (tylko podgląd)</system:String>
   <system:String x:Key="loc_VM_faceEditor_cursedRandomisationLog" xml:space="preserve">Przeklęta randomizacja: suwaki morfu — {0}, kości twarzy — {1}, wartości materiałów — {2}; siła morfu/materiału: {3}%/{4}%; ziarno RNG: {5}.</system:String>

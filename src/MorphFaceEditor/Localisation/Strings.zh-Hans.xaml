@@ -1469,7 +1469,7 @@
   <system:String x:Key="loc_VM_actorAssignment_unresolved" xml:space="preserve">未解析</system:String>
   <system:String x:Key="loc_VM_actorAssignment_warningsHeading" xml:space="preserve">警告</system:String>
   <system:String x:Key="loc_VM_boneTransform_invalidAxes" xml:space="preserve">骨骼变换需要匹配的 X、Y 和 Z 轴编辑器。</system:String>
-  <system:String x:Key="loc_VM_faceEditor_accessoryMesh" xml:space="preserve">配件网格</system:String>
+  <system:String x:Key="loc_VM_faceEditor_accessoryMesh" xml:space="preserve">其他网格</system:String>
   <system:String x:Key="loc_VM_faceEditor_attachmentHeading" xml:space="preserve">头发 / 配件网格</system:String>
   <system:String x:Key="loc_VM_faceEditor_attachmentHeadingPreviewOnly" xml:space="preserve">头发 / 配件网格（仅预览）</system:String>
   <system:String x:Key="loc_VM_faceEditor_cursedRandomisationLog" xml:space="preserve">已进行怪诞随机化：{0} 个形变滑块、{1} 根面部骨骼及 {2} 个材质值；形变/材质强度为 {3}%/{4}%，RNG 种子为 {5}。</system:String>

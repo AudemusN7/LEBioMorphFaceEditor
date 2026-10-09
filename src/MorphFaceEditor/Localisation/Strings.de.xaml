@@ -1471,7 +1471,7 @@ Nein: Benutzerdefinierte Asset-Datenbanken nach erfolgreichem Neuaufbau verwerfe
   <system:String x:Key="loc_VM_actorAssignment_unresolved" xml:space="preserve">nicht aufgelöst</system:String>
   <system:String x:Key="loc_VM_actorAssignment_warningsHeading" xml:space="preserve">WARNUNGEN</system:String>
   <system:String x:Key="loc_VM_boneTransform_invalidAxes" xml:space="preserve">Für eine Knochentransformation müssen passende X-, Y- und Z-Achseneditoren vorhanden sein.</system:String>
-  <system:String x:Key="loc_VM_faceEditor_accessoryMesh" xml:space="preserve">Zubehör-Mesh</system:String>
+  <system:String x:Key="loc_VM_faceEditor_accessoryMesh" xml:space="preserve">Anderes Mesh</system:String>
   <system:String x:Key="loc_VM_faceEditor_attachmentHeading" xml:space="preserve">HAAR-/ZUBEHÖR-MESHES</system:String>
   <system:String x:Key="loc_VM_faceEditor_attachmentHeadingPreviewOnly" xml:space="preserve">HAAR-/ZUBEHÖR-MESHES (nur Vorschau)</system:String>
   <system:String x:Key="loc_VM_faceEditor_cursedRandomisationLog" xml:space="preserve">Verflucht zufällig verändert: {0} Morphregler, {1} Gesichtsknochen und {2} Materialwerte; Morph-/Materialstärke {3}%/{4}%, RNG-Startwert {5}.</system:String>

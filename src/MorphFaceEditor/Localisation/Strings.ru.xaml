@@ -1469,7 +1469,7 @@
   <system:String x:Key="loc_VM_actorAssignment_unresolved" xml:space="preserve">не разрешено</system:String>
   <system:String x:Key="loc_VM_actorAssignment_warningsHeading" xml:space="preserve">ПРЕДУПРЕЖДЕНИЯ</system:String>
   <system:String x:Key="loc_VM_boneTransform_invalidAxes" xml:space="preserve">Для перемещения костей нужны соответствующие редакторы осей X, Y и Z.</system:String>
-  <system:String x:Key="loc_VM_faceEditor_accessoryMesh" xml:space="preserve">Модель аксессуара</system:String>
+  <system:String x:Key="loc_VM_faceEditor_accessoryMesh" xml:space="preserve">Другая модель</system:String>
   <system:String x:Key="loc_VM_faceEditor_attachmentHeading" xml:space="preserve">МОДЕЛИ ВОЛОС И АКСЕССУАРОВ</system:String>
   <system:String x:Key="loc_VM_faceEditor_attachmentHeadingPreviewOnly" xml:space="preserve">МОДЕЛИ ВОЛОС И АКСЕССУАРОВ (только предпросмотр)</system:String>
   <system:String x:Key="loc_VM_faceEditor_cursedRandomisationLog" xml:space="preserve">Случайно изменено: ползунков морфа — {0}, костей лица — {1}, значений материалов — {2}; сила морфа/материалов — {3}%/{4}%; начальное значение RNG — {5}.</system:String>

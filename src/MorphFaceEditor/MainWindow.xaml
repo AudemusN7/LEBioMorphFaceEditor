@@ -583,20 +583,24 @@
 
                     <StackPanel x:Name="AttachmentMeshPanel" Grid.Row="1" Margin="0,0,0,10"
                                 IsEnabled="{Binding Editor.CanEditAttachments}">
-                        <TextBlock x:Name="HairAccessoryMeshesLabel" Text="{Binding Editor.AttachmentMeshesHeading}"
-                                   Style="{StaticResource FieldLabel}" Margin="2,0,0,5" />
+                        <TextBlock x:Name="HairAccessoryMeshesLabel"
+      		    	             Text="{Binding Editor.AttachmentMeshesHeading}"
+           		                 Style="{StaticResource FieldLabel}"
+           		                 Margin="0,0,0,6" />
                         <ItemsControl ItemsSource="{Binding Editor.AttachmentMeshes}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <Grid Margin="0,0,0,6">
                                         <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="124" />
+                                            <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Text="{Binding Label}" Foreground="{DynamicResource SecondaryText}"
-                                                   FontSize="10" VerticalAlignment="Center" />
+                                        <TextBlock Text="{Binding Label}" ToolTip="{Binding HoverText}"
+                                                   Foreground="{DynamicResource SecondaryText}"
+                                                   FontSize="10" VerticalAlignment="Center"
+                                                   Margin="0,0,12,0" />
                                         <controls:SearchableMeshPicker Grid.Column="1" />
                                         <Button Grid.Column="2" Content="{DynamicResource loc_View_MainWindow_Randomise_2}" Command="{Binding RandomiseCommand}"
                                                 Visibility="{Binding HasRandomiseCommand, Converter={StaticResource BooleanToVisibilityConverter}}"

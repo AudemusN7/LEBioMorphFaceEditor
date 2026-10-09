@@ -42,6 +42,10 @@ internal sealed class QaContext : IDisposable
     private MorphFaceMeshReferences? _selectedSource;
     private readonly Dictionary<QaResult, List<string>> _recordedFailures = [];
     private readonly HashSet<MorphFaceGame> _warmedGames = [];
+    private readonly HashSet<MorphFaceGame> _cataloguedGames = [];
+    private MorphFacePackageReader? _customReader;
+    private CustomMaterialTemplateCatalogService? _customCatalog;
+    public MorphFacePackageReader CustomReader => _customReader ??= new MorphFacePackageReader();
     public string? RecordedFailureSummary => _recordedFailures.TryGetValue(Current, out var failures)
         ? string.Join(Environment.NewLine, failures) : null;
     public void ThrowRecordedFailures()
@@ -111,6 +115,7 @@ internal sealed class QaContext : IDisposable
 
     public async Task<T> Measure<T>(string name, Func<Task<T>> operation, QaStageKind kind = QaStageKind.Diagnostic)
     {
+        var phase = _stagePhase;
         var stageName = StageName(name);
         var allocated = GC.GetTotalAllocatedBytes(true);
         var collections = Enumerable.Range(0, 3).Select(GC.CollectionCount).ToArray();
@@ -124,7 +129,7 @@ internal sealed class QaContext : IDisposable
             Current.Stages.Add(new QaStage(stageName, stopwatch.Elapsed.TotalMilliseconds,
                 GC.GetTotalAllocatedBytes(true) - allocated, process.WorkingSet64, process.PrivateMemorySize64,
                 process.HandleCount, GC.CollectionCount(0) - collections[0], GC.CollectionCount(1) - collections[1],
-                GC.CollectionCount(2) - collections[2], kind));
+                GC.CollectionCount(2) - collections[2], kind) { Phase = phase });
         }
     }
 
@@ -170,8 +175,27 @@ internal sealed class QaContext : IDisposable
         geometryMode ??= Face.GeometryMode;
         using var reader = new MorphFacePackageReader();
         using var loader = new MorphFacePreviewLoadService(Scenes, Targets, Profiles, reader);
+        var stageIndex = Current.Stages.Count;
         var result = await Measure($"Load · {face}",
             () => loader.LoadAsync(path, face, geometryMode: geometryMode), QaStageKind.Load);
+        if (reader.LastLoadMetrics is { } metrics)
+            Current.Stages[stageIndex] = Current.Stages[stageIndex] with
+            {
+                BreakdownMs = new Dictionary<string, double>
+                {
+                    ["Reader total"] = metrics.Total.TotalMilliseconds,
+                    ["Package open"] = metrics.PackageOpen.TotalMilliseconds,
+                    ["Document"] = metrics.Document.TotalMilliseconds,
+                    ["Base head"] = metrics.BaseHead.TotalMilliseconds,
+                    ["Attachments"] = metrics.Attachment.TotalMilliseconds,
+                    ["Materials"] = metrics.Materials.TotalMilliseconds,
+                    ["Diagnostics"] = metrics.Diagnostics.TotalMilliseconds,
+                    ["Material overrides (within materials)"] = metrics.MaterialOverrides.TotalMilliseconds,
+                    ["Material resolution (within materials)"] = metrics.MaterialResolution.TotalMilliseconds
+                },
+                CacheHits = metrics.MaterialCacheHits,
+                CacheMisses = metrics.MaterialCacheMisses
+            };
         AddWarnings("face preview load", path, result.Loaded.Warnings, face);
         Current.Evidence["profile"] = result.Profile.Key;
         Current.Evidence["baseHeadDonor"] = result.Loaded.BaseHead.Source;
@@ -367,7 +391,32 @@ internal sealed class QaContext : IDisposable
         throw new QaPrerequisiteException("Run from the MFE checkout, or place the built utility within it.");
     }
 
-    public void Dispose() { }
+    public async Task<DetachedMeshPreviewLoadResult> LoadCustomWorkspace(
+        ImportedMeshAsset mesh, MorphFaceGame game)
+    {
+        _customCatalog ??= new CustomMaterialTemplateCatalogService(CustomReader, Store);
+        CustomMaterialTemplateCatalogResult catalogue;
+        using (UseStagePhase(_cataloguedGames.Contains(game)
+                   ? "Session catalogue access" : "First-use catalogue"))
+            catalogue = await Measure($"Custom catalogue · {game}",
+                () => Task.Run(() => _customCatalog.Load(game)), QaStageKind.Load);
+        _cataloguedGames.Add(game);
+        // Separate catalogue access from geometry/workspace setup without running
+        // it twice. Deferred selections still use the session-owned reader.
+        var loader = new DetachedMeshPreviewLoadService(Scenes,
+            materialCatalog: new CapturedCustomCatalog(game, catalogue));
+        return await Measure("Custom workspace construction · catalogue measured separately",
+            () => Task.Run(() => loader.Load(game, mesh)), QaStageKind.Load);
+    }
+
+    public void Dispose() => _customReader?.Dispose();
+
+    private sealed class CapturedCustomCatalog(MorphFaceGame game,
+        CustomMaterialTemplateCatalogResult result) : ICustomMaterialTemplateCatalog
+    {
+        public CustomMaterialTemplateCatalogResult Load(MorphFaceGame requestedGame) => requestedGame == game
+            ? result : throw new InvalidOperationException("The measured catalogue belongs to a different game.");
+    }
 
     private sealed class StagePhaseScope(QaContext context, string previous) : IDisposable
     {

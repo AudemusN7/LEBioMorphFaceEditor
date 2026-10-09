@@ -24,8 +24,8 @@ internal static partial class QaCases
         var preview = await c.Load(source.PackagePath, source.FacePath);
         var mesh = ImportedMeshFromHead(preview.Loaded.BaseHead);
         c.TrackInput(mesh.SourcePath);
-        using var reader = new MorphFacePackageReader();
-        var detached = await LoadCustomWorkspace(c, reader, mesh, c.Face.Game);
+        var reader = c.CustomReader;
+        var detached = await LoadCustomWorkspace(c, mesh, c.Face.Game);
         var ids = new[]
         {
             $"{c.Face.Game}:{sex}-npc-face:", $"{c.Face.Game}:{sex}:",
@@ -76,8 +76,8 @@ internal static partial class QaCases
         var nativePreview = await c.Load(source.PackagePath, source.FacePath);
         var mesh = ImportedMeshFromHead(nativePreview.Loaded.BaseHead);
         c.TrackInput(mesh.SourcePath);
-        using var reader = new MorphFacePackageReader();
-        var detached = await LoadCustomWorkspace(c, reader, mesh, game);
+        var reader = c.CustomReader;
+        var detached = await LoadCustomWorkspace(c, mesh, game);
         var workspace = detached.CustomMaterials ?? throw new InvalidDataException("Custom hair workspace was not created.");
 
         var hairKey = (sourceKey, game) switch
@@ -351,12 +351,9 @@ internal static partial class QaCases
     }
 
     private static async Task<DetachedMeshPreviewLoadResult> LoadCustomWorkspace(QaContext c,
-        MorphFacePackageReader reader, ImportedMeshAsset mesh, MorphFaceGame game)
+        ImportedMeshAsset mesh, MorphFaceGame game)
     {
-        var loader = new DetachedMeshPreviewLoadService(c.Scenes,
-            materialCatalog: new CustomMaterialTemplateCatalogService(reader, c.Store));
-        var detached = await c.Measure("Human Custom workspace/catalogue construction", () => Task.Run(() =>
-            loader.Load(game, mesh)), QaStageKind.Load);
+        var detached = await c.LoadCustomWorkspace(mesh, game);
         QaContext.Require(detached.CustomMaterials is not null, "Human native mesh did not create Custom material slots.");
         QaContext.Require(!detached.Preview.EditingSession.CanEditMorphFeatures,
             "A native mesh reused as Custom geometry exposed unsupported morph editing.");

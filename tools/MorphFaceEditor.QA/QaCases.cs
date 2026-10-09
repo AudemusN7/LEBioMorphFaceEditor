@@ -1,6 +1,7 @@
 using System.Numerics;
 using System.Security.Cryptography;
 using System.Text.Json;
+using LegendaryExplorerCore.Packages;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Core.Materials;
@@ -38,8 +39,25 @@ internal static partial class QaCases
         var reopened = await c.Load(destination, result.SaveResult.FaceInstancedPath);
         QaContext.Require(reopened.Loaded.Game == targetGame, "Converted package has the wrong game.");
         QaContext.Require(reopened.Profile.Key == $"{targetGame.ToString().ToLowerInvariant()}-{c.Face.ProfileSuffix}", "Conversion resolved to the wrong archetype.");
+        var sourceMeGame = source.Game switch
+        {
+            MorphFaceGame.LE1 => MEGame.LE1,
+            MorphFaceGame.LE2 => MEGame.LE2,
+            MorphFaceGame.LE3 => MEGame.LE3,
+            _ => MEGame.Unknown
+        };
+        var targetMeGame = targetGame switch
+        {
+            MorphFaceGame.LE1 => MEGame.LE1,
+            MorphFaceGame.LE2 => MEGame.LE2,
+            MorphFaceGame.LE3 => MEGame.LE3,
+            _ => MEGame.Unknown
+        };
+        var expectedOtherMeshCount = source.OtherMeshPaths.Count(path =>
+            !CanonicalHatDonorPolicy.TryResolve(sourceMeGame, targetMeGame, path, out var targetHatPath) ||
+            targetHatPath is not null);
         QaContext.Require((source.HairMeshPath is not null) == (reopened.Loaded.Document.HairMeshReference is not null) &&
-            source.OtherMeshPaths.Count == reopened.Loaded.Document.OtherMeshReferences.Count,
+            expectedOtherMeshCount == reopened.Loaded.Document.OtherMeshReferences.Count,
             "Conversion changed the curated source's attachment presence/count.");
         await c.Render(reopened.Scene, "converted.png");
     }

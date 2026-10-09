@@ -1,21 +1,47 @@
 <Solution>
   <Folder Name="/src/">
-    <Project Path="src/MorphFaceEditor/MorphFaceEditor.csproj" />
-    <Project Path="src/MorphFaceEditor.Core/MorphFaceEditor.Core.csproj" />
-    <Project Path="src/MorphFaceEditor.Localisation/MorphFaceEditor.Localisation.csproj" />
-    <Project Path="src/MorphFaceEditor.LegendaryExplorer/MorphFaceEditor.LegendaryExplorer.csproj" />
-    <Project Path="src/MorphFaceEditor.Rendering/MorphFaceEditor.Rendering.csproj" />
+    <Project Path="src/MorphFaceEditor/MorphFaceEditor.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="src/MorphFaceEditor.Core/MorphFaceEditor.Core.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="src/MorphFaceEditor.Localisation/MorphFaceEditor.Localisation.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="src/MorphFaceEditor.LegendaryExplorer/MorphFaceEditor.LegendaryExplorer.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="src/MorphFaceEditor.Rendering/MorphFaceEditor.Rendering.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
   </Folder>
   <Folder Name="/tests/">
-    <Project Path="tests/MorphFaceEditor.Tests/MorphFaceEditor.Tests.csproj" />
+    <Project Path="tests/MorphFaceEditor.Tests/MorphFaceEditor.Tests.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
   </Folder>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+  </Configurations>
   <Folder Name="/benchmarks/">
-    <Project Path="benchmarks/MorphFaceEditor.Benchmarks/MorphFaceEditor.Benchmarks.csproj" />
+    <Project Path="benchmarks/MorphFaceEditor.Benchmarks/MorphFaceEditor.Benchmarks.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
   </Folder>
   <Folder Name="/tools/">
-    <Project Path="tools/MorphFaceEditor.QA/MorphFaceEditor.QA.csproj" />
-    <Project Path="tools/MorphFaceEditor.Localiser/MorphFaceEditor.Localiser.csproj" />
-    <Project Path="tools/MorphFaceEditor.DataCompiler/MorphFaceEditor.DataCompiler.csproj" />
-    <Project Path="tools/MorphFaceEditor.Research/MorphFaceEditor.Research.csproj" />
+    <Project Path="tools/MorphFaceEditor.QA/MorphFaceEditor.QA.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tools/MorphFaceEditor.Localiser/MorphFaceEditor.Localiser.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tools/MorphFaceEditor.DataCompiler/MorphFaceEditor.DataCompiler.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tools/MorphFaceEditor.Research/MorphFaceEditor.Research.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
   </Folder>
 </Solution>

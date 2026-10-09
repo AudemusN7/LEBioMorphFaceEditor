@@ -16,8 +16,11 @@ var suites = new Dictionary<string, IReadOnlyList<TestCase>>(StringComparer.Ordi
         .Concat(Player2DaRandomisationPolicyTests.All).ToArray(),
     ["materials"] = MaterialTests.All,
     ["rendering"] = RenderingTests.All.Concat(NativeHairPreviewTests.All)
+        .Concat(NativeAttachmentPreviewTests.All)
+        .Concat(VisorLensPreviewRendererTests.All)
         .Concat(NativeKaidanAndCcHairPreviewTests.All).ToArray(),
     ["ui"] = UiSmokeTests.All.Concat(AutomationCommandTests.All).Concat(NpcHairRandomisationTests.All)
+        .Concat(VisorLensAnimationLifecycleTests.All)
         .Concat(RandomisationPublicationTests.All)
         .Concat(ApplicationSettingsTests.All)
         .Concat(LocalisationTests.All)
@@ -34,6 +37,10 @@ var suites = new Dictionary<string, IReadOnlyList<TestCase>>(StringComparer.Ordi
         .Concat(SupportedMaterialGraphPolicyTests.All)
         .Concat(MaterialInstancePreservationTests.All).Concat(Le2LocalizedEyeOverrideImportRoleTests.All)
         .Concat(HeadHairTextureOwnershipTests.All).Concat(NativeHairMaterialSupportTests.All)
+        .Concat(AttachmentMaterialPreviewTests.All)
+        .Concat(NativeAttachmentMaterialReaderTests.All)
+        .Concat(NativeDetachedCapMaterialTests.All)
+        .Concat(NativeVisorLensTests.All)
         .Concat(CustomHumanMaterialCatalogTests.All)
         .Concat(MorphFaceInterchangeExportTests.All).ToArray(),
     ["c4"] = ImportedSkeletalMeshWriterTests.All

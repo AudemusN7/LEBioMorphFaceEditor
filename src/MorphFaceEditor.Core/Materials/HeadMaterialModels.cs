@@ -31,7 +31,8 @@ public enum HeadMaterialBlendMode
 {
     Opaque,
     Masked,
-    Translucent
+    Translucent,
+    Additive
 }
 
 /// <summary>Recovered native preview graphs, independent of editing and package support.</summary>
@@ -41,7 +42,14 @@ public enum HumanMaterialPreviewModel
     CcHair = 1,
     CcScalp = 2,
     Kaiden = 3,
-    HumanHair = 4
+    HumanHair = 4,
+    Hat = 5,
+    Visor = 6,
+    CapDecal = 7,
+    CapLe2 = 8,
+    AndersonHat = 9,
+    MotoHat = 10,
+    VisorLens = 11
 }
 
 public enum MaterialParameterKind

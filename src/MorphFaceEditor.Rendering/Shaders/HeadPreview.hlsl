@@ -948,11 +948,186 @@ float3 EvaluateMaskedHairLight(
         + specularColour * specularAnisotropy);
 }
 
+// Canonical headwear uses its own packed-map contracts. Model IDs are the
+// appended HumanMaterialPreviewModel values; family/control eligibility stays
+// Accessory. Equations recovered from each game's FGPUSkin DXBC base/light passes.
+float3 AttachmentDirectLight(float model, bool le3, float3 rawNormal,
+    float3 normal, float3 view, float3 light, float3 albedo,
+    float4 diffuse, float4 specMap, float viewFactor)
+{
+    float facing = saturate(dot(normal, light));
+    float reflected = max(saturate(dot(reflect(-view, normal), light)), 0.0001);
+    float power = 32;
+    float strength = 0;
+    float3 tint = 1;
+    if (model == 5)
+    {
+        power = 100 * pow(max(abs(diffuse.r), 0.0001), 0.45);
+        strength = diffuse.g;
+        tint = SpecularColor.rgb;
+    }
+    else if (model == 7)
+    {
+        power = diffuse.b * 100;
+        strength = diffuse.g;
+        if (le3)
+        {
+            // The additional Phong term is part of the native diffuse input.
+            float3 rawReflection = normalize(reflect(-light, rawNormal));
+            albedo += SpecularColor.rgb * pow(max(saturate(dot(view, rawReflection)), 0.0001), max(GeneralParameters.z, 0.0001));
+        }
+    }
+    else if (model == 8)
+    {
+        power = 100 * pow(max(abs(specMap.r), 0.0001), 0.45);
+        strength = specMap.g;
+    }
+    else if (model == 9)
+    {
+        float3 rawReflection = normalize(reflect(-light, rawNormal));
+        albedo += specMap.b * SpecularColor.rgb
+            * pow(max(saturate(dot(view, rawReflection)), 0.0001), max(GeneralParameters.z, 0.0001));
+        albedo *= viewFactor;
+        power = specMap.r * 100;
+        strength = specMap.g;
+        // Anderson's native wrap term uses diffuse alpha and the inverse spec
+        // intensity as its scattering mask. The preview supplies a fixed wrap.
+        float3 wrap = (1 - specMap.g) * ScatterColor.rgb * diffuse.a * 0.5;
+        float3 diffuseResponse = saturate((dot(normal, light) + wrap) / (1 + wrap));
+        return albedo * diffuseResponse + strength * pow(reflected, power);
+    }
+    else if (model == 10)
+    {
+        power = specMap.b * 100;
+        strength = specMap.g;
+    }
+    return albedo * facing + strength * tint * pow(reflected, power);
+}
+
+float4 AttachmentPreview(VertexOutput input, bool isFrontFace, out float4 aoNormalTarget)
+{
+    float model = TextureFlags2.z;
+    bool le3 = EyeParameters2.w > 0.5;
+    bool le2 = EyeParameters2.z > 0.5;
+    float3 geometricNormal = normalize(input.Normal);
+    if (TextureFlags2.x > 0.5 && !isFrontFace) geometricNormal = -geometricNormal;
+    float3 viewNormal = normalize(mul(float4(geometricNormal, 0), View).xyz);
+    aoNormalTarget = float4(viewNormal * 0.5 + 0.5, 1);
+    float3 tangent = normalize(input.Tangent.xyz - geometricNormal * dot(input.Tangent.xyz, geometricNormal));
+    float3 bitangent = normalize(cross(geometricNormal, tangent)) * input.Tangent.w;
+    float3 view = normalize(CameraPosition.xyz - input.WorldPosition);
+    float3 key = normalize(KeyLightDirection.xyz);
+    float3 fill = normalize(FillLightDirection.xyz);
+    float3 rim = normalize(RimLightDirection.xyz);
+    if (SurfaceParameters.y > 0.5)
+    {
+        float3 color = BaseColor.rgb * (AmbientColor.rgb
+            + KeyLightColor.rgb * saturate(dot(geometricNormal, key))
+            + FillLightColor.rgb * saturate(dot(geometricNormal, fill))
+            + RimLightColor.rgb * saturate(dot(geometricNormal, rim))) * LightingParameters.x;
+        return float4(pow(saturate(color), 1.0 / 2.2), 1);
+    }
+    if (model == 11)
+    {
+        // LE1/2 HMM visor lenses use an inline additive, unlit material, not
+        // the HMF_VSR master. The renderer supplies wrapped, per-frame phases
+        // in the three existing offset vectors; dynamic opacity is fixed at 1.
+        float scanline = TextureFlags0.x > 0.5
+            ? DiffuseTexture.Sample(MaterialSampler,
+                input.TexCoord * float2(1, -1) + SecondaryColor.xy).r
+            : 0;
+        float2 distortion = TextureFlags0.z > 0.5
+            ? MaskTexture.Sample(MaterialSampler, input.TexCoord + TertiaryColor.xy).rg
+            : 0;
+        float3 fractal = TextureFlags0.w > 0.5
+            ? DetailTexture.Sample(MaterialSampler,
+                input.TexCoord + QuaternaryColor.xy + distortion).rgb
+            : 0;
+        float3 emission = TextureFlags0.y > 0.5
+            ? NormalTexture.Sample(MaterialSampler, input.TexCoord).rgb
+            : 0;
+        float3 lensBase = fractal * emission * 25
+            + scanline * float3(0.25, 1, 1.5);
+        if (!le2 && TextureFlags1.y > 0.5)
+        {
+            float3 cube = FixedCubeTexture.Sample(MaterialSampler, reflect(-view, geometricNormal)).rgb;
+            float cubeLuminance = dot(cube, float3(0.3, 0.59, 0.11));
+            float reflectionFactor = max(abs(1 - max(dot(geometricNormal, view), 0)), 0.0001);
+            lensBase = lerp(lensBase, cubeLuminance * float3(0.5, 2, 3), reflectionFactor);
+        }
+        float3 lensColor = (BaseColor.rgb + lensBase) * (0.1 * GeneralParameters.y);
+        return float4(pow(saturate(lensColor), 1.0 / 2.2), 0);
+    }
+    float4 diffuse = TextureFlags0.x > 0.5 ? DiffuseTexture.Sample(MaterialSampler, input.TexCoord) : 1;
+    float4 specMap = TextureFlags0.z > 0.5 ? MaskTexture.Sample(MaterialSampler, input.TexCoord) : 0;
+    float4 packedNormal = TextureFlags0.y > 0.5 ? NormalTexture.Sample(MaterialSampler, input.TexCoord) : float4(0.5, 0.5, 1, 1);
+    // LE1 VSR decodes RGB; LE2 VSR reconstructs Z from RG. LE3 hats use RGB.
+    float3 tangentNormal = le3 || (model == 6 && !le2)
+        ? packedNormal.rgb * 2 - 1 : DecodeNormal(packedNormal);
+    float3 rawNormal = tangent * tangentNormal.x + bitangent * tangentNormal.y + geometricNormal * tangentNormal.z;
+    float3 normal = normalize(rawNormal);
+    float3 reflectedView = reflect(-view, normal);
+    float3 cube = TextureFlags1.y > 0.5 ? FixedCubeTexture.Sample(MaterialSampler, reflectedView).rgb : 0;
+    float3 albedo = diffuse.rgb;
+    float3 ambientAlbedo = albedo;
+    float3 emissive = 0;
+    float alpha = 1;
+    float viewFactor = 1;
+    if (model == 5)
+    {
+        albedo = lerp(SecondaryColor.rgb, BaseColor.rgb, diffuse.b) * diffuse.a;
+        // LE3 removed both the cube sampler and its intensity parameter.
+        if (!le3) albedo += diffuse.g * cube * GeneralParameters.x;
+        ambientAlbedo = albedo;
+    }
+    else if (model == 6)
+    {
+        float normalView = dot(rawNormal, view);
+        float fresnel = 1 - saturate(normalView);
+        float gain = max(sqrt(max(fresnel, 0.0001)), SecondaryColor.x);
+        float3 color = (cube * GeneralParameters.x + tangentNormal * BaseColor.rgb) * gain;
+        alpha = le2 ? GeneralParameters.y : lerp(0.5 * GeneralParameters.y, GeneralParameters.y, pow(1 - max(normalView, 0), 3));
+        // The VSR graph is unlit; fog/SelectionColor are engine inputs omitted
+        // from the standalone studio preview.
+        return float4(pow(saturate(color), 1.0 / 2.2), saturate(alpha));
+    }
+    else if (model == 7)
+    {
+        clip(diffuse.a * GeneralParameters.y - 0.3333);
+        albedo = diffuse.r * (le3 ? TertiaryColor.rgb : float3(1, 1, 1));
+        float3 baseReflection = normalize(reflect(-geometricNormal, rawNormal));
+        ambientAlbedo = albedo + (le3 ? SpecularColor.rgb
+            * pow(max(saturate(dot(view, baseReflection)), 0.0001), max(GeneralParameters.z, 0.0001)) : 0);
+    }
+    else if (model == 9)
+    {
+        viewFactor = sqrt(max(saturate(dot(rawNormal, view)), 0.0001));
+        float3 baseReflection = normalize(reflect(-geometricNormal, rawNormal));
+        ambientAlbedo = (albedo + specMap.b * SpecularColor.rgb
+            * pow(max(saturate(dot(view, baseReflection)), 0.0001), max(GeneralParameters.z, 0.0001))) * viewFactor;
+    }
+    else if (model == 10)
+    {
+        albedo += saturate(dot(geometricNormal, view)) * cube * GeneralParameters.x * specMap.r;
+        ambientAlbedo = albedo;
+        emissive = specMap.a * GeneralParameters.w * EyeEmissiveColor.rgb;
+    }
+    if (LightingParameters.w > 0.5)
+        return float4(pow(saturate(albedo + emissive), 1.0 / 2.2), alpha);
+    float3 lit = ambientAlbedo * AmbientColor.rgb
+        + AttachmentDirectLight(model, le3, rawNormal, normal, view, key, albedo, diffuse, specMap, viewFactor) * KeyLightColor.rgb
+        + AttachmentDirectLight(model, le3, rawNormal, normal, view, fill, albedo, diffuse, specMap, viewFactor) * FillLightColor.rgb
+        + AttachmentDirectLight(model, le3, rawNormal, normal, view, rim, albedo, diffuse, specMap, viewFactor) * RimLightColor.rgb;
+    return float4(pow(saturate(lit * LightingParameters.x + emissive), 1.0 / 2.2), alpha);
+}
+
 float4 PSMain(
     VertexOutput input,
     bool isFrontFace : SV_IsFrontFace,
     out float4 aoNormalTarget : SV_TARGET1) : SV_TARGET0
 {
+    if (TextureFlags2.z >= 5 && TextureFlags2.z <= 11)
+        return AttachmentPreview(input, isFrontFace, aoNormalTarget);
     float family = SurfaceParameters.z;
     float diagnostic = SurfaceParameters.y;
     bool le3 = EyeParameters2.w > 0.5;

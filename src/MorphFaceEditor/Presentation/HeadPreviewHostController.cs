@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.Rendering;
 
 namespace MorphFaceEditor.Presentation;
@@ -15,6 +16,7 @@ public sealed class HeadPreviewHostController : IDisposable
     private readonly FrameworkElement _host;
     private readonly Image _image;
     private readonly DispatcherTimer _resizeTimer;
+    private readonly DispatcherTimer _animationTimer;
     private readonly HeadOrbitCamera _camera = new();
     private HeadPreviewRenderer? _renderer;
     private HeadPreviewScene? _scene;
@@ -40,12 +42,18 @@ public sealed class HeadPreviewHostController : IDisposable
             Interval = TimeSpan.FromMilliseconds(150)
         };
         _resizeTimer.Tick += OnResizeTimerTick;
+        _animationTimer = new DispatcherTimer(DispatcherPriority.Background, window.Dispatcher)
+        {
+            Interval = TimeSpan.FromSeconds(1.0 / 30)
+        };
+        _animationTimer.Tick += OnAnimationTimerTick;
         _window.Activated += OnWindowActivityChanged;
         _window.Deactivated += OnWindowActivityChanged;
         _window.StateChanged += OnWindowActivityChanged;
         _window.IsVisibleChanged += OnVisibilityChanged;
         _window.Closed += OnWindowClosed;
         _host.SizeChanged += OnHostSizeChanged;
+        _host.IsVisibleChanged += OnVisibilityChanged;
     }
 
     public event Action<HeadPreviewFrame>? FramePresented;
@@ -84,12 +92,14 @@ public sealed class HeadPreviewHostController : IDisposable
         // after a file dialog closes); do not drop its first render and leave
         // the old frame visible until an unrelated input event requests one.
         RequestRender(allowInactive: true);
+        UpdateAnimationTimer();
     }
 
     public void ClearScene()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         _resizeTimer.Stop();
+        _animationTimer.Stop();
         _scene = null;
         _renderer?.ClearScene();
         _bitmap = null;
@@ -103,6 +113,7 @@ public sealed class HeadPreviewHostController : IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        UpdateAnimationTimer();
         RequestRender(allowInactive);
     }
 
@@ -161,6 +172,7 @@ public sealed class HeadPreviewHostController : IDisposable
         }).ToArray();
         _scene = _scene with { Meshes = meshes };
         _renderer?.UpdateMaterials(update.Materials);
+        UpdateAnimationTimer();
         // A modal HDR picker deactivates the owner window. An explicit material
         // preview still needs one frame; ordinary lifecycle renders remain gated.
         RequestRender(allowInactive: true);
@@ -258,6 +270,7 @@ public sealed class HeadPreviewHostController : IDisposable
         }
         catch (Exception exception)
         {
+            _animationTimer.Stop();
             PreviewFailed?.Invoke(exception.Message);
         }
     }
@@ -300,6 +313,7 @@ public sealed class HeadPreviewHostController : IDisposable
         {
             return;
         }
+        UpdateAnimationTimer();
         _resizeTimer.Stop();
         _resizeTimer.Start();
     }
@@ -310,9 +324,29 @@ public sealed class HeadPreviewHostController : IDisposable
         RequestRender();
     }
 
-    private void OnWindowActivityChanged(object? sender, EventArgs e) => RequestRender();
+    private void OnAnimationTimerTick(object? sender, EventArgs e) => RequestRender();
 
-    private void OnVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e) => RequestRender();
+    private void UpdateAnimationTimer()
+    {
+        var animate = CanRender && _host.IsVisible &&
+                      _options.RenderMode != HeadPreviewRenderMode.Diagnostic &&
+                      _scene?.Meshes.Any(mesh => mesh.Sections.Any(section =>
+                          section.Material.PreviewModel == HumanMaterialPreviewModel.VisorLens)) == true;
+        if (animate) _animationTimer.Start();
+        else _animationTimer.Stop();
+    }
+
+    private void OnWindowActivityChanged(object? sender, EventArgs e)
+    {
+        UpdateAnimationTimer();
+        RequestRender();
+    }
+
+    private void OnVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        UpdateAnimationTimer();
+        RequestRender();
+    }
 
     private void OnWindowClosed(object? sender, EventArgs e) => Dispose();
 
@@ -324,6 +358,8 @@ public sealed class HeadPreviewHostController : IDisposable
         }
         _disposed = true;
         _resizeTimer.Stop();
+        _animationTimer.Stop();
+        _animationTimer.Tick -= OnAnimationTimerTick;
         _resizeTimer.Tick -= OnResizeTimerTick;
         _window.Activated -= OnWindowActivityChanged;
         _window.Deactivated -= OnWindowActivityChanged;
@@ -331,6 +367,7 @@ public sealed class HeadPreviewHostController : IDisposable
         _window.IsVisibleChanged -= OnVisibilityChanged;
         _window.Closed -= OnWindowClosed;
         _host.SizeChanged -= OnHostSizeChanged;
+        _host.IsVisibleChanged -= OnVisibilityChanged;
         _scene = null;
         if (_renderer is not null)
         {

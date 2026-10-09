@@ -23,6 +23,7 @@ public sealed class HeadPreviewRenderer : IDisposable
     private readonly Device _device;
     private readonly DeviceContext _context;
     private readonly string _deviceKind;
+    private readonly Stopwatch _animationClock = Stopwatch.StartNew();
     private readonly VertexShader _vertexShader;
     private readonly PixelShader _pixelShader;
     private readonly VertexShader _postVertexShader;
@@ -43,6 +44,7 @@ public sealed class HeadPreviewRenderer : IDisposable
     private readonly DepthStencilState _depthReadState;
     private readonly BlendState _opaqueBlendState;
     private readonly BlendState _translucentBlendState;
+    private readonly BlendState _additiveBlendState;
     private readonly BlendState _depthOnlyBlendState;
     private readonly SamplerState _materialSampler;
     private readonly SamplerState _postSampler;
@@ -148,6 +150,7 @@ public sealed class HeadPreviewRenderer : IDisposable
         });
         _opaqueBlendState = CreateBlendState(false);
         _translucentBlendState = CreateBlendState(true);
+        _additiveBlendState = CreateAdditiveBlendState();
         _depthOnlyBlendState = CreateDepthOnlyBlendState();
         _materialSampler = new SamplerState(_device, new SamplerStateDescription
         {
@@ -296,7 +299,11 @@ public sealed class HeadPreviewRenderer : IDisposable
         CreateRenderTargets();
     }
 
-    public HeadPreviewFrame Render(HeadOrbitCamera camera, HeadPreviewOptions options, byte[]? destination = null)
+    public HeadPreviewFrame Render(
+        HeadOrbitCamera camera,
+        HeadPreviewOptions options,
+        byte[]? destination = null,
+        float? animationTimeSeconds = null)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(camera);
@@ -306,7 +313,12 @@ public sealed class HeadPreviewRenderer : IDisposable
         {
             throw new ArgumentException($"Destination must contain exactly {requiredLength} bytes.", nameof(destination));
         }
+        if (animationTimeSeconds is { } explicitAnimationTime && !float.IsFinite(explicitAnimationTime))
+        {
+            throw new ArgumentOutOfRangeException(nameof(animationTimeSeconds), "Animation time must be finite.");
+        }
 
+        var frameAnimationTime = animationTimeSeconds ?? (float)_animationClock.Elapsed.TotalSeconds;
         var stopwatch = Stopwatch.StartNew();
         ConfigurePipeline(options);
         var world = Matrix.Identity;
@@ -355,7 +367,7 @@ public sealed class HeadPreviewRenderer : IDisposable
         var drawCalls = 0;
         foreach (var draw in draws.Where(draw => !IsTranslucent(draw.Material, options.RenderMode)))
         {
-            DrawSection(draw.Mesh, draw.Section, draw.Material, options.RenderMode, options.Wireframe);
+            DrawSection(draw.Mesh, draw.Section, draw.Material, options.RenderMode, options.Wireframe, frameAnimationTime);
             drawCalls++;
         }
         CaptureAmbientOcclusionInputs();
@@ -375,11 +387,12 @@ public sealed class HeadPreviewRenderer : IDisposable
             {
                 DrawSection(
                     draw.Mesh, draw.Section, draw.Material, options.RenderMode, options.Wireframe,
+                    frameAnimationTime,
                     depthThreshold: 1f);
                 drawCalls++;
             }
         }
-        foreach (var draw in translucentDraws)
+        foreach (var draw in translucentDraws.Where(draw => draw.Material.BlendMode != HeadMaterialBlendMode.Additive))
         {
             if (draw.Material.Family == HeadMaterialFamily.Hair)
             {
@@ -388,17 +401,27 @@ public sealed class HeadPreviewRenderer : IDisposable
                 // and is visibly wrong on layered shell hairstyles.
                 DrawSection(
                     draw.Mesh, draw.Section, draw.Material, options.RenderMode, options.Wireframe,
+                    frameAnimationTime,
                     facePass: HairFacePass.BackFaces);
                 DrawSection(
                     draw.Mesh, draw.Section, draw.Material, options.RenderMode, options.Wireframe,
+                    frameAnimationTime,
                     facePass: HairFacePass.FrontFaces);
                 drawCalls += 2;
             }
             else
             {
-                DrawSection(draw.Mesh, draw.Section, draw.Material, options.RenderMode, options.Wireframe);
+                DrawSection(draw.Mesh, draw.Section, draw.Material, options.RenderMode, options.Wireframe, frameAnimationTime);
                 drawCalls++;
             }
+        }
+        // Keep additive surfaces in their own pass so their One+One blend and
+        // depth-read state remain separate from ordinary alpha translucency.
+        foreach (var draw in translucentDraws
+                     .Where(draw => draw.Material.BlendMode == HeadMaterialBlendMode.Additive))
+        {
+            DrawSection(draw.Mesh, draw.Section, draw.Material, options.RenderMode, options.Wireframe, frameAnimationTime);
+            drawCalls++;
         }
         if (options.RenderMode != HeadPreviewRenderMode.Diagnostic)
         {
@@ -408,6 +431,7 @@ public sealed class HeadPreviewRenderer : IDisposable
             {
                 DrawSection(
                     draw.Mesh, draw.Section, draw.Material, options.RenderMode, options.Wireframe,
+                    frameAnimationTime,
                     depthThreshold: 1f / 255f);
                 drawCalls++;
             }
@@ -430,6 +454,7 @@ public sealed class HeadPreviewRenderer : IDisposable
         HeadPreviewMaterial definition,
         HeadPreviewRenderMode renderMode,
         bool wireframe,
+        float animationTimeSeconds,
         float? depthThreshold = null,
         HairFacePass facePass = HairFacePass.TwoSided)
     {
@@ -449,6 +474,12 @@ public sealed class HeadPreviewRenderer : IDisposable
         _context.UpdateSubresource(ref meshConstants, _meshBuffer);
         var bindings = HeadPreviewMaterialBindings.Create(definition);
         var material = HeadPreviewMaterialConstants.Create(definition, renderMode, bindings);
+        if (definition.PreviewModel == HumanMaterialPreviewModel.VisorLens)
+        {
+            material.SecondaryColor = new Vector4(0, PeriodicPhase(animationTimeSeconds * 0.2f), 0, 0);
+            material.TertiaryColor = new Vector4(0, PeriodicPhase(animationTimeSeconds * -0.01f), 0, 0);
+            material.QuaternaryColor = new Vector4(0, PeriodicPhase(animationTimeSeconds * -0.05f), 0, 0);
+        }
         if (depthThreshold is not null)
         {
             material.SurfaceParameters.X = -depthThreshold.Value;
@@ -465,7 +496,9 @@ public sealed class HeadPreviewRenderer : IDisposable
 
     private static bool IsTranslucent(HeadPreviewMaterial material, HeadPreviewRenderMode renderMode) =>
         renderMode != HeadPreviewRenderMode.Diagnostic &&
-        material.BlendMode == HeadMaterialBlendMode.Translucent;
+        material.BlendMode is HeadMaterialBlendMode.Translucent or HeadMaterialBlendMode.Additive;
+
+    private static float PeriodicPhase(float value) => value - MathF.Floor(value);
 
     private void CaptureAmbientOcclusionInputs()
     {
@@ -520,8 +553,10 @@ public sealed class HeadPreviewRenderer : IDisposable
     {
         var translucent = renderMode != HeadPreviewRenderMode.Diagnostic &&
                           material.BlendMode == HeadMaterialBlendMode.Translucent;
-        _context.OutputMerger.SetBlendState(translucent ? _translucentBlendState : _opaqueBlendState);
-        _context.OutputMerger.SetDepthStencilState(translucent ? _depthReadState : _depthState);
+        var additive = renderMode != HeadPreviewRenderMode.Diagnostic &&
+                       material.BlendMode == HeadMaterialBlendMode.Additive;
+        _context.OutputMerger.SetBlendState(additive ? _additiveBlendState : translucent ? _translucentBlendState : _opaqueBlendState);
+        _context.OutputMerger.SetDepthStencilState(translucent || additive ? _depthReadState : _depthState);
 
         _context.PixelShader.SetShaderResources(
             0,
@@ -711,6 +746,23 @@ public sealed class HeadPreviewRenderer : IDisposable
             BlendOperation = BlendOperation.Add,
             SourceAlphaBlend = BlendOption.One,
             DestinationAlphaBlend = BlendOption.InverseSourceAlpha,
+            AlphaBlendOperation = BlendOperation.Add,
+            RenderTargetWriteMask = ColorWriteMaskFlags.All
+        };
+        return new BlendState(_device, description);
+    }
+
+    private BlendState CreateAdditiveBlendState()
+    {
+        var description = new BlendStateDescription();
+        description.RenderTarget[0] = new RenderTargetBlendDescription
+        {
+            IsBlendEnabled = true,
+            SourceBlend = BlendOption.One,
+            DestinationBlend = BlendOption.One,
+            BlendOperation = BlendOperation.Add,
+            SourceAlphaBlend = BlendOption.Zero,
+            DestinationAlphaBlend = BlendOption.One,
             AlphaBlendOperation = BlendOperation.Add,
             RenderTargetWriteMask = ColorWriteMaskFlags.All
         };
@@ -1155,6 +1207,7 @@ public sealed class HeadPreviewRenderer : IDisposable
         _postSampler.Dispose();
         _materialSampler.Dispose();
         _depthOnlyBlendState.Dispose();
+        _additiveBlendState.Dispose();
         _translucentBlendState.Dispose();
         _opaqueBlendState.Dispose();
         _depthReadState.Dispose();

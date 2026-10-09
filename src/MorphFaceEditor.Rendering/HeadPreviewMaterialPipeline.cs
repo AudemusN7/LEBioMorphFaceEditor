@@ -4,7 +4,7 @@ using SharpDX;
 
 namespace MorphFaceEditor.Rendering;
 
-internal readonly record struct HeadPreviewMaterialBindings(
+internal readonly partial record struct HeadPreviewMaterialBindings(
     HeadPreviewTexture? Diffuse,
     HeadPreviewTexture? Normal,
     HeadPreviewTexture? Mask,
@@ -18,6 +18,10 @@ internal readonly record struct HeadPreviewMaterialBindings(
 {
     public static HeadPreviewMaterialBindings Create(HeadPreviewMaterial material)
     {
+        if (material.PreviewModel is >= HumanMaterialPreviewModel.Hat and <= HumanMaterialPreviewModel.VisorLens)
+        {
+            return CreateAttachmentBindings(material);
+        }
         if (material.Family == HeadMaterialFamily.MaskedHair)
         {
             return new HeadPreviewMaterialBindings(
@@ -222,7 +226,7 @@ internal readonly record struct HeadPreviewMaterialBindings(
 }
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct HeadPreviewMaterialConstants
+internal partial struct HeadPreviewMaterialConstants
 {
     public Vector4 BaseColor;
     public Vector4 SecondaryColor;
@@ -263,6 +267,10 @@ internal struct HeadPreviewMaterialConstants
     {
         var diagnostic = mode == HeadPreviewRenderMode.Diagnostic;
         var family = FamilyIndex(material.Family);
+        if (material.PreviewModel is >= HumanMaterialPreviewModel.Hat and <= HumanMaterialPreviewModel.VisorLens)
+        {
+            return CreateAttachmentConstants(material, diagnostic, bindings);
+        }
         var femaleFace = material.Family == HeadMaterialFamily.Skin &&
             (material.Textures.ContainsKey("HED_Makeup_Mask") ||
              material.Scalars.ContainsKey("HED_Brow_Tint_Scalar") ||

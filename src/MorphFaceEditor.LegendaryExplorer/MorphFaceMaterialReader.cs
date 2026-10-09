@@ -73,8 +73,16 @@ internal sealed class MorphFaceMaterialReader(
         _materialCache[MaterialIdentityKey.Create(source)].Dependencies;
 
     // Native attachment controls do not establish Custom Mode editability.
-    internal ResolvedHeadMaterial ReadFaceAttachmentEvidence(ExportEntry materialExport) =>
-        ForFaceControls(ReadMaterialEvidence(materialExport));
+    internal ResolvedHeadMaterial ReadFaceAttachmentEvidence(ExportEntry materialExport)
+    {
+        // Menu selections can load an attachment from a different package,
+        // without a BioMorphFace owner. Use the same preview classification as
+        // the face-owned attachment route before building texture metadata.
+        var model = FindAttachmentPreviewModel(materialExport);
+        return model != HumanMaterialPreviewModel.Default || IsHatAttachment(materialExport)
+            ? ReadHatPreviewMaterial(materialExport, model: model)
+            : ForFaceControls(ReadMaterialEvidence(materialExport));
+    }
 
     private static ResolvedHeadMaterial ForFaceControls(ResolvedHeadMaterial material) => material with
     {
@@ -149,8 +157,9 @@ internal sealed class MorphFaceMaterialReader(
             ResolvedHeadMaterial material;
             try
             {
-                material = IsHatAttachment(materialExport)
-                    ? ReadHatPreviewMaterial(materialExport, warnings, decodeTextures)
+                var attachmentPreviewModel = FindAttachmentPreviewModel(materialExport);
+                material = attachmentPreviewModel != HumanMaterialPreviewModel.Default || IsHatAttachment(materialExport)
+                    ? ReadHatPreviewMaterial(materialExport, warnings, decodeTextures, attachmentPreviewModel)
                     : ReadMaterial(materialExport, overrides, overrideTextures, warnings, decodeTextures);
             }
             catch (Exception exception)
@@ -347,6 +356,82 @@ internal sealed class MorphFaceMaterialReader(
     }
 
     private ResolvedHeadMaterial ReadHatPreviewMaterial(
+        ExportEntry materialExport,
+        List<string>? warnings = null,
+        bool decodeTextures = true,
+        HumanMaterialPreviewModel model = HumanMaterialPreviewModel.Default)
+    {
+        var identity = MorphFacePackageReader.ToIdentity(materialExport)!;
+        if (model == HumanMaterialPreviewModel.Default)
+            model = FindAttachmentPreviewModel(materialExport);
+        if (model != HumanMaterialPreviewModel.Default)
+        {
+            var materialKey = MaterialIdentityKey.Create(identity);
+            if (!_materialCache.TryGetValue(materialKey, out var cached))
+            {
+                _materialCacheMisses++;
+                cached = ReadMaterialDefaults(ResolveMaterialSource(identity), identity, materialKey, model);
+                _materialCache[materialKey] = cached;
+            }
+            else
+            {
+                VerifyDependencies(cached.Dependencies);
+                if (_materialCache.TryGetValue(materialKey, out cached))
+                {
+                    _materialCacheHits++;
+                }
+                else
+                {
+                    _materialCacheMisses++;
+                    cached = ReadMaterialDefaults(ResolveMaterialSource(identity), identity, materialKey, model);
+                    _materialCache[materialKey] = cached;
+                }
+            }
+
+            if (cached.Material.PreviewModel != model)
+            {
+                // Texture semantics are classified while the dependency metadata
+                // is built, so a generic cache entry cannot be relabelled after
+                // the fact for a dedicated attachment shader.
+                cached = ReadMaterialDefaults(ResolveMaterialSource(identity), identity, materialKey, model);
+                _materialCache[materialKey] = cached;
+            }
+
+            var resolved = decodeTextures ? Materialize(cached, warnings) : cached.Material;
+            return resolved with
+            {
+                Family = HeadMaterialFamily.Accessory,
+                PreviewModel = model,
+                IsPreviewOnlyAttachment = true,
+                ContributesFaceControls = false
+            };
+        }
+
+        return ReadLegacyHatPreviewMaterial(materialExport, warnings, decodeTextures);
+    }
+
+    private HumanMaterialPreviewModel FindAttachmentPreviewModel(ExportEntry materialExport)
+    {
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        ExportEntry? current = materialExport;
+        while (current is not null)
+        {
+            var identity = MaterialIdentityKey.Create(MorphFacePackageReader.ToIdentity(current)!);
+            if (!visited.Add(identity)) break;
+            if (AttachmentMaterialPreviewPolicy.TryGetModel(
+                    current.Game.ToString(), PccAssetPathPolicy.FromExport(current), out var model))
+                return model;
+
+            var properties = current.GetProperties(packageCache: packageCache);
+            var parentPropertyName = current.IsA("RvrEffectsMaterialUser") ? "m_pBaseMaterial" : "Parent";
+            current = ResolveOptional(
+                properties.GetProp<ObjectProperty>(parentPropertyName)?.ResolveToEntry(current.FileRef),
+                $"material '{current.InstancedFullPath}' {parentPropertyName}");
+        }
+        return HumanMaterialPreviewModel.Default;
+    }
+
+    private ResolvedHeadMaterial ReadLegacyHatPreviewMaterial(
         ExportEntry materialExport,
         List<string>? warnings = null,
         bool decodeTextures = true)
@@ -645,7 +730,8 @@ internal sealed class MorphFaceMaterialReader(
     private CachedMaterialMetadata ReadMaterialDefaults(
         ExportEntry materialExport,
         AssetIdentity identity,
-        string materialKey)
+        string materialKey,
+        HumanMaterialPreviewModel previewModelOverride = HumanMaterialPreviewModel.Default)
     {
         var scalarValues = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
         var vectorValues = new Dictionary<string, Vector4>(StringComparer.OrdinalIgnoreCase);
@@ -653,12 +739,26 @@ internal sealed class MorphFaceMaterialReader(
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var master = ReadMaterialChain(materialExport, scalarValues, vectorValues, textureValues, visited)
             ?? materialExport;
-        var previewModel = master.Game == MEGame.LE3
+        var previewModel = previewModelOverride != HumanMaterialPreviewModel.Default
+            ? previewModelOverride
+            : master.Game == MEGame.LE3
             ? HumanMaterialProfiles.Le3PreviewModelForMaster(master.ClassName, PccAssetPathPolicy.FromExport(master))
             : HumanMaterialPreviewModel.Default;
         // These consumers inspect the same compiled map. Share it for this read only.
         var shaderMap = new Lazy<MaterialShaderMap>(() => ReadShaderMap(master));
         MaterialShaderMap GetShaderMap() => shaderMap.Value;
+        if (previewModel == HumanMaterialPreviewModel.CapDecal && master.Game == MEGame.LE3)
+        {
+            try
+            {
+                AddCompiledParameterDefaults(GetShaderMap(), scalarValues, vectorValues);
+            }
+            catch
+            {
+                // Retained material expressions still provide conservative
+                // values when the cooked compiled map is unavailable.
+            }
+        }
         // The effective master is the only family authority here. In
         // particular, an imported/custom material name must never select a
         // family merely because it resembles a stock mesh or character name.
@@ -678,6 +778,21 @@ internal sealed class MorphFaceMaterialReader(
         else if (family == HeadMaterialFamily.MaskedHair)
         {
             AddMaskedHairLiteralTextures(master, textureValues, GetShaderMap);
+        }
+        if (previewModel == HumanMaterialPreviewModel.CapLe2)
+        {
+            AddAttachmentLiteralTexture(master, textureValues, GetShaderMap, "__CapCrewDiffuse", 1);
+        }
+        if (previewModel == HumanMaterialPreviewModel.VisorLens)
+        {
+            // The LE1/LE2 visor lens is an inline additive material with no
+            // retained texture-parameter expressions. Bind its compiled
+            // sampler table directly so the preview can resolve the same
+            // four 2D inputs as the native shader.
+            AddAttachmentLiteralTexture(master, textureValues, GetShaderMap, "__LensScanline", 0);
+            AddAttachmentLiteralTexture(master, textureValues, GetShaderMap, "__LensEmission", 1);
+            AddAttachmentLiteralTexture(master, textureValues, GetShaderMap, "__LensDistortion", 2);
+            AddAttachmentLiteralTexture(master, textureValues, GetShaderMap, "__LensFractal", 3);
         }
         if (master.Game == MEGame.LE1 && family == HeadMaterialFamily.Hair &&
             !textureValues.ContainsKey("HAIR_Diff"))
@@ -712,7 +827,11 @@ internal sealed class MorphFaceMaterialReader(
                     pair.Key, new TextureMetadata(MorphFacePackageReader.ToIdentity(pair.Value)!, definition));
             })
             .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
-        var fixedCubeTexture = family switch
+        var isDedicatedAttachmentPreview = previewModel is >= HumanMaterialPreviewModel.Hat and <= HumanMaterialPreviewModel.VisorLens;
+        var fixedCubeTexture = isDedicatedAttachmentPreview
+            ? ReadFixedCubeTexture(
+                master, 0, HeadMaterialFamily.Accessory, "__Attachment_Cube", "attachment reflection cube", GetShaderMap)
+            : family switch
         {
             HeadMaterialFamily.Eyes => ReadFixedCubeTexture(
                 master, 0, family, "__HUM_Eye_Primary_Cube", "Human eye primary reflection cube", GetShaderMap),
@@ -724,7 +843,10 @@ internal sealed class MorphFaceMaterialReader(
                 master, 0, family, "__TUR_Eye_Chrome_Cube", "LE3 Turian chrome reflection cube", GetShaderMap),
             _ => null
         };
-        var secondaryFixedCubeTexture = family switch
+        var secondaryFixedCubeTexture = isDedicatedAttachmentPreview
+            ? ReadFixedCubeTexture(
+                master, 1, HeadMaterialFamily.Accessory, "__Attachment_Secondary_Cube", "secondary attachment reflection cube", GetShaderMap)
+            : family switch
         {
             HeadMaterialFamily.Eyes => ReadFixedCubeTexture(
                 master, 1, family, "__HUM_Eye_Secondary_Cube", "Human eye secondary reflection cube", GetShaderMap),
@@ -734,6 +856,17 @@ internal sealed class MorphFaceMaterialReader(
                 master, 1, family, "__TUR_Eye_Parameter_Cube", "LE3 Turian parameter reflection cube", GetShaderMap),
             _ => null
         };
+        var attachmentCubeParameterName = previewModel == HumanMaterialPreviewModel.Visor
+            ? "HMM_HGR_ALL_CUBE"
+            : "CubeMap";
+        var attachmentCubeOverride = isDedicatedAttachmentPreview
+            ? textureValues.GetValueOrDefault(attachmentCubeParameterName)
+            : null;
+        if (attachmentCubeOverride?.ClassName.Equals("TextureCube", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            fixedCubeTexture = ReadCubeMetadata(attachmentCubeOverride, "attachment CubeMap parameter");
+            secondaryFixedCubeTexture = null;
+        }
         MaterialShaderParameterSupport? support = null;
         try
         {
@@ -784,8 +917,12 @@ internal sealed class MorphFaceMaterialReader(
             identity,
             master.ObjectNameString,
             family,
-            HumanMaterialProfiles.BlendMode(family),
-            HumanMaterialProfiles.IsTwoSided(family),
+            isDedicatedAttachmentPreview
+                ? ReadNativeBlendMode(master) ?? HumanMaterialProfiles.BlendMode(family)
+                : HumanMaterialProfiles.BlendMode(family),
+            isDedicatedAttachmentPreview
+                ? ReadNativeTwoSided(master) ?? HumanMaterialProfiles.IsTwoSided(family)
+                : HumanMaterialProfiles.IsTwoSided(family),
             scalarValues,
             vectorValues,
             new Dictionary<string, MaterialTextureBinding>())
@@ -819,6 +956,42 @@ internal sealed class MorphFaceMaterialReader(
         AddCubeDependencies(secondaryFixedCubeTexture, dependencies);
         dependencies.Add(Path.GetFullPath(master.FileRef.FilePath));
         return new CachedMaterialMetadata(template, textureMetadata, fixedCubeTexture, secondaryFixedCubeTexture, dependencies);
+    }
+
+    private static HeadMaterialBlendMode? ReadNativeBlendMode(ExportEntry master)
+    {
+        var value = master.GetProperty<EnumProperty>("BlendMode")?.Value.Name;
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        if (value.Contains("Masked", StringComparison.OrdinalIgnoreCase)) return HeadMaterialBlendMode.Masked;
+        if (value.Contains("Additive", StringComparison.OrdinalIgnoreCase)) return HeadMaterialBlendMode.Additive;
+        if (value.Contains("Translucent", StringComparison.OrdinalIgnoreCase) ||
+            value.Contains("Modulate", StringComparison.OrdinalIgnoreCase))
+            return HeadMaterialBlendMode.Translucent;
+        if (value.Contains("Opaque", StringComparison.OrdinalIgnoreCase)) return HeadMaterialBlendMode.Opaque;
+        return null;
+    }
+
+    private static bool? ReadNativeTwoSided(ExportEntry master) =>
+        master.GetProperty<BoolProperty>("bTwoSided")?.Value ??
+        master.GetProperty<BoolProperty>("TwoSided")?.Value;
+
+    private static void AddCompiledParameterDefaults(
+        MaterialShaderMap shaderMap,
+        Dictionary<string, float> scalars,
+        Dictionary<string, Vector4> vectors)
+    {
+        foreach (var expression in shaderMap.UniformPixelScalarExpressions.OfType<MaterialUniformExpressionScalarParameter>())
+        {
+            var name = expression.ParameterName.Instanced;
+            if (!string.IsNullOrWhiteSpace(name)) scalars.TryAdd(name, expression.DefaultValue);
+        }
+        foreach (var expression in shaderMap.UniformPixelVectorExpressions.OfType<MaterialUniformExpressionVectorParameter>())
+        {
+            var name = expression.ParameterName.Instanced;
+            if (string.IsNullOrWhiteSpace(name)) continue;
+            var value = expression.DefaultValue;
+            vectors.TryAdd(name, new Vector4(value.R, value.G, value.B, value.A));
+        }
     }
 
     /// <summary>
@@ -907,6 +1080,11 @@ internal sealed class MorphFaceMaterialReader(
             return null;
         }
 
+        return ReadCubeMetadata(cube, label);
+    }
+
+    private CubeMetadata? ReadCubeMetadata(ExportEntry cube, string label)
+    {
         string[] faceNames = ["FacePosX", "FaceNegX", "FacePosY", "FaceNegY", "FacePosZ", "FaceNegZ"];
         var properties = cube.GetProperties(packageCache: packageCache);
         var faces = new List<AssetIdentity>(6);
@@ -914,7 +1092,7 @@ internal sealed class MorphFaceMaterialReader(
         {
             var face = ResolveOptional(
                 properties.GetProp<ObjectProperty>(faceName)?.ResolveToEntry(cube.FileRef),
-                $"Eye cube '{cube.InstancedFullPath}' {faceName}");
+                $"{label} '{cube.InstancedFullPath}' {faceName}");
             if (face is null || !face.IsA("Texture2D"))
             {
                 return null;
@@ -993,9 +1171,58 @@ internal sealed class MorphFaceMaterialReader(
         }
     }
 
+    private void AddAttachmentLiteralTexture(
+        ExportEntry master,
+        Dictionary<string, ExportEntry> textures,
+        Func<MaterialShaderMap> shaderMapProvider,
+        string parameterName,
+        int uniformIndex)
+    {
+        var material = ObjectBinary.From<Material>(master);
+        var uniformTextures = material.SM3MaterialResource.UniformExpressionTextures;
+        var expressions = shaderMapProvider().Uniform2DTextureExpressions;
+        if (uniformIndex < 0 || uniformIndex >= expressions.Length) return;
+        var textureIndex = expressions[uniformIndex].TextureIndex;
+        if (textureIndex < 0 || textureIndex >= uniformTextures.Length) return;
+        var source = ResolveOptional(
+            master.FileRef.GetEntry(uniformTextures[textureIndex]),
+            $"attachment master material '{master.InstancedFullPath}' uniform texture {uniformIndex}");
+        if (source is not null) textures[parameterName] = source;
+    }
+
     private static MaterialParameterDefinition DescribeTexture(
         string name, HeadMaterialFamily family, HumanMaterialPreviewModel previewModel = HumanMaterialPreviewModel.Default)
     {
+        if (previewModel is >= HumanMaterialPreviewModel.Hat and <= HumanMaterialPreviewModel.VisorLens)
+        {
+            var upperName = name.ToUpperInvariant();
+            if (previewModel == HumanMaterialPreviewModel.VisorLens)
+            {
+                return new MaterialParameterDefinition(
+                    name, name, "Attachment preview", MaterialParameterKind.Texture, HeadMaterialFamily.Accessory,
+                    TextureRole: TextureRole.Other,
+                    ColorSpace: upperName == "__LENSEMISSION" ? TextureColorSpace.Srgb : TextureColorSpace.Linear,
+                    AlphaPolicy: TextureAlphaPolicy.Ignore);
+            }
+            var packedDataTexture = upperName is "HMN_HAT_DIFF" or "CAP_DIFF";
+            var trueDiffuseTexture = upperName is "__CAPCREWDIFFUSE" or "DIFFUSE_MAP";
+            var role = packedDataTexture
+                ? TextureRole.Other
+                : upperName.Contains("NORM", StringComparison.Ordinal)
+                ? TextureRole.Normal
+                : upperName.Contains("SPEC", StringComparison.Ordinal)
+                    ? TextureRole.Specular
+                    : upperName.Contains("MASK", StringComparison.Ordinal) || upperName.Contains("OPAC", StringComparison.Ordinal)
+                        ? TextureRole.Mask
+                        : trueDiffuseTexture
+                            ? TextureRole.Diffuse
+                            : TextureRole.Other;
+            var colorSpace = role == TextureRole.Diffuse ? TextureColorSpace.Srgb : TextureColorSpace.Linear;
+            return new MaterialParameterDefinition(
+                name, name, "Attachment preview", MaterialParameterKind.Texture, HeadMaterialFamily.Accessory,
+                TextureRole: role, ColorSpace: colorSpace,
+                AlphaPolicy: role == TextureRole.Mask ? TextureAlphaPolicy.Mask : TextureAlphaPolicy.Ignore);
+        }
         if (previewModel == HumanMaterialPreviewModel.Kaiden)
         {
             // Exact native sampler roles for preview, not editable parameter metadata.

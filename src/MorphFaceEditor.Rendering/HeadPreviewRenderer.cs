@@ -64,6 +64,8 @@ public sealed class HeadPreviewRenderer : IDisposable
     private RenderTargetView _renderTarget = null!;
     private Texture2D _normalTexture = null!;
     private RenderTargetView _normalTarget = null!;
+    private Texture2D _ambientDiffuseTexture = null!;
+    private RenderTargetView _ambientDiffuseTarget = null!;
     private Texture2D _aoNormalTexture = null!;
     private ShaderResourceView _aoNormalShaderView = null!;
     private Texture2D _depthTexture = null!;
@@ -73,6 +75,8 @@ public sealed class HeadPreviewRenderer : IDisposable
     private ShaderResourceView _aoDepthShaderView = null!;
     private Texture2D _resolvedTexture = null!;
     private ShaderResourceView _resolvedShaderView = null!;
+    private Texture2D _resolvedAmbientTexture = null!;
+    private ShaderResourceView _resolvedAmbientShaderView = null!;
     private Texture2D _postTexture = null!;
     private RenderTargetView _postTarget = null!;
     private Texture2D _stagingTexture = null!;
@@ -104,6 +108,13 @@ public sealed class HeadPreviewRenderer : IDisposable
             _deviceKind = "WARP";
         }
         _context = _device.ImmediateContext;
+        var hdrSupport = _device.CheckFormatSupport(Format.R16G16B16A16_Float);
+        var requiredHdrSupport = FormatSupport.RenderTarget | FormatSupport.Blendable | FormatSupport.ShaderSample;
+        if ((hdrSupport & requiredHdrSupport) != requiredHdrSupport)
+        {
+            throw new NotSupportedException(
+                "The selected D3D11 device cannot render, blend, and sample the required R16G16B16A16_FLOAT preview target.");
+        }
         _sampleDescription = SelectMultisampleDescription();
 
         using var vertexBytecode = CompileShader("VSMain", "vs_5_0");
@@ -385,7 +396,7 @@ public sealed class HeadPreviewRenderer : IDisposable
                 lighting.AmbientColor.Z * lighting.AmbientIntensity,
                 0),
             LightingParameters = new Vector4(
-                lighting.Exposure,
+                1,
                 lighting.KeyAngularRadius,
                 lighting.AmbientFresnel,
                 options.RenderMode == HeadPreviewRenderMode.Unlit ? 1 : 0),
@@ -495,7 +506,9 @@ public sealed class HeadPreviewRenderer : IDisposable
         ApplyPostProcess(
             lighting,
             camera,
-            options.AmbientOcclusionEnabled && options.RenderMode != HeadPreviewRenderMode.Unlit);
+            options.AmbientOcclusionEnabled && options.RenderMode != HeadPreviewRenderMode.Unlit,
+            options.RenderMode,
+            options.BackgroundColor);
 
         var pixels = ReadTexture(destination);
         stopwatch.Stop();
@@ -761,22 +774,27 @@ public sealed class HeadPreviewRenderer : IDisposable
         _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
         _context.CopyResource(_depthTexture, _aoDepthTexture);
         _context.CopyResource(_normalTexture, _aoNormalTexture);
-        _context.OutputMerger.SetTargets(_depthView, _renderTarget, _normalTarget);
+        _context.OutputMerger.SetTargets(_depthView, _renderTarget, _normalTarget, _ambientDiffuseTarget);
     }
 
     private void ConfigurePipeline(HeadPreviewOptions options)
     {
         var background = options.BackgroundColor ?? new System.Numerics.Vector3(0.035f, 0.043f, 0.055f);
-        _context.OutputMerger.SetTargets(_depthView, _renderTarget, _normalTarget);
+        var linearBackground = new System.Numerics.Vector3(
+            ToHdrFloat(SrgbToLinear(background.X)),
+            ToHdrFloat(SrgbToLinear(background.Y)),
+            ToHdrFloat(SrgbToLinear(background.Z)));
+        _context.OutputMerger.SetTargets(_depthView, _renderTarget, _normalTarget, _ambientDiffuseTarget);
         _context.OutputMerger.SetDepthStencilState(_depthState);
         _context.Rasterizer.SetViewport(0, 0, _width, _height);
         _context.Rasterizer.State = options.Wireframe ? _wireframeRasterizer : _solidRasterizer;
         _context.ClearRenderTargetView(_renderTarget, new Color4(
-            Math.Clamp(background.X, 0, 1),
-            Math.Clamp(background.Y, 0, 1),
-            Math.Clamp(background.Z, 0, 1),
+            linearBackground.X,
+            linearBackground.Y,
+            linearBackground.Z,
             1));
         _context.ClearRenderTargetView(_normalTarget, new Color4(0.5f, 0.5f, 1, 1));
+        _context.ClearRenderTargetView(_ambientDiffuseTarget, new Color4(0, 0, 0, 0));
         _context.ClearDepthStencilView(_depthView, DepthStencilClearFlags.Depth, 1, 0);
         _context.InputAssembler.InputLayout = _inputLayout;
         _context.InputAssembler.PrimitiveTopology = PrimitiveTopology.TriangleList;
@@ -993,34 +1011,40 @@ public sealed class HeadPreviewRenderer : IDisposable
     private BlendState CreateBlendState(bool translucent)
     {
         var description = new BlendStateDescription();
-        description.RenderTarget[0] = new RenderTargetBlendDescription
+        for (var targetIndex = 0; targetIndex < 3; targetIndex++)
         {
-            IsBlendEnabled = translucent,
-            SourceBlend = BlendOption.SourceAlpha,
-            DestinationBlend = BlendOption.InverseSourceAlpha,
-            BlendOperation = BlendOperation.Add,
-            SourceAlphaBlend = BlendOption.One,
-            DestinationAlphaBlend = BlendOption.InverseSourceAlpha,
-            AlphaBlendOperation = BlendOperation.Add,
-            RenderTargetWriteMask = ColorWriteMaskFlags.All
-        };
+            description.RenderTarget[targetIndex] = new RenderTargetBlendDescription
+            {
+                IsBlendEnabled = translucent,
+                SourceBlend = BlendOption.SourceAlpha,
+                DestinationBlend = BlendOption.InverseSourceAlpha,
+                BlendOperation = BlendOperation.Add,
+                SourceAlphaBlend = BlendOption.One,
+                DestinationAlphaBlend = BlendOption.InverseSourceAlpha,
+                AlphaBlendOperation = BlendOperation.Add,
+                RenderTargetWriteMask = ColorWriteMaskFlags.All
+            };
+        }
         return new BlendState(_device, description);
     }
 
     private BlendState CreateAdditiveBlendState()
     {
         var description = new BlendStateDescription();
-        description.RenderTarget[0] = new RenderTargetBlendDescription
+        for (var targetIndex = 0; targetIndex < 3; targetIndex++)
         {
-            IsBlendEnabled = true,
-            SourceBlend = BlendOption.One,
-            DestinationBlend = BlendOption.One,
-            BlendOperation = BlendOperation.Add,
-            SourceAlphaBlend = BlendOption.Zero,
-            DestinationAlphaBlend = BlendOption.One,
-            AlphaBlendOperation = BlendOperation.Add,
-            RenderTargetWriteMask = ColorWriteMaskFlags.All
-        };
+            description.RenderTarget[targetIndex] = new RenderTargetBlendDescription
+            {
+                IsBlendEnabled = true,
+                SourceBlend = BlendOption.One,
+                DestinationBlend = BlendOption.One,
+                BlendOperation = BlendOperation.Add,
+                SourceAlphaBlend = BlendOption.Zero,
+                DestinationAlphaBlend = BlendOption.One,
+                AlphaBlendOperation = BlendOperation.Add,
+                RenderTargetWriteMask = ColorWriteMaskFlags.All
+            };
+        }
         return new BlendState(_device, description);
     }
 
@@ -1038,17 +1062,22 @@ public sealed class HeadPreviewRenderer : IDisposable
     private void ApplyPostProcess(
         HeadPreviewLightingRig lighting,
         HeadOrbitCamera camera,
-        bool ambientOcclusionEnabled)
+        bool ambientOcclusionEnabled,
+        HeadPreviewRenderMode renderMode,
+        System.Numerics.Vector3? backgroundColor)
     {
         _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
         if (_sampleDescription.Count > 1)
         {
-            _context.ResolveSubresource(_renderTexture, 0, _resolvedTexture, 0, Format.B8G8R8A8_UNorm);
+            _context.ResolveSubresource(_renderTexture, 0, _resolvedTexture, 0, Format.R16G16B16A16_Float);
+            _context.ResolveSubresource(_ambientDiffuseTexture, 0, _resolvedAmbientTexture, 0, Format.R16G16B16A16_Float);
         }
         else
         {
             _context.CopyResource(_renderTexture, _resolvedTexture);
+            _context.CopyResource(_ambientDiffuseTexture, _resolvedAmbientTexture);
         }
+        var background = backgroundColor ?? new System.Numerics.Vector3(0.035f, 0.043f, 0.055f);
         var constants = new PostProcessConstants
         {
             InverseProjection = Matrix.Invert(camera.CreateProjectionMatrix(_width / (float)_height)),
@@ -1068,6 +1097,16 @@ public sealed class HeadPreviewRenderer : IDisposable
                 lighting.BloomThreshold,
                 lighting.BloomIntensity,
                 0,
+                0),
+            DisplayParameters = new Vector4(
+                lighting.Exposure,
+                renderMode != HeadPreviewRenderMode.Unlit ? 1 : 0,
+                0,
+                0),
+            DisplayBackground = new Vector4(
+                ToHdrFloat(SrgbToLinear(background.X)),
+                ToHdrFloat(SrgbToLinear(background.Y)),
+                ToHdrFloat(SrgbToLinear(background.Z)),
                 0)
         };
         _context.UpdateSubresource(ref constants, _postProcessBuffer);
@@ -1093,13 +1132,25 @@ public sealed class HeadPreviewRenderer : IDisposable
             _context.PixelShader.SetShaderResources(
                 10, _resolvedShaderView, null, _aoDepthShaderView, null, _aoNormalShaderView);
         }
+        _context.PixelShader.SetShaderResources(18, _resolvedAmbientShaderView);
         _context.Draw(3, 0);
         _context.PixelShader.SetShaderResources(10, new ShaderResourceView?[5]);
+        _context.PixelShader.SetShaderResources(18, new ShaderResourceView?[] { null });
         _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
     }
 
     private static float ClampFinite(float value, float fallback, float minimum, float maximum) =>
         float.IsFinite(value) ? Math.Clamp(value, minimum, maximum) : fallback;
+
+    private static float SrgbToLinear(float value)
+    {
+        var channel = Math.Clamp(value, 0, 1);
+        return channel <= 0.04045f
+            ? channel / 12.92f
+            : MathF.Pow((channel + 0.055f) / 1.055f, 2.4f);
+    }
+
+    private static float ToHdrFloat(float value) => (float)(System.Half)value;
 
     private void CreateShadowMap()
     {
@@ -1139,7 +1190,7 @@ public sealed class HeadPreviewRenderer : IDisposable
             Height = _height,
             MipLevels = 1,
             ArraySize = 1,
-            Format = Format.B8G8R8A8_UNorm,
+            Format = Format.R16G16B16A16_Float,
             SampleDescription = _sampleDescription,
             Usage = ResourceUsage.Default,
             BindFlags = BindFlags.RenderTarget
@@ -1157,6 +1208,18 @@ public sealed class HeadPreviewRenderer : IDisposable
             BindFlags = BindFlags.RenderTarget
         });
         _normalTarget = new RenderTargetView(_device, _normalTexture);
+        _ambientDiffuseTexture = new Texture2D(_device, new Texture2DDescription
+        {
+            Width = _width,
+            Height = _height,
+            MipLevels = 1,
+            ArraySize = 1,
+            Format = Format.R16G16B16A16_Float,
+            SampleDescription = _sampleDescription,
+            Usage = ResourceUsage.Default,
+            BindFlags = BindFlags.RenderTarget
+        });
+        _ambientDiffuseTarget = new RenderTargetView(_device, _ambientDiffuseTexture);
         _aoNormalTexture = new Texture2D(_device, new Texture2DDescription
         {
             Width = _width,
@@ -1229,12 +1292,24 @@ public sealed class HeadPreviewRenderer : IDisposable
             Height = _height,
             MipLevels = 1,
             ArraySize = 1,
-            Format = Format.B8G8R8A8_UNorm,
+            Format = Format.R16G16B16A16_Float,
             SampleDescription = new SampleDescription(1, 0),
             Usage = ResourceUsage.Default,
             BindFlags = BindFlags.ShaderResource
         });
         _resolvedShaderView = new ShaderResourceView(_device, _resolvedTexture);
+        _resolvedAmbientTexture = new Texture2D(_device, new Texture2DDescription
+        {
+            Width = _width,
+            Height = _height,
+            MipLevels = 1,
+            ArraySize = 1,
+            Format = Format.R16G16B16A16_Float,
+            SampleDescription = new SampleDescription(1, 0),
+            Usage = ResourceUsage.Default,
+            BindFlags = BindFlags.ShaderResource
+        });
+        _resolvedAmbientShaderView = new ShaderResourceView(_device, _resolvedAmbientTexture);
         _postTexture = new Texture2D(_device, new Texture2DDescription
         {
             Width = _width,
@@ -1336,9 +1411,13 @@ public sealed class HeadPreviewRenderer : IDisposable
 
     private SampleDescription SelectMultisampleDescription()
     {
+        if ((_device.CheckFormatSupport(Format.R16G16B16A16_Float) & FormatSupport.MultisampleResolve) == 0)
+        {
+            return new SampleDescription(1, 0);
+        }
         foreach (var count in new[] { 4, 2 })
         {
-            var colorQuality = _device.CheckMultisampleQualityLevels(Format.B8G8R8A8_UNorm, count);
+            var colorQuality = _device.CheckMultisampleQualityLevels(Format.R16G16B16A16_Float, count);
             var depthQuality = _device.CheckMultisampleQualityLevels(Format.D32_Float, count);
             var normalQuality = _device.CheckMultisampleQualityLevels(Format.R16G16B16A16_Float, count);
             if (colorQuality > 0 && depthQuality > 0 && normalQuality > 0)
@@ -1468,6 +1547,8 @@ public sealed class HeadPreviewRenderer : IDisposable
         _postTexture.Dispose();
         _resolvedShaderView.Dispose();
         _resolvedTexture.Dispose();
+        _resolvedAmbientShaderView.Dispose();
+        _resolvedAmbientTexture.Dispose();
         _aoDepthShaderView.Dispose();
         _aoDepthTexture.Dispose();
         _depthShaderView.Dispose();
@@ -1477,6 +1558,8 @@ public sealed class HeadPreviewRenderer : IDisposable
         _aoNormalTexture.Dispose();
         _normalTarget.Dispose();
         _normalTexture.Dispose();
+        _ambientDiffuseTarget.Dispose();
+        _ambientDiffuseTexture.Dispose();
         _renderTarget.Dispose();
         _renderTexture.Dispose();
     }
@@ -1585,6 +1668,8 @@ public sealed class HeadPreviewRenderer : IDisposable
         public Vector4 PixelSizeAndSamples;
         public Vector4 DepthParameters;
         public Vector4 BloomParameters;
+        public Vector4 DisplayParameters;
+        public Vector4 DisplayBackground;
     }
 
     private sealed class GpuTexture(

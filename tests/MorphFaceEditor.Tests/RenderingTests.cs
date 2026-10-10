@@ -48,7 +48,8 @@ public static class RenderingTests
         new("explicit preview updates render while inactive but realized", ExplicitPreviewUpdatesRenderWhileInactive),
         new("scene publication settles with a second viewport frame", ScenePublicationSettlesWithSecondFrame),
         new("renderer rejects work after deterministic disposal", RendererRejectsWorkAfterDisposal),
-        .. ShadowRenderingTests.All
+        .. ShadowRenderingTests.All,
+        .. HdrRenderingTests.All
     ];
 
     private static void OrbitCameraFitsAndClamps()

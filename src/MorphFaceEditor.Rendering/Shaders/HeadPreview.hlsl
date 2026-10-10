@@ -108,6 +108,9 @@ cbuffer PostProcessConstants : register(b4)
     float4 BloomParameters;
     float4 DisplayParameters;
     float4 DisplayBackground;
+    float4 BloomTint;
+    // Normalized UV direction for the separable bloom blur.
+    float4 BloomPassParameters;
 };
 
 Texture2D SceneColorTexture : register(t10);
@@ -116,6 +119,8 @@ Texture2D SceneDepthSingleTexture : register(t12);
 Texture2DMS<float4> SceneNormalMsaaTexture : register(t13);
 Texture2D SceneNormalSingleTexture : register(t14);
 Texture2D SceneAmbientDiffuseTexture : register(t18);
+Texture2D PostBloomTexture : register(t19);
+Texture2D GradingLutTexture : register(t20);
 SamplerState PostSampler : register(s1);
 
 cbuffer SkinningConstants : register(b2)
@@ -2560,6 +2565,93 @@ float3 EvaluateBloom(float2 uv)
     return bloom * BloomParameters.y;
 }
 
+float4 PSBloomExtract(PostVertexOutput input) : SV_TARGET
+{
+    float3 bloom = 0;
+    // Extract before downsampling so small HDR highlights are not lost below
+    // threshold. Four by four samples cover each quarter-resolution pixel.
+    [unroll]
+    for (int y = 0; y < 4; ++y)
+    {
+        [unroll]
+        for (int x = 0; x < 4; ++x)
+        {
+            float2 uv = input.TexCoord + (float2(x, y) - 1.5) * PixelSizeAndSamples.xy;
+            float3 scene = SceneColorTexture.SampleLevel(PostSampler, uv, 0).rgb;
+            if (!IsDisplayBackground(uv, scene))
+            {
+                float peak = max(scene.r, max(scene.g, scene.b));
+                // Recovered UE3 gather rule: maximum channel, threshold,
+                // fixed ramp of two. No per-channel colour subtraction.
+                float amount = saturate((peak - BloomParameters.x) * 0.5);
+                bloom += max(scene, 0) * amount;
+            }
+        }
+    }
+    return float4(bloom * (DisplayParameters.x / 16.0), 1);
+}
+
+float4 PSBloomBlur(PostVertexOutput input) : SV_TARGET
+{
+    // Five bilinear fetches approximate a normalized nine-tap Gaussian.
+    float2 step = BloomPassParameters.xy;
+    float3 bloom = PostBloomTexture.SampleLevel(PostSampler, input.TexCoord, 0).rgb * 0.227027;
+    bloom += PostBloomTexture.SampleLevel(PostSampler, input.TexCoord + step * 1.384615, 0).rgb * 0.316216;
+    bloom += PostBloomTexture.SampleLevel(PostSampler, input.TexCoord - step * 1.384615, 0).rgb * 0.316216;
+    bloom += PostBloomTexture.SampleLevel(PostSampler, input.TexCoord + step * 3.230769, 0).rgb * 0.070270;
+    bloom += PostBloomTexture.SampleLevel(PostSampler, input.TexCoord - step * 3.230769, 0).rgb * 0.070270;
+    return float4(bloom, 1);
+}
+
+float3 LookupPreviewGrade(float3 color)
+{
+    color = saturate(color);
+    float blue = color.b * 15;
+    float slice = floor(blue);
+    float2 uv = float2((slice * 16 + color.r * 15 + 0.5) / 256,
+                      (color.g * 15 + 0.5) / 16);
+    // Clamp the upper slice explicitly at white; never bleed into another tile.
+    float2 upperUv = uv + float2(min(slice + 1, 15) - slice, 0) / 16;
+    return lerp(GradingLutTexture.SampleLevel(PostSampler, uv, 0).rgb,
+                GradingLutTexture.SampleLevel(PostSampler, upperUv, 0).rgb, frac(blue));
+}
+
+float3 PreviewFilmicResponse(float3 color)
+{
+    // Analytic fallback shipped in BioWare's SFX shader. The captured runtime
+    // LUT differs; this is a documented preview approximation, not a LUT copy.
+    float3 x = max(color - 0.004, 0);
+    float3 f = (x * (6.2 * x + 0.5)) / (x * (6.2 * x + 1.7) + 0.06);
+    return f * f;
+}
+
+float3 EncodeDisplaySrgb(float3 linearColor);
+float3 MapDisplayHighlights(float3 color);
+
+float3 ComposeGamePresentation(float3 scene, float3 bloom)
+{
+    float3 exposedScene = max(scene, 0) * DisplayParameters.x;
+    float3 color = exposedScene;
+    // Shared LE2-style presentation, independent of the loaded source game.
+    color = 1 - exp2(-1.7 * color);
+    float luminance = dot(color, float3(0.299, 0.587, 0.114));
+    float receiver = saturate(BloomParameters.z * exp2(-3 * luminance));
+    float3 bloomContribution = bloom * BloomParameters.y * BloomTint.rgb * receiver;
+    color += bloomContribution;
+    color = PreviewFilmicResponse(color);
+    // Anchor the shared response to Neutral before applying the environment grade.
+    // Convert the neutral reference to this route's pre-power grading domain:
+    // the final 1/2.2 power cancels this 2.2 power at zero curve strength. This
+    // is a domain conversion, not a second display gamma on the final output.
+    float3 referenceDisplay = EncodeDisplaySrgb(MapDisplayHighlights(exposedScene + bloomContribution));
+    float3 referenceGradeDomain = pow(saturate(referenceDisplay), 2.2);
+    color = lerp(referenceGradeDomain, color, DisplayParameters.w);
+    color = LookupPreviewGrade(color);
+    // This path follows the native post-grade power transfer. WPF receives the
+    // encoded bytes directly: do not apply EncodeDisplaySrgb after this power.
+    return pow(saturate(color), 1.0 / 2.2);
+}
+
 float3 EncodeDisplaySrgb(float3 linearColor)
 {
     linearColor = max(linearColor, 0);
@@ -2588,8 +2680,18 @@ float4 ComposePostProcess(PostVertexOutput input, float ambientOcclusion)
     float3 color = scene.rgb * ambientOcclusion;
     if (DisplayParameters.y > 0.5)
     {
-        float3 bloom = EvaluateBloom(input.TexCoord);
         bool background = IsDisplayBackground(input.TexCoord, scene.rgb);
+        if (DisplayParameters.z > 0.5)
+        {
+            float3 bloom = PostBloomTexture.SampleLevel(PostSampler, input.TexCoord, 0).rgb;
+            if (!background)
+                return float4(saturate(ComposeGamePresentation(color, bloom)), scene.a);
+            // Grade/tone mapping must not recolour the selected backdrop. Bloom
+            // can still spread across silhouettes in linear display space.
+            color = scene.rgb + bloom * BloomParameters.y * BloomTint.rgb;
+            return float4(saturate(EncodeDisplaySrgb(color)), scene.a);
+        }
+        float3 bloom = EvaluateBloom(input.TexCoord);
         // Keep the user's background colour stable; additive materials are
         // identified by their HDR colour, so alpha=0 emission still transforms.
         if (!background || any(bloom > 0))

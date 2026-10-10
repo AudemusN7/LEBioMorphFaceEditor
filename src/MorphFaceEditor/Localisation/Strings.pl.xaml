@@ -1663,6 +1663,7 @@ Nie: po pomyślnej odbudowie usuń własne bazy zasobów.</system:String>
   <system:String x:Key="loc_View_MainWindow_LOD" xml:space="preserve">LOD</system:String>
   <system:String x:Key="loc_View_MainWindow_LeftDragOrbitMiddleDragPanRightDragWheelZoom" xml:space="preserve">Przeciąganie lewym przyciskiem: obrót   ·   przeciąganie środkowym: przesuwanie   ·   przeciąganie prawym przyciskiem / kółko: powiększanie</system:String>
   <system:String x:Key="loc_View_MainWindow_Lighting" xml:space="preserve">Oświetlenie</system:String>
+  <system:String x:Key="loc_View_MainWindow_PostProcessing" xml:space="preserve">Postprocessing</system:String>
   <system:String x:Key="loc_View_MainWindow_LoadSelectedFace" xml:space="preserve">Wczytaj wybraną twarz</system:String>
   <system:String x:Key="loc_View_MainWindow_MATERIAL" xml:space="preserve">MATERIAŁ</system:String>
   <system:String x:Key="loc_View_MainWindow_MD5" xml:space="preserve">MD5</system:String>

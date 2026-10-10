@@ -1665,6 +1665,7 @@ Nein: Benutzerdefinierte Asset-Datenbanken nach erfolgreichem Neuaufbau verwerfe
   <system:String x:Key="loc_View_MainWindow_LOD" xml:space="preserve">LOD</system:String>
   <system:String x:Key="loc_View_MainWindow_LeftDragOrbitMiddleDragPanRightDragWheelZoom" xml:space="preserve">Linke Taste ziehen: drehen   ·   Mittlere Taste ziehen: verschieben   ·   Rechte Taste ziehen / Mausrad: zoomen</system:String>
   <system:String x:Key="loc_View_MainWindow_Lighting" xml:space="preserve">Beleuchtung</system:String>
+  <system:String x:Key="loc_View_MainWindow_PostProcessing" xml:space="preserve">Nachbearbeitung</system:String>
   <system:String x:Key="loc_View_MainWindow_LoadSelectedFace" xml:space="preserve">Ausgewähltes Gesicht laden</system:String>
   <system:String x:Key="loc_View_MainWindow_MATERIAL" xml:space="preserve">MATERIAL</system:String>
   <system:String x:Key="loc_View_MainWindow_MD5" xml:space="preserve">MD5</system:String>

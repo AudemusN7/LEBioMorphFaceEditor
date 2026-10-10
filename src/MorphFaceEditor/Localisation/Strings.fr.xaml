@@ -1665,6 +1665,7 @@ Non : supprimer les bases de données de ressources personnalisées après une r
   <system:String x:Key="loc_View_MainWindow_LOD" xml:space="preserve">LOD</system:String>
   <system:String x:Key="loc_View_MainWindow_LeftDragOrbitMiddleDragPanRightDragWheelZoom" xml:space="preserve">Glisser gauche : orbiter   ·   Glisser milieu : déplacer   ·   Glisser droite / molette : zoomer</system:String>
   <system:String x:Key="loc_View_MainWindow_Lighting" xml:space="preserve">Éclairage</system:String>
+  <system:String x:Key="loc_View_MainWindow_PostProcessing" xml:space="preserve">Post-traitement</system:String>
   <system:String x:Key="loc_View_MainWindow_LoadSelectedFace" xml:space="preserve">Charger le visage sélectionné</system:String>
   <system:String x:Key="loc_View_MainWindow_MATERIAL" xml:space="preserve">MATÉRIAU</system:String>
   <system:String x:Key="loc_View_MainWindow_MD5" xml:space="preserve">MD5</system:String>

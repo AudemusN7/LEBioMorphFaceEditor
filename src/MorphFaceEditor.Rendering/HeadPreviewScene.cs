@@ -135,7 +135,10 @@ public sealed record HeadPreviewOptions(
     // ShadowDepthBias uses normalized shadow-map depth units.
     float ShadowDepthBias = 0.0003f,
     // ShadowNormalBias is a fraction of the fitted shadow radius.
-    float ShadowNormalBias = 0.002f);
+    float ShadowNormalBias = 0.002f,
+    HeadPreviewPostProcessMode PostProcessMode = HeadPreviewPostProcessMode.GameInspired,
+    HeadPreviewPostProcessSettings? PostProcessSettings = null,
+    bool PostProcessingEnabled = true);
 
 public sealed record HeadPreviewFrame(
     int Width,

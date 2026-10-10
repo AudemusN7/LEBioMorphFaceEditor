@@ -30,6 +30,8 @@ public sealed class HeadPreviewRenderer : IDisposable
     private readonly PixelShader _shadowPixelShader;
     private readonly VertexShader _postVertexShader;
     private readonly PixelShader _postPixelShader;
+    private readonly PixelShader _bloomExtractShader;
+    private readonly PixelShader _bloomBlurShader;
     private readonly InputLayout _inputLayout;
     private readonly Buffer _sceneBuffer;
     private readonly Buffer _materialBuffer;
@@ -80,6 +82,15 @@ public sealed class HeadPreviewRenderer : IDisposable
     private Texture2D _postTexture = null!;
     private RenderTargetView _postTarget = null!;
     private Texture2D _stagingTexture = null!;
+    private Texture2D _bloomTexture = null!;
+    private RenderTargetView _bloomTarget = null!;
+    private ShaderResourceView _bloomShaderView = null!;
+    private Texture2D _bloomScratchTexture = null!;
+    private RenderTargetView _bloomScratchTarget = null!;
+    private ShaderResourceView _bloomScratchShaderView = null!;
+    private Texture2D? _gradingTexture;
+    private ShaderResourceView? _gradingShaderView;
+    private HeadPreviewPostProcessSettings? _gradingSettings;
     private Texture2D _shadowTexture = null!;
     private DepthStencilView _shadowDepthView = null!;
     private ShaderResourceView _shadowShaderView = null!;
@@ -124,11 +135,15 @@ public sealed class HeadPreviewRenderer : IDisposable
         using var postPixelBytecode = CompileShader(
             _sampleDescription.Count > 1 ? "PSPostProcessMsaa" : "PSPostProcessSingle",
             "ps_5_0");
+        using var bloomExtractBytecode = CompileShader("PSBloomExtract", "ps_5_0");
+        using var bloomBlurBytecode = CompileShader("PSBloomBlur", "ps_5_0");
         _vertexShader = new VertexShader(_device, vertexBytecode);
         _pixelShader = new PixelShader(_device, pixelBytecode);
         _shadowPixelShader = new PixelShader(_device, shadowPixelBytecode);
         _postVertexShader = new VertexShader(_device, postVertexBytecode);
         _postPixelShader = new PixelShader(_device, postPixelBytecode);
+        _bloomExtractShader = new PixelShader(_device, bloomExtractBytecode);
+        _bloomBlurShader = new PixelShader(_device, bloomBlurBytecode);
         _inputLayout = new InputLayout(
             _device,
             ShaderSignature.GetInputSignature(vertexBytecode),
@@ -506,9 +521,12 @@ public sealed class HeadPreviewRenderer : IDisposable
         ApplyPostProcess(
             lighting,
             camera,
-            options.AmbientOcclusionEnabled && options.RenderMode != HeadPreviewRenderMode.Unlit,
+            options.AmbientOcclusionEnabled && options.PostProcessingEnabled && options.RenderMode != HeadPreviewRenderMode.Unlit,
             options.RenderMode,
-            options.BackgroundColor);
+            options.BackgroundColor,
+            options.PostProcessMode,
+            options.PostProcessSettings ?? HeadPreviewPostProcessProfiles.Get(options.LightingPreset),
+            options.PostProcessingEnabled);
 
         var pixels = ReadTexture(destination);
         stopwatch.Stop();
@@ -1064,7 +1082,10 @@ public sealed class HeadPreviewRenderer : IDisposable
         HeadOrbitCamera camera,
         bool ambientOcclusionEnabled,
         HeadPreviewRenderMode renderMode,
-        System.Numerics.Vector3? backgroundColor)
+        System.Numerics.Vector3? backgroundColor,
+        HeadPreviewPostProcessMode postProcessMode = HeadPreviewPostProcessMode.Neutral,
+        HeadPreviewPostProcessSettings? postProcessSettings = null,
+        bool postProcessingEnabled = true)
     {
         _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
         if (_sampleDescription.Count > 1)
@@ -1078,6 +1099,10 @@ public sealed class HeadPreviewRenderer : IDisposable
             _context.CopyResource(_ambientDiffuseTexture, _resolvedAmbientTexture);
         }
         var background = backgroundColor ?? new System.Numerics.Vector3(0.035f, 0.043f, 0.055f);
+        var settings = postProcessSettings ?? HeadPreviewPostProcessProfiles.Get(HeadPreviewLightingPreset.Studio);
+        var gameInspired = postProcessMode == HeadPreviewPostProcessMode.GameInspired;
+        if (gameInspired && postProcessingEnabled)
+            UpdateGradingLut(settings);
         var constants = new PostProcessConstants
         {
             InverseProjection = Matrix.Invert(camera.CreateProjectionMatrix(_width / (float)_height)),
@@ -1089,39 +1114,34 @@ public sealed class HeadPreviewRenderer : IDisposable
             DepthParameters = new Vector4(
                 0.100f,
                 0.25f,
-                ambientOcclusionEnabled
+                ambientOcclusionEnabled && postProcessingEnabled
                     ? lighting.AmbientOcclusionStrength * 1.20f
                     : 0,
                 1.65f),
             BloomParameters = new Vector4(
                 lighting.BloomThreshold,
                 lighting.BloomIntensity,
-                0,
+                settings.BloomScreenBlendThreshold,
                 0),
             DisplayParameters = new Vector4(
                 lighting.Exposure,
-                renderMode != HeadPreviewRenderMode.Unlit ? 1 : 0,
-                0,
-                0),
+                postProcessingEnabled ? 1 : 0,
+                gameInspired ? 1 : 0,
+                settings.ToneCurveStrength),
             DisplayBackground = new Vector4(
                 ToHdrFloat(SrgbToLinear(background.X)),
                 ToHdrFloat(SrgbToLinear(background.Y)),
                 ToHdrFloat(SrgbToLinear(background.Z)),
-                0)
+                0),
+            BloomTint = new Vector4(ToDx(settings.BloomTint), 0),
+            BloomPassParameters = Vector4.Zero
         };
         _context.UpdateSubresource(ref constants, _postProcessBuffer);
 
-        _context.OutputMerger.SetTargets((DepthStencilView?)null, _postTarget);
-        _context.OutputMerger.SetDepthStencilState(null);
-        _context.OutputMerger.SetBlendState(_opaqueBlendState);
-        _context.Rasterizer.SetViewport(0, 0, _width, _height);
-        _context.Rasterizer.State = _solidRasterizer;
-        _context.InputAssembler.InputLayout = null;
-        _context.InputAssembler.PrimitiveTopology = PrimitiveTopology.TriangleList;
-        _context.VertexShader.Set(_postVertexShader);
-        _context.PixelShader.Set(_postPixelShader);
-        _context.PixelShader.SetConstantBuffer(4, _postProcessBuffer);
-        _context.PixelShader.SetSampler(1, _postSampler);
+        if (gameInspired && postProcessingEnabled && lighting.BloomIntensity > 0)
+            RenderBloom(ref constants, settings.BloomRadius1080);
+
+        PreparePostPass(_postTarget, _postPixelShader, _width, _height);
         if (_sampleDescription.Count > 1)
         {
             _context.PixelShader.SetShaderResources(
@@ -1132,11 +1152,80 @@ public sealed class HeadPreviewRenderer : IDisposable
             _context.PixelShader.SetShaderResources(
                 10, _resolvedShaderView, null, _aoDepthShaderView, null, _aoNormalShaderView);
         }
-        _context.PixelShader.SetShaderResources(18, _resolvedAmbientShaderView);
+        _context.PixelShader.SetShaderResources(18, _resolvedAmbientShaderView,
+            gameInspired && postProcessingEnabled && lighting.BloomIntensity > 0 ? _bloomShaderView : null,
+            _gradingShaderView);
         _context.Draw(3, 0);
         _context.PixelShader.SetShaderResources(10, new ShaderResourceView?[5]);
-        _context.PixelShader.SetShaderResources(18, new ShaderResourceView?[] { null });
+        _context.PixelShader.SetShaderResources(18, new ShaderResourceView?[3]);
         _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
+    }
+
+    private void PreparePostPass(RenderTargetView target, PixelShader shader, int width, int height)
+    {
+        _context.OutputMerger.SetTargets((DepthStencilView?)null, target);
+        _context.OutputMerger.SetDepthStencilState(null);
+        _context.OutputMerger.SetBlendState(_opaqueBlendState);
+        _context.Rasterizer.SetViewport(0, 0, width, height);
+        _context.Rasterizer.State = _solidRasterizer;
+        _context.InputAssembler.InputLayout = null;
+        _context.InputAssembler.PrimitiveTopology = PrimitiveTopology.TriangleList;
+        _context.VertexShader.Set(_postVertexShader);
+        _context.PixelShader.Set(shader);
+        _context.PixelShader.SetConstantBuffer(4, _postProcessBuffer);
+        _context.PixelShader.SetSampler(1, _postSampler);
+    }
+
+    private void RenderBloom(ref PostProcessConstants constants, float radius1080)
+    {
+        var width = _bloomTexture.Description.Width;
+        var height = _bloomTexture.Description.Height;
+        PreparePostPass(_bloomTarget, _bloomExtractShader, width, height);
+        _context.PixelShader.SetShaderResources(10, _resolvedShaderView);
+        _context.PixelShader.SetShaderResources(18, _resolvedAmbientShaderView);
+        _context.Draw(3, 0);
+        _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
+
+        // The five bilinear taps form a separable nine-tap Gaussian. Scale its
+        // nominal sigma (~1.4 texels) to a radius measured at 1080p, not pixels
+        // tied to the current viewport. Bloom stays in linear HDR throughout.
+        var stepPixels = radius1080 * _height / (1080f * 1.4f);
+        constants.BloomPassParameters = new Vector4(stepPixels / _width, 0, 0, 0);
+        _context.UpdateSubresource(ref constants, _postProcessBuffer);
+        PreparePostPass(_bloomScratchTarget, _bloomBlurShader, width, height);
+        _context.PixelShader.SetShaderResources(19, _bloomShaderView);
+        _context.Draw(3, 0);
+        _context.PixelShader.SetShaderResources(19, new ShaderResourceView?[] { null });
+        _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
+
+        constants.BloomPassParameters = new Vector4(0, stepPixels / _height, 0, 0);
+        _context.UpdateSubresource(ref constants, _postProcessBuffer);
+        PreparePostPass(_bloomTarget, _bloomBlurShader, width, height);
+        _context.PixelShader.SetShaderResources(19, _bloomScratchShaderView);
+        _context.Draw(3, 0);
+        _context.PixelShader.SetShaderResources(19, new ShaderResourceView?[] { null });
+        _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
+    }
+
+    private void UpdateGradingLut(HeadPreviewPostProcessSettings settings)
+    {
+        if (_gradingSettings == settings) return;
+        var pixels = HeadPreviewPostProcessProfiles.BuildGradingLut(settings);
+        if (_gradingTexture is null)
+        {
+            _gradingTexture = new Texture2D(_device, new Texture2DDescription
+            {
+                Width = 256, Height = 16, MipLevels = 1, ArraySize = 1,
+                Format = Format.R32G32B32A32_Float,
+                SampleDescription = new SampleDescription(1, 0),
+                Usage = ResourceUsage.Default, BindFlags = BindFlags.ShaderResource
+            });
+            _gradingShaderView = new ShaderResourceView(_device, _gradingTexture);
+        }
+        using var stream = new DataStream(pixels.Length * sizeof(float), true, true);
+        stream.WriteRange(pixels);
+        _context.UpdateSubresource(new DataBox(stream.DataPointer, 256 * 4 * sizeof(float), 0), _gradingTexture);
+        _gradingSettings = settings;
     }
 
     private static float ClampFinite(float value, float fallback, float minimum, float maximum) =>
@@ -1184,6 +1273,8 @@ public sealed class HeadPreviewRenderer : IDisposable
 
     private void CreateRenderTargets()
     {
+        (_bloomTexture, _bloomTarget, _bloomShaderView) = CreateBloomTarget();
+        (_bloomScratchTexture, _bloomScratchTarget, _bloomScratchShaderView) = CreateBloomTarget();
         _renderTexture = new Texture2D(_device, new Texture2DDescription
         {
             Width = _width,
@@ -1334,6 +1425,21 @@ public sealed class HeadPreviewRenderer : IDisposable
             BindFlags = BindFlags.None,
             CpuAccessFlags = CpuAccessFlags.Read
         });
+    }
+
+    private (Texture2D, RenderTargetView, ShaderResourceView) CreateBloomTarget()
+    {
+        var texture = new Texture2D(_device, new Texture2DDescription
+        {
+            Width = Math.Max(1, (_width + 3) / 4),
+            Height = Math.Max(1, (_height + 3) / 4),
+            MipLevels = 1, ArraySize = 1,
+            Format = Format.R16G16B16A16_Float,
+            SampleDescription = new SampleDescription(1, 0),
+            Usage = ResourceUsage.Default,
+            BindFlags = BindFlags.RenderTarget | BindFlags.ShaderResource
+        });
+        return (texture, new RenderTargetView(_device, texture), new ShaderResourceView(_device, texture));
     }
 
     private byte[] ReadTexture(byte[]? destination)
@@ -1542,6 +1648,12 @@ public sealed class HeadPreviewRenderer : IDisposable
 
     private void DisposeRenderTargets()
     {
+        _bloomShaderView.Dispose();
+        _bloomTarget.Dispose();
+        _bloomTexture.Dispose();
+        _bloomScratchShaderView.Dispose();
+        _bloomScratchTarget.Dispose();
+        _bloomScratchTexture.Dispose();
         _stagingTexture.Dispose();
         _postTarget.Dispose();
         _postTexture.Dispose();
@@ -1575,6 +1687,8 @@ public sealed class HeadPreviewRenderer : IDisposable
         DisposeMeshes();
         DisposeMaterialTextures();
         DisposeRenderTargets();
+        _gradingShaderView?.Dispose();
+        _gradingTexture?.Dispose();
         _shadowShaderView.Dispose();
         _shadowDepthView.Dispose();
         _shadowTexture.Dispose();
@@ -1606,6 +1720,8 @@ public sealed class HeadPreviewRenderer : IDisposable
         _shadowPixelShader.Dispose();
         _vertexShader.Dispose();
         _postPixelShader.Dispose();
+        _bloomExtractShader.Dispose();
+        _bloomBlurShader.Dispose();
         _postVertexShader.Dispose();
         _context.Dispose();
         _device.Dispose();
@@ -1670,6 +1786,8 @@ public sealed class HeadPreviewRenderer : IDisposable
         public Vector4 BloomParameters;
         public Vector4 DisplayParameters;
         public Vector4 DisplayBackground;
+        public Vector4 BloomTint;
+        public Vector4 BloomPassParameters;
     }
 
     private sealed class GpuTexture(

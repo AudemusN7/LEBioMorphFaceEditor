@@ -106,6 +106,8 @@ cbuffer PostProcessConstants : register(b4)
     float4 PixelSizeAndSamples;
     float4 DepthParameters;
     float4 BloomParameters;
+    float4 DisplayParameters;
+    float4 DisplayBackground;
 };
 
 Texture2D SceneColorTexture : register(t10);
@@ -113,6 +115,7 @@ Texture2DMS<float> SceneDepthMsaaTexture : register(t11);
 Texture2D SceneDepthSingleTexture : register(t12);
 Texture2DMS<float4> SceneNormalMsaaTexture : register(t13);
 Texture2D SceneNormalSingleTexture : register(t14);
+Texture2D SceneAmbientDiffuseTexture : register(t18);
 SamplerState PostSampler : register(s1);
 
 cbuffer SkinningConstants : register(b2)
@@ -303,7 +306,7 @@ LegacyScalpLobes LegacyScalpDirections(float3 geometricNormal, float3 tangent,
 }
 
 float3 LegacyScalpAlbedo(float3 diffuse, float3 packedMask, float teeth,
-    LegacyScalpLobes lobes, float3 halfDirection)
+    LegacyScalpLobes lobes, float3 halfDirection, out float3 diffuseOnly)
 {
     // Recovered LE1/LE2 base and directional passes share this composition.
     // Colour magnitude remains in the raw HairColour term; threshold bands
@@ -317,12 +320,16 @@ float3 LegacyScalpAlbedo(float3 diffuse, float3 packedMask, float teeth,
         * lobes.LobeScale;
     float3 rawHair = sqrt(max(maskedDiffuse * maskedDiffuse, 0.0001))
         * lobes.DiffuseGain * SecondaryColor.rgb;
-    hair += rawHair * (HumanParameters.y > 0.5 ? 1.5 : 1);
+    float3 diffuseHair = rawHair * (HumanParameters.y > 0.5 ? 1.5 : 1);
+    hair += diffuseHair;
     float3 maskedHair = packedMask * hair;
     float3 teethColour = HumanParameters.y > 0.5
         ? float3(0.723, 0.311, 0.184) : TertiaryColor.rgb;
     float3 skin = diffuse * BaseColor.rgb * overlay * (1 - teeth);
     float3 composed = skin + diffuse * teeth * teethColour + maskedHair;
+    float3 maskedDiffuseHair = packedMask * diffuseHair;
+    diffuseOnly = lerp(skin + diffuse * teeth * teethColour + maskedDiffuseHair,
+        maskedDiffuseHair, mask * ScalpParameters0.y);
     return lerp(composed, maskedHair, mask * ScalpParameters0.y);
 }
 
@@ -332,7 +339,8 @@ float3 LegacyScalpDirectLight(float3 normal, float3 geometricNormal, float3 tang
 {
     LegacyScalpLobes lobes = LegacyScalpDirections(geometricNormal, tangent, bitangent, uv);
     float3 halfDirection = normalize(view + light);
-    float3 albedo = LegacyScalpAlbedo(diffuse.rgb, packedMask, teeth, lobes, halfDirection);
+    float3 unusedAmbientDiffuse;
+    float3 albedo = LegacyScalpAlbedo(diffuse.rgb, packedMask, teeth, lobes, halfDirection, unusedAmbientDiffuse);
     float3 mask = packedMask * ScalpParameters0.x;
     float3 overlay = 1 - ScalpParameters0.z * mask;
     float3 hairColour = abs(SecondaryColor.rgb);
@@ -1113,8 +1121,9 @@ float3 AttachmentDirectLight(float model, bool le3, float3 rawNormal,
     return albedo * facing + strength * tint * pow(reflected, power);
 }
 
-float4 AttachmentPreview(VertexOutput input, bool isFrontFace, out float4 aoNormalTarget)
+float4 AttachmentPreview(VertexOutput input, bool isFrontFace, out float4 aoNormalTarget, out float4 ambientDiffuseTarget)
 {
+    ambientDiffuseTarget = 0;
     float model = TextureFlags2.z;
     bool le3 = EyeParameters2.w > 0.5;
     bool le2 = EyeParameters2.z > 0.5;
@@ -1135,7 +1144,8 @@ float4 AttachmentPreview(VertexOutput input, bool isFrontFace, out float4 aoNorm
             + KeyLightColor.rgb * saturate(dot(geometricNormal, key))
             + FillLightColor.rgb * saturate(dot(geometricNormal, fill))
             + RimLightColor.rgb * saturate(dot(geometricNormal, rim))) * LightingParameters.x;
-        return float4(pow(saturate(color), 1.0 / 2.2), 1);
+        ambientDiffuseTarget = float4(BaseColor.rgb * AmbientColor.rgb, 1);
+        return float4(color, 1);
     }
     if (model == 11)
     {
@@ -1166,7 +1176,7 @@ float4 AttachmentPreview(VertexOutput input, bool isFrontFace, out float4 aoNorm
             lensBase = lerp(lensBase, cubeLuminance * float3(0.5, 2, 3), reflectionFactor);
         }
         float3 lensColor = (BaseColor.rgb + lensBase) * (0.1 * GeneralParameters.y);
-        return float4(pow(saturate(lensColor), 1.0 / 2.2), 0);
+        return float4(lensColor, 0);
     }
     float4 diffuse = TextureFlags0.x > 0.5 ? DiffuseTexture.Sample(MaterialSampler, input.TexCoord) : 1;
     float4 specMap = TextureFlags0.z > 0.5 ? MaskTexture.Sample(MaterialSampler, input.TexCoord) : 0;
@@ -1180,12 +1190,14 @@ float4 AttachmentPreview(VertexOutput input, bool isFrontFace, out float4 aoNorm
     float3 cube = TextureFlags1.y > 0.5 ? FixedCubeTexture.Sample(MaterialSampler, reflectedView).rgb : 0;
     float3 albedo = diffuse.rgb;
     float3 ambientAlbedo = albedo;
+    float3 ambientDiffuseAlbedo = albedo;
     float3 emissive = 0;
     float alpha = 1;
     float viewFactor = 1;
     if (model == 5)
     {
         albedo = lerp(SecondaryColor.rgb, BaseColor.rgb, diffuse.b) * diffuse.a;
+        ambientDiffuseAlbedo = albedo;
         // LE3 removed both the cube sampler and its intensity parameter.
         if (!le3) albedo += diffuse.g * cube * GeneralParameters.x;
         ambientAlbedo = albedo;
@@ -1199,12 +1211,14 @@ float4 AttachmentPreview(VertexOutput input, bool isFrontFace, out float4 aoNorm
         alpha = le2 ? GeneralParameters.y : lerp(0.5 * GeneralParameters.y, GeneralParameters.y, pow(1 - max(normalView, 0), 3));
         // The VSR graph is unlit; fog/SelectionColor are engine inputs omitted
         // from the standalone studio preview.
-        return float4(pow(saturate(color), 1.0 / 2.2), saturate(alpha));
+        ambientDiffuseTarget.a = saturate(alpha);
+        return float4(color, saturate(alpha));
     }
     else if (model == 7)
     {
         clip(diffuse.a * GeneralParameters.y - 0.3333);
         albedo = diffuse.r * (le3 ? TertiaryColor.rgb : float3(1, 1, 1));
+        ambientDiffuseAlbedo = albedo;
         float3 baseReflection = normalize(reflect(-geometricNormal, rawNormal));
         ambientAlbedo = albedo + (le3 ? SpecularColor.rgb
             * pow(max(saturate(dot(view, baseReflection)), 0.0001), max(GeneralParameters.z, 0.0001)) : 0);
@@ -1212,6 +1226,7 @@ float4 AttachmentPreview(VertexOutput input, bool isFrontFace, out float4 aoNorm
     else if (model == 9)
     {
         viewFactor = sqrt(max(saturate(dot(rawNormal, view)), 0.0001));
+        ambientDiffuseAlbedo = albedo * viewFactor;
         float3 baseReflection = normalize(reflect(-geometricNormal, rawNormal));
         ambientAlbedo = (albedo + specMap.b * SpecularColor.rgb
             * pow(max(saturate(dot(view, baseReflection)), 0.0001), max(GeneralParameters.z, 0.0001))) * viewFactor;
@@ -1223,21 +1238,27 @@ float4 AttachmentPreview(VertexOutput input, bool isFrontFace, out float4 aoNorm
         emissive = specMap.a * GeneralParameters.w * EyeEmissiveColor.rgb;
     }
     if (LightingParameters.w > 0.5)
-        return float4(pow(saturate(albedo + emissive), 1.0 / 2.2), alpha);
+    {
+        ambientDiffuseTarget.a = alpha;
+        return float4(albedo + emissive, alpha);
+    }
     float3 lit = ambientAlbedo * AmbientColor.rgb
         + AttachmentDirectLight(model, le3, rawNormal, normal, view, key, albedo, diffuse, specMap, viewFactor) * shadowedKeyColor
         + AttachmentDirectLight(model, le3, rawNormal, normal, view, fill, albedo, diffuse, specMap, viewFactor) * FillLightColor.rgb
         + AttachmentDirectLight(model, le3, rawNormal, normal, view, rim, albedo, diffuse, specMap, viewFactor) * RimLightColor.rgb;
-    return float4(pow(saturate(lit * LightingParameters.x + emissive), 1.0 / 2.2), alpha);
+    ambientDiffuseTarget = float4(ambientDiffuseAlbedo * AmbientColor.rgb, alpha);
+    return float4(lit + emissive, alpha);
 }
 
 float4 PSMain(
     VertexOutput input,
     bool isFrontFace : SV_IsFrontFace,
-    out float4 aoNormalTarget : SV_TARGET1) : SV_TARGET0
+    out float4 aoNormalTarget : SV_TARGET1,
+    out float4 ambientDiffuseTarget : SV_TARGET2) : SV_TARGET0
 {
+    ambientDiffuseTarget = 0;
     if (TextureFlags2.z >= 5 && TextureFlags2.z <= 11)
-        return AttachmentPreview(input, isFrontFace, aoNormalTarget);
+        return AttachmentPreview(input, isFrontFace, aoNormalTarget, ambientDiffuseTarget);
     float family = SurfaceParameters.z;
     float diagnostic = SurfaceParameters.y;
     bool le3 = EyeParameters2.w > 0.5;
@@ -1471,6 +1492,7 @@ float4 PSMain(
         : geometricNormal;
 
     float3 albedo = diffuseSample.rgb;
+    float3 scalpDiffuseAlbedo = 0;
     float3 scatteringAlbedo = albedo;
     float4 surfaceSelector = 0;
     float alpha = 1;
@@ -1975,6 +1997,7 @@ float4 PSMain(
                 + (1 - teeth) * max(BaseColor.rgb, 0) * (1 - packedSpec)
                 + packedSpec * max(SecondaryColor.rgb * SecondaryColor.rgb, 0);
             albedo = diffuseSample.rgb * scalp;
+            scalpDiffuseAlbedo = albedo;
             if (IsCcScalpPreview())
             {
                 // CC's base pass includes two fibre lobes and a component-wise
@@ -2002,6 +2025,9 @@ float4 PSMain(
                 float3 skinBase = diffuseSample.rgb
                     * (teeth + (1 - teeth) * BaseColor.rgb * ccScalpMasks.Overlay);
                 albedo = lerp(skinBase + maskedHair, maskedHair, ccScalpMasks.Buzzcut);
+                float3 diffuseHair = maskSample.rgb * (1.5 * max(abs(diffuseMask), 0.01)
+                    * (hairLevel <= 0.09 ? 0.5 : 0.25) * SecondaryColor.rgb);
+                scalpDiffuseAlbedo = lerp(skinBase + diffuseHair, diffuseHair, ccScalpMasks.Buzzcut);
             }
             transmissionFactor = diffuseSample.b * max(GeneralParameters.x, 0);
         }
@@ -2010,7 +2036,7 @@ float4 PSMain(
             LegacyScalpLobes lobes = LegacyScalpDirections(geometricNormal, tangent, bitangent, materialUv);
             float3 scalpView = normalize(CameraPosition.xyz - input.WorldPosition);
             albedo = LegacyScalpAlbedo(diffuseSample.rgb, maskSample.rgb, teethSample.g,
-                lobes, normalize(scalpView + geometricNormal));
+                lobes, normalize(scalpView + geometricNormal), scalpDiffuseAlbedo);
             if (SurfaceParameters.w > 0)
             {
                 float coverage = lerp(teethSample.r, 1, saturate(ScalpParameters1.x));
@@ -2092,6 +2118,7 @@ float4 PSMain(
     }
 
     float3 view = normalize(CameraPosition.xyz - input.WorldPosition);
+    float3 ambientDiffuseAlbedo = family == 2 && diagnostic < 0.5 ? scalpDiffuseAlbedo : albedo;
     float3 eyeBaseReflection = 0;
     if (family == 3 && diagnostic < 0.5)
     {
@@ -2134,6 +2161,7 @@ float4 PSMain(
         float chromeFactor = 0.1 * (1 - pow(
             max(1 - geometricFacing, 0.0001),
             0.35));
+        ambientDiffuseAlbedo *= mappedFacing * mappedFacing;
         albedo = mappedFacing * mappedFacing
                 * (albedo + max(GeneralParameters.x, 0) * eyeCube)
             + chrome * chrome * chromeFactor;
@@ -2230,6 +2258,7 @@ float4 PSMain(
 
     float3 lit = (albedo * diffuseLighting + specularLighting + subsurfaceLighting) * LightingParameters.x
         + eyeBaseReflection;
+    float3 ambientDiffuse = ambientDiffuseAlbedo * environmentLighting;
 
     if (family == 2 && !le3 && diagnostic < 0.5)
     {
@@ -2284,6 +2313,7 @@ float4 PSMain(
         float3 maskedHairLighting = environmentLighting * (
             diffuseSample.rgb * tangentEnergy
             + specularColour * ambientSpecular);
+        ambientDiffuse = diffuseSample.rgb * tangentEnergy * environmentLighting;
         maskedHairLighting += shadowedKeyColor * EvaluateMaskedHairLight(
             geometricNormal, fibreTangent, view, keyLight, diffuseSample.rgb, specularColour);
         maskedHairLighting += FillLightColor.rgb * EvaluateMaskedHairLight(
@@ -2298,6 +2328,7 @@ float4 PSMain(
         // UE3 unlit materials retain their authored diffuse/base result while
         // bypassing the scene's directional, environment, and specular lighting.
         lit = albedo;
+        ambientDiffuse = 0;
     }
 
     if (family == 3 && EyeParameters.w > 0.5 && diagnostic < 0.5)
@@ -2324,6 +2355,7 @@ float4 PSMain(
     if (family == 4 && diagnostic < 0.5)
     {
         lit = albedo;
+        ambientDiffuse = 0;
     }
 
     if (diagnostic > 0.5)
@@ -2331,8 +2363,10 @@ float4 PSMain(
         lit = BaseColor.rgb * (environmentLighting + KeyLightColor.rgb * keyDiffuse
             + FillLightColor.rgb * fillDiffuse + RimLightColor.rgb * rimDiffuse) * LightingParameters.x;
         alpha = 1;
+        ambientDiffuse = BaseColor.rgb * environmentLighting;
     }
-    return float4(pow(saturate(lit), 1.0 / 2.2), saturate(alpha));
+    ambientDiffuseTarget = float4(ambientDiffuse, saturate(alpha));
+    return float4(lit, saturate(alpha));
 }
 
 void PSShadow(VertexOutput input)
@@ -2343,7 +2377,8 @@ void PSShadow(VertexOutput input)
     // map with a 0.333 preview cutoff, independently of their camera-view
     // depth pre/post passes (continuous transparency needs a binary depth test).
     float4 unusedNormal;
-    float opacity = PSMain(input, true, unusedNormal).a;
+    float4 unusedAmbient;
+    float opacity = PSMain(input, true, unusedNormal, unusedAmbient).a;
     clip(opacity - 0.3333);
 }
 
@@ -2487,6 +2522,22 @@ float EvaluateSsaoSingle(int2 pixel, float centerDepth)
     return saturate(1 - (occlusion / 12) * DepthParameters.z * DepthParameters.w);
 }
 
+bool IsDisplayBackground(float2 uv, float3 color)
+{
+    // Ambient alpha also tracks surface coverage, including materials whose
+    // diffuse ambient is zero. Additive emission leaves alpha unchanged, so
+    // require the clear colour as well before treating a pixel as background.
+    return SceneAmbientDiffuseTexture.SampleLevel(PostSampler, uv, 0).a <= 0.000001
+        && all(abs(color - DisplayBackground.rgb) < 0.000001);
+}
+
+float3 BloomHighlight(float2 uv)
+{
+    float3 scene = SceneColorTexture.SampleLevel(PostSampler, uv, 0).rgb;
+    if (IsDisplayBackground(uv, scene)) return 0;
+    return max(scene - BloomParameters.x, 0);
+}
+
 float3 EvaluateBloom(float2 uv)
 {
     float2 texel = PixelSizeAndSamples.xy;
@@ -2497,21 +2548,56 @@ float3 EvaluateBloom(float2 uv)
     {
         float weight = 5 - distance;
         float2 offset = texel * distance * 1.5;
-        bloom += SceneColorTexture.SampleLevel(PostSampler, uv + float2(offset.x, 0), 0).rgb * weight;
-        bloom += SceneColorTexture.SampleLevel(PostSampler, uv - float2(offset.x, 0), 0).rgb * weight;
-        bloom += SceneColorTexture.SampleLevel(PostSampler, uv + float2(0, offset.y), 0).rgb * weight;
-        bloom += SceneColorTexture.SampleLevel(PostSampler, uv - float2(0, offset.y), 0).rgb * weight;
+        // Extract highlights before filtering, in scene-linear HDR. A bright
+        // texel can contribute even when its neighbouring pixels are dark.
+        bloom += BloomHighlight(uv + float2(offset.x, 0)) * weight;
+        bloom += BloomHighlight(uv - float2(offset.x, 0)) * weight;
+        bloom += BloomHighlight(uv + float2(0, offset.y)) * weight;
+        bloom += BloomHighlight(uv - float2(0, offset.y)) * weight;
         totalWeight += weight * 4;
     }
     bloom /= max(totalWeight, 1);
-    return max(bloom - BloomParameters.x, 0) * BloomParameters.y;
+    return bloom * BloomParameters.y;
+}
+
+float3 EncodeDisplaySrgb(float3 linearColor)
+{
+    linearColor = max(linearColor, 0);
+    float3 low = linearColor * 12.92;
+    float3 high = 1.055 * pow(linearColor, 1.0 / 2.4) - 0.055;
+    return float3(
+        linearColor.r <= 0.0031308 ? low.r : high.r,
+        linearColor.g <= 0.0031308 ? low.g : high.g,
+        linearColor.b <= 0.0031308 ? low.b : high.b);
+}
+
+float3 MapDisplayHighlights(float3 color)
+{
+    // Provisional neutral display shoulder: retain dark/midtone linear values,
+    // smoothly roll highlights into display range. This is a preview transform,
+    // not a recovered BioWare grading curve; preset calibration comes later.
+    float3 highlight = 0.8 + 0.2 * (1 - exp(-max(color - 0.8, 0) / 0.2));
+    return float3(color.r <= 0.8 ? color.r : highlight.r,
+        color.g <= 0.8 ? color.g : highlight.g,
+        color.b <= 0.8 ? color.b : highlight.b);
 }
 
 float4 ComposePostProcess(PostVertexOutput input, float ambientOcclusion)
 {
     float4 scene = SceneColorTexture.SampleLevel(PostSampler, input.TexCoord, 0);
-    float3 color = scene.rgb * ambientOcclusion + EvaluateBloom(input.TexCoord);
-    return float4(saturate(color), scene.a);
+    float3 color = scene.rgb * ambientOcclusion;
+    if (DisplayParameters.y > 0.5)
+    {
+        float3 bloom = EvaluateBloom(input.TexCoord);
+        bool background = IsDisplayBackground(input.TexCoord, scene.rgb);
+        // Keep the user's background colour stable; additive materials are
+        // identified by their HDR colour, so alpha=0 emission still transforms.
+        if (!background || any(bloom > 0))
+            color = MapDisplayHighlights(max(color + bloom, 0) * DisplayParameters.x);
+    }
+    // B8G8R8A8_UNorm and WPF Bgra32 consume encoded bytes without another
+    // sRGB conversion. This is the sole display encoding in the pipeline.
+    return float4(saturate(EncodeDisplaySrgb(color)), scene.a);
 }
 
 float4 PSPostProcessMsaa(PostVertexOutput input) : SV_TARGET

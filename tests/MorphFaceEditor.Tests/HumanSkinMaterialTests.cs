@@ -514,8 +514,12 @@ public static class HumanSkinMaterialTests
         ? value / 12.92f
         : MathF.Pow((value + 0.055f) / 1.055f, 2.4f);
 
-    private static float EncodePreviewLinear(float value) =>
-        MathF.Pow(Math.Clamp(value, 0, 1), 1f / 2.2f) * 255;
+    private static float EncodePreviewLinear(float value)
+    {
+        value = Math.Clamp(value, 0, 1);
+        return (value <= 0.0031308f ? value * 12.92f
+            : 1.055f * MathF.Pow(value, 1f / 2.4f) - 0.055f) * 255;
+    }
 
     private static void AssertBgraNear(byte[] pixel, float blue, float green, float red, string label)
     {

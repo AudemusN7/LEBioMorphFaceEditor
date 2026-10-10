@@ -1665,6 +1665,7 @@ No: descarta las bases de datos de recursos personalizados después de reconstru
   <system:String x:Key="loc_View_MainWindow_LOD" xml:space="preserve">LOD</system:String>
   <system:String x:Key="loc_View_MainWindow_LeftDragOrbitMiddleDragPanRightDragWheelZoom" xml:space="preserve">Arrastrar con botón izquierdo: orbitar   ·   Arrastrar con botón central: desplazar   ·   Arrastrar con botón derecho o usar la rueda: acercar o alejar</system:String>
   <system:String x:Key="loc_View_MainWindow_Lighting" xml:space="preserve">Iluminación</system:String>
+  <system:String x:Key="loc_View_MainWindow_PostProcessing" xml:space="preserve">Posprocesado</system:String>
   <system:String x:Key="loc_View_MainWindow_LoadSelectedFace" xml:space="preserve">Cargar rostro seleccionado</system:String>
   <system:String x:Key="loc_View_MainWindow_MATERIAL" xml:space="preserve">MATERIAL</system:String>
   <system:String x:Key="loc_View_MainWindow_MD5" xml:space="preserve">MD5</system:String>

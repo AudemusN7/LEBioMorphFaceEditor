@@ -1663,6 +1663,7 @@ No: discard custom asset databases after a successful rebuild.</system:String>
   <system:String x:Key="loc_View_MainWindow_LOD" xml:space="preserve">LOD</system:String>
   <system:String x:Key="loc_View_MainWindow_LeftDragOrbitMiddleDragPanRightDragWheelZoom" xml:space="preserve">Left drag: orbit   ·   Middle drag: pan   ·   Right drag / wheel: zoom</system:String>
   <system:String x:Key="loc_View_MainWindow_Lighting" xml:space="preserve">Lighting</system:String>
+  <system:String x:Key="loc_View_MainWindow_PostProcessing" xml:space="preserve">Post Processing</system:String>
   <system:String x:Key="loc_View_MainWindow_LoadSelectedFace" xml:space="preserve">Load Selected Face</system:String>
   <system:String x:Key="loc_View_MainWindow_MATERIAL" xml:space="preserve">MATERIAL</system:String>
   <system:String x:Key="loc_View_MainWindow_MD5" xml:space="preserve">MD5</system:String>

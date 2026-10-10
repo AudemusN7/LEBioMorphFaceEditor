@@ -1663,6 +1663,7 @@
   <system:String x:Key="loc_View_MainWindow_LOD" xml:space="preserve">LOD</system:String>
   <system:String x:Key="loc_View_MainWindow_LeftDragOrbitMiddleDragPanRightDragWheelZoom" xml:space="preserve">左键拖动：环绕   ·   中键拖动：平移   ·   右键拖动 / 滚轮：缩放</system:String>
   <system:String x:Key="loc_View_MainWindow_Lighting" xml:space="preserve">光照</system:String>
+  <system:String x:Key="loc_View_MainWindow_PostProcessing" xml:space="preserve">后期处理</system:String>
   <system:String x:Key="loc_View_MainWindow_LoadSelectedFace" xml:space="preserve">加载所选脸部</system:String>
   <system:String x:Key="loc_View_MainWindow_MATERIAL" xml:space="preserve">材质</system:String>
   <system:String x:Key="loc_View_MainWindow_MD5" xml:space="preserve">MD5</system:String>

@@ -1663,6 +1663,7 @@
   <system:String x:Key="loc_View_MainWindow_LOD" xml:space="preserve">LOD</system:String>
   <system:String x:Key="loc_View_MainWindow_LeftDragOrbitMiddleDragPanRightDragWheelZoom" xml:space="preserve">左ドラッグ: 回転   ·   中ドラッグ: 平行移動   ·   右ドラッグ／ホイール: ズーム</system:String>
   <system:String x:Key="loc_View_MainWindow_Lighting" xml:space="preserve">ライティング</system:String>
+  <system:String x:Key="loc_View_MainWindow_PostProcessing" xml:space="preserve">ポストプロセス</system:String>
   <system:String x:Key="loc_View_MainWindow_LoadSelectedFace" xml:space="preserve">選択した顔を読み込む</system:String>
   <system:String x:Key="loc_View_MainWindow_MATERIAL" xml:space="preserve">マテリアル</system:String>
   <system:String x:Key="loc_View_MainWindow_MD5" xml:space="preserve">MD5</system:String>

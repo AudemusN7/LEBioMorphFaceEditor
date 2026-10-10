@@ -1665,6 +1665,7 @@ No: elimina i database delle risorse personalizzate dopo una ricostruzione riusc
   <system:String x:Key="loc_View_MainWindow_LOD" xml:space="preserve">LOD</system:String>
   <system:String x:Key="loc_View_MainWindow_LeftDragOrbitMiddleDragPanRightDragWheelZoom" xml:space="preserve">Trascina sinistro: orbita   ·   trascina centrale: sposta   ·   trascina destro / rotellina: zoom</system:String>
   <system:String x:Key="loc_View_MainWindow_Lighting" xml:space="preserve">Illuminazione</system:String>
+  <system:String x:Key="loc_View_MainWindow_PostProcessing" xml:space="preserve">Post-elaborazione</system:String>
   <system:String x:Key="loc_View_MainWindow_LoadSelectedFace" xml:space="preserve">Carica volto selezionato</system:String>
   <system:String x:Key="loc_View_MainWindow_MATERIAL" xml:space="preserve">MATERIALE</system:String>
   <system:String x:Key="loc_View_MainWindow_MD5" xml:space="preserve">MD5</system:String>

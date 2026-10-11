@@ -8,7 +8,9 @@ namespace MorphFaceEditor.LegendaryExplorer.TextureRegistry;
 /// <summary>Reads and atomically replaces MFE's versioned Brotli-compressed registry files.</summary>
 public sealed class TextureRegistryStore(TextureRegistryPaths paths)
 {
-    public const uint Magic = 0x5254464D;
+    // Release generation uses MFT1 so development MFTR schema v1 cannot collide.
+    public const uint Magic = 0x3154464D;
+    public const uint DevelopmentMagic = 0x5254464D;
     private const long MaximumJsonBytes = 256L * 1024 * 1024;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -54,9 +56,9 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
         ReadWithStatus(game, paths.GetModsPath(game));
 
     internal TextureRegistryReadResult ReadManualWithStatus(MorphFaceGame game) =>
-        ReadWithStatus(game, paths.GetManualPath(game), allowLegacyManual: true);
+        ReadWithStatus(game, paths.GetManualPath(game));
 
-    private static TextureRegistryReadResult ReadWithStatus(MorphFaceGame game, string path, bool allowLegacyManual = false)
+    private static TextureRegistryReadResult ReadWithStatus(MorphFaceGame game, string path)
     {
         var fullPath = Path.GetFullPath(path);
         lock (ReadCacheLock)
@@ -68,7 +70,7 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
             if (ReadCache.TryGetValue(fullPath, out var cachedNode))
             {
                 var cached = cachedNode.Value;
-                if (cached.AllowLegacyManual == allowLegacyManual && cached.Game == game &&
+                if (cached.Game == game &&
                     cached.Exists == exists && cached.Length == length && cached.LastWriteTimeUtc == stamp)
                 {
                     ReadCacheLru.Remove(cachedNode);
@@ -79,8 +81,8 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
                 ReadCacheLru.Remove(cachedNode);
             }
 
-            var result = ReadFileWithStatus(game, fullPath, allowLegacyManual, file);
-            var node = ReadCacheLru.AddFirst(new CachedRead(fullPath, game, allowLegacyManual,
+            var result = ReadFileWithStatus(game, fullPath, file);
+            var node = ReadCacheLru.AddFirst(new CachedRead(fullPath, game,
                 exists, length, stamp, result));
             ReadCache[fullPath] = node;
             while (ReadCache.Count > MaximumCachedRegistryFiles)
@@ -94,7 +96,7 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
     }
 
     private static TextureRegistryReadResult ReadFileWithStatus(
-        MorphFaceGame game, string path, bool allowLegacyManual, FileInfo file)
+        MorphFaceGame game, string path, FileInfo file)
     {
         if (!file.Exists)
             return new(new TextureRegistryStatus(game, TextureRegistryState.Missing, null, null, null, null, null), null);
@@ -103,22 +105,29 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
             using (var stream = File.OpenRead(path))
             using (var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: true))
             {
-                if (stream.Length < HeaderSize || reader.ReadUInt32() != Magic)
+                if (stream.Length < HeaderSize)
                 {
                     throw new InvalidDataException("The texture registry header is malformed.");
                 }
+                var magic = reader.ReadUInt32();
+                if (magic != Magic && magic != DevelopmentMagic)
+                    throw new InvalidDataException("The texture registry header is malformed.");
                 var version = reader.ReadInt32();
-                if (version != TextureRegistrySnapshot.CurrentSchemaVersion && !(allowLegacyManual && version is 10 or 11 or 12))
+                if (magic == DevelopmentMagic || version != TextureRegistrySnapshot.CurrentSchemaVersion)
                 {
                     return new TextureRegistryReadResult(
                         new TextureRegistryStatus(game, TextureRegistryState.Outdated, path,
                             file.Length, file.LastWriteTimeUtc, null,
-                            $"Registry schema v{version} is not supported by this editor version."),
+                            $"Registry schema v{version} is not supported by this editor version.")
+                        {
+                            UnsupportedSchemaVersion = version,
+                            IsDevelopmentSchema = magic == DevelopmentMagic
+                        },
                         null);
                 }
             }
 
-            var snapshot = CompactRuntimeAssetIndex(ReadFile(path, game, allowLegacyManual));
+            var snapshot = CompactRuntimeAssetIndex(ReadFile(path, game));
             var missing = snapshot.ManualAssets.Count(asset => asset.IsMissing);
             return new TextureRegistryReadResult(
                 new TextureRegistryStatus(game, TextureRegistryState.Ready, path,
@@ -167,7 +176,7 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
             $"The {game} asset database is unavailable. Build it in Mesh/Texture Databases.");
     }
     public TextureRegistrySnapshot ReadMods(MorphFaceGame game) => ReadFile(paths.GetModsPath(game), game);
-    public TextureRegistrySnapshot ReadManual(MorphFaceGame game) => ReadFile(paths.GetManualPath(game), game, allowLegacyManual: true);
+    public TextureRegistrySnapshot ReadManual(MorphFaceGame game) => ReadFile(paths.GetManualPath(game), game);
     public bool HasManual(MorphFaceGame game) => File.Exists(paths.GetManualPath(game));
     public string GetManualReportPath(MorphFaceGame game) =>
         Path.ChangeExtension(paths.GetManualPath(game), ".missing.log");
@@ -381,10 +390,10 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
         }
     }
 
-    private sealed record CachedRead(string Path, MorphFaceGame Game, bool AllowLegacyManual,
+    private sealed record CachedRead(string Path, MorphFaceGame Game,
         bool Exists, long Length, DateTime LastWriteTimeUtc, TextureRegistryReadResult Result);
 
-    private static TextureRegistrySnapshot ReadFile(string path, MorphFaceGame expectedGame, bool allowLegacyManual = false)
+    private static TextureRegistrySnapshot ReadFile(string path, MorphFaceGame expectedGame)
     {
         using var input = File.OpenRead(path);
         using var reader = new BinaryReader(input, System.Text.Encoding.UTF8, leaveOpen: true);
@@ -393,7 +402,7 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
             throw new InvalidDataException("The texture registry header is malformed.");
         }
         var schemaVersion = reader.ReadInt32();
-        if (schemaVersion != TextureRegistrySnapshot.CurrentSchemaVersion && !(allowLegacyManual && schemaVersion is 10 or 11 or 12))
+        if (schemaVersion != TextureRegistrySnapshot.CurrentSchemaVersion)
         {
             throw new NotSupportedException($"Texture registry schema v{schemaVersion} is not supported.");
         }
@@ -420,8 +429,6 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
 
         var snapshot = JsonSerializer.Deserialize<TextureRegistrySnapshot>(json, JsonOptions)
             ?? throw new InvalidDataException("The texture registry payload is empty.");
-        if (allowLegacyManual && schemaVersion is 10 or 11 or 12 && snapshot.SchemaVersion == schemaVersion)
-            snapshot = snapshot with { SchemaVersion = TextureRegistrySnapshot.CurrentSchemaVersion };
         Validate(snapshot, expectedGame);
         return snapshot;
     }
@@ -494,7 +501,7 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
 
     /// <summary>
     /// Stores the large all-occurrence identity index as package metadata plus grouped
-    /// path/class locations. Legacy manual sidecars used a flat array and remain readable.
+    /// path/class locations.
     /// </summary>
     private sealed class InstalledAssetOccurrenceListConverter : JsonConverter<IReadOnlyList<InstalledAssetOccurrence>>
     {
@@ -503,17 +510,6 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
             Type typeToConvert,
             JsonSerializerOptions options)
         {
-            if (reader.TokenType == JsonTokenType.StartArray)
-            {
-                var legacy = new List<InstalledAssetOccurrence>();
-                while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
-                    legacy.Add(JsonSerializer.Deserialize<InstalledAssetOccurrence>(ref reader, options)
-                        ?? throw new JsonException("The installed asset identity is null."));
-                if (reader.TokenType != JsonTokenType.EndArray)
-                    throw new JsonException("The legacy installed asset array is incomplete.");
-                return legacy;
-            }
-
             using var document = JsonDocument.ParseValue(ref reader);
             var root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object ||

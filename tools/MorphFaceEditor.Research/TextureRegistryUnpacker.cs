@@ -18,7 +18,11 @@ internal static class TextureRegistryUnpacker
 
         using var input = File.OpenRead(inputPath);
         using var reader = new BinaryReader(input, Encoding.UTF8, leaveOpen: true);
-        if (input.Length < HeaderSize || reader.ReadUInt32() != TextureRegistryStore.Magic)
+        if (input.Length < HeaderSize)
+            throw new InvalidDataException("The MFTR header is malformed.");
+        var magic = reader.ReadUInt32();
+        // Offline inspection remains available for rejected development files.
+        if (magic != TextureRegistryStore.Magic && magic != TextureRegistryStore.DevelopmentMagic)
             throw new InvalidDataException("The MFTR header is malformed.");
 
         var schemaVersion = reader.ReadInt32();

@@ -15,7 +15,7 @@ public static class TextureRegistryStoreTests
         new("texture registry store: all-occurrence index compacts package metadata and round trips", InstalledAssetIndexCompactsAndRoundTrips),
         new("texture registry store: wrong game payload is rejected", WrongGamePayloadIsRejected),
         new("texture registry store: unsupported schema is outdated", UnsupportedSchemaIsOutdated),
-        new("texture registry store: legacy manual sidecars survive schema migration", LegacyManualAssetsSurvive),
+        new("texture registry store: development schemas are rejected for installed mod and manual databases", DevelopmentSchemasAreRejected),
         new("texture registry store: malformed payload is failed", MalformedPayloadIsFailed),
         new("texture registry store: cancelled write preserves active file", CancelledWritePreservesActiveFile),
         new("texture registry store: failed paired write preserves both registries", FailedPairWritePreservesBoth),
@@ -725,48 +725,54 @@ public static class TextureRegistryStoreTests
     private static void UnsupportedSchemaIsOutdated()
     {
         using var fixture = RegistryFixture.Create();
-        fixture.WriteHeaderOnly(MorphFaceGame.LE3, schemaVersion: 1);
+        fixture.WriteHeaderOnly(MorphFaceGame.LE3, schemaVersion: TextureRegistrySnapshot.CurrentSchemaVersion + 1);
 
         TestAssert.Equal(TextureRegistryState.Outdated, fixture.Store.GetStatus(MorphFaceGame.LE3).State);
     }
 
-    private static void LegacyManualAssetsSurvive()
+    private static void DevelopmentSchemasAreRejected()
     {
         using var fixture = RegistryFixture.Create();
-        foreach (var version in new[] { 10, 11, 12 })
+        foreach (var magic in new[] { TextureRegistryStore.DevelopmentMagic, TextureRegistryStore.Magic })
+        foreach (var version in Enumerable.Range(1, 13))
         {
-            var manual = Snapshot(TextureCatalogGame.LE1) with
+            if (magic == TextureRegistryStore.Magic && version == TextureRegistrySnapshot.CurrentSchemaVersion)
+                continue; // Release v1 round trips are covered by the normal store tests.
+            var old = Snapshot(TextureCatalogGame.LE1) with
             {
                 SchemaVersion = version,
-                ManualAssets = [new ManualRegistryAsset("Custom.pcc", 42, "Hair.Custom", "SkeletalMesh")],
-                Assets = [new InstalledAssetOccurrence("BIOG_HMF_HIR_PRO.Hair.Custom", "SkeletalMesh",
-                    "BIOG_HMF_HIR_PRO.pcc", 43, 0, TextureCatalogOrigin.BaseGame)]
+                ManualAssets = [new ManualRegistryAsset("Custom.pcc", 42, "Hair.Custom", "SkeletalMesh")]
             };
-            var path = fixture.Paths.GetManualPath(MorphFaceGame.LE1);
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            var json = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(manual);
-            using (var output = File.Create(path))
+            var json = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(old);
+            foreach (var (path, status, read) in new (string Path, Func<TextureRegistryStatus> Status, Action Read)[]
             {
-                using (var writer = new BinaryWriter(output, System.Text.Encoding.UTF8, leaveOpen: true))
+                (fixture.Paths.GetPath(MorphFaceGame.LE1), () => fixture.Store.GetStatus(MorphFaceGame.LE1), () => fixture.Store.Read(MorphFaceGame.LE1)),
+                (fixture.Paths.GetModsPath(MorphFaceGame.LE1), () => fixture.Store.ReadModsWithStatus(MorphFaceGame.LE1).Status, () => fixture.Store.ReadMods(MorphFaceGame.LE1)),
+                (fixture.Paths.GetManualPath(MorphFaceGame.LE1), () => fixture.Store.GetManualStatus(MorphFaceGame.LE1), () => fixture.Store.ReadManual(MorphFaceGame.LE1))
+            })
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                using (var output = File.Create(path))
                 {
-                    writer.Write(TextureRegistryStore.Magic);
-                    writer.Write(version);
-                    writer.Write((int)MorphFaceGame.LE1);
-                    writer.Write((long)json.Length);
+                    using (var writer = new BinaryWriter(output, System.Text.Encoding.UTF8, leaveOpen: true))
+                    {
+                        writer.Write(magic);
+                        writer.Write(version);
+                        writer.Write((int)MorphFaceGame.LE1);
+                        writer.Write((long)json.Length);
+                    }
+                    using var compressed = new System.IO.Compression.BrotliStream(output,
+                        System.IO.Compression.CompressionLevel.Optimal);
+                    compressed.Write(json);
                 }
-                using var compressed = new System.IO.Compression.BrotliStream(output,
-                    System.IO.Compression.CompressionLevel.Optimal);
-                compressed.Write(json);
-            }
-            TestAssert.Equal(TextureRegistryState.Ready, fixture.Store.GetManualStatus(MorphFaceGame.LE1).State);
-            var migrated = fixture.Store.ReadManual(MorphFaceGame.LE1);
-            TestAssert.Equal(TextureRegistrySnapshot.CurrentSchemaVersion, migrated.SchemaVersion);
-            TestAssert.Equal(manual.ManualAssets.Single(), migrated.ManualAssets.Single());
-            TestAssert.Equal(manual.Assets.Single(), migrated.Assets.Single());
-            if (version == 12)
-            {
-                File.Copy(path, fixture.Paths.GetPath(MorphFaceGame.LE1));
-                TestAssert.Equal(TextureRegistryState.Outdated, fixture.Store.GetStatus(MorphFaceGame.LE1).State);
+                var before = File.ReadAllBytes(path);
+                TestAssert.Equal(TextureRegistryState.Outdated, status().State);
+                var rejected = false;
+                try { read(); }
+                catch (Exception exception) when (exception is InvalidDataException or NotSupportedException)
+                { rejected = true; }
+                TestAssert.True(rejected, $"Development schema {version} was accepted at {path}.");
+                TestAssert.True(before.SequenceEqual(File.ReadAllBytes(path)), "Rejected development database was modified.");
             }
         }
     }

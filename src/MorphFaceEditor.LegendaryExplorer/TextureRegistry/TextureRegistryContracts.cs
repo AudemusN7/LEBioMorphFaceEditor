@@ -20,4 +20,8 @@ public sealed record TextureRegistryStatus(
     long? FileSize,
     DateTimeOffset? LastBuilt,
     int? TextureCount,
-    string? ErrorMessage);
+    string? ErrorMessage)
+{
+    public int? UnsupportedSchemaVersion { get; init; }
+    public bool IsDevelopmentSchema { get; init; }
+}

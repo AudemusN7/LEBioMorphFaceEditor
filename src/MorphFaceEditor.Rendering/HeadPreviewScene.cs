@@ -139,6 +139,8 @@ public sealed record HeadPreviewOptions(
     HeadPreviewPostProcessMode PostProcessMode = HeadPreviewPostProcessMode.GameInspired,
     HeadPreviewPostProcessSettings? PostProcessSettings = null,
     bool PostProcessingEnabled = true,
+    // Optional authored world-space diffuse environment; defaults to the lighting preset.
+    HeadPreviewEnvironment? Environment = null,
     // Filter radius is independent of shadow-map resolution.
     int ShadowMapResolution = 1024,
     float ShadowSoftnessWorld = 0.085f,

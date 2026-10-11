@@ -382,6 +382,7 @@ public sealed class HeadPreviewRenderer : IDisposable
         var projection = camera.CreateProjectionMatrix(_width / (float)_height);
         var cameraPosition = camera.Position;
         var lighting = HeadPreviewLightingPresets.Get(options.LightingPreset);
+        var environment = options.Environment ?? HeadPreviewLightingPresets.GetEnvironment(options.LightingPreset);
         var scene = new SceneConstants
         {
             WorldViewProjection = world * view * projection,
@@ -404,10 +405,15 @@ public sealed class HeadPreviewRenderer : IDisposable
                 lighting.KeyAngularRadius,
                 lighting.AmbientFresnel,
                 options.RenderMode == HeadPreviewRenderMode.Unlit ? 1 : 0),
-            SkyColor = new Vector4(lighting.AmbientColor.X, lighting.AmbientColor.Y, lighting.AmbientColor.Z, 0),
-            GroundColor = new Vector4(lighting.GroundColor.X, lighting.GroundColor.Y, lighting.GroundColor.Z, 0),
-            HorizonColor = new Vector4(lighting.HorizonColor.X, lighting.HorizonColor.Y, lighting.HorizonColor.Z, 0),
-            EnvironmentParameters = new Vector4(lighting.AmbientIntensity, 0, 0, 0)
+            EnvironmentSh0 = new Vector4(ToDx(environment.Coefficient0), 0),
+            EnvironmentSh1 = new Vector4(ToDx(environment.Coefficient1), 0),
+            EnvironmentSh2 = new Vector4(ToDx(environment.Coefficient2), 0),
+            EnvironmentSh3 = new Vector4(ToDx(environment.Coefficient3), 0),
+            EnvironmentSh4 = new Vector4(ToDx(environment.Coefficient4), 0),
+            EnvironmentSh5 = new Vector4(ToDx(environment.Coefficient5), 0),
+            EnvironmentSh6 = new Vector4(ToDx(environment.Coefficient6), 0),
+            EnvironmentSh7 = new Vector4(ToDx(environment.Coefficient7), 0),
+            EnvironmentSh8 = new Vector4(ToDx(environment.Coefficient8), 0)
         };
         var draws = _meshes
             .Where(mesh => !mesh.IsAttachment || options.ShowAttachment)
@@ -1784,10 +1790,15 @@ public sealed class HeadPreviewRenderer : IDisposable
         public Vector4 RimLightColor;
         public Vector4 AmbientColor;
         public Vector4 LightingParameters;
-        public Vector4 SkyColor;
-        public Vector4 GroundColor;
-        public Vector4 HorizonColor;
-        public Vector4 EnvironmentParameters;
+        public Vector4 EnvironmentSh0;
+        public Vector4 EnvironmentSh1;
+        public Vector4 EnvironmentSh2;
+        public Vector4 EnvironmentSh3;
+        public Vector4 EnvironmentSh4;
+        public Vector4 EnvironmentSh5;
+        public Vector4 EnvironmentSh6;
+        public Vector4 EnvironmentSh7;
+        public Vector4 EnvironmentSh8;
     }
 
     [StructLayout(LayoutKind.Sequential)]

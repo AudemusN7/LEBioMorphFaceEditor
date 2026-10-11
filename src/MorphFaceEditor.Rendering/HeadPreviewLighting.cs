@@ -117,6 +117,21 @@ public static class HeadPreviewLightingPresets
         0.68f,
         0.065f);
 
+    // Projection is performed once per preset, never per frame or per material.
+    private static readonly HeadPreviewEnvironment StudioEnvironment = HeadPreviewEnvironment.FromLightingRig(Studio);
+    private static readonly HeadPreviewEnvironment HighContrastEnvironment = HeadPreviewEnvironment.FromLightingRig(HighContrast);
+    private static readonly HeadPreviewEnvironment WarmInteriorEnvironment = HeadPreviewEnvironment.FromLightingRig(WarmInterior);
+    private static readonly HeadPreviewEnvironment CoolNightEnvironment = HeadPreviewEnvironment.FromLightingRig(CoolNight);
+
+    public static HeadPreviewEnvironment GetEnvironment(HeadPreviewLightingPreset preset) => preset switch
+    {
+        HeadPreviewLightingPreset.Studio => StudioEnvironment,
+        HeadPreviewLightingPreset.HighContrast => HighContrastEnvironment,
+        HeadPreviewLightingPreset.WarmInterior => WarmInteriorEnvironment,
+        HeadPreviewLightingPreset.CoolNight => CoolNightEnvironment,
+        _ => throw new ArgumentOutOfRangeException(nameof(preset), preset, "Unknown preview lighting preset.")
+    };
+
     public static HeadPreviewLightingRig Get(HeadPreviewLightingPreset preset) => preset switch
     {
         HeadPreviewLightingPreset.Studio => Studio,

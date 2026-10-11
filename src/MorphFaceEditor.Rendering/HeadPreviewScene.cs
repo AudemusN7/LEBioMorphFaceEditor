@@ -139,11 +139,11 @@ public sealed record HeadPreviewOptions(
     HeadPreviewPostProcessMode PostProcessMode = HeadPreviewPostProcessMode.GameInspired,
     HeadPreviewPostProcessSettings? PostProcessSettings = null,
     bool PostProcessingEnabled = true,
-    // Optional authored world-space diffuse environment; defaults to the lighting preset.
+    // Optional authored world-space diffuse environment; null uses the camera-relative preset rig.
     HeadPreviewEnvironment? Environment = null,
-    // Filter radius is independent of shadow-map resolution.
+    // Filter radius is independent of shadow-map resolution; null uses the preset's softness.
     int ShadowMapResolution = 1024,
-    float ShadowSoftnessWorld = 0.085f,
+    float? ShadowSoftnessWorld = null,
     // Maximum slope correction in world-space light depth; prevents grazing blow-ups.
     float ShadowReceiverPlaneBiasWorld = 0.15f,
     // Multiplier on current caster geometry bounds.

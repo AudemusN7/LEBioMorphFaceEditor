@@ -1245,6 +1245,7 @@
   <system:String x:Key="loc_Shell_FaceDetails_OracleMax" xml:space="preserve">オラクル {0:G4} 最大</system:String>
   <system:String x:Key="loc_Shell_FaceDetails_OracleRepaired" xml:space="preserve">オラクルで修復 · {0:G4} 最大 · 未保存</system:String>
   <system:String x:Key="loc_Shell_FaceDetails_RelativeImportedBake" xml:space="preserve">インポートした相対ベイク</system:String>
+  <system:String x:Key="loc_Shell_Lighting_Cinematic" xml:space="preserve">シネマティック</system:String>
   <system:String x:Key="loc_Shell_Lighting_CoolNight" xml:space="preserve">涼しい夜</system:String>
   <system:String x:Key="loc_Shell_Lighting_HighContrast" xml:space="preserve">高コントラスト</system:String>
   <system:String x:Key="loc_Shell_Lighting_Studio" xml:space="preserve">スタジオ</system:String>

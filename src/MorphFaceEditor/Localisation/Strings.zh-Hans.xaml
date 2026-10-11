@@ -1245,6 +1245,7 @@
   <system:String x:Key="loc_Shell_FaceDetails_OracleMax" xml:space="preserve">基准最大差异 {0:G4}</system:String>
   <system:String x:Key="loc_Shell_FaceDetails_OracleRepaired" xml:space="preserve">已按基准修复 · 最大差异 {0:G4} · 未保存</system:String>
   <system:String x:Key="loc_Shell_FaceDetails_RelativeImportedBake" xml:space="preserve">相对导入烘焙</system:String>
+  <system:String x:Key="loc_Shell_Lighting_Cinematic" xml:space="preserve">电影风格</system:String>
   <system:String x:Key="loc_Shell_Lighting_CoolNight" xml:space="preserve">冷色夜景</system:String>
   <system:String x:Key="loc_Shell_Lighting_HighContrast" xml:space="preserve">高对比度</system:String>
   <system:String x:Key="loc_Shell_Lighting_Studio" xml:space="preserve">摄影棚</system:String>

@@ -19,6 +19,7 @@ public static class EnvironmentRenderingTests
     [
         new("SH environment drives world-space diffuse and matches CPU evaluation", EnvironmentMatchesCpuEvaluation),
         new("lighting-rig SH environment reaches the diffuse target", LightingRigEnvironmentReachesDiffuseTarget),
+        new("preset room bounce follows the camera while explicit environments stay world-space", PresetEnvironmentFollowsCamera),
         new("attachment diffuse uses SH while its reflection stays separate", AttachmentDiffuseUsesEnvironment),
         new("SH environment does not affect unlit pixels, background, or shadow draws", EnvironmentIsBypassedForUnlitAndBackground)
     ];
@@ -122,6 +123,45 @@ public static class EnvironmentRenderingTests
 
         TestAssert.True(Enumerable.Range(0, 3).All(channel => hemispheres[1][channel] > hemispheres[0][channel]),
             "The generated studio environment did not preserve the brighter sky direction in the GPU diffuse target.");
+    }
+
+    private static void PresetEnvironmentFollowsCamera()
+    {
+        using var renderer = new HeadPreviewRenderer(96, 96);
+        var normal = Vector3.Normalize(new Vector3(0.31f, 0.58f, 0.75f));
+        var scene = CreateScene(CreateQuad("sh-camera-quad", CreateSkinMaterial("sh-camera", Vector4.One), normal));
+        renderer.SetScene(scene);
+        var camera = CreateCamera(scene.Bounds);
+        var environment = HeadPreviewLightingPresets.GetEnvironment(HeadPreviewLightingPreset.Studio);
+        var options = new HeadPreviewOptions(AmbientOcclusionEnabled: false, ShadowsEnabled: false,
+            PostProcessingEnabled: false, Environment: ConstantEnvironment(Vector3.One));
+        var offset = PixelIndex(96, 48, 48) * 4;
+        var orientationDifference = 0f;
+        foreach (var yaw in new[] { 0f, 0.6f })
+        {
+            camera.Orbit(yaw, yaw * 0.2f);
+            renderer.Render(camera, options);
+            var albedo = ReadFloatTarget(renderer, "_resolvedAmbientTexture");
+            renderer.Render(camera, options with { Environment = null });
+            var presetAmbient = ReadFloatTarget(renderer, "_resolvedAmbientTexture");
+            renderer.Render(camera, options with { Environment = environment });
+            var worldAmbient = ReadFloatTarget(renderer, "_resolvedAmbientTexture");
+            var rigNormal = new Vector3(
+                Vector3.Dot(normal, camera.TransformCameraDirectionToWorld(Vector3.UnitX)),
+                Vector3.Dot(normal, camera.TransformCameraDirectionToWorld(Vector3.UnitY)),
+                Vector3.Dot(normal, camera.TransformCameraDirectionToWorld(Vector3.UnitZ)));
+            var rigExpected = environment.Evaluate(rigNormal);
+            var worldExpected = environment.Evaluate(normal);
+            for (var channel = 0; channel < 3; channel++)
+            {
+                TestAssert.True(Math.Abs(presetAmbient[offset + channel] - albedo[offset + channel] * Component(rigExpected, channel)) < 0.002f,
+                    $"Preset room bounce did not match the camera-relative basis in channel {channel} at yaw {yaw}.");
+                TestAssert.True(Math.Abs(worldAmbient[offset + channel] - albedo[offset + channel] * Component(worldExpected, channel)) < 0.002f,
+                    $"Explicit environment rotated with the camera in channel {channel} at yaw {yaw}.");
+                if (yaw != 0) orientationDifference += Math.Abs(presetAmbient[offset + channel] - worldAmbient[offset + channel]);
+            }
+        }
+        TestAssert.True(orientationDifference > 0.01f, "The camera test did not exercise distinguishable environment orientations.");
     }
 
     private static void AttachmentDiffuseUsesEnvironment()

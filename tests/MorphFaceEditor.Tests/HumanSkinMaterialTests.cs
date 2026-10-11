@@ -486,7 +486,9 @@ public static class HumanSkinMaterialTests
         {
             return renderer.Render(camera, new HeadPreviewOptions(
                 RenderMode: mode,
-                AmbientOcclusionEnabled: false)).BgraPixels.ToArray();
+                AmbientOcclusionEnabled: false,
+                // Raw albedo assertions must not depend on preset exposure or grading.
+                PostProcessingEnabled: mode != HeadPreviewRenderMode.Unlit)).BgraPixels.ToArray();
         }
     }
 

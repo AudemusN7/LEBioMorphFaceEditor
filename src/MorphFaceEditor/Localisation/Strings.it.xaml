@@ -1247,6 +1247,7 @@ Pacchetto: {0}</system:String>
   <system:String x:Key="loc_Shell_FaceDetails_OracleMax" xml:space="preserve">massimo oracle {0:G4}</system:String>
   <system:String x:Key="loc_Shell_FaceDetails_OracleRepaired" xml:space="preserve">oracle corretto · massimo {0:G4} · non salvato</system:String>
   <system:String x:Key="loc_Shell_FaceDetails_RelativeImportedBake" xml:space="preserve">morph relativo cotto importato</system:String>
+  <system:String x:Key="loc_Shell_Lighting_Cinematic" xml:space="preserve">Cinematografico</system:String>
   <system:String x:Key="loc_Shell_Lighting_CoolNight" xml:space="preserve">Notte fresca</system:String>
   <system:String x:Key="loc_Shell_Lighting_HighContrast" xml:space="preserve">Contrasto elevato</system:String>
   <system:String x:Key="loc_Shell_Lighting_Studio" xml:space="preserve">Studio</system:String>

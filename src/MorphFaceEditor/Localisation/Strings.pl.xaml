@@ -1245,6 +1245,7 @@ Pakiet: {0}</system:String>
   <system:String x:Key="loc_Shell_FaceDetails_OracleMax" xml:space="preserve">maks. błąd wzorca {0:G4}</system:String>
   <system:String x:Key="loc_Shell_FaceDetails_OracleRepaired" xml:space="preserve">naprawiono według wzorca · maks. błąd {0:G4} · niezapisane</system:String>
   <system:String x:Key="loc_Shell_FaceDetails_RelativeImportedBake" xml:space="preserve">względna geometria wypalona zaimportowana</system:String>
+  <system:String x:Key="loc_Shell_Lighting_Cinematic" xml:space="preserve">Filmowe</system:String>
   <system:String x:Key="loc_Shell_Lighting_CoolNight" xml:space="preserve">Chłodna noc</system:String>
   <system:String x:Key="loc_Shell_Lighting_HighContrast" xml:space="preserve">Wysoki kontrast</system:String>
   <system:String x:Key="loc_Shell_Lighting_Studio" xml:space="preserve">Studio</system:String>

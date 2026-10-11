@@ -13,6 +13,7 @@ public static class EnvironmentLightingTests
         new("SH environment preserves constant radiance", ConstantRadianceIsPreserved),
         new("SH diffuse evaluation matches cosine integral for tilted normals", TiltedNormalMatchesCosineIntegral),
         new("lighting rig environment preserves ambient mean and sky-ground direction", RigEnvironmentPreservesMeanAndDirection),
+        new("room bounce preserves complementary direction and excludes direct lights", RoomBouncePreservesDirectionAndSeparation),
         new("SH environment evaluations remain finite and non-negative", EvaluationsRemainFiniteAndNonNegative)
     ];
 
@@ -70,18 +71,49 @@ public static class EnvironmentLightingTests
 
     private static void EvaluationsRemainFiniteAndNonNegative()
     {
-        var environment = HeadPreviewEnvironment.FromLightingRig(
-            HeadPreviewLightingPresets.Get(HeadPreviewLightingPreset.CoolNight));
-        const int sampleCount = 1024;
-        for (var index = 0; index < sampleCount; index++)
+        foreach (var preset in Enum.GetValues<HeadPreviewLightingPreset>())
         {
-            var normal = FibonacciDirection(index, sampleCount);
-            var value = environment.Evaluate(normal);
-            TestAssert.True(float.IsFinite(value.X) && float.IsFinite(value.Y) && float.IsFinite(value.Z),
-                "An environment evaluation became non-finite.");
-            TestAssert.True(value.X >= 0 && value.Y >= 0 && value.Z >= 0,
-                "An environment evaluation returned negative irradiance.");
+            var environment = HeadPreviewLightingPresets.GetEnvironment(preset);
+            const int sampleCount = 1024;
+            for (var index = 0; index < sampleCount; index++)
+            {
+                var normal = FibonacciDirection(index, sampleCount);
+                var value = environment.Evaluate(normal);
+                TestAssert.True(float.IsFinite(value.X) && float.IsFinite(value.Y) && float.IsFinite(value.Z),
+                    "An environment evaluation became non-finite.");
+                TestAssert.True(value.X >= 0 && value.Y >= 0 && value.Z >= 0,
+                    "An environment evaluation returned negative irradiance.");
+            }
         }
+    }
+
+    private static void RoomBouncePreservesDirectionAndSeparation()
+    {
+        var rig = HeadPreviewLightingPresets.Get(HeadPreviewLightingPreset.Studio) with
+        {
+            AmbientColor = Vector3.One,
+            AmbientIntensity = 0.2f,
+            GroundColor = Vector3.One,
+            HorizonColor = Vector3.One,
+            EnvironmentLobes = Array.AsReadOnly<HeadPreviewEnvironmentLobe>([
+                new(Vector3.UnitX, new Vector3(4, 0, 0)),
+                new(-Vector3.UnitX, new Vector3(0, 0, 4))])
+        };
+        var environment = HeadPreviewEnvironment.FromLightingRig(rig);
+        TestAssert.Near(new Vector3(0.2f), environment.Coefficient0 / SqrtFourPi, 2e-5f);
+        var right = environment.Evaluate(Vector3.UnitX);
+        var left = environment.Evaluate(-Vector3.UnitX);
+        TestAssert.True(right.X > right.Z * 1.5f && left.Z > left.X * 1.5f,
+            "Complementary room bounce became a uniform colour wash after projection.");
+
+        var alteredDirect = HeadPreviewEnvironment.FromLightingRig(rig with
+        {
+            Key = new(-Vector3.UnitX, Vector3.One, 25),
+            Fill = new(Vector3.UnitY, Vector3.One, 0),
+            Rim = new(Vector3.UnitZ, Vector3.One, 50)
+        });
+        foreach (var normal in new[] { Vector3.UnitX, -Vector3.UnitX, Vector3.UnitY, Vector3.UnitZ })
+            TestAssert.Near(environment.Evaluate(normal), alteredDirect.Evaluate(normal), 1e-6f);
     }
 
     private static Vector3 IntegrateLambertDiffuse(

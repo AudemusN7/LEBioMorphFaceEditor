@@ -1856,4 +1856,6 @@ Scegli No per mantenere le texture e il materiale del cuoio capelluto attuali.</
     <system:String x:Key="loc_Services_ProfileArchetype_FemaleBatarian" xml:space="preserve">Batarian femmina</system:String>
     <!--localiser: {"Key":"loc_Shell_ProfileSpecies_FemaleBatarian","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_Shell_ProfileSpecies_FemaleBatarian" xml:space="preserve">Batarian femmina</system:String>
+    <!--localiser: {"Key":"loc_VM_textureRegistry_developmentSchemaUnsupported","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"0D390E7F60DCCF250CA311CA97646099675817EA2955C208D1FBF6704A105D5B"}--><system:String x:Key="loc_VM_textureRegistry_developmentSchemaUnsupported" xml:space="preserve">Lo schema di sviluppo v{0} non è più supportato</system:String>
+    <!--localiser: {"Key":"loc_VM_textureRegistry_schemaUnsupported","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"808012EA616FA543B3F7F5D6EC3419937AD2BB04D91568B2E483D60710CEBDA9"}--><system:String x:Key="loc_VM_textureRegistry_schemaUnsupported" xml:space="preserve">Lo schema del registro v{0} non è più supportato</system:String>
 </ResourceDictionary>

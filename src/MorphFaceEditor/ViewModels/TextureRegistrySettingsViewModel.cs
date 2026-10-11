@@ -290,9 +290,16 @@ public sealed class TextureRegistrySettingsRowViewModel : ObservableObject
         TextureRegistryState.Ready => Loc.Text("loc_VM_textureRegistry_customAssetsAvailable"),
         TextureRegistryState.Missing => Loc.Text("loc_VM_textureRegistry_noCustomAssets"),
         null => Loc.Text("loc_VM_textureRegistry_checkingCustomAssets"),
-        _ => Loc.Format("loc_VM_textureRegistry_customDatabaseStatus", LocalizedStatus(_manualStatus.State), _manualStatus.ErrorMessage)
+        _ => Loc.Format("loc_VM_textureRegistry_customDatabaseStatus", LocalizedStatus(_manualStatus.State), LocalizedError(_manualStatus))
     };
-    public string? WarningLabel => _status.ErrorMessage ?? _manualStatus?.ErrorMessage;
+    public string? WarningLabel => LocalizedError(_status) ?? LocalizedError(_manualStatus);
+
+    private static string? LocalizedError(TextureRegistryStatus? status) =>
+        status?.UnsupportedSchemaVersion is { } version
+            ? Loc.Format(status.IsDevelopmentSchema
+                ? "loc_VM_textureRegistry_developmentSchemaUnsupported"
+                : "loc_VM_textureRegistry_schemaUnsupported", version)
+            : status?.ErrorMessage;
     public bool IsBuildActionVisible
     {
         get => _isBuildActionVisible;

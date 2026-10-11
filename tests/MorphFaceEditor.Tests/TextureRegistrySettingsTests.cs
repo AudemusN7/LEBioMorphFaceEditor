@@ -30,6 +30,21 @@ public static class TextureRegistrySettingsTests
         TestAssert.Equal("LE1", row.GameLabel);
         TestAssert.Equal("Ready", row.StatusLabel);
         TestAssert.Equal(timestamp.LocalDateTime.ToString("g"), row.LastBuiltLabel);
+        var rejected = row.Status with
+        {
+            State = TextureRegistryState.Outdated,
+            ErrorMessage = "Internal diagnostic text",
+            UnsupportedSchemaVersion = 13,
+            IsDevelopmentSchema = true
+        };
+        row.Update(rejected);
+        TestAssert.Equal("Dev schema v13 is no longer supported", row.WarningLabel);
+        row.Update(row.Status with { ErrorMessage = null, UnsupportedSchemaVersion = null });
+        row.UpdateManual(rejected);
+        TestAssert.Equal("Dev schema v13 is no longer supported", row.WarningLabel);
+        TestAssert.True(row.ManualStatusLabel.Contains(row.WarningLabel!), "Custom database status bypassed localised wording.");
+        row.Update(rejected with { IsDevelopmentSchema = false, UnsupportedSchemaVersion = 2 });
+        TestAssert.Equal("Registry schema v2 is no longer supported", row.WarningLabel);
     }
 
     private static void TrafficLightsDistinguishStates()

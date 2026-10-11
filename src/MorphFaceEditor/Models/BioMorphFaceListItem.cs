@@ -8,5 +8,6 @@ public sealed record BioMorphFaceListItem(
     string ProfileTagColor = "#66717D",
     string ProfileKey = "")
 {
+    public bool SupportsMorphRonExport { get; init; } = true;
     public string DisplayName => ObjectName;
 }

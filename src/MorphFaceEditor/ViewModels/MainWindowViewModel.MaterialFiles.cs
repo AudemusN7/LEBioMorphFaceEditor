@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows.Input;
 using MorphFaceEditor.Core.Services;
+using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.Services;
@@ -13,6 +14,96 @@ public sealed partial class MainWindowViewModel
     internal static string AppendDatabaseImportGuidance(string details) =>
         details + "\n\n" + Loc.Text("loc_Shell_ImportWarnings_DatabaseGuidance");
 
+    private async Task<bool> TryImportMaterialRonAsync(string sourcePath)
+    {
+        MaterialRonCodec.MaterialFileKind? kind;
+        try
+        {
+            var text = await File.ReadAllTextAsync(sourcePath);
+            kind = await Task.Run(() => MaterialRonCodec.IdentifyMaterialFile(text));
+        }
+        catch (Exception exception)
+        {
+            ErrorMessage = Loc.Format("loc_Shell_Error_TheRonProvenanceCouldNot", exception.Message);
+            Status = Loc.Text("loc_Shell_Status_RonImportFailedTheCurrent");
+            return true;
+        }
+        if (kind is null) return false;
+        if (!CanUseMeshMaterialFiles() && !CanUseFaceMaterialFiles())
+        {
+            try
+            {
+                var target = await Task.Run(async () =>
+                    MaterialRonCodec.ReadDefaultFace(await File.ReadAllTextAsync(sourcePath)));
+                if (target is null)
+                {
+                    ErrorMessage = Loc.Text("loc_Shell_Status_RonImportFailedTheCurrent");
+                    AppLog.Warning("Material RON has no default face metadata; no workspace was opened.");
+                    return true;
+                }
+                if (!await OpenDefaultMaterialFaceAsync(target.Value.Game, target.Value.Target, sourcePath)) return true;
+            }
+            catch (Exception exception)
+            {
+                ErrorMessage = Loc.Format("loc_Shell_Error_TheRonProvenanceCouldNot", exception.Message);
+                return true;
+            }
+        }
+        if (CanUseMeshMaterialFiles())
+            await ImportMeshMaterialsAsync(kind == MaterialRonCodec.MaterialFileKind.Tse, sourcePath);
+        else if (CanUseFaceMaterialFiles())
+            await ImportFaceMaterialsAsync(sourcePath);
+        return true;
+    }
+
+    private async Task<bool> OpenDefaultMaterialFaceAsync(string gameName, MaterialFaceTarget target, string sourcePath)
+    {
+        if (!Enum.TryParse<MorphFaceGame>(gameName, out var game) ||
+            game is not (MorphFaceGame.LE1 or MorphFaceGame.LE2 or MorphFaceGame.LE3) ||
+            !MorphFaceProfileRegistry.CreateDefault().Profiles.Any(profile =>
+                profile.Game == game && profile.Key == target.ProfileKey))
+        {
+            ErrorMessage = Loc.Format("loc_Shell_Error_MaterialDefaultFaceUnavailable", target.ProfileKey, gameName);
+            return false;
+        }
+        string packagePath;
+        string facePath;
+        if (target.PlayerMorph)
+        {
+            var suffix = MorphFaceEditor.Core.Materials.HeadProfileIdentity.SuffixFromProfileKey(target.ProfileKey);
+            if (suffix is not ("human-male" or "human-female"))
+            {
+                ErrorMessage = Loc.Format("loc_Shell_Error_MaterialDefaultFaceUnavailable", target.ProfileKey, gameName);
+                return false;
+            }
+            packagePath = StandalonePlayerMorphImportService.ResolveInstalledSeed(game);
+            facePath = StandalonePlayerMorphImportService.ResolvePlayerTemplate(game,
+                suffix == "human-male" ? StandalonePlayerSex.Male : StandalonePlayerSex.Female);
+        }
+        else
+        {
+            var catalogue = await _referenceService.ReadTextureCatalogAsync(game);
+            if (!catalogue.IsAvailable)
+            {
+                ErrorMessage = Loc.Format("loc_Shell_Error_NpcTargetDatabaseUnavailable", game);
+                return false;
+            }
+            var donor = new RonNpcDonorResolver(MorphFaceProfileRegistry.CreateDefault()).ResolveMaterialDefault(
+                game, target.ProfileKey, catalogue.MorphFaceTemplates, catalogue.OfficialPackagePaths);
+            if (donor is null)
+            {
+                ErrorMessage = Loc.Format("loc_Shell_Error_MaterialDefaultFaceUnavailable", target.ProfileKey, gameName);
+                return false;
+            }
+            packagePath = donor.PackagePath;
+            facePath = donor.FacePath;
+        }
+        if (!await EnsureCanAbandonWorkspaceAsync()) return false;
+        if (!await OpenSourcePackagePathAsync(packagePath, facePath, game, standaloneNpc: !target.PlayerMorph)) return false;
+        foreach (var other in Faces.Where(face => face != SelectedFace).ToArray()) Faces.Remove(other);
+        _standaloneImportPath = Path.GetFullPath(sourcePath);
+        return Editor is not null;
+    }
     private readonly AsyncRelayCommand _exportTseMaterialsCommand;
     private readonly AsyncRelayCommand _importTseMaterialsCommand;
     private readonly AsyncRelayCommand _exportMaterialsCommand;
@@ -50,7 +141,7 @@ public sealed partial class MainWindowViewModel
             var values = editor.Material.CaptureInterchangeData();
             var text = tse
                 ? MeshMaterialFileService.ExportTse(workspace, values, editor.HairMesh.Value,
-                    editor.OtherMeshes.Select(value => value.Value).ToArray())
+                    editor.OtherMeshes.Select(value => value.Value).ToArray(), game)
                 : MaterialRonCodec.WriteMfe(MeshMaterialFileService.Capture(workspace, game, name, values));
             await MeshMaterialFileService.WriteAsync(path, text, workspace.Source.SourcePath);
             Status = Loc.Format(tse ? "loc_Shell_Status_ExportedTseMaterialSettings" : "loc_Shell_Status_ExportedMfeMaterialSettings", Path.GetFileName(path));
@@ -66,10 +157,10 @@ public sealed partial class MainWindowViewModel
         finally { IsBusy = false; }
     }
 
-    private async Task ImportMeshMaterialsAsync(bool tse)
+    private async Task ImportMeshMaterialsAsync(bool tse, string? sourcePath = null)
     {
         if (!CanUseMeshMaterialFiles() || Editor is not { CustomMaterials: { } workspace } editor || _standaloneGame is not { } game) return;
-        var path = _dialogs.ChooseMaterialImportFile(tse, Path.GetDirectoryName(_standaloneImportPath));
+        var path = sourcePath ?? _dialogs.ChooseMaterialImportFile(tse, Path.GetDirectoryName(_standaloneImportPath));
         if (path is null) return;
         IsBusy = true;
         ErrorMessage = null;
@@ -115,7 +206,14 @@ public sealed partial class MainWindowViewModel
         {
             var values = editor.Material.CaptureInterchangeData();
             var game = ResolveMaterialFileGame();
-            var text = MaterialRonCodec.WriteMfe(FaceMaterialFileService.Capture(game, face.ObjectName, values));
+            var target = new MaterialFaceTarget(face.ProfileKey,
+                IsPlayerWorkspace || RonNpcDonorResolver.IsPlayerOrCreator(face.InstancedPath) ||
+                RonNpcDonorResolver.IsPlayerOrCreator(_loadedFace?.Document.BaseHeadReference?.InstancedPath));
+            var text = MaterialRonCodec.WriteMfe(FaceMaterialFileService.Capture(game, face.ObjectName, values) with
+            {
+                DefaultFace = MorphFaceProfileRegistry.CreateDefault().Profiles.Any(profile =>
+                    profile.Game == game && profile.Key == target.ProfileKey) ? target : null
+            });
             await MeshMaterialFileService.WriteAsync(path, text,
                 _standaloneImportPath ?? _packageWorkspace?.SourcePath ?? path);
             Status = Loc.Format("loc_Shell_Status_ExportedMfeMaterialSettingsTo", Path.GetFileName(path));
@@ -129,12 +227,12 @@ public sealed partial class MainWindowViewModel
         finally { IsBusy = false; }
     }
 
-    private async Task ImportFaceMaterialsAsync()
+    private async Task ImportFaceMaterialsAsync(string? sourcePath = null)
     {
         if (!CanUseFaceMaterialFiles() || !await EnsureSelectedFaceLoadedForMaterialsAsync() ||
             Editor is not { } editor)
             return;
-        var path = _dialogs.ChooseMaterialImportFile(false,
+        var path = sourcePath ?? _dialogs.ChooseMaterialImportFile(false,
             Path.GetDirectoryName(_standaloneImportPath ?? _packageWorkspace?.SourcePath));
         if (path is null) return;
         IsBusy = true;

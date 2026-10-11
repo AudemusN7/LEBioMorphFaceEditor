@@ -322,7 +322,8 @@
                                     <MenuItem Header="{DynamicResource loc_View_MainWindow_GlTF}" Command="{Binding ExportMorphGltfCommand}" />
                                     <MenuItem Header="{DynamicResource loc_View_MainWindow_MD5}" Command="{Binding ExportMorphMd5Command}" />
                                 </MenuItem>
-                                <MenuItem Header="{DynamicResource loc_View_MainWindow_ExportMorphAsRON}" Style="{StaticResource PccContextAction}" Command="{Binding ExportMorphRonCommand}" />
+                                <MenuItem Header="{DynamicResource loc_View_MainWindow_ExportMorphAsRON}" Style="{StaticResource PccContextAction}" Command="{Binding ExportMorphRonCommand}"
+                                          ToolTip="{Binding MorphRonExportUnavailableReason}" ToolTipService.ShowOnDisabled="True" />
                                 <Separator Style="{StaticResource PccContextSeparator}" />
                                 <MenuItem Header="{DynamicResource loc_View_MainWindow_AssignMorphToActor}" Style="{StaticResource PccContextAction}" Command="{Binding AssignMorphToActorCommand}" />
                                 <MenuItem Header="{DynamicResource loc_View_MainWindow_AssignMaterialsToActor}" Style="{StaticResource PccContextAction}" Command="{Binding AssignMaterialsToActorCommand}" />

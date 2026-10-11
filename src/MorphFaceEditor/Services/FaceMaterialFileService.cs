@@ -67,7 +67,7 @@ public static class FaceMaterialFileService
             }
 
             var taggedHead = HasCompleteMfeProvenanceHeader(text);
-            if (!allowTse && !taggedHead)
+            if (!allowTse && !taggedHead && MaterialRonCodec.IdentifyMaterialFile(text) != MaterialRonCodec.MaterialFileKind.Tse)
             {
                 throw new InvalidDataException(
                     Loc.Text("loc_Services_FaceMaterialFile_OnlyTaggedMfeRonsAccepted"));

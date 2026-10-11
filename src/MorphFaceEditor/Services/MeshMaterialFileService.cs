@@ -34,18 +34,33 @@ public sealed class MeshMaterialFileService(PackageReferenceService references)
             assignments.TryGetValue(slot.MaterialIndex, out var option);
             return new MeshMaterialSlotData(slot.MaterialIndex, slot.MaterialName, option?.Id ?? "",
                 option?.Label ?? "", option?.EffectiveParameterScopeKey ?? "", option?.Family ?? HeadMaterialFamily.Unknown);
-        }).ToArray(), MeshMaterialInterchange.Split(QualifyTexturePaths(data)));
+        }).ToArray(), MeshMaterialInterchange.Split(QualifyTexturePaths(data)))
+        {
+            DefaultFace = InferDefaultFace(workspace, game)
+        };
+    }
+
+    private static MaterialFaceTarget? InferDefaultFace(CustomMaterialWorkspace workspace, MorphFaceGame game)
+    {
+        var suffixes = workspace.Assignments.Select(value => HeadProfileIdentity.InferSuffix(
+                value.Option.Template.Source.InstancedPath, value.Option.Id, value.Option.Label))
+            .OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        if (suffixes.Length != 1 || suffixes[0] == "human") return null;
+        var profileKey = $"{game.ToString().ToLowerInvariant()}-{suffixes[0]}";
+        if (!MorphFaceProfileRegistry.CreateDefault().Profiles.Any(profile => profile.Game == game && profile.Key == profileKey)) return null;
+        return new(profileKey,
+            suffixes[0] is "human-male" or "human-female");
     }
 
     public static string ExportTse(CustomMaterialWorkspace workspace, MorphFaceMaterialData data,
-        AssetIdentity? hair, IReadOnlyList<AssetIdentity?> accessories)
+        AssetIdentity? hair, IReadOnlyList<AssetIdentity?> accessories, MorphFaceGame? game = null)
     {
         if (!MeshMaterialInterchange.CanExportTse(workspace))
             throw new InvalidOperationException(Loc.Text("loc_Services_MeshMaterial_TseExportRequiresHumanMaterial"));
         var human = MeshMaterialInterchange.Split(QualifyTexturePaths(data)).GetValueOrDefault("human")
             ?? new MorphFaceMaterialData([], [], []);
         return MaterialRonCodec.WriteTse(human, AttachmentPath(hair), accessories.OfType<AssetIdentity>()
-            .Select(AttachmentPath).ToArray());
+            .Select(AttachmentPath).ToArray(), game?.ToString(), game is { } targetGame ? InferDefaultFace(workspace, targetGame) : null);
     }
 
     public async Task<PreparedMeshMaterialImport> PrepareAsync(string text, bool tse,

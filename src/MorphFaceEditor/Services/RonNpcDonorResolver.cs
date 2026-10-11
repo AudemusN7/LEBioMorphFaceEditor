@@ -53,6 +53,23 @@ public sealed class RonNpcDonorResolver(MorphFaceProfileRegistry profiles)
     // authored morph controls.  Keep geometry-ignored profiles (such as TUF)
     // out of the donor list because their native payload is intentionally not
     // safe to use as an NPC morph base.
+    internal static bool SupportsMorphRonExport(MorphFaceProfile? profile, string? baseHeadPath) =>
+        profile is not null && IsNativeNpcProfile(profile) && profile.GeometryEditBlockReason(baseHeadPath) is null;
+
+    internal MorphFaceTemplateCandidate? ResolveMaterialDefault(
+        MorphFaceGame game, string profileKey, IReadOnlyList<MorphFaceTemplateCandidate> candidates,
+        IReadOnlyCollection<string> eligibleOfficialPackagePaths)
+    {
+        var eligible = eligibleOfficialPackagePaths.Select(Path.GetFullPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return candidates.Where(candidate => IsNativeNpc(candidate) &&
+                eligible.Contains(Path.GetFullPath(candidate.PackagePath)) && File.Exists(candidate.PackagePath) &&
+                (_profiles.Find(game, candidate.FacePath, candidate.BaseHeadPath) ??
+                 _profiles.Find(game, candidate.FacePath, null))?.Key == profileKey)
+            .OrderByDescending(candidate => candidate.MountPriority)
+            .ThenBy(candidate => candidate.PackagePath, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(candidate => candidate.FacePath, StringComparer.OrdinalIgnoreCase).FirstOrDefault();
+    }
+
     private static bool IsNativeNpcProfile(MorphFaceProfile profile) =>
         !profile.IgnoresAuthoredGeometry &&
         profile.ExportTag.Trim('[', ']').Length > 0;
@@ -62,7 +79,7 @@ public sealed class RonNpcDonorResolver(MorphFaceProfileRegistry profiles)
         !IsPlayerOrCreator(candidate.FacePath) &&
         !IsPlayerOrCreator(candidate.BaseHeadPath);
 
-    private static bool IsPlayerOrCreator(string? path) =>
+    internal static bool IsPlayerOrCreator(string? path) =>
         path?.Contains("Player_Base_", StringComparison.OrdinalIgnoreCase) == true ||
         path?.Contains("Player_Iconic_", StringComparison.OrdinalIgnoreCase) == true ||
         path?.Contains("CharacterCreation_Base_", StringComparison.OrdinalIgnoreCase) == true;

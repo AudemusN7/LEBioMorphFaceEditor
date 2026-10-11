@@ -38,6 +38,7 @@ public static class MaterialInterchangeTests
             [new(Key("krogan", "HED_Diff"), new("", "BIOG_Missing.Diff.KeepMe", 0, "Texture2D"))]),
             new Dictionary<string, DecodedTextureAsset?>());
         var text = source.Export();
+        TestAssert.Equal(MaterialRonCodec.MaterialFileKind.Mfe, MaterialRonCodec.IdentifyMaterialFile(text)!.Value);
         TestAssert.True(!text.Contains("@human/") && !text.Contains("@krogan/"), "Internal control keys leaked into the file.");
         var file = MaterialRonCodec.ReadMfe(text);
         TestAssert.Equal(3, file.Slots.Count);
@@ -272,8 +273,22 @@ public static class MaterialInterchangeTests
 
     private static void FaceMaterialImport()
     {
+        var targeted = MaterialRonCodec.WriteMfe(FaceMaterialFileService.Capture(
+            MorphFaceGame.LE3, "NPC", new([], [], [])) with { DefaultFace = new("le3-salarian", false) });
+        TestAssert.Equal(new MaterialFaceTarget("le3-salarian", false), MaterialRonCodec.ReadMfe(targeted).DefaultFace);
+        TestAssert.Equal("LE3", MaterialRonCodec.ReadDefaultFace(targeted)!.Value.Game);
+        var targetedTse = MaterialRonCodec.WriteTse(new([], [], []), "None", [], "LE2", new("le2-human-female", true));
+        TestAssert.Equal(new MaterialFaceTarget("le2-human-female", true), MaterialRonCodec.ReadDefaultFace(targetedTse)!.Value.Target);
+        TestAssert.Equal("LE2", MaterialRonCodec.ReadDefaultFace(targetedTse)!.Value.Game);
+        TestAssert.Equal(0, MaterialRonCodec.ReadTseDocument(targetedTse).Parameters.Scalars.Count);
         const string untagged = "(morph_features: {}, offset_bones: {}, " +
             "lod0_vertices: [(x: 0, y: 0, z: 0)], scalar_parameters: {\"Shared\": 0.25})";
+        TestAssert.Equal<MaterialRonCodec.MaterialFileKind?>(null, MaterialRonCodec.IdentifyMaterialFile(untagged));
+        var ownTse = MaterialRonCodec.WriteTse(new([new("Shared", 0.25f)], [], []), "None", []);
+        TestAssert.Equal(MaterialRonCodec.MaterialFileKind.Tse, MaterialRonCodec.IdentifyMaterialFile(ownTse)!.Value);
+        TestAssert.Equal(MaterialRonCodec.MaterialFileKind.Tse,
+            MaterialRonCodec.IdentifyMaterialFile(ownTse.Replace("// MFE RON Type: TSE Materials\n", ""))!.Value);
+        TestAssert.Equal(0.25f, FaceMaterialFileService.Read(ownTse, allowTse: false).Parameters.Scalars.Single().Value);
         Reject(() => FaceMaterialFileService.Read(untagged, allowTse: false));
         var tse = FaceMaterialFileService.Read(untagged, allowTse: true);
         TestAssert.True(tse.IsTse && tse.Parameters.Scalars.Single().Value == 0.25f,

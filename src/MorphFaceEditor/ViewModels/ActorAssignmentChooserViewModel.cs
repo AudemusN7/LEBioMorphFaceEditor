@@ -194,7 +194,10 @@ public sealed class ActorAssignmentChoice
         {
             text.AppendLine();
             text.AppendLine(Loc.Text("loc_VM_actorAssignment_warningsHeading"));
-            foreach (var warning in candidate.Warnings) text.AppendLine($"• {warning}");
+            var localizedWarnings = candidate.UserWarnings.Where(message => message.DiagnosticText is not null)
+                .ToDictionary(message => message.DiagnosticText!, UserFacingMessageFormatter.Format, StringComparer.Ordinal);
+            foreach (var warning in candidate.Warnings)
+                text.AppendLine($"• {(localizedWarnings.TryGetValue(warning, out var localized) ? localized : warning)}");
         }
         if (!(mode == ActorAssignmentMode.Morph ? candidate.CanAssignMorph : candidate.CanAssignMaterials))
         {

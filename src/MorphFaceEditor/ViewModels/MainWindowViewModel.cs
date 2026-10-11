@@ -1700,7 +1700,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         catch (Exception exception)
         {
             AppLog.Error($"Temporary face update failed for '{LoadedFacePath}'.", exception);
-            ErrorMessage = Loc.Format("loc_Shell_Error_TemporaryEditsCouldNotUpdate", exception.Message);
+            ErrorMessage = Loc.Format("loc_Shell_Error_TemporaryEditsCouldNotUpdate", UserFacingMessageFormatter.Format(exception));
             Status = Loc.Text("loc_Shell_Status_WorkspaceUpdateFailedSourceUnmodified");
             return false;
         }
@@ -1753,7 +1753,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         catch (Exception exception)
         {
             AppLog.Error($"Package workspace commit failed for '{PackagePath}'.", exception);
-            ErrorMessage = Loc.Format("loc_Shell_Error_PackageChangesCouldNotCommit", exception.Message);
+            ErrorMessage = Loc.Format("loc_Shell_Error_PackageChangesCouldNotCommit", UserFacingMessageFormatter.Format(exception));
             Status = Loc.Text("loc_Shell_Status_SaveFailedTemporaryEditsRetainedSourceUnmodified");
             return false;
         }
@@ -1923,7 +1923,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         catch (Exception exception)
         {
             AppLog.Error($"Morph package export failed for '{LoadedFacePath}' in '{PackagePath}'.", exception);
-            ErrorMessage = Loc.Format("loc_Shell_Error_MorphCouldNotExport", exception.Message);
+            ErrorMessage = Loc.Format("loc_Shell_Error_MorphCouldNotExport", UserFacingMessageFormatter.Format(exception));
             Status = Loc.Text("loc_Shell_Status_SaveFailedSourcePccUnmodified");
             return false;
         }

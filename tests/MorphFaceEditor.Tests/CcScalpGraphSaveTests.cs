@@ -11,9 +11,20 @@ internal static class CcScalpGraphSaveTests
 {
     internal static IReadOnlyList<TestCase> All { get; } =
     [
-        new("LE3 CC scalp graph is face-scoped and survives existing-save and export reopen", SaveExistingRoundTripsFaceScopedCcScalpGraph)
+        new("LE3 CC scalp graph is face-scoped and survives existing-save and export reopen", SaveExistingRoundTripsFaceScopedCcScalpGraph),
+        new("CC scalp errors carry localisable messages without changing exception types", ScalpErrorUsesMasterCatalogue)
     ];
 
+    private static void ScalpErrorUsesMasterCatalogue()
+    {
+        var failure = UserFacingMessage.CreateError(
+            "loc_Shell_Error_CcScalp_DonorNotMaterial",
+            "The selected CC scalp donor 'Scalp' is Texture2D, not a material instance.",
+            "Scalp", "Texture2D");
+        TestAssert.Equal("The selected scalp donor 'Scalp' is a Texture2D, rather than a material instance.",
+            MorphFaceEditor.Infrastructure.UserFacingMessageFormatter.Format(failure));
+        TestAssert.Equal("The selected CC scalp donor 'Scalp' is Texture2D, not a material instance.", failure.Message);
+    }
     internal static void SaveExistingRoundTripsFaceScopedCcScalpGraph()
     {
         LegendaryExplorerCoreRuntime.Initialize();

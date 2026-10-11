@@ -1,0 +1,20 @@
+<Project>
+  <!-- Audited against pinned LEC 804db0b: ISACTTools belongs to audio tooling;
+       System.IO.Hashing is used only by LEC texture CRC tooling outside MFE's routes.
+       Revisit these exclusions when changing the pin or adding those routes. -->
+  <!-- Also clean old outputs when switching an existing checkout to this policy. -->
+  <Target Name="RemoveObsoleteReleaseFiles" AfterTargets="CopyFilesToOutputDirectory"
+          Condition="'$(Configuration)' == 'Release' and '$(TargetDir)' != ''">
+    <ItemGroup>
+      <_ObsoleteReleaseFile Include="$(TargetDir)*.pdb;$(TargetDir)ISACTTools.dll;$(TargetDir)System.IO.Hashing.dll" />
+    </ItemGroup>
+    <Delete Files="@(_ObsoleteReleaseFile)" />
+  </Target>
+  <Target Name="RemoveObsoletePublishedReleaseFiles" AfterTargets="Publish"
+          Condition="'$(Configuration)' == 'Release' and '$(PublishDir)' != ''">
+    <ItemGroup>
+      <_ObsoletePublishedReleaseFile Include="$(PublishDir)*.pdb;$(PublishDir)ISACTTools.dll;$(PublishDir)System.IO.Hashing.dll" />
+    </ItemGroup>
+    <Delete Files="@(_ObsoletePublishedReleaseFile)" />
+  </Target>
+</Project>

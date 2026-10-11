@@ -13,4 +13,11 @@
     <Platforms>x64</Platforms>
     <PlatformTarget>x64</PlatformTarget>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <!-- Do not copy the pinned LEC's adjacent PDB through reference resolution. -->
+    <AllowedReferenceRelatedFileExtensions>.xml;.pri;.dll.config;.exe.config</AllowedReferenceRelatedFileExtensions>
+    <CopyDebugSymbolFilesFromPackages>false</CopyDebugSymbolFilesFromPackages>
+  </PropertyGroup>
 </Project>

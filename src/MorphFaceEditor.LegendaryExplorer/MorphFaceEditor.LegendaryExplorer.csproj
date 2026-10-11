@@ -15,7 +15,7 @@
       <HintPath>$(LecDirectory)\LegendaryExplorerCore.dll</HintPath>
       <Private>true</Private>
     </Reference>
-    <None Include="$(LecDirectory)\LegendaryExplorerCore.pdb"
+    <None Include="$(LecDirectory)\LegendaryExplorerCore.pdb" Condition="'$(Configuration)' == 'Debug'"
           Link="LegendaryExplorerCore.pdb"
           CopyToOutputDirectory="PreserveNewest" />
     <Content Include="$(LecDirectory)\CompressionWrappers.dll"
@@ -23,9 +23,6 @@
              CopyToOutputDirectory="PreserveNewest" />
     <Content Include="$(LecDirectory)\TexConverter.dll"
              Link="TexConverter.dll"
-             CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="$(LecDirectory)\ISACTTools.dll"
-             Link="ISACTTools.dll"
              CopyToOutputDirectory="PreserveNewest" />
     <EmbeddedResource Include="Assets\CrossGameAssetReconciliation.json"
                       LogicalName="MorphFaceEditor.CrossGameAssetReconciliation.json" />
@@ -43,7 +40,6 @@
     <PackageReference Include="SharpDX.D3DCompiler" />
     <PackageReference Include="SharpGLTF.Toolkit" />
     <PackageReference Include="SixLabors.ImageSharp" />
-    <PackageReference Include="System.IO.Hashing" />
   </ItemGroup>
 
   <Target Name="VerifyLegendaryExplorerCorePin" BeforeTargets="ResolveReferences">

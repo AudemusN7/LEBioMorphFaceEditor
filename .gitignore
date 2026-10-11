@@ -4,6 +4,7 @@ obj/
 .idea/
 TestResults/
 artifacts/
+tools/versioning/VersionHistory.csv
 .codex-build/
 .codex-temp/
 .worktrees/

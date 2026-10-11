@@ -418,16 +418,17 @@ public sealed partial class MainWindowViewModel
             _ = LoadTextureRegistryAsync(
                 Editor!, targetGame, preview.Profile, textureProfile, CancellationToken.None);
             Status = Loc.Format("loc_Shell_Status_ImportedAsNpcMorphReady", selected.DisplayName, targetGame, archetype);
-            foreach (var warning in importWarnings.Concat(preview.Loaded.Warnings))
+            var allImportWarnings = importWarnings.Concat(preview.Loaded.Warnings).Distinct(StringComparer.Ordinal).ToArray();
+            foreach (var warning in allImportWarnings)
             {
                 AppLog.Warning(warning);
             }
-            if (importWarnings.Count > 0)
+            if (allImportWarnings.Length > 0)
             {
-                Status = Loc.Format("loc_Shell_Status_ImportedWithAssetOrStatic", selected.DisplayName, importWarnings.Count);
+                Status = Loc.Format("loc_Shell_Status_ImportedWithAssetOrStatic", selected.DisplayName, allImportWarnings.Length);
                 _dialogs.ShowInformation(
                     Loc.Text("loc_Shell_DialogTitle_NpcMorphImportedWithWarnings"),
-                    Loc.Format("loc_Shell_Dialog_NpcMorphImportWarnings", string.Join("\n- ", importWarnings)));
+                    AppendDatabaseImportGuidance(Loc.Format("loc_Shell_Dialog_NpcMorphImportWarnings", string.Join("\n- ", allImportWarnings))));
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -668,7 +669,7 @@ public sealed partial class MainWindowViewModel
                 Status = Loc.Format("loc_Shell_Status_ImportedWithVisibleAssetWarning", importedFacePath, importWarnings.Count);
                 _dialogs.ShowInformation(
                     Loc.Text("loc_Shell_DialogTitle_PlayerMorphImportedWithWarnings"),
-                    Loc.Format("loc_Shell_Dialog_PlayerMorphImportWarnings", string.Join("\n- ", importWarnings)));
+                    AppendDatabaseImportGuidance(Loc.Format("loc_Shell_Dialog_PlayerMorphImportWarnings", string.Join("\n- ", importWarnings))));
             }
             else if (isRon)
             {
@@ -748,7 +749,8 @@ public sealed partial class MainWindowViewModel
             customMaterialOptions: result.MaterialOptions,
             materialRandomisationProfileKey: $"{game.ToString().ToLowerInvariant()}-human-female",
             previewOnlyAttachments: true,
-            playerRandomisationGame: game);
+            playerRandomisationGame: game,
+            customMaterialRegistryAvailable: result.IsMaterialRegistryAvailable);
         SetEditor(editor, result.Preview.Loaded);
         _faceDetailsPrefix = null;
         _faceDetailsHasBakedFallback = false;
@@ -876,6 +878,13 @@ public sealed partial class MainWindowViewModel
                 : fit.UsedSourcePrior
                     ? Loc.Format("loc_Shell_Status_ImportedMorphRestoredLods", result.FaceInstancedPath, fit.MaximumError)
                 : Loc.Format("loc_Shell_Status_ImportedMorphRecoveredSliders", result.FaceInstancedPath, fit.RecoveredFeatureCount, fit.RootMeanSquareError, fit.MaximumError);
+            if (sourceExtension.Equals(".ron", StringComparison.OrdinalIgnoreCase) && result.Warnings.Count > 0)
+            {
+                foreach (var warning in result.Warnings) AppLog.Warning(warning);
+                _dialogs.ShowInformation(
+                    Loc.Text("loc_Shell_DialogTitle_NpcMorphImportedWithWarnings"),
+                    AppendDatabaseImportGuidance(Loc.Format("loc_Shell_Dialog_NpcMorphImportWarnings", string.Join("\n- ", result.Warnings))));
+            }
             if (fit is { MaximumError: > 0.001f })
             {
                 _dialogs.ShowInformation(

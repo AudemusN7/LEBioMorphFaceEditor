@@ -99,6 +99,7 @@ public static class UiSmokeTests
         new("mesh attachment picker previews without committing history", MeshAttachmentPickerPreviewDoesNotCommit),
         new("editor error banners can be dismissed", ErrorBannerCanBeDismissed),
         new("texture registry settings command opens the settings dialog", TextureRegistrySettingsCommandOpensDialog),
+        new("MFTR notices update after a scan and preserve import warnings", DatabaseGuidanceUpdatesAndPreservesWarnings),
         new("actor assignment chooser filters evidence and scopes eligibility by operation", ActorChooserFiltersAndScopesEligibility),
         new("WPF resources, nested menus, and HDR colour controls work", HdrPickerConstructs),
         new("Human Male UI profile orders, groups, and filters features", HumanMaleProfileOrganizesFeatures),
@@ -1202,6 +1203,25 @@ public static class UiSmokeTests
         viewModel.DismissErrorCommand.Execute(null);
         TestAssert.True(!viewModel.HasError, "Dismissing the error left the banner visible.");
         TestAssert.Equal<string?>(null, viewModel.ErrorMessage);
+    }
+
+    private static void DatabaseGuidanceUpdatesAndPreservesWarnings()
+    {
+        using var reader = new MorphFacePackageReader();
+        using var editor = CreateEditor(reader);
+        TestAssert.True(editor.IsMeshDatabaseUnavailable, "Missing MFTR should show the attachment notice.");
+        var notified = false;
+        editor.PropertyChanged += (_, args) => notified |= args.PropertyName == nameof(editor.IsMeshDatabaseUnavailable);
+        editor.UpdateRegistryTextureCandidates([], TextureCatalogProfile.Empty, true);
+        TestAssert.True(!editor.IsMeshDatabaseUnavailable && notified,
+            "Loading an MFTR should hide the attachment notice through a binding notification.");
+        editor.UpdateRegistryTextureCandidates([], TextureCatalogProfile.Empty, false);
+        TestAssert.True(editor.IsMeshDatabaseUnavailable, "A failed database refresh should restore the notice.");
+        var details = "Missing donor asset";
+        var warning = MainWindowViewModel.AppendDatabaseImportGuidance(details);
+        TestAssert.True(warning.StartsWith(details + "\n\n", StringComparison.Ordinal) &&
+                        warning.EndsWith(Loc.Text("loc_Shell_ImportWarnings_DatabaseGuidance"), StringComparison.Ordinal),
+            "Database guidance must accompany rather than replace the original import warnings.");
     }
 
     private static void TextureRegistrySettingsCommandOpensDialog()
@@ -3341,6 +3361,19 @@ public static class UiSmokeTests
                 mainWindow.ShowInTaskbar = false;
                 mainWindow.Opacity = 0;
                 mainWindow.Show();
+                var databaseWarning = (Border)mainWindow.FindName("CustomMaterialDatabaseWarning");
+                void CheckDatabaseWarning(object? editor, Visibility expected)
+                {
+                    databaseWarning.DataContext = new { Editor = editor };
+                    Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                    TestAssert.Equal(expected, databaseWarning.Visibility);
+                }
+                CheckDatabaseWarning(null, Visibility.Collapsed);
+                CheckDatabaseWarning(new { HasLimitedCustomMaterials = false }, Visibility.Collapsed);
+                CheckDatabaseWarning(new { HasLimitedCustomMaterials = true }, Visibility.Visible);
+                CheckDatabaseWarning(new { HasLimitedCustomMaterials = false }, Visibility.Collapsed);
+                CheckDatabaseWarning(null, Visibility.Collapsed);
+                databaseWarning.ClearValue(FrameworkElement.DataContextProperty);
                 ThemePaletteTests.Verify(application, mainWindow, viewModel);
                 ThemeRuntimeTests.Verify(application, mainWindow, viewModel, themeFixture);
                 var faceList = mainWindow.FindName("FaceList") as ListBox;

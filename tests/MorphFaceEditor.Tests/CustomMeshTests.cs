@@ -52,6 +52,13 @@ public static class CustomMeshTests
             .Load(MorphFaceGame.LE3, source);
 
         TestAssert.Equal(1, result.CustomMaterials!.UsedSlots.Count);
+        TestAssert.True(!result.IsMaterialRegistryAvailable,
+            "A missing database must remain visible to the custom mesh workspace.");
+        var indexedResult = new DetachedMeshPreviewLoadService(
+            factory, materialCatalog: new FixedCustomMaterialCatalog(option, true))
+            .Load(MorphFaceGame.LE3, source);
+        TestAssert.True(indexedResult.IsMaterialRegistryAvailable,
+            "An available material database must suppress the limited-material warning.");
         TestAssert.Equal(2, result.CustomMaterials.UsedSlots[0].MaterialIndex);
         var stableKey = MaterialIdentityKey.Create(result.CustomMaterials.GetPreviewMaterialIdentity(2));
         TestAssert.Equal(stableKey, result.Preview.Scene.Meshes.Single().Sections.Single().Material.Key);
@@ -69,10 +76,13 @@ public static class CustomMeshTests
             "Material assignment changed authored imported mesh geometry or section data.");
     }
 
-    private sealed class FixedCustomMaterialCatalog(CustomMaterialAssignmentOption option)
+    private sealed class FixedCustomMaterialCatalog(CustomMaterialAssignmentOption option, bool isRegistryAvailable = false)
         : ICustomMaterialTemplateCatalog
     {
-        public CustomMaterialTemplateCatalogResult Load(MorphFaceGame game) => new([option], [], []);
+        public CustomMaterialTemplateCatalogResult Load(MorphFaceGame game) => new([option], [], [])
+        {
+            IsRegistryAvailable = isRegistryAvailable
+        };
     }
 
     private static void ProfileIsInferredFromMaterials()

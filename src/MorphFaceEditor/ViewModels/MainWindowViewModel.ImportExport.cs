@@ -55,7 +55,7 @@ public sealed partial class MainWindowViewModel
 
     private async Task ExportMorphRonAsync()
     {
-        if (SelectedFace is not { } selected || WorkspacePackagePath is not { } workspacePath)
+        if (!CanExportMorphRon() || SelectedFace is not { } selected || WorkspacePackagePath is not { } workspacePath)
         {
             return;
         }
@@ -72,12 +72,12 @@ public sealed partial class MainWindowViewModel
         Status = Loc.Format("loc_Shell_Status_ExportingAsTrilogySaveEditor", selected.DisplayName);
         try
         {
-            var provenance = CreateRonExportProvenance(selected);
-            await Task.Run(() => _packageContextService.ExportRon(
-                workspacePath,
-                selected.InstancedPath,
-                destination,
-                provenance));
+            var isPlayerWorkspace = IsPlayerWorkspace;
+            await Task.Run(() =>
+            {
+                var provenance = CreateRonExportProvenance(workspacePath, selected, isPlayerWorkspace);
+                _packageContextService.ExportRon(workspacePath, selected.InstancedPath, destination, provenance);
+            });
             Status = Loc.Format("loc_Shell_Status_ExportedAs", selected.DisplayName, Path.GetFileName(destination));
         }
         catch (Exception exception)
@@ -92,30 +92,41 @@ public sealed partial class MainWindowViewModel
         }
     }
 
-    private RonExportProvenance? CreateRonExportProvenance(BioMorphFaceListItem selected)
+    private bool CanExportMorphRon() => CanUseFaceContextMenu() &&
+        SelectedFace is { SupportsMorphRonExport: true } face && HasSupportedRonArchetype(face.ProfileTag.Trim('[', ']'));
+
+    public string? MorphRonExportUnavailableReason => SelectedFace is { } face &&
+        (!face.SupportsMorphRonExport || !HasSupportedRonArchetype(face.ProfileTag.Trim('[', ']')))
+            ? Loc.Text("loc_Shell_Error_RonProfileUnsupported") : null;
+
+    private static bool HasSupportedRonArchetype(string archetype) =>
+        archetype is "ALN" or "ASA" or "BAT" or "HMM" or "HMF" or "KRO" or "SAL" or "TUR";
+
+    internal static RonExportProvenance CreateRonExportProvenance(
+        string workspacePath, BioMorphFaceListItem selected, bool isPlayerWorkspace)
     {
-        if (_loadedFace is null)
-        {
-            return null;
-        }
+        var reference = MorphFaceReferenceInspector.Inspect(workspacePath)
+            .Single(face => face.FacePath.Equals(selected.InstancedPath, StringComparison.OrdinalIgnoreCase));
         var archetype = selected.ProfileTag.Trim('[', ']');
-        if (archetype is not ("ALN" or "ASA" or "BAT" or "HMM" or "HMF" or "KRO" or "SAL" or "TUF" or "TUR"))
+        var profiles = MorphFaceProfileRegistry.CreateDefault();
+        var profile = profiles.Find(reference.Game, reference.FacePath, reference.BaseHeadPath) ??
+                      profiles.Find(reference.Game, reference.FacePath, null);
+        if (!HasSupportedRonArchetype(archetype) || !RonNpcDonorResolver.SupportsMorphRonExport(profile, reference.BaseHeadPath))
         {
-            return null;
+            throw new InvalidOperationException(Loc.Text("loc_Shell_Error_RonProfileUnsupported"));
         }
-        var basePath = _loadedFace.Document.BaseHeadReference?.InstancedPath ?? string.Empty;
-        var player = IsPlayerWorkspace ||
+        var basePath = reference.BaseHeadPath ?? string.Empty;
+        var player = isPlayerWorkspace ||
+                     reference.FacePath.Contains("Player_Base_", StringComparison.OrdinalIgnoreCase) ||
+                     reference.FacePath.Contains("Player_Iconic_", StringComparison.OrdinalIgnoreCase) ||
+                     reference.FacePath.Contains("CharacterCreation_Base_", StringComparison.OrdinalIgnoreCase) ||
                      basePath.Contains("Player_Base_", StringComparison.OrdinalIgnoreCase) ||
                      basePath.Contains("Player_Iconic_", StringComparison.OrdinalIgnoreCase) ||
                      basePath.Contains("CharacterCreation_Base_", StringComparison.OrdinalIgnoreCase);
-        if (player && Editor?.CanEditMorphFeatures != true)
-        {
-            return null;
-        }
         return new RonExportProvenance(
             RonExportProducer.MFE,
             typeof(MainWindowViewModel).Assembly.GetName().Version?.ToString() ?? "0.0.0",
-            _loadedFace.Game,
+            reference.Game,
             archetype,
             player);
     }
@@ -177,6 +188,8 @@ public sealed partial class MainWindowViewModel
 
     private async Task ImportMorphAsync(string sourcePath)
     {
+        if (Path.GetExtension(sourcePath).Equals(".ron", StringComparison.OrdinalIgnoreCase) &&
+            await TryImportMaterialRonAsync(sourcePath)) return;
         var game = _dialogs.ChooseStandaloneImportGame();
         if (game is not null)
         {
@@ -212,6 +225,7 @@ public sealed partial class MainWindowViewModel
         RonExportProvenance? provenance;
         try
         {
+            if (await TryImportMaterialRonAsync(sourcePath)) return;
             provenance = await Task.Run(() => TseHeadMorphRon.ReadProvenance(sourcePath));
         }
         catch (Exception exception)

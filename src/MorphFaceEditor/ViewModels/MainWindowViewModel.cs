@@ -204,7 +204,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             () => ExportMorphMeshAsync(MorphMeshFormat.Gltf), CanUseFaceContextMenu);
         _exportMorphMd5Command = new AsyncRelayCommand(
             () => ExportMorphMeshAsync(MorphMeshFormat.Md5), CanUseFaceContextMenu);
-        _exportMorphRonCommand = new AsyncRelayCommand(ExportMorphRonAsync, CanUseFaceContextMenu);
+        _exportMorphRonCommand = new AsyncRelayCommand(ExportMorphRonAsync, CanExportMorphRon);
         _exportTseMaterialsCommand = new AsyncRelayCommand(async () => { await ExportMeshMaterialsAsync(true); },
             () => CanUseMeshMaterialFiles() && Editor?.CanExportTseMaterials == true);
         _importTseMaterialsCommand = new AsyncRelayCommand(() => ImportMeshMaterialsAsync(true),
@@ -754,13 +754,14 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(HasRecentFiles));
     }
 
-    private async Task<bool> OpenSourcePackagePathAsync(string selectedPath, string? preferredFacePath = null)
+    private async Task<bool> OpenSourcePackagePathAsync(string selectedPath, string? preferredFacePath = null,
+        MorphFaceGame? standaloneGame = null, bool standaloneNpc = false)
     {
         AppLog.Information($"Creating temporary workspace for '{selectedPath}'.");
         MorphFacePackageWorkspace workspace;
         try
         {
-            workspace = await Task.Run(() => new MorphFacePackageWorkspace(selectedPath));
+            workspace = await Task.Run(() => new MorphFacePackageWorkspace(selectedPath, canCommit: standaloneGame is null));
         }
         catch (Exception exception)
         {
@@ -775,8 +776,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         DisposePackageWorkspace();
         _packageWorkspace = workspace;
         _standaloneImportPath = null;
-        _standaloneGame = null;
-        _isStandaloneNpcWorkspace = false;
+        _standaloneGame = standaloneGame;
+        _isStandaloneNpcWorkspace = standaloneNpc;
         SetDetachedMeshSource(null);
         _fixedBakeFacePaths.Clear();
         _relativeBakeFacePaths.Clear();

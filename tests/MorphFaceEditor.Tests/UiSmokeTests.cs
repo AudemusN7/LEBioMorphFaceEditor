@@ -50,6 +50,9 @@ public static class UiSmokeTests
         new("NPC RON resolver accepts static ALN donors and rejects player donors", RonResolverAcceptsStaticAlnDonor),
         new("NPC RON donor uses highest mounted duplicate face", RonResolverPrefersHighestMountedDuplicate),
         new("empty editor imports a tagged native NPC RON", EmptyEditorImportsTaggedNpcRon),
+        new("NPC RON export stamps the selected face without loading it", NpcRonExportIdentifiesUnloadedFace),
+        new("MFE material RON drops use material import rather than Player import", MaterialRonDropsUseMaterialImport),
+        new("material RON metadata opens matching default NPC and Player faces", MaterialRonMetadataOpensDefaultFace),
         new("NPC import cancellation command cancels an active request", NpcImportCancellationCommandCancelsActiveRequest),
         new("tagged human RON follows the user's NPC or Player destination", TaggedHumanRonFollowsDestination),
         new("standalone Gibbed import rejects the wrong selected game before mutation", StandaloneGibbedRejectsWrongGame),
@@ -922,6 +925,127 @@ public static class UiSmokeTests
                         !viewModel.AssignMaterialsToActorCommand.CanExecute(null),
             $"The standalone {workspaceLabel} route inherited actor-assignment commands.");
     }
+
+    private static void NpcRonExportIdentifiesUnloadedFace() => RunWithDispatcher(async () =>
+    {
+        var destination = Path.Combine(Path.GetTempPath(), $"MFE-NpcExport-{Guid.NewGuid():N}.ron");
+        try
+        {
+            using var reader = new MorphFacePackageReader();
+            var dialogs = new StubEditorDialogs { RonExportPath = destination };
+            using var shell = CreateMainWindowViewModel(reader, dialogs);
+            await shell.OpenDroppedFileAsync(Path.GetFullPath(Path.Combine("tests", "Global Morphs", "LE1 GlobalMorphs.pcc")));
+            TestAssert.True(shell.Editor is null, "The regression requires an unloaded face.");
+            var selected = shell.Faces.First(face => face.ProfileKey == "le1-human-male");
+            shell.SelectedFace = selected;
+            foreach (var unsupported in new[] { "[BAF]", "[TUF]", "[CUSTOM]", "[MESH]" })
+            {
+                shell.SelectedFace = selected with { ProfileTag = unsupported };
+                TestAssert.True(!shell.ExportMorphRonCommand.CanExecute(null),
+                    $"An unimportable {unsupported} profile still offers a full morph RON export.");
+            }
+            var bat = MorphFaceProfileRegistry.CreateDefault().Profiles.Single(profile =>
+                profile.Game == MorphFaceGame.LE3 && profile.ExportTag == "[BAT]");
+            var omegaSupported = RonNpcDonorResolver.SupportsMorphRonExport(bat,
+                "BIOG_BAT_OMEGA_HED.BAT.HED.BAT_HED_PROBase_MDL");
+            TestAssert.True(!omegaSupported, "Omega Batarian must share the import route's export restriction.");
+            TestAssert.True(RonNpcDonorResolver.SupportsMorphRonExport(bat,
+                "BIOG_BAT_HED_PROMorph.BAT.HED.BAT_HED_PROBase_MDL"), "Ordinary Batarians should retain full RON export.");
+            shell.SelectedFace = selected with { ProfileTag = "[BAT]", SupportsMorphRonExport = omegaSupported };
+            TestAssert.True(!shell.ExportMorphRonCommand.CanExecute(null), "Omega Batarian full RON export is still enabled.");
+            shell.SelectedFace = selected;
+            await ((AsyncRelayCommand)shell.ExportMorphRonCommand).ExecuteAsync();
+            TestAssert.True(!shell.HasError && File.Exists(destination), shell.ErrorMessage ?? "NPC export failed.");
+            var provenance = TseHeadMorphRon.ReadProvenance(destination);
+            TestAssert.True(provenance is { Producer: RonExportProducer.MFE, Game: MorphFaceGame.LE1,
+                Archetype: "HMM", PlayerMorph: false }, "An unloaded NPC export lost its identity.");
+            var other = shell.Faces.First(face => face.ProfileKey == "le1-human-female");
+            shell.SelectedFace = other;
+            await ((AsyncRelayCommand)shell.LoadSelectedFaceCommand).ExecuteAsync();
+            shell.SelectedFace = selected;
+            await ((AsyncRelayCommand)shell.ExportMorphRonCommand).ExecuteAsync();
+            TestAssert.Equal("HMM", TseHeadMorphRon.ReadProvenance(destination)!.Archetype);
+        }
+        finally
+        {
+            if (File.Exists(destination)) File.Delete(destination);
+        }
+    });
+
+    private static void MaterialRonDropsUseMaterialImport() => RunWithDispatcher(async () =>
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"MFE-MaterialDrop-{Guid.NewGuid():N}.ron");
+        try
+        {
+            using var reader = new MorphFacePackageReader();
+            var dialogs = new StubEditorDialogs { StandaloneGameChoiceResult = MorphFaceGame.LE1 };
+            using var shell = CreateMainWindowViewModel(reader, dialogs);
+            var parameters = new MorphFaceMaterialData([], [], []);
+            File.WriteAllText(path, MaterialRonCodec.WriteMfe(FaceMaterialFileService.Capture(MorphFaceGame.LE1, "Fixture", parameters)));
+            await shell.OpenDroppedFileAsync(path);
+            TestAssert.True(shell.HasError && shell.Editor is null, "Missing target metadata should fail without opening a workspace.");
+            TestAssert.Equal(0, dialogs.StandaloneNameChoiceCount);
+            TestAssert.Equal(0, dialogs.StandaloneGameChoiceCount);
+            await shell.OpenDroppedFileAsync(Path.GetFullPath(Path.Combine("tests", "Global Morphs", "LE1 GlobalMorphs.pcc")));
+            shell.SelectedFace = shell.Faces.First(face => face.ProfileKey == "le1-human-male");
+            await shell.OpenDroppedFileAsync(path);
+            TestAssert.True(!shell.HasError && shell.Editor is not null,
+                shell.ErrorMessage ?? "MFE material drop did not load its selected face.");
+            var editor = shell.Editor;
+            File.WriteAllText(path, MaterialRonCodec.WriteTse(parameters, "None", []));
+            await shell.OpenDroppedFileAsync(path);
+            TestAssert.True(!shell.HasError && ReferenceEquals(editor, shell.Editor),
+                shell.ErrorMessage ?? "A TSE material drop replaced the face workspace.");
+            TestAssert.Equal(0, dialogs.RonImportDestinationChoiceCount);
+            TestAssert.Equal(0, dialogs.MaterialImportFileChoiceCount);
+            TestAssert.Equal(0, dialogs.StandaloneNameChoiceCount);
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
+    });
+
+    private static void MaterialRonMetadataOpensDefaultFace() => RunWithDispatcher(async () =>
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"MFE-MaterialTarget-{Guid.NewGuid():N}.ron");
+        var textureCatalog = new MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureCatalogService(
+            new MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureRegistryStore(
+                MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureRegistryPaths.CreateDefault()));
+        try
+        {
+            foreach (var target in new[] { new MaterialFaceTarget("le2-salarian", false),
+                         new MaterialFaceTarget("le2-human-female", true) })
+            {
+                File.WriteAllText(path, MaterialRonCodec.WriteMfe(FaceMaterialFileService.Capture(
+                    MorphFaceGame.LE2, "Fixture", new([], [], [])) with { DefaultFace = target }));
+                using var reader = new MorphFacePackageReader();
+                var dialogs = new StubEditorDialogs();
+                using var shell = CreateMainWindowViewModel(reader, dialogs, textureCatalog: textureCatalog);
+                await shell.OpenDroppedFileAsync(path);
+                TestAssert.True(!shell.HasError && shell.HasPreview, shell.ErrorMessage ?? "Default material face did not open.");
+                TestAssert.Equal(target.ProfileKey, shell.SelectedFace!.ProfileKey);
+                TestAssert.Equal(1, shell.Faces.Count);
+                TestAssert.True(!shell.CanCommitFace && !shell.SaveCommand.CanExecute(null),
+                    "A default material workspace can overwrite its installed source package.");
+                TestAssert.Equal(0, dialogs.StandaloneGameChoiceCount);
+                if (target.PlayerMorph)
+                {
+                    File.WriteAllText(path, MaterialRonCodec.WriteTse(new([], [], []), "None", [], "LE2", target));
+                    using var tseReader = new MorphFacePackageReader();
+                    using var tseShell = CreateMainWindowViewModel(tseReader, new StubEditorDialogs(), textureCatalog: textureCatalog);
+                    await tseShell.OpenDroppedFileAsync(path);
+                    TestAssert.True(!tseShell.HasError && tseShell.HasPreview, tseShell.ErrorMessage ?? "TSE target metadata did not open its face.");
+                    TestAssert.Equal(target.ProfileKey, tseShell.SelectedFace!.ProfileKey);
+                }
+            }
+            File.WriteAllText(path, MaterialRonCodec.WriteMfe(FaceMaterialFileService.Capture(
+                MorphFaceGame.LE2, "UnsupportedTarget", new([], [], [])) with { DefaultFace = new("custom", false) }));
+            using var unsupportedReader = new MorphFacePackageReader();
+            using var unsupportedShell = CreateMainWindowViewModel(unsupportedReader, new StubEditorDialogs(), textureCatalog: textureCatalog);
+            await unsupportedShell.OpenDroppedFileAsync(path);
+            TestAssert.True(unsupportedShell.HasError && unsupportedShell.Editor is null && !unsupportedShell.HasPreview,
+                "Unsupported target metadata should fail without opening a workspace.");
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
+    });
 
     private static void PccEmptyHeadState() => RunWithDispatcher(async () =>
     {
@@ -3046,6 +3170,7 @@ public static class UiSmokeTests
         public int RonImportDestinationChoiceCount { get; private set; }
         public int MorphImportFileChoiceCount { get; private set; }
         public int MaterialImportFileChoiceCount { get; private set; }
+        public string? RonExportPath { get; init; }
         public MorphFaceGame? StandaloneGameChoiceResult { get; init; }
         public string? StandaloneNameChoiceResult { get; init; }
         public RonImportDestinationChoice? RonImportDestinationChoiceResult { get; set; }
@@ -3085,7 +3210,7 @@ public static class UiSmokeTests
             StandaloneNameChoiceCount++;
             return StandaloneNameChoiceResult;
         }
-        public string? ChooseRonExportFile(string suggestedFileName, string? initialDirectory = null) => null;
+        public string? ChooseRonExportFile(string suggestedFileName, string? initialDirectory = null) => RonExportPath;
         public string? ChooseMeshExportDirectory(string? initialDirectory = null) => null;
         public ActorAssignmentCandidate? ChooseActorAssignment(
             ActorAssignmentInventory inventory,

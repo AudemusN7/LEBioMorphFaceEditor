@@ -73,7 +73,10 @@ public sealed class MorphFaceCatalogService
                     item.Reference.FacePath.Split('.').Last(),
                     item.Profile?.ExportTag ?? "[CUSTOM]",
                     item.Profile?.ExportTagColor ?? "#66717D",
-                    item.Profile?.Key ?? "custom"))
+                    item.Profile?.Key ?? "custom")
+                {
+                    SupportsMorphRonExport = RonNpcDonorResolver.SupportsMorphRonExport(item.Profile, item.Reference.BaseHeadPath)
+                })
                 .OrderBy(face => face.DisplayName, ExplorerNaturalStringComparer.Instance)
                 .ThenBy(face => face.InstancedPath, ExplorerNaturalStringComparer.Instance)
                 .ToArray();

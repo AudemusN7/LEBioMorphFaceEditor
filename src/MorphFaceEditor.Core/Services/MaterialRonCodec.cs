@@ -12,6 +12,20 @@ namespace MorphFaceEditor.Core.Services;
 /// </summary>
 public static class MaterialRonCodec
 {
+    public enum MaterialFileKind { Mfe, Tse }
+    private const string TseMaterialMarker = "// MFE RON Type: TSE Materials";
+
+    /// <summary>Identifies material exports without mistaking a full head RON for a material-only file.</summary>
+    public static MaterialFileKind? IdentifyMaterialFile(string text)
+    {
+        var root = new MaterialRonReader(text).Read();
+        if (root.TryGetValue("format", out var format) && Equals(format, "MorphFaceEditor.Materials"))
+            return MaterialFileKind.Mfe;
+        var marked = text.Split('\n').Any(line => line.Trim() is TseMaterialMarker or
+            "// Material settings only; no authored geometry or bone offsets.");
+        return marked && root.TryGetValue("lod0_vertices", out var lod0) && Array(lod0).Count == 0
+            ? MaterialFileKind.Tse : null;
+    }
     public sealed record TseMaterialDocument(
         MorphFaceMaterialData Parameters,
         string? HairMesh,
@@ -70,7 +84,39 @@ public static class MaterialRonCodec
             if (string.IsNullOrWhiteSpace(scope) || scope.Any(character => !char.IsAsciiLetterOrDigit(character) && character != '-'))
                 throw new InvalidDataException($"Invalid material scope '{scope}'.");
         return new MeshMaterialDocument(game, String(root, "mesh_name"), slots,
-            scopes.ToDictionary(value => value.Key, value => ReadParameters(Object(value.Value)), StringComparer.OrdinalIgnoreCase));
+            scopes.ToDictionary(value => value.Key, value => ReadParameters(Object(value.Value)), StringComparer.OrdinalIgnoreCase))
+        {
+            DefaultFace = ReadDefaultFace(root)
+        };
+    }
+
+    public static (string Game, MaterialFaceTarget Target)? ReadDefaultFace(string text)
+    {
+        var root = new MaterialRonReader(text).Read();
+        if (!root.TryGetValue("format", out var format) || !Equals(format, "MorphFaceEditor.Materials"))
+        {
+            string? Header(string name)
+            {
+                var prefix = "// MFE material target " + name + ":";
+                var line = text.Split('\n').Select(value => value.Trim()).FirstOrDefault(value => value.StartsWith(prefix, StringComparison.Ordinal));
+                return line?[prefix.Length..].Trim();
+            }
+            var game = Header("game");
+            var profile = Header("profile");
+            var kind = Header("kind");
+            return game is not null && profile is not null && kind is "Player" or "NPC"
+                ? (game, new MaterialFaceTarget(profile, kind == "Player")) : null;
+        }
+        var target = ReadDefaultFace(root);
+        return target is null ? null : (String(root, "game"), target);
+    }
+
+    private static MaterialFaceTarget? ReadDefaultFace(IReadOnlyDictionary<string, object> root)
+    {
+        if (!root.ContainsKey("target_profile") && !root.ContainsKey("target_kind")) return null;
+        var kind = String(root, "target_kind");
+        if (kind is not ("Player" or "NPC")) return null;
+        return new(String(root, "target_profile"), kind == "Player");
     }
 
     /// <summary>Reads only the material maps; face workspaces do not use MESH slot or source-game metadata.</summary>
@@ -93,6 +139,11 @@ public static class MaterialRonCodec
         Field(output, "format", "MorphFaceEditor.Materials", 1);
         output.AppendLine($"    version: {MeshMaterialDocument.CurrentVersion},");
         Field(output, "game", document.Game, 1);
+        if (document.DefaultFace is { } target)
+        {
+            Field(output, "target_profile", target.ProfileKey, 1);
+            Field(output, "target_kind", target.PlayerMorph ? "Player" : "NPC", 1);
+        }
         Field(output, "mesh_name", document.MeshName, 1);
         output.AppendLine("    slots: [");
         foreach (var slot in document.Slots.OrderBy(value => value.Index))
@@ -119,9 +170,17 @@ public static class MaterialRonCodec
         return text;
     }
 
-    public static string WriteTse(MorphFaceMaterialData data, string hair, IReadOnlyList<string> accessories)
+    public static string WriteTse(MorphFaceMaterialData data, string hair, IReadOnlyList<string> accessories,
+        string? targetGame = null, MaterialFaceTarget? defaultFace = null)
     {
-        var output = new StringBuilder("// Material settings only; no authored geometry or bone offsets.\n(\n");
+        var output = new StringBuilder(TseMaterialMarker + "\n// Material settings only; no authored geometry or bone offsets.\n");
+        if (targetGame is not null && defaultFace is { } target)
+        {
+            output.AppendLine($"// MFE material target game: {targetGame}");
+            output.AppendLine($"// MFE material target profile: {target.ProfileKey}");
+            output.AppendLine($"// MFE material target kind: {(target.PlayerMorph ? "Player" : "NPC")}");
+        }
+        output.AppendLine("(");
         Field(output, "hair_mesh", hair, 1);
         output.Append("    accessory_mesh: [").AppendJoin(", ", accessories.Select(Quote)).AppendLine("],");
         // TSE deserializes a complete HeadMorph struct; omitted fields are not optional.

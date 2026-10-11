@@ -47,6 +47,7 @@ public sealed partial class MainWindowViewModel
 
     private void RaiseFaceContextCanExecuteChanged()
     {
+        OnPropertyChanged(nameof(MorphRonExportUnavailableReason));
         RaiseMaterialFileCanExecuteChanged();
         _cloneMorphCommand.RaiseCanExecuteChanged();
         _deleteMorphCommand.RaiseCanExecuteChanged();

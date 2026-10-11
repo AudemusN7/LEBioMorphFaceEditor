@@ -10,7 +10,10 @@ public sealed record MeshMaterialDocument(
     IReadOnlyDictionary<string, MorphFaceMaterialData> Parameters)
 {
     public const int CurrentVersion = 1;
+    public MaterialFaceTarget? DefaultFace { get; init; }
 }
+
+public sealed record MaterialFaceTarget(string ProfileKey, bool PlayerMorph);
 
 /// <summary>A source slot's assignment. Empty material identity denotes an unassigned slot.</summary>
 public sealed record MeshMaterialSlotData(

@@ -16,4 +16,4 @@ the hook installation too; Git does not activate repository hooks automatically.
 
 Assembly, file and informational versions derive from this file. The title bar
 combines the existing translated application name with the built assembly version.
-Historical assignments are recorded in `VersionHistory.csv` (original commit IDs).
+The historical migration ledger is local documentation and is not required by these tools.

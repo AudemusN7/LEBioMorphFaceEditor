@@ -4,6 +4,8 @@
     <RootNamespace>MorphFaceEditor.Localisation</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <EmbeddedResource Include="..\MorphFaceEditor\Localisation\Strings.*.xaml"
+                      LogicalName="MorphFaceEditor.Localisation.%(Filename)%(Extension)" WithCulture="false" />
     <InternalsVisibleTo Include="MorphFaceEditor.Localiser" />
   </ItemGroup>
 </Project>

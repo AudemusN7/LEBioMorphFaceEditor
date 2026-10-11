@@ -43,7 +43,12 @@ internal static class LocalisationTests
         foreach (var locale in LanguageOption.All)
         {
             using var stream = File.OpenRead(Path.Combine(source, "Localisation", $"Strings.{locale.Code}.xaml"));
-            Loc.ValidateOverlay(english, Loc.ReadDictionary(stream));
+            var authored = Loc.ReadDictionary(stream);
+            Loc.ValidateOverlay(english, authored);
+            var embedded = EmbeddedCatalogue.Read(locale.Code).Strings;
+            TestAssert.Equal(authored.Count, embedded.Count);
+            foreach (var (key, value) in authored)
+                TestAssert.Equal(value, embedded[key]);
         }
     }
 
@@ -123,27 +128,27 @@ internal static class LocalisationTests
 
     private static void ShippedLanguages()
     {
+        TestAssert.True(!Directory.EnumerateFiles(AppContext.BaseDirectory, "Strings.*.xaml", SearchOption.AllDirectories).Any(),
+            "Build output contains loose localisation dictionaries.");
         Exception? error = null;
         var thread = new Thread(() =>
         {
-            var directory = Path.Combine(AppContext.BaseDirectory, "Localisation");
+
             var culture = CultureInfo.CurrentCulture;
             var uiCulture = CultureInfo.CurrentUICulture;
             var defaultUi = CultureInfo.DefaultThreadCurrentUICulture;
             var resources = new ResourceDictionary { ["unrelated-resource"] = "keep" };
             try
             {
-                using var masterStream = File.OpenRead(Path.Combine(directory, "Strings.en-GB.xaml"));
-                var master = StringCatalogue.Read(masterStream);
+                var master = EmbeddedCatalogue.Read(Loc.DefaultLanguage);
                 // A comma-decimal culture makes accidental changes to numeric parsing visible.
                 CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("fr-FR");
                 foreach (var language in LanguageOption.All)
                 {
-                    using var stream = File.OpenRead(Path.Combine(directory, $"Strings.{language.Code}.xaml"));
-                    var overlay = StringCatalogue.Read(stream);
+                    var overlay = EmbeddedCatalogue.Read(language.Code);
                     StringCatalogue.ValidateOverlay(master.Strings, overlay.Strings,
                         language.Code == Loc.DefaultLanguage ? null : master.Annotations);
-                    Loc.Initialize(resources, language.Code, directory);
+                    Loc.Initialize(resources, language.Code);
                     TestAssert.Equal(language.Code, Loc.Language);
                     TestAssert.Equal(overlay.Strings.Count, Loc.TranslatedStringCount);
                     TestAssert.Equal(language.Code, CultureInfo.CurrentUICulture.Name);
@@ -163,7 +168,7 @@ internal static class LocalisationTests
             catch (Exception exception) { error = exception; }
             finally
             {
-                try { Loc.Initialize(resources, Loc.DefaultLanguage, directory); }
+                try { Loc.Initialize(resources, Loc.DefaultLanguage); }
                 catch (Exception exception) { error ??= exception; }
                 CultureInfo.CurrentCulture = culture;
                 CultureInfo.CurrentUICulture = uiCulture;
@@ -195,38 +200,19 @@ internal static class LocalisationTests
         TestAssert.Equal("Settings", settings.Title);
         TestAssert.Equal("en-GB", Loc.Language);
         selector.SelectedItem = LanguageOption.All[0];
-        WithScratch(root =>
+        var uiCulture = CultureInfo.CurrentUICulture;
+        var defaultUi = CultureInfo.DefaultThreadCurrentUICulture;
+        try
         {
-            var culture = CultureInfo.CurrentCulture;
-            var uiCulture = CultureInfo.CurrentUICulture;
-            var defaultUi = CultureInfo.DefaultThreadCurrentUICulture;
-            try
-            {
-                File.WriteAllText(Path.Combine(root, "Strings.fr.xaml"), DictionaryXml("<system:String x:Key=\"loc_Settings_Title\">Paramètres</system:String>"));
-                Loc.Initialize(app.Resources, "fr", root);
-                TestAssert.Equal("Paramètres", settings.Title);
-                TestAssert.Equal("Paramètres", Loc.Text("loc_Settings_Title"));
-                TestAssert.Equal("Cancel", Loc.Text("loc_Settings_Cancel"));
-                TestAssert.Equal(culture, CultureInfo.CurrentCulture);
-                TestAssert.Equal("fr", CultureInfo.CurrentUICulture.Name);
-                File.WriteAllText(Path.Combine(root, "Strings.fr.xaml"), DictionaryXml("<system:String x:Key=\"loc_Settings_Title\">Paramètres</system:String><system:String x:Key=\"loc_Settings_SavedTo\">Missing placeholder</system:String>"));
-                Loc.Initialize(app.Resources, "fr", root);
-                TestAssert.Equal("Settings", settings.Title);
-                TestAssert.Equal(0, Loc.TranslatedStringCount);
-                File.WriteAllText(Path.Combine(root, "Strings.en-GB.xaml"), DictionaryXml(
-                    "<!-- localiser: {\"Key\":\"loc_Settings_Title\",\"DoNotTranslate\":true} --><system:String x:Key=\"loc_Settings_Title\">Settings</system:String>"));
-                File.WriteAllText(Path.Combine(root, "Strings.fr.xaml"), DictionaryXml("<system:String x:Key=\"loc_Settings_Title\">Paramètres</system:String>"));
-                Loc.Initialize(app.Resources, "fr", root);
-                TestAssert.Equal("Settings", settings.Title);
-                TestAssert.Equal(0, Loc.TranslatedStringCount);
-            }
-            finally
-            {
-                Loc.Initialize(app.Resources, "en-GB", root);
-                CultureInfo.CurrentUICulture = uiCulture;
-                CultureInfo.DefaultThreadCurrentUICulture = defaultUi;
-            }
-        });
+            Loc.Initialize(app.Resources, "fr");
+            TestAssert.Equal(Loc.Text("loc_Settings_Title"), settings.Title);
+        }
+        finally
+        {
+            Loc.Initialize(app.Resources, Loc.DefaultLanguage);
+            CultureInfo.CurrentUICulture = uiCulture;
+            CultureInfo.DefaultThreadCurrentUICulture = defaultUi;
+        }
     }
 
     private static string DictionaryXml(string entries) =>

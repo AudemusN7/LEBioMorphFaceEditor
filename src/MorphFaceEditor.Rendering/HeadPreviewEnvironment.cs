@@ -59,9 +59,11 @@ public sealed class HeadPreviewEnvironment
     public Vector3 Coefficient8 { get; }
 
     /// <summary>
-    /// Builds an ambient-only environment from the preset's sky, horizon and ground colours.
+    /// Builds an ambient-only environment from sky, horizon, ground and broad room lobes.
     /// The distribution is scaled so its mean radiance equals AmbientColor * AmbientIntensity.
     /// Key, fill and rim lights are excluded because they are evaluated separately.
+    /// Preset directions use the camera-relative light rig; explicit overrides
+    /// supplied to the renderer are interpreted in world space.
     /// </summary>
     public static HeadPreviewEnvironment FromLightingRig(HeadPreviewLightingRig lighting)
     {
@@ -79,7 +81,7 @@ public sealed class HeadPreviewEnvironment
         for (var index = 0; index < IntegrationSampleCount; index++)
         {
             var direction = FibonacciDirection(index, IntegrationSampleCount);
-            radiance[index] = EvaluateEnvironmentRadiance(lighting, direction.Y);
+            radiance[index] = EvaluateEnvironmentRadiance(lighting, direction);
             radianceMean += radiance[index];
         }
 
@@ -124,7 +126,7 @@ public sealed class HeadPreviewEnvironment
             coefficients[6], coefficients[7], coefficients[8]);
     }
 
-    /// <summary>Evaluates normalized Lambert diffuse irradiance for a world-space normal.</summary>
+    /// <summary>Evaluates normalized Lambert diffuse irradiance for a normal in the coefficient basis.</summary>
     public Vector3 Evaluate(Vector3 normal)
     {
         if (!IsFinite(normal) || normal.LengthSquared() < 1e-12f)
@@ -141,11 +143,15 @@ public sealed class HeadPreviewEnvironment
         return Vector3.Max(result, Vector3.Zero);
     }
 
-    private static Vector3 EvaluateEnvironmentRadiance(HeadPreviewLightingRig lighting, float vertical)
+    private static Vector3 EvaluateEnvironmentRadiance(HeadPreviewLightingRig lighting, Vector3 direction)
     {
+        var vertical = direction.Y;
         var blend = SmoothStep(0, HorizonBandHeight, MathF.Abs(vertical));
         var distantColor = vertical >= 0 ? lighting.AmbientColor : lighting.GroundColor;
-        return Vector3.Lerp(lighting.HorizonColor, distantColor, blend);
+        var radiance = Vector3.Lerp(lighting.HorizonColor, distantColor, blend);
+        foreach (var lobe in lighting.EnvironmentLobes)
+            radiance += lobe.Evaluate(direction);
+        return radiance;
     }
 
     private static Vector3 FibonacciDirection(int index, int count)

@@ -241,7 +241,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         new(HeadPreviewLightingPreset.Studio, Loc.Text("loc_Shell_Lighting_Studio")),
         new(HeadPreviewLightingPreset.HighContrast, Loc.Text("loc_Shell_Lighting_HighContrast")),
         new(HeadPreviewLightingPreset.WarmInterior, Loc.Text("loc_Shell_Lighting_WarmInterior")),
-        new(HeadPreviewLightingPreset.CoolNight, Loc.Text("loc_Shell_Lighting_CoolNight"))
+        new(HeadPreviewLightingPreset.CoolNight, Loc.Text("loc_Shell_Lighting_CoolNight")),
+        new(HeadPreviewLightingPreset.Cinematic, Loc.Text("loc_Shell_Lighting_Cinematic"))
     ];
     public ICommand OpenPackageCommand => _openPackageCommand;
     public ICommand LoadSelectedFaceCommand => _loadSelectedFaceCommand;

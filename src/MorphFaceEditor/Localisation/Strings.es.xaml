@@ -1247,6 +1247,7 @@ Paquete: {0}</system:String>
   <system:String x:Key="loc_Shell_FaceDetails_OracleMax" xml:space="preserve">oráculo: máx. {0:G4}</system:String>
   <system:String x:Key="loc_Shell_FaceDetails_OracleRepaired" xml:space="preserve">reparado por oráculo · máx. {0:G4} · sin guardar</system:String>
   <system:String x:Key="loc_Shell_FaceDetails_RelativeImportedBake" xml:space="preserve">horneado relativo importado</system:String>
+  <system:String x:Key="loc_Shell_Lighting_Cinematic" xml:space="preserve">Cinematográfico</system:String>
   <system:String x:Key="loc_Shell_Lighting_CoolNight" xml:space="preserve">Noche fresca</system:String>
   <system:String x:Key="loc_Shell_Lighting_HighContrast" xml:space="preserve">Alto contraste</system:String>
   <system:String x:Key="loc_Shell_Lighting_Studio" xml:space="preserve">Estudio</system:String>

@@ -434,7 +434,9 @@ public sealed class HeadPreviewRenderer : IDisposable
                 lighting.KeyAngularRadius,
                 lighting.AmbientFresnel,
                 options.RenderMode == HeadPreviewRenderMode.Unlit ? 1 : 0),
-            EnvironmentSh0 = new Vector4(ToDx(environment.Coefficient0), 0),
+            // Preset room bounce shares the camera-relative direct-light rig.
+            // An explicit authored environment retains its world-space contract.
+            EnvironmentSh0 = new Vector4(ToDx(environment.Coefficient0), options.Environment is null ? 1 : 0),
             EnvironmentSh1 = new Vector4(ToDx(environment.Coefficient1), 0),
             EnvironmentSh2 = new Vector4(ToDx(environment.Coefficient2), 0),
             EnvironmentSh3 = new Vector4(ToDx(environment.Coefficient3), 0),
@@ -754,7 +756,9 @@ public sealed class HeadPreviewRenderer : IDisposable
                 Math.Clamp(options.ShadowDepthBias, 0, 0.01f),
                 Math.Clamp(options.ShadowNormalBias, 0, 0.1f) * Math.Max(_shadowRadius, 0.01f)),
             ShadowFilterParameters = new Vector4(
-                Math.Clamp(options.ShadowSoftnessWorld, 0, Math.Max(_shadowRadius * 2, 0.01f))
+                Math.Clamp(options.ShadowSoftnessWorld
+                    ?? HeadPreviewLightingPresets.Get(options.LightingPreset).ShadowSoftnessWorld,
+                    0, Math.Max(_shadowRadius * 2, 0.01f))
                     / (2 * Math.Max(_shadowRadius, 0.01f)),
                 Math.Clamp(options.ShadowReceiverPlaneBiasWorld, 0, 0.5f)
                     / Math.Max(_shadowRadius * 5 - 0.01f, 0.01f),

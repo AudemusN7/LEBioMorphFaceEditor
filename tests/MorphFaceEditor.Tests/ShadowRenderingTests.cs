@@ -12,7 +12,8 @@ public static class ShadowRenderingTests
         new("key shadows darken a receiver without blacking out ambient light", KeyShadowDarkensReceiver),
         new("transparent hair texels leave holes in key shadows", HairAlphaHolesDoNotCastSolidShadows),
         new("unlit and diagnostic modes ignore key shadows", NonShadedModesIgnoreShadows),
-        new("hidden attachments do not cast key shadows", HiddenAttachmentsDoNotCastShadows)
+        new("hidden attachments do not cast key shadows", HiddenAttachmentsDoNotCastShadows),
+        new("preset shadow softness respects an explicit override", PresetShadowSoftnessRespectsOverride)
     ];
 
     private static void KeyShadowDarkensReceiver()
@@ -37,6 +38,27 @@ public static class ShadowRenderingTests
             $"Key-shadow toggle changed too much of the frame ({changed} pixels); light or background was altered.");
         TestAssert.True(shadowedAverage > 8,
             $"Shadowed receiver lost fill/ambient illumination (mean RGB {shadowedAverage:F1}).");
+    }
+
+    private static void PresetShadowSoftnessRespectsOverride()
+    {
+        using var renderer = new HeadPreviewRenderer(192, 192);
+        var scene = CreateShadowScene(includeOccluder: true);
+        renderer.SetScene(scene);
+        var camera = CreateShadowCamera(scene.Bounds);
+        foreach (var preset in Enum.GetValues<HeadPreviewLightingPreset>())
+        {
+            var options = new HeadPreviewOptions(LightingPreset: preset, AmbientOcclusionEnabled: false);
+            var automatic = renderer.Render(camera, options).BgraPixels.ToArray();
+            var explicitSoftness = HeadPreviewLightingPresets.Get(preset).ShadowSoftnessWorld;
+            var explicitFrame = renderer.Render(camera, options with { ShadowSoftnessWorld = explicitSoftness });
+            TestAssert.True(automatic.SequenceEqual(explicitFrame.BgraPixels),
+                $"{preset} did not use its shadow softness by default.");
+        }
+        var studioOptions = new HeadPreviewOptions(AmbientOcclusionEnabled: false);
+        var soft = renderer.Render(camera, studioOptions).BgraPixels.ToArray();
+        var hard = renderer.Render(camera, studioOptions with { ShadowSoftnessWorld = 0 });
+        TestAssert.True(!soft.SequenceEqual(hard.BgraPixels), "An explicit hard-shadow override was ignored.");
     }
 
     private static void HairAlphaHolesDoNotCastSolidShadows()

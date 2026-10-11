@@ -23,6 +23,7 @@ public static class HdrRenderingTests
         new("game-inspired postprocess remains stable across mode switches and small resizes", GameInspiredPostProcessSurvivesModeSwitchAndResize),
         new("default game tone curves move LE1/LE2/LE3 contrast toward neutral", GameToneCurvesMoveTowardNeutral),
         new("grading LUT preserves cube corners and source clamp ordering", GradingLutPreservesCubeCornersAndClampOrder),
+        new("mood grading distinguishes warm cool and cinematic colours without tinting black", MoodGradingPreservesBoundariesAndColourIntent),
         new("translucent colour blends in linear light", TranslucencyBlendsInLinearLight),
         new("unlit bypass returns raw sRGB while enabled postprocessing preserves HDR", UnlitPostProcessingCanBeBypassed),
         new("enabled unlit postoutput is independent of source-game material flags", UnlitPostOutputIgnoresSourceGameFlags),
@@ -380,15 +381,17 @@ public static class HdrRenderingTests
         int Offset(int red, int green, int blue) => ((green * width) + blue * 16 + red) * 4;
 
         var neutral = HeadPreviewPostProcessProfiles.BuildGradingLut(new HeadPreviewPostProcessSettings());
-        var black = Offset(0, 0, 0);
+        for (var r = 0; r < 16; r++)
+        for (var g = 0; g < 16; g++)
+        for (var b = 0; b < 16; b++)
+        {
+            var offset = Offset(r, g, b);
+            TestAssert.True(neutral[offset] == r / 15f && neutral[offset + 1] == g / 15f
+                && neutral[offset + 2] == b / 15f && neutral[offset + 3] == 1f,
+                "The neutral reference LUT no longer preserves the entire RGB cube exactly.");
+        }
         var red = Offset(15, 0, 0);
         var white = Offset(15, 15, 15);
-        TestAssert.True(neutral[black] == 0f && neutral[black + 1] == 0f && neutral[black + 2] == 0f,
-            "Neutral grading changed the black cube corner.");
-        TestAssert.True(neutral[red] == 1f && neutral[red + 1] == 0f && neutral[red + 2] == 0f,
-            "Neutral grading changed the red cube corner.");
-        TestAssert.True(neutral[white] == 1f && neutral[white + 1] == 1f && neutral[white + 2] == 1f,
-            "Neutral grading changed the white cube corner.");
 
         var clampedSettings = new HeadPreviewPostProcessSettings(
             new Vector3(-0.25f), new Vector3(2f), Vector3.One, Vector3.One, Vector3.Zero,
@@ -406,6 +409,52 @@ public static class HdrRenderingTests
         TestAssert.True(Math.Abs(desaturated[red] - desaturated[red + 1]) < 0.0001f &&
                         Math.Abs(desaturated[red + 1] - desaturated[red + 2]) < 0.0001f,
             $"Full desaturation did not make the red cube corner neutral ({desaturated[red]:F3},{desaturated[red + 1]:F3},{desaturated[red + 2]:F3}).");
+    }
+
+    private static void MoodGradingPreservesBoundariesAndColourIntent()
+    {
+        static Vector3 Sample(float[] lut, int r, int g, int b)
+        {
+            var offset = (g * 256 + b * 16 + r) * 4;
+            return new Vector3(lut[offset], lut[offset + 1], lut[offset + 2]);
+        }
+        static float Luma(Vector3 rgb) => Vector3.Dot(rgb, new Vector3(0.299f, 0.587f, 0.114f));
+        var tintOnly = new HeadPreviewPostProcessSettings(Vector3.Zero, Vector3.One, Vector3.One,
+            Vector3.One, Vector3.Zero, 0f, 10f, 24f, Vector3.One,
+            shadowTint: new Vector3(0.75f, 0.95f, 1.3f), highlightTint: new Vector3(1.1f, 1f, 0.8f));
+        var tintLut = HeadPreviewPostProcessProfiles.BuildGradingLut(tintOnly);
+        TestAssert.Near(Vector3.Zero, Sample(tintLut, 0, 0, 0), 1e-7f);
+        TestAssert.Near(Vector3.One, Sample(tintLut, 15, 15, 15), 1e-6f);
+        foreach (var (r, g, b) in new[] { (2, 2, 2), (10, 10, 10), (7, 3, 2) })
+        {
+            var source = new Vector3(r, g, b) / 15f;
+            TestAssert.True(Math.Abs(Luma(Sample(tintLut, r, g, b)) - Luma(source)) < 1e-6f,
+                "Split toning changed luminance instead of colour.");
+        }
+        var bright = Sample(tintLut, 12, 12, 12);
+        var nearWhite = Sample(tintLut, 14, 14, 14);
+        TestAssert.True(nearWhite.X - nearWhite.Z < bright.X - bright.Z,
+            "Highlight tint did not fade as the input approached white.");
+        var warm = HeadPreviewPostProcessProfiles.BuildGradingLut(HeadPreviewPostProcessProfiles.Get(HeadPreviewLightingPreset.WarmInterior));
+        var cool = HeadPreviewPostProcessProfiles.BuildGradingLut(HeadPreviewPostProcessProfiles.Get(HeadPreviewLightingPreset.CoolNight));
+        var cinematic = HeadPreviewPostProcessProfiles.BuildGradingLut(HeadPreviewPostProcessProfiles.Get(HeadPreviewLightingPreset.Cinematic));
+        var warmMid = Sample(warm, 8, 8, 8);
+        var coolDark = Sample(cool, 3, 3, 3);
+        var cinemaDark = Sample(cinematic, 3, 3, 3);
+        var cinemaBright = Sample(cinematic, 11, 11, 11);
+        TestAssert.True(warmMid.X - warmMid.Z > 0.10f && coolDark.Z - coolDark.X > 0.05f,
+            "Warm and cool grades lost their visible colour separation.");
+        TestAssert.True(cinemaDark.Z - cinemaDark.X > 0.02f && cinemaBright.X - cinemaBright.Z > 0.05f,
+            "Cinematic grading lost its cool shadows and warm highlights.");
+        foreach (var preset in Enum.GetValues<HeadPreviewLightingPreset>())
+        {
+            var settings = HeadPreviewPostProcessProfiles.Get(preset);
+            TestAssert.True(settings.ToneCurveStrength == 0.6f, "Preset grading changed the shared accepted tone response.");
+            var lut = HeadPreviewPostProcessProfiles.BuildGradingLut(settings);
+            TestAssert.True(lut.All(value => float.IsFinite(value) && value is >= 0f and <= 1f),
+                $"{preset} grading produced values outside the finite display cube.");
+            TestAssert.Near(Vector3.Zero, Sample(lut, 0, 0, 0), 1e-7f);
+        }
     }
 
     private static HeadPreviewPostProcessSettings CreateZeroBloomSettings(float toneCurveStrength = 0.6f) => new(

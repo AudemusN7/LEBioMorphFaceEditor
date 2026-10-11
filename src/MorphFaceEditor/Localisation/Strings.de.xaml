@@ -1247,6 +1247,7 @@ Paket: {0}</system:String>
   <system:String x:Key="loc_Shell_FaceDetails_OracleMax" xml:space="preserve">Oracle-Maximum {0:G4}</system:String>
   <system:String x:Key="loc_Shell_FaceDetails_OracleRepaired" xml:space="preserve">Durch Oracle repariert · Maximum {0:G4} · ungespeichert</system:String>
   <system:String x:Key="loc_Shell_FaceDetails_RelativeImportedBake" xml:space="preserve">Relativer importierter Bake</system:String>
+  <system:String x:Key="loc_Shell_Lighting_Cinematic" xml:space="preserve">Filmisch</system:String>
   <system:String x:Key="loc_Shell_Lighting_CoolNight" xml:space="preserve">Kühle Nacht</system:String>
   <system:String x:Key="loc_Shell_Lighting_HighContrast" xml:space="preserve">Hoher Kontrast</system:String>
   <system:String x:Key="loc_Shell_Lighting_Studio" xml:space="preserve">Studio</system:String>

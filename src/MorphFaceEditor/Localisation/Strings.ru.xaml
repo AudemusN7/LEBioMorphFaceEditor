@@ -1245,6 +1245,7 @@
   <system:String x:Key="loc_Shell_FaceDetails_OracleMax" xml:space="preserve">максимум oracle: {0:G4}</system:String>
   <system:String x:Key="loc_Shell_FaceDetails_OracleRepaired" xml:space="preserve">oracle исправлен · максимум {0:G4} · не сохранено</system:String>
   <system:String x:Key="loc_Shell_FaceDetails_RelativeImportedBake" xml:space="preserve">относительная запечённая импортированная геометрия</system:String>
+  <system:String x:Key="loc_Shell_Lighting_Cinematic" xml:space="preserve">Кинематографическое</system:String>
   <system:String x:Key="loc_Shell_Lighting_CoolNight" xml:space="preserve">Прохладная ночь</system:String>
   <system:String x:Key="loc_Shell_Lighting_HighContrast" xml:space="preserve">Высокая контрастность</system:String>
   <system:String x:Key="loc_Shell_Lighting_Studio" xml:space="preserve">Студия</system:String>

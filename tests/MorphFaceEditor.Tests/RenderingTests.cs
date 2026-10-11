@@ -566,18 +566,26 @@ public static class RenderingTests
         var camera = new HeadOrbitCamera();
         camera.Fit(scene.Bounds);
 
-        var studio = renderer.Render(
-            camera,
-            new HeadPreviewOptions(LightingPreset: HeadPreviewLightingPreset.Studio)).BgraPixels.ToArray();
-        var warm = renderer.Render(
-            camera,
-            new HeadPreviewOptions(LightingPreset: HeadPreviewLightingPreset.WarmInterior)).BgraPixels;
+        var outputs = new Dictionary<HeadPreviewLightingPreset, byte[]>();
+        byte[]? rawUnlit = null;
+        foreach (var preset in Enum.GetValues<HeadPreviewLightingPreset>())
+        {
+            // Different lighting must be visible even without a presentation grade.
+            var options = new HeadPreviewOptions(LightingPreset: preset, PostProcessingEnabled: false);
+            outputs[preset] = renderer.Render(camera, options).BgraPixels.ToArray();
+            foreach (var previous in outputs.Where(pair => pair.Key != preset))
+                TestAssert.True(!previous.Value.SequenceEqual(outputs[preset]),
+                    $"{preset} and {previous.Key} produced the same shaded pixels.");
+            var unlit = renderer.Render(camera, options with { RenderMode = HeadPreviewRenderMode.Unlit }).BgraPixels;
+            if (rawUnlit is not null)
+                TestAssert.True(rawUnlit.SequenceEqual(unlit), $"{preset} altered raw Unlit pixels.");
+            rawUnlit = unlit.ToArray();
+            // Exercise each grading profile and shadow configuration on the same device.
+            renderer.Render(camera, options with { PostProcessingEnabled = true });
+        }
 
-        TestAssert.True(!studio.SequenceEqual(warm), "Changing the lighting preset did not change shaded output.");
-
-        var night = renderer.Render(
-            camera,
-            new HeadPreviewOptions(LightingPreset: HeadPreviewLightingPreset.CoolNight)).BgraPixels;
+        var studio = outputs[HeadPreviewLightingPreset.Studio];
+        var night = outputs[HeadPreviewLightingPreset.CoolNight];
         TestAssert.True(
             AverageRgb(studio) > AverageRgb(night) * 1.35,
             "Cool Night was not materially darker than Studio.");

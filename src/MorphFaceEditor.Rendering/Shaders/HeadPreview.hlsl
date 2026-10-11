@@ -1208,6 +1208,9 @@ float3 EvaluateEnvironmentDiffuse(float3 normal)
     // divided by pi: bands 0/1/2 use 1, 2/3, 1/4. Uniform radiance therefore
     // returns that same RGB, without brightening the existing ambient budget.
     float3 n = normalize(normal);
+    // Coefficient 0's unused W marks camera-rig coordinates for preset room
+    // bounce. Explicit environment overrides remain authored in world space.
+    if (EnvironmentSh0.w > 0.5) n = normalize(mul(float4(n, 0), View).xyz);
     float3 irradiance = EnvironmentSh0.rgb * 0.28209479
         + (EnvironmentSh1.rgb * n.z + EnvironmentSh2.rgb * n.y + EnvironmentSh3.rgb * n.x) * (0.48860251 * (2.0 / 3.0))
         + (EnvironmentSh4.rgb * (n.x * n.z) + EnvironmentSh5.rgb * (n.z * n.y)

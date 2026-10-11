@@ -61,6 +61,8 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     private readonly IReadOnlyList<CustomMaterialAssignmentOption> _customMaterialOptions;
     private readonly MorphFaceEditor.LegendaryExplorer.MorphFaceGame? _playerRandomisationGame;
     private IReadOnlyList<TextureCatalogCandidate> _registryTextureCandidates = [];
+    private bool _isTextureRegistryAvailable;
+    private readonly int _localMeshCandidateCount;
     private IReadOnlyList<AttachmentMeshCandidate> _registryAttachmentCandidates = [];
     private IReadOnlyDictionary<int, string> _cleanMaterialAssignments =
         new Dictionary<int, string>();
@@ -90,7 +92,8 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         IReadOnlyList<CustomMaterialAssignmentOption>? customMaterialOptions = null,
         string? materialRandomisationProfileKey = null,
         bool previewOnlyAttachments = false,
-        MorphFaceEditor.LegendaryExplorer.MorphFaceGame? playerRandomisationGame = null)
+        MorphFaceEditor.LegendaryExplorer.MorphFaceGame? playerRandomisationGame = null,
+        bool customMaterialRegistryAvailable = false)
     {
         _session = session;
         var scalpMaterials = materialSession.BaseMaterials.Materials.Values
@@ -98,6 +101,9 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         _sourceScalpMaterial = scalpMaterials.Length == 1 ? scalpMaterials[0] : null;
         _metadataCatalog = metadataCatalog;
         _customMaterialWorkspace = customMaterialWorkspace;
+        HasLimitedCustomMaterials = customMaterialWorkspace is not null && !customMaterialRegistryAvailable;
+        _isTextureRegistryAvailable = isTextureRegistryAvailable;
+        _localMeshCandidateCount = meshCandidates.Count;
         _customMaterialOptions = customMaterialOptions ?? [];
         _registryTextureCandidates = registryTextureCandidates ?? [];
         _playerRandomisationGame = playerRandomisationGame;
@@ -294,6 +300,9 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         set => SetProperty(ref _selectedBoneTransform, value);
     }
     public MaterialEditorViewModel Material { get; }
+    public bool HasLimitedCustomMaterials { get; }
+    public bool IsMeshDatabaseUnavailable => !_isTextureRegistryAvailable;
+    public string AttachmentRegistryNotice => Loc.Format("loc_VM_texture_registryChoicesUnavailable", _localMeshCandidateCount);
     public void UpdateRegistryTextureCandidates(
         IReadOnlyList<TextureCatalogCandidate> candidates,
         TextureCatalogProfile profile,
@@ -301,6 +310,8 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     {
         _registryTextureCandidates = candidates;
         Material.UpdateRegistryCandidates(candidates, profile, isRegistryAvailable);
+        _isTextureRegistryAvailable = isRegistryAvailable;
+        OnPropertyChanged(nameof(IsMeshDatabaseUnavailable));
     }
     public void UpdateRegistryAttachmentMeshes(
         IReadOnlyList<AttachmentMeshCandidate> candidates,

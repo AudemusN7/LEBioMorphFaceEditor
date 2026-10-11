@@ -172,7 +172,19 @@
                             <TextBlock Text="{Binding Details}" Foreground="{DynamicResource Accent}" FontSize="9" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
                     </Grid>
-                    <TextBlock Text="{Binding RegistryStatusLabel}" Foreground="{DynamicResource MutedText}" FontSize="9" Margin="0,7,0,0" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding RegistryStatusLabel}" FontSize="11" Margin="0,7,0,0" TextWrapping="Wrap">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="{DynamicResource MutedText}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsRegistryAvailable}" Value="False">
+                                        <Setter Property="Foreground" Value="{DynamicResource StatusPending}" />
+                                        <Setter Property="FontWeight" Value="SemiBold" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
                     <controls:SearchableTexturePicker Margin="0,3,0,0" />
                 </StackPanel>
             </Border>
@@ -434,7 +446,23 @@
                     </StackPanel>
                 </Button>
 
-                <Border VerticalAlignment="Top" Margin="14,62,14,0" Background="{DynamicResource ErrorBannerBackground}" BorderBrush="{DynamicResource ErrorBannerBorder}" BorderThickness="1" Padding="10" Visibility="{Binding HasError, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <StackPanel VerticalAlignment="Top" Margin="14,62,14,0">
+                    <Border x:Name="CustomMaterialDatabaseWarning" Background="{DynamicResource PanelBackground}"
+                            BorderBrush="{DynamicResource StatusPending}" BorderThickness="1" Padding="10" Margin="0,0,0,8">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Editor.HasLimitedCustomMaterials}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <TextBlock Text="{DynamicResource loc_Shell_Warning_CustomMaterialDatabaseUnavailable}"
+                                   Foreground="{DynamicResource StatusPending}" TextWrapping="Wrap" />
+                    </Border>
+                <Border Background="{DynamicResource ErrorBannerBackground}" BorderBrush="{DynamicResource ErrorBannerBorder}" BorderThickness="1" Padding="10" Visibility="{Binding HasError, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
@@ -462,6 +490,7 @@
                         </StackPanel>
                     </Grid>
                 </Border>
+                </StackPanel>
                 <Border Background="{DynamicResource BusyOverlayBackground}" Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}">
                     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                         <ProgressBar Width="220" Height="4" IsIndeterminate="True" />
@@ -589,6 +618,10 @@
       		    	             Text="{Binding Editor.AttachmentMeshesHeading}"
            		                 Style="{StaticResource FieldLabel}"
            		                 Margin="0,0,0,6" />
+                        <TextBlock x:Name="AttachmentRegistryNotice" Text="{Binding Editor.AttachmentRegistryNotice}"
+                                   Foreground="{DynamicResource StatusPending}" FontSize="11" FontWeight="SemiBold"
+                                   TextWrapping="Wrap" Margin="0,0,0,6"
+                                   Visibility="{Binding Editor.IsMeshDatabaseUnavailable, Converter={StaticResource BooleanToVisibilityConverter}}" />
                         <ItemsControl ItemsSource="{Binding Editor.AttachmentMeshes}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>

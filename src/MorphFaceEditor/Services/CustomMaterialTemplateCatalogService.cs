@@ -17,6 +17,7 @@ public sealed record CustomMaterialTemplateCatalogResult(
     IReadOnlyList<string> Warnings,
     IReadOnlyList<AssetIdentity> PreviewAttachments)
 {
+    public bool IsRegistryAvailable { get; init; }
     public static CustomMaterialTemplateCatalogResult Empty { get; } = new([], [], []);
 }
 
@@ -133,6 +134,7 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
             // unused catalogue choices never retain full mip chains.
             return cached.Metadata with
             {
+                IsRegistryAvailable = cached.Registry is not null,
                 Options = cached.Metadata.Options.Select(option =>
                 {
                     var source = option.Template.Source;

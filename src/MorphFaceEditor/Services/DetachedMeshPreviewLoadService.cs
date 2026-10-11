@@ -14,7 +14,10 @@ public sealed record DetachedMeshPreviewLoadResult(
     MorphFacePreviewLoadResult Preview,
     CustomMaterialWorkspace? CustomMaterials,
     IReadOnlyList<CustomMaterialAssignmentOption> MaterialOptions,
-    IReadOnlyList<AssetIdentity> PreviewAttachments);
+    IReadOnlyList<AssetIdentity> PreviewAttachments)
+{
+    public bool IsMaterialRegistryAvailable { get; init; }
+}
 
 /// <summary>Composes an unrecognised imported mesh into the existing editor/renderer boundary.</summary>
 public sealed class DetachedMeshPreviewLoadService
@@ -102,7 +105,10 @@ public sealed class DetachedMeshPreviewLoadService
             new MorphFacePreviewLoadResult(loaded, scene, session, materialSession, profile),
             customMaterials,
             materialCatalog.Options,
-            materialCatalog.PreviewAttachments);
+            materialCatalog.PreviewAttachments)
+        {
+            IsMaterialRegistryAvailable = materialCatalog.IsRegistryAvailable
+        };
     }
 
     private static SkeletalMeshAsset BindPreviewMaterialSlots(

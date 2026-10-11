@@ -10,6 +10,9 @@ namespace MorphFaceEditor.ViewModels;
 /// <summary>Routes material file actions through the MESH or face workspace interchange path.</summary>
 public sealed partial class MainWindowViewModel
 {
+    internal static string AppendDatabaseImportGuidance(string details) =>
+        details + "\n\n" + Loc.Text("loc_Shell_ImportWarnings_DatabaseGuidance");
+
     private readonly AsyncRelayCommand _exportTseMaterialsCommand;
     private readonly AsyncRelayCommand _importTseMaterialsCommand;
     private readonly AsyncRelayCommand _exportMaterialsCommand;
@@ -86,7 +89,7 @@ public sealed partial class MainWindowViewModel
                 var details = string.Join("\n\n", prepared.Warnings.Take(displayLimit));
                 if (prepared.Warnings.Count > displayLimit)
                     details += Loc.Format("loc_Shell_MaterialFiles_MoreWarningsInLog", prepared.Warnings.Count - displayLimit);
-                _dialogs.ShowInformation(Loc.Text("loc_Shell_DialogTitle_MaterialsImportedWithWarnings"), details);
+                _dialogs.ShowInformation(Loc.Text("loc_Shell_DialogTitle_MaterialsImportedWithWarnings"), AppendDatabaseImportGuidance(details));
             }
         }
         catch (Exception exception)
@@ -151,7 +154,7 @@ public sealed partial class MainWindowViewModel
                 var details = string.Join("\n\n", warnings.Take(displayLimit));
                 if (warnings.Count > displayLimit)
                     details += Loc.Format("loc_Shell_MaterialFiles_MoreWarningsInLog", warnings.Count - displayLimit);
-                _dialogs.ShowInformation(Loc.Text("loc_Shell_DialogTitle_MaterialsImportedWithWarnings"), details);
+                _dialogs.ShowInformation(Loc.Text("loc_Shell_DialogTitle_MaterialsImportedWithWarnings"), AppendDatabaseImportGuidance(details));
             }
         }
         catch (Exception exception)

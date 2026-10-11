@@ -12,10 +12,15 @@ cbuffer SceneConstants : register(b0)
     float4 RimLightColor;
     float4 AmbientColor;
     float4 LightingParameters;
-    float4 SkyColor;
-    float4 GroundColor;
-    float4 HorizonColor;
-    float4 EnvironmentParameters;
+    float4 EnvironmentSh0;
+    float4 EnvironmentSh1;
+    float4 EnvironmentSh2;
+    float4 EnvironmentSh3;
+    float4 EnvironmentSh4;
+    float4 EnvironmentSh5;
+    float4 EnvironmentSh6;
+    float4 EnvironmentSh7;
+    float4 EnvironmentSh8;
 };
 
 cbuffer MaterialConstants : register(b1)
@@ -1187,6 +1192,24 @@ float3 AttachmentDirectLight(float model, bool le3, float3 rawNormal,
     return albedo * facing + strength * tint * pow(reflected, power);
 }
 
+float3 EvaluateEnvironmentDiffuse(float3 normal)
+{
+    // Real orthonormal SH, Y up: [1,z,y,x,xz,zy,3y²-1,xy,x²-z²].
+    // Raw radiance coefficients are convolved with Lambert's cosine kernel
+    // divided by pi: bands 0/1/2 use 1, 2/3, 1/4. Uniform radiance therefore
+    // returns that same RGB, without brightening the existing ambient budget.
+    float3 n = normalize(normal);
+    float3 irradiance = EnvironmentSh0.rgb * 0.28209479
+        + (EnvironmentSh1.rgb * n.z + EnvironmentSh2.rgb * n.y + EnvironmentSh3.rgb * n.x) * (0.48860251 * (2.0 / 3.0))
+        + (EnvironmentSh4.rgb * (n.x * n.z) + EnvironmentSh5.rgb * (n.z * n.y)
+            + EnvironmentSh7.rgb * (n.x * n.y)) * (1.09254843 * 0.25)
+        + EnvironmentSh6.rgb * ((3 * n.y * n.y - 1) * (0.31539157 * 0.25))
+        + EnvironmentSh8.rgb * ((n.x * n.x - n.z * n.z) * (0.54627422 * 0.25));
+    // Low-order projection can ring for sharply authored environments. Preserve
+    // HDR magnitude while preventing negative diffuse light.
+    return max(irradiance, 0);
+}
+
 float4 AttachmentPreview(VertexOutput input, bool isFrontFace, out float4 aoNormalTarget, out float4 ambientDiffuseTarget)
 {
     ambientDiffuseTarget = 0;
@@ -1206,11 +1229,12 @@ float4 AttachmentPreview(VertexOutput input, bool isFrontFace, out float4 aoNorm
     float3 rim = normalize(RimLightDirection.xyz);
     if (SurfaceParameters.y > 0.5)
     {
-        float3 color = BaseColor.rgb * (AmbientColor.rgb
+        float3 environment = EvaluateEnvironmentDiffuse(geometricNormal);
+        float3 color = BaseColor.rgb * (environment
             + KeyLightColor.rgb * saturate(dot(geometricNormal, key))
             + FillLightColor.rgb * saturate(dot(geometricNormal, fill))
             + RimLightColor.rgb * saturate(dot(geometricNormal, rim))) * LightingParameters.x;
-        ambientDiffuseTarget = float4(BaseColor.rgb * AmbientColor.rgb, 1);
+        ambientDiffuseTarget = float4(BaseColor.rgb * environment, 1);
         return float4(color, 1);
     }
     if (model == 11)
@@ -1308,11 +1332,15 @@ float4 AttachmentPreview(VertexOutput input, bool isFrontFace, out float4 aoNorm
         ambientDiffuseTarget.a = alpha;
         return float4(albedo + emissive, alpha);
     }
-    float3 lit = ambientAlbedo * AmbientColor.rgb
+    float3 environment = EvaluateEnvironmentDiffuse(normal);
+    // Apply SH only to diffuse energy. Native reflection terms folded into
+    // attachment base colour retain their previous constant ambient gain.
+    float3 lit = ambientDiffuseAlbedo * environment
+        + (ambientAlbedo - ambientDiffuseAlbedo) * AmbientColor.rgb
         + AttachmentDirectLight(model, le3, rawNormal, normal, view, key, albedo, diffuse, specMap, viewFactor) * shadowedKeyColor
         + AttachmentDirectLight(model, le3, rawNormal, normal, view, fill, albedo, diffuse, specMap, viewFactor) * FillLightColor.rgb
         + AttachmentDirectLight(model, le3, rawNormal, normal, view, rim, albedo, diffuse, specMap, viewFactor) * RimLightColor.rgb;
-    ambientDiffuseTarget = float4(ambientDiffuseAlbedo * AmbientColor.rgb, alpha);
+    ambientDiffuseTarget = float4(ambientDiffuseAlbedo * environment, alpha);
     return float4(lit + emissive, alpha);
 }
 
@@ -2285,26 +2313,12 @@ float4 PSMain(
     float3 shadowedKeyColor = KeyLightColor.rgb * KeyShadowVisibility(input.WorldPosition, geometricNormal);
     float3 fillLight = normalize(FillLightDirection.xyz);
     float3 rimLight = normalize(RimLightDirection.xyz);
-    // A compact UE3-era environment model: soft-edged directional sources,
-    // a sky/ground hemisphere, a horizon band, and a grazing ambient response.
-    // It remains deterministic and cheap enough for interactive morph editing,
-    // but avoids the flat "three points plus a constant" result.
+    // Direct sources remain independent of broad diffuse environment lighting.
     float keyDiffuse = saturate(dot(normal, keyLight));
     float fillDiffuse = saturate(dot(normal, fillLight));
     float rimDiffuse = saturate(dot(normal, rimLight));
-    float hemisphere = normal.y * 0.5 + 0.5;
-    float horizon = pow(saturate(1 - abs(normal.y)), lerp(4, 2, saturate(LightingParameters.y * 8)));
-    float grazingAmbient = pow(1 - saturate(dot(normal, view)), 4) * LightingParameters.z;
-    float3 shapedEnvironment = (
-        lerp(GroundColor.rgb, SkyColor.rgb, hemisphere)
-        + HorizonColor.rgb * horizon * 0.25
-        + SkyColor.rgb * grazingAmbient) * EnvironmentParameters.x;
-    // Preserve each established preset's average ambient level while shaping
-    // it spatially; this keeps authored UE3 material responses from being
-    // crushed by a wholesale relight.
-    float3 environmentLighting = lerp(AmbientColor.rgb, shapedEnvironment, 0.1);
-    float3 diffuseLighting = environmentLighting
-        + shadowedKeyColor * keyDiffuse
+    float3 environmentLighting = EvaluateEnvironmentDiffuse(normal);
+    float3 directDiffuseLighting = shadowedKeyColor * keyDiffuse
         + FillLightColor.rgb * fillDiffuse
         + RimLightColor.rgb * rimDiffuse;
     float3 specularLighting =
@@ -2322,7 +2336,9 @@ float4 PSMain(
         + EvaluateSubsurfaceLight(family, le3, normal, view, rimLight, diffuseSample, albedo, scatteringAlbedo, surfaceSelector, transmissionFactor)
             * RimLightColor.rgb;
 
-    float3 lit = (albedo * diffuseLighting + specularLighting + subsurfaceLighting) * LightingParameters.x
+    float3 ambientLighting = ambientDiffuseAlbedo * environmentLighting
+        + (albedo - ambientDiffuseAlbedo) * AmbientColor.rgb;
+    float3 lit = (ambientLighting + albedo * directDiffuseLighting + specularLighting + subsurfaceLighting) * LightingParameters.x
         + eyeBaseReflection;
     float3 ambientDiffuse = ambientDiffuseAlbedo * environmentLighting;
 
@@ -2330,7 +2346,7 @@ float4 PSMain(
     {
         float teeth = TextureFlags1.x > 0.5
             ? AuxiliaryTexture1.Sample(MaterialSampler, materialUv).g : 0;
-        lit = (albedo * environmentLighting
+        lit = (ambientLighting
             + LegacyScalpDirectLight(normal, geometricNormal, tangent, bitangent, view, keyLight,
                 diffuseSample, maskSample.rgb, teeth, materialUv) * shadowedKeyColor
             + LegacyScalpDirectLight(normal, geometricNormal, tangent, bitangent, view, fillLight,
@@ -2347,7 +2363,7 @@ float4 PSMain(
         // The native base pass supplies the same stack response with a
         // view/normal half-vector, scaled by the engine ambient colour.
         lit += EvaluateHumanHairStack(hairStack, tangent, normalize(view + geometricNormal))
-            * environmentLighting * LightingParameters.x;
+            * AmbientColor.rgb * LightingParameters.x;
     }
 
     if (family == 14 && diagnostic < 0.5)
@@ -2376,9 +2392,8 @@ float4 PSMain(
         float ambientSpecular = pow(
             max(sqrt(saturate(1 - tangentAmbient * tangentAmbient)), 0.0001),
             500);
-        float3 maskedHairLighting = environmentLighting * (
-            diffuseSample.rgb * tangentEnergy
-            + specularColour * ambientSpecular);
+        float3 maskedHairLighting = environmentLighting * diffuseSample.rgb * tangentEnergy
+            + AmbientColor.rgb * specularColour * ambientSpecular;
         ambientDiffuse = diffuseSample.rgb * tangentEnergy * environmentLighting;
         maskedHairLighting += shadowedKeyColor * EvaluateMaskedHairLight(
             geometricNormal, fibreTangent, view, keyLight, diffuseSample.rgb, specularColour);

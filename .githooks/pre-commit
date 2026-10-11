@@ -1,0 +1,2 @@
+#!/bin/sh
+exec pwsh -NoProfile -File tools/versioning/Check-Version.ps1 -Staged

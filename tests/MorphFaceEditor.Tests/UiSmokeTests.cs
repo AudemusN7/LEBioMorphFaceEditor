@@ -3314,6 +3314,9 @@ public static class UiSmokeTests
                 using var reader = new MorphFacePackageReader();
                 using var viewModel = CreateMainWindowViewModel(reader);
                 var mainWindow = new MainWindow(viewModel);
+                TestAssert.Equal($"{Loc.Text("loc_View_MainWindow_BioMorphFaceEditor")} · {WindowTitle.Version}", mainWindow.Title);
+                WindowTitle.SetCaption(mainWindow, "Translated caption");
+                TestAssert.Equal($"Translated caption · {WindowTitle.Version}", mainWindow.Title);
                 using var themeFixture = new ThemeRuntimeTests.Fixture(application.Resources);
                 VerifyAuthoredViewport(themeFixture);
                 var languagePreferencesPath = Path.Combine(themeFixture.Root, "language-preferences.json");

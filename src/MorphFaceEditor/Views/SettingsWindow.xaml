@@ -49,7 +49,6 @@
                                 </DataTemplate>
                             </ComboBox.ItemTemplate>
                         </ComboBox>
-                        <TextBlock Text="{DynamicResource loc_Settings_FallbackNotice}" Style="{StaticResource SettingsDescription}" />
                     </StackPanel>
                 </Border>
                 <Border Style="{StaticResource SettingsSection}">

@@ -97,6 +97,11 @@ public static class ActorAssignmentInventoryTests
 
             TestAssert.Equal("NormandyGarrus", candidate.DisplayName);
             TestAssert.Equal("InheritedGarrus (inherited)", inheritedCandidate.DisplayName);
+            var inheritedDetails = new MorphFaceEditor.ViewModels.ActorAssignmentChoice(inheritedCandidate, ActorAssignmentMode.Materials).Details;
+            TestAssert.True(inheritedDetails.Contains("Some components are inherited. Check their listed owners and material slots before assigning."),
+                "Inherited-component warning was not formatted from the master catalogue.");
+            TestAssert.True(!inheritedDetails.Contains("the chooser should expose"),
+                "Internal inherited-component commentary leaked into the chooser.");
             TestAssert.True(candidate.IdentityEvidence.Any(value =>
                     value.Kind == ActorIdentityEvidenceKind.InheritedTag && value.Value == "InheritedGarrus"),
                 "Inherited actor tag was not retained as separate evidence.");

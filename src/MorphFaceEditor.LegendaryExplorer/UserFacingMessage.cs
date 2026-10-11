@@ -13,4 +13,14 @@ public sealed record UserFacingMessage(
 
     public static UserFacingMessage CreateWarning(string key, string diagnosticText, params object?[] arguments) =>
         new(key, arguments, diagnosticText);
+
+    public static InvalidDataException CreateError(string key, string diagnosticText, params object?[] arguments)
+    {
+        var exception = new InvalidDataException(diagnosticText);
+        exception.Data[nameof(UserFacingMessage)] = new UserFacingMessage(key, arguments, diagnosticText);
+        return exception;
+    }
+
+    public static UserFacingMessage? FromException(Exception exception) =>
+        exception.Data[nameof(UserFacingMessage)] as UserFacingMessage;
 }

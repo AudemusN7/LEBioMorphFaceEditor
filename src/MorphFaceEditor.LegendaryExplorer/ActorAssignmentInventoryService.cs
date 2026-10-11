@@ -87,6 +87,7 @@ public sealed partial class ActorAssignmentInventoryService
         PackageCache cache)
     {
         var warnings = new List<string>();
+        var userWarnings = new List<UserFacingMessage>();
         var behavior = ResolveRelated(actor, ["m_oBehavior", "oBioComponent"], resolver, cache)?.Value;
         var actorType = ResolveRelated(actor, ["ActorType"], resolver, cache)?.Value
                         ?? (behavior is null
@@ -150,7 +151,10 @@ public sealed partial class ActorAssignmentInventoryService
 
         if (components.Any(component => component.Inherited))
         {
-            warnings.Add("One or more actor components are inherited; the chooser should expose their exact owner and slots.");
+            var warning = UserFacingMessage.CreateWarning("loc_VM_actorAssignment_inheritedComponentsWarning",
+                "One or more actor components are inherited; the chooser should expose their exact owner and slots.");
+            warnings.Add(warning.DiagnosticText!);
+            userWarnings.Add(warning);
         }
         if (skippedMaterials.Any(material => material.Reason.Contains("import", StringComparison.OrdinalIgnoreCase)))
         {
@@ -223,7 +227,10 @@ public sealed partial class ActorAssignmentInventoryService
             eligibleMaterials,
             skippedMaterials,
             referencedBy,
-            warnings.Distinct(StringComparer.Ordinal).ToArray());
+            warnings.Distinct(StringComparer.Ordinal).ToArray())
+        {
+            UserWarnings = userWarnings
+        };
     }
 
     private static ActorAssignmentTargetKind? GetTargetKind(ExportEntry export, MorphFaceGame game)

@@ -136,6 +136,7 @@ public sealed record ActorAssignmentCandidate(
     IReadOnlyList<string> Warnings)
 {
     public int SafeMaterialCount => MaterialTargets.Select(target => target.UIndex).Distinct().Count();
+    public IReadOnlyList<UserFacingMessage> UserWarnings { get; init; } = [];
 }
 
 /// <summary>Read-only inventory rooted at one selected local BioMorphFace.</summary>

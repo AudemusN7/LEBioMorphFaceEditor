@@ -30,6 +30,10 @@ public sealed class HeadPreviewRenderer : IDisposable
     private readonly PixelShader _shadowPixelShader;
     private readonly VertexShader _postVertexShader;
     private readonly PixelShader _postPixelShader;
+    private readonly PixelShader _aoSurfaceShader;
+    private readonly PixelShader _ambientOcclusionShader;
+    private readonly PixelShader _aoBlurShader;
+    private readonly PixelShader _applyAmbientOcclusionShader;
     private readonly PixelShader _bloomExtractShader;
     private readonly PixelShader _bloomBlurShader;
     private readonly InputLayout _inputLayout;
@@ -65,6 +69,9 @@ public sealed class HeadPreviewRenderer : IDisposable
     private RenderTargetView _renderTarget = null!;
     private Texture2D _normalTexture = null!;
     private RenderTargetView _normalTarget = null!;
+    private Texture2D _opaquePlaneTexture = null!;
+    private RenderTargetView _opaquePlaneTarget = null!;
+    private ShaderResourceView _opaquePlaneShaderView = null!;
     private Texture2D _ambientDiffuseTexture = null!;
     private RenderTargetView _ambientDiffuseTarget = null!;
     private Texture2D _aoNormalTexture = null!;
@@ -78,6 +85,21 @@ public sealed class HeadPreviewRenderer : IDisposable
     private ShaderResourceView _resolvedShaderView = null!;
     private Texture2D _resolvedAmbientTexture = null!;
     private ShaderResourceView _resolvedAmbientShaderView = null!;
+    private Texture2D _aoSurfaceTexture = null!;
+    private RenderTargetView _aoSurfaceTarget = null!;
+    private ShaderResourceView _aoSurfaceShaderView = null!;
+    private Texture2D _aoReceiverPlaneTexture = null!;
+    private RenderTargetView _aoReceiverPlaneTarget = null!;
+    private ShaderResourceView _aoReceiverPlaneShaderView = null!;
+    private Texture2D _aoVisibilityTexture = null!;
+    private RenderTargetView _aoVisibilityTarget = null!;
+    private ShaderResourceView _aoVisibilityShaderView = null!;
+    private Texture2D _aoScratchTexture = null!;
+    private RenderTargetView _aoScratchTarget = null!;
+    private ShaderResourceView _aoScratchShaderView = null!;
+    private Texture2D _aoCompositedTexture = null!;
+    private RenderTargetView _aoCompositedTarget = null!;
+    private ShaderResourceView _aoCompositedShaderView = null!;
     private Texture2D _postTexture = null!;
     private RenderTargetView _postTarget = null!;
     private Texture2D _stagingTexture = null!;
@@ -132,9 +154,12 @@ public sealed class HeadPreviewRenderer : IDisposable
         using var pixelBytecode = CompileShader("PSMain", "ps_5_0");
         using var shadowPixelBytecode = CompileShader("PSShadow", "ps_5_0");
         using var postVertexBytecode = CompileShader("VSPostProcess", "vs_5_0");
-        using var postPixelBytecode = CompileShader(
-            _sampleDescription.Count > 1 ? "PSPostProcessMsaa" : "PSPostProcessSingle",
-            "ps_5_0");
+        using var postPixelBytecode = CompileShader("PSPostProcess", "ps_5_0");
+        using var aoSurfaceBytecode = CompileShader(
+            _sampleDescription.Count > 1 ? "PSAoSurfaceMsaa" : "PSAoSurfaceSingle", "ps_5_0");
+        using var ambientOcclusionBytecode = CompileShader("PSAmbientOcclusion", "ps_5_0");
+        using var aoBlurBytecode = CompileShader("PSAoBlur", "ps_5_0");
+        using var applyAmbientOcclusionBytecode = CompileShader("PSApplyAmbientOcclusion", "ps_5_0");
         using var bloomExtractBytecode = CompileShader("PSBloomExtract", "ps_5_0");
         using var bloomBlurBytecode = CompileShader("PSBloomBlur", "ps_5_0");
         _vertexShader = new VertexShader(_device, vertexBytecode);
@@ -142,6 +167,10 @@ public sealed class HeadPreviewRenderer : IDisposable
         _shadowPixelShader = new PixelShader(_device, shadowPixelBytecode);
         _postVertexShader = new VertexShader(_device, postVertexBytecode);
         _postPixelShader = new PixelShader(_device, postPixelBytecode);
+        _aoSurfaceShader = new PixelShader(_device, aoSurfaceBytecode);
+        _ambientOcclusionShader = new PixelShader(_device, ambientOcclusionBytecode);
+        _aoBlurShader = new PixelShader(_device, aoBlurBytecode);
+        _applyAmbientOcclusionShader = new PixelShader(_device, applyAmbientOcclusionBytecode);
         _bloomExtractShader = new PixelShader(_device, bloomExtractBytecode);
         _bloomBlurShader = new PixelShader(_device, bloomBlurBytecode);
         _inputLayout = new InputLayout(
@@ -521,7 +550,8 @@ public sealed class HeadPreviewRenderer : IDisposable
             options.BackgroundColor,
             options.PostProcessMode,
             options.PostProcessSettings ?? HeadPreviewPostProcessProfiles.Get(options.LightingPreset),
-            options.PostProcessingEnabled);
+            options.PostProcessingEnabled,
+            options.AmbientOcclusionSettings);
 
         var pixels = ReadTexture(destination);
         stopwatch.Stop();
@@ -805,7 +835,7 @@ public sealed class HeadPreviewRenderer : IDisposable
             ToHdrFloat(SrgbToLinear(background.X)),
             ToHdrFloat(SrgbToLinear(background.Y)),
             ToHdrFloat(SrgbToLinear(background.Z)));
-        _context.OutputMerger.SetTargets(_depthView, _renderTarget, _normalTarget, _ambientDiffuseTarget);
+        _context.OutputMerger.SetTargets(_depthView, _renderTarget, _normalTarget, _ambientDiffuseTarget, _opaquePlaneTarget);
         _context.OutputMerger.SetDepthStencilState(_depthState);
         _context.Rasterizer.SetViewport(0, 0, _width, _height);
         _context.Rasterizer.State = options.Wireframe ? _wireframeRasterizer : _solidRasterizer;
@@ -815,6 +845,7 @@ public sealed class HeadPreviewRenderer : IDisposable
             linearBackground.Z,
             1));
         _context.ClearRenderTargetView(_normalTarget, new Color4(0.5f, 0.5f, 1, 1));
+        _context.ClearRenderTargetView(_opaquePlaneTarget, new Color4(0.5f, 0.5f, 1, 1));
         _context.ClearRenderTargetView(_ambientDiffuseTarget, new Color4(0, 0, 0, 0));
         _context.ClearDepthStencilView(_depthView, DepthStencilClearFlags.Depth, 1, 0);
         _context.InputAssembler.InputLayout = _inputLayout;
@@ -1031,7 +1062,7 @@ public sealed class HeadPreviewRenderer : IDisposable
     private BlendState CreateBlendState(bool translucent)
     {
         var description = new BlendStateDescription();
-        for (var targetIndex = 0; targetIndex < 3; targetIndex++)
+        for (var targetIndex = 0; targetIndex < 4; targetIndex++)
         {
             description.RenderTarget[targetIndex] = new RenderTargetBlendDescription
             {
@@ -1051,7 +1082,7 @@ public sealed class HeadPreviewRenderer : IDisposable
     private BlendState CreateAdditiveBlendState()
     {
         var description = new BlendStateDescription();
-        for (var targetIndex = 0; targetIndex < 3; targetIndex++)
+        for (var targetIndex = 0; targetIndex < 4; targetIndex++)
         {
             description.RenderTarget[targetIndex] = new RenderTargetBlendDescription
             {
@@ -1087,7 +1118,8 @@ public sealed class HeadPreviewRenderer : IDisposable
         System.Numerics.Vector3? backgroundColor,
         HeadPreviewPostProcessMode postProcessMode = HeadPreviewPostProcessMode.Neutral,
         HeadPreviewPostProcessSettings? postProcessSettings = null,
-        bool postProcessingEnabled = true)
+        bool postProcessingEnabled = true,
+        HeadPreviewAmbientOcclusionSettings? ambientOcclusionSettings = null)
     {
         _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
         if (_sampleDescription.Count > 1)
@@ -1102,6 +1134,7 @@ public sealed class HeadPreviewRenderer : IDisposable
         }
         var background = backgroundColor ?? new System.Numerics.Vector3(0.035f, 0.043f, 0.055f);
         var settings = postProcessSettings ?? HeadPreviewPostProcessProfiles.Get(HeadPreviewLightingPreset.Studio);
+        var ao = ambientOcclusionSettings ?? HeadPreviewAmbientOcclusionSettings.Default;
         var gameInspired = postProcessMode == HeadPreviewPostProcessMode.GameInspired;
         if (gameInspired && postProcessingEnabled)
             UpdateGradingLut(settings);
@@ -1112,14 +1145,12 @@ public sealed class HeadPreviewRenderer : IDisposable
                 1f / _width,
                 1f / _height,
                 _sampleDescription.Count,
-                1.50f),
+                0),
             DepthParameters = new Vector4(
-                0.100f,
-                0.25f,
-                ambientOcclusionEnabled && postProcessingEnabled
-                    ? lighting.AmbientOcclusionStrength * 1.20f
-                    : 0,
-                1.65f),
+                0,
+                ClampFinite(ao.AngularBias, HeadPreviewAmbientOcclusionSettings.Default.AngularBias, 0, 0.9f),
+                ambientOcclusionEnabled && postProcessingEnabled ? 1 : 0,
+                0),
             BloomParameters = new Vector4(
                 lighting.BloomThreshold,
                 lighting.BloomIntensity,
@@ -1136,29 +1167,39 @@ public sealed class HeadPreviewRenderer : IDisposable
                 ToHdrFloat(SrgbToLinear(background.Z)),
                 0),
             BloomTint = new Vector4(ToDx(settings.BloomTint), 0),
-            BloomPassParameters = Vector4.Zero
+            BloomPassParameters = Vector4.Zero,
+            AoRadiusParameters = new Vector4(
+                ClampFinite(ao.ContactRadiusWorld, HeadPreviewAmbientOcclusionSettings.Default.ContactRadiusWorld, 0.01f, 10),
+                ClampFinite(ao.CavityRadiusWorld, HeadPreviewAmbientOcclusionSettings.Default.CavityRadiusWorld, 0.01f, 15),
+                ClampFinite(ao.ContactStrength, HeadPreviewAmbientOcclusionSettings.Default.ContactStrength, 0, 4),
+                ClampFinite(ao.CavityStrength, HeadPreviewAmbientOcclusionSettings.Default.CavityStrength, 0, 4)),
+            AoFilterParameters = new Vector4(
+                0, 0,
+                ClampFinite(ao.FilterDepthSigmaWorld, 0.16f, 0.001f, 10),
+                ClampFinite(ao.FilterNormalPower, 0, 0, 32)),
+            AoParameters = new Vector4(
+                ClampFinite(ao.PowerExponent, HeadPreviewAmbientOcclusionSettings.Default.PowerExponent, 0.25f, 8),
+                0,
+                ao.FilteringEnabled ? 1 : 0,
+                0)
         };
         _context.UpdateSubresource(ref constants, _postProcessBuffer);
 
+        // AO modifies only the isolated ambient-diffuse contribution, in linear
+        // HDR. Both bloom and display conversion consume this same composition.
+        var sceneColor = constants.DepthParameters.Z > 0
+            ? RenderAmbientOcclusion(ref constants)
+            : _resolvedShaderView;
         if (gameInspired && postProcessingEnabled && lighting.BloomIntensity > 0)
-            RenderBloom(ref constants, settings.BloomRadius1080);
+            RenderBloom(ref constants, settings.BloomRadius1080, sceneColor);
 
         PreparePostPass(_postTarget, _postPixelShader, _width, _height);
-        if (_sampleDescription.Count > 1)
-        {
-            _context.PixelShader.SetShaderResources(
-                10, _resolvedShaderView, _aoDepthShaderView, null, _aoNormalShaderView, null);
-        }
-        else
-        {
-            _context.PixelShader.SetShaderResources(
-                10, _resolvedShaderView, null, _aoDepthShaderView, null, _aoNormalShaderView);
-        }
+        _context.PixelShader.SetShaderResources(10, sceneColor);
         _context.PixelShader.SetShaderResources(18, _resolvedAmbientShaderView,
             gameInspired && postProcessingEnabled && lighting.BloomIntensity > 0 ? _bloomShaderView : null,
             _gradingShaderView);
         _context.Draw(3, 0);
-        _context.PixelShader.SetShaderResources(10, new ShaderResourceView?[5]);
+        _context.PixelShader.SetShaderResources(10, new ShaderResourceView?[] { null });
         _context.PixelShader.SetShaderResources(18, new ShaderResourceView?[3]);
         _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
     }
@@ -1178,14 +1219,75 @@ public sealed class HeadPreviewRenderer : IDisposable
         _context.PixelShader.SetSampler(1, _postSampler);
     }
 
-    private void RenderBloom(ref PostProcessConstants constants, float radius1080)
+    private ShaderResourceView RenderAmbientOcclusion(ref PostProcessConstants constants)
+    {
+        PreparePostPass(_aoSurfaceTarget, _aoSurfaceShader, _width, _height);
+        _context.OutputMerger.SetTargets((DepthStencilView?)null, _aoSurfaceTarget, _aoReceiverPlaneTarget);
+        _context.PixelShader.SetShaderResources(11,
+            _sampleDescription.Count > 1 ? _aoDepthShaderView : null,
+            _sampleDescription.Count > 1 ? null : _aoDepthShaderView,
+            _sampleDescription.Count > 1 ? _aoNormalShaderView : null,
+            _sampleDescription.Count > 1 ? null : _aoNormalShaderView);
+        _context.PixelShader.SetShaderResources(23,
+            _sampleDescription.Count > 1 ? _opaquePlaneShaderView : null,
+            _sampleDescription.Count > 1 ? null : _opaquePlaneShaderView);
+        _context.Draw(3, 0);
+        _context.PixelShader.SetShaderResources(11, new ShaderResourceView?[4]);
+        _context.PixelShader.SetShaderResources(23, new ShaderResourceView?[2]);
+        _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
+
+        PreparePostPass(_aoVisibilityTarget, _ambientOcclusionShader, _width, _height);
+        _context.PixelShader.SetShaderResources(21, _aoSurfaceShaderView);
+        _context.PixelShader.SetShaderResources(25, _aoReceiverPlaneShaderView);
+        _context.PixelShader.SetShaderResources(11,
+            _sampleDescription.Count > 1 ? _aoDepthShaderView : null);
+        _context.Draw(3, 0);
+        _context.PixelShader.SetShaderResources(11, new ShaderResourceView?[] { null });
+        _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
+
+        if (constants.AoParameters.Z > 0)
+        {
+            constants.AoFilterParameters.X = 1;
+            constants.AoFilterParameters.Y = 0;
+            _context.UpdateSubresource(ref constants, _postProcessBuffer);
+            PreparePostPass(_aoScratchTarget, _aoBlurShader, _width, _height);
+            _context.PixelShader.SetShaderResources(22, _aoVisibilityShaderView);
+            _context.Draw(3, 0);
+            _context.PixelShader.SetShaderResources(22, new ShaderResourceView?[] { null });
+            _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
+
+            constants.AoFilterParameters.X = 0;
+            constants.AoFilterParameters.Y = 1;
+            _context.UpdateSubresource(ref constants, _postProcessBuffer);
+            PreparePostPass(_aoVisibilityTarget, _aoBlurShader, _width, _height);
+            _context.PixelShader.SetShaderResources(22, _aoScratchShaderView);
+            _context.Draw(3, 0);
+            _context.PixelShader.SetShaderResources(22, new ShaderResourceView?[] { null });
+            _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
+
+        }
+        PreparePostPass(_aoCompositedTarget, _applyAmbientOcclusionShader, _width, _height);
+        _context.PixelShader.SetShaderResources(10, _resolvedShaderView);
+        _context.PixelShader.SetShaderResources(18, _resolvedAmbientShaderView);
+        _context.PixelShader.SetShaderResources(22, _aoVisibilityShaderView);
+        _context.Draw(3, 0);
+        _context.PixelShader.SetShaderResources(10, new ShaderResourceView?[] { null });
+        _context.PixelShader.SetShaderResources(18, new ShaderResourceView?[] { null });
+        _context.PixelShader.SetShaderResources(21, new ShaderResourceView?[2]);
+        _context.PixelShader.SetShaderResources(25, new ShaderResourceView?[] { null });
+        _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
+        return _aoCompositedShaderView;
+    }
+
+    private void RenderBloom(ref PostProcessConstants constants, float radius1080, ShaderResourceView sceneColor)
     {
         var width = _bloomTexture.Description.Width;
         var height = _bloomTexture.Description.Height;
         PreparePostPass(_bloomTarget, _bloomExtractShader, width, height);
-        _context.PixelShader.SetShaderResources(10, _resolvedShaderView);
+        _context.PixelShader.SetShaderResources(10, sceneColor);
         _context.PixelShader.SetShaderResources(18, _resolvedAmbientShaderView);
         _context.Draw(3, 0);
+        _context.PixelShader.SetShaderResources(10, new ShaderResourceView?[] { null });
         _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
 
         // The five bilinear taps form a separable nine-tap Gaussian. Scale its
@@ -1302,6 +1404,18 @@ public sealed class HeadPreviewRenderer : IDisposable
     {
         (_bloomTexture, _bloomTarget, _bloomShaderView) = CreateBloomTarget();
         (_bloomScratchTexture, _bloomScratchTarget, _bloomScratchShaderView) = CreateBloomTarget();
+        // Full precision depth avoids introducing half-float depth quantization
+        // while matching one covered MSAA sample to its material normal.
+        (_aoSurfaceTexture, _aoSurfaceTarget, _aoSurfaceShaderView) =
+            CreatePostTarget(Format.R32G32B32A32_Float, _width, _height);
+        (_aoReceiverPlaneTexture, _aoReceiverPlaneTarget, _aoReceiverPlaneShaderView) =
+            CreatePostTarget(Format.R16G16B16A16_Float, _width, _height);
+        (_aoVisibilityTexture, _aoVisibilityTarget, _aoVisibilityShaderView) =
+            CreatePostTarget(Format.R16G16_Float, _width, _height);
+        (_aoScratchTexture, _aoScratchTarget, _aoScratchShaderView) =
+            CreatePostTarget(Format.R16G16_Float, _width, _height);
+        (_aoCompositedTexture, _aoCompositedTarget, _aoCompositedShaderView) =
+            CreatePostTarget(Format.R16G16B16A16_Float, _width, _height);
         _renderTexture = new Texture2D(_device, new Texture2DDescription
         {
             Width = _width,
@@ -1326,6 +1440,19 @@ public sealed class HeadPreviewRenderer : IDisposable
             BindFlags = BindFlags.RenderTarget
         });
         _normalTarget = new RenderTargetView(_device, _normalTexture);
+        _opaquePlaneTexture = new Texture2D(_device, new Texture2DDescription
+        {
+            Width = _width,
+            Height = _height,
+            MipLevels = 1,
+            ArraySize = 1,
+            Format = Format.R16G16B16A16_Float,
+            SampleDescription = _sampleDescription,
+            Usage = ResourceUsage.Default,
+            BindFlags = BindFlags.RenderTarget | BindFlags.ShaderResource
+        });
+        _opaquePlaneTarget = new RenderTargetView(_device, _opaquePlaneTexture);
+        _opaquePlaneShaderView = new ShaderResourceView(_device, _opaquePlaneTexture);
         _ambientDiffuseTexture = new Texture2D(_device, new Texture2DDescription
         {
             Width = _width,
@@ -1454,14 +1581,17 @@ public sealed class HeadPreviewRenderer : IDisposable
         });
     }
 
-    private (Texture2D, RenderTargetView, ShaderResourceView) CreateBloomTarget()
+    private (Texture2D, RenderTargetView, ShaderResourceView) CreateBloomTarget() =>
+        CreatePostTarget(Format.R16G16B16A16_Float, Math.Max(1, (_width + 3) / 4), Math.Max(1, (_height + 3) / 4));
+
+    private (Texture2D, RenderTargetView, ShaderResourceView) CreatePostTarget(Format format, int width, int height)
     {
         var texture = new Texture2D(_device, new Texture2DDescription
         {
-            Width = Math.Max(1, (_width + 3) / 4),
-            Height = Math.Max(1, (_height + 3) / 4),
+            Width = width,
+            Height = height,
             MipLevels = 1, ArraySize = 1,
-            Format = Format.R16G16B16A16_Float,
+            Format = format,
             SampleDescription = new SampleDescription(1, 0),
             Usage = ResourceUsage.Default,
             BindFlags = BindFlags.RenderTarget | BindFlags.ShaderResource
@@ -1555,7 +1685,9 @@ public sealed class HeadPreviewRenderer : IDisposable
             var normalQuality = _device.CheckMultisampleQualityLevels(Format.R16G16B16A16_Float, count);
             if (colorQuality > 0 && depthQuality > 0 && normalQuality > 0)
             {
-                return new SampleDescription(count, Math.Min(colorQuality, Math.Min(depthQuality, normalQuality)) - 1);
+                // D3D11_STANDARD_MULTISAMPLE_PATTERN: predictable sample positions
+                // are required when reconstructing each selected AO depth sample.
+                return new SampleDescription(count, -1);
             }
         }
         return new SampleDescription(1, 0);
@@ -1675,6 +1807,21 @@ public sealed class HeadPreviewRenderer : IDisposable
 
     private void DisposeRenderTargets()
     {
+        _aoSurfaceShaderView.Dispose();
+        _aoSurfaceTarget.Dispose();
+        _aoSurfaceTexture.Dispose();
+        _aoReceiverPlaneShaderView.Dispose();
+        _aoReceiverPlaneTarget.Dispose();
+        _aoReceiverPlaneTexture.Dispose();
+        _aoVisibilityShaderView.Dispose();
+        _aoVisibilityTarget.Dispose();
+        _aoVisibilityTexture.Dispose();
+        _aoScratchShaderView.Dispose();
+        _aoScratchTarget.Dispose();
+        _aoScratchTexture.Dispose();
+        _aoCompositedShaderView.Dispose();
+        _aoCompositedTarget.Dispose();
+        _aoCompositedTexture.Dispose();
         _bloomShaderView.Dispose();
         _bloomTarget.Dispose();
         _bloomTexture.Dispose();
@@ -1697,6 +1844,9 @@ public sealed class HeadPreviewRenderer : IDisposable
         _aoNormalTexture.Dispose();
         _normalTarget.Dispose();
         _normalTexture.Dispose();
+        _opaquePlaneShaderView.Dispose();
+        _opaquePlaneTarget.Dispose();
+        _opaquePlaneTexture.Dispose();
         _ambientDiffuseTarget.Dispose();
         _ambientDiffuseTexture.Dispose();
         _renderTarget.Dispose();
@@ -1746,6 +1896,10 @@ public sealed class HeadPreviewRenderer : IDisposable
         _shadowPixelShader.Dispose();
         _vertexShader.Dispose();
         _postPixelShader.Dispose();
+        _aoSurfaceShader.Dispose();
+        _ambientOcclusionShader.Dispose();
+        _aoBlurShader.Dispose();
+        _applyAmbientOcclusionShader.Dispose();
         _bloomExtractShader.Dispose();
         _bloomBlurShader.Dispose();
         _postVertexShader.Dispose();
@@ -1820,6 +1974,9 @@ public sealed class HeadPreviewRenderer : IDisposable
         public Vector4 DisplayBackground;
         public Vector4 BloomTint;
         public Vector4 BloomPassParameters;
+        public Vector4 AoRadiusParameters;
+        public Vector4 AoFilterParameters;
+        public Vector4 AoParameters;
     }
 
     private sealed class GpuTexture(

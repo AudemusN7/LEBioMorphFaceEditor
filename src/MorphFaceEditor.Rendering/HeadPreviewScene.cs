@@ -133,12 +133,19 @@ public sealed record HeadPreviewOptions(
     bool AmbientOcclusionEnabled = true,
     bool ShadowsEnabled = true,
     // ShadowDepthBias uses normalized shadow-map depth units.
-    float ShadowDepthBias = 0.0003f,
+    float ShadowDepthBias = 0.0035f,
     // ShadowNormalBias is a fraction of the fitted shadow radius.
-    float ShadowNormalBias = 0.002f,
+    float ShadowNormalBias = 0.075f,
     HeadPreviewPostProcessMode PostProcessMode = HeadPreviewPostProcessMode.GameInspired,
     HeadPreviewPostProcessSettings? PostProcessSettings = null,
-    bool PostProcessingEnabled = true);
+    bool PostProcessingEnabled = true,
+    // Filter radius is independent of shadow-map resolution.
+    int ShadowMapResolution = 1024,
+    float ShadowSoftnessWorld = 0.085f,
+    // Maximum slope correction in world-space light depth; prevents grazing blow-ups.
+    float ShadowReceiverPlaneBiasWorld = 0.15f,
+    // Multiplier on current caster geometry bounds.
+    float ShadowBoundsScale = 1.15f);
 
 public sealed record HeadPreviewFrame(
     int Width,

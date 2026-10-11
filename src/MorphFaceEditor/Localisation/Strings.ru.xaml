@@ -1664,6 +1664,8 @@
   <system:String x:Key="loc_View_MainWindow_LeftDragOrbitMiddleDragPanRightDragWheelZoom" xml:space="preserve">ЛКМ: вращение · средняя кнопка: перемещение · ПКМ / колесо: масштаб</system:String>
   <system:String x:Key="loc_View_MainWindow_Lighting" xml:space="preserve">Освещение</system:String>
   <system:String x:Key="loc_View_MainWindow_PostProcessing" xml:space="preserve">Постобработка</system:String>
+  <system:String x:Key="loc_View_MainWindow_AmbientOcclusion" xml:space="preserve">Окклюзия окружения</system:String>
+  <system:String x:Key="loc_View_MainWindow_AmbientOcclusionTooltip" xml:space="preserve">Работает в затенённом режиме при включённой постобработке. Переключается независимо от теней основного источника света.</system:String>
   <system:String x:Key="loc_View_MainWindow_LoadSelectedFace" xml:space="preserve">Загрузить выбранное лицо</system:String>
   <system:String x:Key="loc_View_MainWindow_MATERIAL" xml:space="preserve">МАТЕРИАЛ</system:String>
   <system:String x:Key="loc_View_MainWindow_MD5" xml:space="preserve">MD5</system:String>

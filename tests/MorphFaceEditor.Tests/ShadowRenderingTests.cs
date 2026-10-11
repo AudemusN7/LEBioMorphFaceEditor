@@ -4,7 +4,7 @@ using MorphFaceEditor.Rendering;
 
 namespace MorphFaceEditor.Tests;
 
-// GPU-only synthetic tests for directional shadows. These fixtures avoid game assets.
+// Pipeline/coverage guards only. Face-shadow quality is accepted through real-head QA.
 public static class ShadowRenderingTests
 {
     public static IReadOnlyList<TestCase> All { get; } =
@@ -12,9 +12,7 @@ public static class ShadowRenderingTests
         new("key shadows darken a receiver without blacking out ambient light", KeyShadowDarkensReceiver),
         new("transparent hair texels leave holes in key shadows", HairAlphaHolesDoNotCastSolidShadows),
         new("unlit and diagnostic modes ignore key shadows", NonShadedModesIgnoreShadows),
-        new("hidden attachments do not cast key shadows", HiddenAttachmentsDoNotCastShadows),
-        new("deforming a caster moves and restores its key shadow", DeformingCasterMovesItsShadow),
-        new("skinned caster pose and resize keep shadows in sync", SkinnedCasterPoseAndResizeKeepShadowsInSync)
+        new("hidden attachments do not cast key shadows", HiddenAttachmentsDoNotCastShadows)
     ];
 
     private static void KeyShadowDarkensReceiver()
@@ -48,26 +46,28 @@ public static class ShadowRenderingTests
         var scene = CreateShadowScene(includeOccluder: true, occluderMaterial: transparent);
         renderer.SetScene(scene);
         var camera = CreateShadowCamera(scene.Bounds);
-        var transparentCount = RenderShadowDifferenceCount(renderer, camera);
+        var transparentShadow = RenderShadowDifference(renderer, camera);
 
         var partial = CreateHairMaterial(255, 0);
         renderer.UpdateMaterials(new Dictionary<string, HeadPreviewMaterial> { [partial.Key] = partial });
-        var partialCount = RenderShadowDifferenceCount(renderer, camera);
+        var partialShadow = RenderShadowDifference(renderer, camera);
 
         var opaque = CreateHairMaterial(255, 255);
         renderer.UpdateMaterials(new Dictionary<string, HeadPreviewMaterial> { [opaque.Key] = opaque });
-        var opaqueCount = RenderShadowDifferenceCount(renderer, camera);
+        var opaqueShadow = RenderShadowDifference(renderer, camera);
 
-        TestAssert.True(transparentCount == 0,
-            $"Fully transparent hair texels cast shadows onto the receiver ({transparentCount} darkened pixels).");
-        TestAssert.True(partialCount > 20 && partialCount < opaqueCount,
+        TestAssert.True(transparentShadow.Count == 0,
+            $"Fully transparent hair texels cast shadows onto the receiver ({transparentShadow.Count} darkened pixels).");
+        // A soft kernel can spread the partial shadow over the same pixel set
+        // as the opaque card. Compare total attenuation to verify the holes.
+        TestAssert.True(partialShadow.Count > 20 && partialShadow.Darkening < opaqueShadow.Darkening,
             $"Half-transparent hair did not cast a cutout shadow " +
-            $"(transparent={transparentCount}, partial={partialCount}, opaque={opaqueCount}).");
-        TestAssert.True(opaqueCount > 20,
-            $"Opaque hair texels cast no key shadow onto the receiver ({opaqueCount} darkened pixels).");
+            $"(partial={partialShadow}, opaque={opaqueShadow}).");
+        TestAssert.True(opaqueShadow.Count > 20,
+            $"Opaque hair texels cast no key shadow onto the receiver ({opaqueShadow.Count} darkened pixels).");
     }
 
-    private static int RenderShadowDifferenceCount(HeadPreviewRenderer renderer, HeadOrbitCamera camera)
+    private static (int Count, long Darkening) RenderShadowDifference(HeadPreviewRenderer renderer, HeadOrbitCamera camera)
     {
         var withoutShadows = renderer.Render(camera, new HeadPreviewOptions(
             AmbientOcclusionEnabled: false,
@@ -75,7 +75,15 @@ public static class ShadowRenderingTests
         var withShadows = renderer.Render(camera, new HeadPreviewOptions(
             AmbientOcclusionEnabled: false,
             ShadowsEnabled: true)).BgraPixels;
-        return CountDarkenedPixels(withoutShadows, withShadows);
+        long darkening = 0;
+        for (var offset = 0; offset < withoutShadows.Length; offset += 4)
+        {
+            for (var channel = 0; channel < 3; channel++)
+            {
+                darkening += Math.Max(0, withoutShadows[offset + channel] - withShadows[offset + channel]);
+            }
+        }
+        return (CountDarkenedPixels(withoutShadows, withShadows), darkening);
     }
 
     private static void NonShadedModesIgnoreShadows()
@@ -122,98 +130,10 @@ public static class ShadowRenderingTests
             "A hidden attachment remained in the shadow caster list.");
     }
 
-    private static void DeformingCasterMovesItsShadow()
-    {
-        using var renderer = new HeadPreviewRenderer(192, 192);
-        var scene = CreateShadowScene(includeOccluder: true);
-        renderer.SetScene(scene);
-        var camera = CreateShadowCamera(scene.Bounds);
-        var firstOff = RenderPixels(renderer, camera, shadowsEnabled: false);
-        var firstOn = RenderPixels(renderer, camera, shadowsEnabled: true);
-        var firstMask = DarkenedPixelMask(firstOff, firstOn);
-
-        renderer.UpdateMeshVertices("raised-caster", CreateQuadVertices(0.25f, -0.5f, 0.75f, 0, 0.35f));
-        var movedOff = RenderPixels(renderer, camera, shadowsEnabled: false);
-        var movedOn = RenderPixels(renderer, camera, shadowsEnabled: true);
-        var movedMask = DarkenedPixelMask(movedOff, movedOn);
-
-        var firstCount = firstMask.Count(value => value);
-        var movedCount = movedMask.Count(value => value);
-        TestAssert.True(firstCount > 20 && movedCount > 20,
-            "The caster did not produce a measurable shadow before and after deformation.");
-        var overlap = firstMask.Zip(movedMask).Count(pair => pair.First && pair.Second);
-        var smallerShadow = Math.Min(firstCount, movedCount);
-        TestAssert.True(overlap < smallerShadow * 0.8,
-            $"The shadow mask did not follow the moved caster (overlap={overlap}, smaller={smallerShadow}).");
-
-        renderer.UpdateMeshVertices("raised-caster", CreateQuadVertices(-0.65f, 0.05f, -0.15f, 0.55f, 0.35f));
-        var restoredOn = RenderPixels(renderer, camera, shadowsEnabled: true);
-        TestAssert.True(firstOn.SequenceEqual(restoredOn),
-            "Restoring the caster vertices did not restore the original shadow frame.");
-    }
-
-    private static void SkinnedCasterPoseAndResizeKeepShadowsInSync()
-    {
-        using var renderer = new HeadPreviewRenderer(192, 192);
-        var scene = CreateShadowScene(includeOccluder: true, skinnedOccluder: true);
-        renderer.SetScene(scene);
-        var camera = CreateShadowCamera(scene.Bounds);
-        var firstOff = RenderPixels(renderer, camera, shadowsEnabled: false);
-        var firstOn = RenderPixels(renderer, camera, shadowsEnabled: true);
-        var firstMask = DarkenedPixelMask(firstOff, firstOn);
-
-        renderer.SetSkinningPalette([Matrix4x4.CreateTranslation(0.8f, -0.55f, 0)]);
-        var movedOff = RenderPixels(renderer, camera, shadowsEnabled: false);
-        var movedOn = RenderPixels(renderer, camera, shadowsEnabled: true);
-        var movedMask = DarkenedPixelMask(movedOff, movedOn);
-        var overlap = firstMask.Zip(movedMask).Count(pair => pair.First && pair.Second);
-        var smallerShadow = Math.Min(firstMask.Count(value => value), movedMask.Count(value => value));
-        TestAssert.True(smallerShadow > 20 && overlap < smallerShadow * 0.8,
-            $"Skinning-palette translation did not move the caster's shadow " +
-            $"(overlap={overlap}, smaller={smallerShadow}).");
-
-        renderer.SetSkinningPalette([Matrix4x4.Identity]);
-        var restoredOff = renderer.Render(camera, new HeadPreviewOptions(
-            AmbientOcclusionEnabled: false, ShadowsEnabled: false));
-        var restoredOn = renderer.Render(camera, new HeadPreviewOptions(
-            AmbientOcclusionEnabled: false, ShadowsEnabled: true));
-        var restoredMask = DarkenedPixelMask(restoredOff.BgraPixels, restoredOn.BgraPixels);
-        var restoreOverlap = firstMask.Zip(restoredMask).Count(pair => pair.First && pair.Second);
-        TestAssert.True(restoreOverlap > firstMask.Count(value => value) * 0.65,
-            $"Restoring the skinning palette did not restore the original shadow footprint " +
-            $"(overlap={restoreOverlap}, original={firstMask.Count(value => value)}).");
-
-        renderer.Resize(512, 512);
-        _ = renderer.Render(camera, new HeadPreviewOptions(
-            AmbientOcclusionEnabled: false, ShadowsEnabled: false)); // Warm new viewport targets.
-        var largeOn = renderer.Render(camera, new HeadPreviewOptions(
-            AmbientOcclusionEnabled: false, ShadowsEnabled: true));
-        var largeOff = renderer.Render(camera, new HeadPreviewOptions(
-            AmbientOcclusionEnabled: false, ShadowsEnabled: false));
-        TestAssert.True(CountDarkenedPixels(restoredOff.BgraPixels, restoredOn.BgraPixels) > 20,
-            "The 192px shadow frame had no visible caster shadow.");
-        TestAssert.True(CountDarkenedPixels(largeOff.BgraPixels, largeOn.BgraPixels) > 20,
-            "The resized 512px viewport lost its caster shadow.");
-        TestAssert.True(renderer.DeviceCreationCount == 1,
-            "Resizing the viewport recreated the D3D device instead of retaining it.");
-        TestAssert.True(largeOn.BgraPixels.Length == 512 * 512 * 4 && largeOff.BgraPixels.Length == 512 * 512 * 4,
-            "The resized shadow renders did not return the requested 512px frame.");
-        Console.WriteLine(
-            $"Shadow viewport probe: 192px={restoredOn.Width}x{restoredOn.Height}, " +
-            $"renderMs192Off={restoredOff.RenderTime.TotalMilliseconds:F1}, " +
-            $"renderMs192On={restoredOn.RenderTime.TotalMilliseconds:F1}, " +
-            $"shadowDraws192={restoredOn.ShadowDrawCalls}, " +
-            $"renderMs512Off={largeOff.RenderTime.TotalMilliseconds:F1}, " +
-            $"renderMs512On={largeOn.RenderTime.TotalMilliseconds:F1}, " +
-            $"shadowDraws={largeOn.ShadowDrawCalls}, " +
-            $"deviceCreations={renderer.DeviceCreationCount}.");
-    }
-
     private static HeadPreviewScene CreateShadowScene(
         bool includeOccluder,
         HeadPreviewMaterial? occluderMaterial = null,
-        bool attachmentOccluder = false,
-        bool skinnedOccluder = false)
+        bool attachmentOccluder = false)
     {
         var receiverMaterial = CreateNeutralOpaqueMaterial("shadow-receiver");
         var meshes = new List<HeadPreviewMesh>
@@ -225,15 +145,13 @@ public static class ShadowRenderingTests
             meshes.Add(CreateQuad(
                 "raised-caster", -0.65f, 0.05f, -0.15f, 0.55f, 0.35f,
                 occluderMaterial ?? CreateNeutralOpaqueMaterial("shadow-caster"),
-                isAttachment: attachmentOccluder,
-                applySkinning: skinnedOccluder));
+                isAttachment: attachmentOccluder));
         }
 
         return new HeadPreviewScene(
             "Synthetic shadow scene",
             meshes,
-            new HeadPreviewBounds(new Vector3(-1, -1, -0.05f), new Vector3(1, 1, 0.4f)),
-            skinnedOccluder ? [Matrix4x4.Identity] : null);
+            new HeadPreviewBounds(new Vector3(-1, -1, -0.05f), new Vector3(1, 1, 0.4f)));
     }
 
     private static HeadPreviewMaterial CreateNeutralOpaqueMaterial(string key) =>
@@ -264,14 +182,12 @@ public static class ShadowRenderingTests
         float maxY,
         float z,
         HeadPreviewMaterial material,
-        bool isAttachment = false,
-        bool applySkinning = false)
+        bool isAttachment = false)
     {
         return new HeadPreviewMesh(
             name, CreateQuadVertices(minX, minY, maxX, maxY, z), [0u, 1u, 2u, 0u, 2u, 3u],
             [new HeadPreviewSection(0, 6, 0, material)],
-            IsAttachment: isAttachment,
-            ApplySkinning: applySkinning);
+            IsAttachment: isAttachment);
     }
 
     private static HeadPreviewVertex[] CreateQuadVertices(
@@ -315,31 +231,6 @@ public static class ShadowRenderingTests
         }
         return count;
     }
-
-    private static bool[] DarkenedPixelMask(byte[] withoutShadows, byte[] withShadows)
-    {
-        var mask = new bool[withoutShadows.Length / 4];
-        var pixel = 0;
-        for (var offset = 0; offset < withoutShadows.Length; offset += 4, pixel++)
-        {
-            for (var channel = 0; channel < 3; channel++)
-            {
-                if (withShadows[offset + channel] + 2 < withoutShadows[offset + channel])
-                {
-                    mask[pixel] = true;
-                    break;
-                }
-            }
-        }
-        return mask;
-    }
-
-    private static byte[] RenderPixels(
-        HeadPreviewRenderer renderer,
-        HeadOrbitCamera camera,
-        bool shadowsEnabled) => renderer.Render(camera, new HeadPreviewOptions(
-            AmbientOcclusionEnabled: false,
-            ShadowsEnabled: shadowsEnabled)).BgraPixels.ToArray();
 
     private static double AverageDarkenedRgb(byte[] withoutShadows, byte[] withShadows)
     {

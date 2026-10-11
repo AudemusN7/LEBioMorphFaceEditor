@@ -6,7 +6,6 @@
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="Themes/EditorTheme.xaml" />
-                <ResourceDictionary Source="Localisation/Strings.en-GB.xaml" />
                 <ResourceDictionary Source="Localisation/LanguageFlags.xaml" />
             </ResourceDictionary.MergedDictionaries>
             <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />

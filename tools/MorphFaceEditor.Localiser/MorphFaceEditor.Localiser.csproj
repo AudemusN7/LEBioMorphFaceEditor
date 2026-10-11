@@ -10,7 +10,6 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\MorphFaceEditor.Localisation\MorphFaceEditor.Localisation.csproj" />
     <InternalsVisibleTo Include="MorphFaceEditor.Tests" />
-    <Content Include="..\..\src\MorphFaceEditor\Localisation\Strings.*.xaml" Link="Catalogue\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Page Include="..\..\src\MorphFaceEditor\Themes\DarkColours.xaml" Link="Themes\DarkColours.xaml" />
     <Page Include="..\..\src\MorphFaceEditor\Themes\EditorTheme.xaml" Link="Themes\EditorTheme.xaml" />
   </ItemGroup>

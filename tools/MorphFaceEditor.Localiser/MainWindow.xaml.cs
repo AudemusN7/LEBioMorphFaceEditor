@@ -35,9 +35,9 @@ public partial class MainWindow : Window
     internal void OpenInitial(string? path)
     {
         var repository = SourceReferenceIndex.FindRepository(AppContext.BaseDirectory);
-        path ??= repository is null ? Path.Combine(AppContext.BaseDirectory, "Catalogue", "Strings.en-GB.xaml")
-            : Path.Combine(repository, "src", "MorphFaceEditor", "Localisation", "Strings.en-GB.xaml");
-        if (File.Exists(path)) TryAction("Could not load localisation", () => Review.Open(path));
+        if (path is null && repository is not null)
+            path = Path.Combine(repository, "src", "MorphFaceEditor", "Localisation", "Strings.en-GB.xaml");
+        if (path is not null && File.Exists(path)) TryAction("Could not load localisation", () => Review.Open(path));
     }
 
     private void OnLoadCommand(object sender, ExecutedRoutedEventArgs e)

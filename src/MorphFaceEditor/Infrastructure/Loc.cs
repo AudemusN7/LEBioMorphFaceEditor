@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.IO;
 using System.Windows;
-using System.Xml;
 using MorphFaceEditor.Localisation;
 
 namespace MorphFaceEditor.Infrastructure;
@@ -10,7 +9,7 @@ namespace MorphFaceEditor.Infrastructure;
 public static class Loc
 {
     public const string DefaultLanguage = "en-GB";
-    private static readonly Lazy<CatalogueData> English = new(ReadEmbeddedCatalogue);
+    private static readonly Lazy<CatalogueData> English = new(() => EmbeddedCatalogue.Read(DefaultLanguage));
     private static IReadOnlyDictionary<string, string>? _active;
     public static string Language { get; private set; } = DefaultLanguage;
     public static int TranslatedStringCount { get; private set; }
@@ -23,15 +22,18 @@ public static class Loc
         LanguageOption.All.FirstOrDefault(option => string.Equals(option.Code, language, StringComparison.OrdinalIgnoreCase))?.Code
         ?? DefaultLanguage;
 
-    internal static void Initialize(ResourceDictionary resources, string? language, string? directory = null)
+    internal static void Initialize(ResourceDictionary resources, string? language)
     {
         var selected = NormalizeLanguage(language);
         var values = new Dictionary<string, string>(English.Value.Strings, StringComparer.Ordinal);
-        var annotations = new Dictionary<string, EntryAnnotation>(English.Value.Annotations, StringComparer.Ordinal);
-        directory ??= Path.Combine(AppContext.BaseDirectory, "Localisation");
-        ApplyFile(Path.Combine(directory, $"Strings.{DefaultLanguage}.xaml"), values, annotations, master: true);
-        TranslatedStringCount = selected == DefaultLanguage ? values.Count
-            : ApplyFile(Path.Combine(directory, $"Strings.{selected}.xaml"), values, annotations, master: false);
+        TranslatedStringCount = values.Count;
+        if (selected != DefaultLanguage)
+        {
+            var translated = EmbeddedCatalogue.Read(selected);
+            StringCatalogue.ValidateOverlay(values, translated.Strings, English.Value.Annotations);
+            foreach (var (key, value) in translated.Strings) values[key] = value;
+            TranslatedStringCount = translated.Strings.Count;
+        }
         // Replace strings only. Theme resources and unrelated application resources are untouched.
         foreach (var (key, value) in values) resources[key] = value;
         Language = selected;
@@ -41,39 +43,7 @@ public static class Loc
         CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.CurrentUICulture;
     }
 
-    private static int ApplyFile(string path, Dictionary<string, string> target, Dictionary<string, EntryAnnotation> annotations, bool master)
-    {
-        if (!File.Exists(path)) return 0;
-        try
-        {
-            using var stream = File.OpenRead(path);
-            var translated = StringCatalogue.Read(stream);
-            foreach (var key in translated.Annotations.Keys)
-                if (!target.ContainsKey(key)) throw new FormatException($"Unknown localisation key: {key}");
-            StringCatalogue.ValidateOverlay(target, translated.Strings, master ? null : annotations);
-            foreach (var (key, value) in translated.Strings) target[key] = value;
-            if (master)
-            {
-                foreach (var key in translated.Strings.Keys) annotations.Remove(key);
-                foreach (var (key, annotation) in translated.Annotations) annotations[key] = annotation;
-            }
-            return translated.Strings.Count;
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or XmlException or FormatException)
-        {
-            AppLog.Warning($"Localisation file {Path.GetFileName(path)} was ignored: {exception.Message}");
-            return 0;
-        }
-    }
-
-    internal static IReadOnlyDictionary<string, string> ReadEmbeddedEnglish() => ReadEmbeddedCatalogue().Strings;
-
-    private static CatalogueData ReadEmbeddedCatalogue()
-    {
-        using var stream = typeof(Loc).Assembly.GetManifestResourceStream("MorphFaceEditor.Localisation.Strings.en-GB.xaml")
-            ?? throw new InvalidOperationException("The embedded English localisation catalogue is missing.");
-        return StringCatalogue.Read(stream);
-    }
+    internal static IReadOnlyDictionary<string, string> ReadEmbeddedEnglish() => English.Value.Strings;
 
     internal static IReadOnlyDictionary<string, string> ReadDictionary(Stream stream) => StringCatalogue.Read(stream).Strings;
 

@@ -4,7 +4,7 @@ A standalone Windows localisation editor for all ten supported languages, using 
 
 Run `Run_MFE_Localiser.bat` from the repository root to build and open it, or open `bin/Release/net10.0-windows/MorphFaceEditor.Localiser.exe` after a Release build. An optional first argument selects a master XAML file.
 
-When run from this checkout, it opens `src/MorphFaceEditor/Localisation/Strings.en-GB.xaml`. Outside the checkout it opens the bundled `Catalogue/Strings.en-GB.xaml`. Selecting a language loads its adjacent `Strings.<code>.xaml` when available, then retains its draft in memory. **Load localisation** selects a different file for the current language. **Save localisation as** chooses its output path; `Ctrl+S` opens the same dialog. The save button's tooltip shows the current file path.
+When run from this checkout, it opens `src/MorphFaceEditor/Localisation/Strings.en-GB.xaml`, the single editable source catalogue. Outside the checkout, pass the English master path on the command line or use **Load localisation**. Selecting a language loads its adjacent `Strings.<code>.xaml` when available, then retains its draft in memory. **Load localisation** selects a different file for the current language. **Save localisation as** chooses its output path; `Ctrl+S` opens the same dialog. The save button's tooltip shows the current file path.
 
 ## Review workflow
 
@@ -19,7 +19,7 @@ The tool stores keyed JSON annotations in ordinary XML comments prefixed `locali
 
 Saving validates adjacent candidates and checks fingerprints before replacing files. Previous files are retained as `.localiser.bak` backups. A combined language/master save rolls back the language if the master write fails. Concurrent changes block overwriting the loaded file; drafts can still be saved to a different path. The source corpus and locale scaffolds are not automatically edited or translated.
 
-To use edited files in MFE without rebuilding, copy them into its adjacent `Localisation` directory and restart. To ship edits, update the source catalogues and rebuild. A manually supplied translation that changes an excluded key is rejected by MFE, retaining UK fallback for that file.
+To use or ship edits, update the source catalogues and rebuild. All languages are embedded in `MorphFaceEditor.Localisation.dll`; MFE does not read loose dictionary overrides. Translations must preserve placeholders and excluded keys; the localisation tests validate the compiled catalogues and UK fallback.
 
 ## Validation
 

@@ -253,8 +253,6 @@
                               SelectedValuePath="Preset"
                               SelectedValue="{Binding LightingPreset}" />
                     <CheckBox Content="{DynamicResource loc_View_MainWindow_PostProcessing}" IsChecked="{Binding PostProcessingEnabled}" Margin="14,0,0,0" />
-                    <CheckBox Content="{DynamicResource loc_View_MainWindow_AmbientOcclusion}" IsChecked="{Binding AmbientOcclusionEnabled}"
-                              ToolTip="{DynamicResource loc_View_MainWindow_AmbientOcclusionTooltip}" Margin="14,0,0,0" />
                     <CheckBox Content="{DynamicResource loc_View_MainWindow_ExtendedSliders}" IsChecked="{Binding ExtendedSliders}" Margin="14,0,0,0"
                               ToolTip="{DynamicResource loc_View_MainWindow_AllowSignedZeroCentredSliderRangesTypedValuesRemainUnre}" />
                     <CheckBox Content="{DynamicResource loc_View_MainWindow_Wireframe}" IsChecked="{Binding Wireframe}" Margin="14,0,0,0" />

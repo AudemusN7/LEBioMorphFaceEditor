@@ -177,6 +177,10 @@ cbuffer PostProcessConstants : register(b4)
     float4 BloomTint;
     // Normalized UV direction for the separable bloom blur.
     float4 BloomPassParameters;
+    // Independent world-space AO radii and strengths, followed by blur controls.
+    float4 AoRadiusParameters;
+    float4 AoFilterParameters;
+    float4 AoParameters;
 };
 
 Texture2D SceneColorTexture : register(t10);
@@ -187,6 +191,11 @@ Texture2D SceneNormalSingleTexture : register(t14);
 Texture2D SceneAmbientDiffuseTexture : register(t18);
 Texture2D PostBloomTexture : register(t19);
 Texture2D GradingLutTexture : register(t20);
+Texture2D<float4> AoSurfaceTexture : register(t21);
+Texture2D<float2> AoVisibilityTexture : register(t22);
+Texture2DMS<float4> OpaquePlaneMsaaTexture : register(t23);
+Texture2D<float4> OpaquePlaneSingleTexture : register(t24);
+Texture2D<float4> AoReceiverPlaneTexture : register(t25);
 SamplerState PostSampler : register(s1);
 
 cbuffer SkinningConstants : register(b2)
@@ -1276,6 +1285,10 @@ float4 AttachmentPreview(VertexOutput input, bool isFrontFace, out float4 aoNorm
         ? packedNormal.rgb * 2 - 1 : DecodeNormal(packedNormal);
     float3 rawNormal = tangent * tangentNormal.x + bitangent * tangentNormal.y + geometricNormal * tangentNormal.z;
     float3 normal = normalize(rawNormal);
+    // AO follows the same material normal used by the attachment lighting.
+    // Earlier unlit/visor returns intentionally retain the geometric normal.
+    viewNormal = normalize(mul(float4(normal, 0), View).xyz);
+    aoNormalTarget = float4(viewNormal * 0.5 + 0.5, 1);
     float3 reflectedView = reflect(-view, normal);
     float3 cube = TextureFlags1.y > 0.5 ? FixedCubeTexture.Sample(MaterialSampler, reflectedView).rgb : 0;
     float3 albedo = diffuse.rgb;
@@ -1348,8 +1361,18 @@ float4 PSMain(
     VertexOutput input,
     bool isFrontFace : SV_IsFrontFace,
     out float4 aoNormalTarget : SV_TARGET1,
-    out float4 ambientDiffuseTarget : SV_TARGET2) : SV_TARGET0
+    out float4 ambientDiffuseTarget : SV_TARGET2,
+    out float4 receiverPlaneTarget : SV_TARGET3) : SV_TARGET0
 {
+    // Raster derivatives describe the actual transformed triangle, independently
+    // of smooth vertex normals and material normal maps. Capture this before
+    // branch/clip divergence; it is an AO rejection boundary, not a light normal.
+    float3 plane = cross(ddx(input.WorldPosition), ddy(input.WorldPosition));
+    float planeLengthSquared = dot(plane, plane);
+    plane = planeLengthSquared > 1e-12 ? plane * rsqrt(planeLengthSquared) : normalize(input.Normal);
+    if (dot(plane, CameraPosition.xyz - input.WorldPosition) < 0) plane = -plane;
+    float3 viewPlane = normalize(mul(float4(plane, 0), View).xyz);
+    receiverPlaneTarget = float4(viewPlane * 0.5 + 0.5, 1);
     ambientDiffuseTarget = 0;
     if (TextureFlags2.z >= 5 && TextureFlags2.z <= 11)
         return AttachmentPreview(input, isFrontFace, aoNormalTarget, ambientDiffuseTarget);
@@ -1578,6 +1601,8 @@ float4 PSMain(
     float3 normal = diagnostic < 0.5
         ? normalize(tangent * tangentNormal.x + bitangent * tangentNormal.y + geometricNormal * tangentNormal.z)
         : geometricNormal;
+    float3 viewNormal = normalize(mul(float4(normal, 0), View).xyz);
+    aoNormalTarget = float4(viewNormal * 0.5 + 0.5, 1);
     float3 lensNormal = diagnostic < 0.5
         ? normalize(tangent * lensTangentNormal.x + bitangent * lensTangentNormal.y + geometricNormal * lensTangentNormal.z)
         : geometricNormal;
@@ -2459,7 +2484,8 @@ void PSShadow(VertexOutput input, bool isFrontFace : SV_IsFrontFace)
     // depth pre/post passes (continuous transparency needs a binary depth test).
     float4 unusedNormal;
     float4 unusedAmbient;
-    float opacity = PSMain(input, isFrontFace, unusedNormal, unusedAmbient).a;
+    float4 unusedPlane;
+    float opacity = PSMain(input, isFrontFace, unusedNormal, unusedAmbient, unusedPlane).a;
     clip(opacity - 0.3333);
 }
 
@@ -2478,129 +2504,273 @@ PostVertexOutput VSPostProcess(uint vertexId : SV_VertexID)
     return output;
 }
 
-static const int2 SsaoOffsets[12] =
+int2 PostDimensions()
 {
-    // Three view-space scales: contact, feature, and orbital-cavity range.
-    int2( 3,  0), int2(-3,  0), int2( 0,  3), int2( 0, -3),
-    int2( 7,  7), int2(-7,  7), int2( 7, -7), int2(-7, -7),
-    int2(24,  5), int2(-24, -5), int2( 5, -24), int2(-5, 24)
-};
-
-int2 ClampPostPixel(int2 pixel)
-{
-    int2 dimensions = int2(1.0 / PixelSizeAndSamples.xy);
-    return clamp(pixel, int2(0, 0), dimensions - 1);
+    return int2(round(1.0 / PixelSizeAndSamples.xy));
 }
 
-float LoadMsaaDepth(int2 pixel)
+bool IsPostPixelValid(int2 pixel)
 {
-    float depth = 1;
-    [unroll]
-    for (int sampleIndex = 0; sampleIndex < 4; ++sampleIndex)
-    {
-        if (sampleIndex < (int)PixelSizeAndSamples.z)
-        {
-            depth = min(depth, SceneDepthMsaaTexture.Load(ClampPostPixel(pixel), sampleIndex));
-        }
-    }
-    return depth;
-}
-
-float LoadSingleDepth(int2 pixel)
-{
-    return SceneDepthSingleTexture.Load(int3(ClampPostPixel(pixel), 0)).r;
+    int2 dimensions = PostDimensions();
+    return all(pixel >= 0) && all(pixel < dimensions);
 }
 
 float3 ReconstructViewPosition(int2 pixel, float depth)
 {
-    float2 uv = (float2(ClampPostPixel(pixel)) + 0.5) * PixelSizeAndSamples.xy;
+    float2 uv = (float2(pixel) + 0.5) * PixelSizeAndSamples.xy;
     float4 clip = float4(uv.x * 2 - 1, 1 - uv.y * 2, depth, 1);
     float4 view = mul(clip, InverseProjection);
     return view.xyz / max(abs(view.w), 0.000001);
 }
 
-float3 LoadMsaaAoNormal(int2 pixel)
+float3 DecodeAoNormal(float3 encodedNormal)
 {
-    float3 normal = 0;
-    float samples = 0;
+    return normalize(encodedNormal * 2 - 1);
+}
+
+float4 LoadAoSurface(int2 pixel)
+{
+    return AoSurfaceTexture.Load(int3(pixel, 0));
+}
+
+float2 LoadAoVisibility(int2 pixel)
+{
+    return AoVisibilityTexture.Load(int3(pixel, 0));
+}
+
+float4 PSAoSurfaceMsaa(PostVertexOutput input, out float4 receiverPlane : SV_TARGET1) : SV_TARGET0
+{
+    int2 pixel = int2(input.Position.xy);
+    float nearestDepth = 1;
+    float3 nearestNormal = float3(0, 0, 1);
+    receiverPlane = float4(0.5, 0.5, 1, 0);
     [unroll]
     for (int sampleIndex = 0; sampleIndex < 4; ++sampleIndex)
     {
         if (sampleIndex < (int)PixelSizeAndSamples.z)
         {
-            normal += SceneNormalMsaaTexture.Load(ClampPostPixel(pixel), sampleIndex).rgb * 2 - 1;
-            samples += 1;
+            float depth = SceneDepthMsaaTexture.Load(pixel, sampleIndex);
+            if (depth < nearestDepth)
+            {
+                nearestDepth = depth;
+                nearestNormal = DecodeAoNormal(
+                    SceneNormalMsaaTexture.Load(pixel, sampleIndex).rgb);
+                receiverPlane = OpaquePlaneMsaaTexture.Load(pixel, sampleIndex);
+                receiverPlane.a = sampleIndex;
+            }
         }
     }
-    return normalize(normal / max(samples, 1));
+    return float4(nearestNormal * 0.5 + 0.5, nearestDepth);
 }
 
-float3 LoadSingleAoNormal(int2 pixel)
+float4 PSAoSurfaceSingle(PostVertexOutput input, out float4 receiverPlane : SV_TARGET1) : SV_TARGET0
 {
-    return normalize(SceneNormalSingleTexture.Load(int3(ClampPostPixel(pixel), 0)).rgb * 2 - 1);
+    int2 pixel = int2(input.Position.xy);
+    float depth = SceneDepthSingleTexture.Load(int3(pixel, 0)).r;
+    receiverPlane = OpaquePlaneSingleTexture.Load(int3(pixel, 0));
+    receiverPlane.a = 0;
+    float3 normal = depth < 0.99999
+        ? DecodeAoNormal(SceneNormalSingleTexture.Load(int3(pixel, 0)).rgb)
+        : float3(0, 0, 1);
+    return float4(normal * 0.5 + 0.5, depth);
 }
 
-float EvaluateViewSpaceOccluder(float3 centerPosition, float3 normal, int2 samplePixel, float sampleDepth)
+// Tangent-horizon accumulation follows the shipped LE HBAO.usf compute path.
+// MFE keeps a full-resolution pixel pass and uses precise rsqrt rather than
+// deinterleaving or the native approximate reciprocal-square-root instruction.
+// NVIDIA's HBAO source notice is retained below for this adaptation.
+/*
+Copyright (c) 2014-2015, NVIDIA. All rights reserved.
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+ * Redistributions of source code must retain the above copyright notice,
+   this list of conditions and the following disclaimer.
+ * Neither the name of its contributors may be used to endorse or promote
+   products derived from this software without specific prior written permission.
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS ``AS IS'' AND ANY EXPRESS
+OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY
+DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/
+float2 AoDirection(int index, float phase)
 {
-    if (sampleDepth >= 0.99999)
-    {
-        return 0;
-    }
-    float3 offset = ReconstructViewPosition(samplePixel, sampleDepth) - centerPosition;
-    float distanceToSample = length(offset);
-    if (distanceToSample <= 0.000001)
-    {
-        return 0;
-    }
-    // A coplanar or smoothly convex neighbour lies on/below the tangent plane
-    // and contributes nothing. Only geometry rising into the normal hemisphere
-    // can occlude, which prevents individual mesh triangles becoming visible.
-    float horizon = saturate((dot(normal, offset / distanceToSample) - DepthParameters.y) /
-                             max(1 - DepthParameters.y, 0.0001));
-    float viewRadius = max(abs(centerPosition.z) * DepthParameters.x, 0.025);
-    float rangeWeight = saturate(1 - distanceToSample / viewRadius);
-    rangeWeight *= rangeWeight;
-    return horizon * rangeWeight;
+    float angle = phase + (6.28318530718 * index / 4.0);
+    return float2(cos(angle), sin(angle));
 }
 
-float EvaluateSsaoMsaa(int2 pixel, float centerDepth)
+float AoTangentElevation(float3 position, float3 normal, float3 screenDirection)
 {
-    if (centerDepth >= 0.99999)
-    {
-        return 1;
-    }
-    float3 centerPosition = ReconstructViewPosition(pixel, centerDepth);
-    float3 normal = LoadMsaaAoNormal(pixel);
+    // Intersect the actual normal plane with the perspective screen slice.
+    // Unlike the native XY-only approximation, this uses all three normal
+    // components. Cross products avoid division by grazing normal Z.
+    float facing = dot(normal, position);
+    float3 tangent = position * dot(normal, screenDirection) - screenDirection * facing;
+    if (facing > 0) tangent = -tangent;
+    return tangent.z * rsqrt(max(dot(tangent, tangent), 1e-12));
+}
+
+float2 AoSampleOffset(int2 pixel)
+{
+    // A selected MSAA depth belongs to its subpixel position, not the centre.
+    // The preparation pass retains its index alongside the receiver plane.
+    return PixelSizeAndSamples.z > 1
+        ? SceneDepthMsaaTexture.GetSamplePosition((int)AoReceiverPlaneTexture.Load(int3(pixel, 0)).a)
+        : float2(0, 0);
+}
+
+float3 ReconstructAoPosition(int2 pixel, float depth, out float3 uncertainty)
+{
+    float2 uv = (float2(pixel) + 0.5 + AoSampleOffset(pixel)) * PixelSizeAndSamples.xy;
+    float4 clip = float4(uv.x * 2 - 1, 1 - uv.y * 2, depth, 1);
+    float4 view = mul(clip, InverseProjection);
+    float invW = 1 / max(abs(view.w), 1e-6);
+    float3 position = view.xyz * invW;
+    // Propagate one D32 float depth increment through the inverse projection.
+    // This keeps self-plane rejection tied to input precision and camera depth,
+    // rather than a broad world-space distance that erases genuine contacts.
+    float depthIncrement = asfloat(asuint(depth) + 1) - depth;
+    float3 derivative = (InverseProjection[2].xyz - position * InverseProjection[2][3]) * invW;
+    uncertainty = abs(derivative * depthIncrement) + abs(position) * 1e-6;
+    return position;
+}
+
+float AoRadiusVisibility(int2 pixel, float3 centerPosition, float3 centerNormal, float3 receiverPlane,
+    float3 centerUncertainty, float radius, float strength)
+{
+    if (radius <= 0 || strength <= 0) return 1;
+
+    // Perspective projection maps a view-space radius to a pixel radius. The
+    // inverse-projection diagonal is reciprocal focal length for this camera.
+    float focalX = 1 / max(abs(InverseProjection[0][0]), 1e-6);
+    float focalY = 1 / max(abs(InverseProjection[1][1]), 1e-6);
+    float2 radiusPixels = radius * float2(focalX, focalY)
+        / max(abs(centerPosition.z), 1e-4) / PixelSizeAndSamples.xy * 0.5;
+
+    // Fixed rotation and bounded radial jitter avoid temporal instability.
+    // One snapped step per ray keeps its tangent and all sample directions
+    // consistent, rather than rounding each radius to a different direction.
+    int2 tile = pixel & 3;
+    int tileIndex = (tile.x * 5 + tile.y * 3) & 15;
+    float phase = tileIndex * (1.57079632679 / 16.0);
+    float stepFraction = (0.8 + 0.4 * (((tileIndex * 7) & 15) / 16.0)) / 5.0;
+    float radiusSquared = radius * radius;
     float occlusion = 0;
     [unroll]
-    for (int index = 0; index < 12; ++index)
+    for (int directionIndex = 0; directionIndex < 4; ++directionIndex)
     {
-        int2 scaledOffset = (int2)round(float2(SsaoOffsets[index]) * PixelSizeAndSamples.w);
-        int2 samplePixel = ClampPostPixel(pixel + scaledOffset);
-        occlusion += EvaluateViewSpaceOccluder(
-            centerPosition, normal, samplePixel, LoadMsaaDepth(samplePixel));
+        float2 direction = AoDirection(directionIndex, phase);
+        int2 sampleStep = (int2)round(direction * radiusPixels * stepFraction);
+        if (all(sampleStep == 0)) continue;
+        float3 screenDirection = float3(
+            2 * sampleStep.x * PixelSizeAndSamples.x / focalX,
+            -2 * sampleStep.y * PixelSizeAndSamples.y / focalY, 0);
+        // Only the smooth material normal defines the horizon. Putting the flat
+        // receiver plane here would change every ray at each triangle edge.
+        float horizon = AoTangentElevation(centerPosition, centerNormal, screenDirection);
+        [unroll]
+        for (int stepIndex = 0; stepIndex < 4; ++stepIndex)
+        {
+            int2 samplePixel = pixel + sampleStep * (stepIndex + 1);
+            if (!IsPostPixelValid(samplePixel)) continue;
+
+            float4 sampleSurface = LoadAoSurface(samplePixel);
+            if (sampleSurface.a >= 0.99999) continue;
+            float3 sampleUncertainty;
+            float3 samplePosition = ReconstructAoPosition(samplePixel, sampleSurface.a, sampleUncertainty);
+            float3 offset = samplePosition - centerPosition;
+            float distanceSquared = dot(offset, offset);
+            if (distanceSquared <= 1e-8 || distanceSquared >= radiusSquared) continue;
+
+            // In RH view space, positive delta Z points toward the camera.
+            float elevation = offset.z * rsqrt(distanceSquared);
+            float horizonIncrease = saturate(elevation - horizon - DepthParameters.y);
+            // Reject samples on this triangle's plane without making that plane
+            // a shading baseline. RGBA16F normal quantization also contributes a
+            // bounded angular error; the narrow ramp avoids a hard cutoff.
+            float planeError = dot(abs(receiverPlane), centerUncertainty + sampleUncertainty)
+                + 0.0025 * sqrt(distanceSquared);
+            float planeSeparation = abs(dot(receiverPlane, offset));
+            float sampleWeight = smoothstep(planeError, 2 * planeError, planeSeparation);
+            horizonIncrease *= sampleWeight;
+            horizon += horizonIncrease;
+            float radialFalloff = saturate(1 - distanceSquared / radiusSquared);
+            occlusion += horizonIncrease * radialFalloff;
+        }
     }
-    return saturate(1 - (occlusion / 12) * DepthParameters.z * DepthParameters.w);
+    float multiplier = strength / max(1 - DepthParameters.y, 0.1);
+    return saturate(1 - 2 * occlusion * multiplier / 16.0);
 }
 
-float EvaluateSsaoSingle(int2 pixel, float centerDepth)
+float2 PSAmbientOcclusion(PostVertexOutput input) : SV_TARGET
 {
-    if (centerDepth >= 0.99999)
-    {
-        return 1;
-    }
-    float3 centerPosition = ReconstructViewPosition(pixel, centerDepth);
-    float3 normal = LoadSingleAoNormal(pixel);
-    float occlusion = 0;
+    int2 pixel = int2(input.Position.xy);
+    float4 centerSurface = LoadAoSurface(pixel);
+    if (centerSurface.a >= 0.99999 || DepthParameters.z < 0.5)
+        return float2(1, 1);
+
+    float3 centerUncertainty;
+    float3 centerPosition = ReconstructAoPosition(pixel, centerSurface.a, centerUncertainty);
+    float3 centerNormal = DecodeAoNormal(centerSurface.rgb);
+    float3 receiverPlane = DecodeAoNormal(AoReceiverPlaneTexture.Load(int3(pixel, 0)).rgb);
+    return float2(
+        AoRadiusVisibility(pixel, centerPosition, centerNormal, receiverPlane,
+            centerUncertainty, AoRadiusParameters.x, AoRadiusParameters.z),
+        AoRadiusVisibility(pixel, centerPosition, centerNormal, receiverPlane,
+            centerUncertainty, AoRadiusParameters.y, AoRadiusParameters.w));
+}
+
+float2 PSAoBlur(PostVertexOutput input) : SV_TARGET
+{
+    int2 pixel = int2(input.Position.xy);
+    float4 centerSurface = LoadAoSurface(pixel);
+    float2 centerVisibility = LoadAoVisibility(pixel);
+    if (centerSurface.a >= 0.99999) return float2(1, 1);
+
+    float3 centerPosition = ReconstructViewPosition(pixel, centerSurface.a);
+    float3 centerNormal = DecodeAoNormal(centerSurface.rgb);
+    float sigma = max(AoFilterParameters.z, 1e-5);
+    float normalExponent = max(AoFilterParameters.w, 0);
+    float2 result = 0;
+    float totalWeight = 0;
     [unroll]
-    for (int index = 0; index < 12; ++index)
+    for (int tapIndex = -2; tapIndex <= 2; ++tapIndex)
     {
-        int2 scaledOffset = (int2)round(float2(SsaoOffsets[index]) * PixelSizeAndSamples.w);
-        int2 samplePixel = ClampPostPixel(pixel + scaledOffset);
-        occlusion += EvaluateViewSpaceOccluder(
-            centerPosition, normal, samplePixel, LoadSingleDepth(samplePixel));
+        int2 tapPixel = pixel + (int2)round(AoFilterParameters.xy * tapIndex);
+        if (!IsPostPixelValid(tapPixel)) continue;
+        float4 tapSurface = LoadAoSurface(tapPixel);
+        if (tapSurface.a >= 0.99999) continue;
+
+        float3 tapNormal = DecodeAoNormal(tapSurface.rgb);
+        float3 tapPosition = ReconstructViewPosition(tapPixel, tapSurface.a);
+        // Native HBAO blur uses view-depth separation. Reusing shading tangent
+        // planes here would reintroduce the normal/triangle mismatch in filtering.
+        float depthDistance = tapPosition.z - centerPosition.z;
+        float depthWeight = exp(-0.5 * (depthDistance / sigma) * (depthDistance / sigma));
+        float normalWeight = normalExponent > 0
+            ? pow(saturate(dot(centerNormal, tapNormal)), normalExponent) : 1;
+        float spatialWeight = tapIndex == 0 ? 6 : (abs(tapIndex) == 1 ? 4 : 1);
+        float weight = spatialWeight * depthWeight * normalWeight;
+        // Accumulate differences so a constant visibility field stays exact,
+        // including fully unoccluded input at zero strength.
+        result += (LoadAoVisibility(tapPixel) - centerVisibility) * weight;
+        totalWeight += weight;
     }
-    return saturate(1 - (occlusion / 12) * DepthParameters.z * DepthParameters.w);
+    return totalWeight > 1e-6 ? saturate(centerVisibility + result / totalWeight) : centerVisibility;
+}
+
+float4 PSApplyAmbientOcclusion(PostVertexOutput input) : SV_TARGET
+{
+    float4 scene = SceneColorTexture.SampleLevel(PostSampler, input.TexCoord, 0);
+    float4 ambient = SceneAmbientDiffuseTexture.SampleLevel(PostSampler, input.TexCoord, 0);
+    float2 visibility = AoVisibilityTexture.Load(int3(int2(input.Position.xy), 0));
+    float ao = pow(saturate(visibility.x * visibility.y), AoParameters.x);
+    return float4(scene.rgb - ambient.rgb + ambient.rgb * ao, scene.a);
 }
 
 bool IsDisplayBackground(float2 uv, float3 color)
@@ -2750,10 +2920,10 @@ float3 MapDisplayHighlights(float3 color)
         color.b <= 0.8 ? color.b : highlight.b);
 }
 
-float4 ComposePostProcess(PostVertexOutput input, float ambientOcclusion)
+float4 ComposePostProcess(PostVertexOutput input)
 {
     float4 scene = SceneColorTexture.SampleLevel(PostSampler, input.TexCoord, 0);
-    float3 color = scene.rgb * ambientOcclusion;
+    float3 color = scene.rgb;
     if (DisplayParameters.y > 0.5)
     {
         bool background = IsDisplayBackground(input.TexCoord, scene.rgb);
@@ -2778,16 +2948,7 @@ float4 ComposePostProcess(PostVertexOutput input, float ambientOcclusion)
     return float4(saturate(EncodeDisplaySrgb(color)), scene.a);
 }
 
-float4 PSPostProcessMsaa(PostVertexOutput input) : SV_TARGET
+float4 PSPostProcess(PostVertexOutput input) : SV_TARGET
 {
-    int2 pixel = int2(input.Position.xy);
-    float depth = LoadMsaaDepth(pixel);
-    return ComposePostProcess(input, EvaluateSsaoMsaa(pixel, depth));
-}
-
-float4 PSPostProcessSingle(PostVertexOutput input) : SV_TARGET
-{
-    int2 pixel = int2(input.Position.xy);
-    float depth = SceneDepthSingleTexture.Load(int3(ClampPostPixel(pixel), 0)).r;
-    return ComposePostProcess(input, EvaluateSsaoSingle(pixel, depth));
+    return ComposePostProcess(input);
 }

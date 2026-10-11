@@ -147,7 +147,8 @@ public sealed record HeadPreviewOptions(
     // Maximum slope correction in world-space light depth; prevents grazing blow-ups.
     float ShadowReceiverPlaneBiasWorld = 0.15f,
     // Multiplier on current caster geometry bounds.
-    float ShadowBoundsScale = 1.15f);
+    float ShadowBoundsScale = 1.15f,
+    HeadPreviewAmbientOcclusionSettings? AmbientOcclusionSettings = null);
 
 public sealed record HeadPreviewFrame(
     int Width,

@@ -101,7 +101,6 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private HeadPreviewRenderMode _renderMode = HeadPreviewRenderMode.Shaded;
     private HeadPreviewLightingPreset _lightingPreset = HeadPreviewLightingPreset.Studio;
     private bool _postProcessingEnabled = true;
-    private bool _ambientOcclusionEnabled = true;
     private int _previewLod;
     private Vector4 _backgroundColor = WpfHdrColorDialogService.DefaultBackgroundColor;
     private bool _hasAuthoredBackground;
@@ -573,18 +572,6 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
-    public bool AmbientOcclusionEnabled
-    {
-        get => _ambientOcclusionEnabled;
-        set
-        {
-            if (SetProperty(ref _ambientOcclusionEnabled, value))
-            {
-                PreviewOptionsChanged?.Invoke(this, EventArgs.Empty);
-            }
-        }
-    }
-
     public int PreviewLod
     {
         get => _previewLod;
@@ -641,8 +628,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         ShowAttachment,
         LightingPreset,
         new Vector3(BackgroundColor.X, BackgroundColor.Y, BackgroundColor.Z),
-        PostProcessingEnabled: PostProcessingEnabled,
-        AmbientOcclusionEnabled: AmbientOcclusionEnabled);
+        PostProcessingEnabled: PostProcessingEnabled);
 
     private void EditBackgroundColor()
     {

@@ -741,7 +741,7 @@ public static class HdrRenderingTests
         var method = typeof(HeadPreviewRenderer).GetMethod(
             "ApplyPostProcess", BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new InvalidOperationException("Renderer post-process method was not found.");
-        method.Invoke(renderer, [rig, camera, false, HeadPreviewRenderMode.Shaded, null, HeadPreviewPostProcessMode.Neutral, null, true]);
+        method.Invoke(renderer, [rig, camera, false, HeadPreviewRenderMode.Shaded, null, HeadPreviewPostProcessMode.Neutral, null, true, null]);
     }
 
     private static byte[] ReadDisplayPixels(HeadPreviewRenderer renderer)

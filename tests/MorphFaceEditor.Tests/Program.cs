@@ -15,7 +15,8 @@ var suites = new Dictionary<string, IReadOnlyList<TestCase>>(StringComparer.Ordi
         .Concat(PlayerFaceScarTexturePolicyTests.All)
         .Concat(Player2DaRandomisationPolicyTests.All).ToArray(),
     ["materials"] = MaterialTests.All,
-    ["rendering"] = RenderingTests.All.Concat(EnvironmentLightingTests.All).Concat(EnvironmentRenderingTests.All)
+    ["rendering"] = RenderingTests.All.Concat(AmbientOcclusionRenderingTests.All)
+        .Concat(EnvironmentLightingTests.All).Concat(EnvironmentRenderingTests.All)
         .Concat(HumanHeadShadowTests.All).Concat(NativeHairPreviewTests.All)
         .Concat(NativeAttachmentPreviewTests.All)
         .Concat(VisorLensPreviewRendererTests.All)

@@ -28,8 +28,6 @@ public static class RenderingTests
         new("three-point lighting presets are valid", ThreePointLightingPresetsAreValid),
         new("lighting presets change shaded output", LightingPresetsChangeShadedOutput),
         new("unlit mode bypasses lighting and ambient occlusion", UnlitModeBypassesLightingAndAmbientOcclusion),
-        new("view-space AO does not reveal coplanar triangle topology", AmbientOcclusionRejectsCoplanarTopology),
-        new("view-space AO produces visible contact shadowing", AmbientOcclusionProducesContactShadowing),
         new("lit-translucent hair is excluded from AO", AmbientOcclusionExcludesHair),
         new("renderer clears to the selected background colour", RendererUsesSelectedBackgroundColor),
         new("renderer draws, reads back, and retains its device on resize", RendererDrawsAndRetainsDevice),
@@ -615,48 +613,6 @@ public static class RenderingTests
     private static double AverageRgb(byte[] pixels) => pixels
         .Where((_, index) => index % 4 != 3)
         .Average(value => (double)value);
-
-    private static void AmbientOcclusionRejectsCoplanarTopology()
-    {
-        var material = new HeadPreviewMaterial("AO_Plane", HeadMaterialFamily.Skin);
-        var mesh = CreateQuadMesh("Plane", -0.9f, -0.9f, 0.9f, 0.9f, 0, material);
-        var scene = new HeadPreviewScene(
-            "AO plane",
-            [mesh],
-            new HeadPreviewBounds(new Vector3(-1, -1, -0.05f), new Vector3(1, 1, 0.05f)));
-        using var renderer = new HeadPreviewRenderer(128, 128);
-        renderer.SetScene(scene);
-        var camera = new HeadOrbitCamera();
-        camera.Fit(scene.Bounds);
-
-        var withoutAo = renderer.Render(camera, new HeadPreviewOptions(AmbientOcclusionEnabled: false)).BgraPixels.ToArray();
-        var withAo = renderer.Render(camera, new HeadPreviewOptions(AmbientOcclusionEnabled: true)).BgraPixels;
-
-        TestAssert.True(withoutAo.SequenceEqual(withAo),
-            "Coplanar triangles self-occluded and exposed their shared topology.");
-    }
-
-    private static void AmbientOcclusionProducesContactShadowing()
-    {
-        var material = new HeadPreviewMaterial("AO_Contact", HeadMaterialFamily.Skin);
-        var backing = CreateQuadMesh("Backing", -1, -1, 1, 1, 0, material);
-        var raised = CreateQuadMesh("Raised", -0.28f, -0.28f, 0.28f, 0.28f, 0.12f, material);
-        var scene = new HeadPreviewScene(
-            "AO contact",
-            [backing, raised],
-            new HeadPreviewBounds(new Vector3(-1, -1, -0.05f), new Vector3(1, 1, 0.17f)));
-        using var renderer = new HeadPreviewRenderer(160, 160);
-        renderer.SetScene(scene);
-        var camera = new HeadOrbitCamera();
-        camera.Fit(scene.Bounds);
-
-        var withoutAo = renderer.Render(camera, new HeadPreviewOptions(AmbientOcclusionEnabled: false)).BgraPixels.ToArray();
-        var withAo = renderer.Render(camera, new HeadPreviewOptions(AmbientOcclusionEnabled: true)).BgraPixels;
-        var changedColorBytes = withAo.Where((value, index) => index % 4 != 3 && value < withoutAo[index]).Count();
-
-        TestAssert.True(changedColorBytes > 100,
-            "Raised geometry produced no visible ambient contact shadow on its backing surface.");
-    }
 
     private static void AmbientOcclusionExcludesHair()
     {

@@ -20,7 +20,7 @@ public sealed class HeadPreviewRenderer : IDisposable
 {
     private const int MaximumBoneCount = 128;
     private const long MaximumGpuTextureBytes = 512L * 1024 * 1024;
-    private const int ShadowMapSize = 2048;
+    private const int DefaultShadowMapSize = 1024;
     private readonly Device _device;
     private readonly DeviceContext _context;
     private readonly string _deviceKind;
@@ -55,7 +55,6 @@ public sealed class HeadPreviewRenderer : IDisposable
     private readonly BlendState _depthOnlyBlendState;
     private readonly SamplerState _materialSampler;
     private readonly SamplerState _postSampler;
-    private readonly SamplerState _shadowSampler;
     private readonly SampleDescription _sampleDescription;
     private readonly List<MeshBuffers> _meshes = [];
     private readonly Dictionary<string, HeadPreviewMaterial> _materials = new(StringComparer.OrdinalIgnoreCase);
@@ -94,6 +93,7 @@ public sealed class HeadPreviewRenderer : IDisposable
     private Texture2D _shadowTexture = null!;
     private DepthStencilView _shadowDepthView = null!;
     private ShaderResourceView _shadowShaderView = null!;
+    private int _shadowMapSize;
     private int _skinningPaletteCount;
     private System.Numerics.Matrix4x4[] _skinningPalette = [];
     private float _shadowRadius;
@@ -169,6 +169,8 @@ public sealed class HeadPreviewRenderer : IDisposable
         _postProcessBuffer = CreateConstantBuffer<PostProcessConstants>();
         _shadowBuffer = CreateConstantBuffer<ShadowConstants>();
         _solidRasterizer = CreateRasterizer(FillMode.Solid, CullMode.None);
+        // Match the preview's two-sided geometry/cutout coverage, including
+        // hair cards; PSShadow receives the real front/back-face sign.
         _shadowRasterizer = CreateRasterizer(FillMode.Solid, CullMode.None);
         _wireframeRasterizer = CreateRasterizer(FillMode.Wireframe, CullMode.None);
         _solidBackFacesRasterizer = CreateRasterizer(FillMode.Solid, CullMode.Front);
@@ -222,19 +224,6 @@ public sealed class HeadPreviewRenderer : IDisposable
             MaximumAnisotropy = 1,
             ComparisonFunction = Comparison.Never,
             BorderColor = Color.Black,
-            MinimumLod = 0,
-            MaximumLod = 0,
-            MipLodBias = 0
-        });
-        _shadowSampler = new SamplerState(_device, new SamplerStateDescription
-        {
-            Filter = Filter.ComparisonMinMagMipPoint,
-            AddressU = TextureAddressMode.Border,
-            AddressV = TextureAddressMode.Border,
-            AddressW = TextureAddressMode.Border,
-            MaximumAnisotropy = 1,
-            ComparisonFunction = Comparison.LessEqual,
-            BorderColor = Color.White,
             MinimumLod = 0,
             MaximumLod = 0,
             MipLodBias = 0
@@ -544,6 +533,7 @@ public sealed class HeadPreviewRenderer : IDisposable
         HeadPreviewOptions options,
         float animationTimeSeconds)
     {
+        EnsureShadowMapSize(ResolveShadowMapSize(options.ShadowMapResolution));
         var casters = draws.Where(IsShadowCaster).ToArray();
         if (casters.Length == 0)
         {
@@ -563,11 +553,12 @@ public sealed class HeadPreviewRenderer : IDisposable
 
         var center = ComputeShadowCenter(casters);
         var radius = ComputeShadowRadius(casters, center);
-        // Grow only when a pose extends beyond the current fit. That keeps a
-        // stable texel scale during ordinary facial animation and morph edits.
-        _shadowRadius = Math.Max(_shadowRadius, radius * 1.12f);
-        radius = Math.Max(_shadowRadius, 0.01f);
-        var texelSize = (2 * radius) / ShadowMapSize;
+        // Refit from the visible caster geometry each frame. Keeping the old
+        // maximum here makes an undone morph or hidden attachment permanently
+        // enlarge the map and change its depth precision.
+        _shadowRadius = Math.Max(radius * Math.Clamp(options.ShadowBoundsScale, 1, 2), 0.01f);
+        radius = _shadowRadius;
+        var texelSize = (2 * radius) / _shadowMapSize;
         var forward = System.Numerics.Vector3.Normalize(-lightDirection);
         var referenceUp = Math.Abs(System.Numerics.Vector3.Dot(forward, System.Numerics.Vector3.UnitY)) > 0.98f
             ? System.Numerics.Vector3.UnitZ
@@ -593,7 +584,7 @@ public sealed class HeadPreviewRenderer : IDisposable
         _context.PixelShader.SetShaderResources(17, new ShaderResourceView?[] { null });
         _context.OutputMerger.SetTargets(_shadowDepthView);
         _context.ClearDepthStencilView(_shadowDepthView, DepthStencilClearFlags.Depth, 1, 0);
-        _context.Rasterizer.SetViewport(0, 0, ShadowMapSize, ShadowMapSize);
+        _context.Rasterizer.SetViewport(0, 0, _shadowMapSize, _shadowMapSize);
         _context.Rasterizer.State = _shadowRasterizer;
         _context.OutputMerger.SetDepthStencilState(_shadowDepthState);
         _context.OutputMerger.SetBlendState(_depthOnlyBlendState);
@@ -723,13 +714,19 @@ public sealed class HeadPreviewRenderer : IDisposable
             LightViewProjection = lightViewProjection,
             ShadowParameters = new Vector4(
                 enabled ? 1 : 0,
-                1f / ShadowMapSize,
+                1f / _shadowMapSize,
                 Math.Clamp(options.ShadowDepthBias, 0, 0.01f),
-                Math.Clamp(options.ShadowNormalBias, 0, 0.1f) * Math.Max(_shadowRadius, 0.01f))
+                Math.Clamp(options.ShadowNormalBias, 0, 0.1f) * Math.Max(_shadowRadius, 0.01f)),
+            ShadowFilterParameters = new Vector4(
+                Math.Clamp(options.ShadowSoftnessWorld, 0, Math.Max(_shadowRadius * 2, 0.01f))
+                    / (2 * Math.Max(_shadowRadius, 0.01f)),
+                Math.Clamp(options.ShadowReceiverPlaneBiasWorld, 0, 0.5f)
+                    / Math.Max(_shadowRadius * 5 - 0.01f, 0.01f),
+                0,
+                0)
         };
         _context.UpdateSubresource(ref parameters, _shadowBuffer);
         _context.PixelShader.SetConstantBuffer(5, _shadowBuffer);
-        _context.PixelShader.SetSampler(2, _shadowSampler);
     }
 
     private void DrawSection(
@@ -825,7 +822,6 @@ public sealed class HeadPreviewRenderer : IDisposable
         _context.PixelShader.SetConstantBuffer(1, _materialBuffer);
         _context.PixelShader.SetConstantBuffer(5, _shadowBuffer);
         _context.PixelShader.SetSampler(0, _materialSampler);
-        _context.PixelShader.SetSampler(2, _shadowSampler);
     }
 
     private static Vector4 ToDirection(HeadPreviewDirectionalLight light, HeadOrbitCamera camera)
@@ -1241,12 +1237,36 @@ public sealed class HeadPreviewRenderer : IDisposable
 
     private static float ToHdrFloat(float value) => (float)(System.Half)value;
 
-    private void CreateShadowMap()
+    private static int ResolveShadowMapSize(int requestedSize) => requestedSize is 512 or 1024 or 2048
+        ? requestedSize
+        : DefaultShadowMapSize;
+
+    private void EnsureShadowMapSize(int size)
+    {
+        if (_shadowMapSize == size)
+        {
+            return;
+        }
+
+        // A previous frame may still have the SRV bound when the user changes
+        // resolution. Unbind both views before releasing the old allocation.
+        _context.PixelShader.SetShaderResources(17, new ShaderResourceView?[] { null });
+        _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
+        _shadowShaderView?.Dispose();
+        _shadowDepthView?.Dispose();
+        _shadowTexture?.Dispose();
+        _shadowShaderView = null!;
+        _shadowDepthView = null!;
+        _shadowTexture = null!;
+        CreateShadowMap(size);
+    }
+
+    private void CreateShadowMap(int size = DefaultShadowMapSize)
     {
         _shadowTexture = new Texture2D(_device, new Texture2DDescription
         {
-            Width = ShadowMapSize,
-            Height = ShadowMapSize,
+            Width = size,
+            Height = size,
             MipLevels = 1,
             ArraySize = 1,
             Format = Format.R32_Typeless,
@@ -1269,6 +1289,7 @@ public sealed class HeadPreviewRenderer : IDisposable
             Dimension = ShaderResourceViewDimension.Texture2D,
             Texture2D = new ShaderResourceViewDescription.Texture2DResource { MostDetailedMip = 0, MipLevels = 1 }
         });
+        _shadowMapSize = size;
     }
 
     private void CreateRenderTargets()
@@ -1692,7 +1713,6 @@ public sealed class HeadPreviewRenderer : IDisposable
         _shadowShaderView.Dispose();
         _shadowDepthView.Dispose();
         _shadowTexture.Dispose();
-        _shadowSampler.Dispose();
         _postSampler.Dispose();
         _materialSampler.Dispose();
         _depthOnlyBlendState.Dispose();
@@ -1775,6 +1795,7 @@ public sealed class HeadPreviewRenderer : IDisposable
     {
         public Matrix LightViewProjection;
         public Vector4 ShadowParameters;
+        public Vector4 ShadowFilterParameters;
     }
 
     [StructLayout(LayoutKind.Sequential)]

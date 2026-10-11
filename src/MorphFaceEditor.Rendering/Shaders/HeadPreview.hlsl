@@ -72,19 +72,76 @@ cbuffer ShadowConstants : register(b5)
     row_major float4x4 LightViewProjection;
     // Enabled, texel size, comparison-depth bias, world-space normal bias.
     float4 ShadowParameters;
+    // World filter radius mapped to UV, maximum slope correction in light depth.
+    float4 ShadowFilterParameters;
 };
 Texture2D<float> KeyShadowTexture : register(t17);
-SamplerComparisonState ShadowSampler : register(s2);
+
+float ShadowTexelVisibility(int2 pixel, float2 tapUv, float receiverDepth,
+    float2 depthGradient, float wideAllowance)
+{
+    int mapSize = (int)round(1 / ShadowParameters.y);
+    if (any(pixel < 0) || any(pixel >= mapSize)) return 1;
+    float2 texelUv = (float2(pixel) + 0.5) * ShadowParameters.y;
+    // The signed geometric-plane correction is local to this bilinear tap.
+    // Extrapolating it across the world filter radius exposes triangle edges.
+    float correction = clamp(dot(texelUv - tapUv, depthGradient) - wideAllowance,
+        -ShadowFilterParameters.y, ShadowFilterParameters.y);
+    float comparisonDepth = receiverDepth - ShadowParameters.z + correction;
+    return step(comparisonDepth, KeyShadowTexture.Load(int3(pixel, 0)));
+}
+
+float FilteredShadowTap(float2 sampleUv, float receiverDepth,
+    float2 depthGradient, float wideAllowance)
+{
+    float2 texelPosition = sampleUv / ShadowParameters.y - 0.5;
+    int2 pixel = int2(floor(texelPosition));
+    float2 blend = frac(texelPosition);
+    // Interpolate comparison results, never depth values. Correct each of the
+    // four receiver depths individually, including its subtexel displacement.
+    float topLeft = ShadowTexelVisibility(pixel, sampleUv, receiverDepth, depthGradient, wideAllowance);
+    float topRight = ShadowTexelVisibility(pixel + int2(1, 0), sampleUv, receiverDepth, depthGradient, wideAllowance);
+    float bottomLeft = ShadowTexelVisibility(pixel + int2(0, 1), sampleUv, receiverDepth, depthGradient, wideAllowance);
+    float bottomRight = ShadowTexelVisibility(pixel + int2(1, 1), sampleUv, receiverDepth, depthGradient, wideAllowance);
+    return lerp(lerp(topLeft, topRight, blend.x), lerp(bottomLeft, bottomRight, blend.x), blend.y);
+}
 
 float KeyShadowVisibility(float3 worldPosition, float3 geometricNormal)
 {
     if (ShadowParameters.x < 0.5) return 1;
     float facing = dot(geometricNormal, normalize(KeyLightDirection.xyz));
-    float3 offset = geometricNormal * (facing >= 0 ? 1 : -1)
+    // Always offset outwards along the smooth surface normal. Reversing this
+    // direction at N.L=0 makes the lookup jump across the shadow map.
+    float3 offset = geometricNormal
         * ShadowParameters.w * (1 - saturate(abs(facing)));
     float4 projected = mul(float4(worldPosition + offset, 1), LightViewProjection);
     float3 lightPosition = projected.xyz / projected.w;
     float2 uv = lightPosition.xy * float2(0.5, -0.5) + 0.5;
+    // Use the actual triangle plane only within each bilinear texel footprint.
+    // The lookup origin stays smoothly biased; no flat triangle normal steers it.
+    float4 surfaceProjected = mul(float4(worldPosition, 1), LightViewProjection);
+    float3 surfacePosition = surfaceProjected.xyz / surfaceProjected.w;
+    surfacePosition.xy *= float2(0.5, -0.5);
+    float3 dx = ddx(surfacePosition);
+    float3 dy = ddy(surfacePosition);
+    float determinant = dx.x * dy.y - dx.y * dy.x;
+    float2 depthGradient = 0;
+    if (abs(determinant) > 1e-12)
+        depthGradient = float2(dy.y * dx.z - dx.y * dy.z,
+                               dx.x * dy.z - dy.x * dx.z) / determinant;
+    // For the wider taps, use a one-sided slope allowance from the interpolated
+    // smooth normal. It neither fits a triangle plane across other triangles
+    // nor increases the comparison depth on one side of the receiver.
+    // Orthographic VP columns are orthogonal; dividing by squared column
+    // length applies the inverse-transpose needed for a projected plane normal.
+    float3 columnX = float3(LightViewProjection[0][0], LightViewProjection[1][0], LightViewProjection[2][0]);
+    float3 columnY = float3(LightViewProjection[0][1], LightViewProjection[1][1], LightViewProjection[2][1]);
+    float3 columnZ = float3(LightViewProjection[0][2], LightViewProjection[1][2], LightViewProjection[2][2]);
+    float3 planeNormal = float3(
+        dot(geometricNormal, columnX) / dot(columnX, columnX),
+        dot(geometricNormal, columnY) / dot(columnY, columnY),
+        dot(geometricNormal, columnZ) / dot(columnZ, columnZ));
+    float2 smoothDepthSlope = 2 * abs(planeNormal.xy) / max(abs(planeNormal.z), 1e-8);
     if (any(uv < 0) || any(uv > 1) || lightPosition.z < 0 || lightPosition.z > 1)
         return 1;
     float visibility = 0;
@@ -93,11 +150,15 @@ float KeyShadowVisibility(float3 worldPosition, float3 geometricNormal)
     {
         [unroll]
         for (int x = -1; x <= 1; ++x)
-            visibility += KeyShadowTexture.SampleCmpLevelZero(ShadowSampler,
-                uv + float2(x, y) * ShadowParameters.y,
-                lightPosition.z - ShadowParameters.z);
+        {
+            float2 tapOffset = float2(x, y) * ShadowFilterParameters.x;
+            float wideAllowance = min(dot(abs(tapOffset), smoothDepthSlope), ShadowFilterParameters.y);
+            // Fixed separable tent weights [1,2,1] in each dimension, sum 16.
+            float weight = (x == 0 ? 2 : 1) * (y == 0 ? 2 : 1);
+            visibility += weight * FilteredShadowTap(uv + tapOffset, lightPosition.z, depthGradient, wideAllowance);
+        }
     }
-    return visibility / 9;
+    return visibility / 16;
 }
 
 cbuffer PostProcessConstants : register(b4)
@@ -2374,7 +2435,7 @@ float4 PSMain(
     return float4(lit, saturate(alpha));
 }
 
-void PSShadow(VertexOutput input)
+void PSShadow(VertexOutput input, bool isFrontFace : SV_IsFrontFace)
 {
     // Reuse the material pass's coverage decisions, including masked scalp,
     // alien faces and PROShort01's 0.15 red clip. The compiler discards the
@@ -2383,7 +2444,7 @@ void PSShadow(VertexOutput input)
     // depth pre/post passes (continuous transparency needs a binary depth test).
     float4 unusedNormal;
     float4 unusedAmbient;
-    float opacity = PSMain(input, true, unusedNormal, unusedAmbient).a;
+    float opacity = PSMain(input, isFrontFace, unusedNormal, unusedAmbient).a;
     clip(opacity - 0.3333);
 }
 

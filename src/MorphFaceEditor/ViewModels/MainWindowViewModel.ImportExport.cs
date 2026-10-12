@@ -387,6 +387,7 @@ public sealed partial class MainWindowViewModel
                 registryTextureCandidates: [],
                 textureCatalogProfile: textureProfile,
                 isTextureRegistryAvailable: false,
+                isTextureRegistryPending: true,
                 ignoresAuthoredGeometry: preview.Profile.IgnoresAuthoredGeometry);
 
             cancellationToken.ThrowIfCancellationRequested();
@@ -764,7 +765,8 @@ public sealed partial class MainWindowViewModel
             materialRandomisationProfileKey: $"{game.ToString().ToLowerInvariant()}-human-female",
             previewOnlyAttachments: true,
             playerRandomisationGame: game,
-            customMaterialRegistryAvailable: result.IsMaterialRegistryAvailable);
+            customMaterialRegistryAvailable: result.IsMaterialRegistryAvailable,
+            isTextureRegistryPending: true);
         SetEditor(editor, result.Preview.Loaded);
         _faceDetailsPrefix = null;
         _faceDetailsHasBakedFallback = false;

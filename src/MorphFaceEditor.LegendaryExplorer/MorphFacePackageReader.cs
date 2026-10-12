@@ -4,6 +4,7 @@ using LegendaryExplorerCore.Packages;
 using LegendaryExplorerCore.Packages.CloningImportingAndRelinking;
 using LegendaryExplorerCore.Unreal;
 using LegendaryExplorerCore.Unreal.BinaryConverters;
+using LegendaryExplorerCore.Unreal.ObjectInfo;
 using MorphFaceEditor.Core.Diagnostics;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
@@ -277,30 +278,7 @@ public sealed class MorphFacePackageReader : IDisposable
         }
 
         var materialUIndices = mesh.Materials ?? [];
-        var materialMaps = ReadLodMaterialMaps(
-            meshExport,
-            mesh.LODModels.Length,
-            materialUIndices.Length);
-        var usedSections = new SortedDictionary<int, List<MeshMaterialEvidenceSection>>();
-        for (var lodIndex = 0; lodIndex < mesh.LODModels.Length; lodIndex++)
-        {
-            var sectionIndex = 0;
-            foreach (var section in mesh.LODModels[lodIndex].Sections ?? [])
-            {
-                var slotIndex = LodMaterialMap.Resolve(
-                    section.MaterialIndex,
-                    materialMaps[lodIndex],
-                    materialUIndices.Length,
-                    $"SkeletalMesh '{meshExport.InstancedFullPath}' LOD {lodIndex} section");
-                if (!usedSections.TryGetValue(slotIndex, out var slotSections))
-                {
-                    slotSections = [];
-                    usedSections.Add(slotIndex, slotSections);
-                }
-                slotSections.Add(new MeshMaterialEvidenceSection(lodIndex, sectionIndex));
-                sectionIndex++;
-            }
-        }
+        var usedSections = ResolveUsedMaterialSections(meshExport, mesh, materialUIndices.Length);
 
         var slots = usedSections
             .Select(pair =>
@@ -323,6 +301,119 @@ public sealed class MorphFacePackageReader : IDisposable
             .ToArray();
 
         return new MeshMaterialEvidence(ToIdentity(meshExport)!, slots);
+    }
+
+    /// <summary>
+    /// Reads only the identities and effective material families used by one
+    /// exact SkeletalMesh export. Unlike <see cref="LoadMeshMaterialEvidence"/>,
+    /// this menu-discovery path does not read parameter defaults, textures or
+    /// compiled shader maps.
+    /// </summary>
+    public MeshMaterialSourceCatalog LoadMeshMaterialSources(
+        string packagePath,
+        string meshSelector)
+    {
+        ThrowIfDisposed();
+        LegendaryExplorerCoreRuntime.Initialize();
+        var fullPath = RequireFile(packagePath);
+        var package = PackageSourceCache.GetPackage(_packageCache, fullPath)
+            ?? throw new InvalidDataException($"Legendary Explorer Core could not open '{fullPath}'.");
+        var meshExport = _referenceResolver.Require(
+            ExportSelector.Find(package, meshSelector, "SkeletalMesh"), "mesh material sources");
+        var mesh = meshExport.GetBinaryData<SkeletalMesh>();
+        if (mesh.LODModels is not { Length: > 0 })
+        {
+            throw new InvalidDataException(
+                $"SkeletalMesh '{meshExport.InstancedFullPath}' has no LOD models.");
+        }
+
+        var materialUIndices = mesh.Materials ?? [];
+        var usedSections = ResolveUsedMaterialSections(meshExport, mesh, materialUIndices.Length);
+
+        var dependencies = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            Path.GetFullPath(meshExport.FileRef.FilePath)
+        };
+        var slots = usedSections.Select(pair =>
+        {
+            var materialReference = meshExport.FileRef.GetEntry(materialUIndices[pair.Key])
+                ?? throw new InvalidDataException(
+                    $"SkeletalMesh '{meshExport.InstancedFullPath}' has invalid material UIndex " +
+                    $"{materialUIndices[pair.Key]} in slot {pair.Key}.");
+            var materialExport = CanonicalAttachmentMaterialPolicy.ResolveReplacement(
+                meshExport, materialReference, _packageCache) ?? _referenceResolver.Require(
+                materialReference,
+                $"SkeletalMesh '{meshExport.InstancedFullPath}' material slot {pair.Key}");
+            var source = ToIdentity(materialExport)!;
+            var (master, graphDependencies) = ResolveMaterialMaster(materialExport);
+            dependencies.UnionWith(graphDependencies);
+
+            // Keep the same effective-root rule used by full material evidence:
+            // a child MIC name cannot grant itself a material family.
+            var family = HumanMaterialProfiles.ClassifyMaster(master.ObjectNameString);
+            if (family == HeadMaterialFamily.Unknown)
+                family = HeadMaterialClassifier.Classify(master.InstancedFullPath);
+
+            return new MeshMaterialSourceSlot(pair.Key, source, family, pair.Value.ToArray());
+        }).ToArray();
+
+        return new MeshMaterialSourceCatalog(ToIdentity(meshExport)!, slots, dependencies);
+    }
+
+    private (ExportEntry Master, IReadOnlySet<string> Dependencies) ResolveMaterialMaster(ExportEntry material)
+    {
+        var dependencies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var current = material;
+        while (true)
+        {
+            var identity = ToIdentity(current)!;
+            var key = MaterialIdentityKey.Create(identity);
+            if (!visited.Add(key))
+                throw new InvalidDataException($"Material parent cycle detected at '{current.InstancedFullPath}'.");
+            dependencies.Add(Path.GetFullPath(current.FileRef.FilePath));
+
+            if (current.ClassName.Equals("Material", StringComparison.OrdinalIgnoreCase))
+            {
+                return (current, dependencies);
+            }
+
+            var parentPropertyName = current.IsA("RvrEffectsMaterialUser") ? "m_pBaseMaterial" : "Parent";
+            var parentReference = current.GetProperty<ObjectProperty>(parentPropertyName)?.ResolveToEntry(current.FileRef)
+                ?? throw new InvalidDataException(
+                    $"Material '{current.InstancedFullPath}' has no resolvable {parentPropertyName}.");
+            current = _referenceResolver.Require(parentReference,
+                $"material '{current.InstancedFullPath}' {parentPropertyName}");
+        }
+    }
+
+    private static SortedDictionary<int, List<MeshMaterialEvidenceSection>> ResolveUsedMaterialSections(
+        ExportEntry meshExport,
+        SkeletalMesh mesh,
+        int materialCount)
+    {
+        var materialMaps = ReadLodMaterialMaps(meshExport, mesh.LODModels.Length, materialCount);
+        var usedSections = new SortedDictionary<int, List<MeshMaterialEvidenceSection>>();
+        for (var lodIndex = 0; lodIndex < mesh.LODModels.Length; lodIndex++)
+        {
+            var sectionIndex = 0;
+            foreach (var section in mesh.LODModels[lodIndex].Sections ?? [])
+            {
+                var slotIndex = LodMaterialMap.Resolve(
+                    section.MaterialIndex,
+                    materialMaps[lodIndex],
+                    materialCount,
+                    $"SkeletalMesh '{meshExport.InstancedFullPath}' LOD {lodIndex} section");
+                if (!usedSections.TryGetValue(slotIndex, out var slotSections))
+                {
+                    slotSections = [];
+                    usedSections.Add(slotIndex, slotSections);
+                }
+                slotSections.Add(new MeshMaterialEvidenceSection(lodIndex, sectionIndex));
+                sectionIndex++;
+            }
+        }
+        return usedSections;
     }
 
     public IReadOnlySet<string> GetMaterialEvidenceDependencies(AssetIdentity source)
@@ -852,6 +943,19 @@ public sealed record MeshMaterialEvidence(
     public IReadOnlyList<ResolvedHeadMaterial> Materials =>
         Slots.Select(slot => slot.Material).ToArray();
 }
+
+/// <summary>Material source catalog used to populate assignment menus without resolving controls.</summary>
+public sealed record MeshMaterialSourceCatalog(
+    AssetIdentity Mesh,
+    IReadOnlyList<MeshMaterialSourceSlot> Slots,
+    IReadOnlySet<string> Dependencies);
+
+/// <summary>One used source slot and the family proven by its effective material root.</summary>
+public sealed record MeshMaterialSourceSlot(
+    int SlotIndex,
+    AssetIdentity Source,
+    HeadMaterialFamily Family,
+    IReadOnlyList<MeshMaterialEvidenceSection> Sections);
 
 /// <summary>One source material slot and every LOD section that consumes it.</summary>
 public sealed record MeshMaterialEvidenceSlot(

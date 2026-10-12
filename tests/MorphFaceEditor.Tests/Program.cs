@@ -34,6 +34,7 @@ var suites = new Dictionary<string, IReadOnlyList<TestCase>>(StringComparer.Ordi
         .Concat(Le2PlayerMaterialRonIdentityTests.All).ToArray(),
     ["package"] = PackageContextTests.All.Concat(FemaleBatarianTests.All).Concat(PackageIntegrityTests.All).Concat(CompletedPccCloneTests.All).Concat(CcScalpGraphSaveTests.All).Concat(ActorAssignmentInventoryTests.All)
         .Concat(ActorAssignmentTransactionTests.All).Concat(CustomMaterialEvidenceTests.All)
+        .Concat(ShaderMapOnlyReaderTests.All)
         .Concat(RonStressTests.All).Concat(InstalledAssetResolutionTests.All)
         .Concat(TextureTransferDonorPolicyTests.All)
         .Concat(SupportedMaterialGraphPolicyTests.All)

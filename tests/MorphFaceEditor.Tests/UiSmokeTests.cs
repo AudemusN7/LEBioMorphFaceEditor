@@ -863,9 +863,13 @@ public static class UiSmokeTests
 
                 TestAssert.True(viewModel.ErrorMessage is null,
                     viewModel.ErrorMessage ?? $"{extension} drop failed.");
+                var expectedWorkspaceName = Loc.Format(
+                    "loc_Shell_PackageName_DetachedMeshWorkspace", MorphFaceGame.LE2);
                 TestAssert.True(viewModel.IsDetachedMeshWorkspace &&
-                                viewModel.PackageName.Contains("Detached Mesh Workspace", StringComparison.Ordinal),
-                    $"{extension} did not publish a detached mesh workspace.");
+                                viewModel.PackageName == expectedWorkspaceName,
+                    $"{extension} did not publish the expected detached workspace name " +
+                    $"'{expectedWorkspaceName}'; got '{viewModel.PackageName}' " +
+                    $"(detached={viewModel.IsDetachedMeshWorkspace}, error='{viewModel.ErrorMessage ?? "<none>"}').");
                 TestAssert.True(viewModel.Editor is { CanEditMorphFeatures: false, CanEditBones: false },
                     $"{extension} detached mesh exposed unsupported geometry capabilities.");
                 TestAssert.True(viewModel.SaveMorphToPccCommand.CanExecute(null),
@@ -3252,6 +3256,7 @@ public static class UiSmokeTests
         var mod = new AttachmentMeshOccurrence("DLC_MOD_Test/ModHair.pcc",
             canonical, 8, 9000, TextureCatalogOrigin.Mod, 47);
         var modCopy = mod with { PackagePath = "DLC_MOD_Test/AnotherHair.pcc", ExportUIndex = 12 };
+        var samePhysicalMod = mod with { BoneCount = 99 };
         var otherMod = mod with { PackagePath = "DLC_MOD_Other/ModHair.pcc" };
         using var editor = new HairMeshEditorViewModel(
             new AssetReferenceEditingSession(null), [], "Hair", 0);
@@ -3270,15 +3275,22 @@ public static class UiSmokeTests
         editor.Selected = editor.Candidates[2];
         TestAssert.Equal(mod.PackagePath, editor.Selected.Identity?.PackagePath);
         editor.UpdateRegistryCandidates(
-            [new AttachmentMeshCandidate(canonical, biog, [biog, modCopy, mod, otherMod])
+            [new AttachmentMeshCandidate(canonical, biog, [biog, modCopy, mod, samePhysicalMod, otherMod])
                 { IsEligibleOfficialDefault = true }],
             isPlayerWorkspace: false);
         TestAssert.Equal(3, editor.Candidates.Count);
         TestAssert.Equal(mod.PackagePath, editor.Selected.Identity?.PackagePath);
-        TestAssert.True(!editor.Candidates.Any(option => option.Identity?.PackagePath == modCopy.PackagePath),
-            "Repeated copies within one DLC mod bloated the attachment picker.");
-        TestAssert.True(!editor.Candidates.Any(option => option.Identity?.PackagePath == otherMod.PackagePath),
-            "A copy in another DLC folder duplicated the same mod mesh identity.");
+        TestAssert.Equal(mod.ExportUIndex, editor.Selected.Identity?.UIndex);
+        TestAssert.True(!editor.Candidates.Any(option => option.Identity?.PackagePath == modCopy.PackagePath ||
+                option.Identity?.PackagePath == otherMod.PackagePath),
+            "Automatic package copies duplicated the selected mod mesh identity.");
+        TestAssert.Equal(1, editor.Candidates.Count(option =>
+            string.Equals(option.Identity?.PackagePath, mod.PackagePath, StringComparison.OrdinalIgnoreCase) &&
+            option.Identity?.UIndex == mod.ExportUIndex));
+        TestAssert.True(editor.Candidates.Single(option =>
+                string.Equals(option.Identity?.PackagePath, mod.PackagePath, StringComparison.OrdinalIgnoreCase))
+                .SourceDescription.Contains("47 bones"),
+            "A repeated row for one physical package export replaced the retained occurrence metadata.");
         var seekfree = new AssetIdentity("DLC_MOD_Test/BIOG_HMF_HIR_PRO.pcc",
             "Hair.HMF_HIR_Custom_MDL", 7, "SkeletalMesh");
         using var localEditor = new HairMeshEditorViewModel(
@@ -3287,8 +3299,9 @@ public static class UiSmokeTests
             [new AttachmentMeshCandidate(canonical, mod, [mod, modCopy, otherMod])], false);
         TestAssert.Equal(2, localEditor.Candidates.Count);
         TestAssert.Equal(seekfree, localEditor.Selected.Identity);
-        TestAssert.True(!localEditor.Candidates.Any(option => option.Identity?.PackagePath == mod.PackagePath),
-            "The level-file copy duplicated the open seekfree mesh from the same DLC mod.");
+        TestAssert.True(!localEditor.Candidates.Any(option => option.Identity?.PackagePath == mod.PackagePath ||
+                option.Identity?.PackagePath == modCopy.PackagePath || option.Identity?.PackagePath == otherMod.PackagePath),
+            "Automatic mod copies duplicated the local seekfree mesh identity.");
         var levelCopy = otherMod with { PackagePath = "DLC_MOD_Level/BioA_STA20_10_DSG.pcc" };
         var levelIdentity = new AssetIdentity(levelCopy.PackagePath, canonical, 8, "SkeletalMesh");
         using var levelEditor = new HairMeshEditorViewModel(
@@ -3297,6 +3310,10 @@ public static class UiSmokeTests
             [new AttachmentMeshCandidate(canonical, mod, [mod])], false);
         TestAssert.Equal(2, levelEditor.Candidates.Count);
         TestAssert.Equal(levelIdentity, levelEditor.Selected.Identity);
+        TestAssert.True(!levelEditor.Candidates.Any(option =>
+                string.Equals(option.Identity?.PackagePath, mod.PackagePath, StringComparison.OrdinalIgnoreCase) &&
+                option.Identity?.UIndex == mod.ExportUIndex),
+            "An automatic mod copy duplicated the selected level mesh identity.");
         var manual = new AttachmentMeshOccurrence("C:\\Custom\\BIOG_HMF_HIR_Custom.pcc",
             "Hair.HMF_HIR_Custom_MDL", 2, 0, TextureCatalogOrigin.Manual, 48);
         editor.UpdateRegistryCandidates(
@@ -3888,38 +3905,21 @@ public static class UiSmokeTests
         TestAssert.Equal(byte.MaxValue, pixel[3]);
     }
 
-    private sealed class SmokeApplication : Application
+    private static void RunOnSmokeUi(Action<SmokeApplication> action, TimeSpan? timeout = null)
     {
-        // Application queues startup before Run; dispatcher-pumping checks must
-        // never launch the editor or load a developer's working palette/AppData.
-        public void InitializeComponent()
-        {
-            Resources.MergedDictionaries.Add(new ResourceDictionary
-            {
-                Source = new Uri("/MorphFaceEditor;component/Themes/EditorTheme.xaml", UriKind.Relative)
-            });
-            Resources.Add("BooleanToVisibilityConverter", new BooleanToVisibilityConverter());
-            Resources.Add("PreviewRenderModeLabelConverter", new PreviewRenderModeLabelConverter());
-            Resources.MergedDictionaries.Add(new ResourceDictionary
-            {
-                Source = new Uri("/MorphFaceEditor;component/Localisation/LanguageFlags.xaml", UriKind.Relative)
-            });
-            Loc.Initialize(Resources, "en-GB");
-        }
+        WpfTestDispatcher.Invoke(
+            () => action(Application.Current as SmokeApplication
+                ?? throw new InvalidOperationException("Smoke UI application was not created.")),
+            timeout ?? TimeSpan.FromSeconds(15));
     }
 
     private static void SidePanesFitWindow()
     {
-        Exception? failure = null;
         var preferenceRoot = Path.Combine(Path.GetTempPath(), $"MFE-PanePreferences-{Guid.NewGuid():N}");
-        var thread = new Thread(() =>
+        try
         {
-            SmokeApplication? application = null;
-            try
+            RunOnSmokeUi(application =>
             {
-                application = new SmokeApplication();
-                application.InitializeComponent();
-                application.ShutdownMode = ShutdownMode.OnExplicitShutdown;
                 using var reader = new MorphFacePackageReader();
                 using var viewModel = CreateMainWindowViewModel(reader);
                 var preferencePath = Path.Combine(preferenceRoot, "preferences.json");
@@ -4015,31 +4015,18 @@ public static class UiSmokeTests
                     "Restoring wide pane preferences overflowed a smaller startup window.");
                 reopened.Close();
                 window.Close();
-            }
-            catch (Exception exception) { failure = exception; }
-            finally
-            {
-                application?.Shutdown();
-                if (Directory.Exists(preferenceRoot)) Directory.Delete(preferenceRoot, recursive: true);
-            }
-        });
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-        if (!thread.Join(TimeSpan.FromSeconds(15))) throw new TimeoutException("Pane layout check timed out.");
-        if (failure is not null) throw new Exception($"Pane layout check failed: {failure}", failure);
+            });
+        }
+        finally
+        {
+            if (Directory.Exists(preferenceRoot)) Directory.Delete(preferenceRoot, recursive: true);
+        }
     }
 
     private static void HdrPickerConstructs()
     {
-        Exception? failure = null;
-        var thread = new Thread(() =>
+        RunOnSmokeUi(application =>
         {
-            SmokeApplication? application = null;
-            try
-            {
-                application = new SmokeApplication();
-                application.InitializeComponent();
-                application.ShutdownMode = ShutdownMode.OnExplicitShutdown;
                 HdrPickerControlsPreserveAndScale();
                 using var reader = new MorphFacePackageReader();
                 using var viewModel = CreateMainWindowViewModel(reader);
@@ -4304,26 +4291,7 @@ public static class UiSmokeTests
                 actorChooser.Show();
                 actorChooser.UpdateLayout();
                 actorChooser.Close();
-            }
-            catch (Exception exception)
-            {
-                failure = exception;
-            }
-            finally
-            {
-                application?.Shutdown();
-            }
-        });
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-        if (!thread.Join(TimeSpan.FromSeconds(10)))
-        {
-            throw new TimeoutException("HDR picker construction did not finish within ten seconds.");
-        }
-        if (failure is not null)
-        {
-            throw new Exception($"HDR picker failed during construction: {failure}", failure);
-        }
+        }, TimeSpan.FromSeconds(10));
     }
 
     private static void HdrPickerControlsPreserveAndScale()
@@ -5124,9 +5092,9 @@ public static class UiSmokeTests
 
         TestAssert.Equal("scalp", profile.GetMaterialSubcategory(
             "HED_Scalp_Mask_Scalar", MaterialParameterKind.Scalar));
-        TestAssert.Equal("scalp", profile.GetMaterialSubcategory(
+        TestAssert.Equal("hair", profile.GetMaterialSubcategory(
             "Highlight1Color", MaterialParameterKind.Vector));
-        TestAssert.Equal("scalp", profile.GetMaterialSubcategory(
+        TestAssert.Equal("hair", profile.GetMaterialSubcategory(
             "Highlight2Colour_Vector", MaterialParameterKind.Vector));
         var highlightSession = new MorphFaceEditor.Core.Editing.MaterialEditingSession(
             MorphFaceMaterialOverrides.Empty, ResolvedHeadMaterialSet.Empty);
@@ -5202,7 +5170,7 @@ public static class UiSmokeTests
         TestAssert.Equal("Face Mask Alpha Strength", faceMask.Label);
         TestAssert.Equal("Scalp Opacity", scalpMask.Label);
         TestAssert.Equal("scalp", profile.GetMaterialSubcategory("Mask", MaterialParameterKind.Scalar));
-        TestAssert.Equal("Hair Diffuse Texture", profile.DescribeMaterial(HumanMaterialProfiles.Describe(
+        TestAssert.Equal("Hair Diffuse Texture (Mesh)", profile.DescribeMaterial(HumanMaterialProfiles.Describe(
             "HAIR_ADDN_Diff", MaterialParameterKind.Texture)).Label);
         TestAssert.Equal("surface", profile.GetMaterialSubcategory(
             "Iris_Colour_Multiplier", MaterialParameterKind.Scalar));
@@ -5293,18 +5261,18 @@ public static class UiSmokeTests
         TestAssert.Equal("makeup", profile.GetMaterialSubcategory("HED_Makeup_Mask", MaterialParameterKind.Texture));
         TestAssert.Equal("additions", profile.GetMaterialCategory("HED_Brow_Tint_Scalar", MaterialParameterKind.Scalar));
         TestAssert.Equal("makeup", profile.GetMaterialSubcategory("HED_Lips_Tint_Vector", MaterialParameterKind.Vector));
-        TestAssert.Equal("material-hair", profile.GetMaterialSubcategory("Hightlight1Intensity", MaterialParameterKind.Scalar));
-        TestAssert.Equal("scalp", profile.GetMaterialSubcategory("Highlight2Color", MaterialParameterKind.Vector));
-        TestAssert.Equal("scalp", profile.GetMaterialSubcategory("Highlight1Colour_Vector", MaterialParameterKind.Vector));
-        TestAssert.Equal("material-hair", profile.GetMaterialSubcategory("Highlight2Intensity", MaterialParameterKind.Scalar));
-        TestAssert.Equal("material-hair", profile.GetMaterialSubcategory("Highlight1SpecExp_Scalar", MaterialParameterKind.Scalar));
+        TestAssert.Equal("hair", profile.GetMaterialSubcategory("Hightlight1Intensity", MaterialParameterKind.Scalar));
+        TestAssert.Equal("hair", profile.GetMaterialSubcategory("Highlight2Color", MaterialParameterKind.Vector));
+        TestAssert.Equal("hair", profile.GetMaterialSubcategory("Highlight1Colour_Vector", MaterialParameterKind.Vector));
+        TestAssert.Equal("hair", profile.GetMaterialSubcategory("Highlight2Intensity", MaterialParameterKind.Scalar));
+        TestAssert.Equal("hair", profile.GetMaterialSubcategory("Highlight1SpecExp_Scalar", MaterialParameterKind.Scalar));
         TestAssert.Equal("Eyeshadow Strength", profile.DescribeMaterial(HumanMaterialProfiles.Describe(
             "HED_Brow_Tint_Scalar", MaterialParameterKind.Scalar)).Label);
         TestAssert.Equal("Eyeshadow Colour", profile.DescribeMaterial(HumanMaterialProfiles.Describe(
             "HED_Brow_Tint_Vector", MaterialParameterKind.Vector)).Label);
-        TestAssert.Equal("Makeup Strength", profile.DescribeMaterial(HumanMaterialProfiles.Describe(
+        TestAssert.Equal("Eyeliner Strength", profile.DescribeMaterial(HumanMaterialProfiles.Describe(
             "HED_EyeShadow_Tint_Scalar", MaterialParameterKind.Scalar)).Label);
-        TestAssert.Equal("Makeup Colour", profile.DescribeMaterial(HumanMaterialProfiles.Describe(
+        TestAssert.Equal("Eyeliner Colour", profile.DescribeMaterial(HumanMaterialProfiles.Describe(
             "HED_EyeShadow_Tint_Vector", MaterialParameterKind.Vector)).Label);
         TestAssert.Equal("Primary Brow Colour", profile.DescribeMaterial(HumanMaterialProfiles.Describe(
             "HED_Addn_Colour_Vector", MaterialParameterKind.Vector)).Label);
@@ -5327,7 +5295,7 @@ public static class UiSmokeTests
         TestAssert.True(
             profile.GetMaterialSortOrder("HED_EyeShadow_Tint_Scalar", MaterialParameterKind.Scalar) <
             profile.GetMaterialSortOrder("HED_Brow_Tint_Scalar", MaterialParameterKind.Scalar),
-            "Makeup Strength was not placed first in the Makeup category.");
+            "Eyeliner Strength was not placed first in the Makeup category.");
         var eyeballsNarrow = profile.Describe(new MorphFaceEditor.Core.Deformation.ResolvedMorphFeature(
             new MorphFeatureValue("eyes_RotateIn", 0), target,
             MorphFaceEditor.Core.Deformation.MorphFeatureResolutionKind.DirectTarget, null), true);

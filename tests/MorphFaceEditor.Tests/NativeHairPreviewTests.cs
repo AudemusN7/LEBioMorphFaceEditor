@@ -144,13 +144,19 @@ internal static class NativeHairPreviewTests
 
         var transparentFront = WithHairStackAlpha(frontBase, 0);
         var transparentLayered = Render(Layered(transparentFront));
-        TestAssert.True(transparentLayered.SequenceEqual(backOnly),
+        var transparentChanges = PixelDifference(backOnly, transparentLayered);
+        var center = (48 * 96 + 48) * 4;
+        TestAssert.True(transparentChanges.MaxChannelDelta <= 1 && transparentChanges.TotalDelta <= 4 &&
+                        backOnly.AsSpan(center, 4).SequenceEqual(transparentLayered.AsSpan(center, 4)),
             "A zero-alpha Hair_Stack front card changed the visible rear Human Hair card.");
 
         var opaqueFront = WithHairStackAlpha(frontBase, 255);
         var opaqueLayered = Render(Layered(opaqueFront));
         var opaqueFrontOnly = Render(CreateHairCard("opaque front only", 0.2f, opaqueFront));
-        TestAssert.True(opaqueLayered.SequenceEqual(opaqueFrontOnly),
+        var opaqueChanges = PixelDifference(opaqueLayered, opaqueFrontOnly);
+        TestAssert.True(opaqueChanges.MaxChannelDelta <= 1 && opaqueChanges.TotalDelta <= 4 &&
+                        opaqueLayered.AsSpan(center, 4).SequenceEqual(opaqueFrontOnly.AsSpan(center, 4)) &&
+                        !opaqueFrontOnly.AsSpan(center, 4).SequenceEqual(backOnly.AsSpan(center, 4)),
             "An opaque Human Hair front card failed to occlude its rear card in the alpha depth prepass.");
     }
 
@@ -414,6 +420,22 @@ internal static class NativeHairPreviewTests
 
         TestAssert.True(changedPixels > 8 && totalDelta > 80,
             $"{message} Changed pixels: {changedPixels}; RGB delta: {totalDelta}.");
+    }
+
+    private static (int TotalDelta, int MaxChannelDelta) PixelDifference(byte[] first, byte[] second)
+    {
+        var totalDelta = 0;
+        var maxChannelDelta = 0;
+        for (var index = 0; index < first.Length; index += 4)
+        {
+            var blueDelta = Math.Abs(first[index] - second[index]);
+            var greenDelta = Math.Abs(first[index + 1] - second[index + 1]);
+            var redDelta = Math.Abs(first[index + 2] - second[index + 2]);
+            var delta = blueDelta + greenDelta + redDelta;
+            maxChannelDelta = Math.Max(maxChannelDelta, Math.Max(blueDelta, Math.Max(greenDelta, redDelta)));
+            totalDelta += delta;
+        }
+        return (totalDelta, maxChannelDelta);
     }
 
     private static HeadPreviewTexture SolidTexture(

@@ -883,12 +883,24 @@ public static class PackageContextTests
         MEPackageHandler.CreateAndSavePackage(packagePath, MEGame.LE2);
         try
         {
-            using var package = MEPackageHandler.OpenMEPackage(packagePath, forceLoadFromDisk: true);
-            var face = package.CreateExport("Face", "BioMorphFace", indexed: false);
-            var hat = package.CreateExport("HMM_HAT_Test_MAT", "MaterialInstanceConstant", indexed: false);
+            int faceIndex;
+            int hatIndex;
+            using (var package = MEPackageHandler.OpenMEPackage(packagePath, forceLoadFromDisk: true))
+            {
+                var face = package.CreateExport("Face", "BioMorphFace", indexed: false);
+                var hat = package.CreateExport("HMM_HAT_Test_MAT", "MaterialInstanceConstant", indexed: false);
+                faceIndex = face.UIndex;
+                hatIndex = hat.UIndex;
+                package.Save();
+            }
+
+            using var reopened = MEPackageHandler.OpenMEPackage(packagePath, forceLoadFromDisk: true);
+            var reopenedFace = reopened.GetUExport(faceIndex);
+            var reopenedHat = reopened.GetUExport(hatIndex);
             using var cache = new PackageCache();
             var reader = new MorphFaceMaterialReader(cache, new GamePackageReferenceResolver(cache));
-            var material = reader.Read(face, [], [hat]).Materials.Find(MorphFacePackageReader.ToIdentity(hat)!);
+            var material = reader.Read(reopenedFace, [], [reopenedHat]).Materials.Find(
+                MorphFacePackageReader.ToIdentity(reopenedHat)!);
             TestAssert.True(material?.IsPreviewOnlyAttachment == true,
                 "The Hat material was not marked as preview-only during package reload.");
         }

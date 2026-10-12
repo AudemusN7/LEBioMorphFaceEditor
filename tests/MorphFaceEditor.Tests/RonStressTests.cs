@@ -10,8 +10,8 @@ using MorphFaceEditor.Services;
 namespace MorphFaceEditor.Tests;
 
 /// <summary>
-/// Optional local-only evidence tests for RON import. Fixtures stay in the
-/// ignored repository test folder and are read in place, never copied to output.
+/// Optional local-only evidence tests for RON import. Fixtures are read in place,
+/// never copied to output.
 /// </summary>
 internal static class RonStressTests
 {
@@ -187,7 +187,7 @@ internal static class RonStressTests
         var directory = FindCorpusDirectory();
         if (directory is null)
         {
-            throw new TestSkippedException("tests/RON Stress Test is not present.");
+            throw new TestSkippedException("Local RON corpus fixtures are not present.");
         }
         var files = Directory.GetFiles(directory, "*.ron", SearchOption.AllDirectories)
             .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
@@ -316,7 +316,7 @@ internal static class RonStressTests
         var directory = FindCorpusDirectory();
         if (directory is null)
         {
-            throw new TestSkippedException("tests/RON Stress Test is not present.");
+            throw new TestSkippedException("Local RON corpus fixtures are not present.");
         }
         LegendaryExplorerCoreRuntime.Initialize();
         var service = new StandalonePlayerMorphImportService();
@@ -668,8 +668,10 @@ internal static class RonStressTests
         var current = new DirectoryInfo(Directory.GetCurrentDirectory());
         while (current is not null)
         {
-            var candidate = Path.Combine(current.FullName, "tests", "RON Stress Test");
-            if (Directory.Exists(candidate)) return candidate;
+            var fixtureDirectory = Path.Combine(current.FullName, "fixtures", "RON_Test");
+            if (Directory.Exists(fixtureDirectory)) return fixtureDirectory;
+            var legacyDirectory = Path.Combine(current.FullName, "tests", "RON Stress Test");
+            if (Directory.Exists(legacyDirectory)) return legacyDirectory;
             current = current.Parent;
         }
         return null;

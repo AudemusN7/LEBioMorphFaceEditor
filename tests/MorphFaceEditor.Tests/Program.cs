@@ -25,6 +25,7 @@ var suites = new Dictionary<string, IReadOnlyList<TestCase>>(StringComparer.Ordi
         .Concat(VisorLensAnimationLifecycleTests.All)
         .Concat(RandomisationPublicationTests.All)
         .Concat(ApplicationSettingsTests.All)
+        .Concat(LoggingTests.All)
         .Concat(LocalisationTests.All)
         .Concat(TextureRegistrySettingsTests.All)
         .Concat(HairMeshManualSelectionTests.All)

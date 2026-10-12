@@ -27,7 +27,7 @@ public partial class FirstRunWelcomeWindow : Window
         }
         catch (Exception exception)
         {
-            AppLog.Error("The GitHub tutorial could not be opened.", exception);
+            AppLog.Error("TUTORIAL:OPEN-FAILED", exception);
             _ = new EditorMessageWindow(
                 Loc.Text("loc_FirstRunWelcomeWindow_TutorialUnavailable"),
                 Loc.Format("loc_FirstRunWelcomeWindow_TutorialCouldNotOpen", TutorialUri.AbsoluteUri))

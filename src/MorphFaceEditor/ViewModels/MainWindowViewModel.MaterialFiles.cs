@@ -39,7 +39,7 @@ public sealed partial class MainWindowViewModel
                 if (target is null)
                 {
                     ErrorMessage = Loc.Text("loc_Shell_Status_RonImportFailedTheCurrent");
-                    AppLog.Warning("Material RON has no default face metadata; no workspace was opened.");
+                    AppLog.Warning("RON:MATERIAL-IMPORT-BLOCKED REASON:no-default-face WORKSPACE:none");
                     return true;
                 }
                 if (!await OpenDefaultMaterialFaceAsync(target.Value.Game, target.Value.Target, sourcePath)) return true;
@@ -109,7 +109,7 @@ public sealed partial class MainWindowViewModel
             facePath = donor.FacePath;
         }
         if (!await EnsureCanAbandonWorkspaceAsync()) return false;
-        if (!await OpenSourcePackagePathAsync(packagePath, facePath, game, standaloneNpc: !target.PlayerMorph)) return false;
+        if (!await OpenSourcePackagePathAsync(packagePath, facePath, game, standaloneNpc: !target.PlayerMorph, importedPath: sourcePath)) return false;
         foreach (var other in Faces.Where(face => face != SelectedFace).ToArray()) Faces.Remove(other);
         _standaloneImportPath = Path.GetFullPath(sourcePath);
         return Editor is not null;
@@ -159,7 +159,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception exception)
         {
-            AppLog.Error("MESH material export failed.", exception);
+            AppLog.Error("MESH:MATERIAL-EXPORT-FAILED", exception);
             ErrorMessage = exception.Message;
             Status = Loc.Text("loc_Shell_Status_MaterialExportFailedTheCurrent");
             return false;
@@ -195,7 +195,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception exception)
         {
-            AppLog.Error("MESH material import failed.", exception);
+            AppLog.Error("MESH:MATERIAL-IMPORT-FAILED", exception);
             ErrorMessage = exception.Message;
             Status = Loc.Text("loc_Shell_Status_MaterialImportFailedTheCurrent");
         }
@@ -231,7 +231,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception exception)
         {
-            AppLog.Error("Face material export failed.", exception);
+            AppLog.Error("FACE:MATERIAL-EXPORT-FAILED", exception);
             ErrorMessage = exception.Message;
             Status = Loc.Text("loc_Shell_Status_MaterialExportFailedTheCurrent2");
             return false;
@@ -269,7 +269,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception exception)
         {
-            AppLog.Error("Face material import failed.", exception);
+            AppLog.Error("FACE:MATERIAL-IMPORT-FAILED", exception);
             ErrorMessage = exception.Message;
             Status = Loc.Text("loc_Shell_Status_MaterialImportFailedTheCurrent2");
         }

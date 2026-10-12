@@ -126,7 +126,7 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
         }
         catch (Exception exception)
         {
-            AppLog.Error($"Texture registry build failed for {game}.", exception);
+            AppLog.Error($"REGISTRY:BUILD-FAILED {game}", exception);
             row.Update(previous with { State = TextureRegistryState.Failed, ErrorMessage = exception.Message });
         }
         finally
@@ -170,7 +170,7 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
                 }
                 catch (Exception exception)
                 {
-                    AppLog.Error($"Texture registry build failed for {row.Game} during Rebuild All.", exception);
+                    AppLog.Error($"REGISTRY:BUILD-FAILED {row.Game} MODE:ALL", exception);
                     row.Update(previous with { State = TextureRegistryState.Failed, ErrorMessage = exception.Message });
                     break;
                 }
@@ -197,7 +197,7 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
             cancellationToken);
         if (failures.Count == 0) return status;
         var report = _store.GetManualReportPath(game);
-        AppLog.Error($"{game} custom asset relink failures: {string.Join(" | ", failures)}",
+        AppLog.Error($"REGISTRY:RELINK-FAILED {game} REASONS:{string.Join(" | ", failures)}",
             new FileNotFoundException($"See {report}"));
         return status with
         {

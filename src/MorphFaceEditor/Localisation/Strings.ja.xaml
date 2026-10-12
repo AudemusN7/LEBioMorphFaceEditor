@@ -1091,7 +1091,7 @@
   <system:String x:Key="loc_Settings_ExportedTitle" xml:space="preserve">診断 ZIP をエクスポートしました</system:String>
   <system:String x:Key="loc_Settings_GenerateLogs" xml:space="preserve">トラブルシューティングログを作成</system:String>
   <system:String x:Key="loc_Settings_GenerateLogsButton" xml:space="preserve">ログをエクスポート</system:String>
-  <system:String x:Key="loc_Settings_GenerateLogsDescription" xml:space="preserve">最新のアプリケーションログ、編集中の内容を含むワークスペース、メッシュ／テクスチャデータベースを ZIP にまとめてエクスポートします。トラブルシューティングのため Audemus に送ってください。</system:String>
+  <system:String x:Key="loc_Settings_GenerateLogsDescription" xml:space="preserve">最近のアプリケーションログ、編集中の内容を含むワークスペース、メッシュ／テクスチャデータベースを ZIP にまとめてエクスポートします。トラブルシューティングのため Audemus に送ってください。</system:String>
   <system:String x:Key="loc_Settings_Heading" xml:space="preserve">設定</system:String>
   <system:String x:Key="loc_Settings_Language" xml:space="preserve">言語</system:String>
   <system:String x:Key="loc_Settings_LanguageDescription" xml:space="preserve">インターフェースの言語を選択します。変更はエディターの再起動後に反映されます。</system:String>

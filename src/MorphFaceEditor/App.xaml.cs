@@ -19,15 +19,17 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        AppLog.StartSession(e.Args, typeof(App).Assembly.GetName().Version);
+        foreach (var failure in MorphFacePackageWorkspace.CleanupOrphanedFiles())
+            AppLog.Warning($"WORKSPACE:CLEANUP {failure}");
         Loc.Initialize(Resources, ApplicationPreferencesStore.CreateDefault().Current.Language);
-        AppLog.Information($"Application starting; version {typeof(App).Assembly.GetName().Version}.");
         DispatcherUnhandledException += (_, args) =>
-            AppLog.Error("Unhandled WPF dispatcher exception.", args.Exception);
+            AppLog.Error("APP:DISPATCHER-EXCEPTION", args.Exception);
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
-            AppLog.Error("Unhandled application-domain exception.",
+            AppLog.Error("APP:DOMAIN-EXCEPTION",
                 args.ExceptionObject as Exception ?? new Exception(args.ExceptionObject?.ToString()));
         TaskScheduler.UnobservedTaskException += (_, args) =>
-            AppLog.Error("Unobserved task exception.", args.Exception);
+            AppLog.Error("APP:TASK-EXCEPTION", args.Exception);
         LegendaryExplorerCoreRuntime.Initialize(TaskScheduler.FromCurrentSynchronizationContext());
         Themes = ThemeManager.CreateDefault(Resources);
 

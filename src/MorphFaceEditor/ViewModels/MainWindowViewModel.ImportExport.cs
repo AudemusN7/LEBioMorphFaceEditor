@@ -43,7 +43,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception exception)
         {
-            AppLog.Error($"{format} morph export failed.", exception);
+            AppLog.Error($"MORPH:EXPORT-FAILED FORMAT:{format}", exception);
             ErrorMessage = Loc.Format("loc_Shell_Error_TheMorphMeshCouldNot", exception.Message);
             Status = Loc.Text("loc_Shell_Status_MorphMeshExportFailedThe");
         }
@@ -84,7 +84,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception exception)
         {
-            AppLog.Error("RON morph export failed.", exception);
+            AppLog.Error("RON:EXPORT-FAILED", exception);
             ErrorMessage = Loc.Format("loc_Shell_Error_TheRonHeadMorphCould", exception.Message);
             Status = Loc.Text("loc_Shell_Status_RonExportFailedThePcc");
         }
@@ -158,7 +158,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception exception)
         {
-            AppLog.Error("New player morph creation failed.", exception);
+            AppLog.Error("PLAYER:CREATE-FAILED", exception);
             ErrorMessage = Loc.Format("loc_Shell_Error_ThePlayerMorphCouldNot", exception.Message);
             Status = Loc.Text("loc_Shell_Status_NewPlayerMorphFailedThe");
         }
@@ -427,6 +427,7 @@ public sealed partial class MainWindowViewModel
             TrackSourceFile(sourcePath, selected.InstancedPath, SourceFileFormat.MorphRon);
             _hasWorkspaceChanges = false;
             PackagePath = _packageWorkspace.SourcePath;
+            LogWorkspaceCreated("NPC", targetGame, sourcePath, _packageWorkspace.SourcePath);
             _referenceCatalog = references;
             FaceSearchText = string.Empty;
             Faces.Clear();
@@ -475,7 +476,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception exception)
         {
-            AppLog.Error($"Standalone NPC import failed for '{sourcePath}' as {targetGame} {archetype}.", exception);
+            AppLog.Error($"NPC:IMPORT-FAILED {archetype} {targetGame} FILE:{sourcePath}", exception);
             ErrorMessage = Loc.Format("loc_Shell_Error_TheStandaloneNpcMorphCould", exception.Message);
             Status = Loc.Text("loc_Shell_Status_NpcImportFailedTheCurrent");
         }
@@ -529,7 +530,7 @@ public sealed partial class MainWindowViewModel
             }
             catch (Exception exception)
             {
-                AppLog.Error($"Mesh analysis failed for '{sourcePath}' as {game}.", exception);
+                AppLog.Error($"MESH:ANALYSIS-FAILED {game} FILE:{sourcePath}", exception);
                 ErrorMessage = Loc.Format("loc_Shell_Error_TheMeshCouldNotBe", exception.Message);
                 Status = Loc.Text("loc_Shell_Status_MeshImportFailedTheCurrent");
                 return;
@@ -594,8 +595,7 @@ public sealed partial class MainWindowViewModel
                 }
                 else
                 {
-                    AppLog.Information($"The {game} mesh/texture database is unavailable; " +
-                        "Player RON import will use only assets already present in its staged player package.");
+                    AppLog.Verbose($"REGISTRY:UNAVAILABLE {game} IMPORT:PLAYER-RON ASSETS:staged-package-only");
                 }
                 if (career is not null)
                 {
@@ -693,6 +693,8 @@ public sealed partial class MainWindowViewModel
                 meshRecognition = result.Recognition;
             }
             _standaloneImportPath = Path.GetFullPath(career?.SourcePath ?? sourcePath);
+            LogWorkspaceCreated(newPlayerMode ? "NEW-PLAYER" : "PLAYER", game,
+                career?.SourcePath ?? sourcePath, _packageWorkspace!.SourcePath, append: appendingToCurrentGame);
             if (isRon)
             {
                 // A classified Player RON's LOD0 array is ordered for the exact
@@ -745,7 +747,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception exception)
         {
-            AppLog.Error($"Standalone player import failed for '{sourcePath}' as {game}.", exception);
+            AppLog.Error($"PLAYER:IMPORT-FAILED {game} FILE:{sourcePath}", exception);
             ErrorMessage = career is not null ? FormatPcsavError(exception) :
                 Loc.Format("loc_Shell_Error_TheStandalonePlayerMorphCould", exception.Message);
             Status = Loc.Text("loc_Shell_Status_StandaloneImportFailedTheCurrent");
@@ -773,6 +775,7 @@ public sealed partial class MainWindowViewModel
         _relativeBakeFacePaths.Clear();
         _hasWorkspaceChanges = false;
         PackagePath = Path.GetFullPath(sourcePath);
+        LogWorkspaceCreated("CUSTOM-MESH", game, sourcePath);
         _referenceCatalog = new PackageReferenceCatalog([], []);
         FaceSearchText = string.Empty;
         Faces.Clear();

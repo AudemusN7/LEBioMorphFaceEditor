@@ -1093,7 +1093,7 @@ Vous devrez réappliquer vos préférences à la réouverture de l’éditeur. L
   <system:String x:Key="loc_Settings_ExportedTitle" xml:space="preserve">Archive ZIP de diagnostic exportée</system:String>
   <system:String x:Key="loc_Settings_GenerateLogs" xml:space="preserve">Générer les journaux de dépannage</system:String>
   <system:String x:Key="loc_Settings_GenerateLogsButton" xml:space="preserve">Exporter les journaux</system:String>
-  <system:String x:Key="loc_Settings_GenerateLogsDescription" xml:space="preserve">Exporte une archive ZIP contenant le dernier journal de l’application, l’espace de travail ouvert avec les modifications actuelles et les bases de données de maillages et de textures. Envoyez-la à Audemus pour obtenir de l’aide.</system:String>
+  <system:String x:Key="loc_Settings_GenerateLogsDescription" xml:space="preserve">Exporte une archive ZIP contenant les journaux récents de l’application, l’espace de travail ouvert avec les modifications actuelles et les bases de données de maillages et de textures. Envoyez-la à Audemus pour obtenir de l’aide.</system:String>
   <system:String x:Key="loc_Settings_Heading" xml:space="preserve">PARAMÈTRES</system:String>
   <system:String x:Key="loc_Settings_Language" xml:space="preserve">Langue</system:String>
   <system:String x:Key="loc_Settings_LanguageDescription" xml:space="preserve">Choisissez la langue de l’interface. Les changements prennent effet au redémarrage de l’éditeur.</system:String>

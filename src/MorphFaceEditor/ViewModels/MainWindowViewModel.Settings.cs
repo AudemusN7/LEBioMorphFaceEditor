@@ -27,7 +27,7 @@ public sealed partial class MainWindowViewModel
         IsBusy = true;
         try
         {
-            AppLog.Information("Generating diagnostic ZIP.");
+            AppLog.Information($"DIAGNOSTICS:EXPORT FILE:\"{destination}\" LOG-DAYS:3");
             return await Task.Run(() =>
             {
                 Directory.CreateDirectory(scratch);
@@ -85,13 +85,13 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception exception)
         {
-            AppLog.Error("Diagnostic ZIP export failed.", exception);
+            AppLog.Error("DIAGNOSTICS:EXPORT-FAILED", exception);
             throw;
         }
         finally
         {
             try { if (Directory.Exists(scratch)) Directory.Delete(scratch, recursive: true); }
-            catch (Exception exception) { AppLog.Warning($"Diagnostic scratch cleanup failed: {exception.Message}"); }
+            catch (Exception exception) { AppLog.Warning($"DIAGNOSTICS:CLEANUP-FAILED REASON:{exception.Message}"); }
             finally { IsBusy = false; }
         }
     }

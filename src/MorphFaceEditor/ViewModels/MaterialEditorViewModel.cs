@@ -330,8 +330,7 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
                             throw new InvalidDataException(
                                 Loc.Format("loc_VM_material_randomisationMissingParameter", family.Key, member.Key));
                         }
-                        AppLog.Information(
-                            $"Ignored unsupported optional member '{member.Key}' in randomisation texture family '{family.Key}'.");
+                        AppLog.Verbose($"MATERIAL:OPTIONAL-SKIP FAMILY:{family.Key} MEMBER:{member.Key} REASON:unsupported");
                         continue;
                     }
                     try
@@ -340,15 +339,13 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
                     }
                     catch (Exception exception) when (!required)
                     {
-                        AppLog.Information(
-                            $"Ignored unresolved optional member '{member.Key}' in randomisation texture family " +
-                            $"'{family.Key}': {exception.Message}");
+                        AppLog.Verbose($"MATERIAL:OPTIONAL-SKIP FAMILY:{family.Key} MEMBER:{member.Key} REASON:unresolved {exception.Message}");
                     }
                 }
             }
             catch (Exception exception)
             {
-                AppLog.Warning($"Skipped unresolved randomisation texture family '{family.Key}': {exception.Message}");
+                AppLog.Warning($"MATERIAL:FAMILY-SKIP FAMILY:{family.Key} REASON:unresolved {exception.Message}");
                 failedTextureFamilySignatures.Add(MaterialRandomiser.TextureFamilySignature(family.Value));
                 continue;
             }

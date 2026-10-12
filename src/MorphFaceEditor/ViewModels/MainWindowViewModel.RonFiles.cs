@@ -46,7 +46,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception exception)
         {
-            AppLog.Error("Morphs-only RON import failed.", exception);
+            AppLog.Error("RON:MORPHS-IMPORT-FAILED", exception);
             ErrorMessage = UserFacingMessageFormatter.Format(exception);
             Status = Loc.Text("loc_RonFiles_ImportFailed");
             return true;
@@ -119,7 +119,7 @@ public sealed partial class MainWindowViewModel
                 if (wasFixed) _fixedBakeFacePaths.Add(face.InstancedPath);
                 if (refreshAttempted) await RefreshWorkspaceAsync(face.InstancedPath);
             }
-            AppLog.Error("RON import onto face failed.", exception);
+            AppLog.Error("RON:FACE-IMPORT-FAILED", exception);
             ErrorMessage = UserFacingMessageFormatter.Format(exception);
             Status = Loc.Text("loc_RonFiles_ImportFailed");
         }

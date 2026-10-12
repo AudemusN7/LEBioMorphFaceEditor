@@ -96,7 +96,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception exception)
         {
-            AppLog.Error("Save As failed.", exception);
+            AppLog.Error("FILE:SAVE-AS-FAILED", exception);
             ErrorMessage = Loc.Format("loc_FileSave_Failed", UserFacingMessageFormatter.Format(exception));
             Status = Loc.Text("loc_FileSave_EditsRetained");
         }
@@ -186,7 +186,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception exception)
         {
-            AppLog.Error($"Source RON save failed for '{source.Path}'.", exception);
+            AppLog.Error($"RON:SAVE-FAILED FILE:{source.Path}", exception);
             ErrorMessage = Loc.Format("loc_FileSave_Failed", UserFacingMessageFormatter.Format(exception));
             Status = Loc.Text("loc_FileSave_EditsRetained");
             return false;

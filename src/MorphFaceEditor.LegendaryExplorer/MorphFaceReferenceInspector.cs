@@ -14,7 +14,9 @@ public sealed record MorphFaceMeshReferences(
 
 public static class MorphFaceReferenceInspector
 {
-    public static IReadOnlyList<MorphFaceMeshReferences> Inspect(string packagePath)
+    public static IReadOnlyList<MorphFaceMeshReferences> Inspect(string packagePath) => Inspect(packagePath, out _);
+
+    public static IReadOnlyList<MorphFaceMeshReferences> Inspect(string packagePath, out MorphFaceGame game)
     {
         LegendaryExplorerCoreRuntime.Initialize();
         var fullPath = Path.GetFullPath(packagePath);
@@ -24,6 +26,14 @@ public static class MorphFaceReferenceInspector
         }
 
         using var package = MEPackageHandler.OpenMEPackage(fullPath, forceLoadFromDisk: true);
+        game = package.Game switch
+        {
+            MEGame.LE1 => MorphFaceGame.LE1,
+            MEGame.LE2 => MorphFaceGame.LE2,
+            MEGame.LE3 => MorphFaceGame.LE3,
+            _ => MorphFaceGame.Unsupported
+        };
+        var packageGame = game;
         return package.Exports
             .Where(export => !export.IsDefaultObject &&
                              string.Equals(export.ClassName, "BioMorphFace", StringComparison.OrdinalIgnoreCase))
@@ -32,13 +42,7 @@ public static class MorphFaceReferenceInspector
                 var properties = export.GetProperties();
                 return new MorphFaceMeshReferences(
                     fullPath,
-                    package.Game switch
-                    {
-                        MEGame.LE1 => MorphFaceGame.LE1,
-                        MEGame.LE2 => MorphFaceGame.LE2,
-                        MEGame.LE3 => MorphFaceGame.LE3,
-                        _ => MorphFaceGame.Unsupported
-                    },
+                    packageGame,
                     export.UIndex,
                     export.InstancedFullPath,
                     properties.GetProp<ObjectProperty>("m_oBaseHead")?.ResolveToEntry(package)?.InstancedFullPath,

@@ -24,3 +24,13 @@ The application embeds canonical compressed morph targets and the randomisation 
 
 Debug command for decompressing MFTR. Path is optional
 `dotnet run --project tools/MorphFaceEditor.Research -c Release -- unpack-mftr "C:\path\to\LE1.mftr"`
+
+## Logging
+
+Daily logs live in `%LocalAppData%\LE BioMorphFace Editor\Logs`. Each session starts with `SESSION N`; records use `yyyy-MM-dd HH:mm:ss.fff zzz [INF|WAR|ERR]` followed by compact event fields. Session numbering restarts in each daily file, and a running editor rolls over at midnight.
+
+Launch `MorphFaceEditor.exe -verboselogging` for workspace refresh, face loading, registry lifecycle, feature preview/drag and optional material-member diagnostics. Ordinary logging keeps operation results, randomisation summaries, warnings and errors. In-process QA observers still receive verbose diagnostics, while the QA runner suppresses all AppData log writes.
+
+Normal randomisation uses `RAND:NOR <tag>.<morph> <game> STR<morph>/<material> SEED<morph>[/<material>]`; `-` marks an absent seed. Cursed randomisation uses `RAND:CUR` and its single shared seed.
+
+Startup removes application logs last written more than seven days ago and orphaned `*.workspace.pcc` files. Live workspace leases protect files owned by other editor instances; unleased files from older builds are preserved while another editor is running. Diagnostic ZIPs include today and the preceding two calendar days of logs, plus the current workspace and databases.

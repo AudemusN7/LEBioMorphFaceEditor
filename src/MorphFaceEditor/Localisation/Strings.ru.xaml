@@ -1091,7 +1091,7 @@
   <system:String x:Key="loc_Settings_ExportedTitle" xml:space="preserve">Диагностический ZIP-файл экспортирован</system:String>
   <system:String x:Key="loc_Settings_GenerateLogs" xml:space="preserve">Создать журналы для устранения неполадок</system:String>
   <system:String x:Key="loc_Settings_GenerateLogsButton" xml:space="preserve">Экспортировать журналы</system:String>
-  <system:String x:Key="loc_Settings_GenerateLogsDescription" xml:space="preserve">Экспортировать ZIP-файл с последним журналом приложения, открытой рабочей областью и текущими изменениями, а также базами моделей и текстур. Отправьте файл Audemus для диагностики.</system:String>
+  <system:String x:Key="loc_Settings_GenerateLogsDescription" xml:space="preserve">Экспортировать ZIP-файл с недавними журналами приложения, открытой рабочей областью и текущими изменениями, а также базами моделей и текстур. Отправьте файл Audemus для диагностики.</system:String>
   <system:String x:Key="loc_Settings_Heading" xml:space="preserve">НАСТРОЙКИ</system:String>
   <system:String x:Key="loc_Settings_Language" xml:space="preserve">Язык</system:String>
   <system:String x:Key="loc_Settings_LanguageDescription" xml:space="preserve">Выберите язык интерфейса. Изменения вступят в силу после перезапуска редактора.</system:String>

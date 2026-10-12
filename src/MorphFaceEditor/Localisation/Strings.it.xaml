@@ -1093,7 +1093,7 @@ Quando riaprirai l'editor dovrai reimpostare le preferenze. Dovrai anche ricrear
   <system:String x:Key="loc_Settings_ExportedTitle" xml:space="preserve">Archivio ZIP diagnostico esportato</system:String>
   <system:String x:Key="loc_Settings_GenerateLogs" xml:space="preserve">Genera log per la risoluzione dei problemi</system:String>
   <system:String x:Key="loc_Settings_GenerateLogsButton" xml:space="preserve">Esporta log</system:String>
-  <system:String x:Key="loc_Settings_GenerateLogsDescription" xml:space="preserve">Esporta un archivio ZIP con il log applicazione più recente, l'area di lavoro aperta con le modifiche attuali e i database di mesh e texture. Invialo ad Audemus per la risoluzione dei problemi.</system:String>
+  <system:String x:Key="loc_Settings_GenerateLogsDescription" xml:space="preserve">Esporta un archivio ZIP con i log recenti dell'applicazione, l'area di lavoro aperta con le modifiche attuali e i database di mesh e texture. Invialo ad Audemus per la risoluzione dei problemi.</system:String>
   <system:String x:Key="loc_Settings_Heading" xml:space="preserve">IMPOSTAZIONI</system:String>
   <system:String x:Key="loc_Settings_Language" xml:space="preserve">Lingua</system:String>
   <system:String x:Key="loc_Settings_LanguageDescription" xml:space="preserve">Scegli la lingua dell'interfaccia. Le modifiche avranno effetto al riavvio dell'editor.</system:String>

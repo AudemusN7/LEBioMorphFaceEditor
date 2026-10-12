@@ -34,7 +34,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception exception)
         {
-            AppLog.Error($"Actor-assignment preflight failed for '{source.InstancedPath}'.", exception);
+            AppLog.Error($"ACTOR:PREFLIGHT-FAILED FACE:{source.InstancedPath}", exception);
             ErrorMessage = Loc.Format("loc_Shell_Error_ActorAssignmentCouldNotBe", exception.Message);
             Status = Loc.Text("loc_Shell_Status_ActorAssignmentPreflightFailedThe");
             return;
@@ -73,8 +73,7 @@ public sealed partial class MainWindowViewModel
                     return;
                 }
                 Status = Loc.Format("loc_Shell_Status_AssignedAndVerifiedOnSave", result.NewMorphPath, candidate.DisplayName);
-                AppLog.Information(
-                    $"Actor morph assignment verified: '{result.OwnerPath}.{result.PropertyName}' -> '{result.NewMorphPath}'.");
+                AppLog.Information($"ACTOR:MORPH {result.OwnerPath}.{result.PropertyName} TO:{result.NewMorphPath} VERIFIED");
             }
             else
             {
@@ -91,8 +90,7 @@ public sealed partial class MainWindowViewModel
                 var changedCount = result.ChangedMaterials.Select(value => value.UIndex).Distinct().Count();
                 Status = Loc.Format("loc_Shell_Status_AssignedAndVerifiedMaterialOverrides", changedCount);
                 _dialogs.ShowInformation(Loc.Text("loc_Shell_DialogTitle_MaterialsAssigned"), BuildMaterialCompletion(result));
-                AppLog.Information(
-                    $"Actor material assignment verified for '{result.ActorPath}' on {changedCount} local MIC(s).");
+                AppLog.Information($"ACTOR:MATERIALS {result.ActorPath} MICS:{changedCount} VERIFIED");
             }
         }
         catch (Exception exception)

@@ -43,7 +43,7 @@ internal sealed class ApplicationPreferencesStore
         try { return File.Exists(path) ? JsonSerializer.Deserialize<T>(File.ReadAllText(path), Options) : default; }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
         {
-            AppLog.Warning($"Preferences could not be read from {Path.GetFileName(path)}: {exception.Message}");
+            AppLog.Warning($"PREFERENCES:READ-FAILED FILE:{Path.GetFileName(path)} REASON:{exception.Message}");
             return default;
         }
     }
@@ -88,7 +88,7 @@ internal sealed class ApplicationPreferencesStore
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            AppLog.Warning($"Preferences migration could not finish: {exception.Message}");
+            AppLog.Warning($"PREFERENCES:MIGRATION-FAILED REASON:{exception.Message}");
         }
     }
 

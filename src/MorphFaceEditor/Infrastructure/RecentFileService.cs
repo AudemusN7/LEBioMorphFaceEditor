@@ -32,6 +32,6 @@ public sealed class RecentFileService
     {
         if (_store is null) return;
         try { _store.Update(p => p with { RecentFiles = _paths.ToArray() }); }
-        catch (Exception exception) { AppLog.Warning($"Recent-file history could not be saved: {exception.Message}"); }
+        catch (Exception exception) { AppLog.Warning($"RECENTS:SAVE-FAILED REASON:{exception.Message}"); }
     }
 }

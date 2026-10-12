@@ -766,10 +766,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(HasRecentFiles));
     }
 
+    private MorphFaceGame _workspaceLogGame;
+
     private async Task<bool> OpenSourcePackagePathAsync(string selectedPath, string? preferredFacePath = null,
-        MorphFaceGame? standaloneGame = null, bool standaloneNpc = false)
+        MorphFaceGame? standaloneGame = null, bool standaloneNpc = false, string? importedPath = null)
     {
-        AppLog.Information($"Creating temporary workspace for '{selectedPath}'.");
         MorphFacePackageWorkspace workspace;
         try
         {
@@ -777,7 +778,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
         catch (Exception exception)
         {
-            AppLog.Error($"Package workspace creation failed for '{selectedPath}'.", exception);
+            AppLog.Error($"WORKSPACE:CREATE-FAILED FILE:{selectedPath}", exception);
             ErrorMessage = Loc.Format("loc_Shell_Error_PackageCouldNotOpen", exception.Message);
             Status = Loc.Text("loc_Shell_Status_PackageLoadFailed");
             return false;
@@ -796,8 +797,16 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _hasWorkspaceChanges = false;
         PackagePath = workspace.SourcePath;
         OnDirtyStateChanged();
-        return await RefreshWorkspaceAsync(preferredFacePath, clearSearch: true);
+        var opened = await RefreshWorkspaceAsync(preferredFacePath, clearSearch: true);
+        if (opened)
+            LogWorkspaceCreated(standaloneGame is null ? "PCC" : standaloneNpc ? "NPC" : "PLAYER",
+                standaloneGame ?? _workspaceLogGame, importedPath ?? selectedPath, selectedPath);
+        return opened;
     }
+
+    private static void LogWorkspaceCreated(string type, MorphFaceGame game, string sourcePath, string? seedPath = null, bool append = false) =>
+        AppLog.Information($"WORKSPACE:{(append ? "APPEND" : "CREATE")} TYPE:{type} {game} IMPORT:{Path.GetExtension(sourcePath).TrimStart('.').ToUpperInvariant()} " +
+            $"SOURCE:\"{sourcePath}\"" + (seedPath is null || seedPath == sourcePath ? "" : $" SEED:\"{seedPath}\""));
 
     private async Task<bool> RefreshWorkspaceAsync(
         string? preferredFacePath = null,
@@ -809,8 +818,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             return false;
         }
 
-        AppLog.Information(
-            $"Refreshing package workspace '{workspacePath}' (preferred face: {preferredFacePath ?? "<first>"}).");
+        AppLog.Verbose($"WORKSPACE:REFRESH FACE:{preferredFacePath ?? "<first>"} FILE:\"{workspacePath}\"");
         CancelPendingLoad();
         SetEditor(null, null);
         _referenceService.InvalidatePackage(workspacePath);
@@ -833,6 +841,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             var referencesTask = _referenceService.ReadCatalogAsync(workspacePath);
             await Task.WhenAll(catalogTask, referencesTask);
             var catalog = await catalogTask;
+            _workspaceLogGame = catalog.Game;
             _referenceCatalog = await referencesTask;
             if (clearSearch)
             {
@@ -853,12 +862,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             Status = Faces.Count == 0
                 ? Loc.Text("loc_Shell_Status_NoBioMorphFaceExports")
                 : Loc.Format("loc_Shell_Status_BioMorphFaceExportsFound", Faces.Count);
-            AppLog.Information($"Package workspace catalogue loaded: '{catalog.PackagePath}', {Faces.Count} face(s).");
+            AppLog.Verbose($"WORKSPACE:CATALOGUE FACES:{Faces.Count} FILE:\"{catalog.PackagePath}\"");
             opened = true;
         }
         catch (Exception exception)
         {
-            AppLog.Error($"Package workspace refresh failed for '{workspacePath}'.", exception);
+            AppLog.Error($"WORKSPACE:REFRESH-FAILED FILE:{workspacePath}", exception);
             ErrorMessage = Loc.Format("loc_Shell_Error_PackageCouldNotOpen", exception.Message);
             Status = Loc.Text("loc_Shell_Status_PackageLoadFailed");
         }
@@ -909,7 +918,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         IsBusy = true;
         ErrorMessage = null;
         Status = Loc.Format("loc_Shell_Status_LoadingFace", SelectedFace.DisplayName);
-        AppLog.Information($"Loading face '{SelectedFace.InstancedPath}' from temporary workspace '{workspacePath}'.");
+        AppLog.Verbose($"FACE:LOAD {SelectedFace.InstancedPath} FILE:\"{workspacePath}\"");
         try
         {
             var result = await _previewLoadService.LoadAsync(
@@ -1005,9 +1014,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 : result.Profile.IgnoresAuthoredGeometry
                     ? Loc.Format("loc_Shell_Status_LoadedFaceBaseHeadPreview", SelectedFace.DisplayName, result.Profile.DisplayName, result.EditingSession.EditBlockReason)
                 : Loc.Format("loc_Shell_Status_LoadedFaceBakedGeometryFallback", SelectedFace.DisplayName, result.Profile.DisplayName, result.EditingSession.EditBlockReason);
-            AppLog.Information(
-                $"Face loaded: '{LoadedFacePath}', editable={result.EditingSession.CanEdit}, " +
-                $"vertices={topology.VertexCount}, targets={result.EditingSession.Evaluation.Resolution.WeightedTargets.Count}.");
+            AppLog.Verbose($"FACE:LOADED {LoadedFacePath} {result.Loaded.Game} EDITABLE:{result.EditingSession.CanEdit} " +
+                $"VERTS:{topology.VertexCount} TARGETS:{result.EditingSession.Evaluation.Resolution.WeightedTargets.Count}");
             _ = LoadTextureRegistryAsync(
                 editor,
                 result.Loaded.Game,
@@ -1023,7 +1031,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
         catch (Exception exception)
         {
-            AppLog.Error($"Face load failed for '{requestedFacePath}' in '{workspacePath}'.", exception);
+            AppLog.Error($"FACE:LOAD-FAILED {requestedFacePath} FILE:{workspacePath}", exception);
             HasPreview = false;
             SetEditor(null, null);
             ErrorMessage = Loc.Format("loc_Shell_Error_FaceCouldNotLoad", exception.Message);
@@ -1045,7 +1053,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         try
         {
-            AppLog.Information($"Texture registry load started for {profile.DisplayName} ({game}).");
+            AppLog.Verbose($"REGISTRY:LOAD {profile.Key} {game}");
             var started = System.Diagnostics.Stopwatch.GetTimestamp();
             var catalog = await _referenceService.ReadTextureCatalogAsync(game, cancellationToken);
             if (cancellationToken.IsCancellationRequested || Editor != editor)
@@ -1061,17 +1069,17 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 catalogProfile,
                 catalog.IsAvailable);
             editor.UpdateRegistryAttachmentMeshes(catalog.AttachmentMeshes, IsPlayerWorkspace);
-            AppLog.Information(catalog.IsAvailable
-                ? $"Texture registry loaded for {profile.DisplayName}: {catalog.Candidates.Count:N0} verified candidates in {System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalSeconds:F1}s."
-                : $"Mesh/texture database is unavailable for {profile.DisplayName}; build the {game} database in Mesh/Texture Databases.");
+            AppLog.Verbose(catalog.IsAvailable
+                ? $"REGISTRY:LOADED {profile.Key} COUNT:{catalog.Candidates.Count} SEC:{System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalSeconds:F1}"
+                : $"REGISTRY:UNAVAILABLE {profile.Key} {game}");
         }
         catch (OperationCanceledException)
         {
-            AppLog.Information($"Texture registry load cancelled for {profile.DisplayName} ({game}).");
+            AppLog.Verbose($"REGISTRY:CANCELLED {profile.Key} {game}");
         }
         catch (Exception exception)
         {
-            AppLog.Warning($"Texture registry load failed for {profile.DisplayName} ({game}): {exception.Message}");
+            AppLog.Warning($"REGISTRY:LOAD-FAILED {profile.Key} {game} REASON:{exception.Message}");
         }
     }
 
@@ -1199,7 +1207,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
         catch (Exception exception)
         {
-            AppLog.Error($"Could not prepare scalp textures for manually selected hair '{mesh.InstancedPath}'.", exception);
+            AppLog.Error($"HAIR:SCALP-PREPARE-FAILED {mesh.InstancedPath}", exception);
             SetEditorError(Loc.Format("loc_Shell_Error_MatchingScalpTexturesCouldNotPrepare", exception.Message));
         }
     }
@@ -1260,7 +1268,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         ErrorMessage = null;
         try
         {
-            AppLog.Information($"Repairing baked morph geometry for '{LoadedFacePath}'.");
+            AppLog.Verbose($"MORPH:REPAIR {LoadedFacePath}");
             editor.FixMorph();
         }
         catch (Exception exception)
@@ -1270,7 +1278,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 ReportPostRepairPreviewFailure(editor, exception);
                 return;
             }
-            AppLog.Error($"Morph repair failed for '{LoadedFacePath}'.", exception);
+            AppLog.Error($"MORPH:REPAIR-FAILED {LoadedFacePath}", exception);
             ErrorMessage = Loc.Format("loc_Shell_Error_MorphCouldNotRepair", exception.Message);
             Status = Loc.Text("loc_Shell_Status_MorphRepairFailedFaceUnchanged");
             return;
@@ -1288,9 +1296,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             return;
         }
         Status = Loc.Format("loc_Shell_Status_MorphFixed", SelectedFace?.DisplayName ?? Loc.Text("loc_Shell_Word_Morph"));
-        AppLog.Information(
-            $"Baked morph geometry repaired for '{LoadedFacePath}'; " +
-            $"post-repair oracle maximum {report?.MaximumError ?? 0:G9}.");
+        AppLog.Information($"MORPH:REPAIRED {LoadedFacePath} MAX-ERROR:{report?.MaximumError ?? 0:G6}");
     }
 
     private void ReportPostRepairPreviewFailure(FaceEditorViewModel editor, Exception exception)
@@ -1298,7 +1304,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         var report = editor.Evaluation.OriginalOracleReport;
         SetGeometryDetails(Loc.Format("loc_Shell_FaceDetails_OracleRepaired", report?.MaximumError ?? 0));
         AppLog.Error(
-            $"Baked morph geometry was repaired for '{LoadedFacePath}', but the preview refresh failed.",
+            $"MORPH:REPAIRED {LoadedFacePath} PREVIEW:FAILED",
             exception);
         ErrorMessage = Loc.Format("loc_Shell_Error_MorphRepairedPreviewCouldNotRefresh", exception.Message);
         Status = Loc.Text("loc_Shell_Status_MorphRepairedPreviewRefreshFailed");
@@ -1463,7 +1469,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 {
                     editor.Material.RestoreAttachmentState(materialState);
                 }
-                AppLog.Error($"Attachment change failed for {changedSlot.Label}.", exception);
+                AppLog.Error($"ATTACHMENT:CHANGE-FAILED SLOT:{changedSlot.Label}", exception);
                 SetEditorError(Loc.Format("loc_Shell_Error_AttachmentMeshCouldNotChange", exception.Message));
             }
         }
@@ -1564,7 +1570,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             if (version == _attachmentChangeVersion)
             {
-                AppLog.Error($"Attachment preview failed for {changedSlot.Label}.", exception);
+                AppLog.Error($"ATTACHMENT:PREVIEW-FAILED SLOT:{changedSlot.Label}", exception);
                 PreviewSceneReady?.Invoke(CreateCurrentPreviewScene(), false);
             }
         }
@@ -1698,7 +1704,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         Status = Loc.Text("loc_Shell_Status_UpdatingTemporaryPackageWorkspace");
         try
         {
-            AppLog.Information($"Flushing face '{LoadedFacePath}' to temporary workspace '{WorkspacePackagePath}'.");
+            AppLog.Verbose($"FACE:FLUSH {LoadedFacePath} FILE:\"{WorkspacePackagePath}\"");
             var draft = Editor.CreateDraft();
             var result = await Task.Run(() => _packageWriter.SaveExisting(draft));
             if (IsStandaloneWorkspace && _sourceFile is { } source && LoadedFacePath != source.FacePath)
@@ -1712,12 +1718,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 return false;
             }
             Status = Loc.Format("loc_Shell_Status_TemporaryEditsUpdated", result.FaceInstancedPath);
-            AppLog.Information($"Temporary face update verified: '{result.FaceInstancedPath}'.");
+            AppLog.Information($"FACE:UPDATED {result.FaceInstancedPath} VERIFIED");
             return true;
         }
         catch (Exception exception)
         {
-            AppLog.Error($"Temporary face update failed for '{LoadedFacePath}'.", exception);
+            AppLog.Error($"FACE:UPDATE-FAILED {LoadedFacePath}", exception);
             ErrorMessage = Loc.Format("loc_Shell_Error_TemporaryEditsCouldNotUpdate", UserFacingMessageFormatter.Format(exception));
             Status = Loc.Text("loc_Shell_Status_WorkspaceUpdateFailedSourceUnmodified");
             return false;
@@ -1765,12 +1771,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                     Loc.Text("loc_Shell_DialogTitle_PackageSaved"),
                     Loc.Format("loc_Shell_Dialog_PackageSaved", PackagePath));
             }
-            AppLog.Information($"Temporary package workspace committed to '{PackagePath}'.");
+            AppLog.Information($"PCC:SAVED FILE:\"{PackagePath}\" VERIFIED");
             return true;
         }
         catch (Exception exception)
         {
-            AppLog.Error($"Package workspace commit failed for '{PackagePath}'.", exception);
+            AppLog.Error($"PCC:SAVE-FAILED FILE:{PackagePath}", exception);
             ErrorMessage = Loc.Format("loc_Shell_Error_PackageChangesCouldNotCommit", UserFacingMessageFormatter.Format(exception));
             Status = Loc.Text("loc_Shell_Status_SaveFailedTemporaryEditsRetainedSourceUnmodified");
             return false;
@@ -1916,9 +1922,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         try
         {
             var draft = Editor.CreateDraft();
-            AppLog.Information(
-                $"Exporting face '{LoadedFacePath}' to '{request.DestinationPackagePath}' " +
-                $"(create new package: {request.CreateNewPackage}).");
+            AppLog.Verbose($"PCC:EXPORT {LoadedFacePath} FILE:\"{request.DestinationPackagePath}\" NEW:{request.CreateNewPackage}");
             var result = await Task.Run(() => _packageWriter.SaveMorphToPackage(
                 draft,
                 workspacePath,
@@ -1930,7 +1934,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             if (result.Warnings.Count > 0)
             {
                 AppLog.Warning(
-                    $"Morph package export completed with {result.Warnings.Count} LEC warning(s): " +
+                    $"PCC:EXPORTED {result.FaceInstancedPath} WARNINGS:{result.Warnings.Count} REASONS:" +
                     string.Join("; ", result.Warnings));
             }
             var warningSummary = result.Warnings.Count == 0
@@ -1940,12 +1944,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 Loc.Text("loc_Shell_DialogTitle_MorphPackageSaved"),
                 Loc.Format("loc_Shell_Dialog_MorphPackageSaved", result.PackagePath, result.FaceInstancedPath,
                     result.LodCount, result.TextureReferenceCount, warningSummary));
-            AppLog.Information($"Morph package export verified: '{result.FaceInstancedPath}' in '{result.PackagePath}'.");
+            AppLog.Information($"PCC:EXPORTED {result.FaceInstancedPath} FILE:\"{result.PackagePath}\" VERIFIED");
             return true;
         }
         catch (Exception exception)
         {
-            AppLog.Error($"Morph package export failed for '{LoadedFacePath}' in '{PackagePath}'.", exception);
+            AppLog.Error($"PCC:EXPORT-FAILED FACE:{LoadedFacePath} FILE:{PackagePath}", exception);
             ErrorMessage = Loc.Format("loc_Shell_Error_MorphCouldNotExport", UserFacingMessageFormatter.Format(exception));
             Status = Loc.Text("loc_Shell_Status_SaveFailedSourcePccUnmodified");
             return false;
@@ -2010,7 +2014,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
         catch (Exception exception)
         {
-            AppLog.Error($"Custom mesh PCC export failed for '{_detachedMeshSource.SourcePath}'.", exception);
+            AppLog.Error($"PCC:CUSTOM-MESH-EXPORT-FAILED FILE:{_detachedMeshSource.SourcePath}", exception);
             ErrorMessage = Loc.Format("loc_Shell_Error_MeshCouldNotSave", exception.Message);
             Status = Loc.Text("loc_Shell_Status_SaveFailedSourceMeshAndMaterialEditUnmodified");
             return false;

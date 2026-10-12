@@ -5,7 +5,10 @@ using MorphFaceEditor.Models;
 
 namespace MorphFaceEditor.Services;
 
-public sealed record MorphFaceCatalog(string PackagePath, IReadOnlyList<BioMorphFaceListItem> Faces);
+public sealed record MorphFaceCatalog(string PackagePath, IReadOnlyList<BioMorphFaceListItem> Faces)
+{
+    public MorphFaceGame Game { get; init; }
+}
 
 /// <summary>Controls route-specific visibility applied after package face discovery.</summary>
 public enum MorphFaceCatalogProjection
@@ -62,7 +65,8 @@ public sealed class MorphFaceCatalogService
         {
             cancellationToken.ThrowIfCancellationRequested();
             var fullPath = Path.GetFullPath(packagePath);
-            var faces = MorphFaceReferenceInspector.Inspect(fullPath)
+            var references = MorphFaceReferenceInspector.Inspect(fullPath, out var game);
+            var faces = references
                 .Where(reference => !ShouldHide(reference, projection))
                 .Select(reference => (Reference: reference, Profile:
                     _profiles.Find(reference.Game, reference.FacePath, reference.BaseHeadPath) ??
@@ -80,7 +84,7 @@ public sealed class MorphFaceCatalogService
                 .OrderBy(face => face.DisplayName, ExplorerNaturalStringComparer.Instance)
                 .ThenBy(face => face.InstancedPath, ExplorerNaturalStringComparer.Instance)
                 .ToArray();
-            return new MorphFaceCatalog(fullPath, faces);
+            return new MorphFaceCatalog(fullPath, faces) { Game = game };
         }, cancellationToken);
 
     /// <summary>

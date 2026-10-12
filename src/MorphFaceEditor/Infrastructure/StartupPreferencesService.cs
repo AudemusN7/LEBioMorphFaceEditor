@@ -25,6 +25,6 @@ public sealed class StartupPreferencesService
     private void Save(Func<ApplicationPreferences, ApplicationPreferences> change)
     {
         try { _store.Update(change); }
-        catch (Exception exception) { AppLog.Warning($"Startup preferences could not be saved: {exception.Message}"); }
+        catch (Exception exception) { AppLog.Warning($"PREFERENCES:STARTUP-SAVE-FAILED REASON:{exception.Message}"); }
     }
 }

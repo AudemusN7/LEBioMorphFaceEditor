@@ -112,7 +112,7 @@ public partial class TextureRegistrySettingsWindow : Window
         }
         catch (Exception exception)
         {
-            AppLog.Error($"Could not add custom assets to {row.Game}.", exception);
+            AppLog.Error($"REGISTRY:ADD-ASSETS-FAILED {row.Game}", exception);
             _ = new EditorMessageWindow(Loc.Text("loc_TextureRegistrySettingsWindow_CustomAssetImportFailedTitle"), exception.Message)
             {
                 Owner = this

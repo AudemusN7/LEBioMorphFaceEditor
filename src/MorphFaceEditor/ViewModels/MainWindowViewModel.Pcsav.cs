@@ -47,14 +47,14 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception exception)
         {
-            AppLog.Error($"Career save could not open: '{path}'.", exception);
+            AppLog.Error($"PCSAV:OPEN-FAILED FILE:{path}", exception);
             ErrorMessage = FormatPcsavError(exception);
             Status = Loc.Text("loc_Shell_Status_SelectedFileCouldNotOpen");
         }
         finally
         {
             try { if (Directory.Exists(scratch)) Directory.Delete(scratch, recursive: true); }
-            catch (IOException e) { AppLog.Warning($"Career import scratch cleanup failed: {e.Message}"); }
+            catch (IOException e) { AppLog.Warning($"PCSAV:CLEANUP-FAILED REASON:{e.Message}"); }
         }
     }
 
@@ -84,7 +84,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception exception)
         {
-            AppLog.Error($"Career save failed: '{career.SourcePath}'.", exception);
+            AppLog.Error($"PCSAV:SAVE-FAILED FILE:{career.SourcePath}", exception);
             ErrorMessage = FormatPcsavError(exception);
             Status = Loc.Text("loc_FileSave_EditsRetained");
             return false;
@@ -120,7 +120,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception exception)
         {
-            AppLog.Error($"Career head deletion failed: '{career.SourcePath}'.", exception);
+            AppLog.Error($"PCSAV:HEAD-DELETE-FAILED FILE:{career.SourcePath}", exception);
             ErrorMessage = FormatPcsavError(exception);
             Status = Loc.Text("loc_FileSave_EditsRetained");
         }

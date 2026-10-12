@@ -31,6 +31,8 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     private readonly List<RelayCommand> _subcategoryRandomiseCommands = [];
     private readonly MorphRandomisationCatalog _randomisationCatalog;
     private readonly string _profileKey;
+    private readonly string _logIdentity;
+    private readonly string _logGame;
     private readonly AssetReferenceEditingSession _scalpMaterialSession = new(null);
     private readonly ResolvedHeadMaterial? _sourceScalpMaterial;
     private readonly Dictionary<string, ResolvedHeadMaterial> _scalpMaterialDonors = new(StringComparer.OrdinalIgnoreCase);
@@ -216,6 +218,9 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         Material.ControlsChanged += OnMaterialControlsChanged;
         _scalpMaterialSession.ValueChanged += OnScalpMaterialSelectionChanged;
         _cleanState = CreateDraft();
+        var logProfile = MorphFaceProfileRegistry.CreateDefault().Profiles.FirstOrDefault(profile => profile.Key == profileKey);
+        _logIdentity = $"{logProfile?.ExportTag.Trim('[', ']') ?? "CUSTOM"}.{_cleanState.Source.InstancedPath.Split('.').Last()}";
+        _logGame = (playerRandomisationGame ?? logProfile?.Game)?.ToString() ?? "UNKNOWN";
         _cleanGeometryEdits = session.CaptureGeometryEdits();
         _cleanMaterialAssignments = CaptureMaterialAssignments();
     }
@@ -582,7 +587,6 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                 npcTextureNames = ExcludeHumanScalpTextures(npcTextureNames);
 
             PreparedMaterialRandomisation? npcMaterial = null;
-            var materialValueCount = 0;
             if (hasMaterial && materialProfiles.Count > 0)
             {
                 var npcScalarScope = playerContext is null ? scalarScope : scalarScope
@@ -594,7 +598,6 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                 npcMaterial = await PrepareMaterialRandomisationAsync(
                     materialProfiles, npcScalarScope, npcVectorScope, npcTextureNames,
                     materialSeed!.Value, morphDonor?.Id);
-                materialValueCount = scalarScope.Count + vectorScope.Count;
             }
             var playerDetails = playerContext is not null && materialSeed is not null
                 ? await PreparePlayerFacialDetailsAsync(playerContext.Value, requestedTextureNames,
@@ -660,14 +663,11 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                     _cursedBoneHistory.Set(new Dictionary<string, System.Numerics.Vector3>());
                 aggregate.Commit();
             }
-            AppLog.Information(Loc.Format(
-                "loc_VM_faceEditor_randomisationLog",
-                morphScope.Count, materialValueCount, MorphRandomisationStrength, MaterialRandomisationStrength,
-                morphSeed?.ToString() ?? "n/a", materialSeed?.ToString() ?? "n/a"));
+            LogRandomisation(false, morphSeed, materialSeed);
         }
         catch (Exception exception)
         {
-            AppLog.Error("Face randomisation failed.", exception);
+            AppLog.Error("RAND:FAILED", exception);
             if (propagateErrors) throw;
             _reportError(Loc.Format("loc_VM_faceEditor_randomisationFailed", AppLog.FilePath));
         }
@@ -793,7 +793,6 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             playerHair?.Material, playerFaceScar, playerColours)!;
         CursedMorphRandomisationExtras? boneValues = null;
         Dictionary<string, System.Numerics.Vector3>? nextBoneOffsets = null;
-        var fuzzedBoneCount = 0;
 
         using (var aggregate = _history.BeginAggregate())
         {
@@ -812,8 +811,6 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                 boneValues = CursedMorphRandomiser.CreateExtrasProposal(
                     postMorphBones, new Dictionary<string, float>(),
                     new Dictionary<string, System.Numerics.Vector4>(), MorphRandomisationStrength, seed);
-                fuzzedBoneCount = boneValues.BoneValues.Zip(postMorphBones)
-                    .Count(value => value.First.Translation != value.Second.Translation);
                 foreach (var bone in boneValues.BoneValues)
                 {
                     _session.SetBoneAxis(bone.BoneName, 0, bone.Translation.X);
@@ -847,11 +844,12 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             if (nextBoneOffsets is not null) _cursedBoneHistory.Set(nextBoneOffsets);
             aggregate.Commit();
         }
-        AppLog.Information(Loc.Format(
-            "loc_VM_faceEditor_cursedRandomisationLog",
-            features.Count, fuzzedBoneCount, scalars.Count + vectors.Count,
-            MorphRandomisationStrength, MaterialRandomisationStrength, seed));
+        LogRandomisation(true, seed, seed);
     }
+
+    private void LogRandomisation(bool cursed, int? morphSeed, int? materialSeed) =>
+        AppLog.Information(AppLogMessages.Randomisation(cursed, _logIdentity, _logGame,
+            MorphRandomisationStrength, MaterialRandomisationStrength, morphSeed, materialSeed));
 
     private int NextDistinctSeed(int? otherSeed)
     {
@@ -1471,8 +1469,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                     try { textures[controlName] = await control.ResolveReferenceAsync(asset); }
                     catch (Exception exception)
                     {
-                        AppLog.Warning($"Skipped unresolved Player makeup lash '{objectName}': " +
-                                       exception.Message);
+                        AppLog.Warning($"PLAYER:LASH-SKIP {objectName} REASON:unresolved {exception.Message}");
                     }
                     break;
                 }
@@ -1556,8 +1553,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             }
             catch (Exception exception)
             {
-                AppLog.Warning($"Skipped unresolved Player facial detail '{selection.Asset.InstancedPath}': " +
-                               exception.Message);
+                AppLog.Warning($"PLAYER:DETAIL-SKIP {selection.Asset.InstancedPath} REASON:unresolved {exception.Message}");
             }
         }
         return prepared;
@@ -1615,8 +1611,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                 }
                 catch (Exception exception)
                 {
-                    AppLog.Warning($"Skipped unresolved Player face pair '{face.DiffusePath}' / " +
-                                   $"'{face.NormalPath}': {exception.Message}");
+                    AppLog.Warning($"PLAYER:FACE-PAIR-SKIP DIFF:{face.DiffusePath} NORM:{face.NormalPath} REASON:unresolved {exception.Message}");
                 }
             }
         }
@@ -1653,8 +1648,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                     }
                     catch (Exception exception)
                     {
-                        AppLog.Warning($"Skipped unresolved Player scar '{asset.InstancedPath}': " +
-                                       exception.Message);
+                        AppLog.Warning($"PLAYER:SCAR-SKIP {asset.InstancedPath} REASON:unresolved {exception.Message}");
                     }
                 }
                 if (scarResolved)

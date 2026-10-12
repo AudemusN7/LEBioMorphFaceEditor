@@ -8,7 +8,7 @@ namespace MorphFaceEditor.Services;
 internal sealed record DiagnosticArchiveResult(string Path, IReadOnlyList<string> Entries, IReadOnlyList<string> Warnings);
 
 /// <summary>Publishes an archive only after every requested file has been copied successfully.</summary>
-internal sealed class DiagnosticArchiveService(ApplicationDataPaths paths, string logPath)
+internal sealed class DiagnosticArchiveService(ApplicationDataPaths paths, string logPath, DateTimeOffset? now = null)
 {
     public DiagnosticArchiveResult Export(string destination, IReadOnlyList<string> workspaceFiles,
         IReadOnlyList<string>? warnings = null)
@@ -21,6 +21,13 @@ internal sealed class DiagnosticArchiveService(ApplicationDataPaths paths, strin
         if (!File.Exists(logPath))
             throw new FileNotFoundException(Loc.Text("loc_Services_DiagnosticArchive_LogUnavailable"), logPath);
         files.Add((logPath, "Logs/" + Path.GetFileName(logPath)));
+        var logDirectory = Path.GetDirectoryName(Path.GetFullPath(logPath))!;
+        var today = (now ?? DateTimeOffset.Now).Date;
+        files.AddRange(Directory.EnumerateFiles(logDirectory, "morph-face-editor-*.log")
+            .Where(path => !Path.GetFullPath(path).Equals(Path.GetFullPath(logPath), StringComparison.OrdinalIgnoreCase) &&
+                AppLogFileStore.TryFileDate(path, out var date) && date >= today.AddDays(-2) && date <= today)
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .Select(path => (path, "Logs/" + Path.GetFileName(path))));
         files.AddRange(workspaceFiles.Select(path => (path, "Workspace/" + Path.GetFileName(path))));
         foreach (var root in new[] { paths.CurrentDirectory, paths.LegacyDirectory })
         {

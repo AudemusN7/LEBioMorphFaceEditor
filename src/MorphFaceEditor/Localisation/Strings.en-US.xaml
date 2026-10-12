@@ -1091,7 +1091,7 @@ Preferences will need to be reapplied when the editor reopens. Databases will al
   <system:String x:Key="loc_Settings_ExportedTitle" xml:space="preserve">Diagnostic ZIP exported</system:String>
   <system:String x:Key="loc_Settings_GenerateLogs" xml:space="preserve">Generate Troubleshooting Logs</system:String>
   <system:String x:Key="loc_Settings_GenerateLogsButton" xml:space="preserve">Export Logs</system:String>
-  <system:String x:Key="loc_Settings_GenerateLogsDescription" xml:space="preserve">Export a ZIP containing the latest application log, the open workspace with current edits, and mesh/texture databases. Send to Audemus for troubleshooting.</system:String>
+  <system:String x:Key="loc_Settings_GenerateLogsDescription" xml:space="preserve">Export a ZIP containing recent application logs, the open workspace with current edits, and mesh/texture databases. Send to Audemus for troubleshooting.</system:String>
   <system:String x:Key="loc_Settings_Heading" xml:space="preserve">SETTINGS</system:String>
   <system:String x:Key="loc_Settings_Language" xml:space="preserve">Language</system:String>
   <system:String x:Key="loc_Settings_LanguageDescription" xml:space="preserve">Choose your interface language. Changes take effect when the editor is restarted.</system:String>

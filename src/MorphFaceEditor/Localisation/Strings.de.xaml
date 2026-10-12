@@ -1093,7 +1093,7 @@ Nach dem Neustart müssen die Einstellungen erneut vorgenommen werden. Datenbank
   <system:String x:Key="loc_Settings_ExportedTitle" xml:space="preserve">Diagnose-ZIP exportiert</system:String>
   <system:String x:Key="loc_Settings_GenerateLogs" xml:space="preserve">Fehlerdiagnoseprotokolle erstellen</system:String>
   <system:String x:Key="loc_Settings_GenerateLogsButton" xml:space="preserve">Protokolle exportieren</system:String>
-  <system:String x:Key="loc_Settings_GenerateLogsDescription" xml:space="preserve">Exportiert eine ZIP-Datei mit dem neuesten Anwendungsprotokoll, dem geöffneten Arbeitsbereich samt aktuellen Änderungen sowie Mesh- und Texturdatenbanken. Sende sie zur Fehlerdiagnose an Audemus.</system:String>
+  <system:String x:Key="loc_Settings_GenerateLogsDescription" xml:space="preserve">Exportiert eine ZIP-Datei mit aktuellen Anwendungsprotokollen, dem geöffneten Arbeitsbereich samt aktuellen Änderungen sowie Mesh- und Texturdatenbanken. Sende sie zur Fehlerdiagnose an Audemus.</system:String>
   <system:String x:Key="loc_Settings_Heading" xml:space="preserve">EINSTELLUNGEN</system:String>
   <system:String x:Key="loc_Settings_Language" xml:space="preserve">Sprache</system:String>
   <system:String x:Key="loc_Settings_LanguageDescription" xml:space="preserve">Wähle die Sprache der Benutzeroberfläche. Die Änderung wird nach einem Neustart des Editors wirksam.</system:String>

@@ -1091,7 +1091,7 @@ Po ponownym uruchomieniu edytora trzeba będzie ponownie ustawić preferencje. B
   <system:String x:Key="loc_Settings_ExportedTitle" xml:space="preserve">Wyeksportowano diagnostyczny plik ZIP</system:String>
   <system:String x:Key="loc_Settings_GenerateLogs" xml:space="preserve">Utwórz dzienniki rozwiązywania problemów</system:String>
   <system:String x:Key="loc_Settings_GenerateLogsButton" xml:space="preserve">Eksportuj dzienniki</system:String>
-  <system:String x:Key="loc_Settings_GenerateLogsDescription" xml:space="preserve">Eksportuje plik ZIP z najnowszym dziennikiem aplikacji, otwartym obszarem roboczym wraz z bieżącymi zmianami oraz bazami siatek i tekstur. Wyślij go do Audemusa, aby pomóc w rozwiązaniu problemu.</system:String>
+  <system:String x:Key="loc_Settings_GenerateLogsDescription" xml:space="preserve">Eksportuje plik ZIP z ostatnimi dziennikami aplikacji, otwartym obszarem roboczym wraz z bieżącymi zmianami oraz bazami siatek i tekstur. Wyślij go do Audemusa, aby pomóc w rozwiązaniu problemu.</system:String>
   <system:String x:Key="loc_Settings_Heading" xml:space="preserve">USTAWIENIA</system:String>
   <system:String x:Key="loc_Settings_Language" xml:space="preserve">Język</system:String>
   <system:String x:Key="loc_Settings_LanguageDescription" xml:space="preserve">Wybierz język interfejsu. Zmiany zostaną zastosowane po ponownym uruchomieniu edytora.</system:String>

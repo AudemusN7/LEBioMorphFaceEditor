@@ -1,5 +1,4 @@
 using System.IO;
-using System.Text;
 
 namespace MorphFaceEditor.Infrastructure;
 
@@ -10,16 +9,23 @@ public static class AppLog
     private static readonly object Sync = new();
     private static bool _fileWritesStopped;
     private static int _fileWriteSuppressionCount;
-    private static readonly string SessionId = Guid.NewGuid().ToString("N")[..8];
     public static string DirectoryPath { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "LE BioMorphFace Editor",
         "Logs");
-    public static string FilePath { get; } = Path.Combine(
-        DirectoryPath,
-        $"morph-face-editor-{DateTime.Now:yyyyMMdd}.log");
+    private static readonly AppLogFileStore Files = new(DirectoryPath);
+    public static string FilePath => Files.LatestFilePath;
+
+    public static void StartSession(IEnumerable<string> arguments, Version? version)
+    {
+        Files.VerboseLogging = arguments.Contains("-verboselogging", StringComparer.OrdinalIgnoreCase);
+        // Write the header/start record before any startup service can report a warning.
+        Information($"Application starting VERSION:{version} VERBOSE:{(Files.VerboseLogging ? "ON" : "OFF")}");
+        foreach (var failure in Files.Prune()) Warning(failure);
+    }
 
     public static void Information(string message) => Write("INFO", message, null);
+    public static void Verbose(string message) => Write("INFO", message, null, verbose: true);
     public static void Warning(string message) => Write("WARN", message, null);
     public static void Error(string message, Exception exception) => Write("ERROR", message, exception);
 
@@ -36,27 +42,17 @@ public static class AppLog
         return new PersistentWriteSuppression();
     }
 
-    private static void Write(string level, string message, Exception? exception)
+    private static void Write(string level, string message, Exception? exception, bool verbose = false)
     {
         if (MessageWritten is { } observers)
             foreach (Action<string, string> observer in observers.GetInvocationList())
                 try { observer(level, message); } catch { }
         try
         {
-            var builder = new StringBuilder()
-                .Append(DateTimeOffset.Now.ToString("O"))
-                .Append(" [").Append(SessionId).Append("] ")
-                .Append(level).Append(' ').Append(message);
-            if (exception is not null)
-            {
-                builder.AppendLine().Append(exception);
-            }
-            builder.AppendLine();
             lock (Sync)
             {
                 if (_fileWritesStopped || _fileWriteSuppressionCount > 0) return;
-                Directory.CreateDirectory(DirectoryPath);
-                File.AppendAllText(FilePath, builder.ToString(), Encoding.UTF8);
+                Files.Append(level, message, exception, verbose);
             }
         }
         catch
@@ -64,6 +60,7 @@ public static class AppLog
             // Diagnostics must never become another failure path.
         }
     }
+
     private sealed class PersistentWriteSuppression : IDisposable
     {
         private bool _disposed;

@@ -72,13 +72,13 @@ public sealed class MorphFeatureEditorViewModel : ObservableObject, IContinuousE
                     var now = Environment.TickCount64;
                     if (now - _lastPreviewLogTick >= 250)
                     {
-                        AppLog.Information($"Feature preview {Name}={value:G9}.");
+                        AppLog.Verbose($"FEATURE:PREVIEW {Name}={value:G6}");
                         _lastPreviewLogTick = now;
                     }
                 }
                 catch (Exception exception)
                 {
-                    AppLog.Error($"Feature edit failed for {Name}={value:G9}.", exception);
+                    AppLog.Error($"FEATURE:EDIT-FAILED {Name}={value:G6}", exception);
                     SetProperty(ref _value, _session.GetFeature(Name), nameof(Value));
                     _reportError(Loc.Format("loc_VM_morphFeature_changeFailed", Name, AppLog.FilePath));
                 }
@@ -88,14 +88,14 @@ public sealed class MorphFeatureEditorViewModel : ObservableObject, IContinuousE
 
     public void BeginEdit()
     {
-        AppLog.Information($"Feature drag started: {Name}={Value:G9}.");
+        AppLog.Verbose($"FEATURE:START {Name}={Value:G6}");
         _session.BeginFeatureEdit(Name);
     }
 
     public void EndEdit()
     {
         _session.EndFeatureEdit(Name);
-        AppLog.Information($"Feature drag completed: {Name}={Value:G9}.");
+        AppLog.Verbose($"FEATURE:END {Name}={Value:G6}");
     }
 
     public void Refresh()

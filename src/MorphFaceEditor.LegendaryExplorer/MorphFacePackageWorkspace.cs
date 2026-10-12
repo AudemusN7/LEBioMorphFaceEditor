@@ -1,5 +1,8 @@
 using LegendaryExplorerCore.Packages;
 using MorphFaceEditor.Core.Domain;
+using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace MorphFaceEditor.LegendaryExplorer;
 
@@ -12,8 +15,16 @@ public sealed class MorphFacePackageWorkspace : IDisposable
 {
     private PackageFingerprint _sourceFingerprint;
     private bool _disposed;
+    private readonly FileStream _lease;
+
+    private static string WorkspaceDirectory => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "LE BioMorphFace Editor", "Workspaces");
 
     public MorphFacePackageWorkspace(string sourcePackagePath, bool canCommit = true)
+        : this(sourcePackagePath, canCommit, WorkspaceDirectory) { }
+
+    internal MorphFacePackageWorkspace(string sourcePackagePath, bool canCommit, string workspaceDirectory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePackagePath);
         SourcePath = Path.GetFullPath(sourcePackagePath);
@@ -23,18 +34,86 @@ public sealed class MorphFacePackageWorkspace : IDisposable
         }
 
         _sourceFingerprint = PackageFingerprint.Capture(SourcePath);
-        var workspaceDirectory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "LE BioMorphFace Editor",
-            "Workspaces");
         Directory.CreateDirectory(workspaceDirectory);
         // LEC derives BioWare's import/load tier from the filename prefix (for
         // example, BioD_ files may resolve LE2 post-load startup imports).
         WorkingPath = Path.Combine(
             workspaceDirectory,
             $"{Path.GetFileNameWithoutExtension(SourcePath)}.{Guid.NewGuid():N}.workspace.pcc");
-        File.Copy(SourcePath, WorkingPath, overwrite: false);
+        using var gate = LockDirectory(workspaceDirectory);
+        _lease = new FileStream(WorkingPath + ".lease", FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None);
+        try { File.Copy(SourcePath, WorkingPath, overwrite: false); }
+        catch
+        {
+            _lease.Dispose();
+            File.Delete(WorkingPath + ".lease");
+            throw;
+        }
         CanCommit = canCommit;
+    }
+
+    public static IReadOnlyList<string> CleanupOrphanedFiles()
+    {
+        // Older builds have no leases. Leave their files alone while another editor may own them.
+        Process[] others = [];
+        try
+        {
+            others = Process.GetProcessesByName("MorphFaceEditor");
+            return CleanupOrphanedFiles(WorkspaceDirectory, others.Any(process => process.Id != Environment.ProcessId));
+        }
+        catch (Exception exception) { return [$"REASON:{exception.Message}"]; }
+        finally { foreach (var process in others) process.Dispose(); }
+    }
+
+    internal static IReadOnlyList<string> CleanupOrphanedFiles(string directory, bool preserveUnleased = false)
+    {
+        var failures = new List<string>();
+        try
+        {
+            if (!Directory.Exists(directory) || IsLink(directory)) return failures;
+            using var gate = LockDirectory(directory);
+            var packages = Directory.EnumerateFiles(directory, "*.workspace.pcc").ToArray();
+            var leases = Directory.EnumerateFiles(directory, "*.workspace.pcc.lease").ToArray();
+            foreach (var path in packages.Concat(leases.Select(path => path[..^6])).Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                var leasePath = path + ".lease";
+                try
+                {
+                    if (File.Exists(path) && IsLink(path) || File.Exists(leasePath) && IsLink(leasePath)) continue;
+                    if (preserveUnleased && !File.Exists(leasePath)) continue;
+                    FileStream lease;
+                    try { lease = new FileStream(leasePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None); }
+                    catch (IOException exception) when ((exception.HResult & 0xffff) is 32 or 33)
+                    { continue; } // A live workspace owns this lock, even if LEC has closed the PCC itself.
+                    using (lease) { if (File.Exists(path)) File.Delete(path); }
+                    File.Delete(leasePath);
+                }
+                catch (Exception exception) { failures.Add($"FILE:{Path.GetFileName(path)} REASON:{exception.Message}"); }
+            }
+        }
+        catch (Exception exception) { failures.Add($"REASON:{exception.Message}"); }
+        return failures;
+    }
+
+    private static bool IsLink(string path) => (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0;
+
+    private static IDisposable LockDirectory(string directory)
+    {
+        var name = "Local\\MFE-Workspaces-" + Convert.ToHexString(
+            SHA256.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(directory).ToUpperInvariant())));
+        var mutex = new Mutex(false, name);
+        try
+        {
+            try { if (!mutex.WaitOne(TimeSpan.FromSeconds(2))) throw new IOException("Workspace directory busy."); }
+            catch (AbandonedMutexException) { }
+            return new DirectoryLock(mutex);
+        }
+        catch { mutex.Dispose(); throw; }
+    }
+
+    private sealed class DirectoryLock(Mutex mutex) : IDisposable
+    {
+        public void Dispose() { mutex.ReleaseMutex(); mutex.Dispose(); }
     }
 
     public string SourcePath { get; private set; }
@@ -100,11 +179,17 @@ public sealed class MorphFacePackageWorkspace : IDisposable
         {
             return;
         }
-        if (File.Exists(WorkingPath))
+        using var gate = LockDirectory(Path.GetDirectoryName(WorkingPath)!);
+        try
         {
-            File.Delete(WorkingPath);
+            if (File.Exists(WorkingPath)) File.Delete(WorkingPath);
         }
-        _disposed = true;
+        finally
+        {
+            _lease.Dispose();
+            _disposed = true;
+            File.Delete(WorkingPath + ".lease");
+        }
     }
 
     private static void AtomicReplace(string temporaryPath, string destination)

@@ -96,7 +96,7 @@ public sealed partial class MainWindowViewModel
             IsBusy = true;
             ErrorMessage = null;
             Status = Loc.Format("loc_Shell_Status_Deleting", source.DisplayName);
-            AppLog.Information($"Trashing face '{source.InstancedPath}' and its descendants in temporary workspace '{workspacePath}'.");
+            AppLog.Verbose($"FACE:DELETE {source.InstancedPath} FILE:\"{workspacePath}\"");
             await Task.Run(() => _packageContextService.DeleteMorph(workspacePath, source.InstancedPath));
             packageModified = true;
             MarkWorkspaceChanged();
@@ -107,7 +107,7 @@ public sealed partial class MainWindowViewModel
                 return;
             }
             Status = Loc.Format("loc_Shell_Status_DeletedSaveThePackageTo", source.InstancedPath);
-            AppLog.Information($"Face deletion verified: '{source.InstancedPath}'.");
+            AppLog.Information($"FACE:DELETED {source.InstancedPath} VERIFIED");
         }
         catch (Exception exception)
         {
@@ -143,7 +143,7 @@ public sealed partial class MainWindowViewModel
         var packageModified = false;
         try
         {
-            AppLog.Information($"Cloning face '{source.InstancedPath}' as '{objectName}' in temporary workspace '{workspacePath}'.");
+            AppLog.Verbose($"FACE:CLONE {source.InstancedPath} NAME:{objectName} FILE:\"{workspacePath}\"");
             var result = await Task.Run(() =>
                 _packageContextService.CloneMorph(workspacePath, source.InstancedPath, objectName));
             packageModified = true;
@@ -155,7 +155,7 @@ public sealed partial class MainWindowViewModel
                 return;
             }
             Status = Loc.Format("loc_Shell_Status_ClonedAndVerified", result.FaceInstancedPath);
-            AppLog.Information($"Face clone verified: '{result.FaceInstancedPath}'.");
+            AppLog.Information($"FACE:CLONED {source.InstancedPath} TO:{result.FaceInstancedPath} VERIFIED");
         }
         catch (Exception exception)
         {
@@ -192,9 +192,8 @@ public sealed partial class MainWindowViewModel
         Status = Loc.Format("loc_Shell_Status_ConvertingTo", source.DisplayName, request.TargetGame);
         try
         {
-            AppLog.Information(
-                $"Converting face '{source.InstancedPath}' from '{workspacePath}' to {request.TargetGame} " +
-                $"in '{request.DestinationPackagePath}' (new package: {request.CreateNewPackage}).");
+            AppLog.Verbose($"FACE:CONVERT {source.InstancedPath} TO:{request.TargetGame} " +
+                $"FILE:\"{request.DestinationPackagePath}\" NEW:{request.CreateNewPackage}");
             var result = await Task.Run(() => _conversionService.Convert(new MorphFaceConversionRequest(
                 workspacePath,
                 source.InstancedPath,
@@ -202,6 +201,8 @@ public sealed partial class MainWindowViewModel
                 request.DestinationPackagePath,
                 request.CreateNewPackage,
                 request.TemplatePackagePath)));
+            AppLog.Information($"FACE:CONVERTED {source.InstancedPath} TO:{request.TargetGame} " +
+                $"FACE:{result.SaveResult.FaceInstancedPath} FILE:\"{result.SaveResult.PackagePath}\" VERIFIED");
             Status = result.SaveResult.Warnings.Count == 0
                 ? Loc.Format("loc_Shell_Status_ConvertedAndVerified", result.SaveResult.FaceInstancedPath, result.TargetProfile)
                 : Loc.Format("loc_Shell_Status_ConvertedAndVerifiedWithWarnings", result.SaveResult.FaceInstancedPath, result.SaveResult.Warnings.Count);
@@ -227,7 +228,7 @@ public sealed partial class MainWindowViewModel
             if (result.SaveResult.Warnings.Count > 0)
             {
                 AppLog.Warning(
-                    $"Morph conversion completed with {result.SaveResult.Warnings.Count} warning(s): " +
+                    $"FACE:CONVERTED {source.InstancedPath} TO:{request.TargetGame} WARNINGS:{result.SaveResult.Warnings.Count} REASONS:" +
                     string.Join("; ", result.SaveResult.Warnings));
             }
             _dialogs.ShowInformation(
@@ -239,7 +240,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception exception)
         {
-            AppLog.Error($"Morph conversion failed for '{source.InstancedPath}'.", exception);
+            AppLog.Error($"FACE:CONVERT-FAILED {source.InstancedPath}", exception);
             ErrorMessage = Loc.Format("loc_Shell_Error_TheMorphCouldNotBe", exception.Message);
             Status = Loc.Text("loc_Shell_Status_MorphConversionFailedTheSource");
         }
@@ -430,7 +431,7 @@ public sealed partial class MainWindowViewModel
     {
         var operationName = Loc.Text(operation);
         var messageText = Loc.Text(message);
-        AppLog.Error($"{Loc.ReadEmbeddedEnglish()[operation]} failed.", exception);
+        AppLog.Error($"FACE:OPERATION-FAILED ACTION:{Loc.ReadEmbeddedEnglish()[operation]} FACE:{SelectedFace?.InstancedPath} FILE:{WorkspacePackagePath}", exception);
         ErrorMessage = packageModified
             ? Loc.Format("loc_Shell_Error_TemporaryEditsRetainedWorkspaceRefreshFailed", exception.Message)
             : Loc.Format("loc_Shell_Error_ContextOperationFailed", messageText, exception.Message);

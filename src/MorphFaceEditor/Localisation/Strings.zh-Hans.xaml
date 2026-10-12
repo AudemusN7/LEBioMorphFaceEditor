@@ -1091,7 +1091,7 @@
   <system:String x:Key="loc_Settings_ExportedTitle" xml:space="preserve">已导出诊断 ZIP</system:String>
   <system:String x:Key="loc_Settings_GenerateLogs" xml:space="preserve">生成故障排查日志</system:String>
   <system:String x:Key="loc_Settings_GenerateLogsButton" xml:space="preserve">导出日志</system:String>
-  <system:String x:Key="loc_Settings_GenerateLogsDescription" xml:space="preserve">导出包含最新应用日志、带当前编辑的已打开工作区以及网格/纹理数据库的 ZIP。请发送给 Audemus 用于故障排查。</system:String>
+  <system:String x:Key="loc_Settings_GenerateLogsDescription" xml:space="preserve">导出包含近期应用日志、带当前编辑的已打开工作区以及网格/纹理数据库的 ZIP。请发送给 Audemus 用于故障排查。</system:String>
   <system:String x:Key="loc_Settings_Heading" xml:space="preserve">设置</system:String>
   <system:String x:Key="loc_Settings_Language" xml:space="preserve">语言</system:String>
   <system:String x:Key="loc_Settings_LanguageDescription" xml:space="preserve">选择界面语言。更改在重启编辑器后生效。</system:String>

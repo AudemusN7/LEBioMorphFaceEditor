@@ -1093,7 +1093,7 @@ Tendrás que volver a configurar las preferencias al abrir de nuevo el editor. T
   <system:String x:Key="loc_Settings_ExportedTitle" xml:space="preserve">ZIP de diagnóstico exportado</system:String>
   <system:String x:Key="loc_Settings_GenerateLogs" xml:space="preserve">Generar registros de diagnóstico</system:String>
   <system:String x:Key="loc_Settings_GenerateLogsButton" xml:space="preserve">Exportar registros</system:String>
-  <system:String x:Key="loc_Settings_GenerateLogsDescription" xml:space="preserve">Exporta un ZIP con el registro más reciente de la aplicación, el espacio de trabajo abierto con los cambios actuales y las bases de datos de mallas y texturas. Envíalo a Audemus para que investigue el problema.</system:String>
+  <system:String x:Key="loc_Settings_GenerateLogsDescription" xml:space="preserve">Exporta un ZIP con los registros recientes de la aplicación, el espacio de trabajo abierto con los cambios actuales y las bases de datos de mallas y texturas. Envíalo a Audemus para que investigue el problema.</system:String>
   <system:String x:Key="loc_Settings_Heading" xml:space="preserve">CONFIGURACIÓN</system:String>
   <system:String x:Key="loc_Settings_Language" xml:space="preserve">Idioma</system:String>
   <system:String x:Key="loc_Settings_LanguageDescription" xml:space="preserve">Elige el idioma de la interfaz. El cambio se aplicará al reiniciar el editor.</system:String>

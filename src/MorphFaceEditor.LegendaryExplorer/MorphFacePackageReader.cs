@@ -139,7 +139,12 @@ public sealed class MorphFacePackageReader : IDisposable
             _materialReader.LastReadMetrics.Overrides,
             _materialReader.LastReadMetrics.Resolution,
             _materialReader.LastReadMetrics.CacheHits,
-            _materialReader.LastReadMetrics.CacheMisses);
+            _materialReader.LastReadMetrics.CacheMisses)
+        {
+            MaterialDefaults = _materialReader.LastReadMetrics.Defaults,
+            MaterialShaderLookup = _materialReader.LastReadMetrics.ShaderLookup,
+            MaterialTextureDecode = _materialReader.LastReadMetrics.TextureDecode
+        };
         return new LoadedMorphFace(document, baseHead, hairMesh, materialResult.Materials, diagnostics)
         {
             Game = package.Game switch

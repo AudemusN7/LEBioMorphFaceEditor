@@ -191,7 +191,10 @@ internal sealed class QaContext : IDisposable
                     ["Materials"] = metrics.Materials.TotalMilliseconds,
                     ["Diagnostics"] = metrics.Diagnostics.TotalMilliseconds,
                     ["Material overrides (within materials)"] = metrics.MaterialOverrides.TotalMilliseconds,
-                    ["Material resolution (within materials)"] = metrics.MaterialResolution.TotalMilliseconds
+                    ["Material resolution (within materials)"] = metrics.MaterialResolution.TotalMilliseconds,
+                    ["Material defaults (includes shader lookup)"] = metrics.MaterialDefaults.TotalMilliseconds,
+                    ["Shader lookup (within materials)"] = metrics.MaterialShaderLookup.TotalMilliseconds,
+                    ["Texture decode/cache (within materials)"] = metrics.MaterialTextureDecode.TotalMilliseconds
                 },
                 CacheHits = metrics.MaterialCacheHits,
                 CacheMisses = metrics.MaterialCacheMisses

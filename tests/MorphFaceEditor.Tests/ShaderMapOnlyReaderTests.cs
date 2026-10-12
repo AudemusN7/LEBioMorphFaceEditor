@@ -45,6 +45,17 @@ internal static class ShaderMapOnlyReaderTests
                     TestAssert.True(expected.GetNames(game).SequenceEqual(referenceStyle.GetNames(game)),
                         $"The {game} file-stream reference-cache reader returned different map evidence from LEC.");
 
+                    foreach (var (key, expectedMap) in leCache.MaterialShaderMaps)
+                    {
+                        var repeated = ShaderMapOnlyReader.ReadReferenceCache(path, game, key);
+                        TestAssert.True(repeated is not null &&
+                            expectedMap.GetNames(game).SequenceEqual(repeated.GetNames(game)),
+                            $"A cached {game} material-section offset selected the wrong map.");
+                    }
+                    TestAssert.True(ShaderMapOnlyReader.ReadReferenceCache(
+                            path, game, (StaticParameterSet)Guid.NewGuid()) is null,
+                        $"A missing {game} key unexpectedly matched through the cached section offset.");
+
                     TestAssert.True(ShaderMapOnlyReader.Read(cacheExport, (StaticParameterSet)Guid.NewGuid()) is null,
                         $"A missing {game} static parameter key unexpectedly matched a local map.");
                 }

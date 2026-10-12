@@ -12,6 +12,12 @@ namespace MorphFaceEditor.LegendaryExplorer;
 /// <summary>Reads one compiled material map while skipping unused embedded shader bytecode.</summary>
 internal static class ShaderMapOnlyReader
 {
+    private const int MaximumReferenceSections = 8;
+    private static readonly object ReferenceSectionLock = new();
+    private static readonly Dictionary<string, ReferenceSection> ReferenceSections =
+        new(StringComparer.OrdinalIgnoreCase);
+    private sealed record ReferenceSection(MEGame Game, long Length, DateTime LastWriteUtc, long Offset);
+
     internal static MaterialShaderMap? Read(ExportEntry cacheExport, StaticParameterSet parameters)
     {
         ArgumentNullException.ThrowIfNull(cacheExport);
@@ -43,8 +49,34 @@ internal static class ShaderMapOnlyReader
             throw new InvalidDataException("The reference shader cache has an invalid binary offset.");
 
         var sc = new SerializingContainer(stream, package, true);
-        sc.ms.JumpTo(binaryOffset);
-        return Read(sc, game, 0, parameters);
+        var fullPath = Path.GetFullPath(path);
+        var file = new FileInfo(fullPath);
+        long materialOffset;
+        lock (ReferenceSectionLock)
+        {
+            if (ReferenceSections.TryGetValue(fullPath, out var cached) &&
+                cached.Game == game && cached.Length == file.Length &&
+                cached.LastWriteUtc == file.LastWriteTimeUtc)
+            {
+                materialOffset = cached.Offset;
+            }
+            else
+            {
+                sc.ms.JumpTo(binaryOffset);
+                SkipToMaterialMaps(sc, game, 0);
+                materialOffset = sc.ms.Position;
+                ReferenceSections.Remove(fullPath);
+                if (ReferenceSections.Count >= MaximumReferenceSections)
+                    ReferenceSections.Remove(ReferenceSections.Keys.First());
+                ReferenceSections[fullPath] = new ReferenceSection(
+                    game, file.Length, file.LastWriteTimeUtc, materialOffset);
+            }
+        }
+        // Readers are short-lived during fresh PCC validation. Keep only the
+        // stamped section offset across readers, so each lookup does not walk
+        // the entire reference cache's embedded shader records again.
+        sc.ms.JumpTo(materialOffset);
+        return ReadMaterialMap(sc, game, 0, parameters);
     }
 
     private static MaterialShaderMap? Read(
@@ -53,7 +85,12 @@ internal static class ShaderMapOnlyReader
         long offsetBasis,
         StaticParameterSet parameters)
     {
+        SkipToMaterialMaps(sc, game, offsetBasis);
+        return ReadMaterialMap(sc, game, offsetBasis, parameters);
+    }
 
+    private static void SkipToMaterialMaps(SerializingContainer sc, MEGame game, long offsetBasis)
+    {
         byte platform = 0;
         sc.Serialize(ref platform);
 
@@ -88,6 +125,11 @@ internal static class ShaderMapOnlyReader
             sc.Serialize(ref vertexFactoryTypeCrcMap, sc.Serialize, sc.Serialize);
         }
 
+    }
+
+    private static MaterialShaderMap? ReadMaterialMap(
+        SerializingContainer sc, MEGame game, long offsetBasis, StaticParameterSet parameters)
+    {
         var materialMapCount = ReadCount(sc, "material shader maps");
         for (var i = 0; i < materialMapCount; i++)
         {

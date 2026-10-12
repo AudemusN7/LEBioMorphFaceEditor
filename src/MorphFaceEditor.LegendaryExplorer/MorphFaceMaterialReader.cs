@@ -33,6 +33,25 @@ internal sealed class MorphFaceMaterialReader(
     private long _decodedTextureBytes;
     private int _materialCacheHits;
     private int _materialCacheMisses;
+    private long _defaultsTicks;
+    private long _shaderLookupTicks;
+    private long _textureDecodeTicks;
+
+    private enum ReadStage { Defaults, ShaderLookup, TextureDecode }
+    private readonly struct ReadTimingScope(MorphFaceMaterialReader owner, ReadStage stage) : IDisposable
+    {
+        private readonly long _start = System.Diagnostics.Stopwatch.GetTimestamp();
+        public void Dispose()
+        {
+            var elapsed = System.Diagnostics.Stopwatch.GetTimestamp() - _start;
+            switch (stage)
+            {
+                case ReadStage.Defaults: owner._defaultsTicks += elapsed; break;
+                case ReadStage.ShaderLookup: owner._shaderLookupTicks += elapsed; break;
+                case ReadStage.TextureDecode: owner._textureDecodeTicks += elapsed; break;
+            }
+        }
+    }
 
     public MaterialReadMetrics LastReadMetrics { get; private set; } = new(TimeSpan.Zero, TimeSpan.Zero, 0, 0);
 
@@ -187,6 +206,7 @@ internal sealed class MorphFaceMaterialReader(
         ArgumentNullException.ThrowIfNull(attachmentMaterialExports);
         _materialCacheHits = 0;
         _materialCacheMisses = 0;
+        _defaultsTicks = _shaderLookupTicks = _textureDecodeTicks = 0;
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
         var (overrides, overrideTextures) = applyFaceOverrides
             ? ReadOverrides(face)
@@ -224,7 +244,12 @@ internal sealed class MorphFaceMaterialReader(
             System.Diagnostics.Stopwatch.GetElapsedTime(started, overridesFinished),
             System.Diagnostics.Stopwatch.GetElapsedTime(overridesFinished, finished),
             _materialCacheHits,
-            _materialCacheMisses);
+            _materialCacheMisses)
+        {
+            Defaults = System.Diagnostics.Stopwatch.GetElapsedTime(0, _defaultsTicks),
+            ShaderLookup = System.Diagnostics.Stopwatch.GetElapsedTime(0, _shaderLookupTicks),
+            TextureDecode = System.Diagnostics.Stopwatch.GetElapsedTime(0, _textureDecodeTicks)
+        };
         return new MaterialReadResult(overrides, new ResolvedHeadMaterialSet(resolved), warnings);
     }
 
@@ -756,6 +781,7 @@ internal sealed class MorphFaceMaterialReader(
 
     private MaterialShaderMap ReadShaderMap(ExportEntry master)
     {
+        using var timing = new ReadTimingScope(this, ReadStage.ShaderLookup);
         var parameters = master.ClassName == "Material"
             ? (StaticParameterSet)ObjectBinary.From<Material>(master).SM3MaterialResource.ID
             : ObjectBinary.From<MaterialInstance>(master).SM3StaticParameterSet;
@@ -826,6 +852,7 @@ internal sealed class MorphFaceMaterialReader(
         string materialKey,
         HumanMaterialPreviewModel previewModelOverride = HumanMaterialPreviewModel.Default)
     {
+        using var timing = new ReadTimingScope(this, ReadStage.Defaults);
         var scalarValues = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
         var vectorValues = new Dictionary<string, Vector4>(StringComparer.OrdinalIgnoreCase);
         var textureValues = new Dictionary<string, ExportEntry>(StringComparer.OrdinalIgnoreCase);
@@ -1489,6 +1516,7 @@ internal sealed class MorphFaceMaterialReader(
 
     private DecodedTextureAsset DecodeTexture(ExportEntry export, MaterialParameterDefinition definition)
     {
+        using var timing = new ReadTimingScope(this, ReadStage.TextureDecode);
         var source = MorphFacePackageReader.ToIdentity(export)!;
         PackageSourceCache.Verify(packageCache, source.PackagePath);
         export = ResolveTexture(source);

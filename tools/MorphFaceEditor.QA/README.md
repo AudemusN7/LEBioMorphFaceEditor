@@ -47,6 +47,8 @@ Load and Randomisation stages are warned above **1,500 ms**; file transfer, Save
 
 Preview renderer initialisation is recorded separately as a Load stage with the **1,500 ms** target. This includes its first-use setup rather than hiding that cost inside the untimed Render PNG stage. Shader bytecode is compiled and embedded during the build; preview construction does not compile HLSL.
 
+Face-load material breakdowns also report defaults, shader lookup and texture decoding/cache time. Defaults include shader lookup, so these are overlapping diagnostic timings, not values to add together. They help distinguish reference shader-cache I/O from texture work when a long-run load stalls.
+
 Each stage name contains its sequence number, phase and purpose; run and case identity are supplied by the containing report record. `Player fixture preparation` covers stock loading/catalogue construction and fixture export; `Test workflow` covers the randomized-input test. Face/file names and Clipboard copy/paste roles distinguish repeated operations.
 
 Before the matrix tests a game's first face, it records a separate `ColdLoad` warm-up using that game's corpus package. Cold-load timings have no performance limit; subsequent face loads retain the 1,500 ms limit. This measures the first load in the QA session without flushing Windows file caches. The benchmark case likewise records its first load separately from its warm repeats.

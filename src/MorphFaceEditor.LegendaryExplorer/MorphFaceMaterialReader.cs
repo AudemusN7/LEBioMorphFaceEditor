@@ -7,7 +7,6 @@ using LegendaryExplorerCore.Shaders;
 using LegendaryExplorerCore.Unreal;
 using LegendaryExplorerCore.Unreal.BinaryConverters;
 using LegendaryExplorerCore.Unreal.Classes;
-using LegendaryExplorerCore.Unreal.Collections;
 using LegendaryExplorerCore.Unreal.ObjectInfo;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
@@ -24,7 +23,11 @@ internal sealed class MorphFaceMaterialReader(
     private const long MaximumDecodedTextureBytes = 384L * 1024 * 1024;
     private readonly Dictionary<string, DecodedTextureAsset> _textureCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, CachedMaterialMetadata> _materialCache = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConditionalWeakTable<ExportEntry, UMultiMap<StaticParameterSet, MaterialShaderMap>> _shaderMaps = new();
+    private const int MaximumReferenceShaderMapCacheEntries = 64;
+    private const int MaximumLocalShaderMapCacheEntries = 32;
+    private readonly ConditionalWeakTable<ExportEntry, LocalShaderMapCache> _shaderMaps = new();
+    private readonly Dictionary<ReferenceShaderMapKey, LinkedListNode<CachedReferenceShaderMap>> _referenceShaderMaps = [];
+    private readonly LinkedList<CachedReferenceShaderMap> _referenceShaderMapsLru = [];
     private readonly LinkedList<string> _textureCacheLru = new();
     private readonly Dictionary<string, LinkedListNode<string>> _textureCacheLruNodes = new(StringComparer.OrdinalIgnoreCase);
     private long _decodedTextureBytes;
@@ -42,6 +45,51 @@ internal sealed class MorphFaceMaterialReader(
         CubeMetadata? SecondaryCube,
         IReadOnlySet<string> Dependencies,
         bool TexturesAreDefaults = true);
+
+    private readonly record struct ReferenceShaderMapKey(
+        MEGame Game,
+        string Path,
+        long Length,
+        long LastWriteUtcTicks,
+        StaticParameterSet Parameters);
+
+    private sealed record CachedReferenceShaderMap(ReferenceShaderMapKey Key, MaterialShaderMap Map);
+
+    private sealed class LocalShaderMapCache
+    {
+        private readonly Dictionary<StaticParameterSet, LinkedListNode<CachedLocalShaderMap>> _maps = [];
+        private readonly LinkedList<CachedLocalShaderMap> _lru = [];
+
+        public bool TryGet(StaticParameterSet parameters, out MaterialShaderMap? map)
+        {
+            if (!_maps.TryGetValue(parameters, out var node))
+            {
+                map = null;
+                return false;
+            }
+            _lru.Remove(node);
+            _lru.AddFirst(node);
+            map = node.Value.Map;
+            return true;
+        }
+
+        public void Add(StaticParameterSet parameters, MaterialShaderMap? map)
+        {
+            if (_maps.TryGetValue(parameters, out var existing))
+            {
+                _lru.Remove(existing);
+                _maps.Remove(parameters);
+            }
+            var node = _lru.AddFirst(new CachedLocalShaderMap(parameters, map));
+            _maps.Add(parameters, node);
+            if (_maps.Count <= MaximumLocalShaderMapCacheEntries) return;
+            var last = _lru.Last!;
+            _lru.RemoveLast();
+            _maps.Remove(last.Value.Parameters);
+        }
+    }
+
+    private sealed record CachedLocalShaderMap(StaticParameterSet Parameters, MaterialShaderMap? Map);
 
     /// <summary>
     /// Reads one material's detached defaults without applying a BioMorphFace
@@ -708,23 +756,68 @@ internal sealed class MorphFaceMaterialReader(
 
     private MaterialShaderMap ReadShaderMap(ExportEntry master)
     {
-        // LEC's general shader lookup parses every shader bytecode in the local
-        // cache. Material evidence only needs the maps; retain those once per
-        // source package and allow the parsed shader bytecode to be collected.
         var parameters = master.ClassName == "Material"
             ? (StaticParameterSet)ObjectBinary.From<Material>(master).SM3MaterialResource.ID
             : ObjectBinary.From<MaterialInstance>(master).SM3StaticParameterSet;
         if (master.FileRef.FindExport("SeekFreeShaderCache", "ShaderCache") is { } localCache)
         {
-            // Key by the actual export, not its filename: reopening a changed
-            // package cannot reuse old maps. Weak keys do not keep evicted
-            // packages (or their map indexes) alive for the app's lifetime.
-            var maps = _shaderMaps.GetValue(localCache,
-                export => ObjectBinary.From<ShaderCache>(export).MaterialShaderMaps);
-            if (maps.TryGetValue(parameters, out var map)) return map;
+            var maps = _shaderMaps.GetValue(localCache, _ => new LocalShaderMapCache());
+            if (maps.TryGet(parameters, out var cachedMap))
+            {
+                if (cachedMap is not null) return cachedMap;
+            }
+            else
+            {
+                var map = ShaderMapOnlyReader.Read(localCache, parameters);
+                maps.Add(parameters, map);
+                if (map is not null) return map;
+            }
         }
-        return RefShaderCacheReader.GetMaterialShaderMap(master.Game, parameters, out _)
+        return ReadReferenceShaderMap(master.Game, parameters)
             ?? throw new InvalidDataException($"No compiled shader map was found for '{master.InstancedFullPath}'.");
+    }
+
+    private MaterialShaderMap? ReadReferenceShaderMap(MEGame game, StaticParameterSet parameters)
+    {
+        var path = RefShaderCacheReader.ShaderFilePath(game);
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return null;
+
+        var fullPath = Path.GetFullPath(path);
+        var file = new FileInfo(fullPath);
+        var key = new ReferenceShaderMapKey(game, fullPath, file.Length, file.LastWriteTimeUtc.Ticks, parameters);
+        if (_referenceShaderMaps.TryGetValue(key, out var cached))
+        {
+            _referenceShaderMapsLru.Remove(cached);
+            _referenceShaderMapsLru.AddFirst(cached);
+            return cached.Value.Map;
+        }
+
+        // A changed reference cache must not keep returning maps parsed from
+        // its previous contents. Removing stale versions also frees their maps.
+        foreach (var staleKey in _referenceShaderMaps.Keys
+                     .Where(existing => existing.Game == game &&
+                                        existing.Path.Equals(fullPath, StringComparison.OrdinalIgnoreCase) &&
+                                        (existing.Length != file.Length || existing.LastWriteUtcTicks != file.LastWriteTimeUtc.Ticks))
+                     .ToArray())
+        {
+            var stale = _referenceShaderMaps[staleKey];
+            _referenceShaderMaps.Remove(staleKey);
+            _referenceShaderMapsLru.Remove(stale);
+        }
+
+        var map = ShaderMapOnlyReader.ReadReferenceCache(fullPath, game, parameters);
+        if (map is null) return null;
+
+        var entry = new CachedReferenceShaderMap(key, map);
+        var node = _referenceShaderMapsLru.AddFirst(entry);
+        _referenceShaderMaps.Add(key, node);
+        if (_referenceShaderMaps.Count > MaximumReferenceShaderMapCacheEntries)
+        {
+            var last = _referenceShaderMapsLru.Last!;
+            _referenceShaderMapsLru.RemoveLast();
+            _referenceShaderMaps.Remove(last.Value.Key);
+        }
+        return map;
     }
 
     private CachedMaterialMetadata ReadMaterialDefaults(

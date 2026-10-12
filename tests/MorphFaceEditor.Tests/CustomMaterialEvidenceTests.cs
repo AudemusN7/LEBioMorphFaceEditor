@@ -413,6 +413,9 @@ public static class CustomMaterialEvidenceTests
         }
 
         using var reader = new MorphFacePackageReader();
+        var sources = reader.LoadMeshMaterialSources(
+            packagePath,
+            "Hair_PROShepard.HMF_HIR_PROShepard_MDL");
         var evidence = reader.LoadMeshMaterialEvidence(
             packagePath,
             "Hair_PROShepard.HMF_HIR_PROShepard_MDL");
@@ -444,6 +447,19 @@ public static class CustomMaterialEvidenceTests
         TestAssert.True(evidence.Materials.SequenceEqual(
                 evidence.Slots.Select(slot => slot.Material)),
             "The detached material convenience view changed slot order.");
+        TestAssert.True(sources.Slots.Select(slot => slot.SlotIndex)
+                .SequenceEqual(evidence.Slots.Select(slot => slot.SlotIndex)),
+            "The lightweight material source view changed used slot order.");
+        foreach (var source in sources.Slots)
+        {
+            var material = evidence.Slots.Single(slot => slot.SlotIndex == source.SlotIndex);
+            TestAssert.Equal(MaterialIdentityKey.Create(material.Source), MaterialIdentityKey.Create(source.Source));
+            TestAssert.Equal(material.Material.Family, source.Family);
+            TestAssert.True(source.Sections.SequenceEqual(material.Sections),
+                $"The lightweight source view changed section ownership for slot {source.SlotIndex}.");
+        }
+        TestAssert.True(sources.Dependencies.Contains(Path.GetFullPath(evidence.Mesh.PackagePath)),
+            "The lightweight source view omitted its mesh package from invalidation dependencies.");
     }
 
     private static void RetainsDuplicateSourceMaterialRefs()

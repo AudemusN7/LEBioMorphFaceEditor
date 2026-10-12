@@ -30,16 +30,34 @@ public sealed record CustomMaterialAssignmentOption(
 {
     private ResolvedHeadMaterial _template = Template;
     private Lazy<ResolvedHeadMaterial>? _deferredTemplate;
+    private AssetIdentity _templateSource = Template.Source;
+
+    /// <summary>Exact source identity available without resolving material controls.</summary>
+    public AssetIdentity TemplateSource
+    {
+        get => _templateSource;
+        init => _templateSource = value ?? throw new ArgumentNullException(nameof(value));
+    }
 
     public ResolvedHeadMaterial Template
     {
         get => _deferredTemplate?.Value ?? _template;
-        init { _template = value; _deferredTemplate = null; }
+        init { _template = value; _templateSource = value.Source; _deferredTemplate = null; }
     }
 
     /// <summary>Creates a workspace-owned option whose pixels are decoded only when selected.</summary>
     public CustomMaterialAssignmentOption WithDeferredTemplate(Func<ResolvedHeadMaterial> load) =>
         this with { _deferredTemplate = new Lazy<ResolvedHeadMaterial>(load) };
+
+    /// <summary>Creates an option that keeps its source identity available before metadata is selected.</summary>
+    public CustomMaterialAssignmentOption WithDeferredTemplate(
+        AssetIdentity source,
+        Func<ResolvedHeadMaterial> load) =>
+        this with
+        {
+            TemplateSource = source ?? throw new ArgumentNullException(nameof(source)),
+            _deferredTemplate = new Lazy<ResolvedHeadMaterial>(load)
+        };
 
     public HeadMaterialFamily MaterialFamily => Family;
     public string? RandomisationProfileKey { get; init; }

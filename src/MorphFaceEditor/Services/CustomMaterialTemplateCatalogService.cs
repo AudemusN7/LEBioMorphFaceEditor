@@ -118,9 +118,7 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
             {
                 var sourceFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var metadata = BuildCatalog(game, sourceFiles);
-                var dependencies = metadata.Options.SelectMany(option =>
-                        _reader.GetMaterialEvidenceDependencies(option.Template.Source))
-                    .Concat(metadata.PreviewAttachments.Select(source => source.PackagePath))
+                var dependencies = metadata.PreviewAttachments.Select(source => source.PackagePath)
                     .Concat(sourceFiles)
                     .Concat(new[] { "BIOG_HMF_HIR_PRO.pcc", "BIOG_HMM_HIR_PRO_R.pcc" }
                         .Select(file => Path.Combine(cookedPath, file)))
@@ -137,8 +135,8 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
                 IsRegistryAvailable = cached.Registry is not null,
                 Options = cached.Metadata.Options.Select(option =>
                 {
-                    var source = option.Template.Source;
-                    return option.WithDeferredTemplate(() =>
+                    var source = option.TemplateSource;
+                    return option.WithDeferredTemplate(source, () =>
                     {
                         lock (_catalogLock) return _reader.LoadMaterialEvidence(source);
                     });
@@ -177,10 +175,11 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
                 continue;
             }
 
-            MeshMaterialEvidence evidence;
+            MeshMaterialSourceCatalog evidence;
             try
             {
-                evidence = _reader.LoadMeshMaterialEvidence(packagePath, source.MeshInstancedPath, decodeTextures: false);
+                evidence = _reader.LoadMeshMaterialSources(packagePath, source.MeshInstancedPath);
+                sourceFiles.UnionWith(evidence.Dependencies);
             }
             catch (Exception exception)
             {
@@ -192,29 +191,29 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
 
             foreach (var slot in evidence.Slots)
             {
-                var material = slot.Material;
+                var materialSource = slot.Source;
                 // The original Custom head supplies the Player face, NPC scalp
                 // and existing eye/lash choices. Average supplies the NPC face;
                 // the native Player seed supplies the Player scalp occurrence.
-                if (source.PlayerScalp && material.Family != HeadMaterialFamily.Scalp ||
-                    source.NpcFace && material.Family != HeadMaterialFamily.Skin)
+                if (source.PlayerScalp && slot.Family != HeadMaterialFamily.Scalp ||
+                    source.NpcFace && slot.Family != HeadMaterialFamily.Skin)
                     continue;
-                if (material.Family == HeadMaterialFamily.Unknown ||
-                    !HeadMaterialClassifier.IsAssignableHeadFamily(material.Family))
+                if (slot.Family == HeadMaterialFamily.Unknown ||
+                    !HeadMaterialClassifier.IsAssignableHeadFamily(slot.Family))
                 {
                     warnings.Add(
-                        Loc.Format("loc_Services_CustomTemplate_SkippedUnprovenFamily", material.Source.InstancedPath));
+                        Loc.Format("loc_Services_CustomTemplate_SkippedUnprovenFamily", materialSource.InstancedPath));
                     continue;
                 }
 
-                var role = Role(material.Family);
+                var role = Role(slot.Family);
                 options.Add(new CustomMaterialAssignmentOption(
-                    $"{game}:{source.Key}:{material.Source.InstancedPath}",
-                    source.OptionLabelKey is null ? HumanLabel(source, material.Family) : Loc.Text(source.OptionLabelKey),
+                    $"{game}:{source.Key}:{materialSource.InstancedPath}",
+                    source.OptionLabelKey is null ? HumanLabel(source, slot.Family) : Loc.Text(source.OptionLabelKey),
                     source.AppearanceCompatibilityKey,
                     role,
-                    material.Family,
-                    material)
+                    slot.Family,
+                    CreateTemplateDescriptor(materialSource, slot.Family))
                 {
                     RandomisationProfileKey = RandomisationProfileKey(game, source.PlayerScalp || source.NpcFace
                         ? source.AppearanceCompatibilityKey : source.Key),
@@ -255,14 +254,15 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
         {
             if (source.Games is not null && !source.Games.Contains(game)) continue;
             var candidates = CandidatePackages(snapshot, source).ToArray();
-            MeshMaterialEvidence? evidence = null;
+            MeshMaterialSourceCatalog? evidence = null;
             Exception? lastFailure = null;
             foreach (var candidate in candidates)
             {
                 sourceFiles.Add(candidate.PackagePath);
                 try
                 {
-                    evidence = _reader.LoadMeshMaterialEvidence(candidate.PackagePath, candidate.MeshPath, decodeTextures: false);
+                    evidence = _reader.LoadMeshMaterialSources(candidate.PackagePath, candidate.MeshPath);
+                    sourceFiles.UnionWith(evidence.Dependencies);
                     break;
                 }
                 catch (Exception exception)
@@ -280,24 +280,24 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
 
             foreach (var slot in evidence.Slots)
             {
-                var material = slot.Material;
+                var materialSource = slot.Source;
                 if (source.Key == "asari" &&
-                    material.Family is HeadMaterialFamily.Eyes or HeadMaterialFamily.Lashes)
+                    slot.Family is HeadMaterialFamily.Eyes or HeadMaterialFamily.Lashes)
                 {
                     continue;
                 }
-                if (material.Family == HeadMaterialFamily.Unknown ||
-                    !HeadMaterialClassifier.IsAssignableHeadFamily(material.Family))
+                if (slot.Family == HeadMaterialFamily.Unknown ||
+                    !HeadMaterialClassifier.IsAssignableHeadFamily(slot.Family))
                 {
                     continue;
                 }
                 options.Add(new CustomMaterialAssignmentOption(
-                    $"{game}:{source.Key}:{material.Source.InstancedPath}",
-                    Loc.Format("loc_Services_CustomTemplate_IndexedOptionLabel", SourceLabel(source), FamilyLabel(material.Family)),
+                    $"{game}:{source.Key}:{materialSource.InstancedPath}",
+                    Loc.Format("loc_Services_CustomTemplate_IndexedOptionLabel", SourceLabel(source), FamilyLabel(slot.Family)),
                     source.AppearanceCompatibilityKey,
-                    Role(material.Family),
-                    material.Family,
-                    material)
+                    Role(slot.Family),
+                    slot.Family,
+                    CreateTemplateDescriptor(materialSource, slot.Family))
                 {
                     RandomisationProfileKey = RandomisationProfileKey(game, source.Key),
                     ParameterScopeKey = source.Key,
@@ -403,6 +403,19 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
     internal static bool IsUnsafeAttachment(string packagePath, string meshPath) =>
         AttachmentMeshNamePolicy.HasExcludedSuffix(meshPath) ||
         AttachmentMeshNamePolicy.IsExcludedNativeAttachment(meshPath);
+
+    private static ResolvedHeadMaterial CreateTemplateDescriptor(
+        AssetIdentity source,
+        HeadMaterialFamily family) => new(
+        MaterialIdentityKey.Create(source),
+        source,
+        string.Empty,
+        family,
+        HeadMaterialBlendMode.Opaque,
+        false,
+        new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase),
+        new Dictionary<string, System.Numerics.Vector4>(StringComparer.OrdinalIgnoreCase),
+        new Dictionary<string, MaterialTextureBinding>(StringComparer.OrdinalIgnoreCase));
 
     private static string Role(HeadMaterialFamily family) => family switch
     {

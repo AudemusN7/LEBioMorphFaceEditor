@@ -2,6 +2,7 @@ using System.Numerics;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Core.Materials;
+using MorphFaceEditor.ViewModels;
 
 namespace MorphFaceEditor.Tests;
 
@@ -14,7 +15,7 @@ public static class CustomMaterialWorkspaceTests
         new("custom workspace rejects unknown assignment options", RejectsUnknown),
         new("custom workspace enforces role-specific material compatibility", EnforcesRoleSpecificCompatibility),
         new("custom material assignment undo is one semantic action", AssignmentUndoRedo),
-        new("custom template decodes on assignment and survives undo redo", DeferredTemplateAssignment),
+        new("custom slot menu defers material metadata until assignment and reuses it through history", DeferredTemplateAssignment),
         new("custom material defaults use the lowest assigned slot", LowestSlotWinsDefaults),
         new("custom material rebase exposes shared union and preserves overrides", RebasePreservesUnionAndOverrides),
         new("custom material parameters remain independent across racial scopes", RacialScopesRemainIndependent),
@@ -169,11 +170,18 @@ public static class CustomMaterialWorkspaceTests
     {
         var template = Option("skin", "Skin", "human", "head", HeadMaterialFamily.Skin).Template;
         var loads = 0;
+        var source = template.Source;
         var option = new CustomMaterialAssignmentOption("skin", "Skin", "human", "head",
-            HeadMaterialFamily.Skin, template).WithDeferredTemplate(() => { loads++; return template; });
+            HeadMaterialFamily.Skin, template).WithDeferredTemplate(source, () => { loads++; return template; });
         var workspace = new CustomMaterialWorkspace(CreateSource(new ImportedMeshSection(0, "Face", 0, 3)));
+        using var slotEditor = new CustomMaterialSlotEditorViewModel(
+            workspace, workspace.UsedSlots[0], [option], _ => throw new Exception("Unexpected assignment failure."));
+        TestAssert.Equal(source, option.TemplateSource);
+        TestAssert.Equal(2, slotEditor.Options.Count);
+        TestAssert.True(ReferenceEquals(option, slotEditor.Options[1].Assignment),
+            "The slot menu changed the deferred assignment descriptor.");
         TestAssert.Equal(0, loads);
-        workspace.Assign(0, option);
+        slotEditor.Selected = slotEditor.Options[1];
         TestAssert.Equal(1, loads);
         workspace.Assign(0, option);
         workspace.Undo();

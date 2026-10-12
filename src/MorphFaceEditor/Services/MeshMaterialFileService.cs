@@ -43,7 +43,7 @@ public sealed class MeshMaterialFileService(PackageReferenceService references)
     private static MaterialFaceTarget? InferDefaultFace(CustomMaterialWorkspace workspace, MorphFaceGame game)
     {
         var suffixes = workspace.Assignments.Select(value => HeadProfileIdentity.InferSuffix(
-                value.Option.Template.Source.InstancedPath, value.Option.Id, value.Option.Label))
+                value.Option.TemplateSource.InstancedPath, value.Option.Id, value.Option.Label))
             .OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         if (suffixes.Length != 1 || suffixes[0] == "human") return null;
         var profileKey = $"{game.ToString().ToLowerInvariant()}-{suffixes[0]}";

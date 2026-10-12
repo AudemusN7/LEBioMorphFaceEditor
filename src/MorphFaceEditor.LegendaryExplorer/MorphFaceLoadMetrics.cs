@@ -11,4 +11,9 @@ public sealed record MorphFaceLoadMetrics(
     TimeSpan MaterialOverrides,
     TimeSpan MaterialResolution,
     int MaterialCacheHits,
-    int MaterialCacheMisses);
+    int MaterialCacheMisses)
+{
+    public TimeSpan MaterialDefaults { get; init; }
+    public TimeSpan MaterialShaderLookup { get; init; }
+    public TimeSpan MaterialTextureDecode { get; init; }
+}

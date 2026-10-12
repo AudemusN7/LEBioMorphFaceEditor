@@ -176,7 +176,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             () => !IsBusy && Editor?.IsDirty == true && _packageWorkspace?.CanCommit == true);
         _saveCommand = new AsyncRelayCommand(
             SaveExistingCommandAsync,
-            () => !IsBusy && IsDirty && _packageWorkspace?.CanCommit == true);
+            () => !IsBusy && HasWorkspace && (IsDirty || HasMultipleStandaloneImports));
         _saveMorphToPccCommand = new AsyncRelayCommand(
             SaveMorphToPccCommandAsync,
             () => CanUseFaceContextMenu() ||
@@ -1663,7 +1663,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     private async Task SaveExistingCommandAsync() =>
-        _ = await CommitWorkspaceAsync(showConfirmation: true);
+        _ = await SaveSourceFileAsync();
 
     private async Task CommitFaceCommandAsync() =>
         _ = await FlushEditorToWorkspaceAsync();
@@ -1686,7 +1686,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         try
         {
             AppLog.Information($"Flushing face '{LoadedFacePath}' to temporary workspace '{WorkspacePackagePath}'.");
-            var result = await Task.Run(() => _packageWriter.SaveExisting(Editor.CreateDraft()));
+            var draft = Editor.CreateDraft();
+            var result = await Task.Run(() => _packageWriter.SaveExisting(draft));
+            if (IsStandaloneWorkspace && _sourceFile is { } source && LoadedFacePath != source.FacePath)
+                _hasOtherStandaloneChanges = true;
             MarkWorkspaceChanged();
             var reopened = await RefreshWorkspaceAsync(result.FaceInstancedPath);
             if (!reopened)
@@ -1773,12 +1776,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
         return _dialogs.ConfirmUnsavedChanges(
             LoadedFacePath ?? Loc.Text("loc_Shell_UnsavedChanges_LoadedBioMorphFace"),
-            IsDetachedMeshWorkspace ? UnsavedChangesScope.DetachedMaterials : IsStandaloneWorkspace
+            CanSaveOriginalRon ? UnsavedChangesScope.SourceFile : IsDetachedMeshWorkspace ? UnsavedChangesScope.DetachedMaterials : IsStandaloneWorkspace
                 ? UnsavedChangesScope.StandaloneFace
                 : UnsavedChangesScope.Face) switch
         {
-            UnsavedChangesChoice.Save => IsDetachedMeshWorkspace ? await ExportMeshMaterialsAsync(false) : IsStandaloneWorkspace
-                ? await SaveMorphToPccAsync()
+            UnsavedChangesChoice.Save => IsStandaloneWorkspace ? await SaveSourceFileAsync()
                 : await FlushEditorToWorkspaceAsync(),
             UnsavedChangesChoice.Discard => true,
             _ => false
@@ -1793,11 +1795,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
         return _dialogs.ConfirmUnsavedChanges(
             IsStandaloneWorkspace ? LoadedFacePath ?? PackageName : PackagePath ?? Loc.Text("loc_Shell_UnsavedChanges_OpenPackage"),
-            IsDetachedMeshWorkspace ? UnsavedChangesScope.DetachedMaterials :
+            CanSaveOriginalRon ? UnsavedChangesScope.SourceFile : IsDetachedMeshWorkspace ? UnsavedChangesScope.DetachedMaterials :
                 IsStandaloneWorkspace ? UnsavedChangesScope.StandaloneFace : UnsavedChangesScope.Package) switch
         {
-            UnsavedChangesChoice.Save => IsDetachedMeshWorkspace ? await ExportMeshMaterialsAsync(false) : IsStandaloneWorkspace
-                ? await SaveMorphToPccAsync()
+            UnsavedChangesChoice.Save => IsStandaloneWorkspace ? await SaveSourceFileAsync()
                 : await CommitWorkspaceAsync(showConfirmation: false),
             UnsavedChangesChoice.Discard => true,
             _ => false
@@ -1834,6 +1835,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         SetDetachedMeshSource(null);
         _standaloneImportPath = null;
         _standaloneGame = null;
+        _sourceFile = null;
+        _hasOtherStandaloneChanges = false;
         _isStandaloneNpcWorkspace = false;
         _fixedBakeFacePaths.Clear();
         _relativeBakeFacePaths.Clear();
@@ -2009,6 +2012,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private void DisposePackageWorkspace()
     {
+        _sourceFile = null;
+        _hasOtherStandaloneChanges = false;
         if (_packageWorkspace is null)
         {
             return;

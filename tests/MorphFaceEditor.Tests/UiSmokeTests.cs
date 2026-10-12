@@ -42,6 +42,7 @@ public static class UiSmokeTests
         new("application settings: diagnostic PCC captures pending edits without modifying live data", DiagnosticPccCapturesPendingEdits),
         new("application settings: detached diagnostics include loaded geometry and current material assignments", DiagnosticDetachedMeshIncludesState),
         new("standalone morph import is available before opening a PCC", StandaloneImportIsAvailableWithoutPackage),
+        new("source file save preserves RON edits on failure and blocks multiple imports", SourceFileSaveRoundTrip),
         new("unrecognised mesh import publishes a detached preview workspace", UnrecognisedMeshPublishesDetachedWorkspace),
         new("custom mesh import ignores the selected PCC morph topology", () => UnrecognisedMeshPublishesDetachedWorkspace(openPcc: true)),
         new("glTF and GLB drops publish detached mesh workspaces", GltfAndGlbDropsPublishDetachedWorkspaces),
@@ -298,6 +299,74 @@ public static class UiSmokeTests
                 "Detached diagnostics replaced or cleaned the live editor, or left it busy.");
         }
         finally { Directory.Delete(root, recursive: true); }
+    });
+
+    private static void SourceFileSaveRoundTrip() => RunWithDispatcher(async () =>
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"MFE-SourceSave-{Guid.NewGuid():N}.ron");
+        var second = Path.ChangeExtension(path, ".second.ron");
+        try
+        {
+            var game = MorphFaceGame.LE2;
+            var seed = StandalonePlayerMorphImportService.ResolveInstalledSeed(game);
+            var seedBytes = File.ReadAllBytes(seed);
+            new MorphFacePackageContextService().ExportRon(seed,
+                StandalonePlayerMorphImportService.ResolvePlayerTemplate(game, StandalonePlayerSex.Female), path);
+            using var reader = new MorphFacePackageReader();
+            var dialogs = new StubEditorDialogs
+            {
+                StandaloneGameChoiceResult = game,
+                StandaloneNameChoiceResult = "SourceSave"
+            };
+            using var shell = CreateMainWindowViewModel(reader, dialogs);
+            await shell.OpenDroppedFileAsync(path);
+            TestAssert.True(shell.Editor is not null && !shell.HasError, shell.ErrorMessage ?? "Player setup failed.");
+            var scalar = shell.Editor!.Material.Scalars.First();
+            var name = scalar.Name;
+            var value = scalar.Value + 0.125f;
+            scalar.Value = value;
+            TestAssert.True(shell.SaveCommand.CanExecute(null), "A dirty RON did not enable Save File.");
+            await ((AsyncRelayCommand)shell.SaveCommand).ExecuteAsync();
+            TestAssert.True(!shell.HasError && !shell.IsDirty, shell.ErrorMessage ?? "RON save stayed dirty.");
+            var saved = File.ReadAllText(path);
+            var data = FaceMaterialFileService.Read(saved, allowTse: true).Parameters;
+            TestAssert.Near(value, data.Scalars.Single(item => item.Name == name).Value, 0.00001f);
+            TestAssert.True(seedBytes.SequenceEqual(File.ReadAllBytes(seed)), "RON save changed the installed seed.");
+
+            shell.Editor!.Material.Scalars.Single(item => item.Name == name).Value = value + 0.125f;
+            File.WriteAllText(path, saved + "\n// external change\n");
+            var changed = File.ReadAllText(path);
+            await ((AsyncRelayCommand)shell.SaveCommand).ExecuteAsync();
+            TestAssert.True(shell.HasError && shell.IsDirty, "Failed source save lost the dirty state.");
+            TestAssert.Equal(changed, File.ReadAllText(path));
+            File.WriteAllText(path, saved);
+            await ((AsyncRelayCommand)shell.SaveCommand).ExecuteAsync();
+            TestAssert.True(!shell.HasError && !shell.IsDirty, shell.ErrorMessage ?? "Staged retry failed.");
+
+            shell.Editor!.Material.Scalars.Single(item => item.Name == name).Value = value + 0.25f;
+            dialogs.ConfirmUnsavedChangesResult = UnsavedChangesChoice.Save;
+            TestAssert.True(await shell.ConfirmCloseAsync(), "Closing could not save back to the original RON.");
+            TestAssert.True(!shell.IsDirty && !shell.HasError, "Close-save left unsaved RON edits.");
+
+            File.Copy(path, second);
+            dialogs.StandaloneNameChoiceResult = "SecondSource";
+            dialogs.RonImportDestinationChoiceResult = new(RonImportDestination.PlayerWorkspace, null);
+            await shell.OpenDroppedFileAsync(second);
+            TestAssert.True(!shell.HasError, shell.ErrorMessage ?? "Second import failed.");
+            var firstBefore = File.ReadAllText(path);
+            var secondBefore = File.ReadAllText(second);
+            shell.Editor!.Material.Scalars.First().Value += 0.125f;
+            await ((AsyncRelayCommand)shell.SaveCommand).ExecuteAsync();
+            TestAssert.Equal(Loc.Text("loc_FileSave_MultipleImports"), dialogs.LastInformation);
+            TestAssert.True(shell.IsDirty, "Multiple-import guidance cleared edits.");
+            TestAssert.Equal(firstBefore, File.ReadAllText(path));
+            TestAssert.Equal(secondBefore, File.ReadAllText(second));
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+            if (File.Exists(second)) File.Delete(second);
+        }
     });
 
     private static void StandaloneImportIsAvailableWithoutPackage()
@@ -1026,6 +1095,22 @@ public static class UiSmokeTests
                 TestAssert.True(!shell.CanCommitFace && !shell.SaveCommand.CanExecute(null),
                     "A default material workspace can overwrite its installed source package.");
                 TestAssert.Equal(0, dialogs.StandaloneGameChoiceCount);
+                var scalar = shell.Editor!.Material.Scalars.First();
+                scalar.Value += 0.125f;
+                TestAssert.True(shell.SaveCommand.CanExecute(null), "Material RON save was disabled after editing.");
+                await ((AsyncRelayCommand)shell.SaveCommand).ExecuteAsync();
+                TestAssert.True(!shell.HasError && !shell.IsDirty, shell.ErrorMessage ?? "Material RON save stayed dirty.");
+                var savedMaterials = FaceMaterialFileService.Read(File.ReadAllText(path), allowTse: true).Parameters;
+                TestAssert.Near(scalar.Value, savedMaterials.Scalars.Single(item => item.Name == scalar.Name).Value, 0.00001f);
+                var feature = shell.Editor.Features.FirstOrDefault(item => item.IsEditable);
+                if (feature is not null)
+                {
+                    feature.Value += 0.1f;
+                    await ((AsyncRelayCommand)shell.SaveCommand).ExecuteAsync();
+                    TestAssert.True(shell.IsDirty, "Saving material settings cleared unsaved shape edits.");
+                    dialogs.ConfirmUnsavedChangesResult = UnsavedChangesChoice.Save;
+                    TestAssert.True(!await shell.ConfirmCloseAsync(), "Material-only save abandoned unsaved shape edits.");
+                }
                 if (target.PlayerMorph)
                 {
                     File.WriteAllText(path, MaterialRonCodec.WriteTse(new([], [], []), "None", [], "LE2", target));
@@ -3187,7 +3272,8 @@ public static class UiSmokeTests
         public int MaterialImportFileChoiceCount { get; private set; }
         public string? RonExportPath { get; init; }
         public MorphFaceGame? StandaloneGameChoiceResult { get; init; }
-        public string? StandaloneNameChoiceResult { get; init; }
+        public string? StandaloneNameChoiceResult { get; set; }
+        public string? LastInformation { get; private set; }
         public RonImportDestinationChoice? RonImportDestinationChoiceResult { get; set; }
         public UnsavedChangesChoice ConfirmUnsavedChangesResult { get; set; } = UnsavedChangesChoice.Cancel;
         public int ConfirmUnsavedChangesCount { get; private set; }
@@ -3237,7 +3323,7 @@ public static class UiSmokeTests
             ConfirmUnsavedChangesCount++;
             return ConfirmUnsavedChangesResult;
         }
-        public void ShowInformation(string title, string message) { }
+        public void ShowInformation(string title, string message) => LastInformation = message;
         public void ShowTextureRegistrySettings() => TextureRegistrySettingsWasShown = true;
     }
 

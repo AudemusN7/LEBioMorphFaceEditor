@@ -10,6 +10,11 @@ namespace MorphFaceEditor.Services;
 
 public sealed class WpfEditorDialogService : IEditorDialogService
 {
+    public MeshSaveChoice? ChooseMeshSaveFormat()
+    {
+        var window = new MeshSaveFormatWindow { Owner = Application.Current.MainWindow };
+        return window.ShowDialog() == true ? window.Choice : null;
+    }
     private readonly TextureRegistrySettingsViewModel _textureRegistrySettings;
 
     public WpfEditorDialogService(TextureRegistrySettingsViewModel textureRegistrySettings) =>

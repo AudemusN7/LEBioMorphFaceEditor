@@ -8,6 +8,7 @@ public interface IEditorDialogService
     string? ChooseWorkspaceFile(string? initialDirectory = null) => ChoosePackage(initialDirectory);
     MorphPackageSaveRequest? ChooseMorphPackageDestination(string suggestedFileName, string sourcePackagePath);
     string? ChooseMeshPackageDestination(string suggestedFileName, string sourceMeshPath) => null;
+    MeshSaveChoice? ChooseMeshSaveFormat() => null;
     MorphConversionSaveRequest? ChooseMorphConversionDestination(
         MorphFaceGame sourceGame,
         string suggestedFileName,
@@ -70,10 +71,13 @@ public enum UnsavedChangesChoice
 
 public enum UnsavedChangesScope
 {
+    SourceFile,
     Face,
     StandaloneFace,
     DetachedMaterials,
     Package
 }
+
+public enum MeshSaveChoice { Pcc, MaterialsRon }
 
 public sealed record NewPlayerMorphChoice(MorphFaceGame Game, StandalonePlayerSex Sex);

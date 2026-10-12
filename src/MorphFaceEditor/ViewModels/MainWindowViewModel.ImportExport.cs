@@ -403,6 +403,7 @@ public sealed partial class MainWindowViewModel
             _fixedBakeFacePaths.Clear();
             _relativeBakeFacePaths.Clear();
             _relativeBakeFacePaths.Add(selected.InstancedPath);
+            TrackSourceFile(sourcePath, selected.InstancedPath, SourceFileFormat.MorphRon);
             _hasWorkspaceChanges = false;
             PackagePath = _packageWorkspace.SourcePath;
             _referenceCatalog = references;
@@ -666,7 +667,9 @@ public sealed partial class MainWindowViewModel
                 _fixedBakeFacePaths.Add(importedFacePath);
                 _relativeBakeFacePaths.Remove(importedFacePath);
             }
-            _hasWorkspaceChanges = false;
+            if (!appendingToCurrentGame) _hasWorkspaceChanges = false;
+            TrackSourceFile(sourcePath, importedFacePath, isRon ? SourceFileFormat.MorphRon :
+                isMesh ? SourceFileFormat.Mesh : SourceFileFormat.LegacyMorph);
             OnPropertyChanged(nameof(PackageName));
             OnPropertyChanged(nameof(PackageDisplayName));
             OnDirtyStateChanged();
@@ -738,6 +741,7 @@ public sealed partial class MainWindowViewModel
         Faces.Add(face);
         SelectedFace = face;
         LoadedFacePath = face.InstancedPath;
+        TrackSourceFile(sourcePath, face.InstancedPath, SourceFileFormat.Mesh);
 
         var topology = result.Preview.Loaded.BaseHead.Topology;
         var previewAttachmentOptions = result.PreviewAttachments

@@ -2050,6 +2050,14 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         return result;
     }
 
+    internal void AcceptSavedState(bool materialsOnly = false)
+    {
+        var draft = CreateDraft();
+        _cleanState = materialsOnly ? _cleanState with { MaterialOverrides = draft.MaterialOverrides } : draft;
+        _cleanMaterialAssignments = CaptureMaterialAssignments();
+        RefreshDirtyState();
+    }
+
     private void RefreshDirtyState() =>
         IsDirty = _session.HasPendingRepair ||
                   !MaterialAssignmentsMatchCleanState() ||

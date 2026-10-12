@@ -38,13 +38,13 @@
                 </DataTrigger>
             </Style.Triggers>
         </Style>
-        <Style x:Key="PaneSplitterStyle" TargetType="{x:Type GridSplitter}">
+        <Style x:Key="PaneSplitterStyle" TargetType="{x:Type Thumb}">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="Cursor" Value="SizeWE" />
             <Setter Property="Focusable" Value="True" />
             <Setter Property="Template">
                 <Setter.Value>
-                    <ControlTemplate TargetType="{x:Type GridSplitter}">
+                    <ControlTemplate TargetType="{x:Type Thumb}">
                         <Grid Background="{TemplateBinding Background}">
                             <Border x:Name="Grip" Width="1" HorizontalAlignment="Center"
                                     Background="{DynamicResource BorderBrush}" />
@@ -205,7 +205,7 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                <StackPanel x:Name="FileToolbar" Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                     <Menu VerticalAlignment="Center">
                         <MenuItem Header="{DynamicResource loc_View_MainWindow_File}" Height="30" MinWidth="54">
                             <MenuItem Header="{DynamicResource loc_View_MainWindow_NewPlayerMorph}" Command="{Binding NewPlayerMorphCommand}" InputGestureText="{DynamicResource loc_Shortcut_NewPlayer}" />
@@ -246,7 +246,7 @@
                     <TextBlock Text="{Binding PackageDisplayName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
                     <TextBlock Text="{DynamicResource loc_View_MainWindow_BioMorphFaceGeometryAndMaterialEditor}" Foreground="{DynamicResource MutedText}" FontSize="11" />
                 </StackPanel>
-                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                <StackPanel x:Name="PreviewToolbar" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Text="{DynamicResource loc_View_MainWindow_Material}" Foreground="{DynamicResource SecondaryText}" VerticalAlignment="Center" Margin="0,0,7,0" />
                     <ComboBox Width="108" ItemsSource="{Binding RenderModes}" SelectedItem="{Binding RenderMode}">
                         <ComboBox.ItemTemplate>
@@ -277,14 +277,14 @@
             </Grid>
         </Border>
 
-        <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="270" MinWidth="220" MaxWidth="520" />
+        <controls:PaneLayoutGrid x:Name="WorkspaceLayout" Grid.Row="1">
+            <controls:PaneLayoutGrid.ColumnDefinitions>
+                <ColumnDefinition x:Name="FaceBrowserColumn" Width="270" MinWidth="180" />
                 <ColumnDefinition Width="6" />
                 <ColumnDefinition Width="*" MinWidth="300" />
                 <ColumnDefinition Width="6" />
-                <ColumnDefinition Width="480" MinWidth="360" MaxWidth="760" />
-            </Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="FaceEditorColumn" Width="600" MinWidth="600" />
+            </controls:PaneLayoutGrid.ColumnDefinitions>
 
             <Border Grid.Column="0" Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0" Padding="14">
                 <Grid>
@@ -394,12 +394,12 @@
                 </Grid>
             </Border>
 
-            <GridSplitter Grid.Column="1"
+            <Thumb x:Name="FaceBrowserSplitter" Grid.Column="1"
                           Style="{StaticResource PaneSplitterStyle}"
                           HorizontalAlignment="Stretch"
                           VerticalAlignment="Stretch"
-                          ResizeDirection="Columns"
-                          ResizeBehavior="PreviousAndNext"
+                          DragStarted="OnPaneDragStarted" DragDelta="OnPaneDragDelta" DragCompleted="OnPaneDragCompleted"
+                          KeyDown="OnPaneResizeKeyDown"
                           ToolTip="{DynamicResource loc_View_MainWindow_DragToResizeTheFaceBrowser}"
                           AutomationProperties.Name="{DynamicResource loc_View_MainWindow_ResizeFaceBrowser}" />
 
@@ -509,12 +509,12 @@
                 </Border>
             </Grid>
 
-            <GridSplitter Grid.Column="3"
+            <Thumb x:Name="FaceEditorSplitter" Grid.Column="3"
                           Style="{StaticResource PaneSplitterStyle}"
                           HorizontalAlignment="Stretch"
                           VerticalAlignment="Stretch"
-                          ResizeDirection="Columns"
-                          ResizeBehavior="PreviousAndNext"
+                          DragStarted="OnPaneDragStarted" DragDelta="OnPaneDragDelta" DragCompleted="OnPaneDragCompleted"
+                          KeyDown="OnPaneResizeKeyDown"
                           ToolTip="{DynamicResource loc_View_MainWindow_DragToResizeTheFaceEditor}"
                           AutomationProperties.Name="{DynamicResource loc_View_MainWindow_ResizeFaceEditor}" />
 
@@ -547,7 +547,7 @@
                         <StackPanel>
                             <TextBlock Text="{DynamicResource loc_View_MainWindow_FACEEDITOR}" Foreground="{DynamicResource MutedText}" FontSize="11" FontWeight="SemiBold" />
                         </StackPanel>
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <StackPanel x:Name="EditorActions" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                             <Button Content="{DynamicResource loc_View_MainWindow_Undo}" Command="{Binding Editor.UndoCommand}" MinWidth="66" Padding="9,5" Margin="0,0,6,0" />
                             <Button Content="{DynamicResource loc_View_MainWindow_Redo}" Command="{Binding Editor.RedoCommand}" MinWidth="66" Padding="9,5" Margin="0,0,6,0" />
                             <Button x:Name="SetToDefaultsButton" Content="{DynamicResource loc_View_MainWindow_SetToDefaults}"
@@ -557,7 +557,7 @@
                                     Command="{Binding Editor.RandomiseCommand}"
                                     MinWidth="78" Padding="9,5" />
                         </StackPanel>
-                        <Grid Grid.Row="1" Grid.ColumnSpan="2" Margin="0,8,0,0">
+                        <Grid x:Name="RandomisationControls" Grid.Row="1" Grid.ColumnSpan="2" Margin="0,8,0,0">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
@@ -934,7 +934,7 @@
                     </TabControl>
                 </Grid>
             </Border>
-        </Grid>
+        </controls:PaneLayoutGrid>
 
         <Border Grid.Row="2" Background="{DynamicResource InputBackground}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0">
             <Grid Margin="12,0">

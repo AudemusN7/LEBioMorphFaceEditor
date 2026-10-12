@@ -110,6 +110,7 @@ public static class UiSmokeTests
         new("MFTR notices update after a scan and preserve import warnings", DatabaseGuidanceUpdatesAndPreservesWarnings),
         new("actor assignment chooser filters evidence and scopes eligibility by operation", ActorChooserFiltersAndScopesEligibility),
         new("WPF resources, nested menus, and HDR colour controls work", HdrPickerConstructs),
+        new("side panes fit the window after expanding and shrinking", SidePanesFitWindow),
         new("Human Male UI profile orders, groups, and filters features", HumanMaleProfileOrganizesFeatures),
         new("material editor hides Unreal selection colour parameters", MaterialEditorHidesSelectionColor),
         new("material texture details distinguish unresolved paths from physical donor changes", MaterialTextureDetailsUseCanonicalPath),
@@ -3905,6 +3906,127 @@ public static class UiSmokeTests
             });
             Loc.Initialize(Resources, "en-GB");
         }
+    }
+
+    private static void SidePanesFitWindow()
+    {
+        Exception? failure = null;
+        var preferenceRoot = Path.Combine(Path.GetTempPath(), $"MFE-PanePreferences-{Guid.NewGuid():N}");
+        var thread = new Thread(() =>
+        {
+            SmokeApplication? application = null;
+            try
+            {
+                application = new SmokeApplication();
+                application.InitializeComponent();
+                application.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+                using var reader = new MorphFacePackageReader();
+                using var viewModel = CreateMainWindowViewModel(reader);
+                var preferencePath = Path.Combine(preferenceRoot, "preferences.json");
+                var preferences = new ApplicationPreferencesStore(preferencePath);
+                preferences.Update(p => p with { SuppressWelcome = true, SidePaneWidths = new(350, 900) });
+                var window = new MainWindow(viewModel, preferences);
+                var root = (Grid)window.Content;
+                var panes = (Grid)window.FindName("WorkspaceLayout");
+                var left = panes.ColumnDefinitions[0];
+                var right = panes.ColumnDefinitions[4];
+                TestAssert.Equal(350d, left.Width.Value);
+                TestAssert.Equal(900d, right.Width.Value);
+                void Layout(double width)
+                {
+                    root.Measure(new Size(width, 750));
+                    root.Arrange(new Rect(0, 0, width, 750));
+                    root.UpdateLayout();
+                }
+                Layout(5000);
+                TestAssert.True(double.IsPositiveInfinity(left.MaxWidth) && double.IsPositiveInfinity(right.MaxWidth),
+                    "The side panes still have arbitrary maximum widths.");
+                left.Width = new GridLength(1000);
+                right.Width = new GridLength(1800);
+                Layout(5000);
+                TestAssert.Near(1000, (float)left.ActualWidth, 1);
+                TestAssert.Near(1800, (float)right.ActualWidth, 1);
+                Layout(window.MinWidth);
+                Layout(window.MinWidth);
+                TestAssert.True(left.ActualWidth >= left.MinWidth && right.ActualWidth >= right.MinWidth,
+                    "Shrinking the window violated a side pane minimum.");
+                TestAssert.True(panes.ColumnDefinitions.Sum(column => column.ActualWidth) <= panes.ActualWidth + 1,
+                    "A widened side pane overflowed the smaller window.");
+                left.Width = new GridLength(left.MinWidth);
+                right.Width = new GridLength(right.MinWidth);
+                Layout(window.MinWidth);
+                var strength = (Slider)window.FindName("MaterialRandomisationStrengthSlider");
+                TestAssert.True(strength.ActualWidth >= 79,
+                    "The minimum editor width leaves no usable randomisation slider.");
+                var actions = (StackPanel)window.FindName("EditorActions");
+                var actionBounds = actions.TransformToAncestor(panes).TransformBounds(new Rect(actions.RenderSize));
+                TestAssert.True(actionBounds.Right <= panes.ActualWidth + 1,
+                    "The editor actions extend beyond the window.");
+                var toggle = (CheckBox)window.FindName("RandomiseMaterialsCheckBox");
+                var toggleBounds = toggle.TransformToAncestor(panes).TransformBounds(new Rect(toggle.RenderSize));
+                TestAssert.True(toggleBounds.Right <= panes.ActualWidth + 1,
+                    "The randomisation check box extends beyond the minimum-width editor.");
+                var toolbar = (StackPanel)window.FindName("PreviewToolbar");
+                var toolbarBounds = toolbar.TransformToAncestor(root).TransformBounds(new Rect(toolbar.RenderSize));
+                TestAssert.True(toolbarBounds.Right <= root.ActualWidth + 1,
+                    "The toolbar extends beyond the minimum-width window.");
+                var rightSplitter = (Thumb)window.FindName("FaceEditorSplitter");
+                rightSplitter.RaiseEvent(new DragStartedEventArgs(0, 0) { RoutedEvent = Thumb.DragStartedEvent });
+                for (var drag = 0; drag < 5; drag++)
+                {
+                    rightSplitter.RaiseEvent(new DragDeltaEventArgs(-500, 0) { RoutedEvent = Thumb.DragDeltaEvent });
+                    Layout(window.MinWidth);
+                    TestAssert.True(panes.ColumnDefinitions.Sum(column => column.ActualWidth) <= panes.ActualWidth + 1,
+                        "Dragging the right splitter beyond the viewport minimum pushed the pane outside the window.");
+                    TestAssert.True(panes.ColumnDefinitions[2].ActualWidth >= 299,
+                        "The splitter consumed the viewport's minimum width.");
+                }
+                rightSplitter.RaiseEvent(new DragCompletedEventArgs(0, 0, false) { RoutedEvent = Thumb.DragCompletedEvent });
+                var leftSplitter = (Thumb)window.FindName("FaceBrowserSplitter");
+                leftSplitter.RaiseEvent(new DragDeltaEventArgs(5000, 0) { RoutedEvent = Thumb.DragDeltaEvent });
+                Layout(window.MinWidth);
+                TestAssert.True(panes.ColumnDefinitions.Sum(column => column.ActualWidth) <= panes.ActualWidth + 1,
+                    "Dragging the left splitter pushed the editor outside the window.");
+                // Repeat the user's maximised -> dragged -> smaller-window route.
+                Layout(5000);
+                rightSplitter.RaiseEvent(new DragStartedEventArgs(0, 0) { RoutedEvent = Thumb.DragStartedEvent });
+                rightSplitter.RaiseEvent(new DragDeltaEventArgs(-3000, 0) { RoutedEvent = Thumb.DragDeltaEvent });
+                Layout(5000);
+                rightSplitter.RaiseEvent(new DragCompletedEventArgs(0, 0, false) { RoutedEvent = Thumb.DragCompletedEvent });
+                var saved = new ApplicationPreferencesStore(preferencePath).Current;
+                TestAssert.Equal(right.Width.Value, saved.SidePaneWidths!.FaceEditor!.Value);
+                TestAssert.Equal(left.Width.Value, saved.SidePaneWidths.FaceBrowser!.Value);
+                TestAssert.True(saved.SuppressWelcome, "Saving pane widths overwrote another preference.");
+                foreach (var width in new[] { 4000d, 2500d, window.MinWidth })
+                {
+                    Layout(width);
+                    TestAssert.True(panes.ActualWidth <= width + 1 && root.ActualWidth <= width + 1,
+                        "The dragged pane inflated the layout beyond the smaller window's actual width.");
+                }
+                var reopened = new MainWindow(viewModel, new ApplicationPreferencesStore(preferencePath));
+                var restored = (Grid)reopened.FindName("WorkspaceLayout");
+                TestAssert.Equal(saved.SidePaneWidths.FaceBrowser.Value, restored.ColumnDefinitions[0].Width.Value);
+                TestAssert.Equal(saved.SidePaneWidths.FaceEditor.Value, restored.ColumnDefinitions[4].Width.Value);
+                var reopenedRoot = (Grid)reopened.Content;
+                reopenedRoot.Measure(new Size(window.MinWidth, 750));
+                reopenedRoot.Arrange(new Rect(0, 0, window.MinWidth, 750));
+                reopenedRoot.UpdateLayout();
+                TestAssert.True(restored.ActualWidth <= window.MinWidth + 1,
+                    "Restoring wide pane preferences overflowed a smaller startup window.");
+                reopened.Close();
+                window.Close();
+            }
+            catch (Exception exception) { failure = exception; }
+            finally
+            {
+                application?.Shutdown();
+                if (Directory.Exists(preferenceRoot)) Directory.Delete(preferenceRoot, recursive: true);
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        if (!thread.Join(TimeSpan.FromSeconds(15))) throw new TimeoutException("Pane layout check timed out.");
+        if (failure is not null) throw new Exception($"Pane layout check failed: {failure}", failure);
     }
 
     private static void HdrPickerConstructs()

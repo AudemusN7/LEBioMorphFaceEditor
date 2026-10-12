@@ -5,13 +5,15 @@ using System.Text.Json.Serialization;
 namespace MorphFaceEditor.Infrastructure;
 
 internal sealed record ViewportBackgroundPreference(bool FollowTheme = true, BackgroundColourPreference? Colour = null);
+internal sealed record SidePaneWidthsPreference(double? FaceBrowser = null, double? FaceEditor = null);
 internal sealed record ApplicationPreferences(
     bool SuppressWelcome = false,
     ThemeMode Mode = ThemeMode.System,
     double? AccentHue = null,
     ViewportBackgroundPreference? ViewportBackground = null,
     string[]? RecentFiles = null,
-    string Language = "en-GB");
+    string Language = "en-GB",
+    SidePaneWidthsPreference? SidePaneWidths = null);
 
 /// <summary>One atomic preferences document shared by all application settings.</summary>
 internal sealed class ApplicationPreferencesStore

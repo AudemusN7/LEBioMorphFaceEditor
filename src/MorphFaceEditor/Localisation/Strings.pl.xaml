@@ -1620,7 +1620,7 @@ Nie: po pomyślnej odbudowie usuń własne bazy zasobów.</system:String>
   <system:String x:Key="loc_View_MainWindow_AssignMaterialsToActor" xml:space="preserve">Przypisz materiały postaci</system:String>
   <system:String x:Key="loc_View_MainWindow_AssignMorphToActor" xml:space="preserve">Przypisz morf postaci</system:String>
   <system:String x:Key="loc_View_MainWindow_AssignOneEvidenceBackedMaterialFamilyToThisUsedMeshSlot" xml:space="preserve">Przypisz jedną rodzinę materiałów do używanego slotu siatki</system:String>
-  <system:String x:Key="loc_View_MainWindow_BIOMORPHFACEEXPORTS" xml:space="preserve">EKSPORTY TWARZY</system:String>
+  <!--localiser: {"Key":"loc_View_MainWindow_BIOMORPHFACEEXPORTS","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"D14A1967D06AD4B2FBB3D52E476B46C619962520176CFECE13918049B98F93C4"}--><system:String x:Key="loc_View_MainWindow_BIOMORPHFACEEXPORTS" xml:space="preserve">PRZEGLĄDARKA TWARZY</system:String>
   <system:String x:Key="loc_View_MainWindow_Background" xml:space="preserve">Tło</system:String>
   <system:String x:Key="loc_View_MainWindow_BioMorphFaceEditor" xml:space="preserve">Morph Face Editor</system:String>
   <system:String x:Key="loc_View_MainWindow_BioMorphFaceGeometryAndMaterialEditor" xml:space="preserve">Edytor geometrii i materiałów twarzy z Mass Effect Legendary Edition</system:String>
@@ -1639,7 +1639,7 @@ Nie: po pomyślnej odbudowie usuń własne bazy zasobów.</system:String>
   <system:String x:Key="loc_View_MainWindow_CursedMode" xml:space="preserve">Tryb przeklęty</system:String>
   <system:String x:Key="loc_View_MainWindow_DeleteMorph" xml:space="preserve">Usuń morf</system:String>
   <system:String x:Key="loc_View_MainWindow_DismissError" xml:space="preserve">Zamknij komunikat o błędzie</system:String>
-  <system:String x:Key="loc_View_MainWindow_DragToResizeTheFaceBrowser" xml:space="preserve">Przeciągnij, aby zmienić rozmiar panelu Eksporty twarzy</system:String>
+  <!--localiser: {"Key":"loc_View_MainWindow_DragToResizeTheFaceBrowser","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"34CA39C38B5434C77F809324758A64E3D5B5EFDF78C719DB2DEC009A4F856720"}--><system:String x:Key="loc_View_MainWindow_DragToResizeTheFaceBrowser" xml:space="preserve">Przeciągnij, aby zmienić rozmiar panelu przeglądarki twarzy</system:String>
   <system:String x:Key="loc_View_MainWindow_DragToResizeTheFaceEditor" xml:space="preserve">Przeciągnij, aby zmienić rozmiar panelu Edytor twarzy</system:String>
   <system:String x:Key="loc_View_MainWindow_Edit" xml:space="preserve">Edytuj</system:String>
   <system:String x:Key="loc_View_MainWindow_EnableThisOnlyIfYouAreMentallyDisturbedAndOrAreMgamerz" xml:space="preserve">Włącz tę opcję tylko wtedy, gdy masz zaburzenia psychiczne i/lub jesteś Mgamerzem</system:String>
@@ -1702,7 +1702,7 @@ Nie: po pomyślnej odbudowie usuń własne bazy zasobów.</system:String>
   <system:String x:Key="loc_View_MainWindow_ResizeFaceEditor" xml:space="preserve">Zmień rozmiar edytora twarzy</system:String>
   <system:String x:Key="loc_View_MainWindow_RestoreThisBoneToItsLoadedTranslation" xml:space="preserve">Przywróć pierwotne, wczytane położenie tej kości</system:String>
     <!--localiser: {"Key":"loc_View_MainWindow_SavePackage","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"5BE8DC97FB7946FCCEB090A149C7BB36E0961E46E5877990372E03DBCAF4DEAE"}--><system:String x:Key="loc_View_MainWindow_SavePackage" xml:space="preserve">Zapisz plik</system:String>
-  <system:String x:Key="loc_View_MainWindow_SearchBioMorphFaceExports" xml:space="preserve">Szukaj eksportów BioMorphFace</system:String>
+  <!--localiser: {"Key":"loc_View_MainWindow_SearchBioMorphFaceExports","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"9C963EC255DC5EDBFE9459AFD8253D046C2BB4861B66AE70B03277BF7AB9168B"}--><system:String x:Key="loc_View_MainWindow_SearchBioMorphFaceExports" xml:space="preserve">Szukaj wpisów BioMorphFace</system:String>
   <system:String x:Key="loc_View_MainWindow_SearchByExportNameOrFullInstancedPath" xml:space="preserve">Szukaj według nazwy eksportu lub pełnej ścieżki obiektu. Wskazówka: możesz też filtrować według nazwy tagu, np. [HMM]</system:String>
   <system:String x:Key="loc_View_MainWindow_SetToDefaults" xml:space="preserve">Przywróć wartości domyślne</system:String>
   <system:String x:Key="loc_View_MainWindow_Settings" xml:space="preserve">Ustawienia</system:String>

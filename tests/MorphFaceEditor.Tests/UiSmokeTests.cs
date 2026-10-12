@@ -1332,6 +1332,19 @@ public static class UiSmokeTests
     private static void DatabaseGuidanceUpdatesAndPreservesWarnings()
     {
         using var reader = new MorphFacePackageReader();
+        using var pendingEditor = CreateEditor(reader, isTextureRegistryPending: true);
+        TestAssert.True(!pendingEditor.IsMeshDatabaseUnavailable,
+            "An unfinished MFTR lookup must not show the missing-database notice.");
+        var pendingNotified = false;
+        pendingEditor.PropertyChanged += (_, args) => pendingNotified |=
+            args.PropertyName == nameof(pendingEditor.IsMeshDatabaseUnavailable);
+        pendingEditor.UpdateRegistryTextureCandidates([], TextureCatalogProfile.Empty, true);
+        TestAssert.True(!pendingEditor.IsMeshDatabaseUnavailable && pendingNotified,
+            "A completed available MFTR lookup must keep the notice hidden and update the binding.");
+        using var missingEditor = CreateEditor(reader, isTextureRegistryPending: true);
+        missingEditor.UpdateRegistryTextureCandidates([], TextureCatalogProfile.Empty, false);
+        TestAssert.True(missingEditor.IsMeshDatabaseUnavailable,
+            "A completed missing MFTR lookup must show the notice.");
         using var editor = CreateEditor(reader);
         TestAssert.True(editor.IsMeshDatabaseUnavailable, "Missing MFTR should show the attachment notice.");
         var notified = false;
@@ -2369,7 +2382,8 @@ public static class UiSmokeTests
         IHeadEditorUiProfile? metadataCatalog = null,
         string profileKey = "le1-human-male",
         bool ignoresAuthoredGeometry = false,
-        MorphFaceGeometryMode geometryMode = MorphFaceGeometryMode.MorphEvaluated)
+        MorphFaceGeometryMode geometryMode = MorphFaceGeometryMode.MorphEvaluated,
+        bool isTextureRegistryPending = false)
     {
         var mesh = geometryMode is MorphFaceGeometryMode.FixedBake or MorphFaceGeometryMode.RelativeBake
             ? TestFixtures.CreateRenderableTwoLodMesh()
@@ -2427,7 +2441,8 @@ public static class UiSmokeTests
             _ => { },
             profileKey,
             randomisationCatalog: ignoresAuthoredGeometry ? MorphRandomisationCatalog.LoadEmbedded() : null,
-            ignoresAuthoredGeometry: ignoresAuthoredGeometry);
+            ignoresAuthoredGeometry: ignoresAuthoredGeometry,
+            isTextureRegistryPending: isTextureRegistryPending);
     }
 
     private static FaceEditorViewModel CreateRandomisationEditor(

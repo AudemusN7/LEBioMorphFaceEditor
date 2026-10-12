@@ -961,6 +961,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 registryTextureCandidates: [],
                 textureCatalogProfile: textureCatalogProfile,
                 isTextureRegistryAvailable: false,
+                isTextureRegistryPending: true,
                 ignoresAuthoredGeometry: result.Profile.IgnoresAuthoredGeometry,
                 playerRandomisationGame: IsPlayerWorkspace ? result.Profile.Game : null);
             var speciesKey = PreviewCameraGrouping.SpeciesForProfile(result.Profile.Key);

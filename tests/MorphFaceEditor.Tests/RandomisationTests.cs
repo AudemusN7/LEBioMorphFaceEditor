@@ -1639,7 +1639,14 @@ public static class RandomisationTests
         var definitions = RandomisationProfileDefinitionFactory.CreateDefault(
             MorphFaceProfileRegistry.CreateDefault(), new MorphTargetCatalog());
 
-        TestAssert.Equal(26, definitions.Count);
+        var approvedKeys = new[] { "le1", "le2", "le3" }
+            .SelectMany(game => new[] { "human-male", "human-female", "asari", "salarian", "turian",
+                "female-turian", "batarian", "female-batarian", "krogan" }.Select(species => $"{game}-{species}"))
+            .Concat(["le2-vorcha", "le3-vorcha"])
+            .Order(StringComparer.Ordinal).ToArray();
+        TestAssert.True(approvedKeys.SequenceEqual(definitions.Select(value => value.ProfileKey)
+                .Order(StringComparer.Ordinal)),
+            "The compiler profiles did not match the approved game/species inventory.");
         TestAssert.Equal(10, definitions.Select(value => value.PoolKey).Distinct().Count());
         TestAssert.True(definitions.Where(value => !value.IsMaterialOnly &&
                                                    value.PoolKey != MorphRandomisationPoolKey.Vorcha)
@@ -1658,6 +1665,9 @@ public static class RandomisationTests
         TestAssert.True(definitions.Where(value => value.ProfileKey.EndsWith("-female-turian"))
                 .All(value => value.IsMaterialOnly && value.PoolKey == MorphRandomisationPoolKey.Turian),
             "Female Turian profiles did not join the shared Turian material pool.");
+        TestAssert.True(definitions.Where(value => value.ProfileKey.EndsWith("-female-batarian"))
+                .All(value => value.IsMaterialOnly && value.PoolKey == MorphRandomisationPoolKey.Batarian),
+            "Female Batarian profiles did not join the shared Batarian material pool.");
     }
 
     private static void CompilationRetainsVorchaMaterialDonors()

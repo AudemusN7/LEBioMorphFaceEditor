@@ -7,7 +7,7 @@ internal static class PcsavHeadMorphTests
 {
     public static IReadOnlyList<TestCase> All { get; } =
     [
-        new("PCSAV six careers round-trip exactly and preserve unrelated bytes when edited", SixCareerRoundTrips),
+        new("PCSAV custom and default careers round-trip and preserve unrelated bytes when edited", CareerRoundTrips),
         new("PCSAV rejects corrupt saves and protects externally changed sources", FailedSavesPreserveSources),
         new("PCSAV Save As preserves original and redirects subsequent saves", SaveAsCopies),
         new("PCSAV changing hair clears hidden hair textures but preserves scalp and unchanged hair", HairTextureClearing),
@@ -17,16 +17,39 @@ internal static class PcsavHeadMorphTests
 
     internal static string[] Fixtures()
     {
-        var directory = Path.GetFullPath(Path.Combine(".codex-temp", "PCSAV"));
-        if (!Directory.Exists(directory)) throw new TestSkippedException("Local PCSAV career fixtures are not present.");
-        var paths = Directory.GetFiles(directory, "*.pcsav").Order().ToArray();
-        TestAssert.Equal(6, paths.Length);
+        var directory = FindRepositoryDirectory();
+        var fixtureDirectory = directory is null ? null : Path.Combine(directory, "fixtures", "PCSAV_Test");
+        if (fixtureDirectory is null || !Directory.Exists(fixtureDirectory))
+            throw new TestSkippedException("Local PCSAV career fixtures are not present.");
+        var paths = Directory.GetFiles(fixtureDirectory, "*.pcsav").Order().ToArray();
+        var names = paths.Select(Path.GetFileNameWithoutExtension).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var expected = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "LE1-Male-Custom", "LE1-Female-Custom", "LE1-Default",
+            "LE2-Male-Custom", "LE2-Female-Custom", "LE2-Default",
+            "LE3-Male-Custom", "LE3-Female-Custom", "LE3-Default"
+        };
+        TestAssert.True(expected.SetEquals(names),
+            $"PCSAV fixture inventory must contain custom male/female and default saves for LE1, LE2, and LE3; found {paths.Length} files.");
         return paths;
     }
 
-    private static void SixCareerRoundTrips()
+    private static string? FindRepositoryDirectory()
     {
-        var observed = new HashSet<(MorphFaceGame, StandalonePlayerSex)>();
+        var current = new DirectoryInfo(Directory.GetCurrentDirectory());
+        while (current is not null)
+        {
+            if (Directory.Exists(Path.Combine(current.FullName, "fixtures", "PCSAV_Test")))
+                return current.FullName;
+            current = current.Parent;
+        }
+        return null;
+    }
+
+    private static void CareerRoundTrips()
+    {
+        var customObserved = new HashSet<(MorphFaceGame, StandalonePlayerSex)>();
+        var defaultsObserved = new HashSet<MorphFaceGame>();
         foreach (var fixture in Fixtures())
         {
             var directory = Path.Combine(Path.GetTempPath(), $"MFE-Pcsav-{Guid.NewGuid():N}");
@@ -36,7 +59,13 @@ internal static class PcsavHeadMorphTests
                 var source = Path.Combine(directory, Path.GetFileName(fixture)); File.Copy(fixture, source);
                 var original = File.ReadAllBytes(source);
                 var workspace = PcsavHeadMorphWorkspace.Open(source);
-                observed.Add((workspace.Game, workspace.Sex));
+                var isCustom = Path.GetFileNameWithoutExtension(fixture).EndsWith("-Custom", StringComparison.OrdinalIgnoreCase);
+                TestAssert.True(isCustom == workspace.HasHeadMorph,
+                    $"{Path.GetFileName(fixture)} does not match its custom/default fixture label.");
+                if (isCustom)
+                    customObserved.Add((workspace.Game, workspace.Sex));
+                else
+                    defaultsObserved.Add(workspace.Game);
                 Console.WriteLine($"PCSAV {Path.GetFileName(fixture)}: {workspace.Game} {workspace.Sex}, {workspace.FirstName}, " +
                     (workspace.HasHeadMorph ? $"{workspace.Head.MorphData.BakedLods[0].Length} LOD0 vertices" : "default head"));
                 var ron = Path.Combine(directory, "head.ron");
@@ -82,7 +111,8 @@ internal static class PcsavHeadMorphTests
             }
             finally { Directory.Delete(directory, recursive: true); }
         }
-        TestAssert.Equal(6, observed.Count);
+        TestAssert.Equal(6, customObserved.Count);
+        TestAssert.Equal(3, defaultsObserved.Count);
         TestAssert.Equal(0xFC891918u, PcsavHeadMorphWorkspace.Crc32("123456789"u8));
     }
 

@@ -545,6 +545,9 @@ public static class CustomMeshPccMaterializerTests
             throw new InvalidOperationException("The LE2 human skin material template is unavailable.");
         }
 
+        const string stockMask = "BIOG_Humanoid_MASTER_MTR_R.Skin_HumanHED_SpecMulitplier_Mask";
+        var sourceReferencesNativeMask = MaterialGraphReferencesImport(option.TemplateSource, stockMask);
+
         var source = new ImportedMeshAsset(
             "c4-human-fixture.gltf",
             [Vector3.Zero, Vector3.UnitX, Vector3.UnitY],
@@ -586,15 +589,22 @@ public static class CustomMeshPccMaterializerTests
                     value.ClassName.StartsWith("MaterialExpression", StringComparison.OrdinalIgnoreCase)),
                 "The compiled human Material lost its required expression graph.");
 
-            const string stockMask = "BIOG_Humanoid_MASTER_MTR_R.Skin_HumanHED_SpecMulitplier_Mask";
             var mask = package.Imports.SingleOrDefault(value =>
                 value.ClassName == "Texture2D" && value.InstancedFullPath == stockMask);
-            TestAssert.True(mask is not null,
-                "The intentionally unresolved LE2 skin-mask identity did not remain a native import.");
-            TestAssert.True(!textures.Any(value => value.InstancedFullPath == stockMask),
-                "The LE2 skin-mask exception inherited an automatic community-patch export.");
-            TestAssert.True(package.Exports.Any(value => PackageIntegrity.References(value).Values.Contains(mask!.UIndex)),
-                "The compiled skin graph no longer references the native skin-mask import.");
+            if (sourceReferencesNativeMask)
+            {
+                TestAssert.True(mask is not null,
+                    "The authored LE2 skin graph's native mask import was not retained.");
+                TestAssert.True(!textures.Any(value => value.InstancedFullPath == stockMask),
+                    "The LE2 skin-mask import inherited an automatic community-patch export.");
+                TestAssert.True(package.Exports.Any(value => PackageIntegrity.References(value).Values.Contains(mask!.UIndex)),
+                    "The compiled skin graph no longer references its authored native mask import.");
+            }
+            else
+            {
+                TestAssert.True(mask is null && !textures.Any(value => value.InstancedFullPath == stockMask),
+                    "The PCC added a LE2 community-patch mask dependency absent from its authored skin graph.");
+            }
         }
         finally
         {
@@ -997,5 +1007,61 @@ public static class CustomMeshPccMaterializerTests
         }
         return result;
     }
+
+    private static bool MaterialGraphReferencesImport(AssetIdentity sourceIdentity, string dependencyPath)
+    {
+        using var sourcePackage = MEPackageHandler.OpenMEPackage(sourceIdentity.PackagePath, forceLoadFromDisk: true);
+        var sourceMaterial = sourcePackage.Exports.SingleOrDefault(value =>
+            value.ClassName.Equals(sourceIdentity.ClassName, StringComparison.OrdinalIgnoreCase) &&
+            value.InstancedFullPath.Equals(sourceIdentity.InstancedPath, StringComparison.OrdinalIgnoreCase));
+        TestAssert.True(sourceMaterial is not null,
+            $"The selected LE2 material source '{sourceIdentity.InstancedPath}' is missing from its authored package.");
+
+        using var cache = new PackageCache();
+        var resolver = new GamePackageReferenceResolver(cache);
+        var pending = new Queue<ExportEntry>();
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var hasNativeMaskImport = false;
+        pending.Enqueue(sourceMaterial!);
+        while (pending.TryDequeue(out var current))
+        {
+            var physicalKey = $"{Path.GetFullPath(current.FileRef.FilePath)}#{current.UIndex}";
+            if (!visited.Add(physicalKey)) continue;
+
+            foreach (var reference in PackageIntegrity.References(current).Values
+                         .Select(current.FileRef.GetEntry).Where(value => value is not null))
+            {
+                if (reference is ImportEntry import)
+                {
+                    // Check the exact texture import before resolving any textures,
+                    // which could load an installed patch donor.
+                    if (import.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase) &&
+                        import.InstancedFullPath.Equals(dependencyPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        hasNativeMaskImport = true;
+                        continue;
+                    }
+                    if (IsMaterialGraphNode(import))
+                    {
+                        // An unresolved material dependency means the source graph
+                        // has not been fully inspected; never silently call it absent.
+                        var resolved = resolver.Require(import, "authored LE2 material graph dependency");
+                        pending.Enqueue(resolved);
+                    }
+                }
+                else if (reference is ExportEntry export && IsMaterialGraphNode(export))
+                {
+                    pending.Enqueue(export);
+                }
+            }
+        }
+
+        Console.WriteLine($"LE2 skin-mask source: authored native import={hasNativeMaskImport}; " +
+                          $"inspected {visited.Count} material graph exports.");
+        return hasNativeMaskImport;
+    }
+
+    private static bool IsMaterialGraphNode(IEntry entry) =>
+        entry.ClassName.Contains("Material", StringComparison.OrdinalIgnoreCase);
 
 }

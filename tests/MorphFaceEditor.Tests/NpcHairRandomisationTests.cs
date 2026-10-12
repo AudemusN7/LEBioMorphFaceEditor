@@ -270,17 +270,8 @@ public static class NpcHairRandomisationTests
                 "A locked mesh left the HMF hair-only morph roll enabled.");
             TestAssert.True(editor.HairMesh.RandomiseCommand?.CanExecute(null) == false,
                 "The hair button did not honour the mesh lock.");
-            // Await Cursed's workflow directly to avoid treating an unchanged face as completion.
-            if (cursed)
-            {
-                var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
-                var scope = typeof(FaceEditorViewModel).GetMethod("GlobalRandomisationScope", flags)!
-                    .Invoke(editor, null);
-                var task = (Task)typeof(FaceEditorViewModel).GetMethod("RandomiseCursedAsync", flags)!
-                    .Invoke(editor, [scope, false])!;
-                task.GetAwaiter().GetResult();
-            }
-            else editor.RandomiseCommand.Execute(null);
+            // Await the command's workflow in both modes, including its scope and generation handling.
+            editor.RandomiseAsync().GetAwaiter().GetResult();
             TestAssert.Equal(before.GetFeatureOffset("HAIR_pulledBackSlick"),
                 editor.CreateDraft().GetFeatureOffset("HAIR_pulledBackSlick"));
             TestAssert.Equal(before.HairMeshReference!, editor.CreateDraft().HairMeshReference!);
@@ -348,9 +339,10 @@ public static class NpcHairRandomisationTests
         editor.RandomiseMaterials = true;
         editor.MaterialRandomisationStrength = 100;
         var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
-        var method = typeof(FaceEditorViewModel).GetMethod("RandomiseCursedAsync", flags)!;
+        var method = typeof(FaceEditorViewModel).GetMethod("RandomiseCoreAsync", flags)!;
         void Roll(EditorRandomisationScope scope) =>
-            ((Task)method.Invoke(editor, [scope, false])!).GetAwaiter().GetResult();
+            ((Task)method.Invoke(editor, [scope, false, true])!).GetAwaiter().GetResult();
+        editor.CursedMode = true;
         Roll(new EditorRandomisationScope([], [], [], []));
         var identity = TestFixtures.CreateIdentity("NewHairMaterial", "MaterialInstanceConstant");
         var hair = new ResolvedHeadMaterial(MaterialIdentityKey.Create(identity), identity,

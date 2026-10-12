@@ -11,7 +11,7 @@ public static class HairMeshManualSelectionTests
     public static IReadOnlyList<TestCase> All { get; } =
     [
         new("manual hair mesh selection is distinct from programmatic changes", ManualSelectionIsDistinct),
-        new("hair mesh picker keeps local and explicit sources but one official row per mesh", RegistryShowsAllPhysicalOccurrences),
+        new("hair mesh picker keeps local and manual sources without duplicate automatic donors", RegistryDeduplicatesAutomaticOccurrences),
         new("randomised donor maps to the existing canonical picker row", RandomisedDonorUsesCanonicalPickerRow),
         new("attachment choices exclude base heads and sort across local and external meshes", AttachmentChoicesExcludeHeadsAndSort)
     ];
@@ -61,7 +61,7 @@ public static class HairMeshManualSelectionTests
         TestAssert.Equal(1, editor.Candidates.Count);
     }
 
-    private static void RegistryShowsAllPhysicalOccurrences()
+    private static void RegistryDeduplicatesAutomaticOccurrences()
     {
         const string canonical = "BIOG_HMF_HIR_PRO.Hair.HMF_HIR_Custom_MDL";
         var local = new AttachmentMeshOccurrence(
@@ -72,6 +72,8 @@ public static class HairMeshManualSelectionTests
             "DLC_CON_Hair.pcc", canonical, 21, 80, TextureCatalogOrigin.OfficialDlc, 43);
         var mod = new AttachmentMeshOccurrence(
             "DLC_MOD_Hair\\ModHair.pcc", canonical, 22, 9000, TextureCatalogOrigin.Mod, 47);
+        var secondMod = new AttachmentMeshOccurrence(
+            "DLC_MOD_Hair\\ModHairAlt.pcc", canonical, 25, 8500, TextureCatalogOrigin.Mod, 46);
         var manual = new AttachmentMeshOccurrence(
             "C:\\Custom\\AddedHair.pcc", canonical, 23, 0, TextureCatalogOrigin.Manual, 48);
         var excludedNonBiog = new AttachmentMeshOccurrence(
@@ -85,7 +87,7 @@ public static class HairMeshManualSelectionTests
         editor.UpdateRegistryCandidates(
             [
                 new AttachmentMeshCandidate(canonical, officialWinner,
-                    [officialWinner, officialShadowed, mod, manual, local])
+                    [officialWinner, officialShadowed, mod, secondMod, manual, local])
                 {
                     IsEligibleOfficialDefault = true
                 },
@@ -115,7 +117,10 @@ public static class HairMeshManualSelectionTests
             option.Identity?.InstancedPath == "BIOG_HMF_HIR_PRO.Hair.HMF_HIR_Other_MDL").Identity?.PackagePath);
         TestAssert.True(!options.Any(option => option.Identity?.PackagePath == officialShadowed.PackagePath),
             "A second official donor row duplicated the same canonical mesh.");
-        foreach (var occurrence in new[] { mod, manual })
+        TestAssert.True(!options.Any(option => option.Identity?.PackagePath == mod.PackagePath ||
+                option.Identity?.PackagePath == secondMod.PackagePath),
+            "Automatic mod copies duplicated the local authored mesh identity.");
+        foreach (var occurrence in new[] { manual })
         {
             TestAssert.True(options.Any(option =>
                     string.Equals(option.Identity?.PackagePath, occurrence.PackagePath, StringComparison.OrdinalIgnoreCase) &&

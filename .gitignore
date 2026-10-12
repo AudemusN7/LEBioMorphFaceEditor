@@ -17,6 +17,8 @@ tools/PlayerHeadProbe/
 /Appdata Dir.lnk
 fixtures/local/*
 !fixtures/local/.gitkeep
+fixtures/PCSAV_Test/
+fixtures/RON_Test/
 tests/Global Morphs/
 tests/RON Stress Test/
 tests/TUF Tattoos/

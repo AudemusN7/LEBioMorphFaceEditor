@@ -66,9 +66,9 @@ public static class SalarianMaterialTests
     private static void Le3SalarianNormalsConsumeRgb()
     {
         var le2 = CreateSalarianMaterial(
-            "salarian", normal: [224, 128, 160, 255], isLe3: false);
+            "salarian", normal: [128, 128, 0, 255], isLe3: false);
         var le3 = CreateSalarianMaterial(
-            "salarian", normal: [224, 128, 160, 255], isLe3: true);
+            "salarian", normal: [128, 128, 0, 255], isLe3: true);
         var (renderer, camera) = CreateTriangleRenderer(le2);
         using (renderer)
         {
@@ -176,4 +176,5 @@ public static class SalarianMaterialTests
             white,
             "The LE1-only SAL_HED_SpecMap did not affect direct lighting.");
     }
+
 }

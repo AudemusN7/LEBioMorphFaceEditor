@@ -15,7 +15,7 @@ internal static class LocaliserTests
     [
         new("localiser: full master review round-trip preserves every key and string", CorpusRoundTrip),
         new("localiser: a wording edit preserves master and translation file layout", WordingPreservesLayout),
-        new("localiser: editing a real English label changes only its wording bytes", RealLabelPreservesLayout),
+        new("localiser: editing a real English label preserves bytes outside its wording", RealLabelPreservesLayout),
         new("localiser: wording changes invalidate reviews and revert restores them", ReviewLifecycle),
         new("localiser: notes and protection survive XML-sensitive characters", AnnotationRoundTrip),
         new("localiser: excluded strings cannot be translated and are omitted from saved languages", ProtectedStrings),
@@ -64,30 +64,77 @@ internal static class LocaliserTests
     {
         var source = FindMaster();
         var masterPath = Path.Combine(root, "Strings.en-GB.xaml");
+        var translationMasterPath = Path.Combine(root, "Strings.en-GB.translation.xaml");
         var languagePath = Path.Combine(root, "Strings.en-US.xaml");
         File.Copy(source, masterPath);
+        File.Copy(source, translationMasterPath);
         File.Copy(Path.Combine(Path.GetDirectoryName(source)!, "Strings.en-US.xaml"), languagePath);
-        var master = ReviewWorkspace.Open(masterPath);
-        var language = TranslationWorkspace.Open(master, languagePath);
         const string key = "loc_Services_MetadataText_Archetype_HumanFemale_hed_eyeshadow_tint_scalar_32e85d_Label";
-        foreach (var path in new[] { masterPath, languagePath })
-        {
-            var original = File.ReadAllText(path);
-            if (path == masterPath)
-            {
-                master.Entries.Single(entry => entry.Key == key).Text = "Eyeliner Strength QA";
-                master.Save();
-            }
-            else
-            {
-                language.Entries[key].Text = "Eyeliner Strength QA";
-                language.SaveAs(path, master);
-            }
-            TestAssert.Equal(original.Replace(
-                ">Eyeliner Strength</system:String>", ">Eyeliner Strength QA</system:String>", StringComparison.Ordinal),
-                File.ReadAllText(path));
-        }
+        var master = ReviewWorkspace.Open(masterPath);
+        // Establish the same reviewed baseline regardless of the review state currently saved
+        // in Ryan's editable source catalogue.
+        var masterLabel = master.Entries.Single(entry => entry.Key == key);
+        masterLabel.Reviewed = true;
+        masterLabel.DoNotTranslate = false;
+        masterLabel.Note = "";
+        master.Save();
+
+        var originalMasterBytes = File.ReadAllBytes(masterPath);
+        var expectedMasterBytes = ReplaceTextBytes(originalMasterBytes,
+            ">Eyeliner Strength</system:String>", ">Eyeliner Strength QA</system:String>");
+        masterLabel.Text = "Eyeliner Strength QA";
+        master.Save();
+        TestAssert.True(!ReviewWorkspace.Open(masterPath).Entries.Single(entry => entry.Key == key).Reviewed,
+            "Changed master wording remained reviewed.");
+        AssertBytes(File.ReadAllBytes(masterPath), expectedMasterBytes, "English master wording edit");
+
+        var translationMaster = ReviewWorkspace.Open(translationMasterPath);
+        var language = TranslationWorkspace.Open(translationMaster, languagePath);
+        // The checked-in en-US draft can lag behind current English review/exclusion metadata.
+        // Save once to reconcile it, then measure only the wording edit against that baseline.
+        language.SaveAs(languagePath, translationMaster);
+        language = TranslationWorkspace.Open(translationMaster, languagePath);
+        var originalLanguageBytes = File.ReadAllBytes(languagePath);
+        var expectedLanguageBytes = ReplaceTextBytes(originalLanguageBytes,
+            ">Eyeliner Strength</system:String>", ">Eyeliner Strength QA</system:String>");
+        language.Entries[key].Text = "Eyeliner Strength QA";
+        language.SaveAs(languagePath, translationMaster);
+        AssertBytes(File.ReadAllBytes(languagePath), expectedLanguageBytes, "English translation wording edit");
     });
+
+    private static byte[] ReplaceTextBytes(byte[] originalBytes, string oldValue, string newValue)
+    {
+        var hasPreamble = originalBytes.AsSpan().StartsWith(Encoding.UTF8.GetPreamble());
+        var original = Encoding.UTF8.GetString(originalBytes.AsSpan(hasPreamble ? Encoding.UTF8.GetPreamble().Length : 0));
+        var expected = ReplaceOnce(original, oldValue, newValue);
+        return (hasPreamble ? Encoding.UTF8.GetPreamble() : []).Concat(Encoding.UTF8.GetBytes(expected)).ToArray();
+    }
+
+    private static void AssertBytes(byte[] actual, byte[] expected, string operation) =>
+        TestAssert.True(expected.SequenceEqual(actual),
+            $"{operation} changed bytes outside its wording. {DescribeFirstByteDifference(expected, actual)}");
+
+    private static string ReplaceOnce(string source, string oldValue, string newValue)
+    {
+        var index = source.IndexOf(oldValue, StringComparison.Ordinal);
+        TestAssert.True(index >= 0 && source.IndexOf(oldValue, index + oldValue.Length, StringComparison.Ordinal) < 0,
+            "Expected one unique source span for the byte-preservation assertion.");
+        return source[..index] + newValue + source[(index + oldValue.Length)..];
+    }
+
+    private static string DescribeFirstByteDifference(byte[] expected, byte[] actual)
+    {
+        var offset = 0;
+        while (offset < expected.Length && offset < actual.Length && expected[offset] == actual[offset]) offset++;
+        var start = Math.Max(0, offset - 48);
+        static string Context(byte[] bytes, int start) => Encoding.UTF8.GetString(
+                bytes.AsSpan(start, Math.Min(bytes.Length - start, 96)))
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("\r", "\\r", StringComparison.Ordinal)
+            .Replace("\n", "\\n", StringComparison.Ordinal);
+        return $"First byte difference at {offset}; expected length {expected.Length}, actual length {actual.Length}. " +
+            $"Expected context: '{Context(expected, start)}'; actual context: '{Context(actual, start)}'.";
+    }
 
     private static void CorpusRoundTrip() => Scratch(root =>
     {
@@ -297,7 +344,7 @@ internal static class LocaliserTests
         language.SaveAs(Path.Combine(root, "copy.xaml"), master);
     });
 
-    private static void HistoryLifecycle() => Scratch(root => OnSta(() =>
+    private static void HistoryLifecycle() => Scratch(root => WpfTestDispatcher.Invoke(() =>
     {
         var path = CreateMaster(root);
         var review = new ReviewViewModel();
@@ -365,7 +412,7 @@ internal static class LocaliserTests
         TestAssert.True(!review.CanUndo && !review.CanRedo, "Loading another file retained history tied to the old draft.");
     }));
 
-    private static void BulkHistory() => Scratch(root => OnSta(() =>
+    private static void BulkHistory() => Scratch(root => WpfTestDispatcher.Invoke(() =>
     {
         var path = Path.Combine(root, "Strings.en-GB.xaml");
         File.Copy(FindMaster(), path);
@@ -390,7 +437,7 @@ internal static class LocaliserTests
         TestAssert.True(rows.All(row => !row.Reviewed) && !review.CanUndo, "Bulk reviews required more than one undo.");
     }));
 
-    private static void InlineTyping() => Scratch(root => OnSta(() =>
+    private static void InlineTyping() => Scratch(root => WpfTestDispatcher.Invoke(() =>
     {
         var path = CreateMaster(root);
         var window = new MorphFaceEditor.Localiser.MainWindow();
@@ -495,7 +542,7 @@ internal static class LocaliserTests
         window.Close();
     }));
 
-    private static void WindowSmoke() => Scratch(root => OnSta(() =>
+    private static void WindowSmoke() => Scratch(root => WpfTestDispatcher.Invoke(() =>
     {
         var path = Path.Combine(root, "Strings.en-GB.xaml");
         File.Copy(FindMaster(), path);
@@ -537,7 +584,7 @@ internal static class LocaliserTests
         TestAssert.True(review.Rows.Select(row => row.Excluded).SequenceEqual(excluded), "Toolbar undo/redo lost a bulk edit.");
         review.SetFlags(review.Rows.Take(200), excludedColumn: false, value: true);
         TestAssert.Equal(200, review.Rows.Count(row => row.Reviewed));
-        var first = review.Rows[0];
+        var first = review.Rows.First(row => row.English.Contains("{0}", StringComparison.Ordinal));
         first.English = "Missing the placeholder";
         review.Refresh();
         TestAssert.Equal(SectionState.Invalid, review.Sections[0].State);
@@ -619,15 +666,6 @@ internal static class LocaliserTests
         var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap)); encoder.Save(stream);
     }
 
-    private static void OnSta(Action action)
-    {
-        Exception? error = null;
-        var thread = new Thread(() => { try { action(); } catch (Exception exception) { error = exception; } });
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-        if (!thread.Join(TimeSpan.FromSeconds(30))) throw new Exception("Localiser window smoke test timed out.");
-        if (error is not null) throw new Exception("Localiser window smoke test failed: " + error, error);
-    }
     private static string CreateMaster(string root)
     {
         var path = Path.Combine(root, "Strings.en-GB.xaml");

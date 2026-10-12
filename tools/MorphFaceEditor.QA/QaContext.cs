@@ -296,10 +296,11 @@ internal sealed class QaContext : IDisposable
 
     public async Task Render(HeadPreviewScene scene, string filename)
     {
+        const int width = 640, height = 640;
+        using var renderer = await Measure($"Preview renderer initialisation · {Path.GetFileName(filename)}",
+            () => Task.FromResult(new HeadPreviewRenderer(width, height)), QaStageKind.Load);
         await Measure($"Render PNG · {Path.GetFileName(filename)}", () =>
         {
-            const int width = 640, height = 640;
-            using var renderer = new HeadPreviewRenderer(width, height);
             renderer.SetScene(scene);
             var camera = new HeadOrbitCamera();
             camera.Fit(scene.Bounds); camera.ResetThreeQuarter();

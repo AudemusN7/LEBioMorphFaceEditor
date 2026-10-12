@@ -45,6 +45,8 @@ Each run writes to a new folder under `artifacts/qa`, with a separate directory 
 
 Load and Randomisation stages are warned above **1,500 ms**; file transfer, Save and PCC audit stages are warned above **5,000 ms**. Randomisation timing limits apply to the average of the 100 rolls; the total duration is retained in JSON. Performance warnings change an otherwise passing case to the separate **Warning** status; a case with functional failures remains **Failed** and still includes its performance warnings and contributes to performance-warning totals. Render/PNG readback is excluded from timing limits. Player fixture preparation uses one untimed roll and is not part of the production Randomisation average.
 
+Preview renderer initialisation is recorded separately as a Load stage with the **1,500 ms** target. This includes its first-use setup rather than hiding that cost inside the untimed Render PNG stage. Shader bytecode is compiled and embedded during the build; preview construction does not compile HLSL.
+
 Each stage name contains its sequence number, phase and purpose; run and case identity are supplied by the containing report record. `Player fixture preparation` covers stock loading/catalogue construction and fixture export; `Test workflow` covers the randomized-input test. Face/file names and Clipboard copy/paste roles distinguish repeated operations.
 
 Before the matrix tests a game's first face, it records a separate `ColdLoad` warm-up using that game's corpus package. Cold-load timings have no performance limit; subsequent face loads retain the 1,500 ms limit. This measures the first load in the QA session without flushing Windows file caches. The benchmark case likewise records its first load separately from its warm repeats.

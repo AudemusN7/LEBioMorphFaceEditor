@@ -1620,7 +1620,7 @@
   <system:String x:Key="loc_View_MainWindow_AssignMaterialsToActor" xml:space="preserve">アクターにマテリアルを割り当て</system:String>
   <system:String x:Key="loc_View_MainWindow_AssignMorphToActor" xml:space="preserve">アクターにモーフを割り当て</system:String>
   <system:String x:Key="loc_View_MainWindow_AssignOneEvidenceBackedMaterialFamilyToThisUsedMeshSlot" xml:space="preserve">使用中のメッシュスロットに割り当てるマテリアルファミリーを選択</system:String>
-  <system:String x:Key="loc_View_MainWindow_BIOMORPHFACEEXPORTS" xml:space="preserve">顔のエクスポート</system:String>
+  <!--localiser: {"Key":"loc_View_MainWindow_BIOMORPHFACEEXPORTS","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"D14A1967D06AD4B2FBB3D52E476B46C619962520176CFECE13918049B98F93C4"}--><system:String x:Key="loc_View_MainWindow_BIOMORPHFACEEXPORTS" xml:space="preserve">顔ブラウザー</system:String>
   <system:String x:Key="loc_View_MainWindow_Background" xml:space="preserve">背景</system:String>
   <system:String x:Key="loc_View_MainWindow_BioMorphFaceEditor" xml:space="preserve">Morph Face Editor</system:String>
   <system:String x:Key="loc_View_MainWindow_BioMorphFaceGeometryAndMaterialEditor" xml:space="preserve">Mass Effect Legendary Edition の顔向けジオメトリ／マテリアルエディター</system:String>
@@ -1639,7 +1639,7 @@
   <system:String x:Key="loc_View_MainWindow_CursedMode" xml:space="preserve">呪いモード</system:String>
   <system:String x:Key="loc_View_MainWindow_DeleteMorph" xml:space="preserve">モーフを削除</system:String>
   <system:String x:Key="loc_View_MainWindow_DismissError" xml:space="preserve">エラーを閉じる</system:String>
-  <system:String x:Key="loc_View_MainWindow_DragToResizeTheFaceBrowser" xml:space="preserve">ドラッグして顔エクスポート欄の幅を変更</system:String>
+  <!--localiser: {"Key":"loc_View_MainWindow_DragToResizeTheFaceBrowser","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"34CA39C38B5434C77F809324758A64E3D5B5EFDF78C719DB2DEC009A4F856720"}--><system:String x:Key="loc_View_MainWindow_DragToResizeTheFaceBrowser" xml:space="preserve">ドラッグして顔ブラウザー欄の幅を変更</system:String>
   <system:String x:Key="loc_View_MainWindow_DragToResizeTheFaceEditor" xml:space="preserve">ドラッグして顔エディター欄の幅を変更</system:String>
   <system:String x:Key="loc_View_MainWindow_Edit" xml:space="preserve">編集</system:String>
   <system:String x:Key="loc_View_MainWindow_EnableThisOnlyIfYouAreMentallyDisturbedAndOrAreMgamerz" xml:space="preserve">精神に不調がある場合、または Mgamerz である場合のみ有効にしてください</system:String>
@@ -1702,7 +1702,7 @@
   <system:String x:Key="loc_View_MainWindow_ResizeFaceEditor" xml:space="preserve">顔エディターの幅を変更</system:String>
   <system:String x:Key="loc_View_MainWindow_RestoreThisBoneToItsLoadedTranslation" xml:space="preserve">このボーンを読み込み時の位置に戻す</system:String>
     <!--localiser: {"Key":"loc_View_MainWindow_SavePackage","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"5BE8DC97FB7946FCCEB090A149C7BB36E0961E46E5877990372E03DBCAF4DEAE"}--><system:String x:Key="loc_View_MainWindow_SavePackage" xml:space="preserve">ファイルを保存</system:String>
-  <system:String x:Key="loc_View_MainWindow_SearchBioMorphFaceExports" xml:space="preserve">BioMorphFace エクスポートを検索</system:String>
+  <!--localiser: {"Key":"loc_View_MainWindow_SearchBioMorphFaceExports","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"9C963EC255DC5EDBFE9459AFD8253D046C2BB4861B66AE70B03277BF7AB9168B"}--><system:String x:Key="loc_View_MainWindow_SearchBioMorphFaceExports" xml:space="preserve">BioMorphFace の項目を検索</system:String>
   <system:String x:Key="loc_View_MainWindow_SearchByExportNameOrFullInstancedPath" xml:space="preserve">エクスポート名またはフルインスタンスパスで検索。タグ名でも絞り込めます (例: [HMM])。</system:String>
   <system:String x:Key="loc_View_MainWindow_SetToDefaults" xml:space="preserve">既定値に戻す</system:String>
   <system:String x:Key="loc_View_MainWindow_Settings" xml:space="preserve">設定</system:String>

@@ -1622,7 +1622,7 @@ No: elimina i database delle risorse personalizzate dopo una ricostruzione riusc
   <system:String x:Key="loc_View_MainWindow_AssignMaterialsToActor" xml:space="preserve">Assegna materiali all'attore</system:String>
   <system:String x:Key="loc_View_MainWindow_AssignMorphToActor" xml:space="preserve">Assegna morph all'attore</system:String>
   <system:String x:Key="loc_View_MainWindow_AssignOneEvidenceBackedMaterialFamilyToThisUsedMeshSlot" xml:space="preserve">Assegna una famiglia di materiali a questo slot mesh in uso</system:String>
-  <system:String x:Key="loc_View_MainWindow_BIOMORPHFACEEXPORTS" xml:space="preserve">ESPORTAZIONI DEI VOLTI</system:String>
+  <!--localiser: {"Key":"loc_View_MainWindow_BIOMORPHFACEEXPORTS","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"D14A1967D06AD4B2FBB3D52E476B46C619962520176CFECE13918049B98F93C4"}--><system:String x:Key="loc_View_MainWindow_BIOMORPHFACEEXPORTS" xml:space="preserve">ESPLORA VOLTI</system:String>
   <system:String x:Key="loc_View_MainWindow_Background" xml:space="preserve">Sfondo</system:String>
   <system:String x:Key="loc_View_MainWindow_BioMorphFaceEditor" xml:space="preserve">Morph Face Editor</system:String>
   <system:String x:Key="loc_View_MainWindow_BioMorphFaceGeometryAndMaterialEditor" xml:space="preserve">Editor di geometria e materiali per i volti di Mass Effect Legendary Edition</system:String>
@@ -1641,7 +1641,7 @@ No: elimina i database delle risorse personalizzate dopo una ricostruzione riusc
   <system:String x:Key="loc_View_MainWindow_CursedMode" xml:space="preserve">Modalità caotica</system:String>
   <system:String x:Key="loc_View_MainWindow_DeleteMorph" xml:space="preserve">Elimina morph</system:String>
   <system:String x:Key="loc_View_MainWindow_DismissError" xml:space="preserve">Ignora errore</system:String>
-  <system:String x:Key="loc_View_MainWindow_DragToResizeTheFaceBrowser" xml:space="preserve">Trascina per ridimensionare il riquadro Esportazioni dei volti</system:String>
+  <!--localiser: {"Key":"loc_View_MainWindow_DragToResizeTheFaceBrowser","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"34CA39C38B5434C77F809324758A64E3D5B5EFDF78C719DB2DEC009A4F856720"}--><system:String x:Key="loc_View_MainWindow_DragToResizeTheFaceBrowser" xml:space="preserve">Trascina per ridimensionare il riquadro Esplora volti</system:String>
   <system:String x:Key="loc_View_MainWindow_DragToResizeTheFaceEditor" xml:space="preserve">Trascina per ridimensionare il riquadro Editor volto</system:String>
   <system:String x:Key="loc_View_MainWindow_Edit" xml:space="preserve">Modifica</system:String>
   <system:String x:Key="loc_View_MainWindow_EnableThisOnlyIfYouAreMentallyDisturbedAndOrAreMgamerz" xml:space="preserve">Attivala solo se hai qualche rotella fuori posto e/o sei Mgamerz</system:String>
@@ -1704,7 +1704,7 @@ No: elimina i database delle risorse personalizzate dopo una ricostruzione riusc
   <system:String x:Key="loc_View_MainWindow_ResizeFaceEditor" xml:space="preserve">Ridimensiona l'editor dei volti</system:String>
   <system:String x:Key="loc_View_MainWindow_RestoreThisBoneToItsLoadedTranslation" xml:space="preserve">Ripristina la posizione originale caricata di questo osso</system:String>
     <!--localiser: {"Key":"loc_View_MainWindow_SavePackage","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"5BE8DC97FB7946FCCEB090A149C7BB36E0961E46E5877990372E03DBCAF4DEAE"}--><system:String x:Key="loc_View_MainWindow_SavePackage" xml:space="preserve">Salva file</system:String>
-  <system:String x:Key="loc_View_MainWindow_SearchBioMorphFaceExports" xml:space="preserve">Cerca esportazioni BioMorphFace</system:String>
+  <!--localiser: {"Key":"loc_View_MainWindow_SearchBioMorphFaceExports","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"9C963EC255DC5EDBFE9459AFD8253D046C2BB4861B66AE70B03277BF7AB9168B"}--><system:String x:Key="loc_View_MainWindow_SearchBioMorphFaceExports" xml:space="preserve">Cerca voci BioMorphFace</system:String>
   <system:String x:Key="loc_View_MainWindow_SearchByExportNameOrFullInstancedPath" xml:space="preserve">Cerca per nome di esportazione o percorso completo dell'istanza. Suggerimento: puoi anche filtrare per tag, ad esempio [HMM]</system:String>
   <system:String x:Key="loc_View_MainWindow_SetToDefaults" xml:space="preserve">Ripristina valori predefiniti</system:String>
   <system:String x:Key="loc_View_MainWindow_Settings" xml:space="preserve">Impostazioni</system:String>

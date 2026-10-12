@@ -1620,7 +1620,7 @@
   <system:String x:Key="loc_View_MainWindow_AssignMaterialsToActor" xml:space="preserve">Назначить материалы актёру</system:String>
   <system:String x:Key="loc_View_MainWindow_AssignMorphToActor" xml:space="preserve">Назначить морф актёру</system:String>
   <system:String x:Key="loc_View_MainWindow_AssignOneEvidenceBackedMaterialFamilyToThisUsedMeshSlot" xml:space="preserve">Назначить одно семейство материалов этому используемому слоту модели</system:String>
-  <system:String x:Key="loc_View_MainWindow_BIOMORPHFACEEXPORTS" xml:space="preserve">ЭКСПОРТЫ ЛИЦ</system:String>
+  <!--localiser: {"Key":"loc_View_MainWindow_BIOMORPHFACEEXPORTS","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"D14A1967D06AD4B2FBB3D52E476B46C619962520176CFECE13918049B98F93C4"}--><system:String x:Key="loc_View_MainWindow_BIOMORPHFACEEXPORTS" xml:space="preserve">ОБОЗРЕВАТЕЛЬ ЛИЦ</system:String>
   <system:String x:Key="loc_View_MainWindow_Background" xml:space="preserve">Фон</system:String>
   <system:String x:Key="loc_View_MainWindow_BioMorphFaceEditor" xml:space="preserve">Morph Face Editor</system:String>
   <system:String x:Key="loc_View_MainWindow_BioMorphFaceGeometryAndMaterialEditor" xml:space="preserve">Редактор геометрии и материалов лиц Mass Effect Legendary Edition</system:String>
@@ -1639,7 +1639,7 @@
   <system:String x:Key="loc_View_MainWindow_CursedMode" xml:space="preserve">Проклятый режим</system:String>
   <system:String x:Key="loc_View_MainWindow_DeleteMorph" xml:space="preserve">Удалить морф</system:String>
   <system:String x:Key="loc_View_MainWindow_DismissError" xml:space="preserve">Скрыть ошибку</system:String>
-  <system:String x:Key="loc_View_MainWindow_DragToResizeTheFaceBrowser" xml:space="preserve">Перетащите, чтобы изменить размер панели экспортов лиц</system:String>
+  <!--localiser: {"Key":"loc_View_MainWindow_DragToResizeTheFaceBrowser","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"34CA39C38B5434C77F809324758A64E3D5B5EFDF78C719DB2DEC009A4F856720"}--><system:String x:Key="loc_View_MainWindow_DragToResizeTheFaceBrowser" xml:space="preserve">Перетащите, чтобы изменить размер панели обозревателя лиц</system:String>
   <system:String x:Key="loc_View_MainWindow_DragToResizeTheFaceEditor" xml:space="preserve">Перетащите, чтобы изменить размер панели редактора лица</system:String>
   <system:String x:Key="loc_View_MainWindow_Edit" xml:space="preserve">Изменить</system:String>
   <system:String x:Key="loc_View_MainWindow_EnableThisOnlyIfYouAreMentallyDisturbedAndOrAreMgamerz" xml:space="preserve">Включайте, только если вы не в себе и/или вас зовут Mgamerz</system:String>
@@ -1702,7 +1702,7 @@
   <system:String x:Key="loc_View_MainWindow_ResizeFaceEditor" xml:space="preserve">Изменить размер редактора лица</system:String>
   <system:String x:Key="loc_View_MainWindow_RestoreThisBoneToItsLoadedTranslation" xml:space="preserve">Вернуть кость в исходное загруженное положение</system:String>
     <!--localiser: {"Key":"loc_View_MainWindow_SavePackage","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"5BE8DC97FB7946FCCEB090A149C7BB36E0961E46E5877990372E03DBCAF4DEAE"}--><system:String x:Key="loc_View_MainWindow_SavePackage" xml:space="preserve">Сохранить файл</system:String>
-  <system:String x:Key="loc_View_MainWindow_SearchBioMorphFaceExports" xml:space="preserve">Поиск экспортов BioMorphFace</system:String>
+  <!--localiser: {"Key":"loc_View_MainWindow_SearchBioMorphFaceExports","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"9C963EC255DC5EDBFE9459AFD8253D046C2BB4861B66AE70B03277BF7AB9168B"}--><system:String x:Key="loc_View_MainWindow_SearchBioMorphFaceExports" xml:space="preserve">Поиск записей BioMorphFace</system:String>
   <system:String x:Key="loc_View_MainWindow_SearchByExportNameOrFullInstancedPath" xml:space="preserve">Поиск по имени экспорта или полному инстанцированному пути. Совет: можно также фильтровать по тегу, например [HMM]</system:String>
   <system:String x:Key="loc_View_MainWindow_SetToDefaults" xml:space="preserve">Значения по умолчанию</system:String>
   <system:String x:Key="loc_View_MainWindow_Settings" xml:space="preserve">Настройки</system:String>

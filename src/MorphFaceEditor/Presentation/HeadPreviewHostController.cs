@@ -10,7 +10,8 @@ namespace MorphFaceEditor.Presentation;
 
 public sealed class HeadPreviewHostController : IDisposable
 {
-    private const int MaximumPreviewDimension = 2048;
+    // Allow large/high-DPI viewports to render at their actual pixel size.
+    private const int MaximumPreviewDimension = 16384;
     private const float InitialZoomWheelDelta = 240;
     private readonly Window _window;
     private readonly FrameworkElement _host;

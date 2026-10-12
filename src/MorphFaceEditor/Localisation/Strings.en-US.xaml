@@ -1620,7 +1620,7 @@ No: discard custom asset databases after a successful rebuild.</system:String>
   <system:String x:Key="loc_View_MainWindow_AssignMaterialsToActor" xml:space="preserve">Assign Materials to Actor</system:String>
   <system:String x:Key="loc_View_MainWindow_AssignMorphToActor" xml:space="preserve">Assign Morph to Actor</system:String>
   <system:String x:Key="loc_View_MainWindow_AssignOneEvidenceBackedMaterialFamilyToThisUsedMeshSlot" xml:space="preserve">Assign one material family to this used mesh slot</system:String>
-  <system:String x:Key="loc_View_MainWindow_BIOMORPHFACEEXPORTS" xml:space="preserve">FACE EXPORTS</system:String>
+  <!--localiser: {"Key":"loc_View_MainWindow_BIOMORPHFACEEXPORTS","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"D14A1967D06AD4B2FBB3D52E476B46C619962520176CFECE13918049B98F93C4"}--><system:String x:Key="loc_View_MainWindow_BIOMORPHFACEEXPORTS" xml:space="preserve">FACE BROWSER</system:String>
   <system:String x:Key="loc_View_MainWindow_Background" xml:space="preserve">Background</system:String>
   <system:String x:Key="loc_View_MainWindow_BioMorphFaceEditor" xml:space="preserve">Morph Face Editor</system:String>
   <system:String x:Key="loc_View_MainWindow_BioMorphFaceGeometryAndMaterialEditor" xml:space="preserve">Geometry and material editor for Mass Effect Legendary Edition faces</system:String>
@@ -1639,7 +1639,7 @@ No: discard custom asset databases after a successful rebuild.</system:String>
   <system:String x:Key="loc_View_MainWindow_CursedMode" xml:space="preserve">Cursed Mode</system:String>
   <system:String x:Key="loc_View_MainWindow_DeleteMorph" xml:space="preserve">Delete Morph</system:String>
   <system:String x:Key="loc_View_MainWindow_DismissError" xml:space="preserve">Dismiss error</system:String>
-  <system:String x:Key="loc_View_MainWindow_DragToResizeTheFaceBrowser" xml:space="preserve">Drag to resize the Face Exports pane</system:String>
+  <!--localiser: {"Key":"loc_View_MainWindow_DragToResizeTheFaceBrowser","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"34CA39C38B5434C77F809324758A64E3D5B5EFDF78C719DB2DEC009A4F856720"}--><system:String x:Key="loc_View_MainWindow_DragToResizeTheFaceBrowser" xml:space="preserve">Drag to resize the Face Browser pane</system:String>
   <system:String x:Key="loc_View_MainWindow_DragToResizeTheFaceEditor" xml:space="preserve">Drag to resize the Face Editor pane</system:String>
   <system:String x:Key="loc_View_MainWindow_Edit" xml:space="preserve">Edit</system:String>
   <system:String x:Key="loc_View_MainWindow_EnableThisOnlyIfYouAreMentallyDisturbedAndOrAreMgamerz" xml:space="preserve">Enable this only if you are mentally disturbed and/or are Mgamerz</system:String>
@@ -1702,7 +1702,7 @@ No: discard custom asset databases after a successful rebuild.</system:String>
   <system:String x:Key="loc_View_MainWindow_ResizeFaceEditor" xml:space="preserve">Resize face editor</system:String>
   <system:String x:Key="loc_View_MainWindow_RestoreThisBoneToItsLoadedTranslation" xml:space="preserve">Restore this bone to its original loaded position</system:String>
     <!--localiser: {"Key":"loc_View_MainWindow_SavePackage","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"5BE8DC97FB7946FCCEB090A149C7BB36E0961E46E5877990372E03DBCAF4DEAE"}--><system:String x:Key="loc_View_MainWindow_SavePackage" xml:space="preserve">Save File</system:String>
-  <system:String x:Key="loc_View_MainWindow_SearchBioMorphFaceExports" xml:space="preserve">Search BioMorphFace exports</system:String>
+  <!--localiser: {"Key":"loc_View_MainWindow_SearchBioMorphFaceExports","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"9C963EC255DC5EDBFE9459AFD8253D046C2BB4861B66AE70B03277BF7AB9168B"}--><system:String x:Key="loc_View_MainWindow_SearchBioMorphFaceExports" xml:space="preserve">Search BioMorphFace entries</system:String>
   <system:String x:Key="loc_View_MainWindow_SearchByExportNameOrFullInstancedPath" xml:space="preserve">Search by export name or full instanced path. Tip: You can also filter by tag name. eg [HMM]</system:String>
   <system:String x:Key="loc_View_MainWindow_SetToDefaults" xml:space="preserve">Set to Defaults</system:String>
   <system:String x:Key="loc_View_MainWindow_Settings" xml:space="preserve">Settings</system:String>

@@ -1622,7 +1622,7 @@ No: descarta las bases de datos de recursos personalizados después de reconstru
   <system:String x:Key="loc_View_MainWindow_AssignMaterialsToActor" xml:space="preserve">Asignar materiales al actor</system:String>
   <system:String x:Key="loc_View_MainWindow_AssignMorphToActor" xml:space="preserve">Asignar morph al actor</system:String>
   <system:String x:Key="loc_View_MainWindow_AssignOneEvidenceBackedMaterialFamilyToThisUsedMeshSlot" xml:space="preserve">Asigna una familia de materiales a esta ranura de malla en uso</system:String>
-  <system:String x:Key="loc_View_MainWindow_BIOMORPHFACEEXPORTS" xml:space="preserve">EXPORTACIONES DE ROSTRO</system:String>
+  <!--localiser: {"Key":"loc_View_MainWindow_BIOMORPHFACEEXPORTS","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"D14A1967D06AD4B2FBB3D52E476B46C619962520176CFECE13918049B98F93C4"}--><system:String x:Key="loc_View_MainWindow_BIOMORPHFACEEXPORTS" xml:space="preserve">EXPLORADOR DE ROSTROS</system:String>
   <system:String x:Key="loc_View_MainWindow_Background" xml:space="preserve">Fondo</system:String>
   <system:String x:Key="loc_View_MainWindow_BioMorphFaceEditor" xml:space="preserve">Morph Face Editor</system:String>
   <system:String x:Key="loc_View_MainWindow_BioMorphFaceGeometryAndMaterialEditor" xml:space="preserve">Editor de geometría y materiales para los rostros de Mass Effect Legendary Edition</system:String>
@@ -1641,7 +1641,7 @@ No: descarta las bases de datos de recursos personalizados después de reconstru
   <system:String x:Key="loc_View_MainWindow_CursedMode" xml:space="preserve">Modo maldito</system:String>
   <system:String x:Key="loc_View_MainWindow_DeleteMorph" xml:space="preserve">Eliminar morph</system:String>
   <system:String x:Key="loc_View_MainWindow_DismissError" xml:space="preserve">Descartar error</system:String>
-  <system:String x:Key="loc_View_MainWindow_DragToResizeTheFaceBrowser" xml:space="preserve">Arrastra para cambiar el tamaño del panel de exportaciones de rostros</system:String>
+  <!--localiser: {"Key":"loc_View_MainWindow_DragToResizeTheFaceBrowser","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"34CA39C38B5434C77F809324758A64E3D5B5EFDF78C719DB2DEC009A4F856720"}--><system:String x:Key="loc_View_MainWindow_DragToResizeTheFaceBrowser" xml:space="preserve">Arrastra para cambiar el tamaño del panel del explorador de rostros</system:String>
   <system:String x:Key="loc_View_MainWindow_DragToResizeTheFaceEditor" xml:space="preserve">Arrastra para cambiar el tamaño del panel del editor de rostros</system:String>
   <system:String x:Key="loc_View_MainWindow_Edit" xml:space="preserve">Editar</system:String>
   <system:String x:Key="loc_View_MainWindow_EnableThisOnlyIfYouAreMentallyDisturbedAndOrAreMgamerz" xml:space="preserve">Activa esta opción solo si tienes algún trastorno mental o eres Mgamerz</system:String>
@@ -1704,7 +1704,7 @@ No: descarta las bases de datos de recursos personalizados después de reconstru
   <system:String x:Key="loc_View_MainWindow_ResizeFaceEditor" xml:space="preserve">Cambiar el tamaño del editor de rostros</system:String>
   <system:String x:Key="loc_View_MainWindow_RestoreThisBoneToItsLoadedTranslation" xml:space="preserve">Restaurar este hueso a su posición original al cargarlo</system:String>
     <!--localiser: {"Key":"loc_View_MainWindow_SavePackage","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"5BE8DC97FB7946FCCEB090A149C7BB36E0961E46E5877990372E03DBCAF4DEAE"}--><system:String x:Key="loc_View_MainWindow_SavePackage" xml:space="preserve">Guardar archivo</system:String>
-  <system:String x:Key="loc_View_MainWindow_SearchBioMorphFaceExports" xml:space="preserve">Buscar exportaciones de BioMorphFace</system:String>
+  <!--localiser: {"Key":"loc_View_MainWindow_SearchBioMorphFaceExports","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"9C963EC255DC5EDBFE9459AFD8253D046C2BB4861B66AE70B03277BF7AB9168B"}--><system:String x:Key="loc_View_MainWindow_SearchBioMorphFaceExports" xml:space="preserve">Buscar entradas de BioMorphFace</system:String>
   <system:String x:Key="loc_View_MainWindow_SearchByExportNameOrFullInstancedPath" xml:space="preserve">Busca por nombre de exportación o ruta instanciada completa. Consejo: también puedes filtrar por nombre de etiqueta, por ejemplo [HMM].</system:String>
   <system:String x:Key="loc_View_MainWindow_SetToDefaults" xml:space="preserve">Restablecer valores predeterminados</system:String>
   <system:String x:Key="loc_View_MainWindow_Settings" xml:space="preserve">Configuración</system:String>

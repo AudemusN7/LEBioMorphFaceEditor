@@ -72,7 +72,7 @@ public partial class App : Application
                 materialCatalog: new CustomMaterialTemplateCatalogService(packageReader, textureRegistryStore)));
         textureRegistrySettings.DatabaseChanged += _viewModel.RefreshTextureRegistry;
         _themeViewport = new ThemeViewportBinding(Themes, _viewModel);
-        var window = new MainWindow(_viewModel);
+        var window = new MainWindow(_viewModel, ApplicationPreferencesStore.CreateDefault());
         MainWindow = window;
         window.Show();
 #if DEBUG

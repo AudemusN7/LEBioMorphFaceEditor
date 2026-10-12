@@ -5,6 +5,7 @@ using MorphFaceEditor.ViewModels;
 using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.Models;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -23,10 +24,20 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _numericWheelCommitTimer;
     private IContinuousEditViewModel? _numericWheelEdit;
     private bool _closeConfirmed;
+    private GridLength _paneDragStartWidth;
+    private readonly ApplicationPreferencesStore? _preferencesStore;
 
-    public MainWindow(MainWindowViewModel viewModel)
+    public MainWindow(MainWindowViewModel viewModel) : this(viewModel, null) { }
+
+    internal MainWindow(MainWindowViewModel viewModel, ApplicationPreferencesStore? preferencesStore)
     {
         InitializeComponent();
+        _preferencesStore = preferencesStore;
+        if (preferencesStore?.Current.SidePaneWidths is { } widths)
+        {
+            RestorePaneWidth(FaceBrowserColumn, widths.FaceBrowser);
+            RestorePaneWidth(FaceEditorColumn, widths.FaceEditor);
+        }
         DarkTitleBar.Apply(this);
         _viewModel = viewModel;
         DataContext = viewModel;
@@ -50,6 +61,97 @@ public partial class MainWindow : Window
         _previewHost.PreviewFailed += _viewModel.SetPreviewError;
         Closing += OnClosing;
         Closed += OnClosed;
+        LayoutUpdated += OnPaneLayoutUpdated;
+    }
+
+    private void OnPaneLayoutUpdated(object? sender, EventArgs e)
+    {
+        if (WorkspaceLayout.ActualWidth <= 0) return;
+
+        // Auto-sized columns include the current language's labels/check boxes.
+        // Reserve useful slider space as well as space for the editor heading.
+        var controlsWidth = RandomisationControls.ColumnDefinitions
+            .Where(column => column.Width.IsAuto).Sum(column => column.ActualWidth);
+        var editorMinimum = Math.Max(600, Math.Max(
+            controlsWidth + 42 + 80 + 26, EditorActions.DesiredSize.Width + 100 + 26));
+        if (Math.Abs(FaceEditorColumn.MinWidth - editorMinimum) > 0.5)
+            FaceEditorColumn.MinWidth = editorMinimum;
+
+        var chromeWidth = Math.Max(0, ActualWidth - WorkspaceLayout.ActualWidth);
+        var panesMinimum = FaceBrowserColumn.MinWidth + FaceEditorColumn.MinWidth + 300 + 12;
+        // The package caption can yield space; the toolbar's controls cannot.
+        var toolbarMinimum = FileToolbar.DesiredSize.Width + PreviewToolbar.DesiredSize.Width + 64;
+        var minimum = Math.Max(panesMinimum, toolbarMinimum) + chromeWidth;
+        if (Math.Abs(MinWidth - minimum) > 0.5) MinWidth = minimum;
+        FitSidePanes();
+    }
+
+    private static void RestorePaneWidth(ColumnDefinition pane, double? width)
+    {
+        if (width is > 0 && double.IsFinite(width.Value))
+            pane.Width = new GridLength(Math.Max(pane.MinWidth, width.Value));
+    }
+
+    private void SavePaneWidths()
+    {
+        if (_preferencesStore is null) return;
+        var widths = new SidePaneWidthsPreference(FaceBrowserColumn.Width.Value, FaceEditorColumn.Width.Value);
+        try { _preferencesStore.Update(preferences => preferences with { SidePaneWidths = widths }); }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            AppLog.Warning($"Pane widths could not be saved: {exception.Message}");
+        }
+    }
+
+    private ColumnDefinition GetSidePane(object sender) =>
+        ReferenceEquals(sender, FaceBrowserSplitter) ? FaceBrowserColumn : FaceEditorColumn;
+
+    private void OnPaneDragStarted(object sender, DragStartedEventArgs e) =>
+        _paneDragStartWidth = GetSidePane(sender).Width;
+
+    private void OnPaneDragDelta(object sender, DragDeltaEventArgs e)
+    {
+        ResizeSidePane(sender, e.HorizontalChange);
+        e.Handled = true;
+    }
+
+    private void OnPaneDragCompleted(object sender, DragCompletedEventArgs e)
+    {
+        if (e.Canceled) GetSidePane(sender).Width = _paneDragStartWidth;
+        FitSidePanes();
+        if (!e.Canceled) SavePaneWidths();
+    }
+
+    private void OnPaneResizeKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape && sender is Thumb { IsDragging: true } thumb)
+        {
+            thumb.CancelDrag();
+            e.Handled = true;
+        }
+        else if (e.Key is Key.Left or Key.Right)
+        {
+            ResizeSidePane(sender, e.Key == Key.Left ? -10 : 10);
+            SavePaneWidths();
+            e.Handled = true;
+        }
+    }
+
+    private void ResizeSidePane(object sender, double horizontalChange)
+    {
+        var pane = GetSidePane(sender);
+        var other = ReferenceEquals(pane, FaceBrowserColumn) ? FaceEditorColumn : FaceBrowserColumn;
+        // The outside edge stays at the window edge. Only consume space that the
+        // viewport can actually give up; never let a drag grow the whole grid.
+        var maximum = WorkspaceLayout.ActualWidth - other.ActualWidth - 300 - 12;
+        var change = ReferenceEquals(pane, FaceBrowserColumn) ? horizontalChange : -horizontalChange;
+        pane.Width = new GridLength(Math.Clamp(pane.ActualWidth + change, pane.MinWidth,
+            Math.Max(pane.MinWidth, maximum)));
+    }
+
+    private void FitSidePanes()
+    {
+        WorkspaceLayout.FitSidePanes(WorkspaceLayout.ActualWidth);
     }
 
     private void OnPreviewSceneReady(HeadPreviewScene scene, bool resetPosition) =>
@@ -325,10 +427,12 @@ public partial class MainWindow : Window
 
     private void OnClosed(object? sender, EventArgs e)
     {
+        SavePaneWidths();
         EndNumericWheelEdit();
         _numericWheelCommitTimer.Tick -= OnNumericWheelCommitTimer;
         Closing -= OnClosing;
         Closed -= OnClosed;
+        LayoutUpdated -= OnPaneLayoutUpdated;
         _viewModel.PreviewSceneReady -= OnPreviewSceneReady;
         _viewModel.PreviewCleared -= OnPreviewCleared;
         _viewModel.PreviewDeformationReady -= OnPreviewDeformationReady;

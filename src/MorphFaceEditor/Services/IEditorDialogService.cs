@@ -33,6 +33,9 @@ public interface IEditorDialogService
         ActorAssignmentInventory inventory,
         ActorAssignmentMode mode);
     bool ConfirmDeleteMorph(string facePath, bool hasReferences = false);
+    bool ConfirmDeleteCareerMorph(string name) => ConfirmDeleteMorph(name);
+    bool ConfirmCreateCareerMorph(string name) => true;
+    string? ChooseSaveAsFile(string sourcePath) => null;
     UnsavedChangesChoice ConfirmUnsavedChanges(
         string assetPath,
         UnsavedChangesScope scope = UnsavedChangesScope.Package);

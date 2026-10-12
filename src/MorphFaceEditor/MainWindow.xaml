@@ -19,6 +19,7 @@
         <KeyBinding Key="E" Modifiers="Control" Command="{Binding NewPlayerMorphCommand}" />
         <KeyBinding Key="O" Modifiers="Control" Command="{Binding OpenPackageCommand}" />
         <KeyBinding Key="S" Modifiers="Control" Command="{Binding SaveCommand}" />
+        <KeyBinding Key="S" Modifiers="Control+Shift" Command="{Binding SaveAsCommand}" />
         <KeyBinding Key="W" Modifiers="Control" Command="{Binding CloseWorkspaceCommand}" />
     </Window.InputBindings>
     <!-- Window resources keep editor-specific templates local; shared primitives live in EditorTheme.xaml. -->
@@ -210,6 +211,7 @@
                             <MenuItem Header="{DynamicResource loc_View_MainWindow_NewPlayerMorph}" Command="{Binding NewPlayerMorphCommand}" InputGestureText="{DynamicResource loc_Shortcut_NewPlayer}" />
                             <MenuItem Header="{DynamicResource loc_View_MainWindow_OpenPackage}" Command="{Binding OpenPackageCommand}" InputGestureText="{DynamicResource loc_Shortcut_Open}" />
                             <MenuItem Header="{DynamicResource loc_View_MainWindow_SavePackage}" Command="{Binding SaveCommand}" InputGestureText="{DynamicResource loc_Shortcut_Save}" />
+                            <MenuItem Header="{DynamicResource loc_FileSave_SaveAs}" Command="{Binding SaveAsCommand}" InputGestureText="{DynamicResource loc_Shortcut_SaveAs}" />
                             <Separator />
                             <MenuItem Header="{DynamicResource loc_View_MainWindow_Recent}" ItemsSource="{Binding RecentFiles}" IsEnabled="{Binding HasRecentFiles}">
                                 <MenuItem.ItemContainerStyle>
@@ -316,18 +318,22 @@
                                           Visibility="{Binding IsDetachedMeshWorkspace, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                 <MenuItem Header="{DynamicResource loc_View_MainWindow_CloneMorph}" Style="{StaticResource PccContextAction}" Command="{Binding CloneMorphCommand}" />
                                 <MenuItem Header="{DynamicResource loc_View_MainWindow_ConvertMorph}" Style="{StaticResource PccContextAction}" Command="{Binding ConvertMorphCommand}" />
+                                <Separator Style="{StaticResource PccContextSeparator}" />
+                                <MenuItem Header="{DynamicResource loc_RonFiles_ImportMorphFace}" Style="{StaticResource PccContextAction}" Command="{Binding ImportMorphFaceRonCommand}" />
+                                <MenuItem Header="{DynamicResource loc_View_MainWindow_ExportMorphAsRON}" Style="{StaticResource PccContextAction}" Command="{Binding ExportMorphRonCommand}"
+                                          ToolTip="{Binding MorphRonExportUnavailableReason}" ToolTipService.ShowOnDisabled="True" />
                                 <MenuItem Header="{DynamicResource loc_View_MainWindow_ExportToPCC}" Command="{Binding SaveMorphToPccCommand}" />
                                 <MenuItem Header="{DynamicResource loc_View_MainWindow_ExportMorphAsMesh}" Style="{StaticResource PccContextAction}">
                                     <MenuItem Header="{DynamicResource loc_View_MainWindow_PSK}" Command="{Binding ExportMorphPskCommand}" />
                                     <MenuItem Header="{DynamicResource loc_View_MainWindow_GlTF}" Command="{Binding ExportMorphGltfCommand}" />
                                     <MenuItem Header="{DynamicResource loc_View_MainWindow_MD5}" Command="{Binding ExportMorphMd5Command}" />
                                 </MenuItem>
-                                <MenuItem Header="{DynamicResource loc_View_MainWindow_ExportMorphAsRON}" Style="{StaticResource PccContextAction}" Command="{Binding ExportMorphRonCommand}"
-                                          ToolTip="{Binding MorphRonExportUnavailableReason}" ToolTipService.ShowOnDisabled="True" />
                                 <Separator Style="{StaticResource PccContextSeparator}" />
                                 <MenuItem Header="{DynamicResource loc_View_MainWindow_AssignMorphToActor}" Style="{StaticResource PccContextAction}" Command="{Binding AssignMorphToActorCommand}" />
                                 <MenuItem Header="{DynamicResource loc_View_MainWindow_AssignMaterialsToActor}" Style="{StaticResource PccContextAction}" Command="{Binding AssignMaterialsToActorCommand}" />
                                 <Separator Visibility="{Binding IsMaterialFileWorkspace, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                <MenuItem Header="{DynamicResource loc_RonFiles_ExportMorphs}" Style="{StaticResource PccContextAction}" Command="{Binding ExportMorphFeaturesRonCommand}" />
+                                <MenuItem Header="{DynamicResource loc_RonFiles_ImportMorphs}" Style="{StaticResource PccContextAction}" Command="{Binding ImportMorphFeaturesRonCommand}" />
                                 <MenuItem Header="{DynamicResource loc_View_MainWindow_ExportMaterials}" Command="{Binding ExportMaterialsCommand}"
                                           Visibility="{Binding IsMaterialFileWorkspace, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                 <MenuItem Header="{DynamicResource loc_View_MainWindow_ImportMaterials}" Command="{Binding ImportMaterialsCommand}"

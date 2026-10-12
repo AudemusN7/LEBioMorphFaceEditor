@@ -14,6 +14,13 @@ public sealed record MorphFaceEvaluation(
     MorphTargetResolution Resolution,
     DeformationComparisonReport? OriginalOracleReport);
 
+/// <summary>Non-feature geometry edits retained when only feature offsets are saved.</summary>
+public sealed record MorphFaceGeometryEditState(
+    IReadOnlyDictionary<string, Vector3> BoneOverrides,
+    IReadOnlyList<Vector3[]> PositionCorrections,
+    IReadOnlyList<BoneTranslation> TemplateBones,
+    IReadOnlySet<string>? PastedBoneNames);
+
 /// <summary>
 /// Selects which authored geometry the editing session treats as authoritative.
 /// Morph-evaluated faces are reconstructed from profile targets; fixed-bake faces
@@ -42,7 +49,7 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
     private readonly SkeletalMeshAsset _baseHead;
     private readonly IReadOnlyList<(int LodIndex, Vector3[] Positions)> _orderedBaseLods;
     private readonly IReadOnlyList<MorphTargetAsset> _targets;
-    private readonly IReadOnlySet<string> _metadataOnlyFeatures;
+    private IReadOnlySet<string> _metadataOnlyFeatures;
     private readonly string _profileName;
     private readonly IReadOnlyDictionary<string, string> _aliases;
     private readonly Func<DeformationComparisonReport, bool>? _recognizesBaseVariant;
@@ -52,7 +59,7 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
     private IReadOnlyList<Vector3[]> _positionCorrections = [];
     private readonly Dictionary<string, float> _features;
     private readonly HashSet<string> _originalFeatureNames;
-    private readonly IReadOnlyList<string> _featureOrder;
+    private IReadOnlyList<string> _featureOrder;
     private readonly Dictionary<string, Vector3> _boneOverrides;
     private readonly IReadOnlyList<BoneTranslation> _defaultTemplateBones;
     private readonly IReadOnlyDictionary<string, Vector3> _defaultBoneOverrides;
@@ -169,6 +176,15 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
 
     public MorphFaceEvaluation Evaluation { get; private set; }
     public MorphFaceGeometryMode GeometryMode { get; }
+    public MorphFaceGeometryEditState CaptureGeometryEdits() => new(
+        new Dictionary<string, Vector3>(_boneOverrides, StringComparer.OrdinalIgnoreCase),
+        CloneLods(_positionCorrections), _templateBones.ToArray(), _pastedBoneNames?.ToHashSet(StringComparer.OrdinalIgnoreCase));
+
+    public bool GeometryEditsMatch(MorphFaceGeometryEditState state) =>
+        state.BoneOverrides.Count == _boneOverrides.Count && state.BoneOverrides.All(v => _boneOverrides.TryGetValue(v.Key, out var value) && value == v.Value) &&
+        state.PositionCorrections.Count == _positionCorrections.Count && state.PositionCorrections.Select((lod, i) => lod.SequenceEqual(_positionCorrections[i])).All(v => v) &&
+        state.TemplateBones.SequenceEqual(_templateBones) &&
+        (state.PastedBoneNames is null ? _pastedBoneNames is null : _pastedBoneNames is not null && state.PastedBoneNames.SetEquals(_pastedBoneNames));
     public bool CanEditMorphFeatures { get; private set; }
     public bool CanEditBones { get; private set; }
 
@@ -499,6 +515,23 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
     /// <summary>
     /// Applies a complete logical randomisation as one validated mutation, evaluation and history entry.
     /// </summary>
+    /// <summary>Import compatible feature data, retaining unknown authored names as inert metadata.</summary>
+    public void ImportFeatures(IReadOnlyDictionary<string, float> values)
+    {
+        EnsureMorphEditable();
+        if (values.Any(v => string.IsNullOrWhiteSpace(v.Key) || !float.IsFinite(v.Value)))
+            throw new ArgumentException("Imported feature names must be non-empty and values finite.", nameof(values));
+        var extra = values.Keys.Where(name => !_features.ContainsKey(name)).ToArray();
+        if (extra.Length > 0)
+        {
+            _metadataOnlyFeatures = _metadataOnlyFeatures.Concat(extra).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            _featureOrder = _featureOrder.Concat(extra).OrderBy(v => v, StringComparer.OrdinalIgnoreCase).ToArray();
+            foreach (var name in extra) _features.Add(name, 0);
+        }
+        _originalFeatureNames.UnionWith(values.Keys);
+        SetFeatures(values);
+    }
+
     public void SetFeatures(IReadOnlyDictionary<string, float> values)
     {
         EnsureMorphEditable();

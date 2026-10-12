@@ -37,6 +37,11 @@ public sealed record RonExportProvenance(
 /// </summary>
 public static class TseHeadMorphRon
 {
+    public static bool IsMorphFeaturesOnly(string path) => File.ReadLines(path)
+        .Any(line => line.Trim().Equals("// MFE RON Content: Morphs", StringComparison.Ordinal));
+    public static void WriteMorphFeatures(string path, MorphFaceMorphData data, RonExportProvenance provenance) =>
+        Write(path, new("None", [], new(data.MorphFeatures, [], []), new([], [], [])), provenance, true);
+    public static MorphFaceMorphData ReadMorphData(string path) => Read(path).MorphData;
     public static void Validate(string path) => _ = Read(path);
 
     internal static TseHeadMorph Read(string path)
@@ -44,7 +49,8 @@ public static class TseHeadMorphRon
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         var source = File.ReadAllText(path);
         _ = ParseProvenance(source);
-        var parser = new Parser(source);
+        var featuresOnly = source.Split('\n').Any(line => line.Trim().Equals("// MFE RON Content: Morphs", StringComparison.Ordinal));
+        var parser = new Parser(source, featuresOnly);
         return parser.ReadHeadMorph();
     }
 
@@ -62,11 +68,13 @@ public static class TseHeadMorphRon
     internal static void Write(
         string path,
         TseHeadMorph morph,
-        RonExportProvenance? provenance = null)
+        RonExportProvenance? provenance = null,
+        bool morphFeaturesOnly = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentNullException.ThrowIfNull(morph);
         var builder = new StringBuilder();
+        if (morphFeaturesOnly) builder.AppendLine("// MFE RON Content: Morphs");
         if (provenance is not null)
         {
             WriteProvenance(builder, ValidateProvenance(provenance));
@@ -423,7 +431,12 @@ public static class TseHeadMorphRon
         private readonly string _source;
         private int _index;
 
-        public Parser(string source) => _source = source ?? throw new ArgumentNullException(nameof(source));
+        private readonly bool _featuresOnly;
+        public Parser(string source, bool featuresOnly = false)
+        {
+            _source = source ?? throw new ArgumentNullException(nameof(source));
+            _featuresOnly = featuresOnly;
+        }
 
         public TseHeadMorph ReadHeadMorph()
         {
@@ -474,10 +487,13 @@ public static class TseHeadMorphRon
             }
             var lastLod = Array.FindLastIndex(lods, value => value is { Length: > 0 });
             var baked = lastLod < 0 ? [] : lods.Take(lastLod + 1).Cast<Vector3[]>().ToArray();
-            if (baked.Length == 0 || baked.Any(value => value.Length == 0))
+            if ((!_featuresOnly && baked.Length == 0) || baked.Any(value => value.Length == 0))
             {
                 throw Error("HeadMorph LOD arrays must begin at LOD0 and remain contiguous.");
             }
+            if (_featuresOnly && (baked.Length != 0 || bones.Count != 0 || accessories.Count != 0 ||
+                hair != "None" || scalars.Count != 0 || colours.Count != 0 || textures.Count != 0))
+                throw Error("A Morphs-only RON must contain only morph features.");
             return new TseHeadMorph(
                 hair,
                 accessories,

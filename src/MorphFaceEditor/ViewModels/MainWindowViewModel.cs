@@ -47,6 +47,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly AsyncRelayCommand _loadSelectedFaceCommand;
     private readonly AsyncRelayCommand _commitCommand;
     private readonly AsyncRelayCommand _saveCommand;
+    private readonly AsyncRelayCommand _saveAsCommand;
     private readonly AsyncRelayCommand _saveMorphToPccCommand;
     private readonly AsyncRelayCommand _closeWorkspaceCommand;
     private readonly RelayCommand _exitCommand;
@@ -177,6 +178,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _saveCommand = new AsyncRelayCommand(
             SaveExistingCommandAsync,
             () => !IsBusy && HasWorkspace && (IsDirty || HasMultipleStandaloneImports));
+        _saveAsCommand = new AsyncRelayCommand(SaveSourceFileAsAsync, () => !IsBusy && HasWorkspace);
         _saveMorphToPccCommand = new AsyncRelayCommand(
             SaveMorphToPccCommandAsync,
             () => CanUseFaceContextMenu() ||
@@ -189,7 +191,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _dismissErrorCommand = new RelayCommand(() => ErrorMessage = null);
         _textureRegistrySettingsCommand = new RelayCommand(_dialogs.ShowTextureRegistrySettings);
         _cloneMorphCommand = new AsyncRelayCommand(CloneMorphAsync, CanMutatePackageContext);
-        _deleteMorphCommand = new AsyncRelayCommand(DeleteMorphAsync, CanMutatePackageContext);
+        _deleteMorphCommand = new AsyncRelayCommand(DeleteMorphAsync,
+            () => CanMutatePackageContext() || !IsBusy && _pcsavWorkspace is not null && SelectedFace is not null);
         _convertMorphCommand = new AsyncRelayCommand(ConvertMorphAsync, CanMutatePackageContext);
         _copyMorphDataCommand = new AsyncRelayCommand(CopyMorphDataAsync, CanCopyMorphData);
         _pasteMorphDataCommand = new AsyncRelayCommand(PasteMorphDataAsync, CanPasteMorphData);
@@ -248,6 +251,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public ICommand LoadSelectedFaceCommand => _loadSelectedFaceCommand;
     public ICommand CommitCommand => _commitCommand;
     public ICommand SaveCommand => _saveCommand;
+    public ICommand SaveAsCommand => _saveAsCommand;
     public ICommand SaveMorphToPccCommand => _saveMorphToPccCommand;
     public ICommand CloseWorkspaceCommand => _closeWorkspaceCommand;
     public ICommand ExitCommand => _exitCommand;
@@ -287,7 +291,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
-    public string PackageName => _detachedMeshSource is not null
+    public string PackageName => _pcsavWorkspace is { } career ? Path.GetFileName(career.SourcePath) : _detachedMeshSource is not null
         ? Loc.Format("loc_Shell_PackageName_DetachedMeshWorkspace", _standaloneGame)
         : _standaloneGame is not null
         ? Loc.Format(_isStandaloneNpcWorkspace ? "loc_Shell_PackageName_StandaloneNpcWorkspace" : "loc_Shell_PackageName_StandalonePlayerWorkspace", _standaloneGame)
@@ -464,6 +468,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _loadSelectedFaceCommand.RaiseCanExecuteChanged();
         _commitCommand.RaiseCanExecuteChanged();
         _saveCommand.RaiseCanExecuteChanged();
+        _saveAsCommand.RaiseCanExecuteChanged();
         _saveMorphToPccCommand.RaiseCanExecuteChanged();
         _closeWorkspaceCommand.RaiseCanExecuteChanged();
         _fixMorphCommand.RaiseCanExecuteChanged();
@@ -700,6 +705,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         !IsBusy && EditorFileDrop.Classify(path) switch
         {
             EditorFileDropKind.Package => true,
+            EditorFileDropKind.CareerSave => true,
             EditorFileDropKind.MorphImport => true,
             _ => false
         };
@@ -712,6 +718,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         RecordRecentFile(path);
+
+        if (EditorFileDrop.Classify(path) == EditorFileDropKind.CareerSave)
+        {
+            await OpenCareerSaveAsync(path);
+            return;
+        }
 
         if (EditorFileDrop.Classify(path) == EditorFileDropKind.Package)
         {
@@ -829,6 +841,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             Faces.Clear();
             foreach (var face in catalog.Faces)
             {
+                if (_pcsavWorkspace is not null && face.InstancedPath != _sourceFile?.FacePath) continue;
                 Faces.Add(face);
             }
             SelectedFace = preferredFacePath is null
@@ -1776,7 +1789,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
         return _dialogs.ConfirmUnsavedChanges(
             LoadedFacePath ?? Loc.Text("loc_Shell_UnsavedChanges_LoadedBioMorphFace"),
-            CanSaveOriginalRon ? UnsavedChangesScope.SourceFile : IsDetachedMeshWorkspace ? UnsavedChangesScope.DetachedMaterials : IsStandaloneWorkspace
+            _pcsavWorkspace is not null || CanSaveOriginalRon ? UnsavedChangesScope.SourceFile : IsDetachedMeshWorkspace ? UnsavedChangesScope.DetachedMaterials : IsStandaloneWorkspace
                 ? UnsavedChangesScope.StandaloneFace
                 : UnsavedChangesScope.Face) switch
         {
@@ -1795,7 +1808,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
         return _dialogs.ConfirmUnsavedChanges(
             IsStandaloneWorkspace ? LoadedFacePath ?? PackageName : PackagePath ?? Loc.Text("loc_Shell_UnsavedChanges_OpenPackage"),
-            CanSaveOriginalRon ? UnsavedChangesScope.SourceFile : IsDetachedMeshWorkspace ? UnsavedChangesScope.DetachedMaterials :
+            _pcsavWorkspace is not null || CanSaveOriginalRon ? UnsavedChangesScope.SourceFile : IsDetachedMeshWorkspace ? UnsavedChangesScope.DetachedMaterials :
                 IsStandaloneWorkspace ? UnsavedChangesScope.StandaloneFace : UnsavedChangesScope.Package) switch
         {
             UnsavedChangesChoice.Save => IsStandaloneWorkspace ? await SaveSourceFileAsync()
@@ -1826,6 +1839,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             return;
         }
 
+        ClearWorkspace();
+    }
+
+    private void ClearWorkspace()
+    {
         CancelPendingLoad();
         _npcImportCancellation?.Cancel();
         _npcImportCancellation?.Dispose();
@@ -2014,6 +2032,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         _sourceFile = null;
         _hasOtherStandaloneChanges = false;
+        _pcsavWorkspace = null;
         if (_packageWorkspace is null)
         {
             return;

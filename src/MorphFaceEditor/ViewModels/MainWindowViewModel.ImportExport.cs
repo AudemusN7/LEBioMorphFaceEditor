@@ -53,7 +53,9 @@ public sealed partial class MainWindowViewModel
         }
     }
 
-    private async Task ExportMorphRonAsync()
+    private Task ExportMorphRonAsync() => ExportMorphRonAsync(false);
+
+    private async Task ExportMorphRonAsync(bool morphFeaturesOnly)
     {
         if (!CanExportMorphRon() || SelectedFace is not { } selected || WorkspacePackagePath is not { } workspacePath)
         {
@@ -76,7 +78,7 @@ public sealed partial class MainWindowViewModel
             await Task.Run(() =>
             {
                 var provenance = CreateRonExportProvenance(workspacePath, selected, isPlayerWorkspace);
-                _packageContextService.ExportRon(workspacePath, selected.InstancedPath, destination, provenance);
+                _packageContextService.ExportRon(workspacePath, selected.InstancedPath, destination, provenance, morphFeaturesOnly);
             });
             Status = Loc.Format("loc_Shell_Status_ExportedAs", selected.DisplayName, Path.GetFileName(destination));
         }
@@ -188,8 +190,26 @@ public sealed partial class MainWindowViewModel
 
     private async Task ImportMorphAsync(string sourcePath)
     {
-        if (Path.GetExtension(sourcePath).Equals(".ron", StringComparison.OrdinalIgnoreCase) &&
-            await TryImportMaterialRonAsync(sourcePath)) return;
+        if (Path.GetExtension(sourcePath).Equals(".ron", StringComparison.OrdinalIgnoreCase))
+        {
+            if (await TryImportMorphFeaturesRonAsync(sourcePath)) return;
+            if (await TryImportMaterialRonAsync(sourcePath)) return;
+            try
+            {
+                var metadata = await Task.Run(() => TseHeadMorphRon.ReadProvenance(sourcePath));
+                if (metadata?.Producer == RonExportProducer.MFE)
+                {
+                    await RouteRonImportAsync(sourcePath, metadata.Game);
+                    return;
+                }
+            }
+            catch (Exception exception)
+            {
+                ErrorMessage = Loc.Format("loc_Shell_Error_TheRonProvenanceCouldNot", exception.Message);
+                Status = Loc.Text("loc_Shell_Status_RonImportFailedTheCurrent");
+                return;
+            }
+        }
         var game = _dialogs.ChooseStandaloneImportGame();
         if (game is not null)
         {
@@ -225,6 +245,7 @@ public sealed partial class MainWindowViewModel
         RonExportProvenance? provenance;
         try
         {
+            if (await TryImportMorphFeaturesRonAsync(sourcePath)) return;
             if (await TryImportMaterialRonAsync(sourcePath)) return;
             provenance = await Task.Run(() => TseHeadMorphRon.ReadProvenance(sourcePath));
         }
@@ -254,7 +275,7 @@ public sealed partial class MainWindowViewModel
             ? RonImportDestination.PlayerWorkspace
             : RonImportDestination.NpcFace;
         var archetype = provenance.Archetype;
-        if (isHuman)
+        if (isHuman && provenance.Producer != RonExportProducer.MFE)
         {
             var choice = _dialogs.ChooseRonImportDestination(
                 targetGame,
@@ -470,7 +491,8 @@ public sealed partial class MainWindowViewModel
         }
     }
 
-    private async Task ImportStandaloneMorphAsync(string sourcePath, MorphFaceGame game, bool newPlayerMode = false)
+    private async Task ImportStandaloneMorphAsync(string sourcePath, MorphFaceGame game, bool newPlayerMode = false,
+        PcsavHeadMorphWorkspace? career = null)
     {
         var extension = Path.GetExtension(sourcePath).ToLowerInvariant();
         var isRon = extension == ".ron";
@@ -517,7 +539,8 @@ public sealed partial class MainWindowViewModel
                 IsBusy = false;
             }
         }
-        var appendingToCurrentGame = _standaloneGame == game && _packageWorkspace is not null &&
+        var appendingToCurrentGame = career is null && _pcsavWorkspace is null &&
+                                     _standaloneGame == game && _packageWorkspace is not null &&
                                      !_isStandaloneNpcWorkspace &&
                                      (meshAnalysis is null || meshAnalysis.Recognition is not null);
         var existingNames = appendingToCurrentGame
@@ -526,7 +549,7 @@ public sealed partial class MainWindowViewModel
         var suggestedName = SuggestImportName(
             SanitizeObjectName(Path.GetFileNameWithoutExtension(sourcePath)),
             existingNames);
-        var objectName = newPlayerMode
+        var objectName = career is not null ? SanitizeObjectName(career.FirstName) : newPlayerMode
             ? _dialogs.ChooseNewPlayerMorphName(suggestedName, existingNames)
             : _dialogs.ChooseStandaloneMorphName(suggestedName, existingNames);
         if (objectName is null)
@@ -544,7 +567,9 @@ public sealed partial class MainWindowViewModel
 
         IsBusy = true;
         ErrorMessage = null;
-        Status = Loc.Format("loc_Shell_Status_ImportingAsAStandalonePlayer", Path.GetFileName(sourcePath), game);
+        Status = career is not null ? Loc.Text("loc_Pcsav_Reading") :
+            Loc.Format("loc_Shell_Status_ImportingAsAStandalonePlayer", Path.GetFileName(sourcePath), game);
+        var unavailableCareerAttachments = 0;
         try
         {
             if (meshAnalysis is { Recognition: null })
@@ -571,6 +596,11 @@ public sealed partial class MainWindowViewModel
                 {
                     AppLog.Information($"The {game} mesh/texture database is unavailable; " +
                         "Player RON import will use only assets already present in its staged player package.");
+                }
+                if (career is not null)
+                {
+                    assetCatalog ??= await Task.Run(() => StandalonePlayerAssetCatalog.ForRon(game, sourcePath, []));
+                    unavailableCareerAttachments = await Task.Run(() => career.PrepareEditingRon(sourcePath, assetCatalog));
                 }
             }
 
@@ -605,10 +635,19 @@ public sealed partial class MainWindowViewModel
             {
                 var result = await Task.Run(() => _standaloneImportService.ImportPlayerRon(
                     game, sourcePath, objectName, assetCatalog));
+                if (career is not null)
+                {
+                    try
+                    {
+                        if (result.Sex != career.Sex) throw new PcsavException(PcsavError.InvalidFile);
+                    }
+                    catch { result.Dispose(); throw; }
+                }
                 CancelPendingLoad();
                 SetEditor(null, null);
                 DisposePackageWorkspace();
                 _packageWorkspace = result.Workspace;
+                _pcsavWorkspace = career;
                 _standaloneGame = game;
                 _isStandaloneNpcWorkspace = false;
                 SetDetachedMeshSource(null);
@@ -653,7 +692,7 @@ public sealed partial class MainWindowViewModel
                 importWarnings = result.SaveResult.Warnings;
                 meshRecognition = result.Recognition;
             }
-            _standaloneImportPath = Path.GetFullPath(sourcePath);
+            _standaloneImportPath = Path.GetFullPath(career?.SourcePath ?? sourcePath);
             if (isRon)
             {
                 // A classified Player RON's LOD0 array is ordered for the exact
@@ -667,8 +706,9 @@ public sealed partial class MainWindowViewModel
                 _fixedBakeFacePaths.Add(importedFacePath);
                 _relativeBakeFacePaths.Remove(importedFacePath);
             }
-            if (!appendingToCurrentGame) _hasWorkspaceChanges = false;
-            TrackSourceFile(sourcePath, importedFacePath, isRon ? SourceFileFormat.MorphRon :
+            if (!appendingToCurrentGame) _hasWorkspaceChanges = career is { HasHeadMorph: false };
+            TrackSourceFile(career?.SourcePath ?? sourcePath, importedFacePath,
+                career is not null ? SourceFileFormat.Pcsav : isRon ? SourceFileFormat.MorphRon :
                 isMesh ? SourceFileFormat.Mesh : SourceFileFormat.LegacyMorph);
             OnPropertyChanged(nameof(PackageName));
             OnPropertyChanged(nameof(PackageDisplayName));
@@ -698,11 +738,16 @@ public sealed partial class MainWindowViewModel
                 Status = Loc.Format("loc_Shell_Status_ImportedAsRecognisedPlayerMeshReady", importedFacePath, game,
                     meshRecognition.Sex, meshRecognition.CoordinateSystem);
             }
+            if (career is not null && Editor is not null) career.SetEditingBaseline(Editor.CreateDraft());
+            if (unavailableCareerAttachments > 0 && Editor is not null)
+                _dialogs.ShowInformation(Loc.Text("loc_Shell_DialogTitle_PlayerMorphImportedWithWarnings"),
+                    Loc.Format("loc_Pcsav_UnavailableAttachments", unavailableCareerAttachments));
         }
         catch (Exception exception)
         {
             AppLog.Error($"Standalone player import failed for '{sourcePath}' as {game}.", exception);
-            ErrorMessage = Loc.Format("loc_Shell_Error_TheStandalonePlayerMorphCould", exception.Message);
+            ErrorMessage = career is not null ? FormatPcsavError(exception) :
+                Loc.Format("loc_Shell_Error_TheStandalonePlayerMorphCould", exception.Message);
             Status = Loc.Text("loc_Shell_Status_StandaloneImportFailedTheCurrent");
         }
         finally

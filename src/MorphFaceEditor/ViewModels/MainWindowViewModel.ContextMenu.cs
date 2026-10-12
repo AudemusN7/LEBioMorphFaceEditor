@@ -47,6 +47,7 @@ public sealed partial class MainWindowViewModel
 
     private void RaiseFaceContextCanExecuteChanged()
     {
+        RaiseRonFileCanExecuteChanged();
         OnPropertyChanged(nameof(MorphRonExportUnavailableReason));
         RaiseMaterialFileCanExecuteChanged();
         _cloneMorphCommand.RaiseCanExecuteChanged();
@@ -68,6 +69,11 @@ public sealed partial class MainWindowViewModel
 
     private async Task DeleteMorphAsync()
     {
+        if (_pcsavWorkspace is not null)
+        {
+            await DeleteCareerHeadMorphAsync();
+            return;
+        }
         if (SelectedFace is not { } source || WorkspacePackagePath is not { } workspacePath)
         {
             return;

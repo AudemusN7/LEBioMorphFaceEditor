@@ -10,6 +10,27 @@ namespace MorphFaceEditor.Services;
 
 public sealed class WpfEditorDialogService : IEditorDialogService
 {
+    public bool ConfirmCreateCareerMorph(string name) => new EditorMessageWindow(
+        Loc.Text("loc_View_MainWindow_OpenPackage"), Loc.Format("loc_Pcsav_ConfirmCreate", name),
+        confirmation: true, primaryLabel: Loc.Text("loc_StandaloneImportGameWindow_Continue"),
+        secondaryLabel: Loc.Text("loc_Common_Cancel")) { Owner = Application.Current.MainWindow }.ShowDialog() == true;
+
+    public string? ChooseSaveAsFile(string sourcePath)
+    {
+        var extension = Path.GetExtension(sourcePath);
+        var dialog = new SaveFileDialog
+        {
+            Title = Loc.Text("loc_FileSave_SaveAs"), FileName = Path.GetFileName(sourcePath),
+            DefaultExt = extension, AddExtension = true, OverwritePrompt = true,
+            InitialDirectory = Path.GetDirectoryName(sourcePath),
+            Filter = $"{extension.TrimStart('.').ToUpperInvariant()} (*{extension})|*{extension}"
+        };
+        return dialog.ShowDialog() == true ? dialog.FileName : null;
+    }
+    public bool ConfirmDeleteCareerMorph(string name) => new EditorMessageWindow(
+        Loc.Text("loc_WpfEditorDialogService_DeleteMorphTitle"), Loc.Format("loc_Pcsav_ConfirmDelete", name),
+        confirmation: true, primaryLabel: Loc.Text("loc_WpfEditorDialogService_DeleteMorphTitle"),
+        secondaryLabel: Loc.Text("loc_Common_Cancel")) { Owner = Application.Current.MainWindow }.ShowDialog() == true;
     public MeshSaveChoice? ChooseMeshSaveFormat()
     {
         var window = new MeshSaveFormatWindow { Owner = Application.Current.MainWindow };

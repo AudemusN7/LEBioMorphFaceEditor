@@ -37,19 +37,26 @@ public sealed class MorphFacePackageWorkspace : IDisposable
         CanCommit = canCommit;
     }
 
-    public string SourcePath { get; }
+    public string SourcePath { get; private set; }
     public string WorkingPath { get; }
     public bool CanCommit { get; }
 
-    public void Commit()
+    public void Commit() => Commit(null);
+
+    public void Commit(string? destination)
     {
         ThrowIfDisposed();
+        var target = Path.GetFullPath(destination ?? SourcePath);
+        if (target.Equals(WorkingPath, StringComparison.OrdinalIgnoreCase))
+            throw new IOException("The working package cannot be the save destination.");
+        var savingSource = target.Equals(SourcePath, StringComparison.OrdinalIgnoreCase);
+        var targetFingerprint = File.Exists(target) ? PackageFingerprint.Capture(target) : (PackageFingerprint?)null;
         if (!CanCommit)
         {
             throw new InvalidOperationException(
                 "This detached workspace is read-only with respect to its installed seed and cannot be committed.");
         }
-        if (PackageFingerprint.Capture(SourcePath) != _sourceFingerprint)
+        if (savingSource && PackageFingerprint.Capture(SourcePath) != _sourceFingerprint)
         {
             throw new IOException(
                 "The source PCC changed outside the editor while temporary edits were pending. Reload it before saving.");
@@ -65,12 +72,17 @@ public sealed class MorphFacePackageWorkspace : IDisposable
         }
 
         var commitPath = Path.Combine(
-            Path.GetDirectoryName(SourcePath)!,
-            $".{Path.GetFileName(SourcePath)}.{Guid.NewGuid():N}.commit.tmp");
+            Path.GetDirectoryName(target)!,
+            $".{Path.GetFileName(target)}.{Guid.NewGuid():N}.commit.tmp");
         try
         {
             File.Copy(WorkingPath, commitPath, overwrite: false);
-            AtomicReplace(commitPath, SourcePath);
+            if (File.Exists(target) != (targetFingerprint is not null) ||
+                targetFingerprint is not null && PackageFingerprint.Capture(target) != targetFingerprint)
+                throw new IOException("The destination PCC changed while saving.");
+            if (File.Exists(target)) AtomicReplace(commitPath, target);
+            else File.Move(commitPath, target);
+            SourcePath = target;
             _sourceFingerprint = PackageFingerprint.Capture(SourcePath);
         }
         finally

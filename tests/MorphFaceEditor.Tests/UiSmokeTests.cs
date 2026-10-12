@@ -43,6 +43,10 @@ public static class UiSmokeTests
         new("application settings: detached diagnostics include loaded geometry and current material assignments", DiagnosticDetachedMeshIncludesState),
         new("standalone morph import is available before opening a PCC", StandaloneImportIsAvailableWithoutPackage),
         new("source file save preserves RON edits on failure and blocks multiple imports", SourceFileSaveRoundTrip),
+        new("Morphs-only RON opens its base face saves features and retains unrelated edits", MorphFeaturesFileWorkflow),
+        new("MFE RON representative exports reopen full morph and material scopes across games", RepresentativeRonReopens),
+        new("BAF TUF material RON audit distinguishes available female bases from safe rejection", FemaleMaterialRonAudit),
+        new("PCSAV UI opens edits creates and deletes career heads without intermediary dialogs", PcsavCareerWorkflow),
         new("unrecognised mesh import publishes a detached preview workspace", UnrecognisedMeshPublishesDetachedWorkspace),
         new("custom mesh import ignores the selected PCC morph topology", () => UnrecognisedMeshPublishesDetachedWorkspace(openPcc: true)),
         new("glTF and GLB drops publish detached mesh workspaces", GltfAndGlbDropsPublishDetachedWorkspaces),
@@ -55,7 +59,7 @@ public static class UiSmokeTests
         new("MFE material RON drops use material import rather than Player import", MaterialRonDropsUseMaterialImport),
         new("material RON metadata opens matching default NPC and Player faces", MaterialRonMetadataOpensDefaultFace),
         new("NPC import cancellation command cancels an active request", NpcImportCancellationCommandCancelsActiveRequest),
-        new("tagged human RON follows the user's NPC or Player destination", TaggedHumanRonFollowsDestination),
+        new("human RON uses MFE metadata automatically and retains LEX destination choices", TaggedHumanRonFollowsDestination),
         new("standalone Gibbed import rejects the wrong selected game before mutation", StandaloneGibbedRejectsWrongGame),
         new("standalone fixed-bake workspaces allow material clipboard commands", StandaloneFixedBakeMaterialClipboardCommands),
         new("ALN morph clipboard commands stay blocked before and after load", AlnMorphClipboardCommandsStayBlocked),
@@ -301,17 +305,339 @@ public static class UiSmokeTests
         finally { Directory.Delete(root, recursive: true); }
     });
 
+    private static void PcsavCareerWorkflow() => RunWithDispatcher(async () =>
+    {
+        TestAssert.Equal(EditorFileDropKind.CareerSave, EditorFileDrop.Classify("career.PCSAV"));
+        TestAssert.True(EditorFileDrop.WorkspaceOpenFilter.Contains("*.pcsav"), "Open File hides PCSAVs.");
+        foreach (var fixture in PcsavHeadMorphTests.Fixtures())
+        {
+            var directory = Path.Combine(Path.GetTempPath(), $"MFE-PcsavUi-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(directory);
+            try
+            {
+                var source = Path.Combine(directory, Path.GetFileName(fixture)); File.Copy(fixture, source);
+                var originalBytes = File.ReadAllBytes(source);
+                var original = PcsavHeadMorphWorkspace.Open(source);
+                using var reader = new MorphFacePackageReader();
+                var dialogs = new StubEditorDialogs { ConfirmDeleteMorphResult = false };
+                using var shell = CreateMainWindowViewModel(reader, dialogs);
+                if (!original.HasHeadMorph)
+                {
+                    dialogs.ConfirmCreateCareerMorphResult = false;
+                    await shell.OpenDroppedFileAsync(source);
+                    TestAssert.True(!shell.HasWorkspace && originalBytes.SequenceEqual(File.ReadAllBytes(source)), "Cancelled blank head creation changed the workspace/source.");
+                    dialogs.ConfirmCreateCareerMorphResult = true;
+                }
+                await shell.OpenDroppedFileAsync(source);
+                TestAssert.True(!shell.HasError && shell.Editor is not null, shell.ErrorMessage ?? "PCSAV did not open.");
+                TestAssert.Equal(1, shell.Faces.Count);
+                TestAssert.Equal(original.FirstName, shell.SelectedFace!.ObjectName);
+                TestAssert.Equal(Path.GetFileName(source), shell.PackageName);
+                TestAssert.Equal(0, dialogs.StandaloneGameChoiceCount);
+                TestAssert.Equal(0, dialogs.StandaloneNameChoiceCount);
+                TestAssert.True(originalBytes.SequenceEqual(File.ReadAllBytes(source)), "Opening changed the career save.");
+                TestAssert.Equal(!original.HasHeadMorph, shell.IsDirty);
+                TestAssert.True(shell.DeleteMorphCommand.CanExecute(null), "PCSAV Delete Morph is unavailable.");
+
+                var scalar = shell.Editor!.Material.Scalars.First();
+                var scalarName = scalar.Name;
+                var scalarValue = scalar.Value + 0.125f;
+                scalar.Value = scalarValue;
+                await ((AsyncRelayCommand)shell.SaveCommand).ExecuteAsync();
+                TestAssert.True(!shell.HasError && !shell.IsDirty, shell.ErrorMessage ?? "PCSAV save stayed dirty.");
+                TestAssert.Equal(1, shell.Faces.Count);
+                var saved = PcsavHeadMorphWorkspace.Open(source);
+                TestAssert.True(saved.HasHeadMorph, "Save did not create or retain the native head.");
+                if (original.HasHeadMorph)
+                {
+                    TestAssert.Equal(original.Head.HairMesh, saved.Head.HairMesh);
+                    TestAssert.True(original.Head.AccessoryMeshes.SequenceEqual(saved.Head.AccessoryMeshes),
+                        "A material edit changed saved attachments unavailable to the preview.");
+                    TestAssert.True(original.Head.MaterialData.Textures.SequenceEqual(saved.Head.MaterialData.Textures),
+                        "A scalar edit changed native texture references.");
+                }
+                TestAssert.Near(scalarValue, saved.Head.MaterialData.Scalars.Single(v => v.Name == scalarName).Value, 0.00001f);
+                TestAssert.True(original.UnrelatedPrefix.SequenceEqual(saved.UnrelatedPrefix) &&
+                    original.UnrelatedSuffix.SequenceEqual(saved.UnrelatedSuffix), "UI save changed unrelated career bytes.");
+
+                // A real morph edit exercises the PCC rebake, not just material routing.
+                var feature = shell.Editor!.Features.First(v => v.IsEditable);
+                var featureName = feature.Name;
+                var featureValue = feature.Value + 0.05f;
+                feature.Value = featureValue;
+                await ((AsyncRelayCommand)shell.SaveCommand).ExecuteAsync();
+                TestAssert.True(!shell.HasError && !shell.IsDirty, shell.ErrorMessage ?? "PCSAV morph save failed.");
+                var shaped = PcsavHeadMorphWorkspace.Open(source);
+                TestAssert.Near(featureValue, shaped.Head.MorphData.MorphFeatures.Single(v => v.Name == featureName).Offset, 0.00001f);
+                TestAssert.True(original.UnrelatedPrefix.SequenceEqual(shaped.UnrelatedPrefix) &&
+                    original.UnrelatedSuffix.SequenceEqual(shaped.UnrelatedSuffix), "Shape save changed unrelated data.");
+
+                var beforeCopy = File.ReadAllBytes(source);
+                if (original.Game is MorphFaceGame.LE2 or MorphFaceGame.LE3)
+                {
+                    var eyeMaps = shell.Editor!.Material.Textures.Where(v => v.Name.Contains("EYE", StringComparison.OrdinalIgnoreCase)).ToArray();
+                    TestAssert.True(eyeMaps.Length > 0, "Player eye texture controls were absent from the regression fixture.");
+                    var eyes = eyeMaps.ToDictionary(v => v.Name, v => v.SelectedTexture?.InstancedPath);
+                    shell.Editor.RandomiseMorphs = false;
+                    shell.Editor.RandomiseMaterials = true;
+                    foreach (var cursed in new[] { false, true })
+                    {
+                        shell.Editor.CursedMode = cursed;
+                        await shell.Editor.RandomiseAsync();
+                        foreach (var eye in eyeMaps)
+                            TestAssert.Equal(eyes[eye.Name], eye.SelectedTexture?.InstancedPath);
+                    }
+                }
+                var sourceBeforeCopy = source;
+                dialogs.SaveAsPath = Path.Combine(directory, "Copy.pcsav");
+                await ((AsyncRelayCommand)shell.SaveAsCommand).ExecuteAsync();
+                TestAssert.True(!shell.HasError && !shell.IsDirty, shell.ErrorMessage ?? "Career Save As failed.");
+                TestAssert.True(beforeCopy.SequenceEqual(File.ReadAllBytes(source)), "UI Save As overwrote the original.");
+                source = dialogs.SaveAsPath;
+                TestAssert.Equal("Copy.pcsav", shell.PackageName);
+                if (original.Game == MorphFaceGame.LE3 && original.Sex == StandalonePlayerSex.Male)
+                {
+                    dialogs.RonExportPath = Path.Combine(directory, "Full.ron");
+                    await ((AsyncRelayCommand)shell.ExportMorphRonCommand).ExecuteAsync();
+                    var full = TseHeadMorphRon.Read(dialogs.RonExportPath);
+                    dialogs.RonExportPath = Path.Combine(directory, "Morphs.ron");
+                    await ((AsyncRelayCommand)shell.ExportMorphFeaturesRonCommand).ExecuteAsync();
+                    var featuresOnly = TseHeadMorphRon.Read(dialogs.RonExportPath);
+                    TestAssert.True(featuresOnly.MaterialData.Scalars.Count == 0 && featuresOnly.MorphData.FinalSkeleton.Count == 0 &&
+                        featuresOnly.AccessoryMeshes.Count == 0 && featuresOnly.HairMesh == "None",
+                        "Morphs-only export included other data.");
+                    var selectedFeature = shell.Editor!.Features.First(v => v.IsEditable);
+                    var oldFeatureValue = selectedFeature.Value;
+                    selectedFeature.Value += 0.05f;
+                    shell.Editor.Material.Scalars.First().Value += 0.125f;
+                    var materialsBeforeImport = shell.Editor.CreateDraft().MaterialOverrides.Scalars.ToArray();
+                    dialogs.MorphImportPath = dialogs.RonExportPath;
+                    await ((AsyncRelayCommand)shell.ImportMorphFeaturesRonCommand).ExecuteAsync();
+                    TestAssert.True(!shell.HasError, shell.ErrorMessage ?? "Morphs import failed.");
+                    TestAssert.Near(oldFeatureValue, selectedFeature.Value, 0.00001f);
+                    TestAssert.True(materialsBeforeImport.SequenceEqual(shell.Editor.CreateDraft().MaterialOverrides.Scalars), "Morphs import changed materials.");
+                    selectedFeature.Value += 0.05f;
+                    var valueBeforeMaterials = selectedFeature.Value;
+                    dialogs.MaterialImportPath = Path.Combine(directory, "Full.ron");
+                    await ((AsyncRelayCommand)shell.ImportMaterialsCommand).ExecuteAsync();
+                    TestAssert.True(!shell.HasError, shell.ErrorMessage ?? "Materials import failed.");
+                    TestAssert.Near(valueBeforeMaterials, selectedFeature.Value, 0.00001f);
+                    dialogs.MorphImportPath = dialogs.MaterialImportPath;
+                    await ((AsyncRelayCommand)shell.ImportMorphFaceRonCommand).ExecuteAsync();
+                    TestAssert.True(!shell.HasError && shell.IsDirty && shell.Faces.Count == 1, shell.ErrorMessage ?? "Full head import failed.");
+                    await ((AsyncRelayCommand)shell.SaveCommand).ExecuteAsync();
+                    TestAssert.True(!shell.HasError && !shell.IsDirty, shell.ErrorMessage ?? "Imported head save failed.");
+                    var imported = PcsavHeadMorphWorkspace.Open(source).Head;
+                    TestAssert.Equal(full.HairMesh, imported.HairMesh);
+                    TestAssert.True(full.AccessoryMeshes.SequenceEqual(imported.AccessoryMeshes) &&
+                        full.MorphData.BakedLods[0].SequenceEqual(imported.MorphData.BakedLods[0]), "Full import lost authored head data.");
+                }
+
+                TestAssert.True(beforeCopy.SequenceEqual(File.ReadAllBytes(sourceBeforeCopy)), "A later save targeted the original career.");
+
+                var beforeCancel = File.ReadAllBytes(source);
+                shell.Editor!.Material.Scalars.First().Value += 0.125f;
+                await ((AsyncRelayCommand)shell.DeleteMorphCommand).ExecuteAsync();
+                TestAssert.True(shell.HasWorkspace && shell.IsDirty && beforeCancel.SequenceEqual(File.ReadAllBytes(source)), "Cancelled deletion changed the career or discarded edits.");
+                dialogs.ConfirmDeleteMorphResult = true;
+                var damaged = beforeCancel.ToArray(); damaged[20] ^= 0x80; File.WriteAllBytes(source, damaged);
+                await ((AsyncRelayCommand)shell.DeleteMorphCommand).ExecuteAsync();
+                TestAssert.True(shell.HasWorkspace && shell.HasError && shell.IsDirty, "Failed deletion closed the workspace or discarded edits.");
+                TestAssert.True(damaged.SequenceEqual(File.ReadAllBytes(source)), "Failed deletion overwrote a changed career.");
+                File.WriteAllBytes(source, beforeCancel);
+                await ((AsyncRelayCommand)shell.DeleteMorphCommand).ExecuteAsync();
+                TestAssert.True(!shell.HasWorkspace && shell.Editor is null && !shell.IsDirty, "Successful deletion did not close the workspace.");
+                var deleted = PcsavHeadMorphWorkspace.Open(source);
+                TestAssert.True(!deleted.HasHeadMorph, "UI deletion left a headmorph in the save.");
+                TestAssert.True(original.UnrelatedPrefix.SequenceEqual(deleted.UnrelatedPrefix) &&
+                    original.UnrelatedSuffix.SequenceEqual(deleted.UnrelatedSuffix), "UI deletion changed unrelated data.");
+                TestAssert.True(originalBytes.SequenceEqual(File.ReadAllBytes(fixture)), "The original fixture was changed.");
+                Console.WriteLine($"PCSAV UI {original.Game} {original.Sex} ({original.FirstName}): open/save/delete verified");
+            }
+            finally { Directory.Delete(directory, recursive: true); }
+        }
+    });
+
+    private static void RepresentativeRonReopens() => RunWithDispatcher(async () =>
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"MFE-RonAudit-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var catalog = new MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureCatalogService(
+            new MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureRegistryStore(
+                MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureRegistryPaths.CreateDefault()));
+        try
+        {
+            foreach (var (game, tag, player) in new[] { (MorphFaceGame.LE1, "HMF", true),
+                         (MorphFaceGame.LE2, "SAL", false), (MorphFaceGame.LE3, "TUR", false) })
+            {
+                string package, face;
+                if (player)
+                {
+                    package = StandalonePlayerMorphImportService.ResolveInstalledSeed(game);
+                    face = StandalonePlayerMorphImportService.ResolvePlayerTemplate(game, StandalonePlayerSex.Female);
+                }
+                else
+                {
+                    var snapshot = await catalog.ReadAsync(game);
+                    var donor = new RonNpcDonorResolver(MorphFaceProfileRegistry.CreateDefault())
+                        .Resolve(game, tag, snapshot.MorphFaceTemplates, snapshot.OfficialPackagePaths);
+                    package = donor.PackagePath; face = donor.FacePath;
+                }
+                var context = new MorphFacePackageContextService();
+                var morph = context.CaptureMorphData(package, face);
+                var materials = context.CaptureMaterialData(package, face);
+                var profile = MorphFaceProfileRegistry.CreateDefault().Profiles.Single(v => v.Game == game && v.ExportTag == $"[{tag}]");
+                foreach (var scope in new[] { "Full", "Morphs", "Materials" })
+                {
+                    var path = Path.Combine(directory, $"{game}-{tag}-{scope}.ron");
+                    if (scope == "Materials")
+                        File.WriteAllText(path, MaterialRonCodec.WriteMfe(FaceMaterialFileService.Capture(game, "Audit", materials)
+                            with { DefaultFace = new(profile.Key, player) }));
+                    else context.ExportRon(package, face, path, new(RonExportProducer.MFE, "0.9.6", game, tag, player), scope == "Morphs");
+                    var bytes = File.ReadAllBytes(path);
+                    using var reader = new MorphFacePackageReader();
+                    var dialogs = new StubEditorDialogs { StandaloneNameChoiceResult = "Audit" };
+                    using var shell = CreateMainWindowViewModel(reader, dialogs, textureCatalog: catalog);
+                    await shell.OpenDroppedFileAsync(path);
+                    TestAssert.True(!shell.HasError && shell.Editor is not null && shell.HasPreview,
+                        $"{game} {tag} {scope}: {shell.ErrorMessage ?? "No editing workspace"}");
+                    TestAssert.Equal(profile.Key, shell.SelectedFace!.ProfileKey);
+                    TestAssert.Equal(0, dialogs.StandaloneGameChoiceCount);
+                    TestAssert.Equal(0, dialogs.RonImportDestinationChoiceCount);
+                    TestAssert.True(bytes.SequenceEqual(File.ReadAllBytes(path)), "Opening changed an export.");
+                    if (scope == "Morphs") foreach (var feature in morph.MorphFeatures)
+                        TestAssert.Near(feature.Offset, shell.Editor!.CreateDraft().MorphFeatures.First(v =>
+                            v.Name.Equals(feature.Name, StringComparison.OrdinalIgnoreCase)).Offset, 0.00001f);
+                    if (scope == "Full") TestAssert.True(morph.BakedLods[0].SequenceEqual(shell.Editor!.CreateDraft().BakedLods[0]),
+                        "A full head's authored geometry changed on reopen.");
+                    Console.WriteLine($"RON audit {game} {tag} {scope}: reopened");
+                }
+            }
+        }
+        finally { Directory.Delete(directory, true); }
+    });
+
+    private static void FemaleMaterialRonAudit() => RunWithDispatcher(async () =>
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"MFE-FemaleRonAudit-{Guid.NewGuid():N}.ron");
+        var catalog = new MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureCatalogService(
+            new MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureRegistryStore(
+                MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureRegistryPaths.CreateDefault()));
+        try
+        {
+            foreach (var game in new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 })
+            foreach (var suffix in new[] { "female-batarian", "female-turian" })
+            {
+                var key = $"{game.ToString().ToLowerInvariant()}-{suffix}";
+                var snapshot = await catalog.ReadAsync(game);
+                var donor = new RonNpcDonorResolver(MorphFaceProfileRegistry.CreateDefault()).ResolveMaterialDefault(
+                    game, key, snapshot.MorphFaceTemplates, snapshot.OfficialPackagePaths);
+                File.WriteAllText(path, MaterialRonCodec.WriteMfe(FaceMaterialFileService.Capture(game, "Audit", new([], [], []))
+                    with { DefaultFace = new(key, false) }));
+                using var reader = new MorphFacePackageReader();
+                using var shell = CreateMainWindowViewModel(reader, new StubEditorDialogs(), textureCatalog: catalog);
+                await shell.OpenDroppedFileAsync(path);
+                if (donor is null)
+                    TestAssert.True(shell.HasError && shell.Editor is null, "An absent female base silently substituted another head.");
+                else
+                {
+                    TestAssert.True(!shell.HasError && shell.HasPreview, shell.ErrorMessage ?? "Available female material base failed.");
+                    TestAssert.Equal(key, shell.SelectedFace!.ProfileKey);
+                    TestAssert.True(!shell.ExportMorphRonCommand.CanExecute(null) && !shell.ExportMorphFeaturesRonCommand.CanExecute(null),
+                        "A geometry-ignored female face offered morph RON export.");
+                }
+                Console.WriteLine($"RON audit {key} Materials: {(donor is null ? "no official base; rejected safely" : "reopened")}");
+            }
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
+    });
+
+    private static void MorphFeaturesFileWorkflow() => RunWithDispatcher(async () =>
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"MFE-FeatureFile-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var path = Path.Combine(directory, "John.ron");
+            var game = MorphFaceGame.LE3;
+            var service = new MorphFacePackageContextService();
+            var seed = StandalonePlayerMorphImportService.ResolveInstalledSeed(game);
+            var template = StandalonePlayerMorphImportService.ResolvePlayerTemplate(game, StandalonePlayerSex.Male);
+            var original = service.CaptureMorphData(seed, template);
+            // Exercise Ryan's reported file when present, otherwise generate the same features-only format.
+            var reported = Path.GetFullPath(Path.Combine(".codex-temp", "MorphsOnly", "John.ron"));
+            if (File.Exists(reported) && TseHeadMorphRon.IsMorphFeaturesOnly(reported)) File.Copy(reported, path);
+            else TseHeadMorphRon.WriteMorphFeatures(path, original,
+                new(RonExportProducer.MFE, "0.9.6", game, "HMM", true));
+            var imported = TseHeadMorphRon.ReadMorphData(path);
+            var before = File.ReadAllBytes(path);
+            using var reader = new MorphFacePackageReader();
+            var dialogs = new StubEditorDialogs();
+            using var shell = CreateMainWindowViewModel(reader, dialogs);
+            await shell.OpenDroppedFileAsync(path);
+            TestAssert.True(!shell.HasError && shell.Editor?.CanEditMorphFeatures == true && !shell.IsDirty,
+                shell.ErrorMessage ?? "The Morphs-only file did not open a clean, editable base face.");
+            TestAssert.Equal(0, dialogs.StandaloneGameChoiceCount);
+            TestAssert.Equal(0, dialogs.RonImportDestinationChoiceCount);
+            foreach (var value in imported.MorphFeatures)
+            {
+                var retained = shell.Editor!.CreateDraft().MorphFeatures.FirstOrDefault(v => v.Name.Equals(value.Name, StringComparison.OrdinalIgnoreCase));
+                TestAssert.True(retained is not null, $"Imported feature '{value.Name}' was lost.");
+                TestAssert.Near(value.Offset, retained!.Offset, 0.00001f);
+            }
+            TestAssert.True(before.SequenceEqual(File.ReadAllBytes(path)), "Opening modified the feature file.");
+            var feature = shell.Editor!.Features.First(v => v.IsEditable);
+            feature.Value += 0.05f;
+            await ((AsyncRelayCommand)shell.SaveCommand).ExecuteAsync();
+            TestAssert.True(!shell.HasError && !shell.IsDirty, shell.ErrorMessage ?? "Feature save stayed dirty.");
+            var saved = TseHeadMorphRon.Read(path);
+            TestAssert.True(TseHeadMorphRon.IsMorphFeaturesOnly(path) && saved.MorphData.BakedLods.Count == 0 &&
+                saved.MorphData.FinalSkeleton.Count == 0 && saved.MaterialData.Scalars.Count == 0 && saved.HairMesh == "None",
+                "Feature saving silently expanded to a full head.");
+            TestAssert.Near(feature.Value, saved.MorphData.MorphFeatures.Single(v => v.Name == feature.Name).Offset, 0.00001f);
+            var scalar = shell.Editor.Material.Scalars.First();
+            scalar.Value += 0.125f;
+            feature.Value += 0.05f;
+            await ((AsyncRelayCommand)shell.SaveCommand).ExecuteAsync();
+            TestAssert.True(!shell.HasError && shell.IsDirty, "Saving features cleared unrelated material edits.");
+            var savedFeatureValue = feature.Value;
+            shell.Editor.UndoCommand.Execute(null); // feature change
+            shell.Editor.UndoCommand.Execute(null); // material override, including inherited/explicit state
+            feature.Value = savedFeatureValue;
+            TestAssert.True(!shell.IsDirty, "Returning an unsaved material edit to its baseline stayed dirty.");
+            var bone = shell.Editor.Bones.First();
+            var originalX = bone.Value;
+            bone.Value += 0.01f;
+            feature.Value += 0.05f;
+            await ((AsyncRelayCommand)shell.SaveCommand).ExecuteAsync();
+            TestAssert.True(shell.IsDirty, "Saving features cleared an unsaved bone edit.");
+            bone.Value = originalX;
+            TestAssert.True(!shell.IsDirty, "Reverting the bone edit stayed dirty.");
+            var copy = Path.Combine(directory, "Copy.ron");
+            dialogs.SaveAsPath = copy;
+            await ((AsyncRelayCommand)shell.SaveAsCommand).ExecuteAsync();
+            TestAssert.True(!shell.HasError && TseHeadMorphRon.IsMorphFeaturesOnly(copy), "Save As changed the feature-only format.");
+            var currentEditor = shell.Editor;
+            await shell.OpenDroppedFileAsync(path);
+            TestAssert.True(!shell.HasError && ReferenceEquals(currentEditor, shell.Editor),
+                shell.ErrorMessage ?? "A compatible features-only import replaced the existing editor.");
+        }
+        finally { Directory.Delete(directory, true); }
+    });
+
     private static void SourceFileSaveRoundTrip() => RunWithDispatcher(async () =>
     {
         var path = Path.Combine(Path.GetTempPath(), $"MFE-SourceSave-{Guid.NewGuid():N}.ron");
         var second = Path.ChangeExtension(path, ".second.ron");
+        var copy = Path.ChangeExtension(path, ".copy.ron");
         try
         {
             var game = MorphFaceGame.LE2;
             var seed = StandalonePlayerMorphImportService.ResolveInstalledSeed(game);
             var seedBytes = File.ReadAllBytes(seed);
             new MorphFacePackageContextService().ExportRon(seed,
-                StandalonePlayerMorphImportService.ResolvePlayerTemplate(game, StandalonePlayerSex.Female), path);
+                StandalonePlayerMorphImportService.ResolvePlayerTemplate(game, StandalonePlayerSex.Female), path,
+                new RonExportProvenance(RonExportProducer.MFE, "0.9.6", game, "HMF", true));
             using var reader = new MorphFacePackageReader();
             var dialogs = new StubEditorDialogs
             {
@@ -321,6 +647,8 @@ public static class UiSmokeTests
             using var shell = CreateMainWindowViewModel(reader, dialogs);
             await shell.OpenDroppedFileAsync(path);
             TestAssert.True(shell.Editor is not null && !shell.HasError, shell.ErrorMessage ?? "Player setup failed.");
+            TestAssert.Equal(0, dialogs.StandaloneGameChoiceCount);
+            TestAssert.Equal(0, dialogs.RonImportDestinationChoiceCount);
             var scalar = shell.Editor!.Material.Scalars.First();
             var name = scalar.Name;
             var value = scalar.Value + 0.125f;
@@ -348,6 +676,15 @@ public static class UiSmokeTests
             TestAssert.True(await shell.ConfirmCloseAsync(), "Closing could not save back to the original RON.");
             TestAssert.True(!shell.IsDirty && !shell.HasError, "Close-save left unsaved RON edits.");
 
+            var originalBeforeCopy = File.ReadAllText(path);
+            dialogs.SaveAsPath = copy;
+            await ((AsyncRelayCommand)shell.SaveAsCommand).ExecuteAsync();
+            TestAssert.True(!shell.HasError && !shell.IsDirty && File.Exists(copy), shell.ErrorMessage ?? "RON Save As failed.");
+            shell.Editor!.Material.Scalars.Single(item => item.Name == name).Value += 0.125f;
+            await ((AsyncRelayCommand)shell.SaveCommand).ExecuteAsync();
+            TestAssert.Equal(originalBeforeCopy, File.ReadAllText(path));
+            TestAssert.True(File.ReadAllText(copy) != originalBeforeCopy && !shell.IsDirty, "Ctrl+S did not target the RON copy.");
+
             File.Copy(path, second);
             dialogs.StandaloneNameChoiceResult = "SecondSource";
             dialogs.RonImportDestinationChoiceResult = new(RonImportDestination.PlayerWorkspace, null);
@@ -366,6 +703,7 @@ public static class UiSmokeTests
         {
             if (File.Exists(path)) File.Delete(path);
             if (File.Exists(second)) File.Delete(second);
+            if (File.Exists(copy)) File.Delete(copy);
         }
     });
 
@@ -827,6 +1165,23 @@ public static class UiSmokeTests
                 donor.FacePath,
                 ronPath,
                 new RonExportProvenance(RonExportProducer.MFE, "0.1.0", MorphFaceGame.LE2, "HMM", false));
+            using (var reader = new MorphFacePackageReader())
+            {
+                var dialogs = new StubEditorDialogs
+                {
+                    StandaloneGameChoiceResult = MorphFaceGame.LE3,
+                    StandaloneNameChoiceResult = "MFE_MetadataNpc",
+                    RonImportDestinationChoiceResult = new(RonImportDestination.PlayerWorkspace, null)
+                };
+                using var viewModel = CreateMainWindowViewModel(reader, dialogs, textureCatalog: textureCatalog);
+                RunWithDispatcher(() => viewModel.OpenDroppedFileAsync(ronPath));
+                TestAssert.True(!viewModel.HasError, viewModel.ErrorMessage ?? "Metadata-routed NPC import failed.");
+                AssertStandaloneFaceTransitionCapabilities(viewModel, "NPC Workspace");
+                TestAssert.Equal(0, dialogs.StandaloneGameChoiceCount);
+                TestAssert.Equal(0, dialogs.RonImportDestinationChoiceCount);
+            }
+            new MorphFacePackageContextService().ExportRon(donor.PackagePath, donor.FacePath, ronPath,
+                new RonExportProvenance(RonExportProducer.LEX, "0.1.0", MorphFaceGame.LE2, "HMM", false));
             foreach (var (choice, expectedWorkspace) in new[]
                      {
                          (new RonImportDestinationChoice(RonImportDestination.NpcFace, "HMM"), "NPC Workspace"),
@@ -1270,6 +1625,7 @@ public static class UiSmokeTests
 
         void AssertClipboardAvailability(string state)
         {
+            TestAssert.True(!viewModel.ExportMorphFeaturesRonCommand.CanExecute(null), $"ALN offered Morphs-only export while {state}.");
             viewModel.RefreshClipboardCommandAvailability();
             TestAssert.True(!viewModel.CopyMorphDataCommand.CanExecute(null) &&
                             !viewModel.PasteMorphDataCommand.CanExecute(null),
@@ -3270,7 +3626,13 @@ public static class UiSmokeTests
         public int RonImportDestinationChoiceCount { get; private set; }
         public int MorphImportFileChoiceCount { get; private set; }
         public int MaterialImportFileChoiceCount { get; private set; }
-        public string? RonExportPath { get; init; }
+        public string? RonExportPath { get; set; }
+        public string? MorphImportPath { get; set; }
+        public string? MaterialImportPath { get; set; }
+        public string? SaveAsPath { get; set; }
+        public bool ConfirmCreateCareerMorphResult { get; set; } = true;
+        public bool ConfirmCreateCareerMorph(string name) => ConfirmCreateCareerMorphResult;
+        public string? ChooseSaveAsFile(string sourcePath) => SaveAsPath;
         public MorphFaceGame? StandaloneGameChoiceResult { get; init; }
         public string? StandaloneNameChoiceResult { get; set; }
         public string? LastInformation { get; private set; }
@@ -3284,12 +3646,12 @@ public static class UiSmokeTests
         public string? ChooseMorphImportFile(string? initialDirectory = null)
         {
             MorphImportFileChoiceCount++;
-            return null;
+            return MorphImportPath;
         }
         public string? ChooseMaterialImportFile(bool tse, string? initialDirectory = null)
         {
             MaterialImportFileChoiceCount++;
-            return null;
+            return MaterialImportPath;
         }
         public MorphFaceGame? ChooseStandaloneImportGame()
         {

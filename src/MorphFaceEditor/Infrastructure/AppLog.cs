@@ -9,6 +9,7 @@ public static class AppLog
     public static event Action<string, string>? MessageWritten;
     private static readonly object Sync = new();
     private static bool _fileWritesStopped;
+    private static int _fileWriteSuppressionCount;
     private static readonly string SessionId = Guid.NewGuid().ToString("N")[..8];
     public static string DirectoryPath { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -26,6 +27,13 @@ public static class AppLog
     internal static void StopFileWrites()
     {
         lock (Sync) _fileWritesStopped = true;
+    }
+
+    /// <summary>Stops persistent log appends for a scoped automation run while keeping in-process observers active.</summary>
+    public static IDisposable SuppressPersistentWrites()
+    {
+        lock (Sync) _fileWriteSuppressionCount++;
+        return new PersistentWriteSuppression();
     }
 
     private static void Write(string level, string message, Exception? exception)
@@ -46,7 +54,7 @@ public static class AppLog
             builder.AppendLine();
             lock (Sync)
             {
-                if (_fileWritesStopped) return;
+                if (_fileWritesStopped || _fileWriteSuppressionCount > 0) return;
                 Directory.CreateDirectory(DirectoryPath);
                 File.AppendAllText(FilePath, builder.ToString(), Encoding.UTF8);
             }
@@ -54,6 +62,20 @@ public static class AppLog
         catch
         {
             // Diagnostics must never become another failure path.
+        }
+    }
+    private sealed class PersistentWriteSuppression : IDisposable
+    {
+        private bool _disposed;
+
+        public void Dispose()
+        {
+            lock (Sync)
+            {
+                if (_disposed) return;
+                _disposed = true;
+                _fileWriteSuppressionCount--;
+            }
         }
     }
 }

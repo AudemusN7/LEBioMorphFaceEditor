@@ -10,7 +10,7 @@ dotnet run --project tools/MorphFaceEditor.QA -c Release --
 
 Every run chooses a fresh random seed. Cases that select a corpus donor choose a face randomly from the available Global Morphs for that game and archetype. Pass `--seed <integer>` to reproduce the run's choices. Random choices can coincide by chance.
 
-Requires the repository's .NET SDK, corpus PCCs in `tests/Global Morphs` (including TUF and `BAF/BAF LE1.pcc`, `BAF/BAF LE2.pcc`, `BAF/BAF LE3.pcc`), installed LE1/LE2/LE3, current MFE asset databases, and Legendary Explorer's installed UModel build 1589 or newer. Missing prerequisites are reported and do not count as passes. Player and Clipboard workflows use MFE's temporary AppData workspaces. The Windows Clipboard and installed PCCs are untouched.
+Requires the repository's .NET SDK, corpus PCCs in `tests/Global Morphs` (including TUF and `BAF/BAF LE1.pcc`, `BAF/BAF LE2.pcc`, `BAF/BAF LE3.pcc`), installed LE1/LE2/LE3, current MFE asset databases, and Legendary Explorer's installed UModel build 1589 or newer. Missing prerequisites are reported and do not count as passes. Player and Clipboard workflows use MFE's temporary AppData workspaces. QA diagnostics remain available to the harness for its reports but are not appended to the editor's persistent AppData log. The Windows Clipboard and installed PCCs are untouched.
 
 ## Coverage
 

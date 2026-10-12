@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Windows.Threading;
+using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.LegendaryExplorer;
 
 namespace MorphFaceEditor.QA;
@@ -11,6 +12,7 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        using var appLogSuppression = AppLog.SuppressPersistentWrites();
         if (args.Contains("--help"))
         {
             Console.WriteLine("MFE QA: game and archetype workflows, cross-game conversion, randomisation and export checks.");

@@ -6,14 +6,16 @@ internal enum EditorFileDropKind
 {
     Unsupported,
     Package,
+    CareerSave,
     MorphImport
 }
 
 internal static class EditorFileDrop
 {
     internal static string WorkspaceOpenFilter =>
-        $"{Loc.Text("loc_EditorFileDrop_SupportedPackageMorphFiles")}|*.pcc;*.ron;*.psk;*.pskx;*.gltf;*.glb;*.md5;*.md5mesh;*.me2headmorph;*.me3headmorph|" +
+        $"{Loc.Text("loc_EditorFileDrop_SupportedPackageMorphFiles")}|*.pcc;*.pcsav;*.ron;*.psk;*.pskx;*.gltf;*.glb;*.md5;*.md5mesh;*.me2headmorph;*.me3headmorph|" +
         $"{PackageFilter}|" +
+        $"{Loc.Text("loc_Pcsav_FileFilter")} (*.pcsav)|*.pcsav|" +
         $"{Loc.Text("loc_EditorFileDrop_SupportedMorphFiles")}|*.ron;*.psk;*.pskx;*.gltf;*.glb;*.md5;*.md5mesh;*.me2headmorph;*.me3headmorph|" +
         $"{AllFilesFilter}";
 
@@ -54,6 +56,7 @@ internal static class EditorFileDrop
     internal static EditorFileDropKind Classify(string path)
     {
         var extension = Path.GetExtension(path);
+        if (extension.Equals(".pcsav", StringComparison.OrdinalIgnoreCase)) return EditorFileDropKind.CareerSave;
         if (extension.Equals(".pcc", StringComparison.OrdinalIgnoreCase))
         {
             return EditorFileDropKind.Package;

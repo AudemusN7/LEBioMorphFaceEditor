@@ -10,7 +10,7 @@ namespace MorphFaceEditor.ViewModels;
 
 public sealed partial class MainWindowViewModel
 {
-    private enum SourceFileFormat { MorphRon, MfeMaterialsRon, TseMaterialsRon, Mesh, LegacyMorph, Pcsav }
+    private enum SourceFileFormat { MorphRon, MorphFeaturesRon, MfeMaterialsRon, TseMaterialsRon, Mesh, LegacyMorph, Pcsav }
     private sealed record SourceFile(string Path, string FacePath, SourceFileFormat Format, string Fingerprint);
     private SourceFile? _sourceFile;
     private bool _hasOtherStandaloneChanges;
@@ -32,7 +32,7 @@ public sealed partial class MainWindowViewModel
     }
 
     private bool CanSaveOriginalRon => !HasMultipleStandaloneImports && _sourceFile?.Format is
-        SourceFileFormat.MorphRon or SourceFileFormat.MfeMaterialsRon or SourceFileFormat.TseMaterialsRon;
+        SourceFileFormat.MorphRon or SourceFileFormat.MorphFeaturesRon or SourceFileFormat.MfeMaterialsRon or SourceFileFormat.TseMaterialsRon;
 
     private async Task<bool> SaveSourceFileAsync()
     {
@@ -43,6 +43,7 @@ public sealed partial class MainWindowViewModel
         }
         if (_packageWorkspace?.CanCommit == true)
             return await CommitWorkspaceAsync(showConfirmation: true);
+        if (_pcsavWorkspace is not null) return await SaveCareerFileAsync();
         if (CanSaveOriginalRon)
             return await SaveOriginalRonAsync();
         if (IsDetachedMeshWorkspace || _sourceFile?.Format == SourceFileFormat.Mesh)
@@ -67,7 +68,42 @@ public sealed partial class MainWindowViewModel
         return await SaveMorphToPccAsync();
     }
 
-    private async Task<bool> SaveOriginalRonAsync()
+    private async Task SaveSourceFileAsAsync()
+    {
+        if (HasMultipleStandaloneImports)
+        {
+            _dialogs.ShowInformation(Loc.Text("loc_FileSave_SaveAs"), Loc.Text("loc_FileSave_MultipleImports"));
+            return;
+        }
+        var source = _pcsavWorkspace?.SourcePath ?? (_packageWorkspace?.CanCommit == true ? _packageWorkspace.SourcePath :
+            CanSaveOriginalRon ? _sourceFile?.Path : null);
+        if (source is null) { await SaveSourceFileAsync(); return; }
+        var destination = _dialogs.ChooseSaveAsFile(source);
+        if (destination is null) return;
+        if (_pcsavWorkspace is not null) { await SaveCareerFileAsync(destination); return; }
+        if (CanSaveOriginalRon) { await SaveOriginalRonAsync(destination); return; }
+        using var saveLock = new SaveControlLock(this);
+        if (Editor?.IsDirty == true && !await FlushEditorToWorkspaceAsync()) return;
+        IsBusy = true;
+        ErrorMessage = null;
+        try
+        {
+            await Task.Run(() => _packageWorkspace!.Commit(destination));
+            _hasWorkspaceChanges = false;
+            PackagePath = _packageWorkspace!.SourcePath;
+            OnDirtyStateChanged();
+            Status = Loc.Format("loc_Shell_Status_PackageSaved", PackageName);
+        }
+        catch (Exception exception)
+        {
+            AppLog.Error("Save As failed.", exception);
+            ErrorMessage = Loc.Format("loc_FileSave_Failed", UserFacingMessageFormatter.Format(exception));
+            Status = Loc.Text("loc_FileSave_EditsRetained");
+        }
+        finally { IsBusy = false; }
+    }
+
+    private async Task<bool> SaveOriginalRonAsync(string? destination = null)
     {
         if (_sourceFile is not { } source || WorkspacePackagePath is not { } workspacePath)
             return false;
@@ -82,13 +118,24 @@ public sealed partial class MainWindowViewModel
             Editor?.IsDirty == true && !await FlushEditorToWorkspaceAsync()) return false;
         IsBusy = true;
         ErrorMessage = null;
-        var candidate = Path.Combine(Path.GetDirectoryName(source.Path)!,
-            $".{Path.GetFileName(source.Path)}.{Guid.NewGuid():N}.tmp");
+        var target = Path.GetFullPath(destination ?? source.Path);
+        var savingSource = target.Equals(source.Path, StringComparison.OrdinalIgnoreCase);
+        var candidate = Path.Combine(Path.GetDirectoryName(target)!,
+            $".{Path.GetFileName(target)}.{Guid.NewGuid():N}.tmp");
         try
         {
+            var targetFingerprint = File.Exists(target) ? FileFingerprint(target) : null;
             var face = Faces.Single(value => value.InstancedPath.Equals(source.FacePath, StringComparison.OrdinalIgnoreCase));
             var player = IsPlayerWorkspace;
-            if (source.Format == SourceFileFormat.MorphRon)
+            if (source.Format == SourceFileFormat.MorphFeaturesRon)
+            {
+                if (LoadedFacePath != source.FacePath || Editor is null) return false;
+                var draft = Editor.CreateDraft();
+                var provenance = CreateRonExportProvenance(workspacePath, face, player);
+                await Task.Run(() => TseHeadMorphRon.WriteMorphFeatures(candidate, ToMorphData(draft), provenance));
+                TseHeadMorphRon.Validate(candidate);
+            }
+            else if (source.Format == SourceFileFormat.MorphRon)
             {
                 await Task.Run(() =>
                 {
@@ -120,15 +167,20 @@ public sealed partial class MainWindowViewModel
                 await File.WriteAllTextAsync(candidate, text);
                 _ = FaceMaterialFileService.Read(await File.ReadAllTextAsync(candidate), allowTse: true);
             }
-            if (FileFingerprint(source.Path) != source.Fingerprint)
+            if (savingSource && FileFingerprint(source.Path) != source.Fingerprint ||
+                File.Exists(target) != (targetFingerprint is not null) ||
+                targetFingerprint is not null && FileFingerprint(target) != targetFingerprint)
                 throw new IOException(Loc.Text("loc_FileSave_SourceChanged"));
             var fingerprint = FileFingerprint(candidate);
-            File.Move(candidate, source.Path, overwrite: true);
-            _sourceFile = source with { Fingerprint = fingerprint };
+            File.Move(candidate, target, overwrite: true);
+            _sourceFile = source with { Path = target, Fingerprint = fingerprint };
+            _standaloneImportPath = target;
+            OnPropertyChanged(nameof(PackageName));
             if (source.Format == SourceFileFormat.MorphRon) _hasWorkspaceChanges = _hasOtherStandaloneChanges;
+            else if (source.Format == SourceFileFormat.MorphFeaturesRon) Editor?.AcceptSavedState(featuresOnly: true);
             else Editor?.AcceptSavedState(materialsOnly: true);
             OnDirtyStateChanged();
-            Status = Loc.Format("loc_Shell_Status_PackageSaved", Path.GetFileName(source.Path));
+            Status = Loc.Format("loc_Shell_Status_PackageSaved", Path.GetFileName(target));
             if (IsDirty) ShowRemainingSourceEdits();
             return !IsDirty;
         }
@@ -147,5 +199,6 @@ public sealed partial class MainWindowViewModel
     }
 
     private void ShowRemainingSourceEdits() => _dialogs.ShowInformation(
-        Loc.Text("loc_View_MainWindow_SavePackage"), Loc.Text("loc_FileSave_MaterialsOnly"));
+        Loc.Text("loc_View_MainWindow_SavePackage"), Loc.Text(_sourceFile?.Format == SourceFileFormat.MorphFeaturesRon
+            ? "loc_FileSave_MorphFeaturesOnly" : "loc_FileSave_MaterialsOnly"));
 }

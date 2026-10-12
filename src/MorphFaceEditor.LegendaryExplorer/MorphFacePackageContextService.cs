@@ -461,7 +461,8 @@ public sealed class MorphFacePackageContextService
         string packagePath,
         string facePath,
         string destinationPath,
-        RonExportProvenance? provenance = null)
+        RonExportProvenance? provenance = null,
+        bool morphFeaturesOnly = false)
     {
         LegendaryExplorerCoreRuntime.Initialize();
         using var package = OpenPackage(packagePath);
@@ -474,11 +475,35 @@ public sealed class MorphFacePackageContextService
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .Cast<string>()
             .ToArray() ?? [];
+        var data = ReadMorphData(face);
         TseHeadMorphRon.Write(destinationPath, new TseHeadMorph(
-            hair,
-            accessories,
-            ReadMorphData(face),
-            ReadMaterialData(ResolveMaterialOverride(face))), provenance);
+            morphFeaturesOnly ? "None" : hair,
+            morphFeaturesOnly ? [] : accessories,
+            morphFeaturesOnly ? new(data.MorphFeatures, [], []) : data,
+            morphFeaturesOnly ? new([], [], []) : ReadMaterialData(ResolveMaterialOverride(face))), provenance, morphFeaturesOnly);
+    }
+
+    /// <summary>Replace a face in the staged PCC through the same verified mutation path as other edits.</summary>
+    public MorphFaceSaveResult ReplaceRon(string packagePath, string facePath, string sourcePath,
+        bool player, StandalonePlayerAssetCatalog? assets = null)
+    {
+        var ron = TseHeadMorphRon.Read(sourcePath);
+        ValidateMorphData(ron.MorphData);
+        ValidateMaterialData(ron.MaterialData);
+        return Mutate(packagePath, package =>
+        {
+            var face = FindFace(package, facePath);
+            var previous = ReadMorphData(face);
+            if (player) EnsureCompatibleLod0(previous, ron.MorphData);
+            else EnsureCompatibleLods(previous, ron.MorphData);
+            var material = EnsureIndependentMaterialOverride(face);
+            var warnings = new List<string>();
+            var resolved = ResolveRonMaterials(package, ron.MaterialData, assets, true, warnings);
+            WriteMorphData(face, ron.MorphData);
+            WriteMaterialData(package, material, resolved);
+            WriteRonMeshReferences(package, face, ron, assets, true, warnings, false);
+            return new PendingResult(face.InstancedFullPath, material.InstancedFullPath, ron.MorphData, resolved, warnings);
+        });
     }
 
     public MorphFaceSaveResult ImportRon(

@@ -39,6 +39,8 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     private readonly Func<int> _randomSeedFactory;
     private readonly Action<string> _reportError;
     private MorphFaceEditor.Core.Domain.MorphFaceDocument _cleanState;
+    private MorphFaceGeometryEditState _cleanGeometryEdits;
+    private bool _featuresOnlySavedState;
     private EditorFeatureCategoryViewModel? _selectedCategory;
     private BoneTransformEditorViewModel? _selectedBoneTransform;
     private bool _isDirty;
@@ -214,6 +216,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         Material.ControlsChanged += OnMaterialControlsChanged;
         _scalpMaterialSession.ValueChanged += OnScalpMaterialSelectionChanged;
         _cleanState = CreateDraft();
+        _cleanGeometryEdits = session.CaptureGeometryEdits();
         _cleanMaterialAssignments = CaptureMaterialAssignments();
     }
 
@@ -463,6 +466,12 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         _session.ApplyMorphData(data);
         RefreshDirtyState();
     }
+
+    public void ApplyMorphFeatures(MorphFaceEditor.Core.Domain.MorphFaceMorphData data)
+    {
+        _session.ImportFeatures(data.MorphFeatures.ToDictionary(v => v.Name, v => v.Offset, StringComparer.OrdinalIgnoreCase));
+        RefreshDirtyState();
+    }
     private void SetToDefaults()
     {
         _randomisationGeneration++;
@@ -536,7 +545,8 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                     .ToHashSet(StringComparer.OrdinalIgnoreCase)
                 : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var requestedTextureNames = RandomiseMaterials
-                ? requested.Textures.Where(value => !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(value.Name))
+                ? requested.Textures.Where(value => !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(value.Name) &&
+                    !IsProtectedPlayerEyeTexture(Material.SourceParameterName(value.Name)))
                     .Select(value => value.Name).ToHashSet(StringComparer.OrdinalIgnoreCase)
                 : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var npcTextureNames = playerContext is null
@@ -700,7 +710,8 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         var cursedTextureFamilies = new Dictionary<string, IReadOnlyDictionary<string, string>>(
             StringComparer.OrdinalIgnoreCase);
         var requestedTextureNames = RandomiseMaterials
-            ? requested.Textures.Where(value => !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(value.Name))
+            ? requested.Textures.Where(value => !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(value.Name) &&
+                !IsProtectedPlayerEyeTexture(Material.SourceParameterName(value.Name)))
                 .Select(value => value.Name).ToHashSet(StringComparer.OrdinalIgnoreCase)
             : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (requestedTextureNames.Count > 0)
@@ -847,6 +858,10 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         var seed = _randomSeedFactory();
         return otherSeed is not null && seed == otherSeed.Value ? unchecked(seed + 1) : seed;
     }
+
+    private bool IsProtectedPlayerEyeTexture(string name) =>
+        (_playerRandomisationGame is MorphFaceEditor.LegendaryExplorer.MorphFaceGame.LE2 or MorphFaceEditor.LegendaryExplorer.MorphFaceGame.LE3 &&
+            name.Contains("EYE", StringComparison.OrdinalIgnoreCase));
 
     private static bool IsPlayerExclusiveTexture(string name) =>
         name.Equals("HED_Addn", StringComparison.OrdinalIgnoreCase) ||
@@ -1870,6 +1885,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                 StringComparer.OrdinalIgnoreCase);
         var player = GetPlayerRandomisationContext();
         return Material.Textures
+            .Where(texture => !IsProtectedPlayerEyeTexture(Material.SourceParameterName(texture.Name)))
             .Where(texture => profiles.Any(context =>
                     context.Supports(Material, texture.Name, MaterialParameterKind.Texture) &&
                     eligibleParameters[context.Key].Contains(Material.SourceParameterName(texture.Name))) ||
@@ -2050,18 +2066,35 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         return result;
     }
 
-    internal void AcceptSavedState(bool materialsOnly = false)
+    internal void AcceptSavedState(bool materialsOnly = false, bool featuresOnly = false)
     {
         var draft = CreateDraft();
-        _cleanState = materialsOnly ? _cleanState with { MaterialOverrides = draft.MaterialOverrides } : draft;
-        _cleanMaterialAssignments = CaptureMaterialAssignments();
+        if (featuresOnly)
+        {
+            _cleanState = _cleanState with { MorphFeatures = draft.MorphFeatures };
+            _featuresOnlySavedState = true;
+        }
+        else
+        {
+            _cleanState = materialsOnly ? _cleanState with { MaterialOverrides = draft.MaterialOverrides } : draft;
+            _cleanMaterialAssignments = CaptureMaterialAssignments();
+            if (!materialsOnly)
+            {
+                _featuresOnlySavedState = false;
+                _cleanGeometryEdits = _session.CaptureGeometryEdits();
+            }
+        }
         RefreshDirtyState();
     }
 
-    private void RefreshDirtyState() =>
-        IsDirty = _session.HasPendingRepair ||
+    private void RefreshDirtyState()
+    {
+        var draft = CreateDraft();
+        if (_featuresOnlySavedState) draft = draft with { FinalSkeleton = _cleanState.FinalSkeleton, BakedLods = _cleanState.BakedLods };
+        IsDirty = _session.HasPendingRepair || _featuresOnlySavedState && !_session.GeometryEditsMatch(_cleanGeometryEdits) ||
                   !MaterialAssignmentsMatchCleanState() ||
-                  !MorphFaceEditorStateComparer.Equals(_cleanState, CreateDraft());
+                  !MorphFaceEditorStateComparer.Equals(_cleanState, draft);
+    }
 
     private void OnMaterialControlsChanged(object? sender, EventArgs e)
     {

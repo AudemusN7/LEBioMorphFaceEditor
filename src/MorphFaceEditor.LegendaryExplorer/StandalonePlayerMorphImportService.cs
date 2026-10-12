@@ -149,6 +149,8 @@ public sealed class StandalonePlayerMorphImportService
                 "Gibbed head morphs and mesh files require their dedicated conversion workflows.");
         }
         var ron = TseHeadMorphRon.Read(sourcePath);
+        if (ron.MorphData.BakedLods.Count == 0)
+            throw new InvalidDataException("This RON contains morph features only and requires a matching editing face.");
         return (sourcePath, ron, profile, IdentifySex(targetGame, ron.MorphData.BakedLods[0].Length));
     }
 

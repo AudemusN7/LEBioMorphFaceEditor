@@ -98,7 +98,7 @@
     <!--localiser: {"Key":"loc_EditorFileDrop_RonHeadMorphLabel","ReviewedHash":"04AB00CB06B554594BB2330ECB760F661511A594F0E6DFCAF324F66F0F82EAF7","DoNotTranslate":false,"Note":"Don\u0027t translate RON","SourceHash":null}--><system:String x:Key="loc_EditorFileDrop_RonHeadMorphLabel" xml:space="preserve">RON headmorph</system:String>
     <!--localiser: {"Key":"loc_EditorFileDrop_RonMaterialFilesLabel","ReviewedHash":"4CF61820E162BAAC98538C68B55B44570470465D06151D973975110D09AF6867","DoNotTranslate":false,"Note":"Don\u0027t translate RON","SourceHash":null}--><system:String x:Key="loc_EditorFileDrop_RonMaterialFilesLabel" xml:space="preserve">RON material files</system:String>
     <!--localiser: {"Key":"loc_EditorFileDrop_SupportedMorphFiles","ReviewedHash":"C86CA83E934ED2A2979A43F8ADC8BA0C3862C2D63901212C41FF875C89E9158F","DoNotTranslate":false,"Note":"","SourceHash":null}--><system:String x:Key="loc_EditorFileDrop_SupportedMorphFiles" xml:space="preserve">Supported morph files</system:String>
-    <!--localiser: {"Key":"loc_EditorFileDrop_SupportedPackageMorphFiles","ReviewedHash":"A352CDF4435FE28AD8887DE8A2954E8655F5EC687135076CE37CC3048B5E8B81","DoNotTranslate":false,"Note":"","SourceHash":null}--><system:String x:Key="loc_EditorFileDrop_SupportedPackageMorphFiles" xml:space="preserve">Supported package and morph files</system:String>
+    <!--localiser: {"Key":"loc_EditorFileDrop_SupportedPackageMorphFiles","ReviewedHash":"E2D55694B6A7EF1FA2525BF03C6682CB4D69C496CBBAC67AD5B684D635BD4996","DoNotTranslate":false,"Note":"","SourceHash":null}--><system:String x:Key="loc_EditorFileDrop_SupportedPackageMorphFiles" xml:space="preserve">Supported files</system:String>
     <!--localiser: {"Key":"loc_EditorFileDrop_TseRonLabel","ReviewedHash":"F7E7AB329BF335D377BB0B6DC1FBD07F1316DBB95D0ACC39E78400E5EDCB481C","DoNotTranslate":false,"Note":"Don\u0027t translate RON","SourceHash":null}--><system:String x:Key="loc_EditorFileDrop_TseRonLabel" xml:space="preserve">TrilogySaveEditor RON</system:String>
 
     <!-- FirstRunWelcomeWindow -->
@@ -2343,7 +2343,7 @@ No: discard custom asset databases after a successful rebuild.</system:String>
     <!--localiser: {"Key":"loc_View_MainWindow_Exit","ReviewedHash":"D17D84A604994B722DB37B35860B1AC7E8D9E43E725D0EB50702A9F7228A2999","DoNotTranslate":false,"Note":"","SourceHash":null}--><system:String x:Key="loc_View_MainWindow_Exit" xml:space="preserve">Exit</system:String>
     <!--localiser: {"Key":"loc_View_MainWindow_ExportMaterials","ReviewedHash":"A6F4AC0662B3B4E36A174E96947AD6EC203BC73B6FE430F02FA8E24C0813A763","DoNotTranslate":false,"Note":"","SourceHash":null}--><system:String x:Key="loc_View_MainWindow_ExportMaterials" xml:space="preserve">Export Materials</system:String>
     <!--localiser: {"Key":"loc_View_MainWindow_ExportMorphAsMesh","ReviewedHash":"4B9736B48D14EA74224C40C2C87386161F7DE21DD9B1829E1AF81B3B9EB5F32B","DoNotTranslate":false,"Note":"","SourceHash":null}--><system:String x:Key="loc_View_MainWindow_ExportMorphAsMesh" xml:space="preserve">Export Morph as Mesh</system:String>
-    <!--localiser: {"Key":"loc_View_MainWindow_ExportMorphAsRON","ReviewedHash":"A2156EB9284C9BC4E8938B05A87043322E2CB79A3E289EF1919A6F08DFC06061","DoNotTranslate":false,"Note":"","SourceHash":null}--><system:String x:Key="loc_View_MainWindow_ExportMorphAsRON" xml:space="preserve">Export Morph as RON</system:String>
+    <!--localiser: {"Key":"loc_View_MainWindow_ExportMorphAsRON","ReviewedHash":"6B72FEA5DA31E1F9E01F8206E42809C2628D9309C155EF74FD606A1E59FA8F8E","DoNotTranslate":false,"Note":"","SourceHash":null}--><system:String x:Key="loc_View_MainWindow_ExportMorphAsRON" xml:space="preserve">Export Morph Face</system:String>
     <!--localiser: {"Key":"loc_View_MainWindow_ExportTSERON","ReviewedHash":"D7124B887DB0A99723DC6ECB0D52D4AE6D7B559006C140756C0A3C58F8D7D24E","DoNotTranslate":false,"Note":"","SourceHash":null}--><system:String x:Key="loc_View_MainWindow_ExportTSERON" xml:space="preserve">Export TSE RON</system:String>
     <!--localiser: {"Key":"loc_View_MainWindow_ExportToPCC","ReviewedHash":"4943DAEFC3B9B8996E2F304BDCD866CEBA4A1E3052C91B625A234765226E1677","DoNotTranslate":false,"Note":"","SourceHash":null}--><system:String x:Key="loc_View_MainWindow_ExportToPCC" xml:space="preserve">Export to PCC</system:String>
     <!--localiser: {"Key":"loc_View_MainWindow_ExtendedSliders","ReviewedHash":"D44A8662AD274AF539093519594EB0C50089298F056B17933754E65FCD8AE4B3","DoNotTranslate":false,"Note":"","SourceHash":null}--><system:String x:Key="loc_View_MainWindow_ExtendedSliders" xml:space="preserve">Extended Sliders</system:String>
@@ -2586,4 +2586,44 @@ Choose No to keep the current scalp textures and material.</system:String>
 <system:String x:Key="loc_FileSave_MaterialsOnly" xml:space="preserve">Material settings were saved. Other edits are still unsaved. Right-click the morph in the left pane and export to PCC to preserve them.</system:String>
   <!--localiser: {"Key":"loc_FileSave_ExportMaterialRon","ReviewedHash":"78782AEC7F700C3A4351A26F12AA6A3F604396E333154501706C071694A6A999","DoNotTranslate":false,"Note":"","SourceHash":null}-->
 <system:String x:Key="loc_FileSave_ExportMaterialRon" xml:space="preserve">Export Materials to RON</system:String>
+  <!--localiser: {"Key":"loc_Pcsav_FileFilter","ReviewedHash":"8B17A7CFD2D92513F2AC30B2F5C271EEF7AA51405E967297980EEED482B7DFB8","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_Pcsav_FileFilter" xml:space="preserve">Mass Effect career saves</system:String>
+  <!--localiser: {"Key":"loc_Pcsav_Reading","ReviewedHash":"3FFDB85870BA797466ADDC5ECB7AE3D803BFB2B3B78D9826C2ED3675400D2D6F","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_Pcsav_Reading" xml:space="preserve">Reading career save...</system:String>
+  <!--localiser: {"Key":"loc_Pcsav_Opened","ReviewedHash":"034DB9D4038A604EC18C98E133DFBE81B8C98A93BD4CCF08DD11C5674B97C0CB","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_Pcsav_Opened" xml:space="preserve">Opened {0}'s headmorph.</system:String>
+  <!--localiser: {"Key":"loc_Pcsav_NewHead","ReviewedHash":"42009E5EC7214F6FB00500863D02F71F568FBF8CC2AE6845C49C4AA981A80B2D","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_Pcsav_NewHead" xml:space="preserve">Created a blank custom headmorph for {0}. Save File will add it to the career save.</system:String>
+  <!--localiser: {"Key":"loc_Pcsav_Unsupported","ReviewedHash":"382A23BE0BC7E98C128494677AE9950620BEDBB83D876C54FCDD2606BEA76915","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_Pcsav_Unsupported" xml:space="preserve">This save format is not supported. Open a PC career save from Mass Effect Legendary Edition.</system:String>
+  <!--localiser: {"Key":"loc_Pcsav_InvalidFile","ReviewedHash":"A93F9C998F580DBC0C2D53BD07C5AE8A15579BA3A8AF5F7AB870DA2D2EEC89E6","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_Pcsav_InvalidFile" xml:space="preserve">The career save is damaged or its data could not be read safely.</system:String>
+  <!--localiser: {"Key":"loc_Pcsav_OperationFailed","ReviewedHash":"E6346D4A3D33B2E4B5F7457BD3FD5143DED2DF5923909D52D88D7B8B126858AD","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_Pcsav_OperationFailed" xml:space="preserve">The career save operation failed. Your source file has not been changed. See the log for details.</system:String>
+  <!--localiser: {"Key":"loc_Pcsav_ConfirmDelete","ReviewedHash":"FDBA34D460C2EF70BA74A3B7629CCA444848C2BB9B186AFADD06805B80C21A71","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_Pcsav_ConfirmDelete" xml:space="preserve">Remove {0}'s custom headmorph from the career save? This saves the file immediately and closes the workspace. The game will use the default Shepard head instead.</system:String>
+  <!--localiser: {"Key":"loc_Pcsav_Deleted","ReviewedHash":"1BC4880626D1A40C0F4477E8767AB80482D41CABFDBF4A48ACA4FEB53985DFAD","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_Pcsav_Deleted" xml:space="preserve">Removed the headmorph and saved {0}.</system:String>
+  <!--localiser: {"Key":"loc_Pcsav_UnavailableAttachments","ReviewedHash":"253E8CD56A294E5D65BB93736E7289597039CF84E8019622D8BEBFB7DA734709","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_Pcsav_UnavailableAttachments" xml:space="preserve">{0} saved hair or accessory meshes are unavailable for preview. Their original references will be preserved in the career save unless you change them.</system:String>
+    <!--localiser: {"Key":"loc_FileSave_SaveAs","ReviewedHash":"088203B4CD88789E07F4E9A8F05CF6E8C1D0B413AE32D30CAE69BEEEF94784E6","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_FileSave_SaveAs" xml:space="preserve">Save As</system:String>
+    <!--localiser: {"Key":"loc_Shortcut_SaveAs","ReviewedHash":"3B8157963D09DDDBDB2A3998F81237F850A3C367FA33DF50F2008FD739A998C4","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_Shortcut_SaveAs" xml:space="preserve">Ctrl+Shift+S</system:String>
+    <!--localiser: {"Key":"loc_Pcsav_ConfirmCreate","ReviewedHash":"CCBFEB64D63FF0A349075C6B5A09EEF30ADDFF05E56E9B26946EC2560842C791","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_Pcsav_ConfirmCreate" xml:space="preserve">No custom headmorph was detected for {0}. A new default headmorph will be generated for you to edit. Continue?</system:String>
+    <!--localiser: {"Key":"loc_RonFiles_ImportMorphFace","ReviewedHash":"66DEFCBF6391A3296D0721CC7783112708503DBC6CE91E60E98AEA7F2F3CB489","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_RonFiles_ImportMorphFace" xml:space="preserve">Import Morph Face</system:String>
+    <!--localiser: {"Key":"loc_RonFiles_ImportMorphs","ReviewedHash":"9316587586CECC5445B8D5AD3C58128FA84A513CE851FD55079565444B93E718","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_RonFiles_ImportMorphs" xml:space="preserve">Import Morphs</system:String>
+    <!--localiser: {"Key":"loc_RonFiles_ExportMorphs","ReviewedHash":"029CD595D767834B6BFC41617116B00F58FABCC698CCE3022BAE69FC91DC9F33","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_RonFiles_ExportMorphs" xml:space="preserve">Export Morphs</system:String>
+    <!--localiser: {"Key":"loc_RonFiles_Incompatible","ReviewedHash":"8D8EA87BF3F7644F8F3EB3EAE10E090A7B8762E363AED5A6E10DF1A05DE50F99","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_RonFiles_Incompatible" xml:space="preserve">This RON belongs to a different game or face type. Convert it before importing.</system:String>
+    <!--localiser: {"Key":"loc_RonFiles_ImportFailed","ReviewedHash":"80889B1A2358BF73D67A4ACC55E627964B1C5534F15CD56FBA8C4730B0DC1EC9","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_RonFiles_ImportFailed" xml:space="preserve">The RON could not be imported. Your existing edits have been retained.</system:String>
+    <!--localiser: {"Key":"loc_RonFiles_Imported","ReviewedHash":"9AE578D4C686119D2A5F6878631E1EC2447BF081EE90738DFBC96E8A574C77CD","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_RonFiles_Imported" xml:space="preserve">Imported {0} into the current face.</system:String>
+    <!--localiser: {"Key":"loc_FileSave_MorphFeaturesOnly","ReviewedHash":"4301FA7477000FDDCFCF4168BA6F9D83BC837A60FDAAEFD64440950BD25C26AD","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_FileSave_MorphFeaturesOnly" xml:space="preserve">Morph features were saved. Other head changes remain unsaved. Right-click the face and export the full head or a PCC to include them.</system:String>
 </ResourceDictionary>

@@ -11,7 +11,13 @@ public partial class UnsavedChangesWindow : Window
         InitializeComponent();
         DarkTitleBar.Apply(this);
         FacePathText.Text = assetPath;
-        if (scope == UnsavedChangesScope.Face)
+        if (scope == UnsavedChangesScope.SourceFile)
+        {
+            Title = Loc.Text("loc_FileSave_UnsavedTitle");
+            SummaryText.Text = Loc.Text("loc_FileSave_UnsavedSummary");
+            SaveExplanationText.Text = Loc.Text("loc_FileSave_UnsavedExplanation");
+        }
+        else if (scope == UnsavedChangesScope.Face)
         {
             Title = Loc.Text("loc_UnsavedChangesWindow_UnsavedBioMorphFaceChanges");
             SummaryText.Text = Loc.Text("loc_UnsavedChangesWindow_LoadedBioMorphFaceHasUnsavedChanges");

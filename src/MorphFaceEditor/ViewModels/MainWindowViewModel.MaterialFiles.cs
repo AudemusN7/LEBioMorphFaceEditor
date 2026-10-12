@@ -29,6 +29,7 @@ public sealed partial class MainWindowViewModel
             return true;
         }
         if (kind is null) return false;
+        var openedSourceWorkspace = false;
         if (!CanUseMeshMaterialFiles() && !CanUseFaceMaterialFiles())
         {
             try
@@ -42,6 +43,7 @@ public sealed partial class MainWindowViewModel
                     return true;
                 }
                 if (!await OpenDefaultMaterialFaceAsync(target.Value.Game, target.Value.Target, sourcePath)) return true;
+                openedSourceWorkspace = true;
             }
             catch (Exception exception)
             {
@@ -53,6 +55,14 @@ public sealed partial class MainWindowViewModel
             await ImportMeshMaterialsAsync(kind == MaterialRonCodec.MaterialFileKind.Tse, sourcePath);
         else if (CanUseFaceMaterialFiles())
             await ImportFaceMaterialsAsync(sourcePath);
+        if (openedSourceWorkspace && ErrorMessage is null && LoadedFacePath is { } facePath)
+        {
+            TrackSourceFile(sourcePath, facePath, kind == MaterialRonCodec.MaterialFileKind.Tse
+                ? SourceFileFormat.TseMaterialsRon : SourceFileFormat.MfeMaterialsRon);
+            Editor?.AcceptSavedState();
+            _hasWorkspaceChanges = false;
+            OnDirtyStateChanged();
+        }
         return true;
     }
 
@@ -192,14 +202,14 @@ public sealed partial class MainWindowViewModel
         finally { IsBusy = false; }
     }
 
-    private async Task ExportFaceMaterialsAsync()
+    private async Task<bool> ExportFaceMaterialsAsync()
     {
         if (!CanUseFaceMaterialFiles() || !await EnsureSelectedFaceLoadedForMaterialsAsync() ||
             Editor is not { } editor || SelectedFace is not { } face)
-            return;
+            return false;
         var path = _dialogs.ChooseMaterialExportFile(false, face.ObjectName + ".materials.ron",
             Path.GetDirectoryName(_standaloneImportPath ?? _packageWorkspace?.SourcePath));
-        if (path is null) return;
+        if (path is null) return false;
         IsBusy = true;
         ErrorMessage = null;
         try
@@ -217,12 +227,14 @@ public sealed partial class MainWindowViewModel
             await MeshMaterialFileService.WriteAsync(path, text,
                 _standaloneImportPath ?? _packageWorkspace?.SourcePath ?? path);
             Status = Loc.Format("loc_Shell_Status_ExportedMfeMaterialSettingsTo", Path.GetFileName(path));
+            return true;
         }
         catch (Exception exception)
         {
             AppLog.Error("Face material export failed.", exception);
             ErrorMessage = exception.Message;
             Status = Loc.Text("loc_Shell_Status_MaterialExportFailedTheCurrent2");
+            return false;
         }
         finally { IsBusy = false; }
     }

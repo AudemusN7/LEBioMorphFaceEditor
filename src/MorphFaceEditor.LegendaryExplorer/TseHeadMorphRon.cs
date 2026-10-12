@@ -37,6 +37,8 @@ public sealed record RonExportProvenance(
 /// </summary>
 public static class TseHeadMorphRon
 {
+    public static void Validate(string path) => _ = Read(path);
+
     internal static TseHeadMorph Read(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);

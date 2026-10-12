@@ -150,18 +150,18 @@ public sealed class HeadPreviewRenderer : IDisposable
         }
         _sampleDescription = SelectMultisampleDescription();
 
-        using var vertexBytecode = CompileShader("VSMain", "vs_5_0");
-        using var pixelBytecode = CompileShader("PSMain", "ps_5_0");
-        using var shadowPixelBytecode = CompileShader("PSShadow", "ps_5_0");
-        using var postVertexBytecode = CompileShader("VSPostProcess", "vs_5_0");
-        using var postPixelBytecode = CompileShader("PSPostProcess", "ps_5_0");
-        using var aoSurfaceBytecode = CompileShader(
+        using var vertexBytecode = LoadShader("VSMain", "vs_5_0");
+        using var pixelBytecode = LoadShader("PSMain", "ps_5_0");
+        using var shadowPixelBytecode = LoadShader("PSShadow", "ps_5_0");
+        using var postVertexBytecode = LoadShader("VSPostProcess", "vs_5_0");
+        using var postPixelBytecode = LoadShader("PSPostProcess", "ps_5_0");
+        using var aoSurfaceBytecode = LoadShader(
             _sampleDescription.Count > 1 ? "PSAoSurfaceMsaa" : "PSAoSurfaceSingle", "ps_5_0");
-        using var ambientOcclusionBytecode = CompileShader("PSAmbientOcclusion", "ps_5_0");
-        using var aoBlurBytecode = CompileShader("PSAoBlur", "ps_5_0");
-        using var applyAmbientOcclusionBytecode = CompileShader("PSApplyAmbientOcclusion", "ps_5_0");
-        using var bloomExtractBytecode = CompileShader("PSBloomExtract", "ps_5_0");
-        using var bloomBlurBytecode = CompileShader("PSBloomBlur", "ps_5_0");
+        using var ambientOcclusionBytecode = LoadShader("PSAmbientOcclusion", "ps_5_0");
+        using var aoBlurBytecode = LoadShader("PSAoBlur", "ps_5_0");
+        using var applyAmbientOcclusionBytecode = LoadShader("PSApplyAmbientOcclusion", "ps_5_0");
+        using var bloomExtractBytecode = LoadShader("PSBloomExtract", "ps_5_0");
+        using var bloomBlurBytecode = LoadShader("PSBloomBlur", "ps_5_0");
         _vertexShader = new VertexShader(_device, vertexBytecode);
         _pixelShader = new PixelShader(_device, pixelBytecode);
         _shadowPixelShader = new PixelShader(_device, shadowPixelBytecode);
@@ -1697,24 +1697,8 @@ public sealed class HeadPreviewRenderer : IDisposable
         return new SampleDescription(1, 0);
     }
 
-    private static ShaderBytecode CompileShader(string entryPoint, string profile)
-    {
-        const string resourceName = "MorphFaceEditor.Rendering.Shaders.HeadPreview.hlsl";
-        using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName)
-            ?? throw new InvalidOperationException($"Embedded shader '{resourceName}' was not found.");
-        using var reader = new StreamReader(stream);
-        var result = ShaderBytecode.Compile(
-            reader.ReadToEnd(),
-            entryPoint,
-            profile,
-            ShaderFlags.OptimizationLevel3 | ShaderFlags.EnableStrictness,
-            EffectFlags.None);
-        if (result.HasErrors)
-        {
-            throw new InvalidOperationException(result.Message);
-        }
-        return result.Bytecode;
-    }
+    private static ShaderBytecode LoadShader(string entryPoint, string profile) =>
+        HeadPreviewShaders.Load(entryPoint, profile);
 
     private static GpuVertex ToGpuVertex(HeadPreviewVertex vertex) => new()
     {

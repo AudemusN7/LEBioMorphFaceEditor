@@ -5,9 +5,12 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>MorphFaceEditor.Rendering</AssemblyName>
     <RootNamespace>MorphFaceEditor.Rendering</RootNamespace>
+    <HeadPreviewShaderBundle>$(BaseIntermediateOutputPath)$(Configuration)\$(TargetFramework)\HeadPreviewShaders.zip</HeadPreviewShaderBundle>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\MorphFaceEditor.Core\MorphFaceEditor.Core.csproj" />
+    <ProjectReference Include="..\..\tools\MorphFaceEditor.ShaderCompiler\MorphFaceEditor.ShaderCompiler.csproj"
+                      ReferenceOutputAssembly="false" Private="false" OutputItemType="ShaderCompilerAssembly" />
     <PackageReference Include="SharpDX" />
     <PackageReference Include="SharpDX.D3DCompiler" />
     <PackageReference Include="SharpDX.Direct3D11" />
@@ -15,7 +18,15 @@
     <PackageReference Include="SharpDX.Mathematics" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="Shaders\HeadPreview.hlsl"
-                      LogicalName="MorphFaceEditor.Rendering.Shaders.HeadPreview.hlsl" />
+    <EmbeddedResource Include="$(HeadPreviewShaderBundle)"
+                      LogicalName="MorphFaceEditor.Rendering.Shaders.HeadPreviewShaders.zip" />
   </ItemGroup>
+  <Target Name="CompileHeadPreviewShaders" BeforeTargets="PrepareResources"
+          Inputs="Shaders\HeadPreview.hlsl;@(ShaderCompilerAssembly)"
+          Outputs="$(HeadPreviewShaderBundle)" Condition="'$(DesignTimeBuild)' != 'true'">
+    <Exec Command="dotnet &quot;@(ShaderCompilerAssembly)&quot; &quot;$(MSBuildProjectDirectory)\Shaders\HeadPreview.hlsl&quot; &quot;$(MSBuildProjectDirectory)\$(HeadPreviewShaderBundle)&quot;" />
+    <ItemGroup>
+      <FileWrites Include="$(HeadPreviewShaderBundle)" />
+    </ItemGroup>
+  </Target>
 </Project>

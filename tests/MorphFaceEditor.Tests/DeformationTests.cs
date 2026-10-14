@@ -103,7 +103,7 @@ public static class DeformationTests
             []);
         var session = new MorphFaceEditingSession(face, mesh, [target]);
 
-        TestAssert.True(session.CanEdit, "The lower-LOD residual disabled an otherwise exact profile.");
+        TestAssert.True(session.CanEditMorphFeatures, "The lower-LOD residual disabled an otherwise exact profile.");
         TestAssert.Near(bakedLod1[0], session.Evaluation.LodGeometry[1].Positions[0], 0.000001f);
         session.SetFeature("Target", 0.6f);
         var expected = bakedLod1[0] + Vector3.UnitZ * 0.1f;
@@ -271,7 +271,7 @@ public static class DeformationTests
             []);
         var session = new MorphFaceEditingSession(face, mesh, [invalid]);
 
-        TestAssert.True(!session.CanEdit, "An invalid zero-weight target remained editable.");
+        TestAssert.True(!session.CanEditMorphFeatures, "An invalid zero-weight target remained editable.");
         TestAssert.True(session.ValidationErrors.Count > 0, "The target validation failure was not retained for diagnostics.");
     }
 
@@ -290,7 +290,7 @@ public static class DeformationTests
             [mesh.Positions.ToArray()],
             []);
         var session = new MorphFaceEditingSession(face, mesh, [target]);
-        TestAssert.True(session.CanEdit, "Synthetic session did not pass its zero-weight oracle.");
+        TestAssert.True(session.CanEditMorphFeatures, "Synthetic session did not pass its zero-weight oracle.");
 
         session.BeginFeatureEdit("Target");
         session.SetFeature("Target", 0.25f);

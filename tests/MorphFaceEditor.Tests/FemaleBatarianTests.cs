@@ -34,7 +34,7 @@ internal static class FemaleBatarianTests
             var loaded = preview.Loaded;
             var session = preview.EditingSession;
             var scene = preview.Scene;
-            TestAssert.True(!session.CanEdit && !session.CanEditBones,
+            TestAssert.True(!session.CanEditMorphFeatures && !session.CanEditBones,
                 "BAF exposed inherited geometry editing.");
             var mesh = scene.Meshes.First(mesh => !mesh.IsAttachment);
             TestAssert.True(!mesh.ApplySkinning, "BAF preview applied the inherited male skeleton.");

@@ -47,7 +47,7 @@ public static class MorphTargetCatalogTests
             TestAssert.True(profile.MetadataOnlyFeatures.Contains("eyeShape_droop"),
                 $"{profile.Key} no longer preserves the proven-inert eyeShape_droop creator value as metadata.");
 
-            var authoredTarget = catalog.Load(profile, profile.Game, @"Z:\definitely-not-a-package.pcc")
+            var authoredTarget = catalog.Load(profile, profile.Game)
                 .Single(target => target.Source.InstancedPath.Split('.').Last()
                     .Equals("eye_Shape_droop", StringComparison.Ordinal));
             TestAssert.True(authoredTarget.Lods.SelectMany(lod => lod.Vertices)
@@ -91,14 +91,14 @@ public static class MorphTargetCatalogTests
         foreach (var profile in MorphFaceProfileRegistry.CreateDefault().Profiles
                      .Where(profile => !profile.IgnoresAuthoredGeometry))
         {
-            var targets = catalog.Load(profile, profile.Game, @"Z:\definitely-not-a-package.pcc");
+            var targets = catalog.Load(profile, profile.Game);
             TestAssert.True(targets.SelectMany(target => target.Lods)
                     .All(lod => lod.LodIndex < 2 || lod.Vertices.Count == 0),
                 $"{profile.Key} unexpectedly acquired authored LOD2 target geometry; revisit the LOD2 editor lockout.");
         }
 
         var hmf = MorphFaceProfileRegistry.CreateDefault().Profiles.Single(profile => profile.Key == "le3-human-female");
-        var lod1Only = catalog.Load(hmf, hmf.Game, @"Z:\definitely-not-a-package.pcc")
+        var lod1Only = catalog.Load(hmf, hmf.Game)
             .Where(target => target.BoneOffsets.Count == 0 &&
                              target.Lods.Count(lod => lod.Vertices.Count > 0) == 1 &&
                              target.Lods.Any(lod => lod.LodIndex == 1 && lod.Vertices.Count > 0))
@@ -149,7 +149,7 @@ public static class MorphTargetCatalogTests
         foreach (var profile in MorphFaceProfileRegistry.CreateDefault().Profiles
                      .Where(profile => !profile.IgnoresAuthoredGeometry))
         {
-            var targets = catalog.Load(profile, profile.Game, @"Z:\definitely-not-a-package.pcc");
+            var targets = catalog.Load(profile, profile.Game);
             var expected = gameSpecificCounts.GetValueOrDefault(
                 $"{profile.Game}.{profile.TargetSetName}", expectedCounts[profile.TargetSetName!]);
             TestAssert.Equal(expected, targets.Count);

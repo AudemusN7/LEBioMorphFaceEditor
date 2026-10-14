@@ -952,7 +952,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 ? Loc.Text("loc_Shell_FaceDetails_RelativeImportedBake")
                 : result.EditingSession.GeometryMode == MorphFaceGeometryMode.FixedBake
                     ? Loc.Text("loc_Shell_FaceDetails_FixedImportedBake")
-                : result.EditingSession.CanEdit
+                : result.EditingSession.CanEditMorphFeatures
                     ? Loc.Format("loc_Shell_FaceDetails_OracleMax", oracle!.MaximumError)
                 : result.Profile.IgnoresAuthoredGeometry
                     ? Loc.Text("loc_Shell_FaceDetails_BaseHeadMaterialOnlyPreview")
@@ -962,7 +962,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 materialOverrides.Scalars.Count, materialOverrides.Vectors.Count, materialOverrides.Textures.Count);
             _faceDetailsHasBakedFallback = result.EditingSession.GeometryMode != MorphFaceGeometryMode.RelativeBake &&
                 result.EditingSession.GeometryMode != MorphFaceGeometryMode.FixedBake &&
-                !result.EditingSession.CanEdit && !result.Profile.IgnoresAuthoredGeometry;
+                !result.EditingSession.CanEditMorphFeatures && !result.Profile.IgnoresAuthoredGeometry;
             SetGeometryDetails(geometryDetails);
             LoadedFacePath = result.Loaded.Document.Source.InstancedPath;
             var editor = new FaceEditorViewModel(
@@ -1009,12 +1009,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 ? Loc.Format("loc_Shell_Status_LoadedFaceRelativeBake", SelectedFace.DisplayName, result.Profile.DisplayName)
                 : result.EditingSession.GeometryMode == MorphFaceGeometryMode.FixedBake
                     ? Loc.Format("loc_Shell_Status_LoadedFaceFixedBake", SelectedFace.DisplayName, result.Profile.DisplayName)
-                : result.EditingSession.CanEdit
+                : result.EditingSession.CanEditMorphFeatures
                 ? Loc.Format("loc_Shell_Status_LoadedFaceLiveGeometry", SelectedFace.DisplayName, result.Profile.DisplayName)
                 : result.Profile.IgnoresAuthoredGeometry
                     ? Loc.Format("loc_Shell_Status_LoadedFaceBaseHeadPreview", SelectedFace.DisplayName, result.Profile.DisplayName, result.EditingSession.EditBlockReason)
                 : Loc.Format("loc_Shell_Status_LoadedFaceBakedGeometryFallback", SelectedFace.DisplayName, result.Profile.DisplayName, result.EditingSession.EditBlockReason);
-            AppLog.Verbose($"FACE:LOADED {LoadedFacePath} {result.Loaded.Game} EDITABLE:{result.EditingSession.CanEdit} " +
+            AppLog.Verbose($"FACE:LOADED {LoadedFacePath} {result.Loaded.Game} EDITABLE:{result.EditingSession.CanEditMorphFeatures} " +
                 $"VERTS:{topology.VertexCount} TARGETS:{result.EditingSession.Evaluation.Resolution.WeightedTargets.Count}");
             _ = LoadTextureRegistryAsync(
                 editor,
@@ -1236,7 +1236,6 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             case nameof(FaceEditorViewModel.CursedMode):
                 CursedMode = editor.CursedMode;
                 break;
-            case nameof(FaceEditorViewModel.CanEdit):
             case nameof(FaceEditorViewModel.CanEditMorphFeatures):
             case nameof(FaceEditorViewModel.CanEditBones):
             case nameof(FaceEditorViewModel.CanFixMorph):

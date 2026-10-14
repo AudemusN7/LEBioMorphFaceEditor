@@ -123,7 +123,7 @@ public static class EditingTests
             [new MorphTargetLod(0, 4, [new MorphVertexDelta(1, Vector3.UnitX, Vector3.Zero)])],
             []);
         var session = CreateRelativeSession(mesh, document, incompatibleTarget);
-        TestAssert.True(!session.CanEditMorphFeatures && !session.CanEdit,
+        TestAssert.True(!session.CanEditMorphFeatures,
             "Incompatible authored LOD0 topology exposed relative-bake morph editing.");
         TestAssert.True(session.CanEditBones,
             "Incompatible morph topology disabled the independently verified Player bone rig.");
@@ -181,8 +181,8 @@ public static class EditingTests
             [TestFixtures.CreateTarget(new MorphVertexDelta(1, new Vector3(100, 0, 0), Vector3.Zero))],
             geometryMode: MorphFaceGeometryMode.FixedBake);
 
-        TestAssert.True(!session.CanEditMorphFeatures && !session.CanEdit,
-            "Fixed-bake mode exposed morph editing through the compatibility alias.");
+        TestAssert.True(!session.CanEditMorphFeatures,
+            "Fixed-bake mode exposed morph editing.");
         TestAssert.True(session.CanEditBones, "A fixed-bake session with a valid skeleton hid bone editing.");
         TestAssert.Near(baked[0], session.Evaluation.Geometry.Positions[0], 0.000001f);
         session.SetBoneAxis("root", 0, 7);
@@ -324,13 +324,13 @@ public static class EditingTests
             []);
 
         var atThreshold = CreateSession(MorphFaceEditingSession.OracleMismatchThreshold);
-        TestAssert.True(atThreshold.CanEdit,
+        TestAssert.True(atThreshold.CanEditMorphFeatures,
             $"A threshold baked drift incorrectly blocked editing: {atThreshold.EditBlockReason}");
         TestAssert.True(!atThreshold.CanFixMorph,
             "A threshold baked drift incorrectly offered morph repair.");
 
         var aboveThreshold = CreateSession(MorphFaceEditingSession.OracleMismatchThreshold + 0.0001f);
-        TestAssert.True(!aboveThreshold.CanEdit,
+        TestAssert.True(!aboveThreshold.CanEditMorphFeatures,
             "A just-over-threshold baked drift incorrectly allowed editing.");
         TestAssert.True(aboveThreshold.CanFixMorph,
             aboveThreshold.EditBlockReason ?? "A just-over-threshold baked drift did not offer morph repair.");
@@ -371,13 +371,13 @@ public static class EditingTests
         };
         var session = new MorphFaceEditingSession(document, mesh, [target]);
 
-        TestAssert.True(!session.CanEdit, "The intentionally malformed face was editable before repair.");
+        TestAssert.True(!session.CanEditMorphFeatures, "The intentionally malformed face was editable before repair.");
         TestAssert.True(session.CanFixMorph, session.EditBlockReason ?? "The malformed face was not offered repair.");
 
         session.FixMorph();
         var draft = session.CreateDraft(hair, [otherMesh], material);
 
-        TestAssert.True(session.CanEdit, session.EditBlockReason ?? "Repair did not re-enable editing.");
+        TestAssert.True(session.CanEditMorphFeatures, session.EditBlockReason ?? "Repair did not re-enable editing.");
         TestAssert.True(session.HasPendingRepair, "Repair did not remain pending until save.");
         TestAssert.True(!session.CanFixMorph, "A repaired face still offered the repair action.");
         TestAssert.Near(0, session.Evaluation.OriginalOracleReport!.MaximumError, 0.0001f);
@@ -396,14 +396,14 @@ public static class EditingTests
 
         session.Undo();
         session.Undo();
-        TestAssert.True(session.CanEdit, "Undoing the slider edit unexpectedly undid the repair.");
+        TestAssert.True(session.CanEditMorphFeatures, "Undoing the slider edit unexpectedly undid the repair.");
         TestAssert.True(session.HasPendingRepair, "Undoing the slider edit cleared the pending repair state.");
         session.Undo();
-        TestAssert.True(!session.CanEdit, "Undo did not restore the oracle-blocked state.");
+        TestAssert.True(!session.CanEditMorphFeatures, "Undo did not restore the oracle-blocked state.");
         TestAssert.True(!session.HasPendingRepair, "Undo did not clear the pending repair state.");
         AssertNonGeometryState(session.CreateDraft(hair, [otherMesh], material));
         session.Redo();
-        TestAssert.True(session.CanEdit, "Redo did not restore editability after repair.");
+        TestAssert.True(session.CanEditMorphFeatures, "Redo did not restore editability after repair.");
         TestAssert.True(session.HasPendingRepair, "Redo did not restore the pending repair state.");
         AssertNonGeometryState(session.CreateDraft(hair, [otherMesh], material));
 
@@ -519,11 +519,11 @@ public static class EditingTests
 
         TestAssert.True(failure?.Message == "preview callback failed",
             "The throwing notification callback was not observed.");
-        TestAssert.True(session.CanEdit && session.HasPendingRepair && session.CanUndo,
+        TestAssert.True(session.CanEditMorphFeatures && session.HasPendingRepair && session.CanUndo,
             "A notification failure partially rolled back a recorded repair.");
         session.EvaluationChanged -= throwingCallback;
         session.Undo();
-        TestAssert.True(!session.CanEdit && !session.HasPendingRepair,
+        TestAssert.True(!session.CanEditMorphFeatures && !session.HasPendingRepair,
             "Undo could not restore the original face after a notification failure.");
     }
 
@@ -550,7 +550,7 @@ public static class EditingTests
             [sourceCommon],
             new HashSet<string>(["SourceOnly"], StringComparer.OrdinalIgnoreCase),
             "Source");
-        TestAssert.True(source.CanEdit, source.EditBlockReason ?? "Source session was not editable.");
+        TestAssert.True(source.CanEditMorphFeatures, source.EditBlockReason ?? "Source session was not editable.");
 
         var destinationBase = new[]
         {
@@ -590,7 +590,7 @@ public static class EditingTests
             destinationMesh,
             [destinationCommon, destinationOnly],
             profileName: "Destination");
-        TestAssert.True(destination.CanEdit, destination.EditBlockReason ?? "Destination session was not editable.");
+        TestAssert.True(destination.CanEditMorphFeatures, destination.EditBlockReason ?? "Destination session was not editable.");
 
         destination.ApplySemanticTransferData(source.CaptureSemanticTransferData());
         var draft = destination.CreateDraft(null, [], MorphFaceMaterialOverrides.Empty);

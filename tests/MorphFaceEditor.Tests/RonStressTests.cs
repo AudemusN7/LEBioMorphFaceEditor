@@ -559,7 +559,7 @@ internal static class RonStressTests
         var session = new MorphFaceEditingSession(
             loaded.Document,
             loaded.BaseHead,
-            new MorphTargetCatalog().Load(profile, loaded.Game, workspacePath),
+            new MorphTargetCatalog().Load(profile, loaded.Game),
             profile.MetadataOnlyFeatures,
             profile.DisplayName,
             profile.FeatureAliases,

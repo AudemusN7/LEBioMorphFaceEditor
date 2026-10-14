@@ -73,9 +73,9 @@ public sealed class MorphFaceConversionService(
             : RequirePackage(destinationPath, "destination");
 
         var (templateReference, template) = FindEditableTemplate(reader, templatePath, targetProfile);
-        var sourceSession = CreateSession(source, sourceProfile, sourcePath);
+        var sourceSession = CreateSession(source, sourceProfile);
         var transfer = sourceSession.CaptureSemanticTransferData();
-        var targetSession = CreateSession(template, targetProfile, templatePath);
+        var targetSession = CreateSession(template, targetProfile);
         if (!targetProfile.IgnoresAuthoredGeometry)
         {
             targetSession.ApplySemanticTransferData(transfer);
@@ -162,7 +162,7 @@ public sealed class MorphFaceConversionService(
             mappedMaterial.Scalars.Count,
             mappedMaterial.Vectors.Count,
             mappedMaterial.Textures.Count,
-            sourceSession.CanEdit);
+            sourceSession.CanEditMorphFeatures);
     }
 
     private (MorphFaceSaveResult SaveResult, MorphFaceMaterialData Material) CreateNewPackage(
@@ -283,8 +283,8 @@ public sealed class MorphFaceConversionService(
             {
                 var loaded = reader.Load(templatePath, reference.FaceUIndex.ToString(
                     System.Globalization.CultureInfo.InvariantCulture), decodeTextures: false);
-                var session = CreateSession(loaded, profile, templatePath);
-                if (session.CanEdit || profile.IgnoresAuthoredGeometry)
+                var session = CreateSession(loaded, profile);
+                if (session.CanEditMorphFeatures || profile.IgnoresAuthoredGeometry)
                 {
                     return (reference, loaded);
                 }
@@ -301,11 +301,10 @@ public sealed class MorphFaceConversionService(
 
     private MorphFaceEditingSession CreateSession(
         LoadedMorphFace loaded,
-        MorphFaceProfile profile,
-        string packagePath) => new(
+        MorphFaceProfile profile) => new(
         loaded.Document,
         loaded.BaseHead,
-        profile.IgnoresAuthoredGeometry ? [] : targets.Load(profile, loaded.Game, packagePath),
+        profile.IgnoresAuthoredGeometry ? [] : targets.Load(profile, loaded.Game),
         profile.MetadataOnlyFeatures,
         profile.DisplayName,
         profile.FeatureAliases,

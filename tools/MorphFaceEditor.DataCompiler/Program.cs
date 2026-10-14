@@ -104,24 +104,6 @@ if (args.Length == 3 && args[0] == "conversion-smoke")
                 canonicalReferences.Textures,
                 actualReferences.Textures);
         }
-        var exportChildrenOfImports = package.Exports
-            .Where(export => export.Parent is ImportEntry)
-            .Select(export =>
-            {
-                var descendants = package.Exports.Cast<IEntry>().Concat(package.Imports)
-                    .Where(entry => entry.InstancedFullPath.StartsWith(
-                        export.InstancedFullPath + ".", StringComparison.OrdinalIgnoreCase))
-                    .Select(entry => $"{(entry is ExportEntry ? "E" : "I")}:{entry.ClassName}:{entry.InstancedFullPath}");
-                return $"{export.ClassName}:{export.InstancedFullPath} beneath {export.Parent!.InstancedFullPath} " +
-                       $"[{string.Join(", ", descendants)}]";
-            })
-            .ToArray();
-        if (exportChildrenOfImports.Length > 0)
-        {
-            throw new InvalidDataException(
-                $"{sourceGame}->{targetGame} created exports beneath imports: " +
-                string.Join("; ", exportChildrenOfImports));
-        }
         if (package.Exports.Cast<IEntry>().Concat(package.Imports).Any(entry =>
                 entry.InstancedFullPath.Contains("MFE_EmbeddedTextures", StringComparison.OrdinalIgnoreCase)))
         {

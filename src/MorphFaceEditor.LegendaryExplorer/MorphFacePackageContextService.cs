@@ -423,40 +423,6 @@ public sealed class MorphFacePackageContextService
         });
     }
 
-    /// <summary>
-    /// Retains only material parameters supported by the destination profile.
-    /// Texture identities are rebound to equivalent entries already present in
-    /// that package; unresolved cross-game assets deliberately fall back.
-    /// </summary>
-    public MorphFaceMaterialData MapCompatibleMaterialData(
-        string packagePath,
-        MorphFaceMaterialData source,
-        IReadOnlySet<string> supportedScalars,
-        IReadOnlySet<string> supportedVectors,
-        IReadOnlySet<string> supportedTextures)
-    {
-        ArgumentNullException.ThrowIfNull(source);
-        ArgumentNullException.ThrowIfNull(supportedScalars);
-        ArgumentNullException.ThrowIfNull(supportedVectors);
-        ArgumentNullException.ThrowIfNull(supportedTextures);
-        ValidateMaterialData(source);
-        LegendaryExplorerCoreRuntime.Initialize();
-        using var package = OpenPackage(packagePath);
-        var textures = source.Textures
-            .Where(value => value.TextureReference is not null && supportedTextures.Contains(value.Name))
-            .Select(value => (Value: value, Entry: FindCompatibleEntry(
-                package,
-                value.TextureReference!.InstancedPath,
-                "Texture2D")))
-            .Where(value => value.Entry is not null)
-            .Select(value => value.Value with { TextureReference = ToIdentity(value.Entry) })
-            .ToArray();
-        return new MorphFaceMaterialData(
-            source.Scalars.Where(value => supportedScalars.Contains(value.Name)).ToArray(),
-            source.Vectors.Where(value => supportedVectors.Contains(value.Name)).ToArray(),
-            textures);
-    }
-
     public void ExportRon(
         string packagePath,
         string facePath,

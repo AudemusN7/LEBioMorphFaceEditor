@@ -239,11 +239,6 @@ public sealed class InstalledGameAssetResolver
         return result;
     }
 
-    public static void RefreshMounts(MorphFaceGame game) => LegendaryExplorerCoreRuntime.Initialize();
-    internal static void RefreshMounts(MEGame game) => LegendaryExplorerCoreRuntime.Initialize();
-    internal static bool AreMountedPackagesCurrent(MorphFaceGame game, IReadOnlyList<string> paths) =>
-        paths.Count == 0 || paths.ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(TextureRegistryBuilder.GetPhysicalPackagePaths(game));
-
     private static readonly TextureRegistryStore Store = new(TextureRegistryPaths.CreateDefault());
     private static readonly object Sync = new();
     private static readonly Dictionary<MEGame, ((string Path, long Length, DateTime LastWriteTimeUtc)? Fingerprint, TextureRegistrySnapshot? Snapshot)> Snapshots = [];

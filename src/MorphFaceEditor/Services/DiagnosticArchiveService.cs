@@ -29,14 +29,12 @@ internal sealed class DiagnosticArchiveService(ApplicationDataPaths paths, strin
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
             .Select(path => (path, "Logs/" + Path.GetFileName(path))));
         files.AddRange(workspaceFiles.Select(path => (path, "Workspace/" + Path.GetFileName(path))));
-        foreach (var root in new[] { paths.CurrentDirectory, paths.LegacyDirectory })
+        var registries = Path.Combine(paths.CurrentDirectory, "TextureRegistries");
+        if (Directory.Exists(registries))
         {
-            var registries = Path.Combine(root, "TextureRegistries");
-            if (!Directory.Exists(registries)) continue;
-            var prefix = root == paths.CurrentDirectory ? "TextureRegistries/" : "LegacyTextureRegistries/";
             files.AddRange(Directory.EnumerateFiles(registries, "*.mftr", SearchOption.TopDirectoryOnly)
                 .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
-                .Select(path => (path, prefix + Path.GetFileName(path))));
+                .Select(path => (path, "TextureRegistries/" + Path.GetFileName(path))));
         }
         if (files.Any(file => Path.GetFullPath(file.Source).Equals(destination, StringComparison.OrdinalIgnoreCase)))
             throw new IOException(Loc.Text("loc_Services_DiagnosticArchive_DestinationIsInput"));

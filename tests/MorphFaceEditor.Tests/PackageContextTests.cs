@@ -980,7 +980,7 @@ public static class PackageContextTests
 
             var resolution = new MorphFeatureTargetResolver().Resolve(
                 loaded.Document.MorphFeatures,
-                targets.Load(profile!, item.Game, path),
+                targets.Load(profile!, item.Game),
                 profile!.MetadataOnlyFeatures,
                 profile.DisplayName,
                 profile.FeatureAliases);
@@ -2212,13 +2212,13 @@ public static class PackageContextTests
         var session = new MorphFaceEditingSession(
             loaded.Document,
             loaded.BaseHead,
-            targets.Load(profile, loaded.Game, packagePath),
+            targets.Load(profile, loaded.Game),
             profile.MetadataOnlyFeatures,
             profile.DisplayName,
             profile.FeatureAliases,
             profile.RecognizesBaseVariant,
             profile.GeometryEditBlockReason(loaded.BaseHead.Source.InstancedPath));
-        TestAssert.True(session.CanEdit, session.EditBlockReason ?? "Converted face was not editable.");
+        TestAssert.True(session.CanEditMorphFeatures, session.EditBlockReason ?? "Converted face was not editable.");
     }
 
     private static void PasteLe3MaterialData()
@@ -3331,7 +3331,7 @@ public static class PackageContextTests
                     var session = new MorphFaceEditingSession(
                         loaded.Document,
                         loaded.BaseHead,
-                        new MorphTargetCatalog().Load(profile, loaded.Game, path),
+                        new MorphTargetCatalog().Load(profile, loaded.Game),
                         profile.MetadataOnlyFeatures,
                         profile.DisplayName,
                         profile.FeatureAliases,
@@ -3585,13 +3585,13 @@ public static class PackageContextTests
                 var session = new MorphFaceEditingSession(
                     loaded.Document,
                     loaded.BaseHead,
-                    new MorphTargetCatalog().Load(profile, loaded.Game, path),
+                    new MorphTargetCatalog().Load(profile, loaded.Game),
                     profile.MetadataOnlyFeatures,
                     profile.DisplayName,
                     profile.FeatureAliases,
                     profile.RecognizesBaseVariant,
                     profile.GeometryEditBlockReason(loaded.BaseHead.Source.InstancedPath));
-                if (!session.CanEdit)
+                if (!session.CanEditMorphFeatures)
                 {
                     continue;
                 }

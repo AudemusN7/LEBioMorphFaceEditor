@@ -37,7 +37,7 @@ internal static class ExternalSkeletalMeshMaterializer
         ArgumentException.ThrowIfNullOrWhiteSpace(className);
 
         using var cache = new PackageCache();
-        InstalledGameAssetResolver.RefreshMounts(destination.Game);
+        LegendaryExplorerCoreRuntime.Initialize();
         var installed = new InstalledGameAssetResolver().Resolve(destination.Game,
             new AssetIdentity(donorPackagePath, instancedPath, sourceUIndex, className), cache);
         if (installed is not null)

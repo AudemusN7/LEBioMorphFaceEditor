@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 namespace MorphFaceEditor.Infrastructure;
 
 internal sealed record ViewportBackgroundPreference(bool FollowTheme = true, BackgroundColourPreference? Colour = null);
+internal sealed record BackgroundColourPreference(float Red, float Green, float Blue);
 internal sealed record SidePaneWidthsPreference(double? FaceBrowser = null, double? FaceEditor = null);
 internal sealed record ApplicationPreferences(
     bool SuppressWelcome = false,
@@ -28,30 +29,29 @@ internal sealed class ApplicationPreferencesStore
     };
     internal ApplicationPreferences Current { get; private set; }
 
-    internal ApplicationPreferencesStore(string path, bool migrateLegacy = false)
+    internal ApplicationPreferencesStore(string path)
     {
         _path = Path.GetFullPath(path);
-        Current = Read<ApplicationPreferences>(_path) ?? new();
-        if (migrateLegacy && !File.Exists(_path)) Migrate();
+        Current = Read() ?? new();
     }
 
     internal static ApplicationPreferencesStore CreateDefault() => _default ??= new(
-        Path.Combine(ApplicationDataPaths.CreateDefault().CurrentDirectory, "preferences.json"), migrateLegacy: true);
+        Path.Combine(ApplicationDataPaths.CreateDefault().CurrentDirectory, "preferences.json"));
 
-    private static T? Read<T>(string path)
+    private ApplicationPreferences? Read()
     {
-        try { return File.Exists(path) ? JsonSerializer.Deserialize<T>(File.ReadAllText(path), Options) : default; }
+        try { return File.Exists(_path) ? JsonSerializer.Deserialize<ApplicationPreferences>(File.ReadAllText(_path), Options) : null; }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
         {
-            AppLog.Warning($"PREFERENCES:READ-FAILED FILE:{Path.GetFileName(path)} REASON:{exception.Message}");
-            return default;
+            AppLog.Warning($"PREFERENCES:READ-FAILED FILE:{Path.GetFileName(_path)} REASON:{exception.Message}");
+            return null;
         }
     }
 
     internal void Update(Func<ApplicationPreferences, ApplicationPreferences> change)
     {
         // Merge with the latest document so independent preference consumers cannot overwrite each other.
-        var candidate = change(Read<ApplicationPreferences>(_path) ?? Current);
+        var candidate = change(Read() ?? Current);
         Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
         var temporary = _path + ".tmp";
         try
@@ -63,45 +63,8 @@ internal sealed class ApplicationPreferencesStore
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
 
-    private void Migrate()
-    {
-        var directory = Path.GetDirectoryName(_path)!;
-        var startupPath = Path.Combine(directory, "startup-preferences.json");
-        var themePath = Path.Combine(directory, "theme-preferences.json");
-        var recentPath = Path.Combine(directory, "recent-files.json");
-        var startup = Read<StartupPreferences>(startupPath);
-        var theme = Read<ThemePreferences>(themePath);
-        var recent = Read<string[]>(recentPath);
-        var colour = startup?.BackgroundColour;
-        var custom = ValidColour(colour) && !IsLegacyDefault(colour!);
-        Current = new(startup?.SuppressWelcome ?? false,
-            theme is not null && Enum.IsDefined(theme.Mode) ? theme.Mode : ThemeMode.System,
-            ValidHue(theme?.AccentHue) ? theme?.AccentHue : null,
-            new(!custom, custom ? colour : null), recent);
-        try
-        {
-            Update(_ => Current);
-            // Remove only successfully imported legacy documents, after the replacement is on disk.
-            foreach (var path in new[] { startup is null ? null : startupPath, theme is null ? null : themePath,
-                         recent is null ? null : recentPath }.OfType<string>())
-                File.Delete(path);
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            AppLog.Warning($"PREFERENCES:MIGRATION-FAILED REASON:{exception.Message}");
-        }
-    }
-
     internal static bool ValidHue(double? hue) => hue is null || double.IsFinite(hue.Value) && hue >= 0 && hue < 360;
     internal static bool ValidColour(BackgroundColourPreference? colour) => colour is not null &&
         float.IsFinite(colour.Red) && float.IsFinite(colour.Green) && float.IsFinite(colour.Blue) &&
         colour.Red is >= 0 and <= 1 && colour.Green is >= 0 and <= 1 && colour.Blue is >= 0 and <= 1;
-
-    private static bool IsLegacyDefault(BackgroundColourPreference colour)
-    {
-        bool Matches(float red, float green, float blue) =>
-            Math.Abs(colour.Red - red) < .0001f && Math.Abs(colour.Green - green) < .0001f && Math.Abs(colour.Blue - blue) < .0001f;
-        return Matches(.035f, .043f, .055f) || Matches(8 / 255f, 8 / 255f, 13 / 255f) ||
-               Matches(242 / 255f, 242 / 255f, 242 / 255f);
-    }
 }

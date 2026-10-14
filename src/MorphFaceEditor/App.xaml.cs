@@ -96,7 +96,7 @@ public partial class App : Application
         StartupPreferencesService preferences,
         IEditorDialogService dialogs)
     {
-        if (preferences.Current.SuppressWelcome)
+        if (preferences.SuppressWelcome)
         {
             return;
         }

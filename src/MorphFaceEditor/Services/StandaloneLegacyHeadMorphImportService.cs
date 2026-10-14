@@ -156,7 +156,7 @@ public sealed class StandaloneLegacyHeadMorphImportService
                 $"The installed {targetGame} player template '{templatePath}' is not an editable player profile.");
         }
 
-        var targets = _targets.Load(resolution.Profile, targetGame, workspace.WorkingPath);
+        var targets = _targets.Load(resolution.Profile, targetGame);
         var session = new MorphFaceEditingSession(
             loaded.Document,
             loaded.BaseHead,

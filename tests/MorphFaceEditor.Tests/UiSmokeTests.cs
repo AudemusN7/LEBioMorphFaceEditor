@@ -38,7 +38,7 @@ public static class UiSmokeTests
         new("PCCs start unloaded and empty packages clear the previous head", PccEmptyHeadState),
         new("recent files persist, deduplicate, and cap at ten", RecentFilesPersistDeduplicateAndCap),
         new("startup welcome preference persists", StartupWelcomePreferencePersists),
-        new("application preferences consolidate and migrate legacy settings", ApplicationPreferencesMigrate),
+        new("application preferences preserve current settings across independent consumers", ApplicationPreferencesPersist),
         new("application settings: diagnostic PCC captures pending edits without modifying live data", DiagnosticPccCapturesPendingEdits),
         new("application settings: detached diagnostics include loaded geometry and current material assignments", DiagnosticDetachedMeshIncludesState),
         new("standalone morph import is available before opening a PCC", StandaloneImportIsAvailableWithoutPackage),
@@ -192,13 +192,13 @@ public static class UiSmokeTests
         try
         {
             var service = new StartupPreferencesService(storagePath);
-            TestAssert.True(!service.Current.SuppressWelcome,
+            TestAssert.True(!service.SuppressWelcome,
                 "A new preferences store suppressed the startup welcome by default.");
             service.SetSuppressWelcome(true);
             service.SetBackgroundColor(new Vector4(0.2f, 0.4f, 0.6f, 1));
 
             var reloaded = new StartupPreferencesService(storagePath);
-            TestAssert.True(reloaded.Current.SuppressWelcome,
+            TestAssert.True(reloaded.SuppressWelcome,
                 "The Don't Show Again preference did not survive reloading.");
             TestAssert.Equal(new Vector4(0.2f, 0.4f, 0.6f, 1), reloaded.BackgroundColor!.Value);
         }
@@ -1708,7 +1708,7 @@ public static class UiSmokeTests
 
         TestAssert.Equal(0, editor.Features.Count);
         TestAssert.Equal(0, editor.Bones.Count);
-        TestAssert.True(!editor.CanEdit,
+        TestAssert.True(!editor.CanEditMorphFeatures,
             "Female Turian test session did not reproduce its geometry-edit block.");
         TestAssert.True(!editor.CanEditAttachments,
             "Female Turian material-only mode exposed authored hair or accessory references.");
@@ -3462,35 +3462,36 @@ public static class UiSmokeTests
         public Vector4? EditStandard(string title, Vector4 value, Action<Vector4> livePreview) => null;
     }
 
-    private static void ApplicationPreferencesMigrate()
+    private static void ApplicationPreferencesPersist()
     {
         var root = Path.Combine(Path.GetTempPath(), $"MFE-Preferences-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
         try
         {
-            foreach (var (colour, expectedCustom) in new[]
+            foreach (var colour in new[]
                      {
-                         (new Vector4(.035f, .043f, .055f, 1), false),
-                         (new Vector4(8 / 255f, 8 / 255f, 13 / 255f, 1), false),
-                         (new Vector4(242 / 255f, 242 / 255f, 242 / 255f, 1), false),
-                         (new Vector4(.2f, .4f, .6f, 1), true)
+                         new Vector4(.035f, .043f, .055f, 1),
+                         new Vector4(8 / 255f, 8 / 255f, 13 / 255f, 1),
+                         new Vector4(242 / 255f, 242 / 255f, 242 / 255f, 1),
+                         new Vector4(.2f, .4f, .6f, 1)
                      })
             {
                 var folder = Path.Combine(root, Guid.NewGuid().ToString("N"));
                 Directory.CreateDirectory(folder);
-                File.WriteAllText(Path.Combine(folder, "startup-preferences.json"), System.Text.Json.JsonSerializer.Serialize(
-                    new StartupPreferences(true, new(colour.X, colour.Y, colour.Z))));
-                File.WriteAllText(Path.Combine(folder, "theme-preferences.json"), """{"Mode":"Light","AccentHue":285}""");
                 var recentPath = Path.Combine(folder, "face.pcc");
-                File.WriteAllText(Path.Combine(folder, "recent-files.json"), System.Text.Json.JsonSerializer.Serialize(new[] { recentPath }));
                 var path = Path.Combine(folder, "preferences.json");
-                var store = new ApplicationPreferencesStore(path, migrateLegacy: true);
+                File.WriteAllText(path, System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    SuppressWelcome = true, Mode = "Light", AccentHue = 285,
+                    ViewportBackground = new ViewportBackgroundPreference(false, new(colour.X, colour.Y, colour.Z)),
+                    RecentFiles = new[] { recentPath }, Language = "fr-FR", SidePaneWidths = new SidePaneWidthsPreference(350, 900)
+                }));
+                var store = new ApplicationPreferencesStore(path);
                 var startup = new StartupPreferencesService(store);
                 var themes = new ThemePreferencesStore(store);
                 var recent = new RecentFileService(store);
-                TestAssert.True(startup.Current.SuppressWelcome, "Migration lost the welcome preference.");
-                TestAssert.Equal(expectedCustom, startup.BackgroundColor is not null);
-                if (expectedCustom) TestAssert.Equal(colour, startup.BackgroundColor!.Value);
+                TestAssert.True(startup.SuppressWelcome, "Loading lost the welcome preference.");
+                TestAssert.Equal(colour, startup.BackgroundColor!.Value);
                 TestAssert.Equal(new ThemePreferences(MorphFaceEditor.Infrastructure.ThemeMode.Light, 285), themes.Current);
                 TestAssert.Equal(recentPath, recent.Paths.Single());
                 TestAssert.Equal(1, Directory.GetFiles(folder, "*.json").Length);
@@ -3499,35 +3500,18 @@ public static class UiSmokeTests
                 startup.SetSuppressWelcome(false);
                 independentTheme.Save(new(MorphFaceEditor.Infrastructure.ThemeMode.Dark, 120));
                 recent.Add(Path.Combine(folder, "second.pcc"));
-                var reloaded = new ApplicationPreferencesStore(path, migrateLegacy: true);
+                var reloaded = new ApplicationPreferencesStore(path);
                 TestAssert.True(!reloaded.Current.SuppressWelcome, "A theme/recent write erased startup preferences.");
                 TestAssert.Equal(MorphFaceEditor.Infrastructure.ThemeMode.Dark, reloaded.Current.Mode);
                 TestAssert.Equal(120d, reloaded.Current.AccentHue);
                 TestAssert.Equal(2, reloaded.Current.RecentFiles!.Length);
-                TestAssert.Equal(expectedCustom, new StartupPreferencesService(reloaded).BackgroundColor is not null);
-                // Once unified preferences exist, stale legacy files cannot override them.
-                File.WriteAllText(Path.Combine(folder, "startup-preferences.json"), """{"SuppressWelcome":true}""");
-                TestAssert.True(!new ApplicationPreferencesStore(path, migrateLegacy: true).Current.SuppressWelcome,
-                    "Stale legacy settings overrode the unified document.");
+                TestAssert.Equal(colour, new StartupPreferencesService(reloaded).BackgroundColor!.Value);
+                TestAssert.Equal("fr-FR", reloaded.Current.Language);
+                TestAssert.Equal(new SidePaneWidthsPreference(350, 900), reloaded.Current.SidePaneWidths);
                 startup.FollowThemeBackground();
                 TestAssert.True(new ApplicationPreferencesStore(path).Current.ViewportBackground is { FollowTheme: true, Colour: null },
                     "Follow theme persisted a concrete background colour.");
             }
-            var incomplete = Path.Combine(root, "incomplete");
-            Directory.CreateDirectory(incomplete);
-            File.WriteAllText(Path.Combine(incomplete, "startup-preferences.json"), """{"SuppressWelcome":true,}""");
-            File.WriteAllText(Path.Combine(incomplete, "theme-preferences.json"), "invalid JSON");
-            var incompleteStore = new ApplicationPreferencesStore(Path.Combine(incomplete, "preferences.json"), migrateLegacy: true);
-            TestAssert.True(incompleteStore.Current.SuppressWelcome && incompleteStore.Current.ViewportBackground!.FollowTheme,
-                "A missing background or a trailing comma broke startup migration.");
-            TestAssert.True(File.Exists(Path.Combine(incomplete, "theme-preferences.json")), "Migration discarded an unreadable legacy file.");
-            var blocked = Path.Combine(root, "blocked");
-            Directory.CreateDirectory(Path.Combine(blocked, "preferences.json"));
-            var legacy = Path.Combine(blocked, "startup-preferences.json");
-            File.WriteAllText(legacy, """{"SuppressWelcome":true}""");
-            _ = new ApplicationPreferencesStore(Path.Combine(blocked, "preferences.json"), migrateLegacy: true);
-            TestAssert.True(File.Exists(legacy) && !File.Exists(Path.Combine(blocked, "preferences.json.tmp")),
-                "Failed migration removed legacy data or left a temporary candidate.");
         }
         finally { Directory.Delete(root, recursive: true); }
     }
@@ -3760,7 +3744,7 @@ public static class UiSmokeTests
             []);
         var session = new MorphFaceEditor.Core.Editing.MorphFaceEditingSession(face, mesh, [target]);
         var resolved = session.Evaluation.Resolution.Features.Single(feature => feature.Feature.Name == "Target");
-        var metadata = new HumanMaleFeatureMetadataCatalog().Describe(resolved, session.CanEdit);
+        var metadata = new HumanMaleFeatureMetadataCatalog().Describe(resolved, session.CanEditMorphFeatures);
         var control = new MorphFeatureEditorViewModel(session, metadata, new HashSet<int> { 0, 1 }, _ => { });
         TestAssert.Near(0, control.Minimum, 0);
         TestAssert.Near(1, control.Maximum, 0);

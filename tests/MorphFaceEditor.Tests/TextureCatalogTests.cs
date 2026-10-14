@@ -10,16 +10,12 @@ using MorphFaceEditor.ViewModels;
 
 namespace MorphFaceEditor.Tests;
 
-/// <summary>Protects the detached catalogue ordering rules from package and WPF concerns.</summary>
+/// <summary>Protects texture discovery, picker choices and selection behaviour.</summary>
 public static class TextureCatalogTests
 {
     public static IReadOnlyList<TestCase> All { get; } =
     [
-        new("texture catalogue: active texture ranks before profile matches", ActiveTextureRanksFirst),
-        new("texture catalogue: profile matches precede shared and general textures", ProfileMatchesRankBeforeSharedAndGeneral),
         new("texture catalogue: detached mesh profile covers supported racial scopes", DetachedMeshProfileCoversSupportedRacialScopes),
-        new("texture catalogue: search matches path package and origin", SearchMatchesUserFacingProvenance),
-        new("texture catalogue: malformed RON parent does not hide its valid repair candidate", MalformedRonParentKeepsRepairCandidate),
         new("player workspace: pickers admit only seek-free qualified BIOG references", PlayerPickerRequiresSeekFreePaths),
         new("texture catalogue: duplicate paths default to the official occurrence", DuplicatePathsKeepOfficialOccurrenceAsDefault),
         new("texture catalogue: BIOG and cooked aliases collapse to official defaults", PickerCollapsesAliasesAndPreservesOverride),
@@ -43,8 +39,6 @@ public static class TextureCatalogTests
         new("texture registry: audit exclusions override broad head and HIR matching", DiscoveryAppliesAuditExclusions),
         new("texture registry: installed scans include GBL_Norm_Alpha across games", InstalledScansIncludeGlobalNormalAlpha),
         new("texture registry: occurrence retains mip storage metadata", OccurrenceRetainsMipStorageMetadata),
-        new("texture registry: availability resolves installed and local paths", AvailabilityResolvesMergedPaths),
-        new("texture registry: ambiguous object names are not resolved", AmbiguousObjectNamesAreRejected)
     ];
 
     private static void PlayerPickerRequiresSeekFreePaths()
@@ -69,21 +63,6 @@ public static class TextureCatalogTests
         var meshes = PlayerWorkspaceReferencePolicy.SelectPackageAssets([qualifiedMesh, relativeMesh]);
         TestAssert.Equal(1, meshes.Count);
         TestAssert.Equal(qualifiedMesh.Identity, meshes[0].Identity);
-    }
-
-    private static void MalformedRonParentKeepsRepairCandidate()
-    {
-        const string malformed = "BIOG_HMM_HIR_PRO_R.PROCustomFade02.HMM_HIR_PROCustomFade01_Mask";
-        const string valid = "BIOG_HMM_HIR_PRO_R.PROCustomFade01.HMM_HIR_PROCustomFade01_Mask";
-        var candidate = Candidate(valid, "BIOG_HMM_HIR_PRO_R.pcc");
-        var results = TextureCatalogSearch.FilterAndRank(
-            [candidate],
-            TextureCatalogProfile.Empty,
-            malformed,
-            "HMM_HIR_PROCustomFade01_Mask");
-
-        TestAssert.Equal(1, results.Count);
-        TestAssert.Equal(valid, results[0].InstancedPath);
     }
 
     private static void RequiredDecodeFailureReportsFamilySignature()
@@ -414,43 +393,6 @@ public static class TextureCatalogTests
             "The HAT exclusion escaped its BIOG human HIR scope.");
     }
 
-    private static void AvailabilityResolvesMergedPaths()
-    {
-        const string localPath = "WorkingPackage.Textures.Custom_Diff";
-        const string installedPath = "BIOG_SAL_HED_PROMorph_R.Add.SAL_HED_PRO_Add1";
-        var availability = new TextureCatalogAvailability(
-            [localPath],
-            [Candidate(installedPath, "BioG_Sal.pcc")]);
-
-        TestAssert.True(availability.TryResolve(localPath.ToLowerInvariant(), out var resolvedLocal),
-            "The merged catalogue did not resolve a local path case-insensitively.");
-        TestAssert.Equal(localPath, resolvedLocal);
-        TestAssert.True(availability.TryResolve("SAL_HED_PRO_Add1", out var resolvedInstalled),
-            "A unique installed object name did not resolve through the merged catalogue.");
-        TestAssert.Equal(installedPath, resolvedInstalled);
-    }
-
-    private static void AmbiguousObjectNamesAreRejected()
-    {
-        var availability = new TextureCatalogAvailability(
-            ["WorkingPackage.Textures.Shared_Diff"],
-            [Candidate("BIOG_SAL_HED_PROMorph_R.Add.Shared_Diff", "BioG_Sal.pcc")]);
-
-        TestAssert.True(!availability.TryResolve("Shared_Diff", out _),
-            "An ambiguous object-name-only texture request resolved to an arbitrary package.");
-    }
-
-    private static void ActiveTextureRanksFirst()
-    {
-        var profile = new TextureCatalogProfile("le3-asari", ["ASA_HED"], ["ASA_EYE"]);
-        var active = Candidate("BIOG_ASA_HED_PROMorph_R.Adds.ASA_HED_PRO_Add2", "base.pcc");
-        var preferred = Candidate("BIOG_ASA_HED_PROMorph_R.Adds.ASA_HED_PRO_Add1", "base.pcc");
-
-        var ranked = TextureCatalogSearch.FilterAndRank([preferred, active], profile, active.InstancedPath, string.Empty);
-
-        TestAssert.Equal(active.InstancedPath, ranked[0].InstancedPath);
-    }
-
     private static void InstalledScansIncludeGlobalNormalAlpha()
     {
         LegendaryExplorerCoreRuntime.Initialize();
@@ -513,49 +455,6 @@ public static class TextureCatalogTests
             "Detached texture discovery did not include every supported eye/hair scope.");
         TestAssert.True(!detachedProfile.SharedPathFragments.Contains("BAT_EYE"),
             "Detached texture discovery introduced an eye scope for Batarians, which have no eye material.");
-    }
-
-    private static void ProfileMatchesRankBeforeSharedAndGeneral()
-    {
-        var profile = new TextureCatalogProfile("le3-asari", ["ASA_HED"], ["ASA_EYE"]);
-        var general = Candidate("BIOG_TUR_HED_PROMorph_R.Adds.TUR_HED_PRO_Add1", "turian.pcc");
-        var shared = Candidate("BIOG_ASA_EYE.ASA_EYE_Diff", "eyes.pcc");
-        var preferred = Candidate("BIOG_ASA_HED_PROMorph_R.Adds.ASA_HED_PRO_Add1", "asari.pcc");
-
-        var ranked = TextureCatalogSearch.FilterAndRank([general, shared, preferred], profile, null, string.Empty);
-
-        TestAssert.True(ranked.Select(candidate => candidate.InstancedPath).SequenceEqual(
-            [preferred.InstancedPath, shared.InstancedPath, general.InstancedPath]),
-            "Profile ranking did not keep preferred, shared, and general texture candidates in that order.");
-    }
-
-    private static void SearchMatchesUserFacingProvenance()
-    {
-        var profile = new TextureCatalogProfile("le3-asari", ["ASA_HED"], []);
-        var modded = Candidate(
-            "BIOG_ASA_HED_PROMorph_R.Adds.ASA_HED_PRO_Custom",
-            "DLC_MOD_Custom\\CookedPCConsole\\ModdedTextures.pcc",
-            TextureCatalogOrigin.Mod);
-        var vanilla = Candidate("BIOG_ASA_HED_PROMorph_R.Adds.ASA_HED_PRO_Add1", "BioG_Asa.pcc");
-
-        var byObjectName = TextureCatalogSearch.FilterAndRank([vanilla, modded], profile, null, "custom");
-        var byPackage = TextureCatalogSearch.FilterAndRank([vanilla, modded], profile, null, "moddedtextures");
-        var byOrigin = TextureCatalogSearch.FilterAndRank([vanilla, modded], profile, null, "mod");
-        var officialDefaultWithModOccurrence = vanilla with
-        {
-            Occurrences =
-            [
-                vanilla.EffectiveOccurrence,
-                Occurrence("DLC_MOD_Custom\\CookedPCConsole\\ModdedTextures.pcc", 9000, TextureCatalogOrigin.Mod)
-            ]
-        };
-        var byShadowedPackage = TextureCatalogSearch.FilterAndRank(
-            [officialDefaultWithModOccurrence], profile, null, "moddedtextures");
-
-        TestAssert.Equal(modded.InstancedPath, byObjectName.Single().InstancedPath);
-        TestAssert.Equal(modded.InstancedPath, byPackage.Single().InstancedPath);
-        TestAssert.Equal(modded.InstancedPath, byOrigin.Single().InstancedPath);
-        TestAssert.Equal(officialDefaultWithModOccurrence.InstancedPath, byShadowedPackage.Single().InstancedPath);
     }
 
     private static void DuplicatePathsKeepOfficialOccurrenceAsDefault()

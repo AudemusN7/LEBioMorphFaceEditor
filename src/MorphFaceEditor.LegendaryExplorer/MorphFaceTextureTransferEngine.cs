@@ -42,8 +42,7 @@ internal static class MorphFaceTextureTransferEngine
         InstalledGameAssetResolver? installedAssetsOverride = null)
     {
         var warnings = new List<string>();
-        InstalledGameAssetResolver.RefreshMounts(sourceGame);
-        InstalledGameAssetResolver.RefreshMounts(destination.Game);
+        LegendaryExplorerCoreRuntime.Initialize();
         var installedAssets = installedAssetsOverride ?? new InstalledGameAssetResolver();
         var textures = new List<TextureMaterialOverride>();
         using var donors = new DonorPackages();

@@ -1268,7 +1268,7 @@ public static class RandomisationTests
             [mesh.Positions.ToArray()],
             []);
         var session = new MorphFaceEditingSession(document, mesh, [Target("First"), Target("Second")]);
-        TestAssert.True(session.CanEdit, session.EditBlockReason ?? "Fixture session was not editable.");
+        TestAssert.True(session.CanEditMorphFeatures, session.EditBlockReason ?? "Fixture session was not editable.");
         return session;
     }
 

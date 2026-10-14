@@ -144,7 +144,7 @@ public static class CustomMeshTests
             profileName: "LE1 Human Male",
             geometryEditBlockReason: "Custom base mesh; geometry editing is unavailable.");
 
-        TestAssert.True(!session.CanEdit, "A custom mesh unexpectedly enabled geometry editing.");
+        TestAssert.True(!session.CanEditMorphFeatures, "A custom mesh unexpectedly enabled geometry editing.");
         TestAssert.Equal(mesh.Positions[0], session.Evaluation.Geometry.Positions[0]);
         var draft = session.CreateDraft(null, [], new MorphFaceMaterialOverrides(
             null,

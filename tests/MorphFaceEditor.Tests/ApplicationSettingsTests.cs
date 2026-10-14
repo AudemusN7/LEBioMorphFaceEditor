@@ -9,7 +9,7 @@ public static class ApplicationSettingsTests
 {
     public static IReadOnlyList<TestCase> All { get; } =
     [
-        new("application settings: ZIP includes log, workspace and current/legacy stock/custom MFTRs", ArchiveCollectsFiles),
+        new("application settings: ZIP includes log, workspace and current stock/custom MFTRs", ArchiveCollectsFiles),
         new("application settings: ZIP works without a workspace or registries", ArchiveWithoutWorkspace),
         new("application settings: failed export preserves an existing ZIP and removes its candidate", FailedArchivePreservesDestination),
         new("application settings: export refuses to overwrite a collected file", ArchiveRejectsInputCollision),
@@ -25,19 +25,20 @@ public static class ApplicationSettingsTests
         Write(Path.Combine(paths.CurrentDirectory, "Logs", "old.log"), "old log");
         Write(Path.Combine(paths.CurrentDirectory, "TextureRegistries", "LE1.mftr"), "stock");
         Write(Path.Combine(paths.CurrentDirectory, "TextureRegistries", "LE2.manual.mftr"), "custom");
-        Write(Path.Combine(paths.LegacyDirectory, "TextureRegistries", "LE3.mftr"), "legacy");
-        Write(Path.Combine(paths.CurrentDirectory, "startup-preferences.json"), "preferences");
+        var legacy = Write(Path.Combine(root, "BioMorphFaceEditor", "TextureRegistries", "LE3.mftr"), "legacy");
+        Write(Path.Combine(paths.CurrentDirectory, "preferences.json"), "preferences");
         var workspace = Write(Path.Combine(root, "working.pcc"), "pending workspace");
         var destination = Path.Combine(root, "report.zip");
         var result = new DiagnosticArchiveService(paths, log).Export(destination, [workspace]);
         using var zip = ZipFile.OpenRead(destination);
-        TestAssert.Equal(5, result.Entries.Count);
-        TestAssert.Equal(6, zip.Entries.Count);
+        TestAssert.Equal(4, result.Entries.Count);
+        TestAssert.Equal(5, zip.Entries.Count);
         TestAssert.Equal("latest log", Read(zip, "Logs/latest.log"));
         TestAssert.Equal("pending workspace", Read(zip, "Workspace/working.pcc"));
         TestAssert.Equal("stock", Read(zip, "TextureRegistries/LE1.mftr"));
         TestAssert.Equal("custom", Read(zip, "TextureRegistries/LE2.manual.mftr"));
-        TestAssert.Equal("legacy", Read(zip, "LegacyTextureRegistries/LE3.mftr"));
+        TestAssert.True(zip.GetEntry("LegacyTextureRegistries/LE3.mftr") is null, "An old registry was included.");
+        TestAssert.Equal("legacy", File.ReadAllText(legacy));
         TestAssert.Equal("pending workspace", File.ReadAllText(workspace));
         using var manifest = JsonDocument.Parse(Read(zip, "Report.json"));
         TestAssert.True(manifest.RootElement.GetProperty("WorkspaceIncluded").GetBoolean(), "Workspace missing from manifest.");

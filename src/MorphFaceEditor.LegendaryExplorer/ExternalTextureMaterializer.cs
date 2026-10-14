@@ -21,7 +21,7 @@ internal static class ExternalTextureMaterializer
         ArgumentNullException.ThrowIfNull(identity);
 
         using var cache = new PackageCache();
-        InstalledGameAssetResolver.RefreshMounts(destination.Game);
+        LegendaryExplorerCoreRuntime.Initialize();
         var sourceExport = new InstalledGameAssetResolver().Resolve(
             destination.Game, identity with { IsExplicitTextureDonor = true }, cache)
             ?? ResolveSourceExport(cache.GetCachedPackage(identity.PackagePath)

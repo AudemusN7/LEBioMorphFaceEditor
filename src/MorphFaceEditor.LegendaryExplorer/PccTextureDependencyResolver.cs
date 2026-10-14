@@ -116,7 +116,7 @@ internal static class PccTextureDependencyResolver
         ICollection<string>? warnings)
     {
         using var cache = new PackageCache();
-        InstalledGameAssetResolver.RefreshMounts(destination.Game);
+        LegendaryExplorerCoreRuntime.Initialize();
         var resolver = new InstalledGameAssetResolver();
         ExportEntry? donorTexture = source.IsExplicitDonor
             ? resolver.Resolve(destination.Game,

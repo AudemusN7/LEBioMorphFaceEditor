@@ -188,9 +188,6 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
     public bool CanEditMorphFeatures { get; private set; }
     public bool CanEditBones { get; private set; }
 
-    /// <summary>Compatibility alias for the historical morph-slider capability.</summary>
-    public bool CanEdit => CanEditMorphFeatures;
-
     /// <summary>Whether the preview may show live target deformation.</summary>
     public bool UsesLiveDeformationPreview => GeometryMode is (MorphFaceGeometryMode.MorphEvaluated or MorphFaceGeometryMode.RelativeBake) &&
                                               CanEditMorphFeatures;

@@ -340,7 +340,6 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     public System.Windows.Input.ICommand RedoCommand => _redoCommand;
     public System.Windows.Input.ICommand SetToDefaultsCommand => _setToDefaultsCommand;
     public System.Windows.Input.ICommand RandomiseCommand => _randomiseCommand;
-    public bool CanEdit => CanEditMorphFeatures;
     public bool CanEditMorphFeatures => _session.CanEditMorphFeatures;
     public bool CanEditBones => _session.CanEditBones;
     public bool CanEditAttachments => _allowsAttachmentEditing &&
@@ -1197,7 +1196,6 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         {
             SelectedBoneTransform = BoneTransforms.FirstOrDefault(transform => transform.IsAvailable);
         }
-        OnPropertyChanged(nameof(CanEdit));
         OnPropertyChanged(nameof(CanEditMorphFeatures));
         OnPropertyChanged(nameof(CanEditBones));
         OnPropertyChanged(nameof(UsesLiveDeformationPreview));

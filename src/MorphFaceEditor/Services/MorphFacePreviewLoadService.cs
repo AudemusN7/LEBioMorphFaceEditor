@@ -68,7 +68,7 @@ public sealed class MorphFacePreviewLoadService : IDisposable
             loaded.BaseHead,
             profileResolution.UsesCustomMesh || profile.IgnoresAuthoredGeometry
                 ? []
-                : _targetCatalog.Load(profile, loaded.Game, packagePath),
+                : _targetCatalog.Load(profile, loaded.Game),
             profile.MetadataOnlyFeatures,
             profile.DisplayName,
             profile.FeatureAliases,

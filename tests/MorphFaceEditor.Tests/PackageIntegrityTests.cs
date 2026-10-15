@@ -44,7 +44,11 @@ internal static class PackageIntegrityTests
         new("explicit texture selection rejects an occupying import without changing the PCC", () => WriterRetainsExactTextureImport(true)),
         new("explicit texture selection rejects an occupying export through staged re-export", () => WriterRetainsExactTextureImport(true, exportCollision: true)),
         new("texture donor resolution qualifies local paths without trusting stale indices", TextureDonorResolution),
-        new("Texture2D materialisation preserves a non-Package TextureCube parent", TextureCubeParentPreserved),
+        new("Texture2D materialisation preserves a non-Package TextureCube parent", () => TextureCubeParentPreserved(false, false)),
+        new("Texture2D materialisation reuses an imported TextureCube parent", () => TextureCubeParentPreserved(false, true)),
+        new("Texture2D materialisation preserves its source imported TextureCube parent", () => TextureCubeParentPreserved(true, false)),
+        new("automatic graph copying retains existing import and export roles", () => ExistingDependencyRoles(false)),
+        new("automatic root-preserving copying retains existing import and export roles", () => ExistingDependencyRoles(true)),
         new("relink preserves PROShort01 target donors and optional attachment omissions", HairDonorsAndOmissions),
         new("relink preserves every LE1 Add and Tat fallback policy", () => TextureFallbacks(false)),
         new("texture conversion embeds Add and Tat fallbacks beneath imported package parents", () => TextureFallbacks(true))
@@ -73,7 +77,13 @@ internal static class PackageIntegrityTests
             identity with { InstancedPath = "BIOG_Test.Missing.Scar", UIndex = expected.UIndex }), "not found");
     }
 
-    private static void TextureCubeParentPreserved()
+    private static void TextureCubeParentPreserved(bool sourceImport, bool destinationImport)
+    {
+        foreach (var game in new[] { MEGame.LE1, MEGame.LE2, MEGame.LE3 })
+            TextureCubeParentPreserved(game, sourceImport, destinationImport);
+    }
+
+    private static void TextureCubeParentPreserved(MEGame game, bool sourceImport, bool destinationImport)
     {
         LegendaryExplorerCoreRuntime.Initialize();
         var donorPath = Path.Combine(Path.GetTempPath(), $"BIOG_CubeDonor-{Guid.NewGuid():N}.pcc");
@@ -83,31 +93,42 @@ internal static class PackageIntegrityTests
             int faceUIndex;
             string facePath;
             const string cubePath = "BIOG_CubeDonor.HVYa.HMM_HGR_HVYa_CUBE";
-            using (var donor = MEPackageHandler.CreateMemoryEmptyPackage("BIOG_CubeDonor.pcc", MEGame.LE1))
+            using (var donor = MEPackageHandler.CreateMemoryEmptyPackage("BIOG_CubeDonor.pcc", game))
             {
                 var packageRoot = donor.CreatePackageExport("BIOG_CubeDonor");
                 var group = donor.CreatePackageExport("HVYa", packageRoot);
-                var cube = donor.CreateExport("HMM_HGR_HVYa_CUBE", "TextureCube", group, indexed: false);
-                cube.WriteBinary(new UTextureCube());
+                IEntry cube = sourceImport
+                    ? donor.CreateImport("TextureCube", "HMM_HGR_HVYa_CUBE", group)
+                    : donor.CreateExport("HMM_HGR_HVYa_CUBE", "TextureCube", group, indexed: false);
+                if (cube is ExportEntry cubeExport) cubeExport.WriteBinary(new UTextureCube());
                 var face = donor.CreateExport("CubemapFace0", "Texture2D", cube, indexed: false);
                 face.WriteBinary(UTexture2D.Create());
-                cube.WriteProperty(new ObjectProperty(face, "FacePosX") { StaticArrayIndex = 0 });
+                if (cube is ExportEntry parentExport)
+                    parentExport.WriteProperty(new ObjectProperty(face, "FacePosX") { StaticArrayIndex = 0 });
                 faceUIndex = face.UIndex;
                 facePath = face.InstancedFullPath;
                 donor.Save(donorPath);
             }
 
-            using var destination = Empty("CubeParentDestination");
+            using var destination = Empty("CubeParentDestination", game);
+            if (destinationImport)
+            {
+                var group = destination.CreatePackageExport("HVYa", destination.CreatePackageImport("BIOG_CubeDonor"));
+                destination.CreateImport("TextureCube", "HMM_HGR_HVYa_CUBE", group);
+            }
             var imported = PccTextureDependencyResolver.MaterializeDirect(
                 destination,
                 new AssetIdentity(donorPath, facePath, faceUIndex, "Texture2D"));
-            var cubeExport = destination.FindExport(cubePath, "TextureCube");
-            TestAssert.True(cubeExport is not null, "The source TextureCube parent was not materialised as a TextureCube export.");
-            TestAssert.Equal(cubeExport!.UIndex, imported.idxLink);
+            var expectedImport = sourceImport || destinationImport;
+            var cubeParent = PackageIntegrity.FindExactEntry(destination, cubePath, "TextureCube");
+            TestAssert.True(cubeParent is not null && (cubeParent is ImportEntry) == expectedImport,
+                "The TextureCube parent changed its expected import/export role.");
+            TestAssert.Equal(cubeParent!.UIndex, imported.idxLink);
             TestAssert.Equal(1, destination.Exports.Count(export =>
                 export.ClassName == "Texture2D" && export.InstancedFullPath == facePath));
-            TestAssert.Equal(imported.UIndex,
-                PackageIntegrity.References(cubeExport)["property.FacePosX[0]"]);
+            if (cubeParent is ExportEntry exportedCube)
+                TestAssert.Equal(imported.UIndex,
+                    PackageIntegrity.References(exportedCube)["property.FacePosX[0]"]);
             TestAssert.True(destination.FindExport(cubePath, "Package") is null,
                 "The TextureCube parent path was incorrectly created as a Package export.");
             var graph = PccPackageWorkflow.CaptureDependencyGraph(imported);
@@ -115,17 +136,73 @@ internal static class PackageIntegrityTests
             destination.Save(destinationPath);
             using var reopened = MEPackageHandler.OpenMEPackage(destinationPath, forceLoadFromDisk: true);
             PccPackageWorkflow.VerifyDependencyGraph(reopened, graph);
-            var reopenedCube = reopened.FindExport(cubePath, "TextureCube");
+            PackageIntegrity.Verify(reopened);
+            var reopenedCube = PackageIntegrity.FindExactEntry(reopened, cubePath, "TextureCube");
             var reopenedFace = reopened.FindExport(facePath, "Texture2D");
             TestAssert.True(reopenedCube is not null && reopenedFace is not null,
                 "Saving and reopening lost the TextureCube parent or its Texture2D child.");
             TestAssert.Equal(reopenedCube!.UIndex, reopenedFace!.idxLink);
+            TestAssert.Equal(expectedImport, reopenedCube is ImportEntry);
         }
         finally
         {
             File.Delete(donorPath);
             File.Delete(destinationPath);
         }
+    }
+
+    private static void ExistingDependencyRoles(bool preserveStructure)
+    {
+        const string black = "BIOG_Humanoid_MASTER_MTR_R.GBL_ARM_ALL_Black";
+        const string white = "BIOG_Humanoid_MASTER_MTR_R.GBL_ARM_ALL_White";
+        const string material = "BIOG_HMM_ARM_AND_R.Master.Andersonb_MASTER_MAT";
+        using var source = Empty("DependencyRolesSource", MEGame.LE3);
+        using var destination = Empty("DependencyRolesDestination", MEGame.LE3);
+        IEntry Add(IMEPackage package, string path, string className, bool export)
+        {
+            var parent = PackageIntegrity.EnsurePackagePath(package, path);
+            var name = NameReference.FromInstancedString(path[(path.LastIndexOf('.') + 1)..]);
+            return export ? package.CreateExport(name, className, parent, indexed: false)
+                : package.CreateImport(className, name, parent);
+        }
+        var sourceBlack = (ExportEntry)Add(source, black, "Texture2D", true);
+        sourceBlack.WriteBinary(UTexture2D.Create());
+        var sourceWhite = Add(source, white, "Texture2D", false);
+        var sourceMaterial = Add(source, material, "Material", false);
+        var root = source.CreateExport("Root", "Object", source.CreatePackageExport("BIOG_MFE_Roles"), indexed: false);
+        root.WriteProperty(new ObjectProperty(sourceBlack, "Black"));
+        root.WriteProperty(new ObjectProperty(sourceWhite, "White"));
+        root.WriteProperty(new ObjectProperty(sourceMaterial, "Material"));
+        var existingBlack = Add(destination, black, "Texture2D", false);
+        var existingWhite = (ExportEntry)Add(destination, white, "Texture2D", true);
+        existingWhite.WriteBinary(UTexture2D.Create());
+        var existingMaterial = Add(destination, material, "Material", false);
+        foreach (var texture in new[] { existingBlack, existingWhite })
+            TestAssert.Equal(texture, PccPackageWorkflow.ResolveTextureReference(destination,
+                new AssetIdentity(string.Empty, texture.InstancedFullPath, 0, "Texture2D"), null, false));
+        var copied = preserveStructure
+            ? PccPackageWorkflow.ImportRootPreservingStructure(destination, root)
+            : PccPackageWorkflow.ImportDependencyGraph(destination, root, null, null, false,
+                targetPathOverride: root.InstancedFullPath);
+        foreach (var (name, expected) in new[] { ("Black", existingBlack), ("White", (IEntry)existingWhite), ("Material", existingMaterial) })
+            TestAssert.Equal(expected, copied.GetProperty<ObjectProperty>(name)!.ResolveToEntry(destination));
+        // This is a real export requirement, unlike automatic dependency reuse.
+        Reject(() => PccPackageWorkflow.ImportDependencyGraph(destination, sourceBlack, null, null, false,
+            targetPathOverride: black), "import occupies");
+        var graph = PccPackageWorkflow.CaptureDependencyGraph(copied);
+        var output = Path.Combine(Path.GetTempPath(), $"MFE-DependencyRoles-{Guid.NewGuid():N}.pcc");
+        try
+        {
+            PackageIntegrity.Verify(destination);
+            destination.Save(output);
+            using var reopened = MEPackageHandler.OpenMEPackage(output, forceLoadFromDisk: true);
+            PackageIntegrity.Verify(reopened);
+            PccPackageWorkflow.VerifyDependencyGraph(reopened, graph, verifyCorpusRoles: false);
+            TestAssert.True(PackageIntegrity.FindExactEntry(reopened, black, "Texture2D") is ImportEntry, "Black's native import was replaced.");
+            TestAssert.True(PackageIntegrity.FindExactEntry(reopened, white, "Texture2D") is ExportEntry, "White's existing export was replaced.");
+            TestAssert.True(PackageIntegrity.FindExactEntry(reopened, material, "Material") is ImportEntry, "The material's native import was replaced.");
+        }
+        finally { File.Delete(output); }
     }
 
     private static void AncestorPreflight()

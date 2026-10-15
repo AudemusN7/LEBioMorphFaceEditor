@@ -56,6 +56,8 @@ public static class UiSmokeTests
         new("NPC RON resolver accepts static ALN donors and rejects player donors", RonResolverAcceptsStaticAlnDonor),
         new("NPC RON donor uses highest mounted duplicate face", RonResolverPrefersHighestMountedDuplicate),
         new("empty editor imports a tagged native NPC RON", EmptyEditorImportsTaggedNpcRon),
+        new("LE3 NPC RON reopens Short03 hair while retaining native texture imports", NpcRonShort03RetainsNativeImports),
+        new("LE3 Asari randomisation ignores removed mod texture donors", AsariRandomisationIgnoresRemovedModTextures),
         new("NPC RON export stamps the selected face without loading it", NpcRonExportIdentifiesUnloadedFace),
         new("MFE material RON drops use material import rather than Player import", MaterialRonDropsUseMaterialImport),
         new("material RON metadata opens matching default NPC and Player faces", MaterialRonMetadataOpensDefaultFace),
@@ -1125,6 +1127,113 @@ public static class UiSmokeTests
             if (File.Exists(ronPath)) File.Delete(ronPath);
         }
     }
+
+    private static void NpcRonShort03RetainsNativeImports() => RunWithDispatcher(async () =>
+    {
+        var ronPath = Path.Combine(Path.GetTempPath(), $"MFE-Short03-{Guid.NewGuid():N}.ron");
+        var pccPath = Path.ChangeExtension(ronPath, ".pcc");
+        new MorphFacePackageContextService().ExportRon(
+            Path.GetFullPath("tests/Global Morphs/LE3 GlobalMorphs.pcc"), "HMM.BioFace_end001_alliance_major", ronPath,
+            new RonExportProvenance(RonExportProducer.MFE, "0.10.0.7", MorphFaceGame.LE3, "HMM", false));
+        try
+        {
+            var originalRon = File.ReadAllBytes(ronPath);
+            var expected = TseHeadMorphRon.Read(ronPath);
+            var textureCatalog = new MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureCatalogService(
+                new MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureRegistryStore(
+                    MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureRegistryPaths.CreateDefault()));
+            var snapshot = await textureCatalog.ReadAsync(MorphFaceGame.LE3);
+            var donor = new RonNpcDonorResolver(MorphFaceProfileRegistry.CreateDefault())
+                .Resolve(MorphFaceGame.LE3, "HMM", snapshot.MorphFaceTemplates, snapshot.OfficialPackagePaths);
+            var donorFingerprint = PackageFingerprint.Capture(donor.PackagePath);
+            using var reader = new MorphFacePackageReader();
+            var dialogs = new StubEditorDialogs { StandaloneNameChoiceResult = "MFE_Short03_Reopen",
+                MorphPackageDestination = new MorphPackageSaveRequest(pccPath, true) };
+            using var shell = CreateMainWindowViewModel(reader, dialogs, textureCatalog: textureCatalog);
+            await shell.OpenDroppedFileAsync(ronPath);
+            TestAssert.True(!shell.HasError && shell.Editor is not null && shell.HasPreview,
+                shell.ErrorMessage ?? "The NPC RON did not reopen with an editor and preview.");
+            var workspace = (MorphFacePackageWorkspace)typeof(MainWindowViewModel).GetField("_packageWorkspace",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(shell)!;
+            var restored = new MorphFacePackageContextService().CaptureMorphData(workspace.WorkingPath, shell.LoadedFacePath!);
+            TestAssert.Equal(expected.MorphData.BakedLods.Count, restored.BakedLods.Count);
+            for (var lod = 0; lod < restored.BakedLods.Count; lod++)
+                TestAssert.True(expected.MorphData.BakedLods[lod].SequenceEqual(restored.BakedLods[lod]),
+                    $"RON reopen changed authored LOD {lod}.");
+            using (var package = MEPackageHandler.OpenMEPackage(workspace.WorkingPath, forceLoadFromDisk: true))
+                TestAssert.True(PackageIntegrity.FindExactEntry(package,
+                        "BIOG_Humanoid_MASTER_MTR_R.GBL_ARM_ALL_Black", "Texture2D") is ImportEntry,
+                    "RON hair materialisation replaced the donor package's existing native texture import.");
+
+            var requested = shell.Editor!.CreateDraft();
+            await ((AsyncRelayCommand)shell.SaveMorphToPccCommand).ExecuteAsync();
+            TestAssert.True(!shell.HasError && File.Exists(pccPath), shell.ErrorMessage ?? "The imported RON could not export to PCC.");
+            using var reopenedReader = new MorphFacePackageReader();
+            using var reopened = CreateMainWindowViewModel(reopenedReader, textureCatalog: textureCatalog);
+            await reopened.OpenDroppedFileAsync(pccPath);
+            reopened.SelectedFace = reopened.Faces.Single();
+            await ((AsyncRelayCommand)reopened.LoadSelectedFaceCommand).ExecuteAsync();
+            TestAssert.True(!reopened.HasError && reopened.HasPreview && reopened.Editor is not null,
+                reopened.ErrorMessage ?? "The exported PCC did not reopen with a preview.");
+            var saved = reopenedReader.Load(pccPath, reopened.LoadedFacePath!).Document;
+            TestAssert.Equal(requested.BakedLods.Count, saved.BakedLods.Count);
+            for (var lod = 0; lod < saved.BakedLods.Count; lod++)
+                TestAssert.True(requested.BakedLods[lod].SequenceEqual(saved.BakedLods[lod]), $"PCC reopen changed requested LOD {lod}.");
+            TestAssert.Equal(expected.HairMesh, saved.HairMeshReference!.InstancedPath);
+            TestAssert.Equal(donorFingerprint, PackageFingerprint.Capture(donor.PackagePath));
+            TestAssert.True(originalRon.SequenceEqual(File.ReadAllBytes(ronPath)), "Reopening modified the source RON.");
+        }
+        finally { File.Delete(ronPath); File.Delete(pccPath); }
+    });
+
+    private static void AsariRandomisationIgnoresRemovedModTextures() => RunWithDispatcher(async () =>
+    {
+        var textureCatalog = new MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureCatalogService(
+            new MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureRegistryStore(
+                MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureRegistryPaths.CreateDefault()));
+        using var reader = new MorphFacePackageReader();
+        using var shell = CreateMainWindowViewModel(reader, textureCatalog: textureCatalog,
+            randomisationCatalog: MorphRandomisationCatalog.LoadEmbedded());
+        await shell.OpenDroppedFileAsync(Path.GetFullPath("tests/Global Morphs/LE3 GlobalMorphs.pcc"));
+        shell.SelectedFace = shell.Faces.Single(value => value.InstancedPath == "ASA.citcas_lobby3_spectator1");
+        await ((AsyncRelayCommand)shell.LoadSelectedFaceCommand).ExecuteAsync();
+        TestAssert.True(!shell.HasError && shell.Editor is not null, shell.ErrorMessage ?? "The Asari did not load.");
+        var editor = shell.Editor!;
+        var initialReferences = editor.CreateDraft().MaterialOverrides.Textures
+            .Select(value => value.TextureReference).ToHashSet();
+        var officialPackages = (await textureCatalog.ReadAsync(MorphFaceGame.LE3)).OfficialPackagePaths
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        editor.RandomiseMorphs = false;
+        editor.RandomiseMaterials = true;
+        editor.MaterialRandomisationStrength = 100;
+        var failures = new List<string>();
+        void Observe(string level, string message)
+        {
+            if (message.Contains("MATERIAL:FAMILY-SKIP", StringComparison.Ordinal)) failures.Add(message);
+        }
+        AppLog.MessageWritten += Observe;
+        try
+        {
+            foreach (var cursed in new[] { false, true })
+            {
+                editor.CursedMode = cursed;
+                var seeds = new Queue<int>([584291847, 112592288, 703173069, 2014125175, 1049856654, 695176062]);
+                typeof(FaceEditorViewModel).GetField("_randomSeedFactory",
+                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+                    .SetValue(editor, (Func<int>)(() => seeds.Dequeue()));
+                for (var roll = 0; roll < 6; roll++)
+                {
+                    await editor.RandomiseAsync();
+                    foreach (var value in editor.CreateDraft().MaterialOverrides.Textures)
+                        if (value.TextureReference is { } reference && !initialReferences.Contains(reference))
+                            TestAssert.True(officialPackages.Contains(reference.PackagePath),
+                                $"Randomisation selected a non-official donor: {reference.PackagePath}");
+                }
+            }
+        }
+        finally { AppLog.MessageWritten -= Observe; }
+        TestAssert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
+    });
 
     private static void NpcImportCancellationCommandCancelsActiveRequest()
     {
@@ -2800,7 +2909,8 @@ public static class UiSmokeTests
         IMorphFaceClipboardService? clipboard = null,
         MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureCatalogService? textureCatalog = null,
         IHdrColorDialogService? colorDialog = null,
-        StartupPreferencesService? startupPreferences = null)
+        StartupPreferencesService? startupPreferences = null,
+        MorphRandomisationCatalog? randomisationCatalog = null)
     {
         var sceneFactory = new HeadPreviewSceneFactory();
         var profiles = MorphFaceProfileRegistry.CreateDefault();
@@ -2821,6 +2931,7 @@ public static class UiSmokeTests
                 profiles, targets, context, textureCatalog),
             new MorphFaceInterchangeService(),
             clipboard ?? new StubClipboard(),
+            randomisationCatalog: randomisationCatalog,
             startupPreferences: startupPreferences);
     }
 
@@ -3633,6 +3744,7 @@ public static class UiSmokeTests
         public string? MorphImportPath { get; set; }
         public string? MaterialImportPath { get; set; }
         public string? SaveAsPath { get; set; }
+        public MorphPackageSaveRequest? MorphPackageDestination { get; set; }
         public bool ConfirmCreateCareerMorphResult { get; set; } = true;
         public bool ConfirmCreateCareerMorph(string name) => ConfirmCreateCareerMorphResult;
         public string? ChooseSaveAsFile(string sourcePath) => SaveAsPath;
@@ -3643,7 +3755,7 @@ public static class UiSmokeTests
         public UnsavedChangesChoice ConfirmUnsavedChangesResult { get; set; } = UnsavedChangesChoice.Cancel;
         public int ConfirmUnsavedChangesCount { get; private set; }
         public string? ChoosePackage(string? initialDirectory = null) => null;
-        public MorphPackageSaveRequest? ChooseMorphPackageDestination(string suggestedFileName, string sourcePackagePath) => null;
+        public MorphPackageSaveRequest? ChooseMorphPackageDestination(string suggestedFileName, string sourcePackagePath) => MorphPackageDestination;
         public MorphConversionSaveRequest? ChooseMorphConversionDestination(MorphFaceGame sourceGame, string suggestedFileName, string sourcePackagePath) => null;
         public string? ChooseCloneName(string suggestedName, IReadOnlyCollection<string> existingObjectNames) => null;
         public string? ChooseMorphImportFile(string? initialDirectory = null)
@@ -4400,6 +4512,8 @@ public static class UiSmokeTests
 
     private static void Le3HmmScalpRandomisationAppliesCorePair()
     {
+        using var sourceFile = new FileStream(Path.GetTempFileName(), FileMode.Open, FileAccess.ReadWrite,
+            FileShare.ReadWrite | FileShare.Delete, 4096, FileOptions.DeleteOnClose);
         var family = MorphRandomisationCatalog.LoadEmbedded()
             .CompatibleMaterialDonors("le3-human-male")
             .Select(value => value.MaterialTextureFamilies.GetValueOrDefault("human-scalp"))
@@ -4424,7 +4538,7 @@ public static class UiSmokeTests
         var candidates = family.Values.Select((path, index) =>
         {
             var occurrence = new TextureCatalogOccurrence(
-                "installed.pcc", 42 + index, 0, TextureCatalogOrigin.BaseGame, 1, 1,
+                sourceFile.Name, 42 + index, 0, TextureCatalogOrigin.BaseGame, 1, 1,
                 "PF_B8G8R8A8", "TEXTUREGROUP_Character", false, null);
             return new TextureCatalogCandidate(MorphFaceGame.LE3, path, occurrence, [occurrence])
             { IsEligibleOfficialDefault = true };
@@ -4449,6 +4563,8 @@ public static class UiSmokeTests
 
     private static void ManualHairScalpPromptKeepsRequiredPairWhenOptionalMapFails()
     {
+        using var sourceFile = new FileStream(Path.GetTempFileName(), FileMode.Open, FileAccess.ReadWrite,
+            FileShare.ReadWrite | FileShare.Delete, 4096, FileOptions.DeleteOnClose);
         var family = MorphRandomisationCatalog.LoadEmbedded()
             .CompatibleMaterialDonors("le3-human-male")
             .Select(value => value.MaterialTextureFamilies.GetValueOrDefault("human-scalp"))
@@ -4473,7 +4589,7 @@ public static class UiSmokeTests
         var candidates = family.Values.Select((path, index) =>
         {
             var occurrence = new TextureCatalogOccurrence(
-                "installed.pcc", 42 + index, 0, TextureCatalogOrigin.BaseGame, 1, 1,
+                sourceFile.Name, 42 + index, 0, TextureCatalogOrigin.BaseGame, 1, 1,
                 "PF_B8G8R8A8", "TEXTUREGROUP_Character", false, null);
             return new TextureCatalogCandidate(MorphFaceGame.LE3, path, occurrence, [occurrence])
             { IsEligibleOfficialDefault = true };
@@ -4900,10 +5016,12 @@ public static class UiSmokeTests
 
     private static void TextureLookupsReuseOfficialDonorIndex()
     {
+        using var sourceFile = new FileStream(Path.GetTempFileName(), FileMode.Open, FileAccess.ReadWrite,
+            FileShare.ReadWrite | FileShare.Delete, 4096, FileOptions.DeleteOnClose);
         var session = MaterialTestFixtures.CreateSession();
         const string path = "BIOG_MFE_Test.Textures.Indexed_Diff";
         var occurrence = new TextureCatalogOccurrence(
-            "BIOG_MFE_Test.pcc", 42, 10, TextureCatalogOrigin.BaseGame, 128, 128,
+            sourceFile.Name, 42, 10, TextureCatalogOrigin.BaseGame, 128, 128,
             "PF_DXT1", "TEXTUREGROUP_Character", false, null);
         var candidate = new TextureCatalogCandidate(MorphFaceGame.LE3, path, occurrence, [occurrence])
         {
@@ -4923,7 +5041,7 @@ public static class UiSmokeTests
 
         for (var index = 0; index < 8; index++)
         {
-            _ = editor.ResolveInstancedPathAsync(path).GetAwaiter().GetResult();
+            _ = editor.ResolveRandomisationPathAsync(path).GetAwaiter().GetResult();
             _ = editor.ResolveExactInstancedPathAsync(path).GetAwaiter().GetResult();
         }
 
@@ -4933,11 +5051,13 @@ public static class UiSmokeTests
 
     private static void LargeTextureRegistryAvailability()
     {
+        using var sourceFile = new FileStream(Path.GetTempFileName(), FileMode.Open, FileAccess.ReadWrite,
+            FileShare.ReadWrite | FileShare.Delete, 4096, FileOptions.DeleteOnClose);
         const int uniquePaths = 1600;
         const int copiesPerPath = 40;
         var registry = Enumerable.Range(0, uniquePaths).Select(index =>
         {
-            var official = new TextureCatalogOccurrence("BIOG_MFE_Performance.pcc", index + 1, 0,
+            var official = new TextureCatalogOccurrence(sourceFile.Name, index + 1, 0,
                 TextureCatalogOrigin.BaseGame, 128, 128, "PF_DXT1", "Character", false, null);
             var copies = Enumerable.Range(0, copiesPerPath - 1).Select(copy => official with
             {
@@ -4959,9 +5079,9 @@ public static class UiSmokeTests
         timer.Restart();
         for (var index = 0; index < 400; index++)
         {
-            TestAssert.True(editor.CanResolveInstancedPath($"BIOG_MFE_Performance.Textures.Texture{index:D4}_Diff"),
+            TestAssert.True(editor.CanResolveRandomisationPath($"BIOG_MFE_Performance.Textures.Texture{index:D4}_Diff"),
                 "An official texture disappeared from randomisation availability.");
-            TestAssert.True(!editor.CanResolveInstancedPath($"BIOG_Missing.Textures.Missing{index:D4}_Diff"),
+            TestAssert.True(!editor.CanResolveRandomisationPath($"BIOG_Missing.Textures.Missing{index:D4}_Diff"),
                 "A missing full texture path became available.");
         }
         timer.Stop();
@@ -4973,9 +5093,9 @@ public static class UiSmokeTests
         timer.Restart();
         for (var index = 0; index < 400; index++)
         {
-            TestAssert.True(editor.CanResolveInstancedPath($"BIOG_MFE_Performance.Textures.Texture{index:D4}_Diff"),
+            TestAssert.True(editor.CanResolveRandomisationPath($"BIOG_MFE_Performance.Textures.Texture{index:D4}_Diff"),
                 "Expanding physical sources lost an official texture.");
-            TestAssert.True(!editor.CanResolveInstancedPath($"BIOG_Missing.Textures.Missing{index:D4}_Diff"),
+            TestAssert.True(!editor.CanResolveRandomisationPath($"BIOG_Missing.Textures.Missing{index:D4}_Diff"),
                 "Expanding physical sources admitted a missing texture.");
         }
         timer.Stop();
@@ -5013,7 +5133,7 @@ public static class UiSmokeTests
             families += catalog.ProjectInstalledMaterialDonors(profile, (_, path) =>
                 {
                     queries++;
-                    return editor.CanResolveInstancedPath(path);
+                    return editor.CanResolveRandomisationPath(path);
                 }).Sum(donor => donor.MaterialTextureFamilies.Count);
         timer.Stop();
         Console.WriteLine($"Installed LE3: {candidates.Length:N0} paths / " +

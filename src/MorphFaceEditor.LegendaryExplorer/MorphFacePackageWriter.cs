@@ -1,10 +1,8 @@
-using System.Numerics;
 using LegendaryExplorerCore.Packages;
 using LegendaryExplorerCore.Packages.CloningImportingAndRelinking;
 using LegendaryExplorerCore.Unreal;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
-using BinaryMorphFace = LegendaryExplorerCore.Unreal.BinaryConverters.BioMorphFace;
 using static MorphFaceEditor.LegendaryExplorer.MorphFacePackageCodec;
 
 namespace MorphFaceEditor.LegendaryExplorer;
@@ -26,8 +24,6 @@ public sealed record MorphFaceSaveResult(
 /// </summary>
 public sealed class MorphFacePackageWriter
 {
-    private const float FloatTolerance = 0.000001f;
-
     public MorphFaceSaveResult SaveMorphToPackage(
         MorphFaceDocument draft,
         string logicalSourcePackagePath,
@@ -75,6 +71,7 @@ public sealed class MorphFacePackageWriter
             {
                 EnsureSupportedGame(sourcePackage);
                 var sourceFace = FindExport(sourcePackage, draft.Source.InstancedPath, "BioMorphFace");
+                VerifyUnchangedNonFiniteValues(draft, sourceFace);
                 draft = FilterSupportedAttachments(draft, sourcePackage.Game, warnings);
                 if (draft.ScalpMaterialSelection is not null)
                 {
@@ -231,7 +228,10 @@ public sealed class MorphFacePackageWriter
         ValidateDraft(draft, packagePath);
         IReadOnlySet<string> integrityBaseline;
         using (var original = MEPackageHandler.OpenMEPackage(packagePath, forceLoadFromDisk: true))
+        {
             integrityBaseline = PackageIntegrity.CaptureIssues(original);
+            VerifyUnchangedNonFiniteValues(draft, FindExport(original, draft.Source.InstancedPath, "BioMorphFace"));
+        }
         var temporaryPath = Path.Combine(
             Path.GetDirectoryName(packagePath)!,
             $".{Path.GetFileName(packagePath)}.{Guid.NewGuid():N}.tmp");
@@ -358,12 +358,8 @@ public sealed class MorphFacePackageWriter
         var face = FindExport(package, facePath, "BioMorphFace");
         if (requireMinimal) PccPackageWorkflow.VerifyNoUnreachableEntries(face);
         var properties = face.GetProperties();
-        var binary = face.GetBinaryData<BinaryMorphFace>();
-        IReadOnlyCollection<StructProperty> features = properties.GetProp<ArrayProperty<StructProperty>>("m_aMorphFeatures")?.ToArray() ?? [];
-        IReadOnlyCollection<StructProperty> bones = properties.GetProp<ArrayProperty<StructProperty>>("m_aFinalSkeleton")?.ToArray() ?? [];
-        VerifyFeatures(features, expected.MorphFeatures);
-        VerifyBones(bones, expected.FinalSkeleton);
-        VerifyLods(binary.LODs ?? [], expected.BakedLods);
+        VerifyMorphData(ReadMorphData(face, properties), new MorphFaceMorphData(
+            expected.MorphFeatures, expected.FinalSkeleton, expected.BakedLods));
 
         var baseHead = properties.GetProp<ObjectProperty>("m_oBaseHead")?.ResolveToEntry(package);
         VerifyReference(baseHead, expected.BaseHeadReference, "base head");
@@ -371,7 +367,10 @@ public sealed class MorphFacePackageWriter
         VerifyHairReference(package, properties, expected);
 
         var materialOverride = ResolveMaterialOverride(face);
-        VerifyMaterialOverrides(package, materialOverride, expected.MaterialOverrides);
+        var materialProperties = materialOverride.GetProperties();
+        VerifyWrittenValueFields(properties, materialProperties);
+        VerifyMaterialData(ReadMaterialData(materialOverride, materialProperties), new MorphFaceMaterialData(
+            expected.MaterialOverrides.Scalars, expected.MaterialOverrides.Vectors, expected.MaterialOverrides.Textures));
     }
 
     private static void VerifyScalpMaterialSelection(
@@ -404,43 +403,6 @@ public sealed class MorphFacePackageWriter
         var donor = resolver.Resolve(donorEntry)
             ?? throw new InvalidDataException($"The saved CC scalp donor '{expectedPath}' cannot be reopened.");
         ScalpMaterialGraphMaterializer.EnsureCanonicalCcScalpGraph(donor, cache);
-    }
-
-    private static void VerifyMaterialOverrides(
-        IMEPackage package,
-        ExportEntry export,
-        MorphFaceMaterialOverrides expected)
-    {
-        var properties = export.GetProperties();
-        IReadOnlyCollection<StructProperty> scalars = properties.GetProp<ArrayProperty<StructProperty>>("m_aScalarOverrides")?.ToArray() ?? [];
-        IReadOnlyCollection<StructProperty> vectors = properties.GetProp<ArrayProperty<StructProperty>>("m_aColorOverrides")?.ToArray() ?? [];
-        IReadOnlyCollection<StructProperty> textures = properties.GetProp<ArrayProperty<StructProperty>>("m_aTextureOverrides")?.ToArray() ?? [];
-        if (scalars.Count != expected.Scalars.Count || vectors.Count != expected.Vectors.Count || textures.Count != expected.Textures.Count)
-        {
-            throw new InvalidDataException("Material override counts changed during package round-trip verification.");
-        }
-
-        foreach (var value in expected.Scalars)
-        {
-            var actual = scalars.Single(item => Name(item, "nName") == value.Name)
-                .GetProp<FloatProperty>("sValue")?.Value ?? float.NaN;
-            EnsureClose(actual, value.Value, $"scalar {value.Name}");
-        }
-        foreach (var value in expected.Vectors)
-        {
-            var actual = ReadLinearColor(vectors.Single(item => Name(item, "nName") == value.Name)
-                .GetProp<StructProperty>("cValue"));
-            EnsureClose(actual.X, value.Value.X, $"colour {value.Name}.R");
-            EnsureClose(actual.Y, value.Value.Y, $"colour {value.Name}.G");
-            EnsureClose(actual.Z, value.Value.Z, $"colour {value.Name}.B");
-            EnsureClose(actual.W, value.Value.W, $"colour {value.Name}.A");
-        }
-        foreach (var value in expected.Textures)
-        {
-            var actual = textures.Single(item => Name(item, "nName") == value.Name)
-                .GetProp<ObjectProperty>("m_pTexture")?.ResolveToEntry(package);
-            VerifyReference(actual, value.TextureReference, $"texture {value.Name}");
-        }
     }
 
     private static IReadOnlyList<ExportEntry> ResolveExplicitTextureDonors(
@@ -543,64 +505,6 @@ public sealed class MorphFacePackageWriter
                 otherMeshes[index].ResolveToEntry(package),
                 expectedOthers[index],
                 $"m_oOtherMeshes[{index}]");
-        }
-    }
-
-    private static void VerifyFeatures(
-        IReadOnlyCollection<StructProperty> actual,
-        IReadOnlyList<MorphFeatureValue> expected)
-    {
-        if (actual.Count != expected.Count)
-        {
-            throw new InvalidDataException("Morph feature count changed during package round-trip verification.");
-        }
-        foreach (var value in expected)
-        {
-            var stored = actual.Single(item => Name(item, "sFeatureName") == value.Name)
-                .GetProp<FloatProperty>("Offset")?.Value ?? float.NaN;
-            EnsureClose(stored, value.Offset, $"feature {value.Name}");
-        }
-    }
-
-    private static void VerifyBones(
-        IReadOnlyCollection<StructProperty> actual,
-        IReadOnlyList<BoneTranslation> expected)
-    {
-        if (actual.Count != expected.Count)
-        {
-            throw new InvalidDataException("Final skeleton count changed during package round-trip verification.");
-        }
-        foreach (var value in expected)
-        {
-            var stored = ReadVector(actual.Single(item => Name(item, "nName") == value.BoneName)
-                .GetProp<StructProperty>("vPos"));
-            EnsureClose(stored.X, value.Translation.X, $"bone {value.BoneName}.X");
-            EnsureClose(stored.Y, value.Translation.Y, $"bone {value.BoneName}.Y");
-            EnsureClose(stored.Z, value.Translation.Z, $"bone {value.BoneName}.Z");
-        }
-    }
-
-    private static void VerifyLods(Vector3[][] actual, IReadOnlyList<Vector3[]> expected)
-    {
-        if (actual.Length != expected.Count)
-        {
-            throw new InvalidDataException("Baked LOD count changed during package round-trip verification.");
-        }
-        for (var lod = 0; lod < actual.Length; lod++)
-        {
-            if (actual[lod].Length != expected[lod].Length)
-            {
-                throw new InvalidDataException($"Baked LOD {lod} vertex count changed during package round-trip verification.");
-            }
-            for (var vertex = 0; vertex < actual[lod].Length; vertex++)
-            {
-                var left = actual[lod][vertex];
-                var right = expected[lod][vertex];
-                if (Vector3.Distance(left, right) > FloatTolerance)
-                {
-                    throw new InvalidDataException($"Baked LOD {lod} vertex {vertex} changed during package round-trip verification.");
-                }
-            }
         }
     }
 
@@ -723,12 +627,12 @@ public sealed class MorphFacePackageWriter
         {
             throw new InvalidDataException("At least one non-empty baked LOD is required.");
         }
-        if (draft.MorphFeatures.Any(value => string.IsNullOrWhiteSpace(value.Name) || !float.IsFinite(value.Offset)) ||
+        if (draft.MorphFeatures.Any(value => string.IsNullOrWhiteSpace(value.Name)) ||
             draft.MorphFeatures.Select(value => value.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() != draft.MorphFeatures.Count)
         {
             throw new InvalidDataException("Morph features must have unique names and finite values.");
         }
-        if (draft.FinalSkeleton.Any(value => string.IsNullOrWhiteSpace(value.BoneName) || !IsFinite(value.Translation)) ||
+        if (draft.FinalSkeleton.Any(value => string.IsNullOrWhiteSpace(value.BoneName)) ||
             draft.FinalSkeleton.Select(value => value.BoneName).Distinct(StringComparer.OrdinalIgnoreCase).Count() != draft.FinalSkeleton.Count)
         {
             throw new InvalidDataException("Final skeleton bones must have unique names and finite translations.");
@@ -773,15 +677,4 @@ public sealed class MorphFacePackageWriter
             throw new InvalidDataException($"The {label} reference changed during package round-trip verification.");
         }
     }
-
-    private static void EnsureClose(float actual, float expected, string label)
-    {
-        if (!float.IsFinite(actual) || Math.Abs(actual - expected) > FloatTolerance)
-        {
-            throw new InvalidDataException($"{label} changed during package round-trip verification.");
-        }
-    }
-
-    private static bool IsFinite(Vector3 value) =>
-        float.IsFinite(value.X) && float.IsFinite(value.Y) && float.IsFinite(value.Z);
 }

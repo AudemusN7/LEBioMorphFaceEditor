@@ -372,12 +372,6 @@ internal static class ConversionStressRunner
         {
             throw new InvalidDataException("Converted package contains UnknownProperty data.");
         }
-        var mixed = package.Exports.FirstOrDefault(export => export.Parent is ImportEntry);
-        if (mixed is not null)
-        {
-            throw new InvalidDataException(
-                $"Export '{mixed.InstancedFullPath}' is beneath import '{mixed.Parent?.InstancedFullPath}'.");
-        }
         if (package.Exports.Cast<IEntry>().Concat(package.Imports).Any(entry =>
                 entry.InstancedFullPath.Contains("MFE_EmbeddedTextures", StringComparison.OrdinalIgnoreCase)))
         {

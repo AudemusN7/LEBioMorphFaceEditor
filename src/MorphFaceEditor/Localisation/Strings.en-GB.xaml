@@ -2626,4 +2626,6 @@ Choose No to keep the current scalp textures and material.</system:String>
 <system:String x:Key="loc_RonFiles_Imported" xml:space="preserve">Imported {0} into the current face.</system:String>
     <!--localiser: {"Key":"loc_FileSave_MorphFeaturesOnly","ReviewedHash":"4301FA7477000FDDCFCF4168BA6F9D83BC837A60FDAAEFD64440950BD25C26AD","DoNotTranslate":false,"Note":"","SourceHash":null}-->
 <system:String x:Key="loc_FileSave_MorphFeaturesOnly" xml:space="preserve">Morph features were saved. Other head changes remain unsaved. Right-click the face and export the full head or a PCC to include them.</system:String>
+    <system:String x:Key="loc_PccSave_VerificationMismatch" xml:space="preserve">The saved PCC did not retain the requested data. Nothing was replaced.</system:String>
+    <system:String x:Key="loc_PccSave_NewNonFiniteValue" xml:space="preserve">Cannot save a new or changed NaN/Infinity value in {0}. Existing invalid values can only be carried over unchanged.</system:String>
 </ResourceDictionary>

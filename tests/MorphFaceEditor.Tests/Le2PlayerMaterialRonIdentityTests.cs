@@ -46,10 +46,10 @@ public static class Le2PlayerMaterialRonIdentityTests
         var localPath = Path.Combine(Path.GetTempPath(), "LE2-SFXGame.pcc");
         var occurrence = new TextureCatalogOccurrence(DonorPackage, 8, 100, TextureCatalogOrigin.BaseGame,
             1024, 1024, "PF_DXT1", "TEXTUREGROUP_Character", false, null);
-        var emissive = new TextureCatalogCandidate(TextureCatalogGame.LE2,
+        var emissive = new TextureCatalogCandidate(MorphFaceGame.LE2,
             "Emissive.Face_EmisScars_03", occurrence, [occurrence]) { IsEligibleOfficialDefault = true };
         var normalOccurrence = occurrence with { ExportUIndex = 18 };
-        var normal = new TextureCatalogCandidate(TextureCatalogGame.LE2,
+        var normal = new TextureCatalogCandidate(MorphFaceGame.LE2,
             "Scar.Face_NormScars_03", normalOccurrence, [normalOccurrence]) { IsEligibleOfficialDefault = true };
         var loader = new DonorLoader();
         using var editor = CreateEditor(loader, [], [emissive, normal]);

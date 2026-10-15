@@ -1,7 +1,6 @@
 using MorphFaceEditor.Core.Domain;
-using MorphFaceEditor.LegendaryExplorer;
 
-namespace MorphFaceEditor.Services;
+namespace MorphFaceEditor.Core.Services;
 
 public sealed class MorphTargetCatalog
 {
@@ -9,14 +8,12 @@ public sealed class MorphTargetCatalog
     private readonly Dictionary<string, IReadOnlyList<MorphTargetAsset>> _targets =
         new(StringComparer.OrdinalIgnoreCase);
 
-    public IReadOnlyList<MorphTargetAsset> Load(
-        MorphFaceProfile profile,
-        MorphFaceGame game)
+    public IReadOnlyList<MorphTargetAsset> Load(MorphFaceProfile profile)
     {
         ArgumentNullException.ThrowIfNull(profile);
         lock (_sync)
         {
-            var bundleKey = $"{game}.{profile.TargetSetName}";
+            var bundleKey = $"{profile.Game}.{profile.TargetSetName}";
             if (_targets.TryGetValue(bundleKey, out var cached))
             {
                 return cached;
@@ -30,7 +27,7 @@ public sealed class MorphTargetCatalog
 
     private static IReadOnlyList<MorphTargetAsset> LoadBundle(string bundleKey)
     {
-        var resourceName = $"MorphFaceEditor.Assets.MorphTargets.{bundleKey}.mft.br";
+        var resourceName = $"MorphFaceEditor.Core.Assets.MorphTargets.{bundleKey}.mft.br";
         using var stream = typeof(MorphTargetCatalog).Assembly.GetManifestResourceStream(resourceName)!;
         return MorphTargetBundleSerializer.Read(stream, bundleKey);
     }

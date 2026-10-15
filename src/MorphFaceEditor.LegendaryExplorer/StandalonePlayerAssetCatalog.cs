@@ -209,21 +209,12 @@ public sealed record StandalonePlayerAssetCatalog(
             : null;
     }
 
-    private static bool CandidateMatchesGame(TextureCatalogCandidate candidate, MorphFaceGame game) =>
-        (candidate.Game, game) switch
-        {
-            (TextureCatalogGame.LE1, MorphFaceGame.LE1) => true,
-            (TextureCatalogGame.LE2, MorphFaceGame.LE2) => true,
-            (TextureCatalogGame.LE3, MorphFaceGame.LE3) => true,
-            _ => false
-        };
-
     internal static bool MatchesRequestedTexturePath(
         TextureCatalogCandidate candidate,
         MorphFaceGame game,
         string requestedPath)
     {
-        if (!CandidateMatchesGame(candidate, game))
+        if (candidate.Game != game)
         {
             return false;
         }

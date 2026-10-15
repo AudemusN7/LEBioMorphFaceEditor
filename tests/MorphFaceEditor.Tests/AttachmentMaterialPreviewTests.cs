@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Domain;
 using System.Numerics;
 using LegendaryExplorerCore.Packages;
 using LegendaryExplorerCore.Shaders;
@@ -13,7 +14,7 @@ internal static class AttachmentMaterialPreviewTests
 {
     internal static IReadOnlyList<TestCase> All { get; } =
     [
-        new("hat preview roots respect game and canonical path", CanonicalRoots),
+        new("attachment preview roots respect game and exact master name", CanonicalRoots),
         new("hat preview retains MIC values without exposing controls or face overrides", ReaderPreservesAttachmentValues)
     ];
 
@@ -28,7 +29,7 @@ internal static class AttachmentMaterialPreviewTests
         (MEGame.LE2, "BIOG_HMM_HIR_PRO_R.Cap.HMM_HAT_Cap_Decal_MASTER_MAT", HumanMaterialPreviewModel.CapDecal),
         (MEGame.LE3, "BIOG_HMM_HIR_PRO_R.Hat_Cap.HMM_HAT_Cap_Decal_MASTER_MAT", HumanMaterialPreviewModel.CapDecal),
         (MEGame.LE2, "BIOG_HMM_HIR_PRO_R.Cap.HMM_HAT_Cap_MAT_2a", HumanMaterialPreviewModel.CapLe2),
-        (MEGame.LE3, "BIOG_HMM_ARM_AND_R.Master.Andersonb_MASTER_MAT_USER", HumanMaterialPreviewModel.AndersonHat),
+        (MEGame.LE3, "BIOG_HMM_ARM_AND_R.Master.Andersonb_MASTER_MAT", HumanMaterialPreviewModel.AndersonHat),
         (MEGame.LE3, "BIOG_HMM_HIR_PRO_R.Hat_Moto.HMM_HAT_Mtr_MASTER", HumanMaterialPreviewModel.MotoHat)
     ];
 
@@ -36,24 +37,20 @@ internal static class AttachmentMaterialPreviewTests
     {
         foreach (var root in Roots)
         {
-            TestAssert.True(AttachmentMaterialPreviewPolicy.TryGetModel(root.Game.ToString(), root.Path, out var model), "Missing canonical preview root.");
-            TestAssert.Equal(root.Model, model);
-            TestAssert.True(!AttachmentMaterialPreviewPolicy.TryGetModel(root.Game.ToString(), "Modded." + root.Path, out _),
-                "A matching leaf name in a different material graph selected a native hat shader.");
+            var game = Enum.Parse<MorphFaceGame>(root.Game.ToString());
+            var masterName = root.Path.Split('.').Last();
+            TestAssert.Equal(root.Model, HeadMaterialCatalog.Find(game, masterName)!.PreviewModel);
+            TestAssert.True(HeadMaterialCatalog.Find(game, masterName + "_Copy") is null,
+                "A similar material name selected an attachment shader.");
         }
-        TestAssert.True(!AttachmentMaterialPreviewPolicy.TryGetModel("LE3", Roots[3].Path, out _), "Unused LE3 visor was enabled.");
-        TestAssert.True(!AttachmentMaterialPreviewPolicy.TryGetModel("LE3", Roots[5].Path, out _), "LE3 used the LE1/2 cap path.");
-        TestAssert.True(!AttachmentMaterialPreviewPolicy.TryGetModel("LE1", Roots[8].Path, out _), "LE2-only cap was enabled in LE1.");
-        foreach (var game in new[] { "LE1", "LE2" })
-        {
-            TestAssert.True(AttachmentMaterialPreviewPolicy.TryGetModel(game,
-                "BIOG_HMM_HIR_PRO_R.Visor.HMM_HAT_VSR_MAT_Visor", out var lens), "Missing male visor lens root.");
-            TestAssert.Equal(HumanMaterialPreviewModel.VisorLens, lens);
-        }
-        TestAssert.True(!AttachmentMaterialPreviewPolicy.TryGetModel("LE3",
-            "BIOG_HMM_HIR_PRO_R.Visor.HMM_HAT_VSR_MAT_Visor", out _), "Unreviewed LE3 lens graph was enabled.");
+        TestAssert.True(HeadMaterialCatalog.Find(MorphFaceGame.LE3, "HMF_VSR_MASTER_MAT") is null, "Unused LE3 visor was enabled.");
+        TestAssert.True(HeadMaterialCatalog.Find(MorphFaceGame.LE1, "HMM_HAT_Cap_MAT_2a") is null, "LE2-only cap was enabled in LE1.");
+        foreach (var game in new[] { MorphFaceGame.LE1, MorphFaceGame.LE2 })
+            TestAssert.Equal(HumanMaterialPreviewModel.VisorLens,
+                HeadMaterialCatalog.Find(game, "HMM_HAT_VSR_MAT_Visor")!.PreviewModel);
+        TestAssert.True(HeadMaterialCatalog.Find(MorphFaceGame.LE3, "HMM_HAT_VSR_MAT_Visor") is null,
+            "An unreviewed LE3 lens graph was enabled.");
     }
-
     private static void ReaderPreservesAttachmentValues()
     {
         LegendaryExplorerCoreRuntime.Initialize();
@@ -62,7 +59,7 @@ internal static class AttachmentMaterialPreviewTests
             using var source = MEPackageHandler.CreateMemoryEmptyPackage(
                 Path.Combine(Path.GetTempPath(), "MFE-HatPreview-" + Guid.NewGuid().ToString("N") + ".pcc"), root.Game);
             var split = root.Path.LastIndexOf('.');
-            var group = source.CreatePackageExport(root.Path[..split]);
+            var group = source.CreatePackageExport("Relocated.ByAMod." + root.Path[..split]);
             var isEffectsUser = root.Model == HumanMaterialPreviewModel.AndersonHat;
             var master = source.CreateExport(isEffectsUser ? "Andersonb_MASTER_MAT" : root.Path[(split + 1)..],
                 "Material", group, indexed: false);
@@ -95,7 +92,7 @@ internal static class AttachmentMaterialPreviewTests
             var parent = master;
             if (isEffectsUser)
             {
-                parent = source.CreateExport(root.Path[(split + 1)..], "RvrEffectsMaterialUser", group, indexed: false);
+                parent = source.CreateExport("Renamed_Effects_User", "RvrEffectsMaterialUser", group, indexed: false);
                 parent.WriteProperty(new ObjectProperty(master, "m_pBaseMaterial"));
             }
             var mic = source.CreateExport("Custom_MIC", "MaterialInstanceConstant", group, indexed: false);

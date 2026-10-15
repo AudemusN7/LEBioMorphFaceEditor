@@ -476,13 +476,12 @@ public static class EditingTests
             "A recognized position-corrected base variant was offered destructive repair.");
 
         var lowerPositions = mesh.Positions.Select(position => position + Vector3.One).ToArray();
-        var nonRenderableLowerLod = mesh with { LodPositions = [mesh.Positions, lowerPositions] };
         var unevaluable = new MorphFaceEditingSession(
             CreateDocument([], [
                 [Vector3.Zero, new Vector3(2, 2, 3), new Vector3(-1, -2, -3)],
                 lowerPositions
             ]),
-            nonRenderableLowerLod,
+            mesh,
             []);
         TestAssert.True(!unevaluable.CanFixMorph,
             "An unevaluable stored lower LOD was offered destructive repair.");
@@ -561,11 +560,14 @@ public static class EditingTests
         var destinationMesh = sourceMesh with
         {
             Source = TestFixtures.CreateIdentity("DestinationBase", "SkeletalMesh"),
-            Positions = destinationBase,
-            Topology = sourceMesh.Topology with
+            Lods = [sourceMesh.Lods[0] with
             {
-                ReferenceSkeleton = [new ReferenceBone("root", 0, new Vector3(5, 0, 0), Quaternion.Identity)]
-            }
+                Positions = destinationBase,
+                Topology = sourceMesh.Topology with
+                {
+                    ReferenceSkeleton = [new ReferenceBone("root", 0, new Vector3(5, 0, 0), Quaternion.Identity)]
+                }
+            }]
         };
         var destinationCommon = new MorphTargetAsset(
             TestFixtures.CreateIdentity("Set.Common", "MorphTarget"),

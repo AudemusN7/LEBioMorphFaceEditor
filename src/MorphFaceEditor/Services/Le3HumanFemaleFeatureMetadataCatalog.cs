@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.Core.Deformation;
 using MorphFaceEditor.LegendaryExplorer;
@@ -16,9 +17,7 @@ public sealed class Le3HumanFemaleFeatureMetadataCatalog : HumanFemaleFeatureMet
     public override MorphFeatureMetadata Describe(ResolvedMorphFeature feature, bool sessionCanEdit)
     {
         var metadata = base.Describe(feature, sessionCanEdit);
-        if (feature.Feature.Name.StartsWith("HAIR_", StringComparison.OrdinalIgnoreCase) &&
-            feature.Target?.Lods.Any(lod => lod.LodIndex == 0 && lod.Vertices.Count == 0) == true &&
-            feature.Target.Lods.Any(lod => lod.LodIndex > 0 && lod.Vertices.Count > 0))
+        if (MorphFaceProfileFeatures.IsUnsupportedLe3FemaleHair(feature.Feature.Name, feature.Target))
         {
             metadata = metadata with
             {

@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.Models;
 using MorphFaceEditor.Services;
@@ -174,10 +175,10 @@ public sealed partial class MainWindowViewModel
             return;
         }
         var sourceGame = source.ProfileKey.StartsWith("le3-", StringComparison.OrdinalIgnoreCase)
-            ? MorphFaceEditor.LegendaryExplorer.MorphFaceGame.LE3
+            ? MorphFaceGame.LE3
             : source.ProfileKey.StartsWith("le2-", StringComparison.OrdinalIgnoreCase)
-                ? MorphFaceEditor.LegendaryExplorer.MorphFaceGame.LE2
-                : MorphFaceEditor.LegendaryExplorer.MorphFaceGame.LE1;
+                ? MorphFaceGame.LE2
+                : MorphFaceGame.LE1;
         var request = _dialogs.ChooseMorphConversionDestination(
             sourceGame,
             $"{source.ObjectName}_Converted.pcc",

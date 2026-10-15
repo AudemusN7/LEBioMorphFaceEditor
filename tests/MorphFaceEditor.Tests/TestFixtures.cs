@@ -31,9 +31,9 @@ public static class TestFixtures
             new string('A', 64));
         return new SkeletalMeshAsset(
             CreateIdentity("BaseHead", "SkeletalMesh"),
-            [Vector3.Zero, new Vector3(1, 2, 3), new Vector3(-1, -2, -3)],
-            [Vector3.UnitZ, Vector3.UnitZ, Vector3.UnitZ],
-            topology);
+            [new SkeletalMeshLod(0,
+                [Vector3.Zero, new Vector3(1, 2, 3), new Vector3(-1, -2, -3)],
+                [Vector3.UnitZ, Vector3.UnitZ, Vector3.UnitZ], topology)]);
     }
 
     public static MorphTargetAsset CreateTarget(params MorphVertexDelta[] deltas) =>
@@ -74,11 +74,6 @@ public static class TestFixtures
         };
         return new SkeletalMeshAsset(
             CreateIdentity("BaseHead", "SkeletalMesh"),
-            lods[0].Positions,
-            lods[0].Normals,
-            lods[0].Topology,
-            lods[0].RenderData,
-            lods.Select(lod => lod.Positions).ToArray(),
             lods);
     }
 

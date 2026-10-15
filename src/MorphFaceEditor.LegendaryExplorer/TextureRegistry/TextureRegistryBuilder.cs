@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Domain;
 using LegendaryExplorerCore.GameFilesystem;
 using LegendaryExplorerCore.Packages;
 using MorphFaceEditor.Core.Materials;
@@ -124,7 +125,6 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
                 Path.GetFileName(packagePath), occurrencesByPath.Count));
         }
 
-        var catalogGame = ToCatalogGame(game);
         var candidates = occurrencesByPath
             .Select(pair =>
             {
@@ -138,7 +138,7 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
                     .OrderByDescending(value => value.MountPriority)
                     .ThenBy(value => value.PackagePath, StringComparer.OrdinalIgnoreCase)
                     .FirstOrDefault();
-                return new TextureCatalogCandidate(catalogGame, pair.Key,
+                return new TextureCatalogCandidate(game, pair.Key,
                     officialWinnerOccurrence ?? occurrences[0], occurrences)
                 {
                     IsEligibleOfficialDefault = officialWinnerOccurrence is not null
@@ -148,7 +148,7 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
             .ToArray();
         var snapshot = new TextureRegistrySnapshot(
             TextureRegistrySnapshot.CurrentSchemaVersion,
-            catalogGame,
+            game,
             DateTimeOffset.UtcNow,
             files.Count,
             candidates)
@@ -271,9 +271,9 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
             .ToArray();
         var game = source.Game switch
         {
-            TextureCatalogGame.LE1 => MEGame.LE1,
-            TextureCatalogGame.LE2 => MEGame.LE2,
-            TextureCatalogGame.LE3 => MEGame.LE3,
+            MorphFaceGame.LE1 => MEGame.LE1,
+            MorphFaceGame.LE2 => MEGame.LE2,
+            MorphFaceGame.LE3 => MEGame.LE3,
             _ => throw new ArgumentOutOfRangeException(nameof(source))
         };
         var packagePaths = source.MountedPackagePaths.Where(path => includeModOnly
@@ -384,12 +384,4 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
         _ => 2
     };
 
-    private static TextureCatalogGame ToCatalogGame(MorphFaceGame game) => game switch
-    {
-        MorphFaceGame.LE1 => TextureCatalogGame.LE1,
-        MorphFaceGame.LE2 => TextureCatalogGame.LE2,
-        MorphFaceGame.LE3 => TextureCatalogGame.LE3,
-        _ => throw new ArgumentOutOfRangeException(nameof(game), game,
-            "Texture registries are available only for Legendary Edition games.")
-    };
 }

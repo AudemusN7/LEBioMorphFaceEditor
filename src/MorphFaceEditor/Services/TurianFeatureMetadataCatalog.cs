@@ -25,13 +25,7 @@ public sealed partial class TurianFeatureMetadataCatalog : IHeadEditorUiProfile
     private const string Complexion = "complexion";
     private const string Tattoos = "tattoos";
 
-    public static IReadOnlySet<string> MetadataOnlyFeatures { get; } =
-        new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "eyes_Large" };
-
-    public static IReadOnlyDictionary<string, string> FeatureAliases { get; } =
-        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-    private static readonly IReadOnlyDictionary<string, int> FeatureSortOrders =
+private static readonly IReadOnlyDictionary<string, int> FeatureSortOrders =
         new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
         {
             // Every one of the 37 authored TUR targets owns an explicit UI
@@ -75,12 +69,7 @@ public sealed partial class TurianFeatureMetadataCatalog : IHeadEditorUiProfile
             ["mouth_Wide"] = 85
         };
 
-    public static IReadOnlySet<string> AllFeatureNames { get; } =
-        FeatureSortOrders.Keys
-            .Concat(MetadataOnlyFeatures)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-    public IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
+public IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
     [
         new(FacialStructure, Loc.Text("loc_Services_Taxonomy_facial_structure_812284cf"), Loc.Text("loc_Services_Taxonomy_turian_mandible_and_head_spike_proportions_81516cfd"),
             [new(HeadSpikes, Loc.Text("loc_Services_Taxonomy_head_spikes_3b88885a")), new(Mandibles, Loc.Text("loc_Services_Taxonomy_mandibles_bdadb10a"))]),
@@ -102,7 +91,7 @@ public sealed partial class TurianFeatureMetadataCatalog : IHeadEditorUiProfile
             FeatureLabel(feature.Feature.Name),
             category,
             subcategory,
-            !MetadataOnlyFeatures.Contains(feature.Feature.Name),
+            MorphFaceProfileFeatures.IsControlEligible(MorphFaceMetadataCatalogRegistry.Turian, Core.Domain.MorphFaceGame.LE1, feature.Feature.Name, feature.Target),
             FeatureSortOrder(feature.Feature.Name),
             0,
             1,
@@ -206,7 +195,7 @@ public sealed partial class TurianFeatureMetadataCatalog : IHeadEditorUiProfile
     private static int FeatureSortOrder(string name)
     {
         if (FeatureSortOrders.TryGetValue(name, out var order)) return order;
-        if (MetadataOnlyFeatures.Contains(name)) return int.MaxValue;
+        if (MorphFaceProfileFeatures.TurianMetadataOnlyFeatures.Contains(name)) return int.MaxValue;
         throw new InvalidOperationException(
             $"Turian feature '{name}' has no explicit semantic UI position.");
     }

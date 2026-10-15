@@ -67,7 +67,7 @@ internal static partial class QaCases
             throw new QaPrerequisiteException("The LE3 asset database must be Ready to resolve the ShortAfro mesh and textures.");
         var sex = female ? PlayerHairSex.Female : PlayerHairSex.Male;
         var styleId = female ? "hmf-short-afro" : "hmm-short-afro";
-        var style = PlayerHairStyleCatalog.Resolve(TextureCatalogGame.LE3, sex,
+        var style = PlayerHairStyleCatalog.Resolve(MorphFaceGame.LE3, sex,
                 registry.Candidates, registry.AttachmentMeshes, preferNativeNpcMeshVariants: true)
             .SingleOrDefault(value => value.Id == styleId)
             ?? throw new QaPrerequisiteException($"LE3 {styleId} is not available in the official asset catalogue.");
@@ -449,8 +449,8 @@ internal static partial class QaCases
 
     private static void VerifyHeadGeometry(SkeletalMeshAsset original, SkeletalMeshAsset reopened)
     {
-        var sourceLods = original.AvailableLods.OrderBy(lod => lod.LodIndex).ToArray();
-        var savedLods = reopened.AvailableLods.OrderBy(lod => lod.LodIndex).ToArray();
+        var sourceLods = original.Lods.OrderBy(lod => lod.LodIndex).ToArray();
+        var savedLods = reopened.Lods.OrderBy(lod => lod.LodIndex).ToArray();
         QaContext.Require(sourceLods.Length == savedLods.Length, "The saved head changed its LOD count.");
         for (var index = 0; index < sourceLods.Length; index++)
         {
@@ -459,11 +459,11 @@ internal static partial class QaCases
             QaContext.Require(source.Positions.SequenceEqual(saved.Positions) &&
                               source.Normals.SequenceEqual(saved.Normals),
                 $"Saved head LOD {source.LodIndex} changed authored vertices or normals.");
-            QaContext.Require(source.RenderData.Indices.SequenceEqual(saved.RenderData.Indices) &&
-                              source.RenderData.Tangents.SequenceEqual(saved.RenderData.Tangents) &&
-                              source.RenderData.TextureCoordinates.SequenceEqual(saved.RenderData.TextureCoordinates) &&
-                              source.RenderData.BoneIndices.SequenceEqual(saved.RenderData.BoneIndices) &&
-                              source.RenderData.BoneWeights.SequenceEqual(saved.RenderData.BoneWeights),
+            QaContext.Require(source.RenderData!.Indices.SequenceEqual(saved.RenderData!.Indices) &&
+                              source.RenderData!.Tangents.SequenceEqual(saved.RenderData!.Tangents) &&
+                              source.RenderData!.TextureCoordinates.SequenceEqual(saved.RenderData!.TextureCoordinates) &&
+                              source.RenderData!.BoneIndices.SequenceEqual(saved.RenderData!.BoneIndices) &&
+                              source.RenderData!.BoneWeights.SequenceEqual(saved.RenderData!.BoneWeights),
                 $"Saved head LOD {source.LodIndex} changed render buffers.");
             QaContext.Require(source.Topology.Sections.SequenceEqual(saved.Topology.Sections) &&
                               source.Topology.Chunks.Count == saved.Topology.Chunks.Count &&

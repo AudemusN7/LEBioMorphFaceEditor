@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Domain;
 namespace MorphFaceEditor.LegendaryExplorer.TextureRegistry;
 
 /// <summary>Owns deterministic per-game paths for MFE's compact registries.</summary>

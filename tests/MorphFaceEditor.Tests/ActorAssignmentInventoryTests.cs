@@ -178,7 +178,7 @@ public static class ActorAssignmentInventoryTests
         {
             var selected = package.CreateExport("SelectedFace", "BioMorphFace", indexed: false);
             var incompatibleHead = CreateHeadComponent(package, "HMF_HED_PROBase_MDL", "HeadMesh0");
-            var hmmMic = CreateMic(package, "HMM_HED_PRO_Face_Mat", "HMM_HED_PRO_Face_Master");
+            var hmmMic = CreateMic(package, "HMM_HED_PRO_Face_Mat", "HMM_HED_PRONPC_MASTER_FACE_MAT");
             incompatibleHead.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(hmmMic)], "Materials"));
             var actor = package.CreateExport("MixedEvidenceActor", "BioPawn", indexed: false);
             actor.WriteProperty(new ObjectProperty(incompatibleHead, "HeadMesh"));
@@ -220,10 +220,10 @@ public static class ActorAssignmentInventoryTests
         WithPackage(MEGame.LE3, (path, package) =>
         {
             var selected = package.CreateExport("SelectedFace", "BioMorphFace", indexed: false);
-            var validFace = CreateMic(package, "HMM_HED_PRO_Face_Mat", "HMM_HED_PRO_Face_Master");
+            var validFace = CreateMic(package, "HMM_HED_PRO_Face_Mat", "HMM_HED_PRONPC_MASTER_FACE_MAT");
             var body = CreateMic(package, "HMM_ARM_Casual_Mat", "HMM_ARM_Casual_Master");
             var customEye = CreateMic(package, "Custom_Eye_Instance", "Custom_Eye_Master");
-            var incompatible = CreateMic(package, "ASA_HED_PRO_Face_Mat", "ASA_HED_PRO_Face_Master");
+            var incompatible = CreateMic(package, "ASA_HED_PRO_Face_Mat", "ASA_HED_MASTER_FACE_MAT_1a");
             var importRoot = package.CreatePackageImport("MFEFixture_Imported");
             var imported = package.CreateImport("MaterialInstanceConstant", "HMM_HED_Imported_Mat", importRoot);
 
@@ -260,14 +260,14 @@ public static class ActorAssignmentInventoryTests
             TestAssert.Equal(HeadMaterialFamily.Skin, candidate.MaterialTargets[0].Family);
             TestAssert.True(candidate.MaterialTargets[0].ParentChain.Count == 2 &&
                             candidate.MaterialTargets[0].ParentChain[^1].InstancedPath.Contains(
-                                "HMM_HED_PRO_Face_Master", StringComparison.Ordinal),
-                "Complete MIC parent-chain evidence did not retain the final import path.");
+                                "HMM_HED_PRONPC_MASTER_FACE_MAT", StringComparison.Ordinal),
+                "Complete MIC parent-chain evidence did not retain the final master path.");
             TestAssert.Equal(4, candidate.SkippedMaterials.Count);
             TestAssert.True(candidate.SkippedMaterials.Any(value => value.UIndex == body.UIndex &&
-                                                                    value.Family == HeadMaterialFamily.Accessory),
+                                                                    value.Family == HeadMaterialFamily.Unknown),
                 "Body MIC was not excluded individually.");
             TestAssert.True(candidate.SkippedMaterials.Any(value => value.UIndex == customEye.UIndex &&
-                                                                    value.Reason.Contains("not safe to infer", StringComparison.OrdinalIgnoreCase)),
+                                                                    value.Reason.Contains("not a recognized safe", StringComparison.OrdinalIgnoreCase)),
                 "Custom eye MIC did not retain its scoped skip reason.");
             TestAssert.True(candidate.SkippedMaterials.Any(value => value.UIndex == incompatible.UIndex &&
                                                                     value.Reason.Contains("incompatible", StringComparison.OrdinalIgnoreCase)),
@@ -314,13 +314,13 @@ public static class ActorAssignmentInventoryTests
         {
             var selected = package.CreateExport("SelectedFace", "BioMorphFace", indexed: false);
             var tufHead = CreateHeadComponent(package, "TUF_HED_PROBase_MDL", "TufHeadMesh0");
-            var tufMic = CreateMic(package, "TUF_HED_PRO_Face_Mat", "TUR_HED_PRO_Face_Master");
+            var tufMic = CreateMic(package, "TUF_HED_PRO_Face_Mat", "TUR_HED_PRO_MASTER_MAT");
             tufHead.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(tufMic)], "Materials"));
             var tufActor = package.CreateExport("FemaleTurianActor", "BioPawn", indexed: false);
             tufActor.WriteProperty(new ObjectProperty(tufHead, "HeadMesh"));
 
             var vorchaHead = CreateHeadComponent(package, "ALN_HED_PROBase_MDL", "VorchaHeadMesh0");
-            var vorchaEye = CreateMic(package, "ALN_EYE_Instance", "TUR_HED_EYE_Master");
+            var vorchaEye = CreateMic(package, "ALN_EYE_Instance", "TUR_HED_EYE_MASTER_MAT");
             vorchaHead.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(vorchaEye)], "Materials"));
             var vorchaActor = package.CreateExport("VorchaActor", "BioPawn", indexed: false);
             vorchaActor.WriteProperty(new ObjectProperty(vorchaHead, "HeadMesh"));
@@ -345,16 +345,16 @@ public static class ActorAssignmentInventoryTests
         {
             var selected = package.CreateExport("SelectedFace", "BioMorphFace", indexed: false);
             var head = CreateHeadComponent(package, "ASA_HED_PROBase_MDL", "HeadMesh0");
-            var eyeRoot = CreateMic(package, "HMM_EYE_SharedParent", "HMF_EYE_MASTER_MAT");
+            var eyeRoot = CreateMic(package, "HMM_EYE_SharedParent", "HMM_EYE_MASTER_MAT");
             var eye = package.CreateExport("ASA_EYE_LocalChild", "MaterialInstanceConstant", indexed: false);
             eye.WriteProperty(new ObjectProperty(eyeRoot, "Parent"));
-            var lashes = CreateMic(package, "HMM_Lash_Local", "HMF_HED_PRO_MASTER_LASH_MAT");
-            var scalp = CreateMic(package, "HMM_Scalp_Local", "HMF_HED_Scalp_MASTER_MAT");
+            var lashes = CreateMic(package, "HMM_Lash_Local", "HMN_HED_LASH_Unlit_MASTER_MAT");
+            var scalp = CreateMic(package, "HMM_Scalp_Local", "HMM_HED_PRO_MASTER_SCALP_MAT");
             head.WriteProperty(new ArrayProperty<ObjectProperty>(
                 [new ObjectProperty(eye), new ObjectProperty(lashes), new ObjectProperty(scalp)], "Materials"));
 
             var hairComponent = CreateHeadComponent(package, "HMF_HIR_Long_MDL", "HairMesh0");
-            var hair = CreateMic(package, "BioMaterialInstanceConstant_123", "BIOG_HAIR_HMF_HAIR_MASTER_MAT");
+            var hair = CreateMic(package, "BioMaterialInstanceConstant_123", "HMN_HED_PRO_MASTER_HAIR_MAT");
             hairComponent.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(hair)], "Materials"));
             var actor = package.CreateExport("AsariWithSharedMaterials", "BioPawn", indexed: false);
             actor.WriteProperty(new ObjectProperty(head, "HeadMesh"));
@@ -396,8 +396,8 @@ public static class ActorAssignmentInventoryTests
 
     private static ExportEntry CreateMic(IMEPackage package, string name, string parentName)
     {
-        var root = package.CreatePackageImport($"MFEFixture_{name}");
-        var parent = package.CreateImport("Material", parentName, root);
+        var root = package.CreatePackageExport($"MFEFixture_{name}");
+        var parent = package.CreateExport(parentName, "Material", root, indexed: false);
         var mic = package.CreateExport(name, "MaterialInstanceConstant", indexed: false);
         mic.WriteProperty(new ObjectProperty(parent, "Parent"));
         return mic;

@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Domain;
 using System.Security.Cryptography;
 using System.Text;
 using MorphFaceEditor.LegendaryExplorer;

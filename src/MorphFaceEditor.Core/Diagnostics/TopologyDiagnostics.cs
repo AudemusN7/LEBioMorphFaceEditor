@@ -18,13 +18,12 @@ public sealed record TopologyDiagnosticReport(
     public bool IsValid => Issues.All(issue => issue.Severity != DiagnosticSeverity.Error);
 }
 
-/// <summary>Validates mesh, baked-face and sparse-target structural compatibility before live editing.</summary>
+/// <summary>Validates mesh and baked-face structural compatibility before live editing.</summary>
 public static class TopologyDiagnostics
 {
     public static TopologyDiagnosticReport Analyze(
         SkeletalMeshAsset mesh,
-        MorphFaceDocument? face = null,
-        IEnumerable<MorphTargetAsset>? targets = null)
+        MorphFaceDocument? face = null)
     {
         ArgumentNullException.ThrowIfNull(mesh);
         var issues = new List<TopologyIssue>();
@@ -187,42 +186,6 @@ public static class TopologyDiagnostics
                     DiagnosticSeverity.Error,
                     "DUPLICATE_FINAL_BONE",
                     $"Final-skeleton bone '{boneName}' occurs more than once."));
-            }
-        }
-
-        if (targets is not null)
-        {
-            foreach (var target in targets)
-            {
-                if (target.Lods.Count == 0)
-                {
-                    issues.Add(new TopologyIssue(
-                        DiagnosticSeverity.Error,
-                        "TARGET_NO_LODS",
-                        $"Morph target '{target.Source.InstancedPath}' contains no LODs."));
-                    continue;
-                }
-
-                var lod = target.Lods[0];
-                if (lod.BaseMeshVertexCount != topology.VertexCount)
-                {
-                    issues.Add(new TopologyIssue(
-                        DiagnosticSeverity.Error,
-                        "TARGET_BASE_COUNT",
-                        $"Morph target '{target.Source.InstancedPath}' expects {lod.BaseMeshVertexCount} vertices; base mesh has {topology.VertexCount}."));
-                }
-
-                foreach (var invalidIndex in lod.Vertices
-                             .Where(vertex => vertex.SourceIndex < 0 || vertex.SourceIndex >= topology.VertexCount)
-                             .Select(vertex => vertex.SourceIndex)
-                             .Distinct()
-                             .Take(10))
-                {
-                    issues.Add(new TopologyIssue(
-                        DiagnosticSeverity.Error,
-                        "TARGET_SOURCE_RANGE",
-                        $"Morph target '{target.Source.InstancedPath}' references out-of-range vertex {invalidIndex}."));
-                }
             }
         }
 

@@ -363,7 +363,7 @@ internal static partial class QaCases
 
     private static ImportedMeshAsset ImportedMeshFromHead(SkeletalMeshAsset head)
     {
-        var lod = head.AvailableLods.FirstOrDefault(value => value.LodIndex == 0)
+        var lod = head.Lods.FirstOrDefault(value => value.LodIndex == 0)
             ?? throw new InvalidDataException($"Native head '{head.Source.InstancedPath}' has no renderable LOD0.");
         var authoredSections = lod.Topology.Sections.Where(value => value.TriangleCount > 0)
             .OrderBy(value => value.BaseIndex).ToArray();
@@ -374,7 +374,7 @@ internal static partial class QaCases
         var slotMap = authoredSections.Select(value => value.MaterialIndex).Distinct().Order()
             .Select((sourceIndex, targetIndex) => (sourceIndex, targetIndex))
             .ToDictionary(value => value.sourceIndex, value => value.targetIndex);
-        var indices = lod.RenderData.Indices.ToList();
+        var indices = lod.RenderData!.Indices.ToList();
         var sections = authoredSections.Select(value => new ImportedMeshSection(slotMap[value.MaterialIndex],
                 $"Material {slotMap[value.MaterialIndex]}", value.BaseIndex, checked(value.TriangleCount * 3))).ToList();
         var occupiedSlots = sections.Select(value => value.MaterialIndex).ToHashSet();
@@ -384,7 +384,7 @@ internal static partial class QaCases
             foreach (var index in Enumerable.Range(0, 4).Where(index => !occupiedSlots.Contains(index)))
             {
                 var duplicateIndexStart = indices.Count;
-                indices.AddRange(lod.RenderData.Indices.Skip(seed.IndexStart).Take(seed.IndexCount));
+                indices.AddRange(lod.RenderData!.Indices.Skip(seed.IndexStart).Take(seed.IndexCount));
                 sections.Add(seed with
                 {
                     MaterialIndex = index,
@@ -400,9 +400,9 @@ internal static partial class QaCases
         var bones = lod.Topology.ReferenceSkeleton.Select(value =>
             new ImportedMeshBone(value.Name, value.ParentIndex, value.Position, value.Orientation)).ToArray();
         return new ImportedMeshAsset(head.Source.PackagePath,
-            lod.Positions.ToArray(), lod.Normals.ToArray(), lod.RenderData.Tangents.ToArray(),
-            lod.RenderData.TextureCoordinates.ToArray(), indices.ToArray(), sections.ToArray(), bones,
-            lod.RenderData.BoneIndices.ToArray(), lod.RenderData.BoneWeights.ToArray(),
+            lod.Positions.ToArray(), lod.Normals.ToArray(), lod.RenderData!.Tangents.ToArray(),
+            lod.RenderData!.TextureCoordinates.ToArray(), indices.ToArray(), sections.ToArray(), bones,
+            lod.RenderData!.BoneIndices.ToArray(), lod.RenderData!.BoneWeights.ToArray(),
             Enumerable.Range(0, lod.Positions.Length).ToArray());
     }
 

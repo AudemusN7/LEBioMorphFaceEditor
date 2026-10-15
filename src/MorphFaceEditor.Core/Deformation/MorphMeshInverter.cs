@@ -133,6 +133,7 @@ public static class MorphMeshInverter
             }
         }
 
+        var normalMatrix = BuildNormalMatrix(deltas, correctedBase.Length);
         FitCandidate? best = null;
         foreach (var candidate in candidates.Where(value => value.Positions.Count == correctedBase.Length))
         {
@@ -149,7 +150,7 @@ public static class MorphMeshInverter
             var priorWeights = priorByName is null
                 ? null
                 : columns.Select(feature => (double)priorByName.GetValueOrDefault(feature.Feature.Name)).ToArray();
-            var fitted = SolveCandidate(candidate, correctedBase, deltas, priorWeights, prior);
+            var fitted = SolveCandidate(candidate, correctedBase, deltas, normalMatrix, priorWeights, prior);
             if (best is null || fitted.RootMeanSquareError < best.RootMeanSquareError)
             {
                 best = fitted;
@@ -189,26 +190,27 @@ public static class MorphMeshInverter
             weightedTargets,
             best.Prior);
 
-        var baseLods = baseHead.AvailableLodPositions;
+        var baseLods = baseHead.Lods;
         var bakedLods = templateBakedLods
-            .Select((template, lodIndex) =>
+            .Select((template, ordinal) =>
             {
-                if (lodIndex >= baseLods.Count || baseLods[lodIndex].Length != template.Length)
+                if (ordinal >= baseLods.Count || baseLods[ordinal].Positions.Length != template.Length)
                 {
                     // Some faces retain a lower stored LOD which the canonical
                     // target set cannot rebuild. It remains template-owned.
                     return template.ToArray();
                 }
-                var positions = baseLods[lodIndex];
+                var positions = baseLods[ordinal].Positions;
+                var lodIndex = baseLods[ordinal].LodIndex;
                 var compatible = weightedTargets
                     .Where(weighted => weighted.Target.Lods.Any(lod => lod.LodIndex == lodIndex))
                     .ToArray();
                 var baked = compatible.Length == 0
                     ? positions.ToArray()
                     : SparseMorphEvaluator.EvaluatePositions(positions, compatible, lodIndex);
-                if (lodIndex < positionCorrections.Count)
+                if (ordinal < positionCorrections.Count)
                 {
-                    var correction = positionCorrections[lodIndex];
+                    var correction = positionCorrections[ordinal];
                     if (correction.Length == baked.Length)
                     {
                         for (var vertex = 0; vertex < baked.Length; vertex++)
@@ -273,23 +275,15 @@ public static class MorphMeshInverter
             manualOffsets);
     }
 
-    private static FitCandidate SolveCandidate(
-        MorphMeshPositionCandidate candidate,
-        IReadOnlyList<Vector3> basePositions,
-        IReadOnlyList<Vector3[]> deltas,
-        IReadOnlyList<double>? priorWeights,
-        MorphMeshFitPrior? prior)
+    private static double[,] BuildNormalMatrix(IReadOnlyList<Vector3[]> deltas, int vertexCount)
     {
         var count = deltas.Count;
         var normal = new double[count, count];
-        var right = new double[count];
-        for (var vertex = 0; vertex < basePositions.Count; vertex++)
+        for (var vertex = 0; vertex < vertexCount; vertex++)
         {
-            var displacement = candidate.Positions[vertex] - basePositions[vertex];
             for (var left = 0; left < count; left++)
             {
                 var leftDelta = deltas[left][vertex];
-                right[left] += Vector3.Dot(leftDelta, displacement);
                 for (var column = left; column < count; column++)
                 {
                     normal[left, column] += Vector3.Dot(leftDelta, deltas[column][vertex]);
@@ -301,6 +295,28 @@ public static class MorphMeshInverter
             for (var column = 0; column < row; column++)
             {
                 normal[row, column] = normal[column, row];
+            }
+        }
+        return normal;
+    }
+
+    private static FitCandidate SolveCandidate(
+        MorphMeshPositionCandidate candidate,
+        IReadOnlyList<Vector3> basePositions,
+        IReadOnlyList<Vector3[]> deltas,
+        double[,] normalMatrix,
+        IReadOnlyList<double>? priorWeights,
+        MorphMeshFitPrior? prior)
+    {
+        var count = deltas.Count;
+        var normal = (double[,])normalMatrix.Clone();
+        var right = new double[count];
+        for (var vertex = 0; vertex < basePositions.Count; vertex++)
+        {
+            var displacement = candidate.Positions[vertex] - basePositions[vertex];
+            for (var column = 0; column < count; column++)
+            {
+                right[column] += Vector3.Dot(deltas[column][vertex], displacement);
             }
         }
 

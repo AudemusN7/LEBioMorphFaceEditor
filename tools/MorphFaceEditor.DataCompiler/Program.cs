@@ -1,3 +1,5 @@
+using MorphFaceEditor.Core.Services;
+using MorphFaceEditor.Core.Domain;
 using System.Text;
 using MorphFaceEditor.Core.Randomisation;
 using MorphFaceEditor.DataCompiler;

@@ -25,7 +25,7 @@ public static class MorphMeshTopologyMatcher
         ArgumentNullException.ThrowIfNull(imported);
         ArgumentNullException.ThrowIfNull(canonical);
         var canonicalLod = canonical.FindLod(0);
-        var canonicalRender = canonicalLod?.RenderData ?? canonical.RenderData;
+        var canonicalRender = canonicalLod?.RenderData;
         var importedUvs = imported.TextureCoordinates;
         if (canonicalLod is null || canonicalRender is null ||
             importedUvs is null || !imported.HasCompleteTextureCoordinates ||
@@ -153,7 +153,7 @@ public static class MorphMeshTopologyMatcher
 
     private static string[]? ReadCanonicalTriangles(SkeletalMeshLod mesh)
     {
-        var indices = mesh.RenderData.Indices;
+        var indices = mesh.RenderData!.Indices;
         var materialByIndex = Enumerable.Repeat(-1, indices.Count).ToArray();
         foreach (var section in mesh.Topology.Sections)
         {

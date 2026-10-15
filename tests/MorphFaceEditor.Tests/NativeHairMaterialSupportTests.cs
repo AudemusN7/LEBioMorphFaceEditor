@@ -98,11 +98,12 @@ internal static class NativeHairMaterialSupportTests
                 var native = reader.Read(face, [], [mic], decodeTextures: false).Materials.Materials.Values.Single();
                 TestAssert.Equal(game == MEGame.LE3 ? HumanMaterialPreviewModel.Kaiden : HumanMaterialPreviewModel.Default,
                     native.PreviewModel);
-                TestAssert.Equal(game != MEGame.LE3, native.ContributesFaceControls);
+                TestAssert.True(!native.ContributesFaceControls,
+                    "A preview-only or unsupported-game master granted native face controls.");
                 TestAssert.Near(1, native.Scalars["HED_Spec_Scalar"], 0);
                 // Native control policy must not contaminate the shared metadata cache.
                 var custom = reader.ReadMaterialEvidence(mic, decodeTextures: false);
-                TestAssert.True(custom.ContributesFaceControls, "The native-face policy changed Custom Mode evidence.");
+                TestAssert.Equal(game == MEGame.LE3, custom.ContributesFaceControls);
                 TestAssert.Equal(native.PreviewModel, custom.PreviewModel);
                 var reloaded = reader.Read(face, [], [mic], decodeTextures: false).Materials.Materials.Values.Single();
                 TestAssert.Equal(native.ContributesFaceControls, reloaded.ContributesFaceControls);

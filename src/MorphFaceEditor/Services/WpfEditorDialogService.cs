@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Domain;
 using System.IO;
 using Microsoft.Win32;
 using System.Windows;
@@ -80,7 +81,7 @@ public sealed class WpfEditorDialogService : IEditorDialogService
     }
 
     public MorphConversionSaveRequest? ChooseMorphConversionDestination(
-        MorphFaceEditor.LegendaryExplorer.MorphFaceGame sourceGame,
+        MorphFaceGame sourceGame,
         string suggestedFileName,
         string sourcePackagePath)
     {

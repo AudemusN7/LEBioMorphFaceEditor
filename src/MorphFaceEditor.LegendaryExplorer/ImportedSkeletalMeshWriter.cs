@@ -34,7 +34,7 @@ public static class ImportedSkeletalMeshWriter
         Validate(asset, game, materialUIndexes);
 
         var skeleton = BuildSkeleton(asset, out var skeletalDepth);
-        var hasRig = HasUsableRig(asset);
+        var hasRig = asset.HasRig;
         if (!hasRig)
         {
             skeleton = BuildMinimumSkeleton();
@@ -42,7 +42,7 @@ public static class ImportedSkeletalMeshWriter
         }
 
         var positions = asset.Positions;
-        var vertices = BuildVertices(asset, game, hasRig, skeleton.Length);
+        var vertices = BuildVertices(asset, hasRig, skeleton.Length);
         var bounds = CalculateBounds(positions);
 
         var lod = new StaticLODModel
@@ -106,7 +106,6 @@ public static class ImportedSkeletalMeshWriter
 
         GPUSkinVertex[] BuildVertices(
             ImportedMeshAsset source,
-            MEGame _,
             bool rigged,
             int boneCount)
         {
@@ -206,12 +205,6 @@ public static class ImportedSkeletalMeshWriter
             new Influences(bones[0], bones[1], bones[2], bones[3]),
             new Influences(bytes[0], bytes[1], bytes[2], bytes[3]));
     }
-
-    private static bool HasUsableRig(ImportedMeshAsset asset) =>
-        asset.Bones.Count > 0 &&
-        asset.BoneIndices?.Length == asset.Positions.Length &&
-        asset.BoneWeights?.Length == asset.Positions.Length &&
-        asset.BoneWeights.Any(value => value != Vector4.Zero);
 
     private static MeshBone[] BuildSkeleton(ImportedMeshAsset asset, out int depth)
     {

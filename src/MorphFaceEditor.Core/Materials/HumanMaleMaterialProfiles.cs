@@ -2,57 +2,7 @@ namespace MorphFaceEditor.Core.Materials;
 
 public static class HumanMaterialProfiles
 {
-    private static readonly IReadOnlyDictionary<string, HeadMaterialFamily> MasterFamilies =
-        new Dictionary<string, HeadMaterialFamily>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["HMN_HED_LASH_Unlit_MASTER_MAT"] = HeadMaterialFamily.Lashes,
-            ["HMM_EYE_MASTER_OVRD_MAT"] = HeadMaterialFamily.Eyes,
-            ["HMF_EYE_MASTER_OVRD_MAT"] = HeadMaterialFamily.Eyes,
-            ["HMM_HED_PRONPC_MASTER_FACE_MAT"] = HeadMaterialFamily.Skin,
-            ["HMM_HED_PROCustom_MASTER_FACE_MAT"] = HeadMaterialFamily.Skin,
-            ["HMF_HED_PRO_MASTER_FACE_MAT"] = HeadMaterialFamily.Skin,
-            ["HMF_HED_PROCustom_MASTER_FACE_MAT"] = HeadMaterialFamily.Skin,
-            ["ASA_HED_MASTER_FACE_MAT_1a"] = HeadMaterialFamily.AsariSkin,
-            ["SAL_HED_PRO_MASTER_MAT"] = HeadMaterialFamily.SalarianSkin,
-            ["SAL_HED_EYE_MASTER_MAT"] = HeadMaterialFamily.SalarianEyes,
-            ["TUR_HED_PRO_MASTER_MAT"] = HeadMaterialFamily.TurianSkin,
-            ["TUR_HED_EYE_MASTER_MAT"] = HeadMaterialFamily.TurianEyes,
-            ["BAT_HED_PRO_MASTER_MAT"] = HeadMaterialFamily.BatarianSkin,
-            ["KRO_HED_PRO_MASTER_MAT"] = HeadMaterialFamily.KroganSkin,
-            ["KRO_HED_EYE_MASTER_MAT"] = HeadMaterialFamily.KroganEyes,
-            ["ALN_HED_PRO_MASTER_MAT"] = HeadMaterialFamily.VorchaSkin,
-            ["ALN_EYE_MASTER_MAT"] = HeadMaterialFamily.VorchaEyes,
-            ["HMM_HED_PRO_MASTER_SCALP_MAT"] = HeadMaterialFamily.Scalp,
-            ["HMM_HIR_PROShort01_MAT_1a"] = HeadMaterialFamily.MaskedHair,
-            ["HMN_HED_PRO_MASTER_HAIR_MAT"] = HeadMaterialFamily.Hair,
-            ["HMN_HED_PRO_MASTER_HAIR_MAT_CC"] = HeadMaterialFamily.Hair,
-            ["HMM_HED_PRO_MASTER_SCALP_MAT_CC"] = HeadMaterialFamily.Scalp,
-            ["BIOG_HMM_HED_Kaiden_MASTER"] = HeadMaterialFamily.Skin,
-            ["Human_Hair_MASTER"] = HeadMaterialFamily.Hair,
-            ["HMN_HED_PRO_MASTER_ADDN_HAIR_MAT"] = HeadMaterialFamily.Hair
-        };
-
     public static IReadOnlyList<MaterialParameterDefinition> Definitions { get; } = CreateDefinitions();
-
-    /// <summary>Exact LE3 graph identities; the package reader owns the game check.</summary>
-    public static HumanMaterialPreviewModel Le3PreviewModelForMaster(string className, string canonicalPath)
-    {
-        if (!className.Equals("Material", StringComparison.OrdinalIgnoreCase))
-            return HumanMaterialPreviewModel.Default;
-        return canonicalPath.ToUpperInvariant() switch
-        {
-            "BIOG_HUMANOID_MASTER_MTR_R.HUMAN.HMN_HED_PRO_MASTER_HAIR_MAT_CC" => HumanMaterialPreviewModel.CcHair,
-            "BIOG_HUMANOID_MASTER_MTR_R.HUMAN.HMM_HED_PRO_MASTER_SCALP_MAT_CC" => HumanMaterialPreviewModel.CcScalp,
-            "BIOG_HMM_HED_PROMORPH.KAIDEN.MASTER.BIOG_HMM_HED_KAIDEN_MASTER" => HumanMaterialPreviewModel.Kaiden,
-            "BIOG_HUMANOID_MASTER_MTR_R.HUMAN.HAIR.HUMAN_HAIR_MASTER" => HumanMaterialPreviewModel.HumanHair,
-            _ => HumanMaterialPreviewModel.Default
-        };
-    }
-
-    public static HeadMaterialFamily ClassifyMaster(string? masterMaterialName) =>
-        masterMaterialName is not null && MasterFamilies.TryGetValue(masterMaterialName, out var family)
-            ? family
-            : HeadMaterialFamily.Unknown;
 
     public static HeadMaterialBlendMode BlendMode(HeadMaterialFamily family) => family switch
     {

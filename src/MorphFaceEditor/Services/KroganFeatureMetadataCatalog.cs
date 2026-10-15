@@ -27,21 +27,8 @@ public sealed partial class KroganFeatureMetadataCatalog : IHeadEditorUiProfile
     // These retained character-creator race selectors occur in the LE1/LE2
     // Krogan corpus faces, but have no Krogan target or intentional editor
     // placement. Keep them as stored metadata while hiding them from controls.
-    public static IReadOnlySet<string> MetadataOnlyFeatures { get; } =
-        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "race_asnOld",
-            "race_asnYoung",
-            "race_blackOld",
-            "race_Blackyng",
-            "race_cauOld",
-            "race_cauYng"
-        };
 
-    public static IReadOnlyDictionary<string, string> FeatureAliases { get; } =
-        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-    public IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
+public IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
     [
         new(FacialStructure, Loc.Text("loc_Services_Taxonomy_facial_structure_812284cf"), Loc.Text("loc_Services_Taxonomy_krogan_head_plate_proportions_and_character_shap_296f9a25"),
             [new(Character, Loc.Text("loc_Services_Taxonomy_character_19cd78f5")), new(HeadPlates, Loc.Text("loc_Services_Taxonomy_head_plates_c859789f"))]),
@@ -58,7 +45,7 @@ public sealed partial class KroganFeatureMetadataCatalog : IHeadEditorUiProfile
     public MorphFeatureMetadata Describe(ResolvedMorphFeature feature, bool sessionCanEdit)
     {
         var (category, subcategory) = FeaturePlacement(feature.Feature.Name);
-        var visible = !MetadataOnlyFeatures.Contains(feature.Feature.Name);
+        var visible = MorphFaceProfileFeatures.IsControlEligible(MorphFaceMetadataCatalogRegistry.Krogan, Core.Domain.MorphFaceGame.LE1, feature.Feature.Name, feature.Target);
         var metadata = new MorphFeatureMetadata(
             feature.Feature.Name,
             FeatureLabel(feature.Feature.Name),
@@ -157,7 +144,7 @@ public sealed partial class KroganFeatureMetadataCatalog : IHeadEditorUiProfile
 
     private static int FeatureSortOrder(string name)
     {
-        if (MetadataOnlyFeatures.Contains(name)) return int.MaxValue;
+        if (MorphFaceProfileFeatures.KroganMetadataOnlyFeatures.Contains(name)) return int.MaxValue;
         return name.ToLowerInvariant() switch
         {
             "wrex" => 0,

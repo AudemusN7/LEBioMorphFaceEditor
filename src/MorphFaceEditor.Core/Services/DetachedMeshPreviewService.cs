@@ -18,13 +18,6 @@ public sealed record DetachedMeshEditingCapabilities(
     bool CanEditBones,
     DetachedMeshRigValidation Rig);
 
-public enum DetachedMeshUpAxis
-{
-    Auto,
-    ZUp,
-    YUp
-}
-
 /// <summary>
 /// Package-independent state for an imported mesh. The decoded source is kept
 /// intact for future interchange export while Mesh and Document expose its
@@ -32,8 +25,6 @@ public enum DetachedMeshUpAxis
 /// </summary>
 public sealed record DetachedMeshPreview(
     ImportedMeshAsset Source,
-    DetachedMeshUpAxis UpAxis,
-    DetachedMeshUpAxis EffectiveUpAxis,
     SkeletalMeshAsset Mesh,
     MorphFaceDocument Document,
     TopologyDiagnosticReport TopologyDiagnostics,
@@ -51,27 +42,25 @@ public sealed class DetachedMeshPreviewService
     private const float MinimumWeight = 1e-6f;
     private const float MinimumQuaternionLengthSquared = 1e-12f;
 
-    public DetachedMeshPreview Create(ImportedMeshAsset imported, DetachedMeshUpAxis upAxis = DetachedMeshUpAxis.Auto)
+    public DetachedMeshPreview Create(ImportedMeshAsset imported)
     {
         ArgumentNullException.ThrowIfNull(imported);
         ValidateGeometry(imported);
 
         var source = CloneAsset(imported);
-        var effectiveUpAxis = ResolveUpAxis(source.SourcePath, upAxis);
-        var previewSource = effectiveUpAxis == DetachedMeshUpAxis.YUp ? RotateYUpToZUp(source) : CloneAsset(source);
-        var rig = VerifyRig(previewSource);
-        var normals = previewSource.Normals?.ToArray() ?? GenerateNormals(previewSource.Positions, previewSource.Indices);
-        var tangents = previewSource.Tangents?.ToArray() ?? normals.Select(CreateTangent).ToArray();
-        var uvs = previewSource.TextureCoordinates?.ToArray() ?? new Vector2[previewSource.Positions.Length];
-        var boneIndices = rig.IsValid ? previewSource.BoneIndices!.ToArray() : new BoneIndex4[previewSource.Positions.Length];
-        var boneWeights = rig.IsValid ? previewSource.BoneWeights!.ToArray() : new Vector4[previewSource.Positions.Length];
+        var rig = VerifyRig(source);
+        var normals = source.Normals?.ToArray() ?? GenerateNormals(source.Positions, source.Indices);
+        var tangents = source.Tangents?.ToArray() ?? normals.Select(CreateTangent).ToArray();
+        var uvs = source.TextureCoordinates?.ToArray() ?? new Vector2[source.Positions.Length];
+        var boneIndices = rig.IsValid ? source.BoneIndices!.ToArray() : new BoneIndex4[source.Positions.Length];
+        var boneWeights = rig.IsValid ? source.BoneWeights!.ToArray() : new Vector4[source.Positions.Length];
         ReferenceBone[] skeleton = rig.IsValid
-            ? previewSource.Bones.Select(bone => new ReferenceBone(
+            ? source.Bones.Select(bone => new ReferenceBone(
                 bone.Name, bone.ParentIndex, bone.Position, Quaternion.Normalize(bone.Orientation))).ToArray()
             : [];
-        ImportedMeshSection[] sections = previewSource.Sections.Count == 0
-            ? [new ImportedMeshSection(0, "Material 0", 0, previewSource.Indices.Length)]
-            : previewSource.Sections.ToArray();
+        ImportedMeshSection[] sections = source.Sections.Count == 0
+            ? [new ImportedMeshSection(0, "Material 0", 0, source.Indices.Length)]
+            : source.Sections.ToArray();
         var materialCount = Math.Max(1, sections.Max(section => section.MaterialIndex) + 1);
         var topologySections = sections.Select(section => new MeshSectionTopology(
             section.MaterialIndex, 0, section.IndexStart, section.IndexCount / 3)).ToArray();
@@ -79,49 +68,44 @@ public sealed class DetachedMeshPreviewService
         {
             new MeshChunkTopology(
                 0,
-                rig.IsValid ? 0 : previewSource.Positions.Length,
-                rig.IsValid ? previewSource.Positions.Length : 0,
+                rig.IsValid ? 0 : source.Positions.Length,
+                rig.IsValid ? source.Positions.Length : 0,
                 rig.IsValid ? 4 : 0,
                 rig.IsValid ? Enumerable.Range(0, skeleton.Length).ToArray() : [])
         };
         var topology = new SkeletalMeshTopology(
             0,
-            previewSource.Positions.Length,
-            previewSource.Indices.Length,
+            source.Positions.Length,
+            source.Indices.Length,
             materialCount,
             topologySections,
             chunks,
             skeleton,
             rig.IsValid ? Enumerable.Range(0, skeleton.Length).ToArray() : [],
             rig.IsValid ? Enumerable.Range(0, skeleton.Length).ToArray() : [],
-            CalculateSignature(previewSource.Positions, previewSource.Indices));
+            CalculateSignature(source.Positions, source.Indices));
         var renderData = new SkeletalMeshRenderData(
             tangents,
             uvs,
             boneIndices,
             boneWeights,
-            previewSource.Indices.ToArray(),
+            source.Indices.ToArray(),
             Enumerable.Repeat<AssetIdentity?>(null, materialCount).ToArray());
         var name = Path.GetFileNameWithoutExtension(source.SourcePath);
         var identity = new AssetIdentity(source.SourcePath, $"DetachedMesh.{name}", 0, "SkeletalMesh");
         var mesh = new SkeletalMeshAsset(
             identity,
-            previewSource.Positions.ToArray(),
-            normals,
-            topology,
-            renderData,
-            [previewSource.Positions.ToArray()],
-            [new SkeletalMeshLod(0, previewSource.Positions.ToArray(), normals, topology, renderData)]);
+            [new SkeletalMeshLod(0, source.Positions.ToArray(), normals, topology, renderData)]);
         var signature = topology.SignatureSha256;
         var document = new MorphFaceDocument(
             new AssetIdentity(source.SourcePath, $"DetachedMesh.{name}", 0, "ImportedMesh"),
-            new PackageFingerprint(previewSource.Positions.Length, DateTime.UnixEpoch, signature),
+            new PackageFingerprint(source.Positions.Length, DateTime.UnixEpoch, signature),
             identity,
             null,
             [],
             skeleton.Select(bone => new BoneTranslation(bone.Name, bone.Position)).ToArray(),
             MorphFaceMaterialOverrides.Empty,
-            [previewSource.Positions.ToArray()],
+            [source.Positions.ToArray()],
             []);
         var diagnostics = TopologyDiagnostics.Analyze(mesh, document);
         if (!diagnostics.IsValid)
@@ -141,48 +125,11 @@ public sealed class DetachedMeshPreviewService
 
         return new DetachedMeshPreview(
             source,
-            upAxis,
-            effectiveUpAxis,
             mesh,
             document,
             diagnostics,
             new DetachedMeshEditingCapabilities(MorphFaceGeometryMode.FixedBake, false, rig.IsValid, rig),
             warnings);
-    }
-
-    public DetachedMeshPreview Build(ImportedMeshAsset imported) => Create(imported);
-
-    private static DetachedMeshUpAxis ResolveUpAxis(string _, DetachedMeshUpAxis requested) =>
-        requested != DetachedMeshUpAxis.Auto
-            ? requested
-            // Decoders now return the same canonical UE3 basis for PSK, glTF
-            // and GLB. File extension is not an axis signal at this boundary.
-            : DetachedMeshUpAxis.ZUp;
-
-    private static ImportedMeshAsset RotateYUpToZUp(ImportedMeshAsset source)
-    {
-        var basis = Matrix4x4.CreateRotationX(MathF.PI / 2f);
-        Matrix4x4.Invert(basis, out var inverseBasis);
-        return source with
-        {
-            Positions = source.Positions.Select(value => Vector3.Transform(value, basis)).ToArray(),
-            Normals = source.Normals?.Select(value => Vector3.Normalize(Vector3.TransformNormal(value, basis))).ToArray(),
-            Tangents = source.Tangents?.Select(value =>
-            {
-                var xyz = Vector3.TransformNormal(new Vector3(value.X, value.Y, value.Z), basis);
-                return new Vector4(Vector3.Normalize(xyz), value.W);
-            }).ToArray(),
-            Bones = source.Bones.Select(bone =>
-            {
-                var orientation = Matrix4x4.CreateFromQuaternion(Quaternion.Normalize(bone.Orientation));
-                var rotated = inverseBasis * orientation * basis;
-                return bone with
-                {
-                    Position = Vector3.Transform(bone.Position, basis),
-                    Orientation = Quaternion.Normalize(Quaternion.CreateFromRotationMatrix(rotated))
-                };
-            }).ToArray()
-        };
     }
 
     private static void ValidateGeometry(ImportedMeshAsset mesh)

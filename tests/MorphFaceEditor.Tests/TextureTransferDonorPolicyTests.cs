@@ -28,7 +28,7 @@ internal static class TextureTransferDonorPolicyTests
         var officialOccurrence = Occurrence(official.PackagePath, official.Entry.UIndex, 0, TextureCatalogOrigin.BaseGame);
         var modOccurrence = Occurrence(mod.PackagePath, mod.Entry.UIndex, 1000, TextureCatalogOrigin.Mod);
         var candidate = new TextureCatalogCandidate(
-            TextureCatalogGame.LE3,
+            MorphFaceGame.LE3,
             TexturePath,
             officialOccurrence,
             [officialOccurrence, modOccurrence]) { IsEligibleOfficialDefault = true };
@@ -53,7 +53,7 @@ internal static class TextureTransferDonorPolicyTests
         var mod = donors.Create("BIOG_ModOnly", 207, MEGame.LE3);
         var occurrence = Occurrence(mod.PackagePath, mod.Entry.UIndex, 1000, TextureCatalogOrigin.Mod);
         var candidate = new TextureCatalogCandidate(
-            TextureCatalogGame.LE3,
+            MorphFaceGame.LE3,
             TexturePath,
             occurrence,
             [occurrence]) { IsEligibleOfficialDefault = false };

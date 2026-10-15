@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Domain;
 using LegendaryExplorerCore;
 using LegendaryExplorerCore.GameFilesystem;
 using LegendaryExplorerCore.Packages;

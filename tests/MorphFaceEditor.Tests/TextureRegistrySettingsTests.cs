@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.LegendaryExplorer.TextureRegistry;
@@ -64,7 +65,7 @@ public static class TextureRegistrySettingsTests
         {
             var store = new TextureRegistryStore(new TextureRegistryPaths(root));
             var empty = new TextureRegistrySnapshot(TextureRegistrySnapshot.CurrentSchemaVersion,
-                TextureCatalogGame.LE1, DateTimeOffset.UtcNow, 0, []);
+                MorphFaceGame.LE1, DateTimeOffset.UtcNow, 0, []);
             var occurrence = new AttachmentMeshOccurrence(Path.Combine(root, "mod.pcc"),
                 "Hair.HMM_HIR_Custom_MDL", 1, 9000, TextureCatalogOrigin.Mod);
             var populated = empty with
@@ -208,7 +209,7 @@ public static class TextureRegistrySettingsTests
         var store = new TextureRegistryStore(new TextureRegistryPaths(root));
         var missing = Path.Combine(root, "missing.pcc");
         store.WriteManualAtomic(new TextureRegistrySnapshot(
-            TextureRegistrySnapshot.CurrentSchemaVersion, TextureCatalogGame.LE1,
+            TextureRegistrySnapshot.CurrentSchemaVersion, MorphFaceGame.LE1,
             DateTimeOffset.UtcNow, 0, [])
         {
             ManualAssets = [new ManualRegistryAsset(missing, 2,

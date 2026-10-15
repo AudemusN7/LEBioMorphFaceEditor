@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Infrastructure;
 using System.Text.RegularExpressions;
 using MorphFaceEditor.Core.Deformation;
@@ -35,35 +36,8 @@ public sealed partial class AsariFeatureMetadataCatalog : IHeadEditorUiProfile
     private const string Tattoos = "tattoos";
 
     // Stored creator values without matching geometry must round-trip but never become sliders.
-    public static IReadOnlySet<string> MetadataOnlyFeatures { get; } =
-        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "eyes_PosDown",
-            "eyes_Big",
-            "jaw_narrow",
-            "mouth_CornersDown",
-            "nose_BridgeThin",
-            "nose_TipUp",
-            "race_iconic",
-            "race_oldAsn",
-            "race_oldBlk",
-            "race_oldCauc",
-            "race_yngAsn",
-            "race_yngBlk",
-            "race_yngCauc"
-        };
 
-    public static IReadOnlyDictionary<string, string> FeatureAliases { get; } =
-        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-    private static readonly IReadOnlySet<string> HiddenFeatures =
-        new HashSet<string>(MetadataOnlyFeatures, StringComparer.OrdinalIgnoreCase)
-        {
-            "baseHead",
-            "lashes"
-        };
-
-    private readonly MorphFaceGame? _textGame;
+private readonly MorphFaceGame? _textGame;
 
     public AsariFeatureMetadataCatalog(MorphFaceGame? textGame = null)
     {
@@ -94,7 +68,7 @@ public sealed partial class AsariFeatureMetadataCatalog : IHeadEditorUiProfile
             FeatureLabel(feature.Feature.Name),
             category,
             subcategory,
-            !HiddenFeatures.Contains(feature.Feature.Name),
+            MorphFaceProfileFeatures.IsControlEligible(MorphFaceMetadataCatalogRegistry.Asari, Core.Domain.MorphFaceGame.LE1, feature.Feature.Name, feature.Target),
             FeatureSortOrder(feature.Feature.Name),
             0,
             1,

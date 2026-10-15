@@ -25,34 +25,8 @@ public class HumanFemaleFeatureMetadataCatalog : HumanMaleFeatureMetadataCatalog
     private const string Makeup = "makeup";
 
     // Internal, zero-effect and metadata controls remain preserved but are intentionally absent from the UI.
-    private static readonly IReadOnlySet<string> HiddenFeatures = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-    {
-        "averageHead",
-        "BONE_blinkFix",
-        "Eastwood",
-        "rollins",
-        "HAIR_splitSide",
-        "HAIR_splitSide\"",
-        "None",
-        "mouth_cheekMass",
-        "cheeks_gaunt",
-        "eyeShape_droop",
-        "eyes_Shape_droop",
-        "eyes_Shape_sleepy",
-        "eyes_Shape_wide",
-        "pupil_Small",
-        "pupil_Large",
-        "eyes_bagOut",
-        "eyes_lashAngle",
-        "eyes_lashLength",
-        "teeth_close",
-        "teeth_Seperate",
-        "teeth_canineExtend",
-        "teeth_Narrow",
-        "neck_apple"
-    };
 
-    public override IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
+public override IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
         CreateFemaleCategories();
 
     public override MorphFeatureMetadata Describe(ResolvedMorphFeature feature, bool sessionCanEdit)
@@ -65,7 +39,7 @@ public class HumanFemaleFeatureMetadataCatalog : HumanMaleFeatureMetadataCatalog
             Label = HumaniseFemaleFeature(name, metadata.Label),
             CategoryKey = category,
             SubcategoryKey = subcategory,
-            IsVisible = !HiddenFeatures.Contains(name),
+            IsVisible = MorphFaceProfileFeatures.IsControlEligible(TextArchetype, TextGame ?? Core.Domain.MorphFaceGame.LE1, name, feature.Target),
             SortOrder = GetFemaleSortOrder(name, metadata.SortOrder),
             Description = feature.Kind == MorphFeatureResolutionKind.MetadataOnly
                 ? Loc.Text("loc_Services_Taxonomy_stored_human_female_creator_metadata_with_no_dir_27f9bda2")

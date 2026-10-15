@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Domain;
 using LegendaryExplorerCore.GameFilesystem;
 using LegendaryExplorerCore.Packages;
 using LegendaryExplorerCore.Packages.CloningImportingAndRelinking;

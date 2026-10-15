@@ -1,3 +1,5 @@
+using MorphFaceEditor.Core.Services;
+using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Core.Deformation;
 using MorphFaceEditor.Core.Materials;
@@ -45,7 +47,6 @@ public sealed class MorphFacePreviewLoadService : IDisposable
             loaded.Game,
             loaded.Document.Source.InstancedPath,
             loaded.Document.BaseHeadReference?.InstancedPath,
-            loaded.Document.MaterialOverrides,
             loaded.Materials) ?? throw new NotSupportedException(
                 $"{loaded.Game} BioMorphFace '{loaded.Document.Source.InstancedPath}' uses unsupported base head " +
                 $"'{loaded.Document.BaseHeadReference?.InstancedPath ?? "<unresolved>"}'.");
@@ -68,14 +69,15 @@ public sealed class MorphFacePreviewLoadService : IDisposable
             loaded.BaseHead,
             profileResolution.UsesCustomMesh || profile.IgnoresAuthoredGeometry
                 ? []
-                : _targetCatalog.Load(profile, loaded.Game),
+                : _targetCatalog.Load(profile),
             profile.MetadataOnlyFeatures,
-            profile.DisplayName,
+            profile.GetDisplayName(),
             profile.FeatureAliases,
             profile.RecognizesBaseVariant,
             geometryEditBlockReason,
             profile.IgnoresAuthoredGeometry,
-            resolvedGeometryMode);
+            resolvedGeometryMode,
+            topologyDiagnostics: loaded.TopologyDiagnostics);
         var baseMaterialKeys = loaded.BaseHead.RenderData?.MaterialSlots
             .Where(identity => identity is not null)
             .Select(identity => MaterialIdentityKey.Create(identity!))

@@ -29,7 +29,7 @@ public static class DetachedMeshPreviewTests
         var sections = new[] { new ImportedMeshSection(0, "Authored Skin", 0, 3) };
         var imported = CreateAsset(positions, normals, tangents, uvs, indices, sections);
 
-        var preview = new DetachedMeshPreviewService().Create(imported, DetachedMeshUpAxis.ZUp);
+        var preview = new DetachedMeshPreviewService().Create(imported);
         TestAssert.True(preview.Mesh.Positions.SequenceEqual(positions), "Positions changed at the detached boundary.");
         TestAssert.True(preview.Mesh.Normals.SequenceEqual(normals), "Normals changed at the detached boundary.");
         TestAssert.True(preview.Mesh.RenderData!.Tangents.SequenceEqual(tangents), "Tangents changed at the detached boundary.");
@@ -109,8 +109,6 @@ public static class DetachedMeshPreviewTests
             boneWeights: [Vector4.UnitX, Vector4.UnitX, Vector4.UnitX]);
 
         var preview = new DetachedMeshPreviewService().Create(imported);
-        TestAssert.Equal(DetachedMeshUpAxis.Auto, preview.UpAxis);
-        TestAssert.Equal(DetachedMeshUpAxis.ZUp, preview.EffectiveUpAxis);
         TestAssert.True(preview.Source.Positions.SequenceEqual(imported.Positions), "Retained glTF source positions changed.");
         TestAssert.True(preview.Mesh.Positions.SequenceEqual(imported.Positions),
             "Canonical glTF preview positions were rotated a second time.");
@@ -121,8 +119,6 @@ public static class DetachedMeshPreviewTests
                 sourceOrientation) > 0.99999f,
             "Canonical glTF preview bone orientation changed at the detached boundary.");
 
-        var zUp = new DetachedMeshPreviewService().Create(imported, DetachedMeshUpAxis.ZUp);
-        TestAssert.True(zUp.Mesh.Positions.SequenceEqual(imported.Positions), "Explicit Z-up preview changed positions.");
     }
 
     private static ImportedMeshAsset CreateAsset(

@@ -245,7 +245,7 @@ public sealed class CustomMaterialWorkspace : Editing.IUndoableEditSource
             throw new ArgumentException("A material assignment option requires stable id, label, role and compatibility key.", nameof(option));
         }
         if (option.Family == HeadMaterialFamily.Unknown ||
-            !HeadMaterialClassifier.IsAssignableHeadFamily(option.Family))
+            !HeadMaterialCatalog.IsAssignableHeadFamily(option.Family))
         {
             throw new ArgumentException("Unknown material families cannot be assigned to custom mesh slots.", nameof(option));
         }
@@ -290,13 +290,11 @@ public sealed class CustomMaterialWorkspace : Editing.IUndoableEditSource
     private static CustomMaterialCompatibilityRole CompatibilityRole(CustomMaterialAssignmentOption option) =>
         option.Family is HeadMaterialFamily.Eyes or HeadMaterialFamily.SalarianEyes or
             HeadMaterialFamily.TurianEyes or HeadMaterialFamily.KroganEyes or
-            HeadMaterialFamily.VorchaEyes || option.MaterialRole.Contains("eye", StringComparison.OrdinalIgnoreCase)
+            HeadMaterialFamily.VorchaEyes
             ? CustomMaterialCompatibilityRole.Eyes
-            : option.Family == HeadMaterialFamily.Lashes ||
-              option.MaterialRole.Contains("lash", StringComparison.OrdinalIgnoreCase)
+            : option.Family == HeadMaterialFamily.Lashes
                 ? CustomMaterialCompatibilityRole.Lashes
-                : option.Family is HeadMaterialFamily.Hair or HeadMaterialFamily.MaskedHair ||
-                  option.MaterialRole.Contains("hair", StringComparison.OrdinalIgnoreCase)
+                : option.Family is HeadMaterialFamily.Hair or HeadMaterialFamily.MaskedHair
                     ? CustomMaterialCompatibilityRole.Hair
                     : CustomMaterialCompatibilityRole.None;
 

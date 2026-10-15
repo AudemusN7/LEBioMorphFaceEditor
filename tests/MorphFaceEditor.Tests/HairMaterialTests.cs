@@ -202,6 +202,7 @@ public static class HairMaterialTests
         var material = CreateHairMaterial(key, [255, 128, 0, 255], isLe3: isLe3);
         return material with
         {
+            LayeredHairHighlights = true,
             Scalars = new Dictionary<string, float>(material.Scalars, StringComparer.OrdinalIgnoreCase)
             {
                 ["Hightlight1Intensity"] = 2,

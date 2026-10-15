@@ -967,7 +967,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             LoadedFacePath = result.Loaded.Document.Source.InstancedPath;
             var editor = new FaceEditorViewModel(
                 result.EditingSession,
-                result.Profile.UiProfile,
+                result.Profile.GetUiProfile(),
                 result.MaterialEditingSession,
                 _colorDialog,
                 _referenceService,
@@ -1006,14 +1006,14 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             _previewCameraFamily = cameraFamily;
             PreviewSceneReady?.Invoke(result.Scene, resetCameraPosition);
             Status = result.EditingSession.GeometryMode == MorphFaceGeometryMode.RelativeBake
-                ? Loc.Format("loc_Shell_Status_LoadedFaceRelativeBake", SelectedFace.DisplayName, result.Profile.DisplayName)
+                ? Loc.Format("loc_Shell_Status_LoadedFaceRelativeBake", SelectedFace.DisplayName, result.Profile.GetDisplayName())
                 : result.EditingSession.GeometryMode == MorphFaceGeometryMode.FixedBake
-                    ? Loc.Format("loc_Shell_Status_LoadedFaceFixedBake", SelectedFace.DisplayName, result.Profile.DisplayName)
+                    ? Loc.Format("loc_Shell_Status_LoadedFaceFixedBake", SelectedFace.DisplayName, result.Profile.GetDisplayName())
                 : result.EditingSession.CanEditMorphFeatures
-                ? Loc.Format("loc_Shell_Status_LoadedFaceLiveGeometry", SelectedFace.DisplayName, result.Profile.DisplayName)
+                ? Loc.Format("loc_Shell_Status_LoadedFaceLiveGeometry", SelectedFace.DisplayName, result.Profile.GetDisplayName())
                 : result.Profile.IgnoresAuthoredGeometry
-                    ? Loc.Format("loc_Shell_Status_LoadedFaceBaseHeadPreview", SelectedFace.DisplayName, result.Profile.DisplayName, result.EditingSession.EditBlockReason)
-                : Loc.Format("loc_Shell_Status_LoadedFaceBakedGeometryFallback", SelectedFace.DisplayName, result.Profile.DisplayName, result.EditingSession.EditBlockReason);
+                    ? Loc.Format("loc_Shell_Status_LoadedFaceBaseHeadPreview", SelectedFace.DisplayName, result.Profile.GetDisplayName(), result.EditingSession.EditBlockReason)
+                : Loc.Format("loc_Shell_Status_LoadedFaceBakedGeometryFallback", SelectedFace.DisplayName, result.Profile.GetDisplayName(), result.EditingSession.EditBlockReason);
             AppLog.Verbose($"FACE:LOADED {LoadedFacePath} {result.Loaded.Game} EDITABLE:{result.EditingSession.CanEditMorphFeatures} " +
                 $"VERTS:{topology.VertexCount} TARGETS:{result.EditingSession.Evaluation.Resolution.WeightedTargets.Count}");
             _ = LoadTextureRegistryAsync(
@@ -1142,7 +1142,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         PreviewLods.Clear();
         if (loaded is not null)
         {
-            foreach (var lod in loaded.BaseHead.AvailableLods
+            foreach (var lod in loaded.BaseHead.Lods
                          .Where(lod => editor is null || editor.AvailableLodIndices.Contains(lod.LodIndex))
                          .OrderBy(lod => lod.LodIndex))
             {

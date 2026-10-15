@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Domain;
 using System.Numerics;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.Rendering;
@@ -19,11 +20,11 @@ public static class VorchaMaterialTests
     private static void MastersUseRecoveredFamilies()
     {
         TestAssert.Equal(HeadMaterialFamily.VorchaSkin,
-            HumanMaterialProfiles.ClassifyMaster("ALN_HED_PRO_MASTER_MAT"));
+            (HeadMaterialCatalog.Find(MorphFaceGame.LE2, "ALN_HED_PRO_MASTER_MAT")?.Family ?? HeadMaterialFamily.Unknown));
         TestAssert.Equal(HeadMaterialFamily.VorchaEyes,
-            HumanMaterialProfiles.ClassifyMaster("ALN_EYE_MASTER_MAT"));
+            (HeadMaterialCatalog.Find(MorphFaceGame.LE2, "ALN_EYE_MASTER_MAT")?.Family ?? HeadMaterialFamily.Unknown));
         TestAssert.Equal(HeadMaterialFamily.TurianEyes,
-            HumanMaterialProfiles.ClassifyMaster("TUR_HED_EYE_MASTER_MAT"));
+            (HeadMaterialCatalog.Find(MorphFaceGame.LE1, "TUR_HED_EYE_MASTER_MAT")?.Family ?? HeadMaterialFamily.Unknown));
     }
 
     private static void RegionAndTattooSelectorsRemainLive()

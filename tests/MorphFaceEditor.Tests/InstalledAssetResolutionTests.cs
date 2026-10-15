@@ -309,7 +309,7 @@ internal static class InstalledAssetResolutionTests
         new(AssetPath, "Texture2D", donor.Path, donor.Asset.UIndex, priority, origin);
 
     private static TextureRegistrySnapshot Snapshot(Donor lower, Donor official, Donor mod) =>
-        new(TextureRegistrySnapshot.CurrentSchemaVersion, TextureCatalogGame.LE1, DateTimeOffset.UtcNow, 3, [])
+        new(TextureRegistrySnapshot.CurrentSchemaVersion, MorphFaceGame.LE1, DateTimeOffset.UtcNow, 3, [])
         {
             Assets = [Occurrence(lower, 0, TextureCatalogOrigin.BaseGame),
                 Occurrence(official, 100, TextureCatalogOrigin.OfficialDlc),

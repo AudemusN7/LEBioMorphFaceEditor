@@ -25,9 +25,9 @@ public static class PlayerHairStyleCatalogTests
 
     private static void MeshOnlyStylesPairWithCru()
     {
-        var textures = ScalpFamily(TextureCatalogGame.LE1, "HMM", "Cru");
+        var textures = ScalpFamily(MorphFaceGame.LE1, "HMM", "Cru");
         var mesh = Mesh("HMM_HIR_Fsk_MDL", TextureCatalogOrigin.BaseGame);
-        var options = PlayerHairStyleCatalog.Resolve(TextureCatalogGame.LE1, PlayerHairSex.Male,
+        var options = PlayerHairStyleCatalog.Resolve(MorphFaceGame.LE1, PlayerHairSex.Male,
             textures, [mesh]);
         var option = options.Single(value => value.Id == "hmm-fsk");
         TestAssert.Equal("HMM_HIR_Cru_Diff", ObjectName(option.ScalpTextures["HED_Scalp_Diff"]));
@@ -43,14 +43,14 @@ public static class PlayerHairStyleCatalogTests
 
     private static void HmfMeshOnlyStylesPairWithCru()
     {
-        var textures = ScalpFamily(TextureCatalogGame.LE1, "HMF", "Cru");
+        var textures = ScalpFamily(MorphFaceGame.LE1, "HMF", "Cru");
         var mesh = new AttachmentMeshCandidate("BIOG_HMF_HIR_PRO.Classy.HMF_HIR_Cls_MDL",
             new AttachmentMeshOccurrence("BIOG_HMF_HIR_PRO.pcc", "HMF_HIR_Cls_MDL",
                 13, 1, TextureCatalogOrigin.BaseGame, 31),
             [new AttachmentMeshOccurrence("BIOG_HMF_HIR_PRO.pcc", "HMF_HIR_Cls_MDL",
                 13, 1, TextureCatalogOrigin.BaseGame, 31)])
         { IsEligibleOfficialDefault = true };
-        var options = PlayerHairStyleCatalog.Resolve(TextureCatalogGame.LE1, PlayerHairSex.Female,
+        var options = PlayerHairStyleCatalog.Resolve(MorphFaceGame.LE1, PlayerHairSex.Female,
             textures, [mesh]);
         var option = options.Single(value => value.Id == "hmf-cls");
         TestAssert.Equal("HMF_HIR_Cru_Diff", ObjectName(option.ScalpTextures["HED_Scalp_Diff"]));
@@ -60,10 +60,10 @@ public static class PlayerHairStyleCatalogTests
 
     private static void OfficialDlcIsEligibleAndModsAreNot()
     {
-        var textures = ScalpFamily(TextureCatalogGame.LE3, "HMF", "Cru");
+        var textures = ScalpFamily(MorphFaceGame.LE3, "HMF", "Cru");
         var ftl = Mesh("HMF_HIR_FTL_LongHair_MDL", TextureCatalogOrigin.OfficialDlc);
         var modOnly = Mesh("HMF_HIR_PROJack_MDL", TextureCatalogOrigin.Mod);
-        var options = PlayerHairStyleCatalog.Resolve(TextureCatalogGame.LE3, PlayerHairSex.Female,
+        var options = PlayerHairStyleCatalog.Resolve(MorphFaceGame.LE3, PlayerHairSex.Female,
             textures, [ftl, modOnly]);
         TestAssert.True(options.Any(value => value.Id == "hmf-ftl-long-hair" &&
                                             value.MeshAction == PlayerHairMeshAction.Set),
@@ -74,7 +74,7 @@ public static class PlayerHairStyleCatalogTests
 
     private static void PairedScalpsPreferDedicatedMaps()
     {
-        var textures = ScalpFamily(TextureCatalogGame.LE1, "HMM", "Cru")
+        var textures = ScalpFamily(MorphFaceGame.LE1, "HMM", "Cru")
             .Concat(new[]
             {
                 "HMM_HIR_Mhk_Scalp_Diff", "HMM_HIR_Mhk_Scalp_Norm", "HMM_HIR_Mhk_Scalp_Mask",
@@ -82,14 +82,14 @@ public static class PlayerHairStyleCatalogTests
                 "HMM_HIR_PROCustomBraids01_Scalp_Diff", "HMM_HIR_PROCustomBraids01_Scalp_Norm",
                 "HMM_HIR_PROCustomBraids01_Scalp_Mask", "HMM_HIR_PROCustomBraids01_Diff",
                 "HMM_HIR_PROCustomBraids01_Norm", "HMM_HIR_PROCustomBraids01_Mask"
-            }.SelectMany(name => ScalpTexture(TextureCatalogGame.LE1, name)))
+            }.SelectMany(name => ScalpTexture(MorphFaceGame.LE1, name)))
             .ToArray();
         var meshes = new[]
         {
             Mesh("HMM_HIR_Mhk_MDL", TextureCatalogOrigin.BaseGame),
             Mesh("HMM_HIR_PROCustomBraids01_MDL", TextureCatalogOrigin.BaseGame)
         };
-        var options = PlayerHairStyleCatalog.Resolve(TextureCatalogGame.LE1, PlayerHairSex.Male,
+        var options = PlayerHairStyleCatalog.Resolve(MorphFaceGame.LE1, PlayerHairSex.Male,
             textures, meshes);
         var mhk = options.Single(value => value.Id == "hmm-mhk");
         var braids = options.Single(value => value.Id == "hmm-braids");
@@ -127,7 +127,7 @@ public static class PlayerHairStyleCatalogTests
                 : $"BIOG_HMF_HIR_PRO.{outer}.{name}";
             var occurrence = new TextureCatalogOccurrence(package, 1, 0, TextureCatalogOrigin.BaseGame,
                 256, 256, "PF_DXT5", "Character", false, null);
-            return new TextureCatalogCandidate(TextureCatalogGame.LE2, instancedPath,
+            return new TextureCatalogCandidate(MorphFaceGame.LE2, instancedPath,
                 occurrence, [occurrence]) { IsEligibleOfficialDefault = true };
         }).ToArray();
         var meshes = new[] { "Braids01", "ShortAfro" }.Select((stem, index) =>
@@ -147,7 +147,7 @@ public static class PlayerHairStyleCatalogTests
                 Id: index == 0 ? "hmf-braids" : "hmf-short-afro");
         }).ToArray();
 
-        var options = PlayerHairStyleCatalog.Resolve(TextureCatalogGame.LE2, PlayerHairSex.Female,
+        var options = PlayerHairStyleCatalog.Resolve(MorphFaceGame.LE2, PlayerHairSex.Female,
             textures, meshes.Select(value => value.Candidate).ToArray());
 
         foreach (var mesh in meshes)
@@ -165,16 +165,16 @@ public static class PlayerHairStyleCatalogTests
 
     private static void HmfMomScalpUsesDedicatedMaps()
     {
-        var textures = ScalpTexture(TextureCatalogGame.LE1, "HMF_HIR_Mom_Scalp_Diff")
-            .Concat(ScalpTexture(TextureCatalogGame.LE1, "HMF_HIR_Mom_Scalp_Norm"))
-            .Concat(ScalpTexture(TextureCatalogGame.LE1, "HMF_HIR_Mom_Diff"))
-            .Concat(ScalpTexture(TextureCatalogGame.LE1, "HMF_HIR_Mom_Norm"))
-            .Concat(ScalpTexture(TextureCatalogGame.LE1, "HMF_HIR_Mom_Mask"))
-            .Concat(ScalpTexture(TextureCatalogGame.LE1, "HMF_HIR_Mom_Tang"))
-            .Concat(ScalpTexture(TextureCatalogGame.LE1, "GBL_ARM_ALL_Black"))
-            .Concat(ScalpTexture(TextureCatalogGame.LE1, "GBL_ARM_ALL_Norm"))
+        var textures = ScalpTexture(MorphFaceGame.LE1, "HMF_HIR_Mom_Scalp_Diff")
+            .Concat(ScalpTexture(MorphFaceGame.LE1, "HMF_HIR_Mom_Scalp_Norm"))
+            .Concat(ScalpTexture(MorphFaceGame.LE1, "HMF_HIR_Mom_Diff"))
+            .Concat(ScalpTexture(MorphFaceGame.LE1, "HMF_HIR_Mom_Norm"))
+            .Concat(ScalpTexture(MorphFaceGame.LE1, "HMF_HIR_Mom_Mask"))
+            .Concat(ScalpTexture(MorphFaceGame.LE1, "HMF_HIR_Mom_Tang"))
+            .Concat(ScalpTexture(MorphFaceGame.LE1, "GBL_ARM_ALL_Black"))
+            .Concat(ScalpTexture(MorphFaceGame.LE1, "GBL_ARM_ALL_Norm"))
             .ToArray();
-        var options = PlayerHairStyleCatalog.Resolve(TextureCatalogGame.LE1, PlayerHairSex.Female,
+        var options = PlayerHairStyleCatalog.Resolve(MorphFaceGame.LE1, PlayerHairSex.Female,
             textures, []);
         var mom = options.Single(value => value.Id == "hmf-mom-scalp");
         TestAssert.Equal("HMF_HIR_Mom_Scalp_Diff", ObjectName(mom.ScalpTextures["HED_Scalp_Diff"]));
@@ -185,12 +185,12 @@ public static class PlayerHairStyleCatalogTests
 
     private static void HmfLe2CruUsesSharedNormalFallback()
     {
-        var textures = ScalpFamily(TextureCatalogGame.LE2, "HMF", "Cru")
+        var textures = ScalpFamily(MorphFaceGame.LE2, "HMF", "Cru")
             .Where(value => value.ObjectName != "HMF_HIR_Cru_Norm")
-            .Concat(ScalpTexture(TextureCatalogGame.LE2, "HMF_HED_PROBase_Scalp_Norm"))
+            .Concat(ScalpTexture(MorphFaceGame.LE2, "HMF_HED_PROBase_Scalp_Norm"))
             .ToArray();
         var cls = Mesh("HMF_HIR_Cls_MDL", TextureCatalogOrigin.BaseGame);
-        var options = PlayerHairStyleCatalog.Resolve(TextureCatalogGame.LE2, PlayerHairSex.Female,
+        var options = PlayerHairStyleCatalog.Resolve(MorphFaceGame.LE2, PlayerHairSex.Female,
             textures, [cls]);
         var option = options.Single(value => value.Id == "hmf-cls");
         TestAssert.Equal("HMF_HED_PROBase_Scalp_Norm", ObjectName(option.ScalpTextures["HED_Scalp_Norm"]));
@@ -198,50 +198,50 @@ public static class PlayerHairStyleCatalogTests
 
     private static void PairedScalpLockLookupUsesInstalledPair()
     {
-        var textures = ScalpFamily(TextureCatalogGame.LE1, "HMM", "Cru")
-            .Concat(ScalpTexture(TextureCatalogGame.LE1, "HMM_HIR_Mhk_Scalp_Diff"))
-            .Concat(ScalpTexture(TextureCatalogGame.LE1, "HMM_HIR_Mhk_Scalp_Norm"))
-            .Concat(ScalpTexture(TextureCatalogGame.LE1, "HMM_HIR_Mhk_Scalp_Mask"))
+        var textures = ScalpFamily(MorphFaceGame.LE1, "HMM", "Cru")
+            .Concat(ScalpTexture(MorphFaceGame.LE1, "HMM_HIR_Mhk_Scalp_Diff"))
+            .Concat(ScalpTexture(MorphFaceGame.LE1, "HMM_HIR_Mhk_Scalp_Norm"))
+            .Concat(ScalpTexture(MorphFaceGame.LE1, "HMM_HIR_Mhk_Scalp_Mask"))
             .ToArray();
         var mhkPath = textures.Single(value => value.ObjectName == "HMM_HIR_Mhk_Scalp_Diff").InstancedPath;
         var mhk = Mesh("HMM_HIR_Mhk_MDL", TextureCatalogOrigin.BaseGame);
-        var mhkMeshIdentity = PlayerHairStyleCatalog.Resolve(TextureCatalogGame.LE1, PlayerHairSex.Male,
+        var mhkMeshIdentity = PlayerHairStyleCatalog.Resolve(MorphFaceGame.LE1, PlayerHairSex.Male,
             textures, [mhk]).Single(value => value.Id == "hmm-mhk").MeshVariants.Single();
         TestAssert.True(PlayerHairStyleCatalog.IsCurrentScalpPairedStyle(
-                TextureCatalogGame.LE1, PlayerHairSex.Male, textures, [mhk], mhkPath, mhkMeshIdentity),
+                MorphFaceGame.LE1, PlayerHairSex.Male, textures, [mhk], mhkPath, mhkMeshIdentity),
             "Mhk scalp must be considered paired when the matching reviewed mesh is selected.");
         TestAssert.True(PlayerHairStyleCatalog.IsCurrentScalpPairedStyle(
-                TextureCatalogGame.LE1, PlayerHairSex.Male, textures, [mhk], mhkPath,
+                MorphFaceGame.LE1, PlayerHairSex.Male, textures, [mhk], mhkPath,
                 mhkMeshIdentity with { PackagePath = "patched-copy.pcc", UIndex = 99 }),
             "A copied or patched instance of the reviewed paired mesh was not recognized by its canonical path.");
         TestAssert.True(!PlayerHairStyleCatalog.IsCurrentScalpPairedStyle(
-                TextureCatalogGame.LE1, PlayerHairSex.Male, textures, [mhk], mhkPath, null),
+                MorphFaceGame.LE1, PlayerHairSex.Male, textures, [mhk], mhkPath, null),
             "Mhk scalp alone must not be lock-protected when no mesh is selected.");
         TestAssert.True(!PlayerHairStyleCatalog.IsCurrentScalpPairedStyle(
-                TextureCatalogGame.LE1, PlayerHairSex.Male, textures, [mhk], mhkPath,
+                MorphFaceGame.LE1, PlayerHairSex.Male, textures, [mhk], mhkPath,
                 new AssetIdentity("other.pcc", "Other.Mohawk.HMM_HIR_Mhk_MDL", 7, "SkeletalMesh")),
             "A same-named mesh from another package must not be treated as the installed paired attachment.");
         TestAssert.True(PlayerHairStyleCatalog.IsCurrentScalpPairedStyle(
-                TextureCatalogGame.LE1, PlayerHairSex.Male, textures, [mhk],
+                MorphFaceGame.LE1, PlayerHairSex.Male, textures, [mhk],
                 "BIOG_HMM_HIR_PRO_R.CrewCut.HMM_HIR_Cru_Diff", mhkMeshIdentity),
             "A reviewed paired mesh must protect its scalp despite a different native diffuse path.");
         TestAssert.True(PlayerHairStyleCatalog.IsCurrentScalpPairedStyle(
-                TextureCatalogGame.LE1, PlayerHairSex.Male, textures, [mhk],
+                MorphFaceGame.LE1, PlayerHairSex.Male, textures, [mhk],
                 "DLC_MOD_ThirdParty.Hair.HMM_HIR_Mhk_Scalp_Diff", mhkMeshIdentity),
             "Paired-mesh protection must not depend on the current diffuse resolving in the core texture registry.");
 
-        var sarTextures = ScalpFamily(TextureCatalogGame.LE1, "HMM", "Sar")
-            .Concat(ScalpTexture(TextureCatalogGame.LE1, "HMM_HIR_Sar_Tang"))
+        var sarTextures = ScalpFamily(MorphFaceGame.LE1, "HMM", "Sar")
+            .Concat(ScalpTexture(MorphFaceGame.LE1, "HMM_HIR_Sar_Tang"))
             .ToArray();
         var ssk01 = Mesh("HMM_HIR_Ssk_01_MDL", TextureCatalogOrigin.BaseGame);
         var sarPath = sarTextures.Single(value => value.ObjectName == "HMM_HIR_Sar_Diff").InstancedPath;
-        var ssk01Identity = PlayerHairStyleCatalog.Resolve(TextureCatalogGame.LE1, PlayerHairSex.Male,
+        var ssk01Identity = PlayerHairStyleCatalog.Resolve(MorphFaceGame.LE1, PlayerHairSex.Male,
             sarTextures, [ssk01]).Single(value => value.Id == "hmm-sar-ssk").MeshVariants.Single();
         TestAssert.True(PlayerHairStyleCatalog.IsCurrentScalpPairedStyle(
-                TextureCatalogGame.LE1, PlayerHairSex.Male, sarTextures, [ssk01], sarPath, ssk01Identity),
+                MorphFaceGame.LE1, PlayerHairSex.Male, sarTextures, [ssk01], sarPath, ssk01Identity),
             "Sar is paired under the Ssk slot only when an Ssk mesh is selected.");
         TestAssert.True(!PlayerHairStyleCatalog.IsCurrentScalpPairedStyle(
-                TextureCatalogGame.LE1, PlayerHairSex.Male, sarTextures, [ssk01], sarPath, null),
+                MorphFaceGame.LE1, PlayerHairSex.Male, sarTextures, [ssk01], sarPath, null),
             "The same Sar scalp is independent while no Ssk mesh is selected.");
     }
 
@@ -257,7 +257,7 @@ public static class PlayerHairStyleCatalogTests
             (PlayerHairSex.Female, "PROCustomShortAfro", "hmf-short-afro")
         };
 
-        foreach (var game in new[] { TextureCatalogGame.LE1, TextureCatalogGame.LE2, TextureCatalogGame.LE3 })
+        foreach (var game in new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 })
         foreach (var (sex, stem, id) in cases)
         {
             var prefix = sex == PlayerHairSex.Male ? "HMM" : "HMF";
@@ -296,14 +296,14 @@ public static class PlayerHairStyleCatalogTests
                 candidate.EffectiveOccurrence.ExportUIndex, "SkeletalMesh");
             var copied = selected with { PackagePath = "copied-package.pcc", UIndex = 987 };
             TestAssert.True(!PlayerHairStyleCatalog.IsCurrentHairMeshPairedStyle(
-                    TextureCatalogGame.LE1, sex, [candidate], copied),
+                    MorphFaceGame.LE1, sex, [candidate], copied),
                 $"The {sex} Cru-paired mesh was incorrectly classified as requiring its scalp.");
         }
     }
 
     private static void NpcHmfAfrPrefersNativeMesh()
     {
-        var textures = ScalpFamily(TextureCatalogGame.LE1, "HMF", "Cru");
+        var textures = ScalpFamily(MorphFaceGame.LE1, "HMF", "Cru");
         var variants = new[]
         {
             (Id: "hmf-afr-mesh", Native: "HMF_HIR_Afr_MDL", Custom: "HMF_HIR_PROCustom_Afr_MDL"),
@@ -314,17 +314,17 @@ public static class PlayerHairStyleCatalogTests
         {
             var native = Mesh(variant.Native, TextureCatalogOrigin.BaseGame, "HMF");
             var custom = Mesh(variant.Custom, TextureCatalogOrigin.BaseGame, "HMF");
-            var playerOptions = PlayerHairStyleCatalog.Resolve(TextureCatalogGame.LE1,
+            var playerOptions = PlayerHairStyleCatalog.Resolve(MorphFaceGame.LE1,
                 PlayerHairSex.Female, textures, [custom, native]);
             var playerStyle = playerOptions.Single(value => value.Id == variant.Id);
             TestAssert.Equal(variant.Custom, ObjectName(playerStyle.MeshVariants.Single().InstancedPath));
 
-            var npcOptions = PlayerHairStyleCatalog.Resolve(TextureCatalogGame.LE1,
+            var npcOptions = PlayerHairStyleCatalog.Resolve(MorphFaceGame.LE1,
                 PlayerHairSex.Female, textures, [custom, native], preferNativeNpcMeshVariants: true);
             var npcStyle = npcOptions.Single(value => value.Id == variant.Id);
             TestAssert.Equal(variant.Native, ObjectName(npcStyle.MeshVariants.Single().InstancedPath));
 
-            var fallbackOptions = PlayerHairStyleCatalog.Resolve(TextureCatalogGame.LE1,
+            var fallbackOptions = PlayerHairStyleCatalog.Resolve(MorphFaceGame.LE1,
                 PlayerHairSex.Female, textures, [custom], preferNativeNpcMeshVariants: true);
             var fallbackStyle = fallbackOptions.Single(value => value.Id == variant.Id);
             TestAssert.Equal(variant.Custom, ObjectName(fallbackStyle.MeshVariants.Single().InstancedPath));
@@ -333,10 +333,10 @@ public static class PlayerHairStyleCatalogTests
 
     private static void MeshLockKeepsIndependentScalps()
     {
-        var textures = ScalpFamily(TextureCatalogGame.LE1, "HMM", "Cru")
-            .Concat(ScalpFamily(TextureCatalogGame.LE1, "HMM", "Afr")).ToArray();
+        var textures = ScalpFamily(MorphFaceGame.LE1, "HMM", "Cru")
+            .Concat(ScalpFamily(MorphFaceGame.LE1, "HMM", "Afr")).ToArray();
         var mesh = Mesh("HMM_HIR_Fsk_MDL", TextureCatalogOrigin.BaseGame);
-        var options = PlayerHairStyleCatalog.Resolve(TextureCatalogGame.LE1, PlayerHairSex.Male,
+        var options = PlayerHairStyleCatalog.Resolve(MorphFaceGame.LE1, PlayerHairSex.Male,
             textures, [mesh], meshLocked: true);
         TestAssert.True(options.Any(value => value.Id == "hmm-cru" && value.MeshAction == PlayerHairMeshAction.Keep),
             "An independent scalp option must preserve the locked attachment.");
@@ -348,10 +348,10 @@ public static class PlayerHairStyleCatalogTests
 
     private static void SskSlotHasThreeEqualOutcomes()
     {
-        var textures = ScalpFamily(TextureCatalogGame.LE2, "HMM", "Sar");
+        var textures = ScalpFamily(MorphFaceGame.LE2, "HMM", "Sar");
         var meshes = new[] { Mesh("HMM_HIR_Ssk_01_MDL", TextureCatalogOrigin.BaseGame),
             Mesh("HMM_HIR_Ssk_02_MDL", TextureCatalogOrigin.BaseGame) };
-        var options = PlayerHairStyleCatalog.Resolve(TextureCatalogGame.LE2, PlayerHairSex.Male,
+        var options = PlayerHairStyleCatalog.Resolve(MorphFaceGame.LE2, PlayerHairSex.Male,
             textures, meshes);
         var slotOptions = options.Where(value => value.Id == "hmm-sar-ssk").ToArray();
         TestAssert.Equal(1, slotOptions.Length);
@@ -373,7 +373,7 @@ public static class PlayerHairStyleCatalogTests
 
     private static void OfficialIdentitySurvivesOverride()
     {
-        var textures = ScalpFamily(TextureCatalogGame.LE3, "HMM", "Cru");
+        var textures = ScalpFamily(MorphFaceGame.LE3, "HMM", "Cru");
         var baseOccurrence = new AttachmentMeshOccurrence("BIOG_HMM_HIR_PRO.pcc", "HMM_HIR_Fsk_MDL",
             41, 1, TextureCatalogOrigin.BaseGame, 28);
         var officialDlcOccurrence = new AttachmentMeshOccurrence("DLC_CON_Hair/BIOG_HMM_HIR_PRO.pcc",
@@ -385,20 +385,20 @@ public static class PlayerHairStyleCatalogTests
         var mesh = new AttachmentMeshCandidate(canonicalPath,
             officialDlcOccurrence, [baseOccurrence, officialDlcOccurrence, modOccurrence])
         { IsEligibleOfficialDefault = true };
-        var options = PlayerHairStyleCatalog.Resolve(TextureCatalogGame.LE3, PlayerHairSex.Male,
+        var options = PlayerHairStyleCatalog.Resolve(MorphFaceGame.LE3, PlayerHairSex.Male,
             textures, [mesh]);
         var identity = options.Single(value => value.Id == "hmm-fsk").MeshVariants.Single();
         TestAssert.Equal(officialDlcOccurrence.PackagePath, identity.PackagePath);
         TestAssert.Equal(canonicalPath, identity.InstancedPath);
         TestAssert.Equal(43, identity.UIndex);
 
-        var unprojectedOptions = PlayerHairStyleCatalog.Resolve(TextureCatalogGame.LE3,
+        var unprojectedOptions = PlayerHairStyleCatalog.Resolve(MorphFaceGame.LE3,
             PlayerHairSex.Male, textures, [mesh with { IsEligibleOfficialDefault = false }]);
         TestAssert.True(unprojectedOptions.All(value => value.Id != "hmm-fsk"),
             "A physical mesh without eligible official-default provenance became an automatic hair variant.");
     }
 
-    private static TextureCatalogCandidate[] ScalpFamily(TextureCatalogGame game, string sex, string stem)
+    private static TextureCatalogCandidate[] ScalpFamily(MorphFaceGame game, string sex, string stem)
     {
         var prefix = $"{sex}_HIR_{stem}";
         var names = new[] { $"{prefix}_Diff", $"{prefix}_Norm", $"{prefix}_Mask", "GBL_ARM_ALL_Norm" };
@@ -414,7 +414,7 @@ public static class PlayerHairStyleCatalogTests
         }).ToArray();
     }
 
-    private static TextureCatalogCandidate[] ScalpTexture(TextureCatalogGame game, string name)
+    private static TextureCatalogCandidate[] ScalpTexture(MorphFaceGame game, string name)
     {
         var occurrence = new TextureCatalogOccurrence($"BIOG_{name.Split('_')[0]}_HIR_PRO.pcc", 22,
             0, TextureCatalogOrigin.BaseGame, 256, 256, "PF_DXT5", "Character", false, null);

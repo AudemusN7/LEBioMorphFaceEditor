@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Domain;
 namespace MorphFaceEditor.Services;
 
 using MorphFaceEditor.LegendaryExplorer;

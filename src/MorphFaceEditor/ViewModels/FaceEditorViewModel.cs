@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Core.Deformation;
 using MorphFaceEditor.Infrastructure;
@@ -63,7 +64,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     private readonly IHeadEditorUiProfile _metadataCatalog;
     private readonly CustomMaterialWorkspace? _customMaterialWorkspace;
     private readonly IReadOnlyList<CustomMaterialAssignmentOption> _customMaterialOptions;
-    private readonly MorphFaceEditor.LegendaryExplorer.MorphFaceGame? _playerRandomisationGame;
+    private readonly MorphFaceGame? _playerRandomisationGame;
     private IReadOnlyList<TextureCatalogCandidate> _registryTextureCandidates = [];
     private bool _isTextureRegistryAvailable;
     private bool _isTextureRegistryPending;
@@ -97,7 +98,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         IReadOnlyList<CustomMaterialAssignmentOption>? customMaterialOptions = null,
         string? materialRandomisationProfileKey = null,
         bool previewOnlyAttachments = false,
-        MorphFaceEditor.LegendaryExplorer.MorphFaceGame? playerRandomisationGame = null,
+        MorphFaceGame? playerRandomisationGame = null,
         bool customMaterialRegistryAvailable = false,
         bool isTextureRegistryPending = false)
     {
@@ -857,7 +858,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     }
 
     private bool IsProtectedPlayerEyeTexture(string name) =>
-        (_playerRandomisationGame is MorphFaceEditor.LegendaryExplorer.MorphFaceGame.LE2 or MorphFaceEditor.LegendaryExplorer.MorphFaceGame.LE3 &&
+        (_playerRandomisationGame is MorphFaceGame.LE2 or MorphFaceGame.LE3 &&
             name.Contains("EYE", StringComparison.OrdinalIgnoreCase));
 
     private static bool IsPlayerExclusiveTexture(string name) =>
@@ -872,7 +873,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         name.Equals("HED_Tang", StringComparison.OrdinalIgnoreCase);
 
     private bool IsCurrentPairedScalpProtected(
-        (TextureCatalogGame Game, PlayerHairSex Sex, string? ScopeKey)? humanHairContext,
+        (MorphFaceGame Game, PlayerHairSex Sex, string? ScopeKey)? humanHairContext,
         bool forcePreserveMesh)
     {
         if (humanHairContext is not { } context ||
@@ -927,7 +928,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
 
     private static bool IsPlayerRandomisableMorph(
         MorphFeatureEditorViewModel feature,
-        (TextureCatalogGame Game, PlayerHairSex Sex, string? ScopeKey)? player)
+        (MorphFaceGame Game, PlayerHairSex Sex, string? ScopeKey)? player)
         => IsPlayerRandomisableMorph(feature.Name, feature.CategoryKey,
             feature.SubcategoryKey, player?.Sex);
 
@@ -979,7 +980,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
 
     private IReadOnlyDictionary<string, float> WithExclusivePlayerIconicMorphs(
         IReadOnlyDictionary<string, float> proposed,
-        (TextureCatalogGame Game, PlayerHairSex Sex, string? ScopeKey)? player,
+        (MorphFaceGame Game, PlayerHairSex Sex, string? ScopeKey)? player,
         int seed)
     {
         if (!RandomiseMorphs || player is not { Sex: PlayerHairSex.Female }) return proposed;
@@ -1042,7 +1043,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     }
 
     private static bool IsScalpControlledHairMorph(MorphFeatureEditorViewModel feature,
-        (TextureCatalogGame Game, PlayerHairSex Sex, string? ScopeKey)? context) =>
+        (MorphFaceGame Game, PlayerHairSex Sex, string? ScopeKey)? context) =>
         context is { Sex: PlayerHairSex.Male } && HumanMaleHairScalpPolicy.IsHairMorph(feature.Name);
 
     private EditorRandomisationScope CoordinateHairMorphScope(EditorRandomisationScope scope)
@@ -1260,22 +1261,15 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             .ToArray();
     }
 
-    private (TextureCatalogGame Game, PlayerHairSex Sex, string? ScopeKey)? GetPlayerRandomisationContext()
+    private (MorphFaceGame Game, PlayerHairSex Sex, string? ScopeKey)? GetPlayerRandomisationContext()
     {
         if (_playerRandomisationGame is not { } game) return null;
-        var catalogGame = game switch
-        {
-            MorphFaceEditor.LegendaryExplorer.MorphFaceGame.LE1 => TextureCatalogGame.LE1,
-            MorphFaceEditor.LegendaryExplorer.MorphFaceGame.LE2 => TextureCatalogGame.LE2,
-            MorphFaceEditor.LegendaryExplorer.MorphFaceGame.LE3 => TextureCatalogGame.LE3,
-            _ => throw new ArgumentOutOfRangeException(nameof(game))
-        };
         if (_customMaterialWorkspace is null)
         {
             if (_profileKey.EndsWith("-human-male", StringComparison.OrdinalIgnoreCase))
-                return (catalogGame, PlayerHairSex.Male, null);
+                return (game, PlayerHairSex.Male, null);
             if (_profileKey.EndsWith("-human-female", StringComparison.OrdinalIgnoreCase))
-                return (catalogGame, PlayerHairSex.Female, null);
+                return (game, PlayerHairSex.Female, null);
             return null;
         }
 
@@ -1287,28 +1281,21 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         var sex = playerSkin.Option.Id.StartsWith($"{game}:human-male:", StringComparison.OrdinalIgnoreCase)
             ? PlayerHairSex.Male
             : PlayerHairSex.Female;
-        return (catalogGame, sex, playerSkin.Option.EffectiveParameterScopeKey);
+        return (game, sex, playerSkin.Option.EffectiveParameterScopeKey);
     }
 
-    private (TextureCatalogGame Game, PlayerHairSex Sex, string? ScopeKey)? GetHumanScalpContext()
+    private (MorphFaceGame Game, PlayerHairSex Sex, string? ScopeKey)? GetHumanScalpContext()
     {
         var player = GetPlayerRandomisationContext();
         if (player is not null) return player;
         if (_customMaterialWorkspace is not null) return null;
-        if (!Enum.TryParse<MorphFaceEditor.LegendaryExplorer.MorphFaceGame>(
+        if (!Enum.TryParse<MorphFaceGame>(
                 _profileKey.Split('-')[0], true, out var game)) return null;
-        var catalogGame = game switch
-        {
-            MorphFaceEditor.LegendaryExplorer.MorphFaceGame.LE1 => TextureCatalogGame.LE1,
-            MorphFaceEditor.LegendaryExplorer.MorphFaceGame.LE2 => TextureCatalogGame.LE2,
-            MorphFaceEditor.LegendaryExplorer.MorphFaceGame.LE3 => TextureCatalogGame.LE3,
-            _ => (TextureCatalogGame)(-1)
-        };
-        if (!Enum.IsDefined(catalogGame)) return null;
+        if (game is not (MorphFaceGame.LE1 or MorphFaceGame.LE2 or MorphFaceGame.LE3)) return null;
         if (_profileKey.EndsWith("-human-male", StringComparison.OrdinalIgnoreCase))
-            return (catalogGame, PlayerHairSex.Male, null);
+            return (game, PlayerHairSex.Male, null);
         return _profileKey.EndsWith("-human-female", StringComparison.OrdinalIgnoreCase)
-            ? (catalogGame, PlayerHairSex.Female, null)
+            ? (game, PlayerHairSex.Female, null)
             : null;
     }
 
@@ -1350,7 +1337,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         if (prepared.FailedTextureFamilySignatures.Count > 0 ||
             !prepared.Textures.ContainsKey(diffuseControl) ||
             !prepared.Textures.ContainsKey(normalControl)) return null;
-        var requiresCc = _customMaterialWorkspace is null && context.Game == TextureCatalogGame.LE3 &&
+        var requiresCc = _customMaterialWorkspace is null && context.Game == MorphFaceGame.LE3 &&
             style.Id is "hmm-short-afro" or "hmf-short-afro" &&
             _sourceScalpMaterial?.PreviewModel != HumanMaterialPreviewModel.CcScalp;
         if (requiresCc && _sourceScalpMaterial is null)
@@ -1388,7 +1375,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     }
 
     private async Task<PreparedMaterialRandomisation?> PreparePlayer2DaAsync(
-        (TextureCatalogGame Game, PlayerHairSex Sex, string? ScopeKey) context,
+        (MorphFaceGame Game, PlayerHairSex Sex, string? ScopeKey) context,
         EditorRandomisationScope requested,
         IReadOnlyDictionary<string, DecodedTextureAsset?> playerDetails,
         int seed, bool cursed)
@@ -1495,7 +1482,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
 
     internal static MorphFaceEditor.Core.Domain.AssetIdentity? ResolvePlayer2DaTextureAsset(
         IReadOnlyList<TextureCatalogCandidate> candidates,
-        TextureCatalogGame game,
+        MorphFaceGame game,
         string objectName)
     {
         ArgumentNullException.ThrowIfNull(candidates);
@@ -1523,7 +1510,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     }
 
     private async Task<IReadOnlyDictionary<string, DecodedTextureAsset?>> PreparePlayerFacialDetailsAsync(
-        (TextureCatalogGame Game, PlayerHairSex Sex, string? ScopeKey) context,
+        (MorphFaceGame Game, PlayerHairSex Sex, string? ScopeKey) context,
         IReadOnlySet<string> requestedTextureNames,
         int seed)
     {
@@ -1558,7 +1545,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     }
 
     private async Task<PreparedMaterialRandomisation?> PreparePlayerFaceScarAsync(
-        (TextureCatalogGame Game, PlayerHairSex Sex, string? ScopeKey) context,
+        (MorphFaceGame Game, PlayerHairSex Sex, string? ScopeKey) context,
         IReadOnlySet<string> requestedTextureNames,
         IReadOnlySet<string> requestedScalarNames,
         int seed)
@@ -1673,7 +1660,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
 
     private async Task<(PreparedMaterialRandomisation Material, PlayerHairStyleOption Style,
         MorphFaceEditor.Core.Domain.AssetIdentity? Mesh)?> PrepareHumanHairAsync(
-        (TextureCatalogGame Game, PlayerHairSex Sex, string? ScopeKey) context,
+        (MorphFaceGame Game, PlayerHairSex Sex, string? ScopeKey) context,
         IReadOnlySet<string> requestedTextureNames,
         int seed,
         bool targetedTextureRoll,

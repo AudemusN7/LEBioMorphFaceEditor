@@ -1,3 +1,5 @@
+using MorphFaceEditor.Core.Services;
+using MorphFaceEditor.Core.Domain;
 using System.Numerics;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.Core.Editing;

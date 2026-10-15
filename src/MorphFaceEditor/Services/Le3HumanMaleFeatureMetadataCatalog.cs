@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.Core.Deformation;
 using MorphFaceEditor.LegendaryExplorer;
@@ -13,23 +14,9 @@ public sealed class Le3HumanMaleFeatureMetadataCatalog : HumanMaleFeatureMetadat
 {
     protected override MorphFaceGame? TextGame => MorphFaceGame.LE3;
 
-    private static readonly IReadOnlySet<string> HiddenMetadata =
-        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "eyes_Large",
-            "eyeShape_droop",
-            "eyeShape_sleepy"
-        };
-
-    public override MorphFeatureMetadata Describe(ResolvedMorphFeature feature, bool sessionCanEdit)
+public override MorphFeatureMetadata Describe(ResolvedMorphFeature feature, bool sessionCanEdit)
     {
         var metadata = base.Describe(feature, sessionCanEdit);
-        if (HiddenMetadata.Contains(feature.Feature.Name))
-        {
-            metadata = metadata with { IsVisible = false };
-            return MetadataTextCatalog.Apply(TextArchetype, metadata, TextGame);
-        }
-
         metadata = feature.Feature.Name.ToLowerInvariant() switch
         {
             "pupil_small" => DescribeVestigialPupil(metadata),

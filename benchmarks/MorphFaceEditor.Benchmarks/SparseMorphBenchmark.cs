@@ -18,9 +18,9 @@ public static class SparseMorphBenchmark
         var topology = new SkeletalMeshTopology(0, vertexCount, 0, 0, [], [], [], [], [], "synthetic");
         var mesh = new SkeletalMeshAsset(
             identity,
-            Enumerable.Range(0, vertexCount).Select(index => new Vector3(index * 0.001f)).ToArray(),
-            Enumerable.Repeat(Vector3.UnitZ, vertexCount).ToArray(),
-            topology);
+            [new SkeletalMeshLod(0,
+                Enumerable.Range(0, vertexCount).Select(index => new Vector3(index * 0.001f)).ToArray(),
+                Enumerable.Repeat(Vector3.UnitZ, vertexCount).ToArray(), topology)]);
         var targets = CreateTargets(identity, vertexCount, targetCount, deltasPerTarget);
 
         for (var index = 0; index < 5; index++)

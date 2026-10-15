@@ -3,6 +3,7 @@ using LegendaryExplorerCore.Unreal;
 using LegendaryExplorerCore.Unreal.BinaryConverters;
 using LegendaryExplorerCore.Unreal.Classes;
 using MorphFaceEditor.LegendaryExplorer;
+using MorphFaceEditor.Core.Materials;
 
 namespace MorphFaceEditor.Tests;
 
@@ -14,8 +15,58 @@ public static class SupportedMaterialGraphPolicyTests
         new("custom attachment MICs are supported through reviewed canonical effects materials", CustomMicInheritsCanonicalEffectsMaterial),
         new("stock Short02 LongHair and Jack MIC donors pass by canonical parent graph", StockHairMicDonorsUseCanonicalParents),
         new("custom attachment material values and texture survive package materialisation", CustomMaterialGraphRoundTrips),
-        new("custom attachment MICs reject unknown roots unresolved parents and cycles", RejectsUnsupportedGraphs)
+        new("custom attachment MICs reject unknown roots unresolved parents and cycles", RejectsUnsupportedGraphs),
+        new("material recognition uses the reached master and preserves child values", MasterAuthorityAndValues)
     ];
+
+    private static void MasterAuthorityAndValues()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        var path = Path.Combine(Path.GetTempPath(), $"MFE-MasterAuthority-{Guid.NewGuid():N}.pcc");
+        try
+        {
+            using var package = MEPackageHandler.CreateMemoryEmptyPackage(path, MEGame.LE1);
+            var master = CreateExportAtPath(package, "Modded.Place.HMM_HED_PRONPC_MASTER_FACE_MAT", "Material");
+            var scalar = package.CreateExport("Strength", "MaterialExpressionScalarParameter", master, indexed: false);
+            scalar.WriteProperty(new NameProperty("HED_Norm_Blend", "ParameterName"));
+            scalar.WriteProperty(new FloatProperty(0.25f, "DefaultValue"));
+            master.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(scalar)], "Expressions"));
+            master.WriteBinary(Material.Create());
+            var mic = package.CreateExport("Misleading_Alien_Eye_Name", "MaterialInstanceConstant", indexed: false);
+            mic.WriteProperty(new ObjectProperty(master, "Parent"));
+            WriteScalar(mic, 0.7f);
+            var broken = package.CreateExport("HMF_HED_PROCustom_MASTER_FACE_MAT", "MaterialInstanceConstant", indexed: false);
+            WriteScalar(broken, 0.3f);
+            var cyclic = package.CreateExport("HMN_HED_PRO_MASTER_HAIR_MAT", "MaterialInstanceConstant", indexed: false);
+            cyclic.WriteProperty(new ObjectProperty(cyclic, "Parent"));
+            WriteScalar(cyclic, 0.4f);
+            package.Save(path);
+            using var cache = new PackageCache();
+            var reader = new MorphFaceMaterialReader(cache, new GamePackageReferenceResolver(cache,
+                new InstalledGameAssetResolver(_ => new Dictionary<string, string>(), _ => null)));
+            var material = reader.ReadMaterialEvidence(mic, decodeTextures: false);
+            TestAssert.True(MorphFacePackageReader.DescribeMaterialMaster(MEGame.LE2, master) is null,
+                "A foreign-game material was treated as a local game's master.");
+            TestAssert.Equal(HeadMaterialFamily.Skin, material.Family);
+            TestAssert.Equal(HumanFaceMaterialKind.MaleNpc, material.HumanFace);
+            TestAssert.Equal(0.7f, material.Scalars["HED_Norm_Blend"]);
+            foreach (var (entry, value) in new[] { (broken, 0.3f), (cyclic, 0.4f) })
+            {
+                var unsupported = reader.ReadMaterialEvidence(entry, decodeTextures: false);
+                TestAssert.Equal(HeadMaterialFamily.Unknown, unsupported.Family);
+                TestAssert.True(!unsupported.ContributesFaceControls && !unsupported.HasCompiledParameterSupport,
+                    "A MIC name without a terminal master granted material controls.");
+                TestAssert.Equal(value, unsupported.Scalars["HED_Norm_Blend"]);
+            }
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
+
+        static void WriteScalar(ExportEntry mic, float value) => mic.WriteProperty(new ArrayProperty<StructProperty>(
+            [new StructProperty("ScalarParameterValue", new PropertyCollection
+            {
+                new NameProperty("HED_Norm_Blend", "ParameterName"), new FloatProperty(value, "ParameterValue")
+            })], "ScalarParameterValues"));
+    }
 
     private static void CustomMicInheritsCanonicalBase()
     {
@@ -90,9 +141,13 @@ public static class SupportedMaterialGraphPolicyTests
         unknownEffects.WriteProperty(new ObjectProperty(canonicalBase, "m_pBaseMaterial"));
         var unknownEffectsMic = package.CreateExport("MFE_UnknownEffectsMic", "MaterialInstanceConstant", indexed: false);
         unknownEffectsMic.WriteProperty(new ObjectProperty(unknownEffects, "Parent"));
-        TestAssert.True(!IsSupported(package, unknownEffectsMic, out var unknownEffectsFailure) &&
-                        unknownEffectsFailure.Contains("unreviewed effects material", StringComparison.OrdinalIgnoreCase),
-            $"An unreviewed effects wrapper was accepted because it points at a canonical base: {unknownEffectsFailure}");
+        TestAssert.True(IsSupported(package, unknownEffectsMic, out var unknownEffectsFailure),
+            $"A renamed effects wrapper leading to a known master was rejected: {unknownEffectsFailure}");
+        var relocatedMaster = package.CreateExport(canonicalBase.ObjectName.Instanced, "Material",
+            package.CreatePackageExport("Relocated"), indexed: false);
+        unknownEffects.WriteProperty(new ObjectProperty(relocatedMaster, "m_pBaseMaterial"));
+        TestAssert.True(IsSupported(package, unknownEffectsMic, out var relocatedFailure),
+            $"A relocated exact master was rejected: {relocatedFailure}");
 
         using var vfxRootPackage = MEPackageHandler.CreateMemoryEmptyPackage("MFE-OracleVfxRoot.pcc", MEGame.LE3);
         var vfxMaster = CreateExportAtPath(

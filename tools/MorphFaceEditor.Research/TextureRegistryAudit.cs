@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Domain;
 using System.Text;
 using System.Text.Json;
 using LegendaryExplorerCore.GameFilesystem;

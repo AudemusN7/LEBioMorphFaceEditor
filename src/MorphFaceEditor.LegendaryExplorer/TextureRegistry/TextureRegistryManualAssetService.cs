@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Domain;
 using LegendaryExplorerCore.Packages;
 using MorphFaceEditor.Core.Materials;
 
@@ -94,7 +95,7 @@ public sealed class TextureRegistryManualAssetService(TextureRegistryStore store
     }
 
     private static TextureRegistrySnapshot Empty(MorphFaceGame game) => new(
-        TextureRegistrySnapshot.CurrentSchemaVersion, ToCatalogGame(game), DateTimeOffset.UtcNow, 0, []);
+        TextureRegistrySnapshot.CurrentSchemaVersion, game, DateTimeOffset.UtcNow, 0, []);
 
     private static TextureRegistrySnapshot PruneRelinked(TextureRegistrySnapshot snapshot,
         IReadOnlyList<ManualRegistryAsset> selections)
@@ -190,7 +191,7 @@ public sealed class TextureRegistryManualAssetService(TextureRegistryStore store
                                 .Where(value => !SameSource(value.PackagePath, value.ExportUIndex, group.Key, export.UIndex))
                                 .Append(occurrence).ToArray();
                             textures[export.InstancedFullPath] = new TextureCatalogCandidate(
-                                ToCatalogGame(game), export.InstancedFullPath,
+                                game, export.InstancedFullPath,
                                 ChooseTexture(occurrences), occurrences);
                         }
                         else if (selected.ClassName.Equals("SkeletalMesh", StringComparison.OrdinalIgnoreCase))
@@ -253,7 +254,7 @@ public sealed class TextureRegistryManualAssetService(TextureRegistryStore store
                 {
                     var existing = textures.GetValueOrDefault(selected.InstancedPath);
                     var all = (existing?.Occurrences ?? []).Append(occurrence).Distinct().ToArray();
-                    textures[selected.InstancedPath] = new TextureCatalogCandidate(ToCatalogGame(game),
+                    textures[selected.InstancedPath] = new TextureCatalogCandidate(game,
                         selected.InstancedPath, ChooseTexture(all), all);
                 }
             }
@@ -300,11 +301,4 @@ public sealed class TextureRegistryManualAssetService(TextureRegistryStore store
         _ => 2
     };
 
-    private static TextureCatalogGame ToCatalogGame(MorphFaceGame game) => game switch
-    {
-        MorphFaceGame.LE1 => TextureCatalogGame.LE1,
-        MorphFaceGame.LE2 => TextureCatalogGame.LE2,
-        MorphFaceGame.LE3 => TextureCatalogGame.LE3,
-        _ => throw new ArgumentOutOfRangeException(nameof(game))
-    };
 }

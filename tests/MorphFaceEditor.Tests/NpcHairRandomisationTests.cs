@@ -116,7 +116,7 @@ public static class NpcHairRandomisationTests
         {
             "HMM_HIR_Afr_Diff", "HMM_HIR_Afr_Norm", "HMM_HIR_Afr_Mask", "HMM_HIR_Afr_Tang"
         }.Select(Texture).ToArray();
-        var style = PlayerHairStyleCatalog.Resolve(TextureCatalogGame.LE1, PlayerHairSex.Male,
+        var style = PlayerHairStyleCatalog.Resolve(MorphFaceGame.LE1, PlayerHairSex.Male,
                 candidates, [])
             .Single(value => value.Id == "hmm-afr");
 
@@ -134,7 +134,7 @@ public static class NpcHairRandomisationTests
     {
         var registry = TestFixtures.GetCorpusTextureCatalogService();
         var catalog = registry.ReadAsync(MorphFaceGame.LE1).GetAwaiter().GetResult();
-        var style = PlayerHairStyleCatalog.Resolve(TextureCatalogGame.LE1, PlayerHairSex.Male,
+        var style = PlayerHairStyleCatalog.Resolve(MorphFaceGame.LE1, PlayerHairSex.Male,
                 catalog.Candidates, catalog.AttachmentMeshes)
             .Single(value => value.Id == "hmm-afr");
         using var reader = new MorphFacePackageReader();
@@ -202,7 +202,7 @@ public static class NpcHairRandomisationTests
     {
         var registry = TestFixtures.GetCorpusTextureCatalogService();
         var catalog = registry.ReadAsync(MorphFaceGame.LE1).GetAwaiter().GetResult();
-        var style = PlayerHairStyleCatalog.Resolve(TextureCatalogGame.LE1, PlayerHairSex.Male,
+        var style = PlayerHairStyleCatalog.Resolve(MorphFaceGame.LE1, PlayerHairSex.Male,
             catalog.Candidates, catalog.AttachmentMeshes).Single(value => value.Id == "hmm-afr");
         using var reader = new MorphFacePackageReader();
         foreach (var cursed in new[] { false, true })
@@ -243,7 +243,7 @@ public static class NpcHairRandomisationTests
     {
         var registry = new TextureCatalogService(new TextureRegistryStore(TextureRegistryPaths.CreateDefault()));
         var catalog = registry.ReadAsync(MorphFaceGame.LE1).GetAwaiter().GetResult();
-        var style = PlayerHairStyleCatalog.Resolve(TextureCatalogGame.LE1, PlayerHairSex.Female,
+        var style = PlayerHairStyleCatalog.Resolve(MorphFaceGame.LE1, PlayerHairSex.Female,
             catalog.Candidates, catalog.AttachmentMeshes).Single(value => value.Id == "hmf-mhk");
         using var reader = new MorphFacePackageReader();
         foreach (var cursed in new[] { false, true })
@@ -284,7 +284,7 @@ public static class NpcHairRandomisationTests
     {
         var registry = new TextureCatalogService(new TextureRegistryStore(TextureRegistryPaths.CreateDefault()));
         var catalog = registry.ReadAsync(MorphFaceGame.LE1).GetAwaiter().GetResult();
-        var style = PlayerHairStyleCatalog.Resolve(TextureCatalogGame.LE1, PlayerHairSex.Female,
+        var style = PlayerHairStyleCatalog.Resolve(MorphFaceGame.LE1, PlayerHairSex.Female,
             catalog.Candidates, catalog.AttachmentMeshes).Single(value => value.Id == "hmf-braids");
         using var reader = new MorphFacePackageReader();
         foreach (var cursed in new[] { false, true })
@@ -331,7 +331,7 @@ public static class NpcHairRandomisationTests
     {
         var registry = TestFixtures.GetCorpusTextureCatalogService();
         var catalog = registry.ReadAsync(MorphFaceGame.LE1).GetAwaiter().GetResult();
-        var style = PlayerHairStyleCatalog.Resolve(TextureCatalogGame.LE1, PlayerHairSex.Male,
+        var style = PlayerHairStyleCatalog.Resolve(MorphFaceGame.LE1, PlayerHairSex.Male,
             catalog.Candidates, catalog.AttachmentMeshes).Single(value => value.Id == "hmm-afr");
         using var reader = new MorphFacePackageReader();
         using var editor = CreateNpcEditor(reader, registry, catalog, "le1-human-male",
@@ -372,7 +372,7 @@ public static class NpcHairRandomisationTests
         var registry = new TextureCatalogService(new TextureRegistryStore(
             TextureRegistryPaths.CreateDefault()));
         var catalog = registry.ReadAsync(MorphFaceGame.LE1).GetAwaiter().GetResult();
-        var styles = PlayerHairStyleCatalog.Resolve(TextureCatalogGame.LE1, sex,
+        var styles = PlayerHairStyleCatalog.Resolve(MorphFaceGame.LE1, sex,
             catalog.Candidates, catalog.AttachmentMeshes);
         var styleId = sex == PlayerHairSex.Female ? "hmf-braids" : "hmm-mhk";
         var style = styles.FirstOrDefault(value => value.Id == styleId);
@@ -526,7 +526,7 @@ public static class NpcHairRandomisationTests
             "BIOG_HMM_HIR_PRO_R.pcc", System.Threading.Interlocked.Increment(ref _nextSyntheticTextureUIndex),
             0, TextureCatalogOrigin.BaseGame,
             1, 1, "PF_B8G8R8A8", "TEXTUREGROUP_Character", false, null);
-        return new TextureCatalogCandidate(TextureCatalogGame.LE1, path, occurrence, [occurrence])
+        return new TextureCatalogCandidate(MorphFaceGame.LE1, path, occurrence, [occurrence])
         { IsEligibleOfficialDefault = true };
     }
 

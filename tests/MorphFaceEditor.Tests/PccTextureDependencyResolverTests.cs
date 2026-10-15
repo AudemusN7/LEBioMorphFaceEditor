@@ -455,7 +455,7 @@ public static class PccTextureDependencyResolverTests
                 mip.TextureCacheName)).ToArray()
         };
         var candidate = new TextureCatalogCandidate(
-            TextureCatalogGame.LE2,
+            MorphFaceGame.LE2,
             PccAssetPathPolicy.FromExport(source),
             occurrence,
             [occurrence]) { IsEligibleOfficialDefault = true };
@@ -514,7 +514,7 @@ public static class PccTextureDependencyResolverTests
     private static TextureCatalogCandidate Candidate(
         string path,
         params TextureCatalogOccurrence[] occurrences) =>
-        new(TextureCatalogGame.LE3, path,
+        new(MorphFaceGame.LE3, path,
             occurrences.Where(value => value.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc)
                 .OrderByDescending(value => value.MountPriority).FirstOrDefault() ?? occurrences[0], occurrences)
         {

@@ -427,14 +427,10 @@ public static class TextureCatalogTests
     {
         var detachedProfile = TextureCatalogProfiles.For(new MorphFaceProfile(
             "le3-detached-mesh",
-            "Detached Custom Mesh",
             MorphFaceGame.LE3,
-            string.Empty,
             new HashSet<string>(StringComparer.OrdinalIgnoreCase),
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
-            new HumanMaleFeatureMetadataCatalog(),
             "[MESH]",
-            "#66717D",
             _ => false,
             (_, _) => false));
 
@@ -463,7 +459,7 @@ public static class TextureCatalogTests
         var baseOccurrence = Occurrence("base.pcc", mountPriority: 0, TextureCatalogOrigin.BaseGame);
         var modOccurrence = Occurrence("DLC_MOD_Custom\\CookedPCConsole\\mod.pcc", mountPriority: 9021, TextureCatalogOrigin.Mod);
         var candidate = new TextureCatalogCandidate(
-            TextureCatalogGame.LE3,
+            MorphFaceGame.LE3,
             path,
             baseOccurrence,
             [baseOccurrence, modOccurrence]);
@@ -480,12 +476,12 @@ public static class TextureCatalogTests
         var levelOccurrence = Occurrence("BIOA_TEST.pcc", 0, TextureCatalogOrigin.BaseGame);
         var modOccurrence = Occurrence("DLC_MOD_Test\\CookedPCConsole\\ModHair.pcc", 9000, TextureCatalogOrigin.Mod);
         var manualOccurrence = Occurrence("C:\\Custom\\ChosenHair.pcc", 0, TextureCatalogOrigin.Manual);
-        var biog = new TextureCatalogCandidate(TextureCatalogGame.LE3, biogPath,
+        var biog = new TextureCatalogCandidate(MorphFaceGame.LE3, biogPath,
             biogOccurrence, [biogOccurrence])
         {
             IsEligibleOfficialDefault = true
         };
-        var level = new TextureCatalogCandidate(TextureCatalogGame.LE3, qualifiedPath,
+        var level = new TextureCatalogCandidate(MorphFaceGame.LE3, qualifiedPath,
             manualOccurrence, [levelOccurrence, modOccurrence, manualOccurrence]);
 
         var choices = TextureCatalogPicker.Select([level, biog]);
@@ -508,7 +504,7 @@ public static class TextureCatalogTests
         var officialLow = Occurrence("BIOG_HMF_HED_PROMorph_R.pcc", 0, TextureCatalogOrigin.BaseGame);
         var officialHigh = Occurrence("DLC_CON_CORE_HMF_HED_PROMorph_R\\CookedPCConsole\\BIOG_HMF_HED_PROMorph_R.pcc",
             500, TextureCatalogOrigin.OfficialDlc);
-        var installed = new TextureCatalogCandidate(TextureCatalogGame.LE3, path, officialHigh,
+        var installed = new TextureCatalogCandidate(MorphFaceGame.LE3, path, officialHigh,
             [mod, officialLow, officialHigh])
         {
             IsEligibleOfficialDefault = true
@@ -565,7 +561,7 @@ public static class TextureCatalogTests
             "DLC_CON_Shadowed\\CookedPCConsole\\BIOG_MFE_Test.pcc", 9000, TextureCatalogOrigin.OfficialDlc);
         var mod = Occurrence("DLC_MOD_Shadowed\\CookedPCConsole\\BIOG_MFE_Test.pcc", 9000,
             TextureCatalogOrigin.Mod);
-        var candidate = new TextureCatalogCandidate(TextureCatalogGame.LE3, path, shadowedOfficial,
+        var candidate = new TextureCatalogCandidate(MorphFaceGame.LE3, path, shadowedOfficial,
             [shadowedOfficial, mod, manual]);
         var loader = new RecordingTextureLoader();
         using var editor = new MaterialTextureEditorViewModel(
@@ -602,7 +598,7 @@ public static class TextureCatalogTests
         var first = Candidate(path, @"DLC_MOD_A\CookedPCConsole\BIOG_MFE_Test.pcc", TextureCatalogOrigin.Mod);
         var secondOccurrence = Occurrence(
             @"DLC_MOD_Z\CookedPCConsole\BIOG_MFE_Test.pcc", 99, TextureCatalogOrigin.Mod) with { ExportUIndex = 43 };
-        var second = new TextureCatalogCandidate(TextureCatalogGame.LE3, path, secondOccurrence, [secondOccurrence]);
+        var second = new TextureCatalogCandidate(MorphFaceGame.LE3, path, secondOccurrence, [secondOccurrence]);
         var loader = new RecordingTextureLoader();
         using var reader = new MorphFacePackageReader();
         using var editor = CreateTextureEditor(session, reader, [], [second, first],
@@ -626,7 +622,7 @@ public static class TextureCatalogTests
         var session = MaterialTestFixtures.CreateSession();
         var current = session.GetSelectedTexture("HED_Diff")!;
         var registryCandidate = new TextureCatalogCandidate(
-            TextureCatalogGame.LE3,
+            MorphFaceGame.LE3,
             current.Source.InstancedPath,
             Occurrence("DLC_MOD_Texture\\CookedPCConsole\\external.pcc", 9000, TextureCatalogOrigin.Mod),
             [Occurrence("DLC_MOD_Texture\\CookedPCConsole\\external.pcc", 9000, TextureCatalogOrigin.Mod)]);
@@ -758,7 +754,7 @@ public static class TextureCatalogTests
         TextureCatalogOrigin origin = TextureCatalogOrigin.BaseGame)
     {
         var occurrence = Occurrence(packagePath, 0, origin);
-        return new TextureCatalogCandidate(TextureCatalogGame.LE3, path, occurrence, [occurrence])
+        return new TextureCatalogCandidate(MorphFaceGame.LE3, path, occurrence, [occurrence])
         {
             IsEligibleOfficialDefault = origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc
         };

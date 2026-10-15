@@ -38,99 +38,6 @@ public sealed record MorphTargetResolution(IReadOnlyList<ResolvedMorphFeature> F
 
 public sealed class MorphFeatureTargetResolver
 {
-    public static IReadOnlySet<string> HumanMaleMetadataOnlyFeatures { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-    {
-        "Formal",
-        "None",
-        "Sarge",
-        "Slick",
-        "eyes_bagOut",
-        "eyeShape_droop",
-        "cheeks_gaunt",
-        "eyeShape_liara",
-        "eyeShape_iconic",
-        "eyeShape_oldBlk",
-        "eyeShape_yngAsn",
-        "nose_BottomThin",
-        "nose_BottomWide",
-        "race_asnOld",
-        "race_asnYoung",
-        "race_blackOld",
-        "race_Blackyng",
-        "race_cauOld",
-        "race_cauYng",
-        "teeth_canineExtend",
-        "teeth_Narrow",
-        "teeth_Wide"
-    };
-
-    public static IReadOnlySet<string> HumanFemaleMetadataOnlyFeatures { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-    {
-        // Stored by LE1's female character-creator metadata, but absent from
-        // HMF_BaseMorphSet. Representative baked-face oracles prove that these
-        // values do not contribute a direct target delta.
-        "eyes_lashAngle",
-        "eyes_lashLength",
-        "eyes_bagOut",
-        "cheeks_gaunt",
-        "Eastwood",
-        "eyes_Shape_droop",
-        "eyes_Shape_sleepy",
-        "eyes_Shape_wide",
-        "HAIR_splitSide\"",
-        "mouth_cheekMass",
-        "neck_apple",
-        "None",
-        "pupil_Large",
-        "pupil_Small",
-        "rollins",
-        "teeth_canineExtend",
-        "teeth_close",
-        "teeth_Narrow",
-        "teeth_Seperate"
-    };
-
-    public static IReadOnlySet<string> Le3HumanMaleMetadataOnlyFeatures { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-    {
-        // Present with non-zero weights across the 169-face LE3 HMM corpus,
-        // absent from its 153-target HMM_BaseMorphSet, and proven inert by
-        // exact reconstruction of every stored 2,392-vertex LOD0.
-        "cheeks_gaunt",
-        "eyes_bagOut",
-        "eyes_Large",
-        "eyeShape_droop",
-        "eyeShape_sleepy",
-        "Formal",
-        "neck_thick",
-        "None",
-        "nose_BottomThin",
-        "nose_BottomWide",
-        "race_asnOld",
-        "race_asnYoung",
-        "race_cauOld",
-        "race_cauYng",
-        "Slick",
-        "teeth_Narrow"
-    };
-
-    public static IReadOnlySet<string> Le3HumanFemaleMetadataOnlyFeatures { get; } =
-        new HashSet<string>(HumanFemaleMetadataOnlyFeatures, StringComparer.OrdinalIgnoreCase);
-
-    /// <summary>
-    /// LE1/2 male character creation serialises these two UI feature names even
-    /// though their canonical HMM target objects use different names.
-    /// </summary>
-    public static IReadOnlyDictionary<string, string> Le12HumanMaleFeatureAliases { get; } =
-        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["Jaw_Width"] = "jaw_wide",
-            ["mouthShape_thick"] = "mouthShape_fatLips"
-        };
-
-    public static IReadOnlyDictionary<string, string> HumanFemaleFeatureAliases { get; } =
-        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        { };
-
     public MorphTargetResolution Resolve(
         IReadOnlyList<MorphFeatureValue> features,
         IReadOnlyList<MorphTargetAsset> targets,
@@ -140,7 +47,7 @@ public sealed class MorphFeatureTargetResolver
     {
         ArgumentNullException.ThrowIfNull(features);
         ArgumentNullException.ThrowIfNull(targets);
-        metadataOnlyFeatures ??= HumanMaleMetadataOnlyFeatures;
+        metadataOnlyFeatures ??= MorphFaceProfileFeatures.HumanMaleMetadataOnlyFeatures;
         var byName = targets
             .GroupBy(target => GetObjectName(target.Source.InstancedPath), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.OrdinalIgnoreCase);

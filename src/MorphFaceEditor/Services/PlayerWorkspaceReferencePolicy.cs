@@ -46,7 +46,7 @@ public static class PlayerWorkspaceReferencePolicy
                                       IsLe3HmmShortScalpTexture(candidate)).ToArray();
 
     private static bool IsLe3HmmShortScalpTexture(TextureCatalogCandidate candidate) =>
-        candidate.Game == TextureCatalogGame.LE3 &&
+        candidate.Game == MorphFaceGame.LE3 &&
         Le3HmmShortScalpTextures.Contains(candidate.InstancedPath) &&
         candidate.Occurrences
             .DefaultIfEmpty(candidate.EffectiveOccurrence)

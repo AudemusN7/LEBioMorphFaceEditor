@@ -63,6 +63,8 @@ public sealed record HeadPreviewMaterial(
     public bool IsLe2 { get; init; }
     public bool IsLe3 { get; init; }
     public HumanMaterialPreviewModel PreviewModel { get; init; }
+    public HumanFaceMaterialKind HumanFace { get; init; }
+    public bool LayeredHairHighlights { get; init; }
     public bool HasCompiledParameterSupport { get; init; }
     public HeadPreviewCubeTexture? FixedCubeTexture { get; init; }
     public HeadPreviewCubeTexture? SecondaryFixedCubeTexture { get; init; }

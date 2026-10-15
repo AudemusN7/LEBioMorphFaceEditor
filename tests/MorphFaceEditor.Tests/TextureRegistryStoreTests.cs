@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.LegendaryExplorer.TextureRegistry;
@@ -70,7 +71,7 @@ public static class TextureRegistryStoreTests
             [modPackage] = [new(stock, Occurrence(modPackage, 9000, TextureCatalogOrigin.Mod)),
                 new(addition, Occurrence(modPackage, 9000, TextureCatalogOrigin.Mod))]
         });
-        var manual = Snapshot(TextureCatalogGame.LE3);
+        var manual = Snapshot(MorphFaceGame.LE3);
         fixture.Store.WriteManualAtomic(manual);
         var manualBytes = File.ReadAllBytes(fixture.Paths.GetManualPath(MorphFaceGame.LE3));
         fixture.CreateBuilder(scanner, _ => [basePackage, modPackage])
@@ -91,7 +92,7 @@ public static class TextureRegistryStoreTests
     private static void RuntimeReadsWithoutSourcePackages()
     {
         using var fixture = RegistryFixture.Create();
-        fixture.Store.WriteAtomic(Snapshot(TextureCatalogGame.LE1));
+        fixture.Store.WriteAtomic(Snapshot(MorphFaceGame.LE1));
         var service = new TextureCatalogService(fixture.Store);
 
         var result = service.ReadAsync(MorphFaceGame.LE1).GetAwaiter().GetResult();
@@ -113,7 +114,7 @@ public static class TextureRegistryStoreTests
         const string ccHair = "BIOG_HMF_HIR_PRO.Hair_PROCustom.HMF_HIR_PROCustom01_MDL_CC";
         const string ccHat = "BIOG_HMF_HIR_PRO.Beanie.HMF_HAT_Bn1_MDL_CC";
         fixture.Store.WriteAtomic(new TextureRegistrySnapshot(TextureRegistrySnapshot.CurrentSchemaVersion,
-            TextureCatalogGame.LE1, DateTimeOffset.UtcNow, 1, [])
+            MorphFaceGame.LE1, DateTimeOffset.UtcNow, 1, [])
         {
             OfficialPackagePaths = [officialPath],
             MountedPackagePaths = [officialPath],
@@ -172,7 +173,7 @@ public static class TextureRegistryStoreTests
         var path = Path.Combine(Path.GetDirectoryName(fixture.Paths.GetPath(MorphFaceGame.LE1))!, "Mounted.pcc");
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllBytes(path, [1]);
-        fixture.Store.WriteAtomic(Snapshot(TextureCatalogGame.LE1) with
+        fixture.Store.WriteAtomic(Snapshot(MorphFaceGame.LE1) with
             { MountedPackages = [MountedPackageFingerprint.Read(path)] });
         var service = new TextureCatalogService(fixture.Store);
         var first = service.ReadAsync(MorphFaceGame.LE1).GetAwaiter().GetResult();
@@ -189,12 +190,12 @@ public static class TextureRegistryStoreTests
     private static void WarmReadsUseLayoutStamps()
     {
         using var fixture = RegistryFixture.Create();
-        fixture.Store.WriteAtomic(Snapshot(TextureCatalogGame.LE1));
+        fixture.Store.WriteAtomic(Snapshot(MorphFaceGame.LE1));
         var service = new TextureCatalogService(fixture.Store);
         var first = service.ReadAsync(MorphFaceGame.LE1).GetAwaiter().GetResult();
         TestAssert.True(ReferenceEquals(first, service.ReadAsync(MorphFaceGame.LE1).GetAwaiter().GetResult()),
             "A warm read rebuilt the unchanged registry catalogue.");
-        fixture.Store.WriteAtomic(Snapshot(TextureCatalogGame.LE1) with { Candidates = [] });
+        fixture.Store.WriteAtomic(Snapshot(MorphFaceGame.LE1) with { Candidates = [] });
         var refreshed = service.ReadAsync(MorphFaceGame.LE1).GetAwaiter().GetResult();
         TestAssert.True(refreshed.IsAvailable, "A rebuilt MFTR was unavailable.");
         TestAssert.Equal(0, refreshed.Candidates.Count);
@@ -203,15 +204,15 @@ public static class TextureRegistryStoreTests
     private static void ManualSidecarMergesWithoutChangingInstalled()
     {
         using var fixture = RegistryFixture.Create();
-        var installed = Snapshot(TextureCatalogGame.LE1);
+        var installed = Snapshot(MorphFaceGame.LE1);
         fixture.Store.WriteAtomic(installed);
         var manualPath = "BIOG_HMM_HIR_PRO_R.Hair.HMM_HIR_Explicit_CC";
         var packagePath = "C:\\Custom\\Explicit.pcc";
         var occurrence = new TextureCatalogOccurrence(packagePath, 3, 0,
             TextureCatalogOrigin.Manual, 256, 256, "PF_DXT5", "Character", false, null);
         var manual = new TextureRegistrySnapshot(TextureRegistrySnapshot.CurrentSchemaVersion,
-            TextureCatalogGame.LE1, DateTimeOffset.UtcNow, 0,
-            [new TextureCatalogCandidate(TextureCatalogGame.LE1, manualPath, occurrence, [occurrence])])
+            MorphFaceGame.LE1, DateTimeOffset.UtcNow, 0,
+            [new TextureCatalogCandidate(MorphFaceGame.LE1, manualPath, occurrence, [occurrence])])
         {
             ManualAssets = [new ManualRegistryAsset(packagePath, 3, manualPath, "Texture2D")]
         };
@@ -233,7 +234,7 @@ public static class TextureRegistryStoreTests
         var occurrence = new AttachmentMeshOccurrence(sourcePath, "Hair.HMM_HIR_Custom_MDL",
             7, 0, TextureCatalogOrigin.Manual, 42);
         fixture.Store.WriteManualAtomic(new TextureRegistrySnapshot(
-            TextureRegistrySnapshot.CurrentSchemaVersion, TextureCatalogGame.LE1,
+            TextureRegistrySnapshot.CurrentSchemaVersion, MorphFaceGame.LE1,
             DateTimeOffset.UtcNow, 0, [])
         {
             AttachmentMeshes = [new AttachmentMeshCandidate(canonicalPath, occurrence, [occurrence])],
@@ -253,7 +254,7 @@ public static class TextureRegistryStoreTests
             // The manual sidecar cannot stand in for the required installed database.
         }
 
-        fixture.Store.WriteAtomic(Snapshot(TextureCatalogGame.LE1));
+        fixture.Store.WriteAtomic(Snapshot(MorphFaceGame.LE1));
         var resolved = references.ResolveInstalledSkeletalMeshesAsync(MorphFaceGame.LE1,
             [canonicalPath, occurrence.InstancedPath, "missing.Hair.HMM_HIR_NoSuchMesh_MDL"])
             .GetAwaiter().GetResult();
@@ -271,7 +272,7 @@ public static class TextureRegistryStoreTests
         var occurrence = new AttachmentMeshOccurrence(path, "Hair.HMM_HIR_Custom_MDL", 3, 0,
             TextureCatalogOrigin.Manual, 42);
         var manual = new TextureRegistrySnapshot(TextureRegistrySnapshot.CurrentSchemaVersion,
-            TextureCatalogGame.LE1, DateTimeOffset.UtcNow, 0, [])
+            MorphFaceGame.LE1, DateTimeOffset.UtcNow, 0, [])
         {
             AttachmentMeshes = [new AttachmentMeshCandidate("missing-custom.Hair.HMM_HIR_Custom_MDL",
                 occurrence, [occurrence])],
@@ -293,7 +294,7 @@ public static class TextureRegistryStoreTests
     private static void SelectedExportAppendsToSidecar()
     {
         using var fixture = RegistryFixture.Create();
-        fixture.Store.WriteAtomic(Snapshot(TextureCatalogGame.LE1));
+        fixture.Store.WriteAtomic(Snapshot(MorphFaceGame.LE1));
         var path = Path.GetFullPath("tests/Global Morphs/LE1 GlobalMorphs.pcc");
         var export = PackageAssetInspector.Inventory(path, ["Texture2D", "SkeletalMesh"]).Entries
             .First(value => !value.IsDefaultObject);
@@ -302,7 +303,7 @@ public static class TextureRegistryStoreTests
         var missingPath = Path.Combine(Path.GetDirectoryName(fixture.Paths.GetManualPath(MorphFaceGame.LE1))!,
             "old-location.pcc");
         fixture.Store.WriteManualAtomic(new TextureRegistrySnapshot(
-            TextureRegistrySnapshot.CurrentSchemaVersion, TextureCatalogGame.LE1,
+            TextureRegistrySnapshot.CurrentSchemaVersion, MorphFaceGame.LE1,
             DateTimeOffset.UtcNow, 0, [])
         {
             ManualAssets = [selected with { PackagePath = missingPath, IsMissing = true }]
@@ -616,7 +617,7 @@ public static class TextureRegistryStoreTests
     private static void CancelledBuildPreservesActiveFile()
     {
         using var fixture = RegistryFixture.Create();
-        fixture.Store.WriteAtomic(Snapshot(TextureCatalogGame.LE1));
+        fixture.Store.WriteAtomic(Snapshot(MorphFaceGame.LE1));
         var path = fixture.Paths.GetPath(MorphFaceGame.LE1);
         var before = File.ReadAllBytes(path);
         using var cancellation = new CancellationTokenSource();
@@ -652,14 +653,14 @@ public static class TextureRegistryStoreTests
     private static void SnapshotRoundTripPreservesMetadata()
     {
         using var fixture = RegistryFixture.Create();
-        var snapshot = Snapshot(TextureCatalogGame.LE1);
+        var snapshot = Snapshot(MorphFaceGame.LE1);
 
         fixture.Store.WriteAtomic(snapshot);
         var reopened = fixture.Store.Read(MorphFaceGame.LE1);
         var status = fixture.Store.GetStatus(MorphFaceGame.LE1);
 
         TestAssert.Equal(TextureRegistrySnapshot.CurrentSchemaVersion, reopened.SchemaVersion);
-        TestAssert.Equal(TextureCatalogGame.LE1, reopened.Game);
+        TestAssert.Equal(MorphFaceGame.LE1, reopened.Game);
         TestAssert.Equal(37, reopened.InstalledPackageCount);
         TestAssert.Equal(1, reopened.Candidates.Count);
         TestAssert.Equal(1, reopened.MorphFaceTemplates.Count);
@@ -690,7 +691,7 @@ public static class TextureRegistryStoreTests
             .ToArray();
         var flatSize = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(assets).LongLength;
 
-        fixture.Store.WriteAtomic(Snapshot(TextureCatalogGame.LE3) with { Assets = assets });
+        fixture.Store.WriteAtomic(Snapshot(MorphFaceGame.LE3) with { Assets = assets });
 
         var roundTrip = fixture.Store.Read(MorphFaceGame.LE3).Assets;
         TestAssert.True(assets.SequenceEqual(roundTrip),
@@ -708,7 +709,7 @@ public static class TextureRegistryStoreTests
     private static void WrongGamePayloadIsRejected()
     {
         using var fixture = RegistryFixture.Create();
-        fixture.Store.WriteAtomic(Snapshot(TextureCatalogGame.LE1));
+        fixture.Store.WriteAtomic(Snapshot(MorphFaceGame.LE1));
         File.Copy(fixture.Paths.GetPath(MorphFaceGame.LE1), fixture.Paths.GetPath(MorphFaceGame.LE2));
 
         try
@@ -738,7 +739,7 @@ public static class TextureRegistryStoreTests
         {
             if (magic == TextureRegistryStore.Magic && version == TextureRegistrySnapshot.CurrentSchemaVersion)
                 continue; // Release v1 round trips are covered by the normal store tests.
-            var old = Snapshot(TextureCatalogGame.LE1) with
+            var old = Snapshot(MorphFaceGame.LE1) with
             {
                 SchemaVersion = version,
                 ManualAssets = [new ManualRegistryAsset("Custom.pcc", 42, "Hair.Custom", "SkeletalMesh")]
@@ -790,7 +791,7 @@ public static class TextureRegistryStoreTests
     private static void CancelledWritePreservesActiveFile()
     {
         using var fixture = RegistryFixture.Create();
-        fixture.Store.WriteAtomic(Snapshot(TextureCatalogGame.LE2));
+        fixture.Store.WriteAtomic(Snapshot(MorphFaceGame.LE2));
         var path = fixture.Paths.GetPath(MorphFaceGame.LE2);
         var before = File.ReadAllBytes(path);
         using var cancellation = new CancellationTokenSource();
@@ -798,7 +799,7 @@ public static class TextureRegistryStoreTests
 
         try
         {
-            fixture.Store.WriteAtomic(Snapshot(TextureCatalogGame.LE2) with { InstalledPackageCount = 999 }, cancellation.Token);
+            fixture.Store.WriteAtomic(Snapshot(MorphFaceGame.LE2) with { InstalledPackageCount = 999 }, cancellation.Token);
             throw new Exception("A cancelled registry write completed.");
         }
         catch (OperationCanceledException)
@@ -814,8 +815,8 @@ public static class TextureRegistryStoreTests
     private static void FailedPairWritePreservesBoth()
     {
         using var fixture = RegistryFixture.Create();
-        var originalInstalled = Snapshot(TextureCatalogGame.LE1) with { InstalledPackageCount = 11 };
-        var originalMods = Snapshot(TextureCatalogGame.LE1) with { InstalledPackageCount = 22 };
+        var originalInstalled = Snapshot(MorphFaceGame.LE1) with { InstalledPackageCount = 11 };
+        var originalMods = Snapshot(MorphFaceGame.LE1) with { InstalledPackageCount = 22 };
         fixture.Store.WriteInstalledAndModsAtomic(originalInstalled, originalMods);
         var replacementInstalled = originalInstalled with { InstalledPackageCount = 101 };
         var replacementMods = originalMods with { InstalledPackageCount = 202 };
@@ -852,14 +853,14 @@ public static class TextureRegistryStoreTests
     private static void SharedCacheReusesSnapshot()
     {
         using var fixture = RegistryFixture.Create();
-        fixture.Store.WriteAtomic(Snapshot(TextureCatalogGame.LE1));
+        fixture.Store.WriteAtomic(Snapshot(MorphFaceGame.LE1));
         var first = fixture.Store.ReadWithStatus(MorphFaceGame.LE1).Snapshot!;
         var secondStore = new TextureRegistryStore(fixture.Paths);
         var second = secondStore.ReadWithStatus(MorphFaceGame.LE1).Snapshot!;
         TestAssert.True(ReferenceEquals(first, second),
             "Separate store instances reparsed an unchanged registry file.");
 
-        fixture.Store.WriteAtomic(Snapshot(TextureCatalogGame.LE1) with { Candidates = [] });
+        fixture.Store.WriteAtomic(Snapshot(MorphFaceGame.LE1) with { Candidates = [] });
         var refreshed = secondStore.ReadWithStatus(MorphFaceGame.LE1).Snapshot!;
         TestAssert.True(!ReferenceEquals(first, refreshed),
             "A changed registry file reused the old parsed snapshot.");
@@ -872,8 +873,8 @@ public static class TextureRegistryStoreTests
         var secondStore = new TextureRegistryStore(fixture.Paths);
         using var firstReadyToVerify = new ManualResetEventSlim();
         using var releaseFirst = new ManualResetEventSlim();
-        var firstSnapshot = Snapshot(TextureCatalogGame.LE2) with { InstalledPackageCount = 101 };
-        var secondSnapshot = Snapshot(TextureCatalogGame.LE2) with { InstalledPackageCount = 202 };
+        var firstSnapshot = Snapshot(MorphFaceGame.LE2) with { InstalledPackageCount = 101 };
+        var secondSnapshot = Snapshot(MorphFaceGame.LE2) with { InstalledPackageCount = 202 };
         var first = Task.Run(() => fixture.Store.WriteAtomic(
             firstSnapshot,
             CancellationToken.None,
@@ -897,7 +898,7 @@ public static class TextureRegistryStoreTests
             Path.GetDirectoryName(fixture.Paths.GetPath(MorphFaceGame.LE2))!, "*.tmp").Length);
     }
 
-    private static TextureRegistrySnapshot Snapshot(TextureCatalogGame game)
+    private static TextureRegistrySnapshot Snapshot(MorphFaceGame game)
     {
         var occurrence = new TextureCatalogOccurrence(
             "DLC_MOD_Custom\\CookedPCConsole\\BioG_Sal.pcc",

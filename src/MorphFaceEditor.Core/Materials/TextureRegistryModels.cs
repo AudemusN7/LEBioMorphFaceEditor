@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Domain;
 using System.Text.Json.Serialization;
 
 namespace MorphFaceEditor.Core.Materials;
@@ -16,7 +17,7 @@ public sealed record TextureMipStorageRecord(
 /// <summary>The complete compact registry payload for one installed Legendary Edition game.</summary>
 public sealed record TextureRegistrySnapshot(
     int SchemaVersion,
-    TextureCatalogGame Game,
+    MorphFaceGame Game,
     DateTimeOffset BuiltAtUtc,
     int InstalledPackageCount,
     IReadOnlyList<TextureCatalogCandidate> Candidates)

@@ -271,10 +271,7 @@ internal partial struct HeadPreviewMaterialConstants
         {
             return CreateAttachmentConstants(material, diagnostic, bindings);
         }
-        var femaleFace = material.Family == HeadMaterialFamily.Skin &&
-            (material.Textures.ContainsKey("HED_Makeup_Mask") ||
-             material.Scalars.ContainsKey("HED_Brow_Tint_Scalar") ||
-             material.Vectors.ContainsKey("HED_Lips_Tint_Vector"));
+        var femaleFace = material.HumanFace is HumanFaceMaterialKind.FemaleNpc or HumanFaceMaterialKind.FemalePlayer;
         if (material.Family == HeadMaterialFamily.AsariSkin)
         {
             return CreateAsari(material, diagnostic, family, bindings);
@@ -897,11 +894,7 @@ internal partial struct HeadPreviewMaterialConstants
             : fallback;
 
     private static bool HasLayeredHairHighlights(HeadPreviewMaterial material) =>
-        material.Family == HeadMaterialFamily.Hair &&
-        (material.Supports("Highlight1Color", MaterialParameterKind.Vector) ||
-         material.Supports("Highlight1Colour_Vector", MaterialParameterKind.Vector) ||
-         material.Supports("Highlight2Color", MaterialParameterKind.Vector) ||
-         material.Supports("Highlight2Colour_Vector", MaterialParameterKind.Vector));
+        material.LayeredHairHighlights;
 
     private static float GetFirstScalar(
         HeadPreviewMaterial material,

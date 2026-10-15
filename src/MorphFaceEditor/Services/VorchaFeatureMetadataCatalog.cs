@@ -19,12 +19,7 @@ public sealed partial class VorchaFeatureMetadataCatalog : IHeadEditorUiProfile
     private const string Surface = "surface";
     private const string Tattoo = "tattoo";
 
-    public static IReadOnlySet<string> MetadataOnlyFeatures { get; } =
-        new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "VorchaBase" };
-    public static IReadOnlyDictionary<string, string> FeatureAliases { get; } =
-        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-    public IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
+public IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
     [
         new(Head, Loc.Text("loc_Services_Taxonomy_head_9bb0aacc"), Loc.Text("loc_Services_Taxonomy_reconstructed_vorcha_facial_shape_controls_8e9650d1"),
             [new(Shape, Loc.Text("loc_Services_Taxonomy_shape_cfb25fc2")), new(Nose, Loc.Text("loc_Services_Taxonomy_nose_3c3cb8fe")), new(Mouth, Loc.Text("loc_Services_Taxonomy_mouth_jaw_b57e4681")), new(Spikes, Loc.Text("loc_Services_Taxonomy_spikes_fe7e5996"))]),

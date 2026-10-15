@@ -3,7 +3,7 @@ using System.Numerics;
 using System.Text;
 using MorphFaceEditor.Core.Domain;
 
-namespace MorphFaceEditor.LegendaryExplorer;
+namespace MorphFaceEditor.Core.Services;
 
 /// <summary>Compact, versioned storage for the morph targets shipped with the editor.</summary>
 public static class MorphTargetBundleSerializer

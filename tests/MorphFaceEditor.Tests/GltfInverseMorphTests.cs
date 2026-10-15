@@ -20,8 +20,9 @@ public static class GltfInverseMorphTests
     private static readonly Vector3[] Baked = [new(2, 3, 5), new(7, 11, 13), new(17, 19, 23)];
     private static MorphMeshFitPrior Prior => new("Fixture.BaseHead", [], [], [Baked]);
     private static SkeletalMeshAsset BaseHead => new(
-        new AssetIdentity("", "Fixture.BaseHead", 0, "SkeletalMesh"), Baked, new Vector3[3],
-        new SkeletalMeshTopology(0, 3, 0, 0, [], [], [], [], [], ""));
+        new AssetIdentity("", "Fixture.BaseHead", 0, "SkeletalMesh"),
+        [new SkeletalMeshLod(0, Baked, new Vector3[3],
+            new SkeletalMeshTopology(0, 3, 0, 0, [], [], [], [], [], ""))]);
 
     private static void CanonicalBasis() => WithFixture((gltf, _) =>
     {

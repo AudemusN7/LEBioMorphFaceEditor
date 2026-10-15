@@ -168,9 +168,9 @@ public static class MaterialInterchangeTests
             1, 1, "PF_B8G8R8A8", "TEXTUREGROUP_Character", false, null);
         var characterCreatorOccurrence = new TextureCatalogOccurrence("EntryMenu.pcc", 18, 0, TextureCatalogOrigin.BaseGame,
             1, 1, "PF_B8G8R8A8", "TEXTUREGROUP_Character", false, null);
-        var seekFreeCandidate = new TextureCatalogCandidate(TextureCatalogGame.LE1, "Diff.Test",
+        var seekFreeCandidate = new TextureCatalogCandidate(MorphFaceGame.LE1, "Diff.Test",
             seekFreeOccurrence, [seekFreeOccurrence]) { IsEligibleOfficialDefault = true };
-        var characterCreatorCandidate = new TextureCatalogCandidate(TextureCatalogGame.LE1, path,
+        var characterCreatorCandidate = new TextureCatalogCandidate(MorphFaceGame.LE1, path,
             characterCreatorOccurrence, [characterCreatorOccurrence]) { IsEligibleOfficialDefault = true };
         var loader = new Loader();
         PreparedMeshMaterialImport Prepare(string texturePath, IReadOnlyList<TextureCatalogCandidate>? sources = null) =>
@@ -204,7 +204,7 @@ public static class MaterialInterchangeTests
         const string path = "BIOG_Lower.Textures.Shared";
         var lower = Occurrence("BIOG_Lower.pcc", 100, TextureCatalogOrigin.OfficialDlc);
         var higher = Occurrence("BIOG_Higher.pcc", 9000, TextureCatalogOrigin.OfficialDlc);
-        var candidate = new TextureCatalogCandidate(TextureCatalogGame.LE1, path, higher, [lower, higher])
+        var candidate = new TextureCatalogCandidate(MorphFaceGame.LE1, path, higher, [lower, higher])
         {
             IsEligibleOfficialDefault = true
         };
@@ -213,13 +213,13 @@ public static class MaterialInterchangeTests
         TestAssert.Equal("BIOG_Higher.pcc", selected?.Occurrence.PackagePath);
 
         var customOccurrence = Occurrence("custom.pcc", 0, TextureCatalogOrigin.Manual);
-        var custom = new TextureCatalogCandidate(TextureCatalogGame.LE1,
+        var custom = new TextureCatalogCandidate(MorphFaceGame.LE1,
             "BIOG_Custom.Textures.Only", customOccurrence, [customOccurrence]);
         TestAssert.Equal("custom.pcc",
             MeshMaterialFileService.PreferredTextureSource(custom.InstancedPath, [custom])?.Occurrence.PackagePath);
 
         var modOccurrence = Occurrence("mod.pcc", 8000, TextureCatalogOrigin.Mod);
-        var modOnly = new TextureCatalogCandidate(TextureCatalogGame.LE1,
+        var modOnly = new TextureCatalogCandidate(MorphFaceGame.LE1,
             "BIOG_Mod.Textures.Only", modOccurrence, [modOccurrence]);
         TestAssert.True(MeshMaterialFileService.PreferredTextureSource(modOnly.InstancedPath, [modOnly]) is null,
             "A path-only material import inferred a mod donor without an official default or explicit selection.");
@@ -349,7 +349,7 @@ public static class MaterialInterchangeTests
             Workspace = loaded.CustomMaterials!;
             Session = loaded.Preview.MaterialEditingSession;
             References = new PackageReferenceService(_reader, TestFixtures.CreateMissingTextureCatalogService());
-            Editor = new FaceEditorViewModel(loaded.Preview.EditingSession, loaded.Preview.Profile.UiProfile, Session,
+            Editor = new FaceEditorViewModel(loaded.Preview.EditingSession, loaded.Preview.Profile.GetUiProfile(Workspace), Session,
                 new Colours(), References,
                 source.SourcePath, [], [], null, [], error => throw new Exception(error),
                 customMaterialWorkspace: Workspace, customMaterialOptions: Options, previewOnlyAttachments: true);

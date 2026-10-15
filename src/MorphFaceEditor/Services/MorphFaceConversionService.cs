@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Services;
 using System.IO;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Editing;
@@ -64,7 +65,7 @@ public sealed class MorphFaceConversionService(
                                 profile.Game == request.TargetGame &&
                                 string.Equals(SpeciesForProfile(profile.Key), species, StringComparison.OrdinalIgnoreCase))
                             ?? throw new NotSupportedException(
-                                $"No {request.TargetGame} conversion profile exists for {sourceProfile.DisplayName}.");
+                                $"No {request.TargetGame} conversion profile exists for {sourceProfile.GetDisplayName()}.");
 
         var templatePath = request.CreateNewPackage
             ? string.IsNullOrWhiteSpace(request.TemplatePackagePath)
@@ -155,8 +156,8 @@ public sealed class MorphFaceConversionService(
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         return new MorphFaceConversionResult(
             saveResult,
-            sourceProfile.DisplayName,
-            targetProfile.DisplayName,
+            sourceProfile.GetDisplayName(),
+            targetProfile.GetDisplayName(),
             sourceNonZero.Count(targetNames.Contains),
             sourceNonZero.Count(name => !targetNames.Contains(name)),
             mappedMaterial.Scalars.Count,
@@ -224,7 +225,7 @@ public sealed class MorphFaceConversionService(
         if (match is null)
         {
             throw new InvalidOperationException(
-                $"The {profile.Game} texture database contains no installed {profile.DisplayName} face to use as a conversion template. Rebuild that database and try again.");
+                $"The {profile.Game} texture database contains no installed {profile.GetDisplayName()} face to use as a conversion template. Rebuild that database and try again.");
         }
         return Path.GetFullPath(match.PackagePath);
     }
@@ -296,7 +297,7 @@ public sealed class MorphFaceConversionService(
             }
         }
         throw new InvalidOperationException(
-            $"'{templatePath}' contains no editable {profile.DisplayName} BioMorphFace to use as a conversion template.");
+            $"'{templatePath}' contains no editable {profile.GetDisplayName()} BioMorphFace to use as a conversion template.");
     }
 
     private MorphFaceEditingSession CreateSession(
@@ -304,9 +305,9 @@ public sealed class MorphFaceConversionService(
         MorphFaceProfile profile) => new(
         loaded.Document,
         loaded.BaseHead,
-        profile.IgnoresAuthoredGeometry ? [] : targets.Load(profile, loaded.Game),
+        profile.IgnoresAuthoredGeometry ? [] : targets.Load(profile),
         profile.MetadataOnlyFeatures,
-        profile.DisplayName,
+        profile.GetDisplayName(),
         profile.FeatureAliases,
         profile.RecognizesBaseVariant,
         profile.GeometryEditBlockReason(loaded.BaseHead.Source.InstancedPath),

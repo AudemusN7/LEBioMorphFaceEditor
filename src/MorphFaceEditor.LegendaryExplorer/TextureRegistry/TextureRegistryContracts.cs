@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Domain;
 namespace MorphFaceEditor.LegendaryExplorer.TextureRegistry;
 
 /// <summary>Observable lifecycle of one MFE-owned compact texture registry.</summary>

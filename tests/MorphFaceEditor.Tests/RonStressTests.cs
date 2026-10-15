@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Services;
 using System.Numerics;
 using LegendaryExplorerCore.Packages;
 using LegendaryExplorerCore.Unreal.BinaryConverters;
@@ -258,7 +259,7 @@ internal static class RonStressTests
             false,
             null);
         var candidate = new TextureCatalogCandidate(
-            TextureCatalogGame.LE1,
+            MorphFaceGame.LE1,
             internalPath,
             occurrence,
             [occurrence]);
@@ -551,7 +552,6 @@ internal static class RonStressTests
             loaded.Game,
             loaded.Document.Source.InstancedPath,
             loaded.Document.BaseHeadReference?.InstancedPath,
-            loaded.Document.MaterialOverrides,
             loaded.Materials) ?? throw new Exception($"{label} did not resolve a Player profile.");
         TestAssert.True(!resolution.UsesCustomMesh,
             $"{label} was classified as a custom-mesh profile instead of canonical Player topology.");
@@ -559,9 +559,9 @@ internal static class RonStressTests
         var session = new MorphFaceEditingSession(
             loaded.Document,
             loaded.BaseHead,
-            new MorphTargetCatalog().Load(profile, loaded.Game),
+            new MorphTargetCatalog().Load(profile),
             profile.MetadataOnlyFeatures,
-            profile.DisplayName,
+            profile.GetDisplayName(),
             profile.FeatureAliases,
             profile.RecognizesBaseVariant,
             profile.GeometryEditBlockReason(loaded.BaseHead.Source.InstancedPath),

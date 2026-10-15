@@ -24,26 +24,7 @@ public sealed partial class SalarianFeatureMetadataCatalog : IHeadEditorUiProfil
     private const string Complexion = "complexion";
     private const string Tattoos = "tattoos";
 
-    public static IReadOnlySet<string> MetadataOnlyFeatures { get; } =
-        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            // Present in official face recipes but absent from SAL_BaseMorphSet.
-            // The corpus oracle establishes whether it is inert front-end metadata.
-            "shape_chubby"
-        };
-
-    public static IReadOnlyDictionary<string, string> FeatureAliases { get; } =
-        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-    private static readonly IReadOnlySet<string> HiddenFeatures =
-        new HashSet<string>(MetadataOnlyFeatures, StringComparer.OrdinalIgnoreCase)
-        {
-            // An internal seam correction, retained and evaluated but not presented
-            // as an authored facial control.
-            "neck_correction"
-        };
-
-    public IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
+public IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
     [
         new(FacialStructure, Loc.Text("loc_Services_Taxonomy_facial_structure_812284cf"), Loc.Text("loc_Services_Taxonomy_salarian_cranial_ring_proportions_2d573b0d"),
             [new(CranialRing, Loc.Text("loc_Services_Taxonomy_cranial_ring_b34926d4"))]),
@@ -65,7 +46,7 @@ public sealed partial class SalarianFeatureMetadataCatalog : IHeadEditorUiProfil
             FeatureLabel(feature.Feature.Name),
             category,
             subcategory,
-            !HiddenFeatures.Contains(feature.Feature.Name),
+            MorphFaceProfileFeatures.IsControlEligible(MorphFaceMetadataCatalogRegistry.Salarian, Core.Domain.MorphFaceGame.LE1, feature.Feature.Name, feature.Target),
             FeatureSortOrder(feature.Feature.Name),
             0,
             1,

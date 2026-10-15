@@ -4,14 +4,6 @@ using MorphFaceEditor.Core.Materials;
 
 namespace MorphFaceEditor.LegendaryExplorer;
 
-public enum MorphFaceGame
-{
-    LE1,
-    LE2,
-    LE3,
-    Unsupported
-}
-
 public sealed record LoadedMorphFace(
     MorphFaceDocument Document,
     SkeletalMeshAsset BaseHead,

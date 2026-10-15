@@ -148,23 +148,29 @@ public sealed class MorphFaceInterchangeService
         }
     }
 
-    public IReadOnlyList<MorphMeshPositionCandidate> ReadMeshPositions(string path, SkeletalMeshAsset baseHead)
+    public IReadOnlyList<MorphMeshPositionCandidate> ReadMeshPositions(string path, SkeletalMeshAsset baseHead) =>
+        ReadMeshPositions(path)(baseHead);
+
+    // Decode the file once; correspondence and vertex-count choices remain specific to each candidate base.
+    internal Func<SkeletalMeshAsset, IReadOnlyList<MorphMeshPositionCandidate>> ReadMeshPositions(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         if (!File.Exists(path))
         {
             throw new FileNotFoundException("Imported morph mesh was not found.", path);
         }
-        var expectedVertexCount = baseHead.Positions.Length;
-        var candidates = Path.GetExtension(path).ToLowerInvariant() switch
+        var project = Path.GetExtension(path).ToLowerInvariant() switch
         {
-            ".psk" or ".pskx" => ReadPsk(path, expectedVertexCount),
-            ".gltf" or ".glb" => ReadGltf(path, baseHead),
-            ".md5" or ".md5mesh" => ReadMd5(path, baseHead),
+            ".psk" or ".pskx" => ReadPsk(path),
+            ".gltf" or ".glb" => ReadGltf(path),
+            ".md5" or ".md5mesh" => ReadMd5(path),
             _ => throw new NotSupportedException(
                 "Morph mesh import supports PSK/PSKX, glTF/GLB, and MD5/MD5Mesh files.")
         };
-        return ApplyVertexMapSidecar(path, candidates, expectedVertexCount);
+        var sidecar = ReadVertexMapSidecar(path);
+        return baseHead => ApplyVertexMapSidecar(sidecar,
+            project(new MeshPositionReference(baseHead.Positions, baseHead.RenderData?.TextureCoordinates)),
+            baseHead.Positions.Length);
     }
 
     /// <summary>Reads complete detached render geometry, preserving optional rig data.</summary>
@@ -260,12 +266,12 @@ public sealed class MorphFaceInterchangeService
         IReadOnlyList<Vector3> bakedPositions,
         MorphMeshFitPrior fitPrior)
     {
-        var baseHead = CreatePositionOnlyMesh(bakedPositions);
+        var baseHead = new MeshPositionReference(bakedPositions);
         var candidates = format switch
         {
-            MorphMeshFormat.Psk => ReadPsk(meshPath, bakedPositions.Count),
-            MorphMeshFormat.Gltf => ReadGltf(meshPath, baseHead),
-            MorphMeshFormat.Md5 => ReadMd5(meshPath, baseHead),
+            MorphMeshFormat.Psk => ReadPsk(meshPath)(baseHead),
+            MorphMeshFormat.Gltf => ReadGltf(meshPath)(baseHead),
+            MorphMeshFormat.Md5 => ReadMd5(meshPath)(baseHead),
             _ => throw new ArgumentOutOfRangeException(nameof(format))
         };
         foreach (var candidate in candidates.Where(value =>
@@ -287,9 +293,9 @@ public sealed class MorphFaceInterchangeService
         IReadOnlyList<Vector3> bakedPositions,
         MorphMeshFitPrior fitPrior)
     {
-        var baseHead = CreatePositionOnlyMesh(bakedPositions);
-        var md5Candidates = ReadMd5(md5Path, baseHead);
-        var gltfCandidates = ReadGltf(gltfPath, baseHead);
+        var baseHead = new MeshPositionReference(bakedPositions);
+        var md5Candidates = ReadMd5(md5Path)(baseHead);
+        var gltfCandidates = ReadGltf(gltfPath)(baseHead);
         foreach (var candidate in md5Candidates.Where(value =>
                      value.CoordinateSystem.EndsWith("file order", StringComparison.Ordinal)))
         {
@@ -394,70 +400,66 @@ public sealed class MorphFaceInterchangeService
                 .ToArray();
         }).ToArray();
 
+    private static VertexMapSidecar? ReadVertexMapSidecar(string meshPath)
+    {
+        var path = meshPath + ".mfe.json";
+        if (!File.Exists(path)) return null;
+        try { return JsonSerializer.Deserialize<VertexMapSidecar>(File.ReadAllText(path)); }
+        catch (JsonException) { return null; }
+    }
+
     private static IReadOnlyList<MorphMeshPositionCandidate> ApplyVertexMapSidecar(
-        string meshPath,
+        VertexMapSidecar? sidecar,
         IReadOnlyList<MorphMeshPositionCandidate> candidates,
         int expectedVertexCount)
     {
-        var sidecarPath = meshPath + ".mfe.json";
-        if (!File.Exists(sidecarPath))
+        if (sidecar is null) return candidates;
+        var prior = sidecar is
+            { Version: 3, BaseHeadPath: not null, MorphFeatures: not null, FinalSkeleton: not null, BakedLods: not null }
+            ? new MorphMeshFitPrior(
+                sidecar.BaseHeadPath,
+                sidecar.MorphFeatures.Select(value =>
+                    new MorphFeatureValue(value.Name, value.Offset)).ToArray(),
+                sidecar.FinalSkeleton.Select(value => new BoneTranslation(
+                    value.BoneName,
+                    new Vector3(value.X, value.Y, value.Z))).ToArray(),
+                DecodeBakedLods(sidecar.BakedLods))
+            : null;
+        var candidatesWithPrior = candidates
+            .Select(candidate => candidate with { Prior = prior })
+            .ToArray();
+        var source = sidecar is { Version: 1 or 2 or 3 } &&
+                     sidecar.ExportedToBase.Length == expectedVertexCount
+            ? candidatesWithPrior.FirstOrDefault(value =>
+                value.CoordinateSystem.Equals(sidecar.CoordinateSystem, StringComparison.Ordinal))
+            : null;
+        if (source is null || source.Positions.Count != expectedVertexCount ||
+            sidecar!.ExportedToBase.Distinct().Count() != expectedVertexCount ||
+            sidecar.ExportedToBase.Any(index => index < 0 || index >= expectedVertexCount))
         {
-            return candidates;
+            return candidatesWithPrior;
         }
-        try
+        var reordered = new Vector3[expectedVertexCount];
+        for (var exportedIndex = 0; exportedIndex < expectedVertexCount; exportedIndex++)
         {
-            var sidecar = JsonSerializer.Deserialize<VertexMapSidecar>(File.ReadAllText(sidecarPath));
-            var prior = sidecar is
-                { Version: 3, BaseHeadPath: not null, MorphFeatures: not null, FinalSkeleton: not null, BakedLods: not null }
-                ? new MorphMeshFitPrior(
-                    sidecar.BaseHeadPath,
-                    sidecar.MorphFeatures.Select(value =>
-                        new MorphFeatureValue(value.Name, value.Offset)).ToArray(),
-                    sidecar.FinalSkeleton.Select(value => new BoneTranslation(
-                        value.BoneName,
-                        new Vector3(value.X, value.Y, value.Z))).ToArray(),
-                    DecodeBakedLods(sidecar.BakedLods))
-                : null;
-            var candidatesWithPrior = candidates
-                .Select(candidate => candidate with { Prior = prior })
-                .ToArray();
-            var source = sidecar is { Version: 1 or 2 or 3 } &&
-                         sidecar.ExportedToBase.Length == expectedVertexCount
-                ? candidatesWithPrior.FirstOrDefault(value =>
-                    value.CoordinateSystem.Equals(sidecar.CoordinateSystem, StringComparison.Ordinal))
-                : null;
-            if (source is null || source.Positions.Count != expectedVertexCount ||
-                sidecar!.ExportedToBase.Distinct().Count() != expectedVertexCount ||
-                sidecar.ExportedToBase.Any(index => index < 0 || index >= expectedVertexCount))
-            {
-                return candidatesWithPrior;
-            }
-            var reordered = new Vector3[expectedVertexCount];
-            for (var exportedIndex = 0; exportedIndex < expectedVertexCount; exportedIndex++)
-            {
-                var correction = sidecar.Corrections is { } corrections &&
-                                 corrections.Length == expectedVertexCount * 3
-                    ? new Vector3(
-                        corrections[exportedIndex * 3],
-                        corrections[exportedIndex * 3 + 1],
-                        corrections[exportedIndex * 3 + 2])
-                    : Vector3.Zero;
-                reordered[sidecar.ExportedToBase[exportedIndex]] =
-                    source.Positions[exportedIndex] + correction;
-            }
-            return
-            [
-                new MorphMeshPositionCandidate(
-                    $"{source.CoordinateSystem}, MFE vertex map",
-                    reordered,
-                    prior),
-                .. candidatesWithPrior
-            ];
+            var correction = sidecar.Corrections is { } corrections &&
+                             corrections.Length == expectedVertexCount * 3
+                ? new Vector3(
+                    corrections[exportedIndex * 3],
+                    corrections[exportedIndex * 3 + 1],
+                    corrections[exportedIndex * 3 + 2])
+                : Vector3.Zero;
+            reordered[sidecar.ExportedToBase[exportedIndex]] =
+                source.Positions[exportedIndex] + correction;
         }
-        catch (JsonException)
-        {
-            return candidates;
-        }
+        return
+        [
+            new MorphMeshPositionCandidate(
+                $"{source.CoordinateSystem}, MFE vertex map",
+                reordered,
+                prior),
+            .. candidatesWithPrior
+        ];
     }
 
     private const float VertexMapTolerance = 0.001f;
@@ -499,18 +501,11 @@ public sealed class MorphFaceInterchangeService
         return true;
     }
 
-    private static SkeletalMeshAsset CreatePositionOnlyMesh(IReadOnlyList<Vector3> positions)
-    {
-        var topology = new SkeletalMeshTopology(
-            0, positions.Count, 0, 0, [], [], [], [], [], string.Empty);
-        return new SkeletalMeshAsset(
-            new AssetIdentity(string.Empty, "UModelExport", 0, "SkeletalMesh"),
-            positions.ToArray(),
-            new Vector3[positions.Count],
-            topology);
-    }
+    private sealed record MeshPositionReference(
+        IReadOnlyList<Vector3> Positions,
+        IReadOnlyList<Vector2>? TextureCoordinates = null);
 
-    private static IReadOnlyList<MorphMeshPositionCandidate> ReadPsk(string path, int expectedVertexCount)
+    private static Func<MeshPositionReference, IReadOnlyList<MorphMeshPositionCandidate>> ReadPsk(string path)
     {
         var psk = PSK.FromFile(path);
         // UModel collapses identical point positions but retains one wedge per GPU
@@ -518,17 +513,19 @@ public sealed class MorphFaceInterchangeService
         var points = psk.Points
             .Select(value => new Vector3(value.X, -value.Y, value.Z))
             .ToArray();
-        var positions = points.Length == expectedVertexCount
-            ? points
-            : psk.Wedges.Count == expectedVertexCount
-                ? psk.Wedges.Select(wedge => points[wedge.PointIndex]).ToArray()
-                : points;
-        return [new MorphMeshPositionCandidate("PSK (Y handedness restored), file order", positions)];
+        return reference =>
+        {
+            var positions = points.Length == reference.Positions.Count
+                ? points
+                : psk.Wedges.Count == reference.Positions.Count
+                    ? psk.Wedges.Select(wedge => points[wedge.PointIndex]).ToArray()
+                    : points;
+            return [new MorphMeshPositionCandidate("PSK (Y handedness restored), file order", positions)];
+        };
     }
 
-    private static IReadOnlyList<MorphMeshPositionCandidate> ReadGltf(string path, SkeletalMeshAsset baseHead)
+    private static Func<MeshPositionReference, IReadOnlyList<MorphMeshPositionCandidate>> ReadGltf(string path)
     {
-        var expectedVertexCount = baseHead.Positions.Length;
         // UModel build 1589 occasionally rounds accessor min/max metadata one ULP
         // inward. The binary position data is valid, so bypass schema bounds checks.
         var model = ModelRoot.Load(path, new ReadSettings { Validation = ValidationMode.Skip });
@@ -540,26 +537,29 @@ public sealed class MorphFaceInterchangeService
             .Where(stream => stream.Positions.Length > 0)
             .DistinctBy(stream => stream.Positions)
             .ToArray();
-        var exact = streams.Where(stream => stream.Positions.Length == expectedVertexCount).ToArray();
-        IReadOnlyList<VertexStream> viable = exact.Length > 0
-            ? exact
-            : streams.Sum(stream => stream.Positions.Length) == expectedVertexCount
-                ? [new VertexStream(
-                    streams.SelectMany(stream => stream.Positions).ToArray(),
-                    streams.SelectMany(stream => stream.TextureCoordinates).ToArray())]
-                : streams;
-        return viable.SelectMany((stream, index) => CoordinateCandidates(
-                stream.Positions,
-                stream.TextureCoordinates,
-                $"glTF stream {index + 1}",
-                scale: 100,
-                baseHead))
-            .ToArray();
+        return baseHead =>
+        {
+            var expectedVertexCount = baseHead.Positions.Count;
+            var exact = streams.Where(stream => stream.Positions.Length == expectedVertexCount).ToArray();
+            IReadOnlyList<VertexStream> viable = exact.Length > 0
+                ? exact
+                : streams.Sum(stream => stream.Positions.Length) == expectedVertexCount
+                    ? [new VertexStream(
+                        streams.SelectMany(stream => stream.Positions).ToArray(),
+                        streams.SelectMany(stream => stream.TextureCoordinates).ToArray())]
+                    : streams;
+            return viable.SelectMany((stream, index) => CoordinateCandidates(
+                    stream.Positions,
+                    stream.TextureCoordinates,
+                    $"glTF stream {index + 1}",
+                    scale: 100,
+                    baseHead))
+                .ToArray();
+        };
     }
 
-    private static IReadOnlyList<MorphMeshPositionCandidate> ReadMd5(string path, SkeletalMeshAsset baseHead)
+    private static Func<MeshPositionReference, IReadOnlyList<MorphMeshPositionCandidate>> ReadMd5(string path)
     {
-        var expectedVertexCount = baseHead.Positions.Length;
         var source = File.ReadAllText(path);
         var jointsBlock = ExtractBlocks(source, "joints").SingleOrDefault()
                           ?? throw new InvalidDataException("MD5 mesh has no joints block.");
@@ -610,24 +610,28 @@ public sealed class MorphFaceInterchangeService
             }).ToArray();
             streams.Add(new VertexStream(positions, vertices.Select(value => value.TextureCoordinate).ToArray()));
         }
-        var viable = streams.Where(stream => stream.Positions.Length == expectedVertexCount).ToList();
-        if (viable.Count == 0 && streams.Sum(stream => stream.Positions.Length) == expectedVertexCount)
+        return baseHead =>
         {
-            viable.Add(new VertexStream(
-                streams.SelectMany(stream => stream.Positions).ToArray(),
-                streams.SelectMany(stream => stream.TextureCoordinates).ToArray()));
-        }
-        if (viable.Count == 0)
-        {
-            viable.AddRange(streams);
-        }
-        return viable.SelectMany((stream, index) => CoordinateCandidates(
-                stream.Positions,
-                stream.TextureCoordinates,
-                $"MD5 mesh {index + 1}",
-                scale: 1,
-                baseHead))
-            .ToArray();
+            var expectedVertexCount = baseHead.Positions.Count;
+            var viable = streams.Where(stream => stream.Positions.Length == expectedVertexCount).ToList();
+            if (viable.Count == 0 && streams.Sum(stream => stream.Positions.Length) == expectedVertexCount)
+            {
+                viable.Add(new VertexStream(
+                    streams.SelectMany(stream => stream.Positions).ToArray(),
+                    streams.SelectMany(stream => stream.TextureCoordinates).ToArray()));
+            }
+            if (viable.Count == 0)
+            {
+                viable.AddRange(streams);
+            }
+            return viable.SelectMany((stream, index) => CoordinateCandidates(
+                    stream.Positions,
+                    stream.TextureCoordinates,
+                    $"MD5 mesh {index + 1}",
+                    scale: 1,
+                    baseHead))
+                .ToArray();
+        };
     }
 
     private static IEnumerable<MorphMeshPositionCandidate> CoordinateCandidates(
@@ -635,7 +639,7 @@ public sealed class MorphFaceInterchangeService
         Vector2[] textureCoordinates,
         string label,
         float scale,
-        SkeletalMeshAsset baseHead)
+        MeshPositionReference baseHead)
     {
         var transforms = new (string Name, Func<Vector3, Vector3> Apply)[]
         {
@@ -665,23 +669,23 @@ public sealed class MorphFaceInterchangeService
     private static bool TryReorderByTextureCoordinates(
         IReadOnlyList<Vector3> importedPositions,
         IReadOnlyList<Vector2> importedTextureCoordinates,
-        SkeletalMeshAsset baseHead,
+        MeshPositionReference baseHead,
         bool flipV,
         out Vector3[] reordered)
     {
         reordered = [];
-        var renderData = baseHead.FindLod(0)?.RenderData ?? baseHead.RenderData;
-        if (renderData is null ||
-            importedPositions.Count != baseHead.Positions.Length ||
+        var baseUvs = baseHead.TextureCoordinates;
+        if (baseUvs is null ||
+            importedPositions.Count != baseHead.Positions.Count ||
             importedTextureCoordinates.Count != importedPositions.Count ||
-            renderData.TextureCoordinates.Count != baseHead.Positions.Length)
+            baseUvs.Count != baseHead.Positions.Count)
         {
             return false;
         }
 
         static (int U, int V) Key(Vector2 value) =>
             ((int)MathF.Round(value.X * 65536), (int)MathF.Round(value.Y * 65536));
-        var destinationGroups = renderData.TextureCoordinates
+        var destinationGroups = baseUvs
             .Select((value, index) => (Key: Key(value), Index: index))
             .GroupBy(value => value.Key)
             .ToDictionary(group => group.Key, group => group.Select(value => value.Index).ToList());
@@ -693,12 +697,12 @@ public sealed class MorphFaceInterchangeService
             })
             .GroupBy(value => value.Key)
             .ToArray();
-        if (sourceGroups.Sum(group => group.Count()) != baseHead.Positions.Length)
+        if (sourceGroups.Sum(group => group.Count()) != baseHead.Positions.Count)
         {
             return false;
         }
 
-        reordered = new Vector3[baseHead.Positions.Length];
+        reordered = new Vector3[baseHead.Positions.Count];
         foreach (var sourceGroup in sourceGroups)
         {
             if (!destinationGroups.TryGetValue(sourceGroup.Key, out var destinations) ||

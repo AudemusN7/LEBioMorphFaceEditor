@@ -24,6 +24,9 @@ public static class PackageContextTests
     [
         new("LE2 BioD workspaces retain post-load import resolution", Le2BioDWorkspaceRetainsPostLoadResolution),
         new("LE1 context clone and loaded save preserve authored fields and independent child ownership", CloneLe1Morph),
+        new("safe-save rejects outside edits during loaded save clone and delete", SaveConflictsPreserveOutsideEdits),
+        new("safe-save rejects a competing new morph export and cleans its candidate", NewExportConflictPreservesDestination),
+        new("safe-save workspace conflicts and locked destinations retain pending edits for retry", WorkspaceSaveFailureRetainsEdits),
         new("saved value checks preserve original nonfinite PCC fields and reject newly invalid edits", NonFiniteValuesRoundTrip),
         new("LE1 context delete trashes a face only in its package workspace", DeleteLe1Morph),
         new("morph deletion detects incoming references without modifying the PCC", MorphDeleteReferences),
@@ -259,6 +262,142 @@ public static class PackageContextTests
             TestAssert.True(ReadFaces(path).Any(face => face.ObjectName == "MFE_ContextClone_Test"),
                 "The committed workspace did not install the cloned face in the source PCC.");
         });
+    }
+
+    private static void SaveConflictsPreserveOutsideEdits()
+    {
+        foreach (var operation in new[] { "save", "clone", "delete" })
+        WithPackageCopy("LE1 GlobalMorphs.pcc", path =>
+        {
+            var facePath = ReadFaces(path).First().InstancedPath;
+            using var reader = new MorphFacePackageReader();
+            var draft = reader.Load(path, facePath, decodeTextures: false).Document;
+            PackageFingerprint? outsideEdit = null;
+            string? candidate = null;
+            FileSaveTransaction.BeforeCommitForTesting = (temporaryPath, destination) =>
+            {
+                candidate = temporaryPath;
+                using (var external = MEPackageHandler.OpenMEPackage(destination, forceLoadFromDisk: true))
+                {
+                    external.FindExport(facePath, "BioMorphFace")!
+                        .WriteProperty(new StrProperty("Outside edit", "MFE_ExternalEdit"));
+                    external.Save();
+                }
+                outsideEdit = PackageFingerprint.Capture(destination);
+            };
+            try
+            {
+                ExpectSaveFailure(() =>
+                {
+                    if (operation == "save") new MorphFacePackageWriter().SaveExisting(draft);
+                    else if (operation == "clone") new MorphFacePackageContextService().CloneMorph(path, facePath, "MFE_ConflictClone");
+                    else new MorphFacePackageContextService().DeleteMorph(path, facePath);
+                });
+                TestAssert.True(outsideEdit is not null, "The operation failed before reaching publication.");
+                TestAssert.Equal(outsideEdit, PackageFingerprint.Capture(path));
+                TestAssert.True(candidate is not null && !File.Exists(candidate), "A rejected save left its candidate behind.");
+                using var reopened = MEPackageHandler.OpenMEPackage(path, forceLoadFromDisk: true);
+                TestAssert.Equal("Outside edit", reopened.FindExport(facePath, "BioMorphFace")!
+                    .GetProperty<StrProperty>("MFE_ExternalEdit")!.Value);
+                TestAssert.True(reopened.Exports.All(value => value.ObjectNameString != "MFE_ConflictClone"),
+                    "A rejected clone was published.");
+            }
+            finally { FileSaveTransaction.BeforeCommitForTesting = null; }
+        });
+    }
+
+    private static void NewExportConflictPreservesDestination()
+    {
+        WithPackageCopy("LE1 GlobalMorphs.pcc", path =>
+        {
+            var destination = path + ".export.pcc";
+            var original = PackageFingerprint.Capture(path);
+            var facePath = ReadFaces(path).First().InstancedPath;
+            using var reader = new MorphFacePackageReader();
+            var draft = reader.Load(path, facePath, decodeTextures: false).Document;
+            PackageFingerprint? competingFile = null;
+            string? candidate = null;
+            FileSaveTransaction.BeforeCommitForTesting = (temporaryPath, target) =>
+            {
+                candidate = temporaryPath;
+                File.Copy(path, target);
+                competingFile = PackageFingerprint.Capture(target);
+            };
+            try
+            {
+                ExpectSaveFailure(() => new MorphFacePackageWriter().SaveMorphToPackage(
+                    draft, path, destination, createNewPackage: true));
+                TestAssert.True(competingFile is not null, "The export failed before reaching publication.");
+                TestAssert.Equal(competingFile, PackageFingerprint.Capture(destination));
+                TestAssert.Equal(original, PackageFingerprint.Capture(path));
+                TestAssert.True(candidate is not null && !File.Exists(candidate), "A rejected export left its candidate behind.");
+            }
+            finally
+            {
+                FileSaveTransaction.BeforeCommitForTesting = null;
+                File.Delete(destination);
+            }
+        });
+    }
+
+    private static void WorkspaceSaveFailureRetainsEdits()
+    {
+        WithPackageCopy("LE1 GlobalMorphs.pcc", path =>
+        {
+            using var workspace = new MorphFacePackageWorkspace(path);
+            var context = new MorphFacePackageContextService();
+            var facePath = ReadFaces(workspace.WorkingPath).First().InstancedPath;
+            var clone = context.CloneMorph(workspace.WorkingPath, facePath, "MFE_PendingClone");
+            var pending = PackageFingerprint.Capture(workspace.WorkingPath);
+            var source = PackageFingerprint.Capture(path);
+            var destination = path + ".save-as.pcc";
+            string? candidate = null;
+            FileSaveTransaction.BeforeCommitForTesting = (temporaryPath, target) =>
+            {
+                candidate = temporaryPath;
+                File.Copy(path, target);
+            };
+            try
+            {
+                ExpectSaveFailure(() => workspace.Commit(destination));
+                TestAssert.Equal(path, workspace.SourcePath);
+                TestAssert.Equal(source, PackageFingerprint.Capture(path));
+                TestAssert.Equal(pending, PackageFingerprint.Capture(workspace.WorkingPath));
+                TestAssert.True(candidate is not null && !File.Exists(candidate), "A conflicted Save As left its candidate behind.");
+
+                FileSaveTransaction.BeforeCommitForTesting = (temporaryPath, _) => candidate = temporaryPath;
+                var competing = PackageFingerprint.Capture(destination);
+                using (var locked = new FileStream(destination, FileMode.Open, FileAccess.Read, FileShare.Read))
+                    ExpectSaveFailure(() => workspace.Commit(destination));
+                TestAssert.Equal(competing, PackageFingerprint.Capture(destination));
+                TestAssert.Equal(path, workspace.SourcePath);
+                TestAssert.Equal(pending, PackageFingerprint.Capture(workspace.WorkingPath));
+                TestAssert.True(candidate is not null && !File.Exists(candidate), "A locked Save As left its candidate behind.");
+
+                FileSaveTransaction.BeforeCommitForTesting = null;
+                workspace.Commit(destination);
+                workspace.Commit();
+                TestAssert.Equal(destination, workspace.SourcePath);
+                TestAssert.Equal(source, PackageFingerprint.Capture(path));
+                using var saved = MEPackageHandler.OpenMEPackage(destination, forceLoadFromDisk: true);
+                TestAssert.True(saved.FindExport(clone.FaceInstancedPath, "BioMorphFace") is not null,
+                    "Retrying Save As lost the pending clone.");
+                TestAssert.True(!Directory.EnumerateFiles(Path.GetDirectoryName(path)!,
+                    Path.GetFileName(destination) + ".*.backup").Any(), "A completed Save As left a backup behind.");
+            }
+            finally
+            {
+                FileSaveTransaction.BeforeCommitForTesting = null;
+                File.Delete(destination);
+            }
+        });
+    }
+
+    private static void ExpectSaveFailure(Action save)
+    {
+        try { save(); }
+        catch (IOException) { return; }
+        throw new InvalidOperationException("The conflicting or blocked save unexpectedly succeeded.");
     }
 
     private static void NonFiniteValuesRoundTrip()
@@ -2899,7 +3038,7 @@ public static class PackageContextTests
             try
             {
                 context.ExportRon(donorPath, donor.InstancedPath, ronPath);
-                PccPackageWorkflow.BeforeAtomicReplaceForTesting = (temporaryPath, destination) =>
+                FileSaveTransaction.BeforeCommitForTesting = (temporaryPath, destination) =>
                 {
                     TestAssert.True(temporaryPath.StartsWith(workspaceDirectory, StringComparison.OrdinalIgnoreCase),
                         "NPC cancellation did not interrupt an AppData candidate PCC.");
@@ -2948,7 +3087,7 @@ public static class PackageContextTests
             }
             finally
             {
-                PccPackageWorkflow.BeforeAtomicReplaceForTesting = null;
+                FileSaveTransaction.BeforeCommitForTesting = null;
                 if (File.Exists(ronPath)) File.Delete(ronPath);
             }
         });

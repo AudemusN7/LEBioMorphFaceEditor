@@ -39,10 +39,9 @@ public sealed class ActorAssignmentService
         }
 
         var target = candidate.MorphTarget;
-        var fingerprint = PackageFingerprint.Capture(packagePath);
-        var temporaryPath = TemporarySibling(packagePath);
-        try
+        using (var save = new FileSaveTransaction(packagePath, PackageFingerprint.Capture(packagePath), ".actor.tmp"))
         {
+            var temporaryPath = save.CandidatePath;
             File.Copy(packagePath, temporaryPath, overwrite: false);
             LegendaryExplorerCoreRuntime.Initialize();
             using (var package = MEPackageHandler.OpenMEPackage(temporaryPath, forceLoadFromDisk: true))
@@ -56,8 +55,7 @@ public sealed class ActorAssignmentService
             }
 
             VerifyMorph(temporaryPath, inventory.SelectedFaceUIndex, target);
-            EnsureUnchanged(packagePath, fingerprint);
-            AtomicReplace(temporaryPath, packagePath);
+            save.Commit("The temporary workspace changed while actor assignment was being written. Nothing was replaced.");
             return new ActorMorphAssignmentResult(
                 candidate.UIndex,
                 candidate.InstancedPath,
@@ -69,10 +67,6 @@ public sealed class ActorAssignmentService
                 target.CurrentMorphPath,
                 inventory.SelectedFaceUIndex,
                 inventory.SelectedFacePath);
-        }
-        finally
-        {
-            if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
         }
     }
 
@@ -92,9 +86,9 @@ public sealed class ActorAssignmentService
 
         var fingerprint = PackageFingerprint.Capture(packagePath);
         var plan = ReadMaterialPlan(packagePath, inventory, candidate);
-        var temporaryPath = TemporarySibling(packagePath);
-        try
+        using (var save = new FileSaveTransaction(packagePath, fingerprint, ".actor.tmp"))
         {
+            var temporaryPath = save.CandidatePath;
             File.Copy(packagePath, temporaryPath, overwrite: false);
             using (var package = MEPackageHandler.OpenMEPackage(temporaryPath, forceLoadFromDisk: true))
             {
@@ -127,8 +121,7 @@ public sealed class ActorAssignmentService
             }
 
             VerifyMaterials(temporaryPath, plan, candidate);
-            EnsureUnchanged(packagePath, fingerprint);
-            AtomicReplace(temporaryPath, packagePath);
+            save.Commit("The temporary workspace changed while actor assignment was being written. Nothing was replaced.");
             return new ActorMaterialAssignmentResult(
                 candidate.UIndex,
                 candidate.InstancedPath,
@@ -138,10 +131,6 @@ public sealed class ActorAssignmentService
                 plan.Textures is not null,
                 plan.Vectors is not null,
                 plan.Scalars is not null);
-        }
-        finally
-        {
-            if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
         }
     }
 
@@ -412,37 +401,6 @@ public sealed class ActorAssignmentService
     private static int RequiredObject(StructProperty value, string name) =>
         value.GetProp<ObjectProperty>(name)?.Value
         ?? throw new InvalidDataException($"A MIC parameter is missing {name}.");
-
-    private static string TemporarySibling(string path) => Path.Combine(
-        Path.GetDirectoryName(Path.GetFullPath(path))!,
-        $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.actor.tmp");
-
-    private static void EnsureUnchanged(string path, PackageFingerprint expected)
-    {
-        if (PackageFingerprint.Capture(path) != expected)
-        {
-            throw new IOException("The temporary workspace changed while actor assignment was being written. Nothing was replaced.");
-        }
-    }
-
-    private static void AtomicReplace(string temporaryPath, string destination)
-    {
-        var backup = $"{destination}.{Guid.NewGuid():N}.backup";
-        try
-        {
-            File.Replace(temporaryPath, destination, backup, ignoreMetadataErrors: true);
-            File.Delete(backup);
-        }
-        catch
-        {
-            if (File.Exists(backup))
-            {
-                File.Copy(backup, destination, overwrite: true);
-                File.Delete(backup);
-            }
-            throw;
-        }
-    }
 
     private sealed record MaterialPlan(
         int FaceUIndex,

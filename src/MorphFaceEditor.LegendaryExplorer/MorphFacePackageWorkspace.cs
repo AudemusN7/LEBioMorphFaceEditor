@@ -135,9 +135,9 @@ public sealed class MorphFacePackageWorkspace : IDisposable
             throw new InvalidOperationException(
                 "This detached workspace is read-only with respect to its installed seed and cannot be committed.");
         }
-        if (savingSource && PackageFingerprint.Capture(SourcePath) != _sourceFingerprint)
+        if (savingSource)
         {
-            throw new IOException(
+            FileSaveTransaction.VerifyUnchanged(SourcePath, _sourceFingerprint,
                 "The source PCC changed outside the editor while temporary edits were pending. Reload it before saving.");
         }
 
@@ -150,26 +150,12 @@ public sealed class MorphFacePackageWorkspace : IDisposable
             }
         }
 
-        var commitPath = Path.Combine(
-            Path.GetDirectoryName(target)!,
-            $".{Path.GetFileName(target)}.{Guid.NewGuid():N}.commit.tmp");
-        try
+        using (var save = new FileSaveTransaction(target, targetFingerprint, ".commit.tmp"))
         {
-            File.Copy(WorkingPath, commitPath, overwrite: false);
-            if (File.Exists(target) != (targetFingerprint is not null) ||
-                targetFingerprint is not null && PackageFingerprint.Capture(target) != targetFingerprint)
-                throw new IOException("The destination PCC changed while saving.");
-            if (File.Exists(target)) AtomicReplace(commitPath, target);
-            else File.Move(commitPath, target);
+            File.Copy(WorkingPath, save.CandidatePath, overwrite: false);
+            save.Commit("The destination PCC changed while saving.");
             SourcePath = target;
             _sourceFingerprint = PackageFingerprint.Capture(SourcePath);
-        }
-        finally
-        {
-            if (File.Exists(commitPath))
-            {
-                File.Delete(commitPath);
-            }
         }
     }
 
@@ -189,25 +175,6 @@ public sealed class MorphFacePackageWorkspace : IDisposable
             _lease.Dispose();
             _disposed = true;
             File.Delete(WorkingPath + ".lease");
-        }
-    }
-
-    private static void AtomicReplace(string temporaryPath, string destination)
-    {
-        var backup = $"{destination}.{Guid.NewGuid():N}.backup";
-        try
-        {
-            File.Replace(temporaryPath, destination, backup, ignoreMetadataErrors: true);
-            File.Delete(backup);
-        }
-        catch
-        {
-            if (File.Exists(backup))
-            {
-                File.Copy(backup, destination, overwrite: true);
-                File.Delete(backup);
-            }
-            throw;
         }
     }
 

@@ -10,6 +10,7 @@ public static class ActorAssignmentTransactionTests
     public static IReadOnlyList<TestCase> All { get; } =
     [
         new("actor morph assignment writes and verifies the exact owner", AssignsExactMorphOwner),
+        new("actor assignment rejects an outside edit and cleans its candidate", OutsideEditPreserved),
         new("LE1 placed morph assignment leaves the shared spawn type untouched", LeavesSharedLe1TypeUntouched),
         new("actor material assignment converts BMO arrays and protects non-target MICs", ConvertsAndProtectsMaterials),
         new("actor material assignment surgically updates body MIC skin vectors across all games", UpdatesBodySkinVectors),
@@ -38,6 +39,44 @@ public static class ActorAssignmentTransactionTests
             TestAssert.Equal(selectedId, result.NewMorphUIndex);
             TestAssert.Equal(selectedId,
                 reopened.GetUExport(actorId).GetProperty<ObjectProperty>("MorphHead")!.Value);
+        });
+    }
+
+    private static void OutsideEditPreserved()
+    {
+        WithPackage(MEGame.LE3, (path, package) =>
+        {
+            var selected = package.CreateExport("SelectedFace", "BioMorphFace", indexed: false);
+            var old = package.CreateExport("OldFace", "BioMorphFace", indexed: false);
+            var actor = CreateActorWithHead(package, "SFXStuntActor", "TargetActor", "HMM_HED_PROBase_MDL");
+            actor.WriteProperty(new ObjectProperty(old, "MorphHead"));
+            package.Save();
+            string? candidate = null;
+            byte[]? outsideEdit = null;
+            FileSaveTransaction.BeforeCommitForTesting = (temporaryPath, destination) =>
+            {
+                candidate = temporaryPath;
+                using (var external = MEPackageHandler.OpenMEPackage(destination, forceLoadFromDisk: true))
+                {
+                    external.GetUExport(actor.UIndex).WriteProperty(new IntProperty(73, "ExternalEdit"));
+                    external.Save();
+                }
+                outsideEdit = File.ReadAllBytes(destination);
+            };
+            try
+            {
+                var rejected = false;
+                try
+                {
+                    new ActorAssignmentService(new ActorAssignmentInventoryService((_, _) => null))
+                        .AssignMorph(path, selected.UIndex.ToString(), "le3-human-male", actor.UIndex);
+                }
+                catch (IOException) { rejected = true; }
+                TestAssert.True(rejected && outsideEdit is not null, "Actor assignment did not reject the outside edit at publication.");
+                TestAssert.True(outsideEdit!.SequenceEqual(File.ReadAllBytes(path)), "Actor assignment replaced the outside edit.");
+                TestAssert.True(candidate is not null && !File.Exists(candidate), "Rejected actor assignment left its candidate behind.");
+            }
+            finally { FileSaveTransaction.BeforeCommitForTesting = null; }
         });
     }
 
@@ -101,7 +140,7 @@ public static class ActorAssignmentTransactionTests
             bmo.WriteProperty(new ArrayProperty<StructProperty>("m_aScalarOverrides"));
             face.WriteProperty(new ObjectProperty(bmo, "m_oMaterialOverrides"));
 
-            var target = CreateMic(package, "HMM_HED_PRO_Face_Mat", "HMM_HED_PRO_Face_Master");
+            var target = CreateMic(package, "HMM_HED_PRO_Face_Mat", "HMM_HED_PRONPC_MASTER_FACE_MAT");
             target.WriteProperty(new ArrayProperty<StructProperty>(
             [
                 new StructProperty("ScalarParameterValue", false,
@@ -167,7 +206,7 @@ public static class ActorAssignmentTransactionTests
             ], "m_aScalarOverrides"));
             face.WriteProperty(new ObjectProperty(bmo, "m_oMaterialOverrides"));
 
-            var target = CreateMic(package, "HMM_HED_PRO_Face_Mat", "HMM_HED_PRO_Face_Master");
+            var target = CreateMic(package, "HMM_HED_PRO_Face_Mat", "HMM_HED_PRONPC_MASTER_FACE_MAT");
             target.WriteProperty(new ArrayProperty<StructProperty>(
             [
                 new StructProperty("TextureParameterValue", false,
@@ -322,7 +361,7 @@ public static class ActorAssignmentTransactionTests
         var bmo = package.CreateExport("SelectedFaceMaterials", "BioMaterialOverride", face, indexed: false);
         bmo.WriteProperty(new ArrayProperty<StructProperty>(colors, "m_aColorOverrides"));
         face.WriteProperty(new ObjectProperty(bmo, "m_oMaterialOverrides"));
-        var headMic = CreateMic(package, "HMM_HED_PRO_Face_Mat", "HMM_HED_PRO_Face_Master");
+        var headMic = CreateMic(package, "HMM_HED_PRO_Face_Mat", "HMM_HED_PRONPC_MASTER_FACE_MAT");
         var head = CreateHeadComponent(package, "HMM_HED_PROBase_MDL", "HeadComponent");
         head.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(headMic)], "Materials"));
         var body = CreateHeadComponent(package, "Body_MDL", "BodyComponent");
@@ -365,8 +404,8 @@ public static class ActorAssignmentTransactionTests
 
     private static ExportEntry CreateMic(IMEPackage package, string name, string parentName)
     {
-        var root = package.CreatePackageImport($"MFEFixture_{name}");
-        var parent = package.CreateImport("Material", parentName, root);
+        var root = package.CreatePackageExport($"MFEFixture_{name}");
+        var parent = package.CreateExport(parentName, "Material", root, indexed: false);
         var mic = package.CreateExport(name, "MaterialInstanceConstant", indexed: false);
         mic.WriteProperty(new ObjectProperty(parent, "Parent"));
         return mic;

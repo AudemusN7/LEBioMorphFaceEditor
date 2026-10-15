@@ -73,10 +73,9 @@ public sealed class MorphFacePackageContextService
         var directory = Path.GetDirectoryName(destination)
                         ?? throw new InvalidOperationException("The conversion destination has no parent directory.");
         Directory.CreateDirectory(directory);
-        var temporaryPath = Path.Combine(
-            directory, $".{Path.GetFileName(destination)}.{Guid.NewGuid():N}.conversion.tmp.pcc");
-        try
+        using (var save = new FileSaveTransaction(destination, null, ".conversion.tmp.pcc"))
         {
+            var temporaryPath = save.CandidatePath;
             TextureTransferResult transfer;
             AttachmentTransferResult attachments;
             IReadOnlyList<string> stagingWarnings;
@@ -159,11 +158,7 @@ public sealed class MorphFacePackageContextService
             }
 
             VerifyMinimalConvertedPackage(temporaryPath, facePath, materialPath, dependencyGraph);
-            if (File.Exists(destination))
-            {
-                throw new IOException("The new conversion destination was created by another process.");
-            }
-            PccPackageWorkflow.AtomicReplace(temporaryPath, destination);
+            save.Commit("The new conversion destination was created by another process.");
             return new TransferredMaterialSaveResult(
                 new MorphFaceSaveResult(
                     destination,
@@ -179,10 +174,6 @@ public sealed class MorphFacePackageContextService
                     UserWarnings = attachments.UserWarnings
                 },
                 transfer.MaterialData);
-        }
-        finally
-        {
-            if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
         }
     }
 
@@ -232,12 +223,9 @@ public sealed class MorphFacePackageContextService
             throw new FileNotFoundException("The open PCC no longer exists.", path);
         }
 
-        var originalFingerprint = PackageFingerprint.Capture(path);
-        var temporaryPath = Path.Combine(
-            Path.GetDirectoryName(path)!,
-            $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
-        try
+        using (var save = new FileSaveTransaction(path, PackageFingerprint.Capture(path)))
         {
+            var temporaryPath = save.CandidatePath;
             File.Copy(path, temporaryPath, overwrite: false);
             using (var package = MEPackageHandler.OpenMEPackage(temporaryPath, forceLoadFromDisk: true))
             {
@@ -255,18 +243,7 @@ public sealed class MorphFacePackageContextService
                 }
             }
 
-            if (PackageFingerprint.Capture(path) != originalFingerprint)
-            {
-                throw new IOException("The open PCC changed while the morph was being deleted. Nothing was replaced.");
-            }
-            PccPackageWorkflow.AtomicReplace(temporaryPath, path);
-        }
-        finally
-        {
-            if (File.Exists(temporaryPath))
-            {
-                File.Delete(temporaryPath);
-            }
+            save.Commit("The open PCC changed while the morph was being deleted. Nothing was replaced.");
         }
     }
 
@@ -882,11 +859,9 @@ public sealed class MorphFacePackageContextService
         IReadOnlySet<string> integrityBaseline;
         using (var original = OpenPackage(path))
             integrityBaseline = PackageIntegrity.CaptureIssues(original);
-        var temporaryPath = Path.Combine(
-            Path.GetDirectoryName(path)!,
-            $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
-        try
+        using (var save = new FileSaveTransaction(path, originalFingerprint))
         {
+            var temporaryPath = save.CandidatePath;
             cancellationToken.ThrowIfCancellationRequested();
             File.Copy(path, temporaryPath, overwrite: false);
             cancellationToken.ThrowIfCancellationRequested();
@@ -901,14 +876,8 @@ public sealed class MorphFacePackageContextService
 
             cancellationToken.ThrowIfCancellationRequested();
             Verify(temporaryPath, pending, integrityBaseline);
-            cancellationToken.ThrowIfCancellationRequested();
-            if (PackageFingerprint.Capture(path) != originalFingerprint)
-            {
-                throw new IOException("The open PCC changed while the operation was being written. Nothing was replaced.");
-            }
-
-            cancellationToken.ThrowIfCancellationRequested();
-            PccPackageWorkflow.AtomicReplace(temporaryPath, path);
+            save.Commit("The open PCC changed while the operation was being written. Nothing was replaced.",
+                cancellationToken);
             return new MorphFaceSaveResult(
                 path,
                 pending.FacePath,
@@ -919,13 +888,6 @@ public sealed class MorphFacePackageContextService
                 Warnings = pending.Warnings ?? [],
                 UserWarnings = pending.UserWarnings ?? []
             };
-        }
-        finally
-        {
-            if (File.Exists(temporaryPath))
-            {
-                File.Delete(temporaryPath);
-            }
         }
     }
 

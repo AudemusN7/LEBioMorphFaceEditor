@@ -120,7 +120,7 @@ internal static class HeadHairTextureOwnershipTests
             {
                 var failedOutput = Path.Combine(directory, "Rejected.pcc");
                 var fingerprint = PackageFingerprint.Capture(sourcePath);
-                PccPackageWorkflow.BeforeAtomicReplaceForTesting = (_, _) => throw new IOException("Test publication failure");
+                FileSaveTransaction.BeforeCommitForTesting = (_, _) => throw new IOException("Test publication failure");
                 try
                 {
                     try
@@ -134,7 +134,7 @@ internal static class HeadHairTextureOwnershipTests
                     TestAssert.True(!Directory.EnumerateFiles(directory, "*.tmp").Any(), "Failed export left its disk candidate behind.");
                     TestAssert.Equal(2, Directory.EnumerateFiles(directory).Count()); // Source plus successful output; no staging PCC.
                 }
-                finally { PccPackageWorkflow.BeforeAtomicReplaceForTesting = null; }
+                finally { FileSaveTransaction.BeforeCommitForTesting = null; }
             }
             using var reopened = MEPackageHandler.OpenMEPackage(output, forceLoadFromDisk: true);
             TestAssert.Equal(!exportNew, reopened.FindExport(rootPath + ".StaleBmoHairTexture", "Texture2D") is not null);

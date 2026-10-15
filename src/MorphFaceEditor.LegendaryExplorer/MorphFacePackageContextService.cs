@@ -19,8 +19,6 @@ public sealed record TransferredMaterialSaveResult(
 /// </summary>
 public sealed class MorphFacePackageContextService
 {
-    private const float FloatTolerance = 0.000001f;
-
     private sealed record NpcRonMaterialTransfer(
         MorphFaceGame SourceGame,
         string SourceProfileKey,
@@ -107,7 +105,7 @@ public sealed class MorphFacePackageContextService
                     warnings: stagingMessages,
                     requiredExportReferences: [templateBaseHead]);
                 stagingWarnings = stagingMessages;
-                EnsureNoExportParentsAreImports(package, "target-template staging");
+                VerifyConversionStage(package, "target-template staging");
                 face.ObjectName = new NameReference(objectName);
                 var materialOverride = ResolveMaterialOverride(face);
 
@@ -126,7 +124,7 @@ public sealed class MorphFacePackageContextService
                     templatePath,
                     sourceTextureCatalog,
                     targetTextureCatalog);
-                EnsureNoExportParentsAreImports(package, "texture staging");
+                VerifyConversionStage(package, "texture staging");
                 WriteMaterialData(package, materialOverride, transfer.MaterialData);
                 attachments = MorphFaceAttachmentTransferEngine.Transfer(
                     package,
@@ -134,7 +132,7 @@ public sealed class MorphFacePackageContextService
                     sourceOtherMeshes,
                     ToMeGame(sourceGame),
                     templatePath);
-                EnsureNoExportParentsAreImports(package, "attachment staging");
+                VerifyConversionStage(package, "attachment staging");
 
                 var baseHead = draft.BaseHeadReference
                                ?? throw new InvalidDataException("The converted face has no target-game base head.");
@@ -143,7 +141,7 @@ public sealed class MorphFacePackageContextService
                                          package,
                                          baseHead,
                                          warnings: null);
-                EnsureNoExportParentsAreImports(package, "base-head staging");
+                VerifyConversionStage(package, "base-head staging");
                 var properties = face.GetProperties();
                 properties.AddOrReplaceProp(new ObjectProperty(stagedBaseHead, "m_oBaseHead"));
                 properties.AddOrReplaceProp(new ObjectProperty(materialOverride, "m_oMaterialOverrides"));
@@ -828,7 +826,7 @@ public sealed class MorphFacePackageContextService
         EnsureNoInvalidHmmMorphPackageAliases(package, "final verification");
     }
 
-    private static void EnsureNoExportParentsAreImports(IMEPackage package, string stage)
+    private static void VerifyConversionStage(IMEPackage package, string stage)
     {
         PackageIntegrity.Verify(package);
         EnsureNoInvalidHmmMorphPackageAliases(package, stage);
@@ -1390,95 +1388,11 @@ public sealed class MorphFacePackageContextService
         PackageIntegrity.Verify(package, allowedExistingIntegrityIssues);
         var face = FindFace(package, expected.FacePath);
         var materialOverride = ResolveMaterialOverride(face);
-        CompareMorphData(ReadMorphData(face), expected.MorphData);
-        CompareMaterialData(ReadMaterialData(materialOverride), expected.MaterialData);
+        VerifyMorphData(ReadMorphData(face), expected.MorphData);
+        VerifyMaterialData(ReadMaterialData(materialOverride), expected.MaterialData);
         if (!string.Equals(materialOverride.InstancedFullPath, expected.MaterialOverridePath, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidDataException("The BioMaterialOverride path changed during package verification.");
-        }
-    }
-
-    private static void CompareMorphData(MorphFaceMorphData actual, MorphFaceMorphData expected)
-    {
-        if (actual.MorphFeatures.Count != expected.MorphFeatures.Count ||
-            actual.FinalSkeleton.Count != expected.FinalSkeleton.Count ||
-            actual.BakedLods.Count != expected.BakedLods.Count)
-        {
-            throw new InvalidDataException("Morph data counts changed during package verification.");
-        }
-        for (var index = 0; index < expected.MorphFeatures.Count; index++)
-        {
-            var left = actual.MorphFeatures[index];
-            var right = expected.MorphFeatures[index];
-            if (!string.Equals(left.Name, right.Name, StringComparison.OrdinalIgnoreCase) ||
-                Math.Abs(left.Offset - right.Offset) > FloatTolerance)
-            {
-                throw new InvalidDataException($"Morph feature {index} changed during package verification.");
-            }
-        }
-        for (var index = 0; index < expected.FinalSkeleton.Count; index++)
-        {
-            var left = actual.FinalSkeleton[index];
-            var right = expected.FinalSkeleton[index];
-            if (!string.Equals(left.BoneName, right.BoneName, StringComparison.OrdinalIgnoreCase) ||
-                Vector3.Distance(left.Translation, right.Translation) > FloatTolerance)
-            {
-                throw new InvalidDataException($"Final skeleton bone {index} changed during package verification.");
-            }
-        }
-        for (var lod = 0; lod < expected.BakedLods.Count; lod++)
-        {
-            if (actual.BakedLods[lod].Length != expected.BakedLods[lod].Length)
-            {
-                throw new InvalidDataException($"Baked LOD {lod} changed size during package verification.");
-            }
-            for (var vertex = 0; vertex < expected.BakedLods[lod].Length; vertex++)
-            {
-                if (Vector3.Distance(actual.BakedLods[lod][vertex], expected.BakedLods[lod][vertex]) > FloatTolerance)
-                {
-                    throw new InvalidDataException($"Baked LOD {lod} vertex {vertex} changed during package verification.");
-                }
-            }
-        }
-    }
-
-    private static void CompareMaterialData(MorphFaceMaterialData actual, MorphFaceMaterialData expected)
-    {
-        if (actual.Scalars.Count != expected.Scalars.Count ||
-            actual.Vectors.Count != expected.Vectors.Count ||
-            actual.Textures.Count != expected.Textures.Count)
-        {
-            throw new InvalidDataException("Material data counts changed during package verification.");
-        }
-        for (var index = 0; index < expected.Scalars.Count; index++)
-        {
-            var left = actual.Scalars[index];
-            var right = expected.Scalars[index];
-            if (!string.Equals(left.Name, right.Name, StringComparison.OrdinalIgnoreCase) ||
-                Math.Abs(left.Value - right.Value) > FloatTolerance)
-            {
-                throw new InvalidDataException($"Material scalar {index} changed during package verification.");
-            }
-        }
-        for (var index = 0; index < expected.Vectors.Count; index++)
-        {
-            var left = actual.Vectors[index];
-            var right = expected.Vectors[index];
-            if (!string.Equals(left.Name, right.Name, StringComparison.OrdinalIgnoreCase) ||
-                Vector4.Distance(left.Value, right.Value) > FloatTolerance)
-            {
-                throw new InvalidDataException($"Material vector {index} changed during package verification.");
-            }
-        }
-        for (var index = 0; index < expected.Textures.Count; index++)
-        {
-            var left = actual.Textures[index];
-            var right = expected.Textures[index];
-            if (!string.Equals(left.Name, right.Name, StringComparison.OrdinalIgnoreCase) ||
-                !string.Equals(left.TextureReference?.InstancedPath, right.TextureReference?.InstancedPath, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidDataException($"Material texture {index} changed during package verification.");
-            }
         }
     }
 

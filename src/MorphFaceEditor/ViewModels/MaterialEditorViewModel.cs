@@ -254,10 +254,10 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
             string.Equals(SourceParameterName(control), parameterName, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(ParameterScopeKey(control), scopeKey, StringComparison.OrdinalIgnoreCase));
     }
-    public bool CanResolveTexturePath(string parameterName, string instancedPath) =>
+    public bool CanResolveRandomisationTexturePath(string parameterName, string instancedPath) =>
         Textures.Where(texture => SourceParameterName(texture.Name).Equals(
                 parameterName, StringComparison.OrdinalIgnoreCase))
-            .Any(texture => texture.CanResolveInstancedPath(instancedPath));
+            .Any(texture => texture.CanResolveRandomisationPath(instancedPath));
     public void UpdateRegistryCandidates(
         IReadOnlyList<TextureCatalogCandidate> candidates,
         TextureCatalogProfile profile,
@@ -335,7 +335,7 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
                     }
                     try
                     {
-                        resolved[editor.Name] = await editor.ResolveInstancedPathAsync(member.Value);
+                        resolved[editor.Name] = await editor.ResolveRandomisationPathAsync(member.Value);
                     }
                     catch (Exception exception) when (!required)
                     {

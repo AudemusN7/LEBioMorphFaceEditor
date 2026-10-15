@@ -13,8 +13,9 @@ internal enum MaterialOracleEntryKind
 
 /// <summary>
 /// Compact runtime projection of the three native GlobalMorphs packages. The
-/// fixtures are the authority for stock material/texture identity and whether
-/// an identity is stored as an import or export. Player-only authored textures
+/// fixtures supply stock identities and roles when constructing missing
+/// dependencies; other native packages can validly use a different role.
+/// Existing exact destination references take precedence. Player-only authored textures
 /// are intentionally absent and remain an exact texture-database lookup.
 /// </summary>
 internal sealed class MaterialDependencyOracle

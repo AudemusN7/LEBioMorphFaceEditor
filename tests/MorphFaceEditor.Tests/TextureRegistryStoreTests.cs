@@ -3,6 +3,7 @@ using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.LegendaryExplorer.TextureRegistry;
 using MorphFaceEditor.Services;
+using LegendaryExplorerCore.Packages;
 
 namespace MorphFaceEditor.Tests;
 
@@ -26,6 +27,7 @@ public static class TextureRegistryStoreTests
         new("texture registry builder: scans every physical package and records official filename winners", BuilderIndexesAllPhysicalPackages),
         new("texture registry builder: keeps official templates and texture donors beneath mod overrides", BuilderRetainsNativeTemplatesBeneathModOverrides),
         new("texture registry builder: official texture occurrence is the default", BuilderGroupsPathsByMountPrecedence),
+        new("texture registry scanner: persisted donors follow highest official mount and keep only mod additions", RealScannerPreservesOfficialDonors),
         new("texture registry builder: mod additions merge from sidecar without stock replacements", ModAdditionsMergeFromSidecar),
         new("texture registry builder: filename winner without the asset excludes shadowed official defaults", BuilderExcludesShadowedOfficialDefault),
         new("texture registry builder: groups HIR meshes under canonical paths", BuilderGroupsAttachmentMeshes),
@@ -469,6 +471,43 @@ public static class TextureRegistryStoreTests
         {
             if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
         }
+    }
+
+    private static void RealScannerPreservesOfficialDonors()
+    {
+        using var fixture = RegistryFixture.Create();
+        var bioGame = Path.Combine(Path.GetDirectoryName(fixture.Paths.GetPath(MorphFaceGame.LE3))!, "BioGame");
+        var locations = new[] { ("CookedPCConsole", 0), ("DLC/DLC_CON_PRO1/CookedPCConsole", 2060),
+            ("DLC/DLC_METR_Patch01/CookedPCConsole", 4000), ("DLC/DLC_MOD_Test/CookedPCConsole", 9000) };
+        var paths = new List<string>();
+        LegendaryExplorerCoreRuntime.Initialize();
+        foreach (var (relative, mount) in locations)
+        {
+            var cooked = Path.GetFullPath(Path.Combine(bioGame, relative));
+            Directory.CreateDirectory(cooked);
+            if (mount != 0) WriteLe3Mount(Directory.GetParent(cooked)!.FullName, mount);
+            var path = Path.Combine(cooked, "BIOG_ASA_Test.pcc");
+            using var package = LegendaryExplorerCore.Packages.MEPackageHandler.CreateMemoryEmptyPackage(path,
+                LegendaryExplorerCore.Packages.MEGame.LE3);
+            var root = package.CreatePackageExport("BIOG_ASA_HED_PROMorph_R");
+            var group = package.CreatePackageExport("PROBase", root);
+            var texture = package.CreateExport("ASA_HED_PROBase_Diff", "Texture2D", group, indexed: false);
+            texture.WriteBinary(LegendaryExplorerCore.Unreal.BinaryConverters.UTexture2D.Create());
+            if (mount == 9000)
+                package.CreateExport("MFE_Custom_Diff", "Texture2D", group, indexed: false)
+                    .WriteBinary(LegendaryExplorerCore.Unreal.BinaryConverters.UTexture2D.Create());
+            package.Save(path);
+            paths.Add(path);
+        }
+        var builder = fixture.CreateBuilder(new LecTextureRegistryPackageScanner(), _ => paths);
+        _ = builder.RebuildAsync(MorphFaceGame.LE3).GetAwaiter().GetResult();
+        var official = fixture.Store.Read(MorphFaceGame.LE3);
+        TestAssert.Equal(paths[2], official.Candidates.Single().EffectiveOccurrence.PackagePath);
+        TestAssert.Equal(TextureCatalogOrigin.OfficialDlc, official.Candidates.Single().EffectiveOccurrence.Origin);
+        TestAssert.Equal(paths[2], official.OfficialPackagePaths.Single());
+        var mods = fixture.Store.ReadMods(MorphFaceGame.LE3);
+        TestAssert.Equal("BIOG_ASA_HED_PROMorph_R.PROBase.MFE_Custom_Diff", mods.Candidates.Single().InstancedPath);
+        TestAssert.Equal(TextureCatalogOrigin.Mod, mods.Candidates.Single().EffectiveOccurrence.Origin);
     }
 
     private static void BuilderExcludesShadowedOfficialDefault()

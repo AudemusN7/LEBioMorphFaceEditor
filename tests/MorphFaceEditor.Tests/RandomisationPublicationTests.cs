@@ -114,21 +114,30 @@ public static class RandomisationPublicationTests
             }));
         var catalog = CreateCatalog();
         var loader = new ControlledTextureLoader();
+        var sourceFile = new FileStream(Path.GetTempFileName(), FileMode.Open, FileAccess.ReadWrite,
+            FileShare.ReadWrite | FileShare.Delete, 4096, FileOptions.DeleteOnClose);
         var textureCandidates = catalog.Corpus.Pools.Values.SelectMany(value => value)
             .SelectMany(value => value.MaterialTextureFamilies.Values)
             .SelectMany(value => value.Values)
             .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Select((path, index) => new PackageAssetListItem(new AssetIdentity(
-                "probe-donors.pcc", path, 100 + index, "Texture2D")))
+            .Select((path, index) =>
+            {
+                var occurrence = new TextureCatalogOccurrence(sourceFile.Name, 100 + index, 0,
+                    TextureCatalogOrigin.BaseGame, 1, 1, "PF_B8G8R8A8", "Character", false, null);
+                return new TextureCatalogCandidate(MorphFaceGame.LE1, path, occurrence, [occurrence])
+                { IsEligibleOfficialDefault = true };
+            })
             .ToArray();
         var reader = new MorphFacePackageReader();
         var references = new PackageReferenceService(reader, TestFixtures.CreateMissingTextureCatalogService());
         var session = new MorphFaceEditingSession(face, mesh, []);
         var seedIndex = 0;
         var editor = new FaceEditorViewModel(session, new HumanMaleFeatureMetadataCatalog(), materialSession,
-            new NullColorDialog(), references, "probe.pcc", textureCandidates,
+            new NullColorDialog(), references, "probe.pcc", [],
             [], null, [], _ => { }, ProfileKey, catalog,
-            () => seeds[Math.Min(seedIndex++, seeds.Length - 1)]);
+            () => seeds[Math.Min(seedIndex++, seeds.Length - 1)],
+            registryTextureCandidates: textureCandidates, textureCatalogProfile: TextureCatalogProfile.Empty,
+            isTextureRegistryAvailable: true);
 
         // Replace only the decode boundary; selection, eligibility, command/core execution and history stay real.
         foreach (var texture in editor.Material.Textures)
@@ -145,7 +154,7 @@ public static class RandomisationPublicationTests
             reader.Dispose();
             throw new InvalidOperationException("The editor fixture did not pass the normal Randomise command eligibility check.");
         }
-        return new Fixture(editor, catalog, loader, reader);
+        return new Fixture(editor, catalog, loader, reader, sourceFile);
     }
 
     private static MorphRandomisationCatalog CreateCatalog()
@@ -260,7 +269,7 @@ public static class RandomisationPublicationTests
     }
 
     private sealed class Fixture(FaceEditorViewModel editor, MorphRandomisationCatalog catalog,
-        ControlledTextureLoader loader, MorphFacePackageReader reader) : IDisposable
+        ControlledTextureLoader loader, MorphFacePackageReader reader, FileStream sourceFile) : IDisposable
     {
         public FaceEditorViewModel Editor { get; } = editor;
         public MorphRandomisationCatalog Catalog { get; } = catalog;
@@ -269,6 +278,7 @@ public static class RandomisationPublicationTests
         {
             Editor.Dispose();
             reader.Dispose();
+            sourceFile.Dispose();
         }
     }
 

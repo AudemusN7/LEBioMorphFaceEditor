@@ -111,9 +111,11 @@ public static class TextureCatalogTests
 
     private static void TextureEditorResolvesInstalledPathsWithoutGuessing()
     {
+        using var sourceFile = new FileStream(Path.GetTempFileName(), FileMode.Open, FileAccess.ReadWrite,
+            FileShare.ReadWrite | FileShare.Delete, 4096, FileOptions.DeleteOnClose);
         var session = MaterialTestFixtures.CreateSession();
         var current = session.GetSelectedTexture("HED_Diff")!;
-        var unique = Candidate("BIOG_SAL_HED_PROMorph.Add.Unique_Diff", "sal.pcc");
+        var unique = Candidate("BIOG_SAL_HED_PROMorph.Add.Unique_Diff", sourceFile.Name);
         var ambiguousA = Candidate("BIOG_A_PROMorph.Add.Shared_Diff", "a.pcc");
         var ambiguousB = Candidate("BIOG_B_PROMorph.Add.Shared_Diff", "b.pcc");
         using var reader = new MorphFacePackageReader();
@@ -121,28 +123,30 @@ public static class TextureCatalogTests
             [new PackageAssetListItem(current.Source)], [unique, ambiguousA, ambiguousB],
             TextureCatalogProfile.Empty, true);
 
-        TestAssert.True(editor.CanResolveInstancedPath(unique.InstancedPath),
+        TestAssert.True(editor.CanResolveRandomisationPath(unique.InstancedPath),
             "An exact installed texture path was unavailable to randomisation.");
-        TestAssert.True(editor.CanResolveInstancedPath("Unique_Diff"),
+        TestAssert.True(editor.CanResolveRandomisationPath("Unique_Diff"),
             "A unique installed object name was unavailable to randomisation.");
-        TestAssert.True(!editor.CanResolveInstancedPath("Shared_Diff"),
+        TestAssert.True(!editor.CanResolveRandomisationPath("Shared_Diff"),
             "An ambiguous object name was treated as a resolvable randomisation texture.");
     }
 
     private static void HumanEyeCorpusRootResolvesExactInstalledPath()
     {
+        using var sourceFile = new FileStream(Path.GetTempFileName(), FileMode.Open, FileAccess.ReadWrite,
+            FileShare.ReadWrite | FileShare.Delete, 4096, FileOptions.DeleteOnClose);
         var session = MaterialTestFixtures.CreateSession();
         var current = session.GetSelectedTexture("HED_Diff")!;
-        var official = Candidate("BIOG_HMM_HED_PROMorph.Eye.EYE_Diff", "BIOG_HMM_HED_PROMorph.pcc");
+        var official = Candidate("BIOG_HMM_HED_PROMorph.Eye.EYE_Diff", sourceFile.Name);
         var duplicate = Candidate("BIOG_HMM_ICONIC.Eye.EYE_Diff", "DLC_MOD_Iconic.pcc", TextureCatalogOrigin.Mod);
         var loader = new RecordingTextureLoader();
         using var reader = new MorphFacePackageReader();
         using var editor = CreateTextureEditor(session, reader, [new PackageAssetListItem(current.Source)],
             [official, duplicate], TextureCatalogProfile.Empty, true, loader);
         const string alias = "BIOG_HMM_HED_PROMorph_R.Eye.EYE_Diff";
-        TestAssert.True(editor.CanResolveInstancedPath(alias), "Reviewed corpus root failed when the object name was ambiguous.");
-        TestAssert.True(!editor.CanResolveInstancedPath("EYE_Diff"), "The alias fix weakened ambiguous-name rejection.");
-        var texture = editor.ResolveInstancedPathAsync(alias).GetAwaiter().GetResult();
+        TestAssert.True(editor.CanResolveRandomisationPath(alias), "Reviewed corpus root failed when a mod used the same object name.");
+        TestAssert.True(editor.CanResolveRandomisationPath("EYE_Diff"), "A mod duplicate changed official randomisation availability.");
+        var texture = editor.ResolveRandomisationPathAsync(alias).GetAwaiter().GetResult();
         TestAssert.Equal(official.InstancedPath, texture.Source.InstancedPath);
         TestAssert.Equal(official.EffectiveOccurrence.PackagePath, loader.Calls.Single().PackagePath);
         TestAssert.Equal(official.InstancedPath, loader.Calls.Single().TexturePath);
@@ -495,6 +499,8 @@ public static class TextureCatalogTests
 
     private static void PathOnlyLookupPrefersHighestOfficial()
     {
+        using var sourceFile = new FileStream(Path.GetTempFileName(), FileMode.Open, FileAccess.ReadWrite,
+            FileShare.ReadWrite | FileShare.Delete, 4096, FileOptions.DeleteOnClose);
         var session = MaterialTestFixtures.CreateSession();
         var current = session.GetSelectedTexture("HED_Diff")!;
         const string path = "BIOG_HMF_HED_PROMorph_R.Textures.Shared_Diff";
@@ -502,7 +508,7 @@ public static class TextureCatalogTests
             current.Source.PackagePath, path, 77, "Texture2D"));
         var mod = Occurrence("DLC_MOD_Texture\\CookedPCConsole\\Override.pcc", 9000, TextureCatalogOrigin.Mod);
         var officialLow = Occurrence("BIOG_HMF_HED_PROMorph_R.pcc", 0, TextureCatalogOrigin.BaseGame);
-        var officialHigh = Occurrence("DLC_CON_CORE_HMF_HED_PROMorph_R\\CookedPCConsole\\BIOG_HMF_HED_PROMorph_R.pcc",
+        var officialHigh = Occurrence(sourceFile.Name,
             500, TextureCatalogOrigin.OfficialDlc);
         var installed = new TextureCatalogCandidate(MorphFaceGame.LE3, path, officialHigh,
             [mod, officialLow, officialHigh])
@@ -535,7 +541,7 @@ public static class TextureCatalogTests
         TestAssert.True(physicalChoices.Any(option => option.RegistryCandidate?.EffectiveOccurrence.PackagePath == officialHigh.PackagePath),
             "The highest official occurrence disappeared from the picker.");
 
-        _ = editor.ResolveInstancedPathAsync(path).GetAwaiter().GetResult();
+        _ = editor.ResolveRandomisationPathAsync(path).GetAwaiter().GetResult();
         TestAssert.True(officialHigh.PackagePath.Equals(loader.Calls.Last().PackagePath,
                 StringComparison.OrdinalIgnoreCase),
             "Path-only lookup did not select the highest-mounted official occurrence.");
@@ -550,6 +556,9 @@ public static class TextureCatalogTests
             "An explicit physical identity was redirected to the official occurrence.");
         TestAssert.True(explicitTexture.Source.IsExplicitTextureDonor,
             "Resolving an explicit physical identity discarded its donor selection flag.");
+        File.Delete(sourceFile.Name);
+        TestAssert.True(!editor.CanResolveRandomisationPath(path),
+            "Deleting the official donor left the randomisation path available.");
     }
 
     private static void ShadowedOfficialIsNotPathDefault()
@@ -581,7 +590,9 @@ public static class TextureCatalogTests
             option.InstancedPath.Equals(path, StringComparison.OrdinalIgnoreCase)).ToArray();
         TestAssert.True(visible.Any(option => option.RegistryCandidate?.EffectiveOccurrence.PackagePath == shadowedOfficial.PackagePath),
             "The shadowed official physical occurrence was removed from discovery.");
-        _ = editor.ResolveInstancedPathAsync(path).GetAwaiter().GetResult();
+        TestAssert.True(!editor.CanResolveRandomisationPath(path),
+            "A manual or shadowed occurrence became an automatic randomisation donor.");
+        _ = editor.ResolveExactInstancedPathAsync(path).GetAwaiter().GetResult();
         TestAssert.True(manual.PackagePath.Equals(loader.Calls.Last().PackagePath, StringComparison.OrdinalIgnoreCase),
             "A shadowed official occurrence displaced the explicit manual default.");
         _ = editor.ResolveReferenceAsync(new AssetIdentity(shadowedOfficial.PackagePath, path,
@@ -593,9 +604,11 @@ public static class TextureCatalogTests
 
     private static void UniqueModOnlyPathRemainsSelectable()
     {
+        using var sourceFile = new FileStream(Path.GetTempFileName(), FileMode.Open, FileAccess.ReadWrite,
+            FileShare.ReadWrite | FileShare.Delete, 4096, FileOptions.DeleteOnClose);
         var session = MaterialTestFixtures.CreateSession();
         const string path = "BIOG_MFE_Test.Textures.CustomModOnly";
-        var first = Candidate(path, @"DLC_MOD_A\CookedPCConsole\BIOG_MFE_Test.pcc", TextureCatalogOrigin.Mod);
+        var first = Candidate(path, sourceFile.Name, TextureCatalogOrigin.Mod);
         var secondOccurrence = Occurrence(
             @"DLC_MOD_Z\CookedPCConsole\BIOG_MFE_Test.pcc", 99, TextureCatalogOrigin.Mod) with { ExportUIndex = 43 };
         var second = new TextureCatalogCandidate(MorphFaceGame.LE3, path, secondOccurrence, [secondOccurrence]);
@@ -613,8 +626,13 @@ public static class TextureCatalogTests
 
         _ = editor.ResolveExactInstancedPathAsync(path).GetAwaiter().GetResult();
         TestAssert.Equal(first.EffectiveOccurrence.PackagePath, loader.Calls.Last().PackagePath);
-        _ = editor.ResolveInstancedPathAsync(path).GetAwaiter().GetResult();
-        TestAssert.Equal(first.EffectiveOccurrence.PackagePath, loader.Calls.Last().PackagePath);
+        TestAssert.True(!editor.CanResolveRandomisationPath(path),
+            "A present mod-only texture was admitted to automatic randomisation.");
+        var count = editor.Candidates.Count;
+        editor.CommitTexture(visible[0]);
+        editor.Refresh();
+        TestAssert.Equal(count, editor.Candidates.Count);
+        TestAssert.Equal(first.EffectiveOccurrence.PackagePath, editor.SelectedTexture!.Asset!.Identity.PackagePath);
     }
 
     private static void CurrentLocalTextureRemainsLocal()

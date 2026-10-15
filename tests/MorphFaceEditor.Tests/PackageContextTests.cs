@@ -24,6 +24,7 @@ public static class PackageContextTests
     [
         new("LE2 BioD workspaces retain post-load import resolution", Le2BioDWorkspaceRetainsPostLoadResolution),
         new("LE1 context clone and loaded save preserve authored fields and independent child ownership", CloneLe1Morph),
+        new("saved value checks preserve original nonfinite PCC fields and reject newly invalid edits", NonFiniteValuesRoundTrip),
         new("LE1 context delete trashes a face only in its package workspace", DeleteLe1Morph),
         new("morph deletion detects incoming references without modifying the PCC", MorphDeleteReferences),
         new("LE1 morph export creates and extends a dependency-only PCC without changing paths", ExportLe1MorphPackage),
@@ -257,6 +258,130 @@ public static class PackageContextTests
 
             TestAssert.True(ReadFaces(path).Any(face => face.ObjectName == "MFE_ContextClone_Test"),
                 "The committed workspace did not install the cloned face in the source PCC.");
+        });
+    }
+
+    private static void NonFiniteValuesRoundTrip()
+    {
+        WithPackageCopy("LE1 GlobalMorphs.pcc", path =>
+        {
+            var facePath = ReadFaces(path).First().InstancedPath;
+            MorphFaceDocument draft;
+            using (var reader = new MorphFacePackageReader()) draft = reader.Load(path, facePath, decodeTextures: false).Document;
+            var nan = BitConverter.Int32BitsToSingle(0x7fc12345);
+            var features = draft.MorphFeatures.Append(new MorphFeatureValue("MFE_NaN", nan)).ToArray();
+            var bones = draft.FinalSkeleton.Append(new BoneTranslation("MFE_InvalidBone",
+                new Vector3(float.PositiveInfinity, 0, nan))).ToArray();
+            var lods = draft.BakedLods.Select(lod => lod.ToArray()).ToArray();
+            lods[^1][0] = new Vector3(nan, float.NegativeInfinity, 0);
+            var materials = draft.MaterialOverrides with
+            {
+                Scalars = draft.MaterialOverrides.Scalars.Append(new ScalarMaterialOverride("MFE_NaN", nan)).ToArray(),
+                Vectors = draft.MaterialOverrides.Vectors.Append(new VectorMaterialOverride("MFE_InvalidColour",
+                    new Vector4(1, float.NegativeInfinity, nan, 0))).ToArray()
+            };
+            using (var package = MEPackageHandler.OpenMEPackage(path, forceLoadFromDisk: true))
+            {
+                var face = package.FindExport(facePath, "BioMorphFace")!;
+                var storedFeatures = face.GetProperty<ArrayProperty<StructProperty>>("m_aMorphFeatures")
+                    ?? new ArrayProperty<StructProperty>([], "m_aMorphFeatures");
+                storedFeatures.Add(new StructProperty("MorphFeature", false,
+                    new NameProperty("MFE_NaN", "sFeatureName"), new FloatProperty(nan, "Offset")));
+                face.WriteProperty(storedFeatures);
+                var storedBones = face.GetProperty<ArrayProperty<StructProperty>>("m_aFinalSkeleton")
+                    ?? new ArrayProperty<StructProperty>([], "m_aFinalSkeleton");
+                storedBones.Add(new StructProperty("OffsetBonePos", false,
+                    new NameProperty("MFE_InvalidBone", "nName"),
+                    new StructProperty("Vector", [new FloatProperty(float.PositiveInfinity, "X"),
+                        new FloatProperty(0, "Y"), new FloatProperty(nan, "Z")], "vPos", true)));
+                face.WriteProperty(storedBones);
+                face.WriteBinary(new BioMorphFace { LODs = lods });
+                var material = (ExportEntry)face.GetProperty<ObjectProperty>("m_oMaterialOverrides")!.ResolveToEntry(package);
+                var scalars = material.GetProperty<ArrayProperty<StructProperty>>("m_aScalarOverrides")
+                    ?? new ArrayProperty<StructProperty>([], "m_aScalarOverrides");
+                scalars.Add(new StructProperty("ScalarParameter", false,
+                    new NameProperty("MFE_NaN", "nName"), new FloatProperty(nan, "sValue")));
+                material.WriteProperty(scalars);
+                var vectors = material.GetProperty<ArrayProperty<StructProperty>>("m_aColorOverrides")
+                    ?? new ArrayProperty<StructProperty>([], "m_aColorOverrides");
+                vectors.Add(new StructProperty("ColorParameter", false,
+                    new NameProperty("MFE_InvalidColour", "nName"),
+                    new StructProperty("LinearColor", [new FloatProperty(1, "R"),
+                        new FloatProperty(float.NegativeInfinity, "G"), new FloatProperty(nan, "B"),
+                        new FloatProperty(0, "A")], "cValue", true)));
+                material.WriteProperty(vectors);
+                package.Save(path);
+            }
+            draft = draft with { SourceFingerprint = PackageFingerprint.Capture(path), MorphFeatures = features,
+                FinalSkeleton = bones, BakedLods = lods, MaterialOverrides = materials };
+            var writer = new MorphFacePackageWriter();
+            writer.SaveExisting(draft);
+            var service = new MorphFacePackageContextService();
+            var clone = service.CloneMorph(path, facePath, "MFE_NonFiniteClone");
+            AssertBits(path, clone.FaceInstancedPath);
+            draft = draft with { SourceFingerprint = PackageFingerprint.Capture(path) };
+            var destination = Path.Combine(Path.GetTempPath(), $"MFE-NonFinite-{Guid.NewGuid():N}.pcc");
+            try
+            {
+                var exported = writer.SaveMorphToPackage(draft, path, destination, createNewPackage: true);
+                AssertBits(destination, exported.FaceInstancedPath);
+                var destinationFingerprint = PackageFingerprint.Capture(destination);
+                try
+                {
+                    writer.SaveMorphToPackage(draft with
+                    {
+                        MorphFeatures = features.Append(new MorphFeatureValue("MFE_NewInvalid", nan)).ToArray()
+                    }, path, destination, createNewPackage: false);
+                    throw new Exception("A newly invalid re-export replaced the destination.");
+                }
+                catch (InvalidDataException exception)
+                {
+                    TestAssert.Equal("loc_PccSave_NewNonFiniteValue", UserFacingMessage.FromException(exception)?.LocalizationKey);
+                }
+                TestAssert.Equal(destinationFingerprint, PackageFingerprint.Capture(destination));
+            }
+            finally { File.Delete(destination); }
+
+            var changedLods = lods.Select(lod => lod.ToArray()).ToArray();
+            changedLods[0][0] = new Vector3(float.PositiveInfinity, 0, 0);
+            foreach (var changed in new[]
+                     {
+                         draft with { MorphFeatures = features.Append(new("MFE_NewInvalid", nan)).ToArray() },
+                         draft with { FinalSkeleton = bones.Select(value => value.BoneName == "MFE_InvalidBone"
+                             ? value with { Translation = new Vector3(float.NegativeInfinity, 0, nan) } : value).ToArray() },
+                         draft with { BakedLods = changedLods },
+                         draft with { MaterialOverrides = materials with { Scalars = materials.Scalars.Select(value =>
+                             value.Name == "MFE_NaN" ? value with { Value = float.NaN } : value).ToArray() } },
+                         draft with { MaterialOverrides = materials with { Vectors = materials.Vectors.Append(
+                             new VectorMaterialOverride("MFE_NewInvalid", new Vector4(nan))).ToArray() } }
+                     })
+            {
+                try { writer.SaveExisting(changed); throw new Exception("A newly invalid edit was saved."); }
+                catch (InvalidDataException exception)
+                {
+                    TestAssert.Equal("loc_PccSave_NewNonFiniteValue", UserFacingMessage.FromException(exception)?.LocalizationKey);
+                }
+                TestAssert.Equal(draft.SourceFingerprint, PackageFingerprint.Capture(path));
+            }
+            writer.SaveExisting(draft with
+            {
+                MorphFeatures = features.Select(value => value.Name == "MFE_NaN" ? value with { Offset = 0 } : value).ToArray()
+            });
+            TestAssert.Equal(0f, service.CaptureMorphData(path, facePath).MorphFeatures.Last().Offset);
+
+            void AssertBits(string packagePath, string selectedFace)
+            {
+                var morph = service.CaptureMorphData(packagePath, selectedFace);
+                var material = service.CaptureMaterialData(packagePath, selectedFace);
+                TestAssert.Equal(0x7fc12345, BitConverter.SingleToInt32Bits(morph.MorphFeatures.Last().Offset));
+                TestAssert.Equal(0x7fc12345, BitConverter.SingleToInt32Bits(morph.FinalSkeleton.Last().Translation.Z));
+                TestAssert.Equal(float.PositiveInfinity, morph.FinalSkeleton.Last().Translation.X);
+                TestAssert.Equal(0x7fc12345, BitConverter.SingleToInt32Bits(morph.BakedLods[^1][0].X));
+                TestAssert.Equal(float.NegativeInfinity, morph.BakedLods[^1][0].Y);
+                TestAssert.Equal(0x7fc12345, BitConverter.SingleToInt32Bits(material.Scalars.Last().Value));
+                TestAssert.Equal(0x7fc12345, BitConverter.SingleToInt32Bits(material.Vectors.Last().Value.Z));
+                TestAssert.Equal(float.NegativeInfinity, material.Vectors.Last().Value.Y);
+            }
         });
     }
 

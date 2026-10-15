@@ -159,7 +159,7 @@ public sealed partial class MainWindowViewModel
         catch (Exception exception)
         {
             AppLog.Error("PLAYER:CREATE-FAILED", exception);
-            ErrorMessage = Loc.Format("loc_Shell_Error_ThePlayerMorphCouldNot", exception.Message);
+            ErrorMessage = Loc.Format("loc_Shell_Error_ThePlayerMorphCouldNot", UserFacingMessageFormatter.Format(exception));
             Status = Loc.Text("loc_Shell_Status_NewPlayerMorphFailedThe");
         }
         finally
@@ -477,7 +477,7 @@ public sealed partial class MainWindowViewModel
         catch (Exception exception)
         {
             AppLog.Error($"NPC:IMPORT-FAILED {archetype} {targetGame} FILE:{sourcePath}", exception);
-            ErrorMessage = Loc.Format("loc_Shell_Error_TheStandaloneNpcMorphCould", exception.Message);
+            ErrorMessage = Loc.Format("loc_Shell_Error_TheStandaloneNpcMorphCould", UserFacingMessageFormatter.Format(exception));
             Status = Loc.Text("loc_Shell_Status_NpcImportFailedTheCurrent");
         }
         finally
@@ -749,7 +749,7 @@ public sealed partial class MainWindowViewModel
         {
             AppLog.Error($"PLAYER:IMPORT-FAILED {game} FILE:{sourcePath}", exception);
             ErrorMessage = career is not null ? FormatPcsavError(exception) :
-                Loc.Format("loc_Shell_Error_TheStandalonePlayerMorphCould", exception.Message);
+                Loc.Format("loc_Shell_Error_TheStandalonePlayerMorphCould", UserFacingMessageFormatter.Format(exception));
             Status = Loc.Text("loc_Shell_Status_StandaloneImportFailedTheCurrent");
         }
         finally

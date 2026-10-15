@@ -408,33 +408,33 @@ internal static class PccPackageWorkflow
             {
                 if (reference.ClassName.Equals("Package", StringComparison.OrdinalIgnoreCase)) continue;
                 if (plannedMappings.ContainsKey(reference)) continue;
-                if (reference is ExportEntry instance && MaterialInstanceSourcePolicy.IsInstance(instance) &&
-                    (MaterialDependencyOracle.Instance.GetKind(destination.Game, instance.ClassName, CanonicalPath(instance)) !=
-                         MaterialOracleEntryKind.Import ||
-                     MaterialInstanceSourcePolicy.OverridesOfficialInstance(instance, resolver, cache)))
+                var nativePath = CanonicalPath(reference);
+                var authoredInstance = reference is ExportEntry instance && MaterialInstanceSourcePolicy.IsInstance(instance);
+                var editedInstance = authoredInstance && MaterialInstanceSourcePolicy.OverridesOfficialInstance(
+                    (ExportEntry)reference, resolver, cache);
+                if (!editedInstance &&
+                    PackageIntegrity.FindExactEntry(destination, nativePath, reference.ClassName) is { } existingReference)
                 {
-                    var renamed = ImportDependencyGraph(destination, instance, destinationParent: null,
+                    plannedMappings[reference] = existingReference;
+                    continue;
+                }
+                if (authoredInstance &&
+                    (MaterialDependencyOracle.Instance.GetKind(destination.Game, reference.ClassName, nativePath) !=
+                         MaterialOracleEntryKind.Import ||
+                     editedInstance))
+                {
+                    var renamed = ImportDependencyGraph(destination, (ExportEntry)reference, destinationParent: null,
                         textureCatalog: null, preferBiogTextures: false, applyCorpusMaterialPolicy: true,
-                        targetPathOverride: CanonicalPath(instance), installedAssets: resolver);
+                        targetPathOverride: nativePath, installedAssets: resolver);
                     plannedMappings[reference] = renamed;
                     continue;
                 }
                 if (InstalledAssetOccurrence.IsSupportedClass(reference.ClassName))
                 {
-                    var nativePath = CanonicalPath(reference);
                     if (MaterialDependencyOracle.Instance.GetKind(destination.Game, reference.ClassName, nativePath) ==
                         MaterialOracleEntryKind.Import)
                     {
-                        if (reference.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase) &&
-                            IsRegisteredExplicitTexture(destination, nativePath) &&
-                            PackageIntegrity.FindExactEntry(destination, nativePath, "Texture2D") is ExportEntry selectedLeaf)
-                        {
-                            plannedMappings[reference] = selectedLeaf;
-                        }
-                        else
-                        {
-                            plannedMappings[reference] = EnsureImport(destination, nativePath, reference.ClassName);
-                        }
+                        plannedMappings[reference] = EnsureImport(destination, nativePath, reference.ClassName);
                         continue;
                     }
                     if (reference is ImportEntry &&
@@ -452,34 +452,23 @@ internal static class PccPackageWorkflow
                     if (selected is not null)
                     {
                         var path = PccAssetPathPolicy.FromExport(selected);
-                        if (IsRegisteredExplicitTexture(destination, path) &&
-                            PackageIntegrity.FindExactEntry(destination, path, "Texture2D") is ExportEntry selectedLeaf)
+                        var existing = PackageIntegrity.FindExactEntry(destination, path, selected.ClassName);
+                        if (existing is not null)
                         {
-                            plannedMappings[reference] = selectedLeaf;
+                            plannedMappings[reference] = existing;
                             continue;
                         }
-                        {
-                            var existing = PackageIntegrity.FindExactEntry(destination, path, selected.ClassName);
-                            if (existing is ExportEntry existingExport)
-                            {
-                                plannedMappings[reference] = existingExport;
-                                continue;
-                            }
-                            if (existing is ImportEntry)
-                                throw new InvalidDataException(
-                                    $"Cannot stage official {selected.ClassName} '{path}': an import occupies the required export identity.");
-                            var embedded = ImportDependencyGraph(
-                                destination,
-                                selected,
-                                destinationParent: null,
-                                textureCatalog: null,
-                                preferBiogTextures: false,
-                                applyCorpusMaterialPolicy: true,
-                                targetPathOverride: path,
-                                authoredMaterialDonors: AuthoredMeshMaterials(reference));
-                            plannedMappings[reference] = embedded;
-                            continue; // The staged official graph supplies its own dependencies.
-                        }
+                        var embedded = ImportDependencyGraph(
+                            destination,
+                            selected,
+                            destinationParent: null,
+                            textureCatalog: null,
+                            preferBiogTextures: false,
+                            applyCorpusMaterialPolicy: true,
+                            targetPathOverride: path,
+                            authoredMaterialDonors: AuthoredMeshMaterials(reference));
+                        plannedMappings[reference] = embedded;
+                        continue; // The staged official graph supplies its own dependencies.
                     }
                 }
                 if (reference is ExportEntry export) pending.Enqueue(export);
@@ -638,24 +627,13 @@ internal static class PccPackageWorkflow
         }
         var path = resolved?.InstancedPath ??
                    PccAssetPathPolicy.FromDonorOccurrence(identity.InstancedPath, identity.PackagePath);
-        if (IsRegisteredExplicitTexture(destination, path) &&
-            PackageIntegrity.FindExactEntry(destination, path, "Texture2D") is ExportEntry explicitLeaf)
-            return explicitLeaf;
+        if (PackageIntegrity.FindExactEntry(destination, path, "Texture2D") is { } existing)
+            return existing;
         var oracleKind = MaterialDependencyOracle.Instance.GetKind(destination.Game, "Texture2D", path);
         if (oracleKind == MaterialOracleEntryKind.Import)
         {
             return EnsureImport(destination, path, "Texture2D");
         }
-        if (PackageIntegrity.FindExactEntry(destination, path, "Texture2D") is { } existing)
-        {
-            if (oracleKind == MaterialOracleEntryKind.Export && existing is ImportEntry)
-            {
-                throw new InvalidDataException(
-                    $"The corpus requires Texture2D '{path}' to be an export, but an import occupies that identity.");
-            }
-            return existing;
-        }
-
         if (resolved is not null)
         {
             return PccTextureDependencyResolver.MaterializeResolved(destination, resolved, warnings);
@@ -856,6 +834,11 @@ internal static class PccPackageWorkflow
                              _relinker.CrossPackageMap.TryGetValue(sourceParent, out var destinationParent)
                 ? $"{destinationParent.InstancedFullPath}.{reference.ObjectName.Instanced}"
                 : canonicalPath;
+            if (PackageIntegrity.FindExactEntry(_destination, targetPath, reference.ClassName) is { } existing)
+            {
+                _relinker.CrossPackageMap[reference] = existing;
+                return existing;
+            }
             if (expected == MaterialOracleEntryKind.Import ||
                 reference is ImportEntry && expected == MaterialOracleEntryKind.Unknown)
             {
@@ -899,11 +882,10 @@ internal static class PccPackageWorkflow
                 }
             }
             var targetPath = selection?.InstancedPath ?? canonicalPath;
-            if (IsRegisteredExplicitTexture(_destination, targetPath) &&
-                PackageIntegrity.FindExactEntry(_destination, targetPath, "Texture2D") is ExportEntry selectedExplicit)
+            if (PackageIntegrity.FindExactEntry(_destination, targetPath, "Texture2D") is { } existing)
             {
-                _relinker.CrossPackageMap[reference] = selectedExplicit;
-                return selectedExplicit;
+                _relinker.CrossPackageMap[reference] = existing;
+                return existing;
             }
             var expected = ExpectedKind("Texture2D", targetPath);
             if (expected == MaterialOracleEntryKind.Import)
@@ -961,6 +943,15 @@ internal static class PccPackageWorkflow
                 _relinker.CrossPackageMap[source] = result;
                 return result;
             }
+            // Resolving an import supplies donor content; it does not require
+            // replacing the destination's native role. Corpus roles choose how
+            // to construct missing dependencies. Explicit roots still require
+            // an export and retain their collision check below.
+            if (!forceExport && PackageIntegrity.FindExactEntry(_destination, targetPath, source.ClassName) is { } existingReference)
+            {
+                _relinker.CrossPackageMap[source] = existingReference;
+                return existingReference;
+            }
             var expected = ExpectedKind(source.ClassName, targetPath);
             if (!forceExport && expected == MaterialOracleEntryKind.Import)
             {
@@ -979,12 +970,6 @@ internal static class PccPackageWorkflow
             {
                 if (existing is not ExportEntry)
                 {
-                    if (!forceExport && !_applyCorpusMaterialPolicy)
-                    {
-                        _destinations[identityKey] = existing;
-                        _relinker.CrossPackageMap[source] = existing;
-                        return existing;
-                    }
                     throw new InvalidDataException(
                         $"Cannot materialise {source.ClassName} '{targetPath}': an import occupies the required export identity.");
                 }
@@ -1053,15 +1038,28 @@ internal static class PccPackageWorkflow
             return export;
         }
 
-        private IEntry? ResolveDestinationParent(ExportEntry source, string targetPath)
+        private IEntry? ResolveDestinationParent(IEntry source, string targetPath)
         {
-            if (source.Parent is ExportEntry sourceParent &&
+            if (source.Parent is { } sourceParent &&
                 !sourceParent.ClassName.Equals("Package", StringComparison.OrdinalIgnoreCase))
             {
                 var parentPath = targetPath.Contains('.')
                     ? targetPath[..targetPath.LastIndexOf('.')]
                     : DependencyPath(sourceParent);
-                return MaterializeExport(sourceParent, parentPath, destinationParent: null, forceExport: true);
+                // An outer is a reference too. A Texture2D face can live under
+                // an imported TextureCube; it does not require a local cube.
+                if (PackageIntegrity.FindExactEntry(_destination, parentPath, sourceParent.ClassName) is { } existing)
+                {
+                    _relinker.CrossPackageMap[sourceParent] = existing;
+                    return existing;
+                }
+                if (sourceParent is ExportEntry exportedParent)
+                    return MaterializeExport(exportedParent, parentPath, destinationParent: null, forceExport: true);
+                var parent = _destination.CreateImport(sourceParent.ClassName,
+                    NameReference.FromInstancedString(parentPath[(parentPath.LastIndexOf('.') + 1)..]),
+                    ResolveDestinationParent(sourceParent, parentPath));
+                _relinker.CrossPackageMap[sourceParent] = parent;
+                return parent;
             }
             return PackageIntegrity.EnsurePackagePath(_destination, targetPath, source.ClassName);
         }

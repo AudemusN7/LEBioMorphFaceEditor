@@ -731,8 +731,11 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                     .Where(value => context.Supports(Material, value.Name, MaterialParameterKind.Texture))
                     .Select(value => Material.SourceParameterName(value.Name))
                     .ToHashSet(StringComparer.OrdinalIgnoreCase);
-                var donor = _randomisationCatalog.SelectMaterialDonor(
+                var selected = _randomisationCatalog.SelectMaterialDonor(
                     context.Key, unchecked(seed + profileIndex++ * 7919));
+                var donor = _randomisationCatalog.ProjectInstalledMaterialDonors(
+                        context.Key, Material.CanResolveRandomisationTexturePath)
+                    .First(value => value.Id.Equals(selected.Id, StringComparison.OrdinalIgnoreCase));
                 foreach (var family in donor.MaterialTextureFamilies.Where(family =>
                              IsTextureFamilyInScope(family.Value, requestedNames, availableTextureNames)))
                 {
@@ -1573,8 +1576,8 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                                  family.ContainsKey("HED_Norm"))
                 .Select(family => new PlayerFaceTextureSet(
                     family!["HED_Diff"], family["HED_Norm"]))
-                .Where(pair => diffuseControl.CanResolveInstancedPath(pair.DiffusePath) &&
-                               normalControl.CanResolveInstancedPath(pair.NormalPath))
+                .Where(pair => diffuseControl.CanResolveRandomisationPath(pair.DiffusePath) &&
+                               normalControl.CanResolveRandomisationPath(pair.NormalPath))
                 .ToArray();
             var face = PlayerFaceScarTexturePolicy.SelectFaceSet(
                 profileKey, npcPairs, _registryTextureCandidates, seed);
@@ -1586,10 +1589,10 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                     // cannot leave a face diffuse and normal from different sets.
                     var diffuse = face.PlayerDiffuseAsset is { } playerDiffuse
                         ? await diffuseControl.ResolveReferenceAsync(playerDiffuse)
-                        : await diffuseControl.ResolveInstancedPathAsync(face.DiffusePath);
+                        : await diffuseControl.ResolveRandomisationPathAsync(face.DiffusePath);
                     var normal = face.PlayerNormalAsset is { } playerNormal
                         ? await normalControl.ResolveReferenceAsync(playerNormal)
-                        : await normalControl.ResolveInstancedPathAsync(face.NormalPath);
+                        : await normalControl.ResolveRandomisationPathAsync(face.NormalPath);
                     textures[diffuseName] = diffuse;
                     textures[normalName] = normal;
                     appliedFamilies++;
@@ -1936,7 +1939,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                 .Select(value => Material.SourceParameterName(value.Name))
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
             var installedDonors = _randomisationCatalog.ProjectInstalledMaterialDonors(
-                context.Key, Material.CanResolveTexturePath);
+                context.Key, Material.CanResolveRandomisationTexturePath);
             var compatibleDonors = excludedDonorId is null
                 ? installedDonors
                 : installedDonors.Where(value =>

@@ -242,7 +242,7 @@ public sealed partial class MainWindowViewModel
         catch (Exception exception)
         {
             AppLog.Error($"FACE:CONVERT-FAILED {source.InstancedPath}", exception);
-            ErrorMessage = Loc.Format("loc_Shell_Error_TheMorphCouldNotBe", exception.Message);
+            ErrorMessage = Loc.Format("loc_Shell_Error_TheMorphCouldNotBe", UserFacingMessageFormatter.Format(exception));
             Status = Loc.Text("loc_Shell_Status_MorphConversionFailedTheSource");
         }
         finally
@@ -434,8 +434,8 @@ public sealed partial class MainWindowViewModel
         var messageText = Loc.Text(message);
         AppLog.Error($"FACE:OPERATION-FAILED ACTION:{Loc.ReadEmbeddedEnglish()[operation]} FACE:{SelectedFace?.InstancedPath} FILE:{WorkspacePackagePath}", exception);
         ErrorMessage = packageModified
-            ? Loc.Format("loc_Shell_Error_TemporaryEditsRetainedWorkspaceRefreshFailed", exception.Message)
-            : Loc.Format("loc_Shell_Error_ContextOperationFailed", messageText, exception.Message);
+            ? Loc.Format("loc_Shell_Error_TemporaryEditsRetainedWorkspaceRefreshFailed", UserFacingMessageFormatter.Format(exception))
+            : Loc.Format("loc_Shell_Error_ContextOperationFailed", messageText, UserFacingMessageFormatter.Format(exception));
         Status = packageModified
             ? Loc.Format("loc_Shell_Status_ContextOperationUpdatedWorkspaceReloadFailed", operationName)
             : Loc.Format("loc_Shell_Status_ContextOperationFailedSourceUnmodified", operationName);

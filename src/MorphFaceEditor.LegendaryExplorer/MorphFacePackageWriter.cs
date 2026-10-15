@@ -54,13 +54,10 @@ public sealed class MorphFacePackageWriter
             destinationIntegrityBaseline = PackageIntegrity.CaptureIssues(existingDestination);
         }
 
-        var temporaryPath = Path.Combine(
-            Path.GetDirectoryName(destination)!,
-            $".{Path.GetFileName(destination)}.{Guid.NewGuid():N}.tmp");
         Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-
-        try
+        using (var save = new FileSaveTransaction(destination, destinationFingerprint))
         {
+            var temporaryPath = save.CandidatePath;
             string facePath;
             string overridePath;
             var warnings = new List<string>();
@@ -184,18 +181,9 @@ public sealed class MorphFacePackageWriter
             }
 
             Verify(temporaryPath, facePath, draft, destinationIntegrityBaseline, dependencyGraph, requireMinimal: createNewPackage);
-            if (PackageFingerprint.Capture(sourcePath) != draft.SourceFingerprint)
-            {
-                throw new IOException("The source PCC changed while the morph package was being written. Nothing was replaced.");
-            }
-            if (destinationFingerprint is null && File.Exists(destination) ||
-                destinationFingerprint is not null &&
-                (!File.Exists(destination) || PackageFingerprint.Capture(destination) != destinationFingerprint))
-            {
-                throw new IOException("The destination changed while the morph package was being written. Nothing was replaced.");
-            }
-
-            PccPackageWorkflow.AtomicReplace(temporaryPath, destination);
+            FileSaveTransaction.VerifyUnchanged(sourcePath, draft.SourceFingerprint,
+                "The source PCC changed while the morph package was being written. Nothing was replaced.");
+            save.Commit("The destination changed while the morph package was being written. Nothing was replaced.");
             return new MorphFaceSaveResult(
                 destination,
                 facePath,
@@ -205,13 +193,6 @@ public sealed class MorphFacePackageWriter
             {
                 Warnings = warnings
             };
-        }
-        finally
-        {
-            if (File.Exists(temporaryPath))
-            {
-                File.Delete(temporaryPath);
-            }
         }
     }
 
@@ -232,12 +213,9 @@ public sealed class MorphFacePackageWriter
             integrityBaseline = PackageIntegrity.CaptureIssues(original);
             VerifyUnchangedNonFiniteValues(draft, FindExport(original, draft.Source.InstancedPath, "BioMorphFace"));
         }
-        var temporaryPath = Path.Combine(
-            Path.GetDirectoryName(packagePath)!,
-            $".{Path.GetFileName(packagePath)}.{Guid.NewGuid():N}.tmp");
-
-        try
+        using (var save = new FileSaveTransaction(packagePath, draft.SourceFingerprint))
         {
+            var temporaryPath = save.CandidatePath;
             File.Copy(packagePath, temporaryPath, overwrite: false);
             string overridePath;
             var warnings = new List<string>();
@@ -266,12 +244,7 @@ public sealed class MorphFacePackageWriter
             }
 
             Verify(temporaryPath, draft.Source.InstancedPath, draft, integrityBaseline, dependencyGraph);
-            if (PackageFingerprint.Capture(packagePath) != draft.SourceFingerprint)
-            {
-                throw new IOException("The open PCC changed while the face was being written. Nothing was replaced.");
-            }
-
-            PccPackageWorkflow.AtomicReplace(temporaryPath, packagePath);
+            save.Commit("The open PCC changed while the face was being written. Nothing was replaced.");
             return new MorphFaceSaveResult(
                 packagePath,
                 draft.Source.InstancedPath,
@@ -281,13 +254,6 @@ public sealed class MorphFacePackageWriter
             {
                 Warnings = warnings
             };
-        }
-        finally
-        {
-            if (File.Exists(temporaryPath))
-            {
-                File.Delete(temporaryPath);
-            }
         }
     }
 

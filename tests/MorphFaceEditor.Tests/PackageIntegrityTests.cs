@@ -1229,7 +1229,7 @@ internal static class PackageIntegrityTests
                 worker.WaitForExit(10_000);
             }
             worker?.Dispose();
-            PccPackageWorkflow.BeforeAtomicReplaceForTesting = null;
+            FileSaveTransaction.BeforeCommitForTesting = null;
             if (File.Exists(sourcePath)) File.Delete(sourcePath);
             if (File.Exists(markerPath))
             {
@@ -1247,7 +1247,7 @@ internal static class PackageIntegrityTests
         using (var package = MEPackageHandler.OpenMEPackage(sourcePath, forceLoadFromDisk: true))
             facePath = package.Exports.First(entry => entry.ClassName == "BioMorphFace").InstancedFullPath;
         var draft = new MorphFacePackageReader().Load(sourcePath, facePath).Document;
-        PccPackageWorkflow.BeforeAtomicReplaceForTesting = (temporaryPath, destination) =>
+        FileSaveTransaction.BeforeCommitForTesting = (temporaryPath, destination) =>
         {
             TestAssert.True(File.Exists(temporaryPath), "The atomic-save worker reached the hook before writing its candidate.");
             TestAssert.Equal(sourcePath, destination);
@@ -1264,7 +1264,7 @@ internal static class PackageIntegrityTests
         }
         finally
         {
-            PccPackageWorkflow.BeforeAtomicReplaceForTesting = null;
+            FileSaveTransaction.BeforeCommitForTesting = null;
         }
     }
 

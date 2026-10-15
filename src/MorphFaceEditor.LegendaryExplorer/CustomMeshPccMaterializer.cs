@@ -75,12 +75,9 @@ public sealed class CustomMeshPccMaterializer
         var originalDestination = File.Exists(destination)
             ? PackageFingerprint.Capture(destination)
             : null;
-        var temporaryPath = Path.Combine(
-            directory,
-            $".{Path.GetFileName(destination)}.{Guid.NewGuid():N}.mfe-mesh.tmp.pcc");
-
-        try
+        using (var save = new FileSaveTransaction(destination, originalDestination, ".mfe-mesh.tmp.pcc"))
         {
+            var temporaryPath = save.CandidatePath;
             var warnings = new List<string>();
             IReadOnlyList<CustomMeshPccMaterialResult> materialResults;
             PccDependencyGraphSnapshot dependencyGraph;
@@ -117,32 +114,15 @@ public sealed class CustomMeshPccMaterializer
             }
 
             Verify(temporaryPath, request, materialResults, meshPath, dependencyGraph);
-            if (originalDestination is null)
-            {
-                if (File.Exists(destination))
-                {
-                    throw new IOException("The PCC destination was created by another process. Nothing was replaced.");
-                }
-            }
-            else if (!File.Exists(destination) || PackageFingerprint.Capture(destination) != originalDestination)
-            {
-                throw new IOException("The PCC destination changed while it was being written. Nothing was replaced.");
-            }
-
-            PccPackageWorkflow.AtomicReplace(temporaryPath, destination);
+            save.Commit(originalDestination is null
+                ? "The PCC destination was created by another process. Nothing was replaced."
+                : "The PCC destination changed while it was being written. Nothing was replaced.");
             return new CustomMeshPccSaveResult(
                 destination,
                 $"{PackageRootName}",
                 meshPath,
                 materialResults,
                 warnings);
-        }
-        finally
-        {
-            if (File.Exists(temporaryPath))
-            {
-                File.Delete(temporaryPath);
-            }
         }
     }
 

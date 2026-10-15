@@ -21,8 +21,6 @@ internal static class PccPackageWorkflow
     private static readonly ConditionalWeakTable<IMEPackage, ExplicitTextureLeafState> ExplicitTextureLeaves = new();
     private static readonly ConditionalWeakTable<IMEPackage, HashSet<string>> PersistedTextureLeafNames = new();
     private const string ExplicitTextureNamePrefix = "MFE_ExplicitTexture2D_";
-    // Test-only interruption boundary immediately before atomic installation.
-    internal static Action<string, string>? BeforeAtomicReplaceForTesting { get; set; }
 
     internal static ExportEntry ImportDependencyGraph(
         IMEPackage destination,
@@ -656,32 +654,6 @@ internal static class PccPackageWorkflow
             VerifyCorpusRoles(reopened,
                 new HashSet<CorpusRoleIssue>(CorpusRoleIssueComparer.Instance),
                 expected.ExplicitTextureLeaves.ToHashSet(StringComparer.OrdinalIgnoreCase));
-        }
-    }
-
-    internal static void AtomicReplace(string temporaryPath, string destination)
-    {
-        BeforeAtomicReplaceForTesting?.Invoke(temporaryPath, destination);
-        if (!File.Exists(destination))
-        {
-            File.Move(temporaryPath, destination);
-            return;
-        }
-
-        var backup = $"{destination}.{Guid.NewGuid():N}.backup";
-        try
-        {
-            File.Replace(temporaryPath, destination, backup, ignoreMetadataErrors: true);
-            File.Delete(backup);
-        }
-        catch
-        {
-            if (File.Exists(backup))
-            {
-                File.Copy(backup, destination, overwrite: true);
-                File.Delete(backup);
-            }
-            throw;
         }
     }
 

@@ -1,14 +1,7 @@
+using MorphFaceEditor.Core.Domain;
 using System.Text.Json.Serialization;
 
 namespace MorphFaceEditor.Core.Materials;
-
-/// <summary>Legendary Edition game identity kept independent of package-library types.</summary>
-public enum TextureCatalogGame
-{
-    LE1,
-    LE2,
-    LE3
-}
 
 /// <summary>Human-readable provenance inferred from an installed package location.</summary>
 public enum TextureCatalogOrigin
@@ -53,7 +46,7 @@ public sealed record TextureCatalogOccurrence(
 /// expose each physical occurrence with its donor provenance.
 /// </summary>
 public sealed record TextureCatalogCandidate(
-    TextureCatalogGame Game,
+    MorphFaceGame Game,
     string InstancedPath,
     TextureCatalogOccurrence EffectiveOccurrence,
     IReadOnlyList<TextureCatalogOccurrence> Occurrences)

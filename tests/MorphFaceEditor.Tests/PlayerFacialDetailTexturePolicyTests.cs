@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.Core.Randomisation;
 using MorphFaceEditor.Models;
@@ -21,22 +22,22 @@ public static class PlayerFacialDetailTexturePolicyTests
     {
         var candidates = new[]
         {
-            Candidate(TextureCatalogGame.LE2,
+            Candidate(MorphFaceGame.LE2,
                 "BIOG_HMM_HED_PROMorph.Beard.Custom.HMM_HED_PROCustom_Add1"),
-            Candidate(TextureCatalogGame.LE2,
+            Candidate(MorphFaceGame.LE2,
                 "BIOG_HMM_HED_PROMorph.Beard.Custom.HMM_HED_PROCustom_Stubble"),
-            Candidate(TextureCatalogGame.LE2,
+            Candidate(MorphFaceGame.LE2,
                 "BIOG_HMM_HED_PROMorph.Brow.HMM_HED_PROCustom_ArchedBrow"),
-            Candidate(TextureCatalogGame.LE2,
+            Candidate(MorphFaceGame.LE2,
                 "BIOG_HMM_HED_PROMorph.Brow.HMM_HED_PROCustom_Bushybrow"),
             // NPC combined addition texture: same general face category, but not a Player beard.
-            Candidate(TextureCatalogGame.LE2,
+            Candidate(MorphFaceGame.LE2,
                 "BIOG_HMM_HED_PROMorph.Addn.HMM_HED_Addn_012"),
             // A Player brow texture must not leak into the beard slot.
-            Candidate(TextureCatalogGame.LE2,
+            Candidate(MorphFaceGame.LE2,
                 "BIOG_HMM_HED_PROMorph.Brow.HMM_HED_PROCustom_ArchedBrow", "HMF"),
             // Likewise, a correctly named beard in another folder is not eligible.
-            Candidate(TextureCatalogGame.LE2,
+            Candidate(MorphFaceGame.LE2,
                 "BIOG_HMM_HED_PROMorph.Addn.HMM_HED_PROCustom_Add1")
         };
         var current = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -68,11 +69,11 @@ public static class PlayerFacialDetailTexturePolicyTests
     {
         var candidates = new[]
         {
-            Candidate(TextureCatalogGame.LE3,
+            Candidate(MorphFaceGame.LE3,
                 "BIOG_HMF_HED_PROMorph_R.Brow.HMF_HED_PROCustom_AngularBrow", "HMF"),
-            Candidate(TextureCatalogGame.LE3,
+            Candidate(MorphFaceGame.LE3,
                 "BIOG_HMF_HED_PROMorph_R.Beard.HMF_HED_PROCustom_Add1", "HMF"),
-            Candidate(TextureCatalogGame.LE3,
+            Candidate(MorphFaceGame.LE3,
                 "BIOG_HMF_HED_PROMorph_R.Brow.HMM_HED_PROCustom_ArchedBrow", "HMF")
         };
         var current = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -100,7 +101,7 @@ public static class PlayerFacialDetailTexturePolicyTests
             "TEXTUREGROUP_Character", false, null);
         var mod = Occurrence("AThirdPartyHairMod.pcc", TextureCatalogOrigin.Mod, 99);
         var candidate = new TextureCatalogCandidate(
-            TextureCatalogGame.LE1,
+            MorphFaceGame.LE1,
             "BIOG_HMM_HED_PROMorph.Beard.Custom.HMM_HED_PROCustom_5oclock",
             officialDlc,
             [mod, baseGame, officialDlc])
@@ -131,7 +132,7 @@ public static class PlayerFacialDetailTexturePolicyTests
             ["HED_Addn"] = "existing beard",
             ["HED_Brow"] = "existing brow"
         };
-        var onlyBrow = Candidate(TextureCatalogGame.LE2,
+        var onlyBrow = Candidate(MorphFaceGame.LE2,
             "BIOG_HMM_HED_PROMorph.Brow.HMM_HED_PROCustom_ThickBrow");
 
         var proposal = PlayerFacialDetailTexturePolicy.CreateProposal(
@@ -155,9 +156,9 @@ public static class PlayerFacialDetailTexturePolicyTests
             "le2-human-male",
             new Dictionary<string, string> { ["HED_Addn"] = "current beard", ["HED_Brow"] = "current brow" },
             [
-                new TextureCatalogCandidate(TextureCatalogGame.LE2, beardPath, beardOccurrence, [beardOccurrence])
+                new TextureCatalogCandidate(MorphFaceGame.LE2, beardPath, beardOccurrence, [beardOccurrence])
                     { IsEligibleOfficialDefault = true },
-                new TextureCatalogCandidate(TextureCatalogGame.LE2, browPath, browOccurrence, [browOccurrence])
+                new TextureCatalogCandidate(MorphFaceGame.LE2, browPath, browOccurrence, [browOccurrence])
                     { IsEligibleOfficialDefault = true }
             ],
             1337);
@@ -189,7 +190,7 @@ public static class PlayerFacialDetailTexturePolicyTests
         var proposal = PlayerFacialDetailTexturePolicy.CreateProposal(
             "le2-asari",
             new Dictionary<string, string> { ["HED_Brow"] = "existing" },
-            [Candidate(TextureCatalogGame.LE2,
+            [Candidate(MorphFaceGame.LE2,
                 "BIOG_HMF_HED_PROMorph_R.Brow.HMF_HED_PROCustom_AngularBrow", "HMF")],
             5);
 
@@ -197,7 +198,7 @@ public static class PlayerFacialDetailTexturePolicyTests
     }
 
     private static TextureCatalogCandidate Candidate(
-        TextureCatalogGame game,
+        MorphFaceGame game,
         string path,
         string sex = "HMM")
     {

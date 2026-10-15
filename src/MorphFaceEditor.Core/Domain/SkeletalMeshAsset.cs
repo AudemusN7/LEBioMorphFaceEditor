@@ -57,33 +57,24 @@ public sealed record SkeletalMeshRenderData(
     IReadOnlyList<int> Indices,
     IReadOnlyList<AssetIdentity?> MaterialSlots);
 
-/// <summary>Complete renderer-facing data for one skeletal-mesh LOD.</summary>
+/// <summary>Geometry for one LOD, with optional streams needed for rendering and skinning.</summary>
 public sealed record SkeletalMeshLod(
     int LodIndex,
     Vector3[] Positions,
     Vector3[] Normals,
     SkeletalMeshTopology Topology,
-    SkeletalMeshRenderData RenderData);
+    SkeletalMeshRenderData? RenderData = null);
 
 public sealed record SkeletalMeshAsset(
     AssetIdentity Source,
-    Vector3[] Positions,
-    Vector3[] Normals,
-    SkeletalMeshTopology Topology,
-    SkeletalMeshRenderData? RenderData = null,
-    IReadOnlyList<Vector3[]>? LodPositions = null,
-    IReadOnlyList<SkeletalMeshLod>? Lods = null)
+    IReadOnlyList<SkeletalMeshLod> Lods)
 {
-    public IReadOnlyList<Vector3[]> AvailableLodPositions => Lods is { Count: > 0 }
-        ? Lods.OrderBy(lod => lod.LodIndex).Select(lod => lod.Positions).ToArray()
-        : LodPositions ?? [Positions];
-
-    public IReadOnlyList<SkeletalMeshLod> AvailableLods => Lods is { Count: > 0 }
-        ? Lods
-        : RenderData is null
-            ? []
-            : [new SkeletalMeshLod(0, Positions, Normals, Topology, RenderData)];
+    // Producers supply LOD0 first, then lower LODs in ascending native index order.
+    public Vector3[] Positions => Lods[0].Positions;
+    public Vector3[] Normals => Lods[0].Normals;
+    public SkeletalMeshTopology Topology => Lods[0].Topology;
+    public SkeletalMeshRenderData? RenderData => Lods[0].RenderData;
 
     public SkeletalMeshLod? FindLod(int lodIndex) =>
-        AvailableLods.FirstOrDefault(lod => lod.LodIndex == lodIndex);
+        Lods.FirstOrDefault(lod => lod.LodIndex == lodIndex);
 }

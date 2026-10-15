@@ -37,14 +37,13 @@ public static class MaterialSchemaTests
         };
         foreach (var (path, expected) in cases)
         {
-            TestAssert.Equal(expected, HumanMaterialProfiles.Le3PreviewModelForMaster("Material", path));
-            TestAssert.Equal(expected, HumanMaterialProfiles.Le3PreviewModelForMaster("material", path.ToLowerInvariant()));
-            TestAssert.Equal(HumanMaterialPreviewModel.Default,
-                HumanMaterialProfiles.Le3PreviewModelForMaster("MaterialInstanceConstant", path));
-            TestAssert.Equal(HumanMaterialPreviewModel.Default,
-                HumanMaterialProfiles.Le3PreviewModelForMaster("Material", "Custom." + path));
-            TestAssert.Equal(HumanMaterialPreviewModel.Default,
-                HumanMaterialProfiles.Le3PreviewModelForMaster("Material", path[(path.LastIndexOf('.') + 1)..]));
+            var masterName = path[(path.LastIndexOf('.') + 1)..];
+            TestAssert.Equal(expected, HeadMaterialCatalog.Find(MorphFaceGame.LE3, masterName)!.PreviewModel);
+            TestAssert.Equal(expected, HeadMaterialCatalog.Find(MorphFaceGame.LE3, masterName.ToLowerInvariant())!.PreviewModel);
+            TestAssert.True(HeadMaterialCatalog.Find(MorphFaceGame.LE1, masterName) is null,
+                "An LE3-only master was recognised in LE1.");
+            TestAssert.True(HeadMaterialCatalog.Find(MorphFaceGame.LE3, masterName + "_Copy") is null,
+                "An approximate master name selected a dedicated preview shader.");
         }
     }
 
@@ -222,7 +221,7 @@ public static class MaterialSchemaTests
                      "le2-human-male", "le2-human-female", "le3-human-male", "le3-human-female"
                  })
         {
-            AssertMaterialControlProjection(profiles.Single(value => value.Key == key).UiProfile, key);
+            AssertMaterialControlProjection(profiles.Single(value => value.Key == key).GetUiProfile(), key);
         }
         AssertMaterialControlProjection(new DetachedMeshFeatureMetadataCatalog(), "le3-mesh", scoped: true);
     }
@@ -296,16 +295,16 @@ public static class MaterialSchemaTests
         {
             TestAssert.True(HumanMaterialProfiles.Definitions.Any(value => value.Family == family), $"No schema entries exist for {family}.");
         }
-        TestAssert.Equal(HeadMaterialFamily.Eyes, HumanMaterialProfiles.ClassifyMaster("HMM_EYE_MASTER_OVRD_MAT"));
-        TestAssert.Equal(HeadMaterialFamily.Eyes, HumanMaterialProfiles.ClassifyMaster("HMF_EYE_MASTER_OVRD_MAT"));
-        TestAssert.Equal(HeadMaterialFamily.Skin, HumanMaterialProfiles.ClassifyMaster("HMF_HED_PRO_MASTER_FACE_MAT"));
-        TestAssert.Equal(HeadMaterialFamily.Hair, HumanMaterialProfiles.ClassifyMaster("HMN_HED_PRO_MASTER_ADDN_HAIR_MAT"));
-        TestAssert.Equal(HeadMaterialFamily.MaskedHair, HumanMaterialProfiles.ClassifyMaster("HMM_HIR_PROShort01_MAT_1a"));
-        TestAssert.Equal(HeadMaterialFamily.SalarianSkin, HumanMaterialProfiles.ClassifyMaster("SAL_HED_PRO_MASTER_MAT"));
-        TestAssert.Equal(HeadMaterialFamily.SalarianEyes, HumanMaterialProfiles.ClassifyMaster("SAL_HED_EYE_MASTER_MAT"));
-        TestAssert.Equal(HeadMaterialFamily.BatarianSkin, HumanMaterialProfiles.ClassifyMaster("BAT_HED_PRO_MASTER_MAT"));
-        TestAssert.Equal(HeadMaterialFamily.KroganSkin, HumanMaterialProfiles.ClassifyMaster("KRO_HED_PRO_MASTER_MAT"));
-        TestAssert.Equal(HeadMaterialFamily.KroganEyes, HumanMaterialProfiles.ClassifyMaster("KRO_HED_EYE_MASTER_MAT"));
+        TestAssert.Equal(HeadMaterialFamily.Eyes, (HeadMaterialCatalog.Find(MorphFaceGame.LE1, "HMM_EYE_MASTER_OVRD_MAT")?.Family ?? HeadMaterialFamily.Unknown));
+        TestAssert.Equal(HeadMaterialFamily.Eyes, (HeadMaterialCatalog.Find(MorphFaceGame.LE1, "HMF_EYE_MASTER_OVRD_MAT")?.Family ?? HeadMaterialFamily.Unknown));
+        TestAssert.Equal(HeadMaterialFamily.Skin, (HeadMaterialCatalog.Find(MorphFaceGame.LE1, "HMF_HED_PRO_MASTER_FACE_MAT")?.Family ?? HeadMaterialFamily.Unknown));
+        TestAssert.Equal(HeadMaterialFamily.Hair, (HeadMaterialCatalog.Find(MorphFaceGame.LE3, "HMN_HED_PRO_MASTER_ADDN_HAIR_MAT")?.Family ?? HeadMaterialFamily.Unknown));
+        TestAssert.Equal(HeadMaterialFamily.MaskedHair, (HeadMaterialCatalog.Find(MorphFaceGame.LE1, "HMM_HIR_PROShort01_MAT_1a")?.Family ?? HeadMaterialFamily.Unknown));
+        TestAssert.Equal(HeadMaterialFamily.SalarianSkin, (HeadMaterialCatalog.Find(MorphFaceGame.LE1, "SAL_HED_PRO_MASTER_MAT")?.Family ?? HeadMaterialFamily.Unknown));
+        TestAssert.Equal(HeadMaterialFamily.SalarianEyes, (HeadMaterialCatalog.Find(MorphFaceGame.LE1, "SAL_HED_EYE_MASTER_MAT")?.Family ?? HeadMaterialFamily.Unknown));
+        TestAssert.Equal(HeadMaterialFamily.BatarianSkin, (HeadMaterialCatalog.Find(MorphFaceGame.LE1, "BAT_HED_PRO_MASTER_MAT")?.Family ?? HeadMaterialFamily.Unknown));
+        TestAssert.Equal(HeadMaterialFamily.KroganSkin, (HeadMaterialCatalog.Find(MorphFaceGame.LE1, "KRO_HED_PRO_MASTER_MAT")?.Family ?? HeadMaterialFamily.Unknown));
+        TestAssert.Equal(HeadMaterialFamily.KroganEyes, (HeadMaterialCatalog.Find(MorphFaceGame.LE1, "KRO_HED_EYE_MASTER_MAT")?.Family ?? HeadMaterialFamily.Unknown));
         TestAssert.Equal(TextureRole.Other, HumanMaterialProfiles.Describe(
             "HED_Makeup_Mask", MaterialParameterKind.Texture).TextureRole);
         foreach (var customPlayerParameter in new[]

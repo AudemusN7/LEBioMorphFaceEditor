@@ -35,7 +35,7 @@ internal static class SupportedMaterialGraphPolicy
 
             if (current.ClassName.Equals("Material", StringComparison.OrdinalIgnoreCase))
             {
-                if (IsCanonicalHeadMaterial(game, current.ClassName, path))
+                if (MorphFacePackageReader.DescribeMaterialMaster(game, current) is not null)
                 {
                     unsupported = string.Empty;
                     return true;
@@ -48,14 +48,6 @@ internal static class SupportedMaterialGraphPolicy
             string parentPropertyName;
             if (current.IsA("RvrEffectsMaterialUser"))
             {
-                // Effects-material wrappers are supported only when the wrapper
-                // itself is canonical; arbitrary user-authored shader graphs
-                // cannot become supported by pointing at a stock base.
-                if (!IsCanonicalHeadMaterial(game, current.ClassName, path))
-                {
-                    unsupported = $"unreviewed effects material '{path}'";
-                    return false;
-                }
                 parentPropertyName = "m_pBaseMaterial";
             }
             else if (current.IsA("MaterialInstanceConstant") ||
@@ -85,73 +77,4 @@ internal static class SupportedMaterialGraphPolicy
             }
         }
     }
-
-    private static bool IsCanonicalHeadMaterial(MEGame game, string className, string path)
-    {
-        // LE1's officially backported Shepard hair graph is absent from the
-        // GlobalMorphs projection. Its shader parents are supported independently
-        // of whichever stock or custom MIC points to them.
-        if (game == MEGame.LE1 &&
-            ($"{className}|{path}".Equals(
-                 "RvrEffectsMaterialUser|EffectsMaterials.Users.HMN_HED_PRO_MASTER_HAIR_ME3_MAT_USER",
-                 StringComparison.OrdinalIgnoreCase) ||
-             $"{className}|{path}".Equals(
-                 "Material|BIOG_Humanoid_MASTER_MTR_R.Human.HMN_HED_PRO_ME3_MASTER_Hair_MAT",
-                 StringComparison.OrdinalIgnoreCase)))
-            return true;
-        if (MaterialDependencyOracle.Instance.GetKind(game, className, path) ==
-            MaterialOracleEntryKind.Unknown)
-        {
-            return false;
-        }
-
-        var leaf = path.Split('.').Last();
-        if (leaf.StartsWith("CombinedEffect_", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        // The oracle is a dependency projection and includes body and VFX
-        // materials. Ordinary roots must classify as an assignable head family
-        // or recognized headwear. Reviewed shared roots also cover attachment
-        // graphs whose names do not describe their headwear or preview family.
-        return HeadMaterialClassifier.IsAssignableHeadFamily(HeadMaterialClassifier.Classify(path)) ||
-               IsRecognizedHeadwearPath(path) ||
-               IsReviewedSharedHatRoot(game, className, path) ||
-               IsReviewedSharedHairRoot(game, className, path);
-    }
-
-    private static bool IsRecognizedHeadwearPath(string path) =>
-        path.Contains("hat", StringComparison.OrdinalIgnoreCase) ||
-        path.Contains("helmet", StringComparison.OrdinalIgnoreCase) ||
-        path.Contains("visor", StringComparison.OrdinalIgnoreCase) ||
-        path.Contains("beanie", StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsReviewedSharedHatRoot(MEGame game, string className, string path)
-    {
-        var identity = $"{className}|{path}";
-        // Stock MotoGlasses uses this visor graph for its second MIC slot.
-        // Authored dependency porting does not require an editable material
-        // family or preview shader. The oracle check above still establishes
-        // the reviewed game's native identity and import/export role.
-        return (game is MEGame.LE1 or MEGame.LE2 && IsOneOf(identity,
-            "RvrEffectsMaterialUser|EffectsMaterials.Users.HMF_VSR_MASTER_MAT_USER",
-            "Material|BIOG_Humanoid_MASTER_MTR_R.Human.HMF_VSR_MASTER_MAT")) ||
-            (game == MEGame.LE3 && IsOneOf(identity,
-            "RvrEffectsMaterialUser|BIOG_HMM_ARM_AND_R.Master.Andersonb_MASTER_MAT_USER",
-            "Material|BIOG_HMM_ARM_AND_R.Master.Andersonb_MASTER_MAT"));
-    }
-
-    private static bool IsReviewedSharedHairRoot(MEGame game, string className, string path) =>
-        game == MEGame.LE3 && IsOneOf($"{className}|{path}",
-            "RvrEffectsMaterialUser|EffectsMaterials.Users.Human.HMN_HED_PRO_MASTER_HAIR_MAT_USER_CC",
-            "Material|BIOG_Humanoid_MASTER_MTR_R.Human.HMN_HED_PRO_MASTER_HAIR_MAT_CC",
-            "RvrEffectsMaterialUser|EffectsMaterials.Users.HMM_HED_PRO_USER_SCALP_MAT_CC",
-            "Material|BIOG_Humanoid_MASTER_MTR_R.Human.HMM_HED_PRO_MASTER_SCALP_MAT_CC",
-            "RvrEffectsMaterialUser|BIOG_HMM_HED_PROMorph.Kaiden.Master.BIOG_HMM_HED_Kaiden_USER",
-            "Material|BIOG_HMM_HED_PROMorph.Kaiden.Master.BIOG_HMM_HED_Kaiden_MASTER",
-            "Material|BIOG_Humanoid_MASTER_MTR_R.Human.Hair.Human_Hair_MASTER");
-
-    private static bool IsOneOf(string identity, params string[] reviewedIdentities) =>
-        reviewedIdentities.Contains(identity, StringComparer.OrdinalIgnoreCase);
 }

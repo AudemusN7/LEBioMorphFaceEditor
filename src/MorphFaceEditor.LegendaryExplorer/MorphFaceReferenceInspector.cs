@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Domain;
 using LegendaryExplorerCore.Packages;
 using LegendaryExplorerCore.Unreal;
 

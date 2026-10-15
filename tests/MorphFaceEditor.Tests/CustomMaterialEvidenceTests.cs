@@ -107,13 +107,13 @@ public static class CustomMaterialEvidenceTests
                 TextureCatalogOrigin.OfficialDlc, 1, 1, "PF_B8G8R8A8", "", false, null);
             var modTexture = new TextureCatalogOccurrence(modPath, 30, 9000,
                 TextureCatalogOrigin.Mod, 1, 1, "PF_B8G8R8A8", "", false, null);
-            var texture = new TextureCatalogCandidate(TextureCatalogGame.LE3, texturePath,
+            var texture = new TextureCatalogCandidate(MorphFaceGame.LE3, texturePath,
                 higherTexture, [lowerTexture, higherTexture, modTexture])
             {
                 IsEligibleOfficialDefault = true
             };
             var snapshot = new TextureRegistrySnapshot(TextureRegistrySnapshot.CurrentSchemaVersion,
-                TextureCatalogGame.LE3, DateTimeOffset.UtcNow, 3, [texture])
+                MorphFaceGame.LE3, DateTimeOffset.UtcNow, 3, [texture])
             {
                 OfficialPackagePaths = [lowerPath, higherPath],
                 MorphFaceTemplates =
@@ -229,7 +229,7 @@ public static class CustomMaterialEvidenceTests
             "Ssk_02's active material slot did not resolve.");
         TestAssert.True(attachment.Materials.Materials.Count > 0,
             "The valid Ssk_02 material evidence was not loaded.");
-        TestAssert.True(attachment.Mesh.AvailableLods.All(lod =>
+        TestAssert.True(attachment.Mesh.Lods.All(lod =>
                 lod.Topology.Sections.All(section => section.MaterialIndex == 1)),
             "A Ssk_02 LOD section no longer points at the active slot 1 material.");
     }

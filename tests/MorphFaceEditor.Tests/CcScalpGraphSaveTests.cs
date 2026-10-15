@@ -156,8 +156,8 @@ internal static class CcScalpGraphSaveTests
         IMEPackage savedPackage,
         bool allowUniqueMicCopy)
     {
-        var sourceLods = original.AvailableLods.OrderBy(lod => lod.LodIndex).ToArray();
-        var savedLods = reopened.AvailableLods.OrderBy(lod => lod.LodIndex).ToArray();
+        var sourceLods = original.Lods.OrderBy(lod => lod.LodIndex).ToArray();
+        var savedLods = reopened.Lods.OrderBy(lod => lod.LodIndex).ToArray();
         TestAssert.Equal(sourceLods.Length, savedLods.Length);
         for (var index = 0; index < sourceLods.Length; index++)
         {
@@ -166,11 +166,11 @@ internal static class CcScalpGraphSaveTests
             TestAssert.True(source.Positions.SequenceEqual(saved.Positions) &&
                             source.Normals.SequenceEqual(saved.Normals),
                 $"Head LOD {source.LodIndex} vertex positions or normals changed.");
-            TestAssert.True(source.RenderData.Indices.SequenceEqual(saved.RenderData.Indices) &&
-                            source.RenderData.Tangents.SequenceEqual(saved.RenderData.Tangents) &&
-                            source.RenderData.TextureCoordinates.SequenceEqual(saved.RenderData.TextureCoordinates) &&
-                            source.RenderData.BoneIndices.SequenceEqual(saved.RenderData.BoneIndices) &&
-                            source.RenderData.BoneWeights.SequenceEqual(saved.RenderData.BoneWeights),
+            TestAssert.True(source.RenderData!.Indices.SequenceEqual(saved.RenderData!.Indices) &&
+                            source.RenderData!.Tangents.SequenceEqual(saved.RenderData!.Tangents) &&
+                            source.RenderData!.TextureCoordinates.SequenceEqual(saved.RenderData!.TextureCoordinates) &&
+                            source.RenderData!.BoneIndices.SequenceEqual(saved.RenderData!.BoneIndices) &&
+                            source.RenderData!.BoneWeights.SequenceEqual(saved.RenderData!.BoneWeights),
                 $"Head LOD {source.LodIndex} render buffers changed.");
             TestAssert.True(source.Topology.Sections.SequenceEqual(saved.Topology.Sections) &&
                             source.Topology.Chunks.Count == saved.Topology.Chunks.Count &&

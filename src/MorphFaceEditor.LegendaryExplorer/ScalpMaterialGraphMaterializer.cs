@@ -141,8 +141,8 @@ internal static class ScalpMaterialGraphMaterializer
                 throw UserFacingMessage.CreateError("loc_Shell_Error_CcScalp_ParentCycle", $"Selected CC scalp material '{donor.InstancedFullPath}' has a parent cycle.", donor.InstancedFullPath);
             if (current.ClassName.Equals("Material", StringComparison.OrdinalIgnoreCase))
             {
-                if (!PccAssetPathPolicy.FromExport(current).Equals(
-                        Le3CcScalpMaterialPolicy.MasterMaterialPath, StringComparison.OrdinalIgnoreCase))
+                if (MorphFacePackageReader.DescribeMaterialMaster(donor.Game, current)?.PreviewModel !=
+                    MorphFaceEditor.Core.Materials.HumanMaterialPreviewModel.CcScalp)
                     throw UserFacingMessage.CreateError("loc_Shell_Error_CcScalp_WrongMaster", $"Selected CC scalp material '{donor.InstancedFullPath}' terminates at '{PccAssetPathPolicy.FromExport(current)}', not the reviewed CC scalp master.", donor.InstancedFullPath, PccAssetPathPolicy.FromExport(current));
                 return;
             }

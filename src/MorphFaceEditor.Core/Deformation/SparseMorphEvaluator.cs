@@ -27,12 +27,8 @@ public static class SparseMorphEvaluator
         ArgumentNullException.ThrowIfNull(baseMesh);
         ArgumentNullException.ThrowIfNull(weightedTargets);
         ArgumentOutOfRangeException.ThrowIfNegative(lodIndex);
-        var baseLod = lodIndex == 0 && baseMesh.FindLod(0) is null
-            ? new { baseMesh.Positions, baseMesh.Normals }
-            : baseMesh.FindLod(lodIndex) is { } renderLod
-                ? new { renderLod.Positions, renderLod.Normals }
-                : throw new InvalidDataException(
-                    $"Base mesh '{baseMesh.Source.InstancedPath}' has no renderable LOD {lodIndex}.");
+        var baseLod = baseMesh.FindLod(lodIndex) ?? throw new InvalidDataException(
+            $"Base mesh '{baseMesh.Source.InstancedPath}' has no LOD {lodIndex}.");
         var positions = (Vector3[])baseLod.Positions.Clone();
         var normals = (Vector3[])baseLod.Normals.Clone();
         var appliedDeltaCount = 0;

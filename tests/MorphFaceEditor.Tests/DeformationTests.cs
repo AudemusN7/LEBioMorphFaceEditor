@@ -28,7 +28,8 @@ public static class DeformationTests
         new("bone puck drag coalesces all axes into one semantic edit", BonePuckHistoryCoalesces),
         new("editing session exposes available targets but saves them sparsely", AvailableTargetsRemainSparse),
         new("baked mesh inversion recovers exact morph slider weights", MeshInversionRecoversWeights),
-        new("mesh sidecar prior selects the original multi-LOD slider branch", MeshPriorPreservesLowerLod)
+        new("mesh sidecar prior selects the original multi-LOD slider branch", () => MeshPriorPreservesLowerLod(1)),
+        new("mesh inverse fit preserves a sparse native LOD index", () => MeshPriorPreservesLowerLod(2))
     ];
 
     private static void ZeroTargetsPreserveBase()
@@ -87,9 +88,9 @@ public static class DeformationTests
             []);
         var weighted = new[] { new WeightedMorphTarget("Target", target, 0.5f) };
         var bakedLod0 = SparseMorphEvaluator.EvaluatePositions(
-            mesh.AvailableLodPositions[0], weighted, 0);
+            mesh.Lods[0].Positions, weighted, 0);
         var bakedLod1 = SparseMorphEvaluator.EvaluatePositions(
-            mesh.AvailableLodPositions[1], weighted, 1);
+            mesh.Lods[1].Positions, weighted, 1);
         bakedLod1[0] += new Vector3(0, 2, 0);
         var face = new MorphFaceDocument(
             TestFixtures.CreateIdentity("Face", "BioMorphFace"),
@@ -442,15 +443,15 @@ public static class DeformationTests
         TestAssert.Near(0, result.MaximumError, 0.00001f);
     }
 
-    private static void MeshPriorPreservesLowerLod()
+    private static void MeshPriorPreservesLowerLod(int lowerLodIndex)
     {
-        var mesh = TestFixtures.CreateRenderableTwoLodMesh();
+        var mesh = TestFixtures.CreateRenderableTwoLodMesh(lowerLodIndex);
         MorphTargetAsset Target(string name, Vector3 lod1Delta) => new(
             TestFixtures.CreateIdentity(name, "MorphTarget"),
             [
                 new MorphTargetLod(0, 3,
                     [new MorphVertexDelta(0, Vector3.UnitX, Vector3.Zero)]),
-                new MorphTargetLod(1, 3,
+                new MorphTargetLod(lowerLodIndex, 3,
                     [new MorphVertexDelta(0, lod1Delta, Vector3.Zero)])
             ],
             []);
@@ -464,13 +465,13 @@ public static class DeformationTests
                 MorphFeatureResolutionKind.DirectTarget, null)
         };
         var bakedLod0 = SparseMorphEvaluator.EvaluatePositions(
-            mesh.AvailableLodPositions[0],
+            mesh.Lods[0].Positions,
             [new WeightedMorphTarget("First", first, 1)],
             0);
         var bakedLod1 = SparseMorphEvaluator.EvaluatePositions(
-            mesh.AvailableLodPositions[1],
+            mesh.Lods[1].Positions,
             [new WeightedMorphTarget("First", first, 1)],
-            1);
+            lowerLodIndex);
         var prior = new MorphMeshFitPrior(
             mesh.Source.InstancedPath,
             [new MorphFeatureValue("First", 1)],

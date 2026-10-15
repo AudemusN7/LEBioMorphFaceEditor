@@ -127,7 +127,7 @@ internal static class ThemePaletteTests
         {
             var code = profile.ExportTag.Trim('[', ']');
             var definition = ArchetypeTag.Definitions.Single(tag => tag.Code == code);
-            TestAssert.Equal((Color)ColorConverter.ConvertFromString(profile.ExportTagColor),
+            TestAssert.Equal((Color)ColorConverter.ConvertFromString(profile.GetExportTagColor()),
                 ((SolidColorBrush)application.FindResource(definition.BrushKey)).Color);
         }
         var list = (ListBox)main.FindName("FaceList");

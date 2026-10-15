@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Domain;
 using System.IO.Compression;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -219,8 +220,8 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
     {
         ArgumentNullException.ThrowIfNull(installed);
         ArgumentNullException.ThrowIfNull(mods);
-        var game = ToMorphFaceGame(installed.Game);
-        if (game != ToMorphFaceGame(mods.Game)) throw new InvalidDataException("Registry pair games do not match.");
+        var game = installed.Game;
+        if (game != mods.Game) throw new InvalidDataException("Registry pair games do not match.");
         Validate(installed, game);
         Validate(mods, game);
         cancellationToken.ThrowIfCancellationRequested();
@@ -303,11 +304,11 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
         TextureRegistrySnapshot snapshot,
         CancellationToken cancellationToken,
         Action? beforeVerification) =>
-        WriteAtomic(snapshot, paths.GetPath(ToMorphFaceGame(snapshot.Game)), cancellationToken, beforeVerification);
+        WriteAtomic(snapshot, paths.GetPath(snapshot.Game), cancellationToken, beforeVerification);
 
     public void WriteManualAtomic(TextureRegistrySnapshot snapshot,
         CancellationToken cancellationToken = default) =>
-        WriteAtomic(snapshot, paths.GetManualPath(ToMorphFaceGame(snapshot.Game)), cancellationToken, null);
+        WriteAtomic(snapshot, paths.GetManualPath(snapshot.Game), cancellationToken, null);
 
     private static void WriteAtomic(
         TextureRegistrySnapshot snapshot,
@@ -317,7 +318,7 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         cancellationToken.ThrowIfCancellationRequested();
-        var game = ToMorphFaceGame(snapshot.Game);
+        var game = snapshot.Game;
         Validate(snapshot, game);
         var temporaryPath = $"{targetPath}.{Guid.NewGuid():N}.tmp";
         Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
@@ -361,7 +362,7 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
         {
             writer.Write(Magic);
             writer.Write(TextureRegistrySnapshot.CurrentSchemaVersion);
-            writer.Write((int)ToMorphFaceGame(snapshot.Game));
+            writer.Write((int)snapshot.Game);
             writer.Write((long)json.Length);
         }
         using (var brotli = new BrotliStream(output, CompressionLevel.Optimal, leaveOpen: true))
@@ -439,7 +440,7 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
         {
             throw new NotSupportedException($"Texture registry schema v{snapshot.SchemaVersion} is not supported.");
         }
-        if (ToMorphFaceGame(snapshot.Game) != expectedGame)
+        if (snapshot.Game != expectedGame)
         {
             throw new InvalidDataException("The registry header and payload games do not match.");
         }
@@ -636,15 +637,7 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
         }
     }
 
-    private static MorphFaceGame ToMorphFaceGame(TextureCatalogGame game) => game switch
-    {
-        TextureCatalogGame.LE1 => MorphFaceGame.LE1,
-        TextureCatalogGame.LE2 => MorphFaceGame.LE2,
-        TextureCatalogGame.LE3 => MorphFaceGame.LE3,
-        _ => throw new ArgumentOutOfRangeException(nameof(game), game, "Unsupported texture registry game.")
-    };
-
-    private const int HeaderSize = sizeof(uint) + sizeof(int) + sizeof(int) + sizeof(long);
+private const int HeaderSize = sizeof(uint) + sizeof(int) + sizeof(int) + sizeof(long);
 }
 
 internal sealed record TextureRegistryReadResult(

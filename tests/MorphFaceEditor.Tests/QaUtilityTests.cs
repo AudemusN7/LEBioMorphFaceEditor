@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Domain;
 using System.Text.Json;
 using MorphFaceEditor.QA;
 
@@ -52,13 +53,13 @@ internal static class QaUtilityTests
 
     private static void ConversionDonorExclusion()
     {
-        var excluded = QaCoverageSelection.ConversionSourceExclusions(MorphFaceEditor.LegendaryExplorer.MorphFaceGame.LE1, "HMM");
+        var excluded = QaCoverageSelection.ConversionSourceExclusions(MorphFaceGame.LE1, "HMM");
         TestAssert.True(excluded.Contains("HMM.hench_humanmale"),
             "LE1 HMM conversion cases did not exclude Hench Human Male.");
         TestAssert.Equal(0, QaCoverageSelection.ConversionSourceExclusions(
-            MorphFaceEditor.LegendaryExplorer.MorphFaceGame.LE2, "HMM").Count);
+            MorphFaceGame.LE2, "HMM").Count);
         TestAssert.Equal(0, QaCoverageSelection.ConversionSourceExclusions(
-            MorphFaceEditor.LegendaryExplorer.MorphFaceGame.LE1, "HMF").Count);
+            MorphFaceGame.LE1, "HMF").Count);
 
         var candidates = new[] { "HMM.alternate_a", "HMM.hench_humanmale", "HMM.alternate_b" };
         var eligible = QaCoverageSelection.ExcludePaths(candidates, path => path, excluded);

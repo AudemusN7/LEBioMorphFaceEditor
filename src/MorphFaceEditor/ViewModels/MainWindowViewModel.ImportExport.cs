@@ -392,7 +392,7 @@ public sealed partial class MainWindowViewModel
             var textureProfile = TextureCatalogProfiles.For(preview.Profile);
             preparedEditor = new FaceEditorViewModel(
                 preview.EditingSession,
-                preview.Profile.UiProfile,
+                preview.Profile.GetUiProfile(),
                 preview.MaterialEditingSession,
                 _colorDialog,
                 _referenceService,
@@ -784,7 +784,7 @@ public sealed partial class MainWindowViewModel
             result.Preview.Loaded.Document.Source.InstancedPath,
             objectName,
             result.Preview.Profile.ExportTag,
-            result.Preview.Profile.ExportTagColor,
+            result.Preview.Profile.GetExportTagColor(),
             result.Preview.Profile.Key);
         Faces.Add(face);
         SelectedFace = face;
@@ -797,7 +797,7 @@ public sealed partial class MainWindowViewModel
             .ToArray();
         var editor = new FaceEditorViewModel(
             result.Preview.EditingSession,
-            result.Preview.Profile.UiProfile,
+            result.Preview.Profile.GetUiProfile(result.CustomMaterials),
             result.Preview.MaterialEditingSession,
             _colorDialog,
             _referenceService,

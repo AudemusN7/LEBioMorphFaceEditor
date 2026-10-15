@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Domain;
 using LegendaryExplorerCore.Packages;
 using LegendaryExplorerCore.Unreal;
 using LegendaryExplorerCore.Unreal.BinaryConverters;
@@ -256,7 +257,7 @@ internal static class MaterialInstancePreservationTests
         }, "m_Guid", true));
         variant.Save(variant.FilePath);
         var snapshot = new TextureRegistrySnapshot(TextureRegistrySnapshot.CurrentSchemaVersion,
-            TextureCatalogGame.LE1, DateTimeOffset.UtcNow, 1, [])
+            MorphFaceGame.LE1, DateTimeOffset.UtcNow, 1, [])
         {
             Assets = new[] { official, variant }.SelectMany(package => new[] { MicPath, ParentMicPath }.Select(path =>
                 new InstalledAssetOccurrence(path, "MaterialInstanceConstant", package.FilePath,
@@ -299,7 +300,7 @@ internal static class MaterialInstancePreservationTests
             using var official = CreateDonor(Path.Combine(directory, "Official.pcc"), 0.25f, false);
             using var authored = CreateDonor(Path.Combine(directory, "Authored.pcc"), 0.75f, true);
             var snapshot = new TextureRegistrySnapshot(TextureRegistrySnapshot.CurrentSchemaVersion,
-                TextureCatalogGame.LE1, DateTimeOffset.UtcNow, 1, [])
+                MorphFaceGame.LE1, DateTimeOffset.UtcNow, 1, [])
             {
                 Assets = [new InstalledAssetOccurrence(MicPath, "MaterialInstanceConstant",
                     official.FilePath, official.FindExport(MicPath, "MaterialInstanceConstant")!.UIndex,

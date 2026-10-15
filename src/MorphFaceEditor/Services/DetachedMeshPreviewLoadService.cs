@@ -38,10 +38,9 @@ public sealed class DetachedMeshPreviewLoadService
 
     public DetachedMeshPreviewLoadResult Load(
         MorphFaceGame game,
-        ImportedMeshAsset imported,
-        DetachedMeshUpAxis upAxis = DetachedMeshUpAxis.Auto)
+        ImportedMeshAsset imported)
     {
-        var detached = _detachedMeshes.Create(imported, upAxis);
+        var detached = _detachedMeshes.Create(imported);
         var warnings = detached.Warnings.ToList();
         CustomMaterialWorkspace? customMaterials = null;
         CustomMaterialTemplateCatalogResult materialCatalog = CustomMaterialTemplateCatalogResult.Empty;
@@ -87,7 +86,8 @@ public sealed class DetachedMeshPreviewLoadService
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
             _ => false,
             blockReason,
-            geometryMode: MorphFaceGeometryMode.FixedBake);
+            geometryMode: MorphFaceGeometryMode.FixedBake,
+            topologyDiagnostics: detached.TopologyDiagnostics);
         var materialSession = new MaterialEditingSession(
             MorphFaceMaterialOverrides.Empty,
             ResolvedHeadMaterialSet.Empty);
@@ -96,7 +96,7 @@ public sealed class DetachedMeshPreviewLoadService
             customMaterials.ActiveMaterialsChanged += (_, args) =>
                 materialSession.RebaseMaterialSurface(args.Materials);
         }
-        var profile = CreateProfile(game, customMaterials);
+        var profile = CreateProfile(game);
         var scene = session.CanEditBones
             ? _sceneFactory.CreateEditable(loaded, session.Evaluation)
             : _sceneFactory.Create(loaded);
@@ -128,28 +128,22 @@ public sealed class DetachedMeshPreviewLoadService
             return renderData with { MaterialSlots = materialSlots };
         }
 
-        var lods = mesh.AvailableLods
-            .Select(lod => lod with { RenderData = Bind(lod.RenderData) })
+        var lods = mesh.Lods
+            .Select(lod => lod with { RenderData = lod.RenderData is null ? null : Bind(lod.RenderData) })
             .ToArray();
         return mesh with
         {
-            RenderData = mesh.RenderData is null ? null : Bind(mesh.RenderData),
             Lods = lods
         };
     }
 
     private static MorphFaceProfile CreateProfile(
-        MorphFaceGame game,
-        CustomMaterialWorkspace? customMaterials) => new(
+        MorphFaceGame game) => new(
         $"{game.ToString().ToLowerInvariant()}-detached-mesh",
-        Loc.Text("loc_Services_DetachedMeshPreviewLoad_ProfileName"),
         game,
-        string.Empty,
         new HashSet<string>(StringComparer.OrdinalIgnoreCase),
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
-        new DetachedMeshFeatureMetadataCatalog(customMaterials),
         "[MESH]",
-        "#66717D",
         _ => false,
         (_, _) => false);
 

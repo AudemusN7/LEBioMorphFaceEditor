@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Infrastructure;
 using System.Text.RegularExpressions;
 using MorphFaceEditor.Core.Deformation;
@@ -80,22 +81,7 @@ public class HumanMaleFeatureMetadataCatalog : IHeadEditorUiProfile
     private const string Face = "face";
     private const string Scalp = "scalp";
 
-    private static readonly IReadOnlySet<string> HiddenFeatureNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-    {
-        // Proven zero-effect or internal construction/corrective targets.
-        "averageHead", "baseHead", "BONE_blinkFix", "DEBUG_EyeLidCorrector", "DEBUG_InnerEyeCorrector",
-        "eyeShape_droop", "eye_Shape_droop",
-        // Composite/duplicate variants superseded by the explicit controls in the profile.
-        "BuzzCut", "BuzzCut_WidowsPeak", "flatTop_WidowsPeak", "objobjWillis", "Willis01",
-        // Character-creator metadata with no live geometry. Formal/Sarge/Slick are retained
-        // because they are explicitly part of the requested hairstyle surface.
-        "None", "Formal", "Sarge", "Slick", "lashes", "eyes_bagOut", "cheeks_gaunt", "eyeShape_liara", "eyeShape_iconic",
-        "eyeShape_oldBlk", "eyeShape_yngAsn", "nose_BottomThin", "nose_BottomWide",
-        "race_asnOld", "race_asnYoung", "race_blackOld", "race_Blackyng", "race_cauOld", "race_cauYng",
-        "teeth_canineExtend", "teeth_Narrow", "teeth_Wide"
-    };
-
-    public virtual IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
+public virtual IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
     [
         new(FacialStructure, Loc.Text("loc_Services_Taxonomy_facial_structure_812284cf"), Loc.Text("loc_Services_Taxonomy_character_likeness_race_and_geometry_based_hairs_50ee7c21"),
             [new(Character, Loc.Text("loc_Services_Taxonomy_character_19cd78f5")), new(Race, Loc.Text("loc_Services_Taxonomy_race_c51fb9b5")), new(Hair, Loc.Text("loc_Services_Taxonomy_hair_3ba4bcee"))]),
@@ -125,7 +111,7 @@ public class HumanMaleFeatureMetadataCatalog : IHeadEditorUiProfile
             HumaniseFeatureName(feature.Feature.Name),
             category,
             subcategory,
-            !HiddenFeatureNames.Contains(feature.Feature.Name),
+            MorphFaceProfileFeatures.IsControlEligible(TextArchetype, TextGame ?? MorphFaceGame.LE1, feature.Feature.Name, feature.Target),
             GetFeatureSortOrder(feature.Feature.Name),
             0,
             1,

@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Deformation;
 using System.Numerics;
 using System.Text;
 using System.Threading;
@@ -1678,7 +1679,7 @@ public static class UiSmokeTests
                 "BIOG_BAT_HED_PROMorph_R.PROBase.BAF_HED_PROBase_MDL");
             var bat = registry.Profiles.Single(value => value.Key == $"{key}-batarian");
             TestAssert.Equal("[BAF]", profile.ExportTag);
-            TestAssert.True(ReferenceEquals(bat.UiProfile, profile.UiProfile), "BAF duplicated BAT's UI schema.");
+            TestAssert.True(ReferenceEquals(bat.GetUiProfile(), profile.GetUiProfile()), "BAF duplicated BAT's UI schema.");
             TestAssert.True(ReferenceEquals(corpus.GetMaterialProfile(bat.Key), corpus.GetMaterialProfile(profile.Key)),
                 "BAF did not reuse BAT's material randomisation profile.");
             TestAssert.True(corpus.CompatibleMaterialDonors(profile.Key).SequenceEqual(corpus.CompatibleMaterialDonors(bat.Key)),
@@ -1689,7 +1690,7 @@ public static class UiSmokeTests
             var textures = TextureCatalogProfiles.For(profile);
             TestAssert.True(textures.PreferredPathFragments.SequenceEqual(TextureCatalogProfiles.For(bat).PreferredPathFragments),
                 "BAF texture discovery differs from BAT.");
-            using var editor = CreateEditor(reader, profile.UiProfile, profile.Key, ignoresAuthoredGeometry: true);
+            using var editor = CreateEditor(reader, profile.GetUiProfile(), profile.Key, ignoresAuthoredGeometry: true);
             TestAssert.Equal(0, editor.Features.Count);
             TestAssert.Equal(0, editor.Bones.Count);
             TestAssert.True(!editor.AllowsMorphRandomisation && editor.AllowsMaterialRandomisation,
@@ -2192,14 +2193,14 @@ public static class UiSmokeTests
             77, 9000, TextureCatalogOrigin.Mod,
             512, 512, "PF_DXT5", "TEXTUREGROUP_Character", false, null);
         var candidate = new TextureCatalogCandidate(
-            TextureCatalogGame.LE3, path, officialDlc,
+            MorphFaceGame.LE3, path, officialDlc,
             [baseGame, officialDlc, higherMountedMod])
         {
             IsEligibleOfficialDefault = true
         };
 
         var selected = FaceEditorViewModel.ResolvePlayer2DaTextureAsset(
-            [candidate], TextureCatalogGame.LE3, "HMF_HED_PROLash_Opac_M01");
+            [candidate], MorphFaceGame.LE3, "HMF_HED_PROLash_Opac_M01");
         TestAssert.True(selected is not null,
             "The official table object name was discarded because its path had multiple physical occurrences.");
         TestAssert.Equal(officialDlc.PackagePath, selected!.PackagePath);
@@ -2213,11 +2214,11 @@ public static class UiSmokeTests
             EffectiveOccurrence = baseGame
         };
         TestAssert.True(FaceEditorViewModel.ResolvePlayer2DaTextureAsset(
-                [candidate, secondIdentity], TextureCatalogGame.LE3, "HMF_HED_PROLash_Opac_M01") is null,
+                [candidate, secondIdentity], MorphFaceGame.LE3, "HMF_HED_PROLash_Opac_M01") is null,
             "The 2DA object-name lookup guessed between two distinct full asset identities.");
         TestAssert.True(FaceEditorViewModel.ResolvePlayer2DaTextureAsset(
                 [candidate with { IsEligibleOfficialDefault = false }],
-                TextureCatalogGame.LE3, "HMF_HED_PROLash_Opac_M01") is null,
+                MorphFaceGame.LE3, "HMF_HED_PROLash_Opac_M01") is null,
             "The 2DA lookup used an occurrence that was not projected as an eligible official default.");
     }
 
@@ -2849,7 +2850,7 @@ public static class UiSmokeTests
             mesh,
             ignoresAuthoredGeometry ? [] : [TestFixtures.CreateTarget()],
             metadataOnlyFeatures: ignoresAuthoredGeometry
-                ? FemaleTurianFeatureMetadataCatalog.MetadataOnlyFeatures
+                ? MorphFaceProfileFeatures.TurianAllFeatureNames
                 : null,
             geometryEditBlockReason: ignoresAuthoredGeometry ? "Material-only test profile." : null,
             ignoreAuthoredGeometry: ignoresAuthoredGeometry,
@@ -2909,7 +2910,7 @@ public static class UiSmokeTests
         var sourceMesh = TestFixtures.CreateMesh();
         var mesh = sourceMesh with
         {
-            Topology = sourceMesh.Topology with
+            Lods = [sourceMesh.Lods[0] with { Topology = sourceMesh.Topology with
             {
                 ReferenceSkeleton =
                 [
@@ -2919,7 +2920,7 @@ public static class UiSmokeTests
                 ],
                 ActiveBones = [0, 1, 2],
                 RequiredBones = [0, 1, 2]
-            }
+            }}]
         };
         MorphTargetAsset Target(string name) => new(
             TestFixtures.CreateIdentity($"Set.{name}", "MorphTarget"),
@@ -3412,7 +3413,7 @@ public static class UiSmokeTests
         var source = TestFixtures.CreateMesh();
         var mesh = source with
         {
-            Topology = source.Topology with
+            Lods = [source.Lods[0] with { Topology = source.Topology with
             {
                 ReferenceSkeleton =
                 [
@@ -3421,7 +3422,7 @@ public static class UiSmokeTests
                 ],
                 ActiveBones = [0, 1],
                 RequiredBones = [0, 1]
-            }
+            }}]
         };
         var target = new MorphTargetAsset(
             TestFixtures.CreateIdentity("Set.eyes_wide", "MorphTarget"),
@@ -4425,7 +4426,7 @@ public static class UiSmokeTests
             var occurrence = new TextureCatalogOccurrence(
                 "installed.pcc", 42 + index, 0, TextureCatalogOrigin.BaseGame, 1, 1,
                 "PF_B8G8R8A8", "TEXTUREGROUP_Character", false, null);
-            return new TextureCatalogCandidate(TextureCatalogGame.LE3, path, occurrence, [occurrence])
+            return new TextureCatalogCandidate(MorphFaceGame.LE3, path, occurrence, [occurrence])
             { IsEligibleOfficialDefault = true };
         }).ToArray();
         using var editor = new MaterialEditorViewModel(
@@ -4474,7 +4475,7 @@ public static class UiSmokeTests
             var occurrence = new TextureCatalogOccurrence(
                 "installed.pcc", 42 + index, 0, TextureCatalogOrigin.BaseGame, 1, 1,
                 "PF_B8G8R8A8", "TEXTUREGROUP_Character", false, null);
-            return new TextureCatalogCandidate(TextureCatalogGame.LE3, path, occurrence, [occurrence])
+            return new TextureCatalogCandidate(MorphFaceGame.LE3, path, occurrence, [occurrence])
             { IsEligibleOfficialDefault = true };
         }).ToArray();
         using var editor = new MaterialEditorViewModel(
@@ -4690,9 +4691,9 @@ public static class UiSmokeTests
         var manual = new TextureCatalogOccurrence(
             "C:\\Manual\\ManualTexture.pcc", 88, 0, TextureCatalogOrigin.Manual, 128, 128,
             "PF_DXT1", "TEXTUREGROUP_Character", false, null);
-        var manualOnly = new TextureCatalogCandidate(TextureCatalogGame.LE3,
+        var manualOnly = new TextureCatalogCandidate(MorphFaceGame.LE3,
             "ManualOnly.Textures.Manual_Diff", manual, [manual]);
-        var candidate = new TextureCatalogCandidate(TextureCatalogGame.LE3, path, official,
+        var candidate = new TextureCatalogCandidate(MorphFaceGame.LE3, path, official,
             [duplicate, mod]) { IsEligibleOfficialDefault = true };
         using var editor = new MaterialTextureEditorViewModel(
             session,
@@ -4904,7 +4905,7 @@ public static class UiSmokeTests
         var occurrence = new TextureCatalogOccurrence(
             "BIOG_MFE_Test.pcc", 42, 10, TextureCatalogOrigin.BaseGame, 128, 128,
             "PF_DXT1", "TEXTUREGROUP_Character", false, null);
-        var candidate = new TextureCatalogCandidate(TextureCatalogGame.LE3, path, occurrence, [occurrence])
+        var candidate = new TextureCatalogCandidate(MorphFaceGame.LE3, path, occurrence, [occurrence])
         {
             IsEligibleOfficialDefault = true
         };
@@ -4944,7 +4945,7 @@ public static class UiSmokeTests
                 Origin = TextureCatalogOrigin.Mod,
                 MountPriority = copy + 100
             }).Prepend(official).ToArray();
-            return new TextureCatalogCandidate(TextureCatalogGame.LE3,
+            return new TextureCatalogCandidate(MorphFaceGame.LE3,
                 $"BIOG_MFE_Performance.Textures.Texture{index:D4}_Diff", official, copies)
                 { IsEligibleOfficialDefault = true };
         }).ToArray();
@@ -5300,7 +5301,7 @@ public static class UiSmokeTests
     private static void Le3HumanMaleProfileOrganizesFeatures()
     {
         var profile = MorphFaceProfileRegistry.CreateDefault().Profiles
-            .Single(value => value.Key == "le3-human-male").UiProfile;
+            .Single(value => value.Key == "le3-human-male").GetUiProfile();
         var target = TestFixtures.CreateTarget();
         foreach (var (name, label) in new[]
                  {
@@ -5336,7 +5337,7 @@ public static class UiSmokeTests
     private static void Le3HumanFemaleProfileOrganizesFeatures()
     {
         var profile = MorphFaceProfileRegistry.CreateDefault().Profiles
-            .Single(value => value.Key == "le3-human-female").UiProfile;
+            .Single(value => value.Key == "le3-human-female").GetUiProfile();
         var target = TestFixtures.CreateTarget();
         foreach (var name in new[] { "Jack", "Kasumi", "Miranda" })
         {
@@ -5389,7 +5390,7 @@ public static class UiSmokeTests
 
         var profiles = MorphFaceProfileRegistry.CreateDefault().Profiles;
         MorphFeatureMetadata Describe(string profileKey, string name) =>
-            profiles.Single(profile => profile.Key == profileKey).UiProfile.Describe(
+            profiles.Single(profile => profile.Key == profileKey).GetUiProfile().Describe(
                 new MorphFaceEditor.Core.Deformation.ResolvedMorphFeature(
                     new MorphFeatureValue(name, 0), TestFixtures.CreateTarget(),
                     MorphFaceEditor.Core.Deformation.MorphFeatureResolutionKind.DirectTarget, null), true);
@@ -5550,14 +5551,14 @@ public static class UiSmokeTests
             .ToArray();
         foreach (var workingProfile in asariProfiles.Where(value => value.Game != MorphFaceGame.LE3))
         {
-            var workingMouthForward = workingProfile.UiProfile.Describe(
+            var workingMouthForward = workingProfile.GetUiProfile().Describe(
                 new MorphFaceEditor.Core.Deformation.ResolvedMorphFeature(
                     new MorphFeatureValue("mouth_Forward", 0), target,
                     MorphFaceEditor.Core.Deformation.MorphFeatureResolutionKind.DirectTarget, null), true);
             TestAssert.Equal("Mouth Forward", workingMouthForward.Label);
         }
         var le3Profile = asariProfiles
-            .Single(value => value.Key == "le3-asari").UiProfile;
+            .Single(value => value.Key == "le3-asari").GetUiProfile();
         var le3MouthForward = le3Profile.Describe(new MorphFaceEditor.Core.Deformation.ResolvedMorphFeature(
             new MorphFeatureValue("mouth_Forward", 0), target,
             MorphFaceEditor.Core.Deformation.MorphFeatureResolutionKind.DirectTarget, null), true);
@@ -5932,7 +5933,7 @@ public static class UiSmokeTests
         TestAssert.Equal("ears", ears.SubcategoryKey);
         TestAssert.Equal("chin", chin.SubcategoryKey);
         TestAssert.True(!correction.IsVisible, "Zero-effect Batarian teeth correction remained visible.");
-        TestAssert.True(BatarianFeatureMetadataCatalog.MetadataOnlyFeatures.SetEquals(
+        TestAssert.True(MorphFaceProfileFeatures.BatarianMetadataOnlyFeatures.SetEquals(
             new[] { "jaw_narrow", "shape_skinny" }),
             "The Batarian metadata-only feature set changed.");
 

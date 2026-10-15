@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Services;
 using System.Numerics;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Deformation;
@@ -980,13 +981,13 @@ public static class PackageContextTests
 
             var resolution = new MorphFeatureTargetResolver().Resolve(
                 loaded.Document.MorphFeatures,
-                targets.Load(profile!, item.Game),
+                targets.Load(profile!),
                 profile!.MetadataOnlyFeatures,
-                profile.DisplayName,
+                profile.GetDisplayName(),
                 profile.FeatureAliases);
             foreach (var feature in resolution.Features)
             {
-                _ = profile.UiProfile.Describe(feature, sessionCanEdit: true);
+                _ = profile.GetUiProfile().Describe(feature, sessionCanEdit: true);
             }
 
             var materialSession = new MaterialEditingSession(loaded.Document.MaterialOverrides, loaded.Materials);
@@ -2212,9 +2213,9 @@ public static class PackageContextTests
         var session = new MorphFaceEditingSession(
             loaded.Document,
             loaded.BaseHead,
-            targets.Load(profile, loaded.Game),
+            targets.Load(profile),
             profile.MetadataOnlyFeatures,
-            profile.DisplayName,
+            profile.GetDisplayName(),
             profile.FeatureAliases,
             profile.RecognizesBaseVariant,
             profile.GeometryEditBlockReason(loaded.BaseHead.Source.InstancedPath));
@@ -2996,7 +2997,7 @@ public static class PackageContextTests
                  index < section.BaseIndex + section.TriangleCount * 3;
                  index++)
             {
-                vertexMaterials[lod.RenderData.Indices[index]] = checked((byte)section.MaterialIndex);
+                vertexMaterials[lod.RenderData!.Indices[index]] = checked((byte)section.MaterialIndex);
             }
         }
 
@@ -3006,9 +3007,9 @@ public static class PackageContextTests
             for (var triangle = 0; triangle < section.TriangleCount; triangle++)
             {
                 var index = section.BaseIndex + triangle * 3;
-                var a = lod.RenderData.Indices[index];
-                var b = lod.RenderData.Indices[index + 1];
-                var c = lod.RenderData.Indices[index + 2];
+                var a = lod.RenderData!.Indices[index];
+                var b = lod.RenderData!.Indices[index + 1];
+                var c = lod.RenderData!.Indices[index + 2];
                 faces.Add(new PSK.PSKTriangle
                 {
                     // LEC's PSK writer swaps the first two corners; the detached
@@ -3024,7 +3025,7 @@ public static class PackageContextTests
         new PSK
         {
             Points = lod.Positions.Select(value => new Vector3(value.X, -value.Y, value.Z)).ToList(),
-            Wedges = lod.RenderData.TextureCoordinates.Select((uv, index) => new PSK.PSKWedge
+            Wedges = lod.RenderData!.TextureCoordinates.Select((uv, index) => new PSK.PSKWedge
             {
                 PointIndex = checked((ushort)index),
                 U = uv.X,
@@ -3331,9 +3332,9 @@ public static class PackageContextTests
                     var session = new MorphFaceEditingSession(
                         loaded.Document,
                         loaded.BaseHead,
-                        new MorphTargetCatalog().Load(profile, loaded.Game),
+                        new MorphTargetCatalog().Load(profile),
                         profile.MetadataOnlyFeatures,
-                        profile.DisplayName,
+                        profile.GetDisplayName(),
                         profile.FeatureAliases,
                         profile.RecognizesBaseVariant,
                         profile.GeometryEditBlockReason(loaded.BaseHead.Source.InstancedPath));
@@ -3585,9 +3586,9 @@ public static class PackageContextTests
                 var session = new MorphFaceEditingSession(
                     loaded.Document,
                     loaded.BaseHead,
-                    new MorphTargetCatalog().Load(profile, loaded.Game),
+                    new MorphTargetCatalog().Load(profile),
                     profile.MetadataOnlyFeatures,
-                    profile.DisplayName,
+                    profile.GetDisplayName(),
                     profile.FeatureAliases,
                     profile.RecognizesBaseVariant,
                     profile.GeometryEditBlockReason(loaded.BaseHead.Source.InstancedPath));

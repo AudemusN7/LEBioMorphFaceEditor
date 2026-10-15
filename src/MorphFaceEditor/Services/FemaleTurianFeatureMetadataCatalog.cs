@@ -15,14 +15,11 @@ public sealed class FemaleTurianFeatureMetadataCatalog : IHeadEditorUiProfile
     public FemaleTurianFeatureMetadataCatalog(TurianFeatureMetadataCatalog? turian = null) =>
         _turian = turian ?? MorphFaceMetadataCatalogRegistry.TurianParent;
 
-    public static IReadOnlySet<string> MetadataOnlyFeatures { get; } =
-        TurianFeatureMetadataCatalog.AllFeatureNames;
-
-    public IReadOnlyList<EditorCategoryDefinition> Categories => _turian.Categories;
+public IReadOnlyList<EditorCategoryDefinition> Categories => _turian.Categories;
 
     public MorphFeatureMetadata Describe(ResolvedMorphFeature feature, bool sessionCanEdit)
     {
-        var metadata = TurianFeatureMetadataCatalog.AllFeatureNames.Contains(feature.Feature.Name)
+        var metadata = MorphFaceProfileFeatures.TurianAllFeatureNames.Contains(feature.Feature.Name)
             ? _turian.Describe(feature, false)
             : new MorphFeatureMetadata(
                 feature.Feature.Name,

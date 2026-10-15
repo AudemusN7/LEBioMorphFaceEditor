@@ -1,3 +1,5 @@
+using MorphFaceEditor.Core.Services;
+using MorphFaceEditor.Core.Domain;
 using System.IO;
 using System.Windows;
 using MorphFaceEditor.LegendaryExplorer;

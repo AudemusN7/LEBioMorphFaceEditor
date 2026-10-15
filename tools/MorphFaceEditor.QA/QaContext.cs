@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Services;
 using System.Diagnostics;
 using System.Numerics;
 using System.Security.Cryptography;
@@ -274,7 +275,7 @@ internal sealed class QaContext : IDisposable
             var seeds = new List<int>();
             Current.Evidence["operationSeeds/" + _stagePhase] = seeds;
             int NextSeed() { var seed = random.Next(); seeds.Add(seed); return seed; }
-            var editor = new FaceEditorViewModel(preview.EditingSession, preview.Profile.UiProfile,
+            var editor = new FaceEditorViewModel(preview.EditingSession, preview.Profile.GetUiProfile(),
                 preview.MaterialEditingSession, new QaColorDialog(), references, path,
                 isPlayer ? PlayerWorkspaceReferencePolicy.SelectPackageAssets(packageReferences.Textures) : packageReferences.Textures,
                 packageReferences.SkeletalMeshes, preview.Loaded.Document.HairMeshReference,

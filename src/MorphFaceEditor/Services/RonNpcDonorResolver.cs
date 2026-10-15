@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Domain;
 using System.IO;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.LegendaryExplorer;
@@ -13,7 +14,7 @@ public sealed class RonNpcDonorResolver(MorphFaceProfileRegistry profiles)
         _profiles.Profiles
             .Where(profile => profile.Game == game && IsNativeNpcProfile(profile))
             .Select(profile => new RonNpcArchetypeOption(
-                profile.ExportTag.Trim('[', ']'), profile.DisplayName))
+                profile.ExportTag.Trim('[', ']'), profile.GetDisplayName()))
             .DistinctBy(option => option.Key, StringComparer.OrdinalIgnoreCase)
             .OrderBy(option => option.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ToArray();

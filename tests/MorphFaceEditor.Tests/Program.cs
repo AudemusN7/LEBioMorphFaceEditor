@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Services;
 using MorphFaceEditor.Tests;
 
 if (args.Length >= 3 && args[0].Equals("--d4-interrupted-save-worker", StringComparison.OrdinalIgnoreCase))

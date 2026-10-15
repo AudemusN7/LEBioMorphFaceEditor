@@ -40,13 +40,11 @@ public sealed partial class ActorAssignmentInventoryService
             var rawEntry = materialsProperty.Property[slot].ResolveToEntry(materialsProperty.Owner.FileRef);
             if (rawEntry is null) continue;
             var resolved = resolver.Resolve(rawEntry);
-            var chain = BuildMaterialChain(rawEntry, package, resolver, cache);
-            var chainIdentities = chain.Select(node => node.InstancedPath).ToArray();
-            var family = HeadMaterialClassifier.ClassifyChain(
-                chainIdentities, component.Role == ActorComponentRole.Hair);
-            var rootIdentity = HeadMaterialClassifier.EffectiveRootIdentity(chainIdentities);
-            var rootSuffix = HeadProfileIdentity.InferSuffix(rootIdentity);
-            var materialProfileKey = rootSuffix is not null && rootSuffix != "human"
+            var chain = BuildMaterialChain(rawEntry, package, resolver, cache, out var master);
+            var definition = MorphFacePackageReader.DescribeMaterialMaster(package.Game, master);
+            var family = definition?.Family ?? HeadMaterialFamily.Unknown;
+            var rootSuffix = definition?.ProfileSuffix;
+            var materialProfileKey = rootSuffix is not null
                 ? HeadProfileIdentity.WithGame(gamePrefix, rootSuffix)
                 : null;
 
@@ -70,7 +68,7 @@ public sealed partial class ActorAssignmentInventoryService
                     userReason = UserFacingMessage.Create("loc_VM_actorAssignment_bodySkinParametersMissing");
                 }
             }
-            else if (!HeadMaterialClassifier.IsAssignableHeadFamily(family))
+            else if (!HeadMaterialCatalog.IsAssignableHeadFamily(family))
             {
                 reason = family == HeadMaterialFamily.Accessory
                     ? "The complete parent chain classifies as body, gear, headgear, or another accessory."
@@ -78,7 +76,7 @@ public sealed partial class ActorAssignmentInventoryService
             }
             else
             {
-                var compatible = (IsApprovedSharedRoot(family, rootIdentity) &&
+                var compatible = (definition?.IsSharedHeadRoot == true &&
                                   HeadProfileIdentity.IsGeometryCompatible(selectedProfileKey, headProfileKey)) ||
                                  HeadProfileIdentity.IsMaterialCompatible(
                                      selectedProfileKey, materialProfileKey, family);
@@ -118,8 +116,10 @@ public sealed partial class ActorAssignmentInventoryService
         IEntry start,
         IMEPackage workspacePackage,
         GamePackageReferenceResolver resolver,
-        PackageCache cache)
+        PackageCache cache,
+        out ExportEntry? master)
     {
+        master = null;
         var result = new List<ActorMaterialChainEntry>();
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         IEntry? raw = start;
@@ -135,28 +135,18 @@ public sealed partial class ActorAssignmentInventoryService
                 raw.InstancedFullPath,
                 raw is ExportEntry && ReferenceEquals(raw.FileRef, workspacePackage),
                 resolved is not null));
-            if (identity.ClassName.Equals("Material", StringComparison.OrdinalIgnoreCase)) break;
+            if (identity.ClassName.Equals("Material", StringComparison.OrdinalIgnoreCase))
+            {
+                master = resolved;
+                break;
+            }
             if (resolved is null) break;
 
-            var parent = FindProperty<ObjectProperty>(resolved, "Parent", resolver, cache)
-                         ?? FindProperty<ObjectProperty>(resolved, "m_pBaseMaterial", resolver, cache);
+            var parentName = resolved.IsA("RvrEffectsMaterialUser") ? "m_pBaseMaterial" : "Parent";
+            var parent = FindProperty<ObjectProperty>(resolved, parentName, resolver, cache);
             raw = parent?.Property.ResolveToEntry(parent.Owner.FileRef);
         }
         return result;
     }
 
-    private static bool IsApprovedSharedRoot(HeadMaterialFamily family, string? rootIdentity)
-    {
-        if (family is not (HeadMaterialFamily.Eyes or HeadMaterialFamily.Lashes or
-            HeadMaterialFamily.Scalp or HeadMaterialFamily.Teeth or
-            HeadMaterialFamily.Hair or HeadMaterialFamily.MaskedHair) ||
-            string.IsNullOrWhiteSpace(rootIdentity))
-        {
-            return false;
-        }
-        return new[]
-        {
-            "HMM_", "HMF_", "HMN_", "ASA_", "BIOG_HAIR", "BIO_EYE", "PROShort", "HED_Scalp"
-        }.Any(marker => rootIdentity.Contains(marker, StringComparison.OrdinalIgnoreCase));
-    }
 }

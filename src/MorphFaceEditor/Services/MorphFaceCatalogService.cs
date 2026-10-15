@@ -76,7 +76,7 @@ public sealed class MorphFaceCatalogService
                     item.Reference.FacePath,
                     item.Reference.FacePath.Split('.').Last(),
                     item.Profile?.ExportTag ?? "[CUSTOM]",
-                    item.Profile?.ExportTagColor ?? "#66717D",
+                    item.Profile?.GetExportTagColor() ?? "#66717D",
                     item.Profile?.Key ?? "custom")
                 {
                     SupportsMorphRonExport = RonNpcDonorResolver.SupportsMorphRonExport(item.Profile, item.Reference.BaseHeadPath)

@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.Services;
@@ -48,17 +49,17 @@ public static class PlayerWorkspaceReferencePolicyTests
         var mod = Occurrence("ThirdPartyHair.pcc", TextureCatalogOrigin.Mod, 50);
         var candidates = new[]
         {
-            Candidate(TextureCatalogGame.LE3, diffuse, mod, [mod, baseGame]),
-            Candidate(TextureCatalogGame.LE3, normal, baseGame, [baseGame]),
-            Candidate(TextureCatalogGame.LE3, mask, baseGame, [baseGame]),
-            Candidate(TextureCatalogGame.LE2, diffuse, baseGame, [baseGame]),
-            Candidate(TextureCatalogGame.LE3, diffuse,
+            Candidate(MorphFaceGame.LE3, diffuse, mod, [mod, baseGame]),
+            Candidate(MorphFaceGame.LE3, normal, baseGame, [baseGame]),
+            Candidate(MorphFaceGame.LE3, mask, baseGame, [baseGame]),
+            Candidate(MorphFaceGame.LE2, diffuse, baseGame, [baseGame]),
+            Candidate(MorphFaceGame.LE3, diffuse,
                 Occurrence("BIOG_HMM_HIR_PRO.pcc", TextureCatalogOrigin.BaseGame, 8),
                 [Occurrence("BIOG_HMM_HIR_PRO.pcc", TextureCatalogOrigin.BaseGame, 8)]),
-            Candidate(TextureCatalogGame.LE3, diffuse, mod, [mod]),
-            Candidate(TextureCatalogGame.LE3,
+            Candidate(MorphFaceGame.LE3, diffuse, mod, [mod]),
+            Candidate(MorphFaceGame.LE3,
                 "Hair_Short03.HMM_HIR_Short_Scalp_Tang", baseGame, [baseGame]),
-            Candidate(TextureCatalogGame.LE3,
+            Candidate(MorphFaceGame.LE3,
                 "Hair_Short04.HMM_HIR_Short_Scalp_Diff", baseGame, [baseGame])
         };
 
@@ -76,11 +77,11 @@ public static class PlayerWorkspaceReferencePolicyTests
     private static TextureCatalogCandidate Candidate(string path)
     {
         var occurrence = Occurrence("BIOG_TestPackage.pcc", TextureCatalogOrigin.BaseGame, 1);
-        return Candidate(TextureCatalogGame.LE2, path, occurrence, [occurrence]);
+        return Candidate(MorphFaceGame.LE2, path, occurrence, [occurrence]);
     }
 
     private static TextureCatalogCandidate Candidate(
-        TextureCatalogGame game,
+        MorphFaceGame game,
         string path,
         TextureCatalogOccurrence effective,
         IReadOnlyList<TextureCatalogOccurrence> occurrences) =>

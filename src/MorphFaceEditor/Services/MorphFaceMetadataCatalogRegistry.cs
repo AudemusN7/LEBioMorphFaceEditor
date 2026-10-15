@@ -1,3 +1,5 @@
+using MorphFaceEditor.Core.Domain;
+using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.LegendaryExplorer;
 
@@ -67,4 +69,40 @@ public static class MorphFaceMetadataCatalogRegistry
 
     public static string ProfileDisplayName(MorphFaceGame game, string archetypeKey) =>
         Loc.Format("loc_Services_ProfileDisplayName", GameTerms[game], ArchetypeTerms[archetypeKey]);
+
+    public static string GetDisplayName(this MorphFaceProfile profile) =>
+        profile.Archetype == "detached-mesh"
+            ? Loc.Text("loc_Services_DetachedMeshPreviewLoad_ProfileName")
+            : ProfileDisplayName(profile.Game, profile.Archetype);
+
+    public static IHeadEditorUiProfile GetUiProfile(this MorphFaceProfile profile, CustomMaterialWorkspace? workspace = null) =>
+        profile.Archetype switch
+        {
+            HumanMale => HumanMaleFor(profile.Game),
+            HumanFemale => HumanFemaleFor(profile.Game),
+            Asari => AsariFor(profile.Game),
+            Salarian => SalarianParent,
+            Turian => TurianParent,
+            FemaleTurian => FemaleTurianParent,
+            Batarian or FemaleBatarian => BatarianParent,
+            Krogan => KroganParent,
+            Vorcha => VorchaParent,
+            "detached-mesh" => new DetachedMeshFeatureMetadataCatalog(workspace),
+            _ => throw new ArgumentOutOfRangeException(nameof(profile), profile.Key, "Unknown editor profile.")
+        };
+
+    public static string GetExportTagColor(this MorphFaceProfile profile) => profile.ExportTag switch
+    {
+        "[HMM]" => "#287CCB",
+        "[HMF]" => "#C02B9B",
+        "[ASA]" => "#6635BA",
+        "[SAL]" => "#1F9139",
+        "[TUR]" => "#008C83",
+        "[TUF]" => "#99597D",
+        "[BAT]" => "#A16F10",
+        "[BAF]" => "#A85B21FF",
+        "[KRO]" => "#781400",
+        "[ALN]" => "#909110",
+        _ => "#66717D"
+    };
 }

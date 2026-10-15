@@ -46,14 +46,14 @@ public static class PlayerHairStyleCatalog
     private const string ScalpMaskParameter = "HED_Scalp_Spec";
     private const string ScalpTangentParameter = "HED_Tang";
 
-    private static readonly IReadOnlySet<TextureCatalogGame> AllGames =
-        new HashSet<TextureCatalogGame> { TextureCatalogGame.LE1, TextureCatalogGame.LE2, TextureCatalogGame.LE3 };
-    private static readonly IReadOnlySet<TextureCatalogGame> Le12 =
-        new HashSet<TextureCatalogGame> { TextureCatalogGame.LE1, TextureCatalogGame.LE2 };
-    private static readonly IReadOnlySet<TextureCatalogGame> Le23 =
-        new HashSet<TextureCatalogGame> { TextureCatalogGame.LE2, TextureCatalogGame.LE3 };
-    private static readonly IReadOnlySet<TextureCatalogGame> Le1 = new HashSet<TextureCatalogGame> { TextureCatalogGame.LE1 };
-    private static readonly IReadOnlySet<TextureCatalogGame> Le3 = new HashSet<TextureCatalogGame> { TextureCatalogGame.LE3 };
+    private static readonly IReadOnlySet<MorphFaceGame> AllGames =
+        new HashSet<MorphFaceGame> { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 };
+    private static readonly IReadOnlySet<MorphFaceGame> Le12 =
+        new HashSet<MorphFaceGame> { MorphFaceGame.LE1, MorphFaceGame.LE2 };
+    private static readonly IReadOnlySet<MorphFaceGame> Le23 =
+        new HashSet<MorphFaceGame> { MorphFaceGame.LE2, MorphFaceGame.LE3 };
+    private static readonly IReadOnlySet<MorphFaceGame> Le1 = new HashSet<MorphFaceGame> { MorphFaceGame.LE1 };
+    private static readonly IReadOnlySet<MorphFaceGame> Le3 = new HashSet<MorphFaceGame> { MorphFaceGame.LE3 };
 
     private static readonly StyleDefinition[] HmmStyles = CreateHmmStyles();
     private static readonly StyleDefinition[] HmfStyles = CreateHmfStyles();
@@ -64,7 +64,7 @@ public static class PlayerHairStyleCatalog
     /// require changing the attachment, while retaining independently selectable scalp styles.
     /// </summary>
     public static IReadOnlyList<PlayerHairStyleOption> Resolve(
-        TextureCatalogGame game,
+        MorphFaceGame game,
         PlayerHairSex sex,
         IEnumerable<TextureCatalogCandidate> textures,
         IEnumerable<AttachmentMeshCandidate> meshes,
@@ -144,7 +144,7 @@ public static class PlayerHairStyleCatalog
     /// participate because native games can expose equivalent scalp aliases differently.
     /// </summary>
     public static bool IsCurrentScalpPairedStyle(
-        TextureCatalogGame game,
+        MorphFaceGame game,
         PlayerHairSex sex,
         IEnumerable<TextureCatalogCandidate> textures,
         IEnumerable<AttachmentMeshCandidate> meshes,
@@ -162,7 +162,7 @@ public static class PlayerHairStyleCatalog
     /// path; it does not depend on which native scalp texture alias is currently assigned.
     /// </summary>
     public static bool IsCurrentHairMeshPairedStyle(
-        TextureCatalogGame game,
+        MorphFaceGame game,
         PlayerHairSex sex,
         IEnumerable<AttachmentMeshCandidate> meshes,
         AssetIdentity? currentMeshIdentity)
@@ -401,11 +401,11 @@ public static class PlayerHairStyleCatalog
         var result = new List<StyleDefinition>();
         void Scalp(string id, ScalpDefinition scalp, string[]? morphs = null,
             IReadOnlyList<IReadOnlyList<string>>? meshes = null,
-            IReadOnlySet<TextureCatalogGame>? games = null,
+            IReadOnlySet<MorphFaceGame>? games = null,
             bool includesNoMeshOutcome = false) => result.Add(new StyleDefinition(
                 id, games ?? AllGames, scalp, meshes ?? Array.Empty<IReadOnlyList<string>>(), morphs ?? [],
                 includesNoMeshOutcome));
-        void MeshOnly(string id, string[] meshes, IReadOnlySet<TextureCatalogGame>? games = null) =>
+        void MeshOnly(string id, string[] meshes, IReadOnlySet<MorphFaceGame>? games = null) =>
             Scalp(id, HmScalp("HMM", "Cru"), meshes: [meshes], games: games);
 
         Scalp("hmm-afr", HmScalp("HMM", "Afr"), ["Afro", "deiter"]);
@@ -440,11 +440,11 @@ public static class PlayerHairStyleCatalog
     {
         var result = new List<StyleDefinition>();
         void Scalp(string id, ScalpDefinition scalp, IReadOnlyList<IReadOnlyList<string>>? meshes = null,
-            IReadOnlySet<TextureCatalogGame>? games = null) => result.Add(new StyleDefinition(
+            IReadOnlySet<MorphFaceGame>? games = null) => result.Add(new StyleDefinition(
                 id, games ?? AllGames, scalp, meshes ?? Array.Empty<IReadOnlyList<string>>(), []));
-        void MeshOnly(string id, string[] aliases, IReadOnlySet<TextureCatalogGame>? games = null) =>
+        void MeshOnly(string id, string[] aliases, IReadOnlySet<MorphFaceGame>? games = null) =>
             Scalp(id, HmfScalpAliases("cru", "Cru", "Cru"), OrderedAliasGroups(aliases), games);
-        void Mesh(string id, string[] aliases, IReadOnlySet<TextureCatalogGame>? games = null) =>
+        void Mesh(string id, string[] aliases, IReadOnlySet<MorphFaceGame>? games = null) =>
             MeshOnly(id, aliases, games);
 
         Scalp("hmf-bald", HmfBaldScalp());
@@ -505,7 +505,7 @@ public static class PlayerHairStyleCatalog
 
     private sealed record StyleDefinition(
         string Id,
-        IReadOnlySet<TextureCatalogGame> Games,
+        IReadOnlySet<MorphFaceGame> Games,
         ScalpDefinition? Scalp,
         IReadOnlyList<IReadOnlyList<string>> MeshNames,
         IReadOnlyList<string> HairMorphNames,

@@ -47,7 +47,7 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
     private const float OracleVerificationTolerance = 0.0001f;
     private MorphFaceDocument _document;
     private readonly SkeletalMeshAsset _baseHead;
-    private readonly IReadOnlyList<(int LodIndex, Vector3[] Positions)> _orderedBaseLods;
+    private readonly IReadOnlyList<SkeletalMeshLod> _orderedBaseLods;
     private readonly IReadOnlyList<MorphTargetAsset> _targets;
     private IReadOnlySet<string> _metadataOnlyFeatures;
     private readonly string _profileName;
@@ -80,13 +80,14 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
         Func<DeformationComparisonReport, bool>? recognizesBaseVariant = null,
         string? geometryEditBlockReason = null,
         bool ignoreAuthoredGeometry = false,
-        MorphFaceGeometryMode geometryMode = MorphFaceGeometryMode.MorphEvaluated)
+        MorphFaceGeometryMode geometryMode = MorphFaceGeometryMode.MorphEvaluated,
+        TopologyDiagnosticReport? topologyDiagnostics = null)
     {
         _document = document ?? throw new ArgumentNullException(nameof(document));
         _baseHead = baseHead ?? throw new ArgumentNullException(nameof(baseHead));
-        _orderedBaseLods = CreateOrderedBaseLods(baseHead);
+        _orderedBaseLods = baseHead.Lods;
         _targets = targets ?? throw new ArgumentNullException(nameof(targets));
-        _metadataOnlyFeatures = metadataOnlyFeatures ?? MorphFeatureTargetResolver.HumanMaleMetadataOnlyFeatures;
+        _metadataOnlyFeatures = metadataOnlyFeatures ?? MorphFaceProfileFeatures.HumanMaleMetadataOnlyFeatures;
         _profileName = profileName;
         _aliases = aliases ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         _recognizesBaseVariant = recognizesBaseVariant;
@@ -164,7 +165,7 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
         _defaultFinalSkeleton = Evaluation.FinalSkeleton.ToArray();
         ValidationErrors = ValidateEditableTargets(Evaluation.Resolution);
         _hasValidBoneRig = baseHead.RenderData is not null &&
-                           TopologyDiagnostics.Analyze(baseHead, document).IsValid &&
+                           (topologyDiagnostics ?? TopologyDiagnostics.Analyze(baseHead, document)).IsValid &&
                            baseHead.Topology.ReferenceSkeleton.Count > 0 &&
                            Evaluation.FinalSkeleton.Count > 0;
         UpdateCapabilities();
@@ -845,7 +846,7 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
             ApplyCorrection(geometry.Positions, 0);
         }
         var lodGeometry = new Dictionary<int, DeformationResult> { [0] = geometry };
-        foreach (var lod in _baseHead.AvailableLods.Where(value => value.LodIndex > 0))
+        foreach (var lod in _baseHead.Lods.Where(value => value.LodIndex > 0))
         {
             var evaluated = SparseMorphEvaluator.Evaluate(_baseHead, resolution.WeightedTargets, lod.LodIndex);
             if (applyPositionCorrections)
@@ -886,24 +887,13 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
     private MorphFaceEvaluation EvaluateBaseMeshOnly()
     {
         var geometryLods = new Dictionary<int, DeformationResult>();
-        if (_baseHead.AvailableLods.Count == 0)
+        foreach (var lod in _baseHead.Lods)
         {
-            geometryLods[0] = new DeformationResult(
-                _baseHead.Positions.ToArray(),
-                _baseHead.Normals.ToArray(),
+            geometryLods[lod.LodIndex] = new DeformationResult(
+                lod.Positions.ToArray(),
+                lod.Normals.ToArray(),
                 0,
                 ["Base-mesh-only geometry does not evaluate authored morph features."]);
-        }
-        else
-        {
-            foreach (var lod in _baseHead.AvailableLods)
-            {
-                geometryLods[lod.LodIndex] = new DeformationResult(
-                    lod.Positions.ToArray(),
-                    lod.Normals.ToArray(),
-                    0,
-                    ["Base-mesh-only geometry does not evaluate authored morph features."]);
-            }
         }
 
         var geometry = geometryLods.TryGetValue(0, out var lod0)
@@ -1033,17 +1023,6 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
                     $"The selected profile could not evaluate stored LOD {_orderedBaseLods[index].LodIndex}."))
             .ToArray();
     }
-
-    private static IReadOnlyList<(int LodIndex, Vector3[] Positions)> CreateOrderedBaseLods(
-        SkeletalMeshAsset baseHead) =>
-        baseHead.AvailableLods.Count > 0
-            ? baseHead.AvailableLods
-                .OrderBy(lod => lod.LodIndex)
-                .Select(lod => (lod.LodIndex, lod.Positions))
-                .ToArray()
-            : baseHead.AvailableLodPositions
-                .Select((positions, index) => (index, positions))
-                .ToArray();
 
     private static IReadOnlyList<Vector3[]> CloneLods(IReadOnlyList<Vector3[]> lods) =>
         lods.Select(lod => lod.ToArray()).ToArray();

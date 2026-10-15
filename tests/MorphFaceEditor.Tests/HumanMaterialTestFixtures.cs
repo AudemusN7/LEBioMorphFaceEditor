@@ -169,7 +169,7 @@ public static class HumanMaterialTestFixtures
             {
                 [diffuse.ParameterName] = diffuse,
                 [makeup.ParameterName] = makeup
-            });
+            }) { HumanFace = HumanFaceMaterialKind.FemaleNpc };
     }
 
     internal static HeadPreviewMaterial CreateEyeMaterial(

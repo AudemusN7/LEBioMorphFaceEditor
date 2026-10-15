@@ -95,24 +95,17 @@ public static class CustomMeshTests
         var material = new ResolvedHeadMaterial(
             MaterialIdentityKey.Create(materialIdentity),
             materialIdentity,
-            "HMM_HED_PRO_MASTER_FACE_MAT",
+            "HMM_HED_PRONPC_MASTER_FACE_MAT",
             HeadMaterialFamily.Skin,
             HeadMaterialBlendMode.Opaque,
             false,
             new Dictionary<string, float>(),
             new Dictionary<string, Vector4>(),
             new Dictionary<string, MaterialTextureBinding>());
-        var overrides = new MorphFaceMaterialOverrides(
-            TestFixtures.CreateIdentity("Ahern.MaterialOverride", "BioMaterialOverride"),
-            [new ScalarMaterialOverride("HED_Norm_Blend", 0.5f)],
-            [],
-            []);
-
         var resolution = MorphFaceProfileRegistry.CreateDefault().Resolve(
             MorphFaceGame.LE1,
             "Ahern.CustomFace",
             "BIOA_PRC2_HMM_Ahern.Ahern_Custom_Head_MDL",
-            overrides,
             new ResolvedHeadMaterialSet(new Dictionary<string, ResolvedHeadMaterial>
             {
                 [material.Key] = material
@@ -434,10 +427,6 @@ public static class CustomMeshTests
             [null, null]);
         var canonical = new SkeletalMeshAsset(
             TestFixtures.CreateIdentity("Player.Base", "SkeletalMesh"),
-            canonicalPositions,
-            Enumerable.Repeat(Vector3.UnitZ, 4).ToArray(),
-            topology,
-            render,
             Lods: [new SkeletalMeshLod(
                 0,
                 canonicalPositions,

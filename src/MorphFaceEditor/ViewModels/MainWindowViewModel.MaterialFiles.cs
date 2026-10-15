@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Domain;
 using System.IO;
 using System.Windows.Input;
 using MorphFaceEditor.Core.Services;

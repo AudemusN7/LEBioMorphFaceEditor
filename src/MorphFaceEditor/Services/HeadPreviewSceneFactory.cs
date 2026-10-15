@@ -53,13 +53,8 @@ public sealed class HeadPreviewSceneFactory
 
     private static int FindStoredLodOrdinal(SkeletalMeshAsset mesh, int lodIndex)
     {
-        if (mesh.AvailableLods.Count == 0)
-        {
-            return lodIndex < mesh.AvailableLodPositions.Count ? lodIndex : -1;
-        }
-
         var ordinal = 0;
-        foreach (var lod in mesh.AvailableLods.OrderBy(lod => lod.LodIndex))
+        foreach (var lod in mesh.Lods)
         {
             if (lod.LodIndex == lodIndex)
             {
@@ -138,13 +133,6 @@ public sealed class HeadPreviewSceneFactory
         ArgumentNullException.ThrowIfNull(loaded);
         ArgumentNullException.ThrowIfNull(materials);
         var attachmentMeshes = EnumerateAttachments(loaded).ToArray();
-        var hairMaterialKeys = attachmentMeshes
-            .Where(mesh => mesh.RenderData is not null)
-            .SelectMany(mesh => mesh.RenderData!.MaterialSlots)
-            .Where(identity => identity is not null)
-            .Cast<AssetIdentity>()
-            .Select(MaterialIdentityKey.Create)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var update = new[] { loaded.BaseHead }.Concat(attachmentMeshes)
             .Where(mesh => mesh.RenderData is not null)
             .SelectMany(mesh => mesh.RenderData!.MaterialSlots)
@@ -154,7 +142,6 @@ public sealed class HeadPreviewSceneFactory
             .Select(identity => CreateMaterial(
                 identity,
                 materials,
-                hairMaterialKeys.Contains(MaterialIdentityKey.Create(identity)),
                 loaded.Game))
             .ToDictionary(material => material.Key, StringComparer.OrdinalIgnoreCase);
         return new HeadPreviewMaterialUpdate(update);
@@ -236,7 +223,7 @@ public sealed class HeadPreviewSceneFactory
                 lod.Normals.ToArray(),
                 0,
                 ["Attachment bind geometry uses the face's named final-skeleton translations."]),
-            lod.RenderData,
+            lod.RenderData!,
             pose.SkinningMatrices);
     }
 
@@ -291,7 +278,7 @@ public sealed class HeadPreviewSceneFactory
         bool applySkinning,
         MorphFaceGame game)
     {
-        var renderData = lod.RenderData;
+        var renderData = lod.RenderData!;
         if (positions.Count != lod.Topology.VertexCount || normals.Count != lod.Topology.VertexCount)
         {
             throw new InvalidDataException(
@@ -329,7 +316,7 @@ public sealed class HeadPreviewSceneFactory
                     IsLe2 = game == MorphFaceGame.LE2,
                     IsLe3 = game == MorphFaceGame.LE3
                 }
-                : CreateMaterial(identity, materials, attachment, game);
+                : CreateMaterial(identity, materials, game);
             return new HeadPreviewSection(
                 section.BaseIndex,
                 checked(section.TriangleCount * 3),
@@ -347,25 +334,22 @@ public sealed class HeadPreviewSceneFactory
     }
 
     private static SkeletalMeshLod RequireLod(SkeletalMeshAsset mesh, int lodIndex) =>
-        mesh.FindLod(lodIndex) ?? throw new InvalidDataException(
+        mesh.FindLod(lodIndex) is { RenderData: not null } lod ? lod : throw new InvalidDataException(
             $"Mesh '{mesh.Source.InstancedPath}' has no renderable LOD {lodIndex}.");
 
     private static SkeletalMeshLod SelectLod(SkeletalMeshAsset mesh, int requestedLod) =>
-        mesh.FindLod(requestedLod) ??
-        mesh.AvailableLods.Where(lod => lod.LodIndex <= requestedLod).MaxBy(lod => lod.LodIndex) ??
+        mesh.Lods.Where(lod => lod.RenderData is not null && lod.LodIndex <= requestedLod).MaxBy(lod => lod.LodIndex) ??
         RequireLod(mesh, 0);
 
     private static HeadPreviewMaterial CreateMaterial(
         AssetIdentity identity,
         ResolvedHeadMaterialSet materials,
-        bool attachment,
         MorphFaceGame game)
     {
         var resolved = materials.Find(identity);
         if (resolved is null)
         {
-            var fallbackFamily = HeadMaterialClassifier.Classify(identity.InstancedPath, attachment);
-            return new HeadPreviewMaterial(identity.InstancedPath, fallbackFamily) with
+            return new HeadPreviewMaterial(identity.InstancedPath, HeadMaterialFamily.Unknown) with
             {
                 Key = MaterialIdentityKey.Create(identity),
                 IsLe2 = game == MorphFaceGame.LE2,
@@ -386,25 +370,20 @@ public sealed class HeadPreviewSceneFactory
                 value.Texture.HasMeaningfulAlpha,
                 value.Texture.Mips),
             StringComparer.OrdinalIgnoreCase);
-        // A resolved family's material parameters and blend mode are authoritative. The
-        // package path can identify a hair package without telling us whether this is a
-        // scalp material; reclassifying it as Hair would make masked scalp materials
-        // translucent when a mesh attachment happens to use them.
-        var family = resolved.Family == HeadMaterialFamily.Unknown
-            ? HeadMaterialClassifier.Classify(identity.InstancedPath, attachment)
-            : resolved.Family;
         return new HeadPreviewMaterial(
             resolved.Key,
             resolved.Source.InstancedPath,
-            family,
-            family == resolved.Family ? resolved.BlendMode : HumanMaterialProfiles.BlendMode(family),
-            family == resolved.Family ? resolved.TwoSided : HumanMaterialProfiles.IsTwoSided(family),
+            resolved.Family,
+            resolved.BlendMode,
+            resolved.TwoSided,
             resolved.Scalars,
             resolved.Vectors,
             textures)
         {
             SupportedScalars = resolved.SupportedScalars,
             PreviewModel = resolved.PreviewModel,
+            HumanFace = resolved.HumanFace,
+            LayeredHairHighlights = resolved.LayeredHairHighlights,
             HasCompiledParameterSupport = resolved.HasCompiledParameterSupport,
             SupportedVectors = resolved.SupportedVectors,
             SupportedTextures = resolved.SupportedTextures,

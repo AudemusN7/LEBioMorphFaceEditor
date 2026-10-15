@@ -160,6 +160,8 @@ public sealed record ResolvedHeadMaterial(
     // Control contribution is separate from shader support and authored override preservation.
     public bool ContributesFaceControls { get; init; } = true;
     public HumanMaterialPreviewModel PreviewModel { get; init; }
+    public HumanFaceMaterialKind HumanFace { get; init; }
+    public bool LayeredHairHighlights { get; init; }
 
     public bool Supports(string name, MaterialParameterKind kind) => kind switch
     {

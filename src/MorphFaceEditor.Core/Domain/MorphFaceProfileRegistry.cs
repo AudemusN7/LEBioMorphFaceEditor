@@ -1,22 +1,19 @@
+using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Deformation;
 using MorphFaceEditor.Core.Materials;
-using MorphFaceEditor.LegendaryExplorer;
 
-namespace MorphFaceEditor.Services;
+namespace MorphFaceEditor.Core.Domain;
 
 public sealed record MorphFaceProfile(
     string Key,
-    string DisplayName,
     MorphFaceGame Game,
-    string TargetPackageName,
     IReadOnlySet<string> MetadataOnlyFeatures,
     IReadOnlyDictionary<string, string> FeatureAliases,
-    IHeadEditorUiProfile UiProfile,
     string ExportTag,
-    string ExportTagColor,
     Func<DeformationComparisonReport, bool> RecognizesBaseVariant,
     Func<string, string?, bool> Matches)
 {
+    public string Archetype => HeadProfileIdentity.SuffixFromProfileKey(Key)!;
     public string? TargetSetName { get; init; }
     public bool IgnoresAuthoredGeometry { get; init; }
     public Func<string?, string?> GeometryEditBlockReason { get; init; } = _ => null;
@@ -54,10 +51,8 @@ public sealed class MorphFaceProfileRegistry
         MorphFaceGame game,
         string facePath,
         string? baseHeadPath,
-        Core.Materials.MorphFaceMaterialOverrides materialOverrides,
         Core.Materials.ResolvedHeadMaterialSet materials)
     {
-        ArgumentNullException.ThrowIfNull(materialOverrides);
         ArgumentNullException.ThrowIfNull(materials);
         var recognised = Find(game, facePath, baseHeadPath);
         if (recognised is not null)
@@ -65,7 +60,7 @@ public sealed class MorphFaceProfileRegistry
             return new MorphFaceProfileResolution(recognised, false);
         }
 
-        var profileSuffix = InferProfileSuffix(materialOverrides, materials);
+        var profileSuffix = InferProfileSuffix(game, materials);
         var customProfile = profileSuffix is null
             ? null
             : _profiles.FirstOrDefault(profile =>
@@ -81,120 +76,58 @@ public sealed class MorphFaceProfileRegistry
             $"{game} BioMorphFace '{facePath}' uses unsupported base head '{baseHeadPath ?? "<unresolved>"}'.");
 
     public static MorphFaceProfileRegistry CreateDefault() => new(
-    [
-        new MorphFaceProfile(
-            "le1-human-male",
-            MorphFaceMetadataCatalogRegistry.ProfileDisplayName(MorphFaceGame.LE1, MorphFaceMetadataCatalogRegistry.HumanMale),
-            MorphFaceGame.LE1,
-            "BIOG_HMM_HED_PROMorph.pcc",
-            MorphFeatureTargetResolver.HumanMaleMetadataOnlyFeatures,
-            MorphFeatureTargetResolver.Le12HumanMaleFeatureAliases,
-            MorphFaceMetadataCatalogRegistry.HumanMaleFor(MorphFaceGame.LE1),
-            "[HMM]",
-            "#287CCB",
-            _ => false,
-            (facePath, baseHeadPath) => MatchesHuman(
-                facePath, baseHeadPath, HumanMaleMorphMeshes, "HMM", "Human Male"))
-        { TargetSetName = "HMM_BaseMorphSet" },
-        new MorphFaceProfile(
-            "le1-human-female",
-            MorphFaceMetadataCatalogRegistry.ProfileDisplayName(MorphFaceGame.LE1, MorphFaceMetadataCatalogRegistry.HumanFemale),
-            MorphFaceGame.LE1,
-            "BIOG_HMF_HED_PROMorph_R.pcc",
-            MorphFeatureTargetResolver.HumanFemaleMetadataOnlyFeatures,
-            MorphFeatureTargetResolver.HumanFemaleFeatureAliases,
-            MorphFaceMetadataCatalogRegistry.HumanFemaleFor(MorphFaceGame.LE1),
-            "[HMF]",
-            "#C02B9B",
-            IsLe1HumanFemaleLegacyBaseVariant,
-            (facePath, baseHeadPath) => MatchesHuman(
-                facePath, baseHeadPath, HumanFemaleMorphMeshes, "HMF", "Human Female"))
-        { TargetSetName = "HMF_BaseMorphSet" },
-        CreateAsariProfile(MorphFaceGame.LE1, null),
-        CreateSalarianProfile(MorphFaceGame.LE1, null),
-        CreateTurianProfile(MorphFaceGame.LE1),
-        CreateFemaleTurianProfile(MorphFaceGame.LE1),
-        CreateBatarianProfile(MorphFaceGame.LE1),
-        CreateFemaleBatarianProfile(MorphFaceGame.LE1),
-        CreateKroganProfile(MorphFaceGame.LE1),
-        new MorphFaceProfile(
-            "le2-human-male",
-            MorphFaceMetadataCatalogRegistry.ProfileDisplayName(MorphFaceGame.LE2, MorphFaceMetadataCatalogRegistry.HumanMale),
-            MorphFaceGame.LE2,
-            "BIOG_HMM_HED_PROMorph.pcc",
-            MorphFeatureTargetResolver.HumanMaleMetadataOnlyFeatures,
-            MorphFeatureTargetResolver.Le12HumanMaleFeatureAliases,
-            MorphFaceMetadataCatalogRegistry.HumanMaleFor(MorphFaceGame.LE2),
-            "[HMM]",
-            "#287CCB",
-            _ => false,
-            (facePath, baseHeadPath) => MatchesHuman(
-                facePath, baseHeadPath, HumanMaleMorphMeshes, "HMM", "Human Male"))
-        { TargetSetName = "HMM_BaseMorphSet" },
-        new MorphFaceProfile(
-            "le2-human-female",
-            MorphFaceMetadataCatalogRegistry.ProfileDisplayName(MorphFaceGame.LE2, MorphFaceMetadataCatalogRegistry.HumanFemale),
-            MorphFaceGame.LE2,
-            "BIOG_HMF_HED_PROMorph_R.pcc",
-            MorphFeatureTargetResolver.HumanFemaleMetadataOnlyFeatures,
-            MorphFeatureTargetResolver.HumanFemaleFeatureAliases,
-            MorphFaceMetadataCatalogRegistry.HumanFemaleFor(MorphFaceGame.LE2),
-            "[HMF]",
-            "#C02B9B",
-            _ => false,
-            (facePath, baseHeadPath) => MatchesHuman(
-                facePath, baseHeadPath, HumanFemaleMorphMeshes, "HMF", "Human Female"))
-        { TargetSetName = "HMF_BaseMorphSet" },
-        CreateAsariProfile(MorphFaceGame.LE2, "BioP_TwrHub.pcc"),
-        CreateSalarianProfile(MorphFaceGame.LE2, "BioP_TwrHub.pcc"),
-        CreateTurianProfile(MorphFaceGame.LE2),
-        CreateFemaleTurianProfile(MorphFaceGame.LE2),
-        CreateBatarianProfile(MorphFaceGame.LE2),
-        CreateFemaleBatarianProfile(MorphFaceGame.LE2),
-        CreateKroganProfile(MorphFaceGame.LE2),
-        CreateVorchaProfile(MorphFaceGame.LE2),
-        new MorphFaceProfile(
-            "le3-human-male",
-            MorphFaceMetadataCatalogRegistry.ProfileDisplayName(MorphFaceGame.LE3, MorphFaceMetadataCatalogRegistry.HumanMale),
-            MorphFaceGame.LE3,
-            "BIOG_HMM_HED_PROMorph.pcc",
-            MorphFeatureTargetResolver.Le3HumanMaleMetadataOnlyFeatures,
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
-            MorphFaceMetadataCatalogRegistry.HumanMaleFor(MorphFaceGame.LE3),
-            "[HMM]",
-            "#287CCB",
-            _ => false,
-            (facePath, baseHeadPath) => MatchesHuman(
-                facePath, baseHeadPath, HumanMaleMorphMeshes, "HMM", "Human Male",
-                allowCharacterCreationVariant: true))
-        { TargetSetName = "HMM_BaseMorphSet" },
-        new MorphFaceProfile(
-            "le3-human-female",
-            MorphFaceMetadataCatalogRegistry.ProfileDisplayName(MorphFaceGame.LE3, MorphFaceMetadataCatalogRegistry.HumanFemale),
-            MorphFaceGame.LE3,
-            "BIOG_HMF_HED_PROMorph_R.pcc",
-            MorphFeatureTargetResolver.Le3HumanFemaleMetadataOnlyFeatures,
-            MorphFeatureTargetResolver.HumanFemaleFeatureAliases,
-            MorphFaceMetadataCatalogRegistry.HumanFemaleFor(MorphFaceGame.LE3),
-            "[HMF]",
-            "#C02B9B",
-            _ => false,
-            (facePath, baseHeadPath) => MatchesHuman(
-                facePath, baseHeadPath, HumanFemaleMorphMeshes, "HMF", "Human Female",
-                allowCharacterCreationVariant: true))
-        { TargetSetName = "HMF_BaseMorphSet" },
-        CreateAsariProfile(MorphFaceGame.LE3, "BIOG_ASA_HED_PROMorph_R.pcc"),
-        CreateSalarianProfile(MorphFaceGame.LE3, "BIOG_SAL_HED_PROMorph_R.pcc"),
-        CreateTurianProfile(MorphFaceGame.LE3),
-        CreateFemaleTurianProfile(MorphFaceGame.LE3),
-        CreateBatarianProfile(MorphFaceGame.LE3),
-        CreateFemaleBatarianProfile(MorphFaceGame.LE3),
-        CreateKroganProfile(MorphFaceGame.LE3),
-        CreateVorchaProfile(MorphFaceGame.LE3)
-    ]);
+        new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 }.SelectMany(game =>
+        {
+            var profiles = new List<MorphFaceProfile>
+            {
+                CreateHumanMaleProfile(game),
+                CreateHumanFemaleProfile(game),
+                CreateAsariProfile(game),
+                CreateSalarianProfile(game),
+                CreateTurianProfile(game),
+                CreateFemaleTurianProfile(game),
+                CreateBatarianProfile(game),
+                CreateFemaleBatarianProfile(game),
+                CreateKroganProfile(game)
+            };
+            if (game != MorphFaceGame.LE1) profiles.Add(CreateVorchaProfile(game));
+            return profiles;
+        }).ToArray());
+
+    private static MorphFaceProfile CreateHumanMaleProfile(MorphFaceGame game) => new(
+        $"{game.ToString().ToLowerInvariant()}-human-male",
+        game,
+        game == MorphFaceGame.LE3
+            ? MorphFaceProfileFeatures.Le3HumanMaleMetadataOnlyFeatures
+            : MorphFaceProfileFeatures.HumanMaleMetadataOnlyFeatures,
+        game == MorphFaceGame.LE3
+            ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            : MorphFaceProfileFeatures.Le12HumanMaleFeatureAliases,
+        "[HMM]",
+
+        _ => false,
+        (facePath, baseHeadPath) => MatchesHuman(
+            facePath, baseHeadPath, HumanMaleMorphMeshes, "HMM", "Human Male",
+            allowCharacterCreationVariant: game == MorphFaceGame.LE3))
+    { TargetSetName = "HMM_BaseMorphSet" };
+
+    private static MorphFaceProfile CreateHumanFemaleProfile(MorphFaceGame game) => new(
+        $"{game.ToString().ToLowerInvariant()}-human-female",
+        game,
+        game == MorphFaceGame.LE3
+            ? MorphFaceProfileFeatures.Le3HumanFemaleMetadataOnlyFeatures
+            : MorphFaceProfileFeatures.HumanFemaleMetadataOnlyFeatures,
+        MorphFaceProfileFeatures.NoAliases,
+        "[HMF]",
+
+        game == MorphFaceGame.LE1 ? IsLe1HumanFemaleLegacyBaseVariant : _ => false,
+        (facePath, baseHeadPath) => MatchesHuman(
+            facePath, baseHeadPath, HumanFemaleMorphMeshes, "HMF", "Human Female",
+            allowCharacterCreationVariant: game == MorphFaceGame.LE3))
+    { TargetSetName = "HMF_BaseMorphSet" };
 
     private static string? InferProfileSuffix(
-        Core.Materials.MorphFaceMaterialOverrides materialOverrides,
+        MorphFaceGame game,
         Core.Materials.ResolvedHeadMaterialSet materials)
     {
         var families = materials.Materials.Values
@@ -211,40 +144,18 @@ public sealed class MorphFaceProfileRegistry
             families.Contains(Core.Materials.HeadMaterialFamily.SalarianEyes)) return "-salarian";
         if (families.Contains(Core.Materials.HeadMaterialFamily.AsariSkin)) return "-asari";
 
-        var evidence = string.Join('|', materials.Materials.Values.SelectMany(material => new[]
-            {
-                material.Source.InstancedPath,
-                material.MasterMaterialName
-            })
-            .Concat(materialOverrides.Source is null ? [] : [materialOverrides.Source.InstancedPath])
-            .Concat(materialOverrides.Scalars.Select(value => value.Name))
-            .Concat(materialOverrides.Vectors.Select(value => value.Name))
-            .Concat(materialOverrides.Textures.Select(value => value.Name)));
-        if (ContainsMarker(evidence, "ALN_", "Vorcha")) return "-vorcha";
-        if (ContainsMarker(evidence, "BAT_", "Batarian")) return "-batarian";
-        if (ContainsMarker(evidence, "KRO_", "Krogan")) return "-krogan";
-        if (ContainsMarker(evidence, "TUR_", "Turian")) return "-turian";
-        if (ContainsMarker(evidence, "SAL_", "Salarian")) return "-salarian";
-        if (ContainsMarker(evidence, "ASA_", "Asari")) return "-asari";
-        if (ContainsMarker(evidence, "HMF_", "Human Female")) return "-human-female";
-        if (ContainsMarker(evidence, "HMM_", "Human Male")) return "-human-male";
-        return null;
+        return materials.Materials.Values
+            .Select(material => HeadMaterialCatalog.Find(game, material.MasterMaterialName)?.ProfileSuffix)
+            .FirstOrDefault(suffix => suffix is not null) is { } suffix ? "-" + suffix : null;
     }
-
-    private static bool ContainsMarker(string evidence, params string[] markers) =>
-        markers.Any(marker => evidence.Contains(marker, StringComparison.OrdinalIgnoreCase));
-
-    private static MorphFaceProfile CreateAsariProfile(MorphFaceGame game, string? targetPackageName) =>
+    private static MorphFaceProfile CreateAsariProfile(MorphFaceGame game) =>
         new(
             $"{game.ToString().ToLowerInvariant()}-asari",
-            MorphFaceMetadataCatalogRegistry.ProfileDisplayName(game, MorphFaceMetadataCatalogRegistry.Asari),
             game,
-            targetPackageName ?? string.Empty,
-            AsariFeatureMetadataCatalog.MetadataOnlyFeatures,
-            AsariFeatureMetadataCatalog.FeatureAliases,
-            MorphFaceMetadataCatalogRegistry.AsariFor(game),
+            MorphFaceProfileFeatures.AsariMetadataOnlyFeatures,
+            MorphFaceProfileFeatures.NoAliases,
             "[ASA]",
-            "#6635BA",
+
             _ => false,
             MatchesAsari)
         {
@@ -261,17 +172,14 @@ public sealed class MorphFaceProfileRegistry
         return facePath.StartsWith("Asari.", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static MorphFaceProfile CreateSalarianProfile(MorphFaceGame game, string? targetPackageName) =>
+    private static MorphFaceProfile CreateSalarianProfile(MorphFaceGame game) =>
         new(
             $"{game.ToString().ToLowerInvariant()}-salarian",
-            MorphFaceMetadataCatalogRegistry.ProfileDisplayName(game, MorphFaceMetadataCatalogRegistry.Salarian),
             game,
-            targetPackageName ?? string.Empty,
-            SalarianFeatureMetadataCatalog.MetadataOnlyFeatures,
-            SalarianFeatureMetadataCatalog.FeatureAliases,
-            MorphFaceMetadataCatalogRegistry.SalarianParent,
+            MorphFaceProfileFeatures.SalarianMetadataOnlyFeatures,
+            MorphFaceProfileFeatures.NoAliases,
             "[SAL]",
-            "#1F9139",
+
             _ => false,
             MatchesSalarian)
         {
@@ -291,14 +199,11 @@ public sealed class MorphFaceProfileRegistry
     private static MorphFaceProfile CreateTurianProfile(MorphFaceGame game) =>
         new(
             $"{game.ToString().ToLowerInvariant()}-turian",
-            MorphFaceMetadataCatalogRegistry.ProfileDisplayName(game, MorphFaceMetadataCatalogRegistry.Turian),
             game,
-            string.Empty,
-            TurianFeatureMetadataCatalog.MetadataOnlyFeatures,
-            TurianFeatureMetadataCatalog.FeatureAliases,
-            MorphFaceMetadataCatalogRegistry.TurianParent,
+            MorphFaceProfileFeatures.TurianMetadataOnlyFeatures,
+            MorphFaceProfileFeatures.NoAliases,
             "[TUR]",
-            "#008C83",
+
             _ => false,
             MatchesTurian)
         {
@@ -318,14 +223,11 @@ public sealed class MorphFaceProfileRegistry
     private static MorphFaceProfile CreateFemaleTurianProfile(MorphFaceGame game) =>
         new(
             $"{game.ToString().ToLowerInvariant()}-female-turian",
-            MorphFaceMetadataCatalogRegistry.ProfileDisplayName(game, MorphFaceMetadataCatalogRegistry.FemaleTurian),
             game,
-            string.Empty,
-            FemaleTurianFeatureMetadataCatalog.MetadataOnlyFeatures,
-            TurianFeatureMetadataCatalog.FeatureAliases,
-            MorphFaceMetadataCatalogRegistry.FemaleTurianParent,
+            MorphFaceProfileFeatures.TurianAllFeatureNames,
+            MorphFaceProfileFeatures.NoAliases,
             "[TUF]",
-            "#99597D",
+
             _ => false,
             MatchesFemaleTurian)
         {
@@ -348,14 +250,11 @@ public sealed class MorphFaceProfileRegistry
     private static MorphFaceProfile CreateKroganProfile(MorphFaceGame game) =>
         new(
             $"{game.ToString().ToLowerInvariant()}-krogan",
-            MorphFaceMetadataCatalogRegistry.ProfileDisplayName(game, MorphFaceMetadataCatalogRegistry.Krogan),
             game,
-            string.Empty,
-            KroganFeatureMetadataCatalog.MetadataOnlyFeatures,
-            KroganFeatureMetadataCatalog.FeatureAliases,
-            MorphFaceMetadataCatalogRegistry.KroganParent,
+            MorphFaceProfileFeatures.KroganMetadataOnlyFeatures,
+            MorphFaceProfileFeatures.NoAliases,
             "[KRO]",
-            "#781400",
+
             _ => false,
             MatchesKrogan)
         {
@@ -375,14 +274,11 @@ public sealed class MorphFaceProfileRegistry
     private static MorphFaceProfile CreateBatarianProfile(MorphFaceGame game) =>
         new(
             $"{game.ToString().ToLowerInvariant()}-batarian",
-            MorphFaceMetadataCatalogRegistry.ProfileDisplayName(game, MorphFaceMetadataCatalogRegistry.Batarian),
             game,
-            string.Empty,
-            BatarianFeatureMetadataCatalog.MetadataOnlyFeatures,
-            BatarianFeatureMetadataCatalog.FeatureAliases,
-            MorphFaceMetadataCatalogRegistry.BatarianParent,
+            MorphFaceProfileFeatures.BatarianMetadataOnlyFeatures,
+            MorphFaceProfileFeatures.NoAliases,
             "[BAT]",
-            "#A16F10",
+
             _ => false,
             MatchesBatarian)
         {
@@ -399,10 +295,7 @@ public sealed class MorphFaceProfileRegistry
         CreateBatarianProfile(game) with
         {
             Key = $"{game.ToString().ToLowerInvariant()}-female-batarian",
-            DisplayName = MorphFaceMetadataCatalogRegistry.ProfileDisplayName(
-                game, MorphFaceMetadataCatalogRegistry.FemaleBatarian),
             ExportTag = "[BAF]",
-            ExportTagColor = "#A85B21FF",
             Matches = MatchesFemaleBatarian,
             IgnoresAuthoredGeometry = true,
             GeometryEditBlockReason = _ =>
@@ -433,14 +326,11 @@ public sealed class MorphFaceProfileRegistry
     private static MorphFaceProfile CreateVorchaProfile(MorphFaceGame game) =>
         new(
             $"{game.ToString().ToLowerInvariant()}-vorcha",
-            MorphFaceMetadataCatalogRegistry.ProfileDisplayName(game, MorphFaceMetadataCatalogRegistry.Vorcha),
             game,
-            "BIOG_ALN_HED_PROMorph_R.pcc",
-            VorchaFeatureMetadataCatalog.MetadataOnlyFeatures,
-            VorchaFeatureMetadataCatalog.FeatureAliases,
-            MorphFaceMetadataCatalogRegistry.VorchaParent,
+            MorphFaceProfileFeatures.VorchaMetadataOnlyFeatures,
+            MorphFaceProfileFeatures.NoAliases,
             "[ALN]",
-            "#909110",
+
             _ => false,
             MatchesVorcha)
         {

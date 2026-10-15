@@ -162,14 +162,8 @@ public static class ImportedMeshDecoder
             foreach (var primitive in primitives)
             {
                 var positionAccessor = primitive.GetVertexAccessor("POSITION") ?? throw new InvalidDataException("glTF primitive has no POSITION accessor.");
-                var localPositions = positionAccessor.AsVector3Array().ToArray();
-                if (localPositions.Length == 0) continue;
-                var localNormals = primitive.GetVertexAccessor("NORMAL")?.AsVector3Array().ToArray();
-                var localTangents = primitive.GetVertexAccessor("TANGENT")?.AsVector4Array().ToArray();
-                var localUvs = primitive.GetVertexAccessor("TEXCOORD_0")?.AsVector2Array().ToArray();
-                if (localNormals is not null && localNormals.Length != localPositions.Length) throw new InvalidDataException("glTF NORMAL count does not match POSITION.");
-                if (localTangents is not null && localTangents.Length != localPositions.Length) throw new InvalidDataException("glTF TANGENT count does not match POSITION.");
-                if (localUvs is not null && localUvs.Length != localPositions.Length) throw new InvalidDataException("glTF TEXCOORD_0 count does not match POSITION.");
+                var positionCount = positionAccessor.Count;
+                if (positionCount == 0) continue;
                 // Material-split primitives commonly share all vertex accessors.
                 // Reuse that stream for the second primitive; transforms are part
                 // of the key through the visual node identity.
@@ -183,6 +177,13 @@ public static class ImportedMeshDecoder
                 var isNewStream = !streamOffsets.TryGetValue(streamKey, out var offset);
                 if (isNewStream)
                 {
+                    var localPositions = positionAccessor.AsVector3Array().ToArray();
+                    var localNormals = primitive.GetVertexAccessor("NORMAL")?.AsVector3Array().ToArray();
+                    var localTangents = primitive.GetVertexAccessor("TANGENT")?.AsVector4Array().ToArray();
+                    var localUvs = primitive.GetVertexAccessor("TEXCOORD_0")?.AsVector2Array().ToArray();
+                    if (localNormals is not null && localNormals.Length != localPositions.Length) throw new InvalidDataException("glTF NORMAL count does not match POSITION.");
+                    if (localTangents is not null && localTangents.Length != localPositions.Length) throw new InvalidDataException("glTF TANGENT count does not match POSITION.");
+                    if (localUvs is not null && localUvs.Length != localPositions.Length) throw new InvalidDataException("glTF TEXCOORD_0 count does not match POSITION.");
                     offset = positions.Count;
                     streamOffsets.Add(streamKey, offset);
                     for (var i = 0; i < localPositions.Length; i++)
@@ -205,12 +206,42 @@ public static class ImportedMeshDecoder
                         uvPresent.Add(localUvs is not null);
                         sourceIndices.Add(logicalSource++);
                     }
+                    var joints = primitive.GetVertexAccessor("JOINTS_0")?.AsVector4Array().ToArray();
+                    var weights = primitive.GetVertexAccessor("WEIGHTS_0")?.AsVector4Array().ToArray();
+                    if (joints is not null || weights is not null)
+                    {
+                        if (joints is null || weights is null || joints.Length != localPositions.Length || weights.Length != localPositions.Length || bones.Length == 0)
+                            throw new InvalidDataException("glTF skin streams are incomplete or have no skeleton.");
+                        haveRig = true;
+                        for (var i = 0; i < joints.Length; i++)
+                        {
+                            var j = new[] { (int)joints[i].X, (int)joints[i].Y, (int)joints[i].Z, (int)joints[i].W };
+                            if (j.Any(value => (uint)value >= (uint)bones.Length)) throw new InvalidDataException("glTF JOINTS_0 references an invalid joint.");
+                            var value = weights[i];
+                            if (!float.IsFinite(value.X) || !float.IsFinite(value.Y) ||
+                                !float.IsFinite(value.Z) || !float.IsFinite(value.W) ||
+                                value.X < 0 || value.Y < 0 || value.Z < 0 || value.W < 0)
+                                throw new InvalidDataException("glTF WEIGHTS_0 contains a negative or non-finite value.");
+                            var sum = value.X + value.Y + value.Z + value.W;
+                            if (sum > 0) value /= sum;
+                            boneIndices.Add(new BoneIndex4(j[0], j[1], j[2], j[3]));
+                            boneWeights.Add(value);
+                        }
+                    }
+                    else
+                    {
+                        for (var i = 0; i < localPositions.Length; i++)
+                        {
+                            boneIndices.Add(default);
+                            boneWeights.Add(Vector4.Zero);
+                        }
+                    }
                 }
                 var primitiveIndices = primitive.GetTriangleIndices();
                 var start = indices.Count;
                 foreach (var (a, b, c) in primitiveIndices)
                 {
-                    if ((uint)a >= (uint)localPositions.Length || (uint)b >= (uint)localPositions.Length || (uint)c >= (uint)localPositions.Length)
+                    if ((uint)a >= (uint)positionCount || (uint)b >= (uint)positionCount || (uint)c >= (uint)positionCount)
                         throw new InvalidDataException("glTF triangle references an invalid vertex.");
                     indices.Add(offset + a);
                     indices.Add(offset + (changesHandedness ? c : b));
@@ -225,48 +256,18 @@ public static class ImportedMeshDecoder
                 var materialName = primitive.Material?.Name ?? $"material-{materialKey}";
                 sections.Add(new ImportedMeshSection(materialIndex, materialName, start, indices.Count - start));
 
-                var joints = primitive.GetVertexAccessor("JOINTS_0")?.AsVector4Array().ToArray();
-                var weights = primitive.GetVertexAccessor("WEIGHTS_0")?.AsVector4Array().ToArray();
-                if (isNewStream && (joints is not null || weights is not null))
-                {
-                    if (joints is null || weights is null || joints.Length != localPositions.Length || weights.Length != localPositions.Length || bones.Length == 0)
-                        throw new InvalidDataException("glTF skin streams are incomplete or have no skeleton.");
-                    haveRig = true;
-                    for (var i = 0; i < joints.Length; i++)
-                    {
-                        var j = new[] { (int)joints[i].X, (int)joints[i].Y, (int)joints[i].Z, (int)joints[i].W };
-                        if (j.Any(value => (uint)value >= (uint)bones.Length)) throw new InvalidDataException("glTF JOINTS_0 references an invalid joint.");
-                        var value = weights[i];
-                        if (!float.IsFinite(value.X) || !float.IsFinite(value.Y) ||
-                            !float.IsFinite(value.Z) || !float.IsFinite(value.W) ||
-                            value.X < 0 || value.Y < 0 || value.Z < 0 || value.W < 0)
-                            throw new InvalidDataException("glTF WEIGHTS_0 contains a negative or non-finite value.");
-                        var sum = value.X + value.Y + value.Z + value.W;
-                        if (sum > 0) value /= sum;
-                        boneIndices.Add(new BoneIndex4(j[0], j[1], j[2], j[3]));
-                        boneWeights.Add(value);
-                    }
-                }
-                else if (isNewStream)
-                {
-                    for (var i = 0; i < localPositions.Length; i++)
-                    {
-                        boneIndices.Add(default);
-                        boneWeights.Add(Vector4.Zero);
-                    }
-                }
             }
         }
         if (positions.Count == 0 || indices.Count == 0) throw new InvalidDataException("glTF has no renderable triangles.");
         var positionArray = positions.ToArray();
-        var generatedNormalValues = GenerateNormals(positionArray, indices);
+        var generatedNormals = normalPresent.Any(value => !value);
+        var generatedNormalValues = generatedNormals ? GenerateNormals(positionArray, indices) : null;
         var finalNormals = normals.Select((value, index) => normalPresent[index]
             ? value
-            : generatedNormalValues[index]).ToArray();
-        var generatedNormals = normalPresent.Any(value => !value);
+            : generatedNormalValues![index]).ToArray();
         var anyUvs = uvPresent.Any(value => value);
         var finalUvs = anyUvs ? uvs.ToArray() : null;
-        var generatedTangentValues = GenerateTangents(
+        var generatedTangentValues = tangentPresent.All(value => value) ? null : GenerateTangents(
             positionArray,
             finalNormals,
             finalUvs,
@@ -278,7 +279,7 @@ public static class ImportedMeshDecoder
                 : generatedTangentValues?[index] ?? Vector4.Zero).ToArray()
             : null;
         var generatedTangents = generatedTangentValues is not null && tangentPresent.Any(value => !value);
-        return new ImportedMeshAsset(path, positions.ToArray(), finalNormals, finalTangents,
+        return new ImportedMeshAsset(path, positionArray, finalNormals, finalTangents,
             finalUvs, indices.ToArray(), sections, bones,
             haveRig ? boneIndices.ToArray() : null, haveRig ? boneWeights.ToArray() : null,
             sourceIndices.ToArray(), generatedNormals, generatedTangents,

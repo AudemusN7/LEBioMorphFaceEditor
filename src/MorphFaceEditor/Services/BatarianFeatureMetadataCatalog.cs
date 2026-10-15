@@ -32,17 +32,8 @@ public sealed partial class BatarianFeatureMetadataCatalog : IHeadEditorUiProfil
     private const string Complexion = "complexion";
 
     // These values occur in recipes but have no geometry target in supported games.
-    public static IReadOnlySet<string> MetadataOnlyFeatures { get; } =
-        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "jaw_narrow",
-            "shape_skinny"
-        };
 
-    public static IReadOnlyDictionary<string, string> FeatureAliases { get; } =
-        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-    public IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
+public IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
     [
         new(FacialStructure, Loc.Text("loc_Services_Taxonomy_facial_structure_812284cf"), Loc.Text("loc_Services_Taxonomy_batarian_specific_cranium_and_regional_colour_co_3ef2e9bb"),
             [new(Cranium, Loc.Text("loc_Services_Taxonomy_cranium_5f4bf434")), new(RegionalColour, Loc.Text("loc_Services_Taxonomy_regional_colour_199c8ed3"))]),
@@ -62,8 +53,8 @@ public sealed partial class BatarianFeatureMetadataCatalog : IHeadEditorUiProfil
     {
         var name = feature.Feature.Name;
         var (category, subcategory) = FeaturePlacement(name);
-        var visible = !name.Equals("teeth_correction", StringComparison.OrdinalIgnoreCase) &&
-                      !MetadataOnlyFeatures.Contains(name);
+        var visible = MorphFaceProfileFeatures.IsControlEligible(
+            MorphFaceMetadataCatalogRegistry.Batarian, Core.Domain.MorphFaceGame.LE1, name, feature.Target);
         var metadata = new MorphFeatureMetadata(
             name,
             FeatureLabel(name),

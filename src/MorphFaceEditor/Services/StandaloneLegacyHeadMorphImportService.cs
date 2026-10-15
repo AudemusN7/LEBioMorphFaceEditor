@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Services;
 using System.IO;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Editing;
@@ -147,7 +148,6 @@ public sealed class StandaloneLegacyHeadMorphImportService
             loaded.Game,
             loaded.Document.Source.InstancedPath,
             loaded.Document.BaseHeadReference?.InstancedPath,
-            loaded.Document.MaterialOverrides,
             loaded.Materials) ?? throw new NotSupportedException(
                 $"The installed {targetGame} player template '{templatePath}' has no supported morph profile.");
         if (resolution.UsesCustomMesh || resolution.Profile.IgnoresAuthoredGeometry)
@@ -156,13 +156,13 @@ public sealed class StandaloneLegacyHeadMorphImportService
                 $"The installed {targetGame} player template '{templatePath}' is not an editable player profile.");
         }
 
-        var targets = _targets.Load(resolution.Profile, targetGame);
+        var targets = _targets.Load(resolution.Profile);
         var session = new MorphFaceEditingSession(
             loaded.Document,
             loaded.BaseHead,
             targets,
             resolution.Profile.MetadataOnlyFeatures,
-            resolution.Profile.DisplayName,
+            resolution.Profile.GetDisplayName(),
             resolution.Profile.FeatureAliases,
             resolution.Profile.RecognizesBaseVariant,
             resolution.Profile.GeometryEditBlockReason(loaded.BaseHead.Source.InstancedPath));

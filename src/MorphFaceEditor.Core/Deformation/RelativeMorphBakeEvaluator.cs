@@ -11,7 +11,7 @@ namespace MorphFaceEditor.Core.Deformation;
 internal sealed class RelativeMorphBakeEvaluator
 {
     private readonly SkeletalMeshAsset _baseHead;
-    private readonly IReadOnlyList<(int LodIndex, Vector3[] Positions)> _orderedBaseLods;
+    private readonly IReadOnlyList<SkeletalMeshLod> _orderedBaseLods;
     private readonly IReadOnlyList<Vector3[]> _baselineLods;
     private readonly IReadOnlyList<WeightedMorphTarget> _authoredTargets;
     private readonly IReadOnlyList<MorphTargetAsset> _profileTargets;
@@ -26,14 +26,7 @@ internal sealed class RelativeMorphBakeEvaluator
         ArgumentNullException.ThrowIfNull(authoredLods);
         ArgumentNullException.ThrowIfNull(authoredTargets);
         ArgumentNullException.ThrowIfNull(profileTargets);
-        _orderedBaseLods = baseHead.AvailableLods.Count > 0
-            ? baseHead.AvailableLods
-                .OrderBy(lod => lod.LodIndex)
-                .Select(lod => (lod.LodIndex, lod.Positions))
-                .ToArray()
-            : baseHead.AvailableLodPositions
-                .Select((positions, index) => (index, positions))
-                .ToArray();
+        _orderedBaseLods = baseHead.Lods;
         _baselineLods = CloneLods(authoredLods);
         _authoredTargets = authoredTargets.ToArray();
         _profileTargets = profileTargets.Distinct().ToArray();

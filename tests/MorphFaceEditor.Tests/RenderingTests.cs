@@ -73,7 +73,7 @@ public static class RenderingTests
             [],
             [],
             MorphFaceMaterialOverrides.Empty,
-            mesh.AvailableLodPositions,
+            mesh.Lods.Select(lod => lod.Positions).ToArray(),
             []);
         var loaded = new LoadedMorphFace(
             document,
@@ -91,7 +91,7 @@ public static class RenderingTests
     private static void SceneFactoryMapsNonContiguousLodIds()
     {
         var mesh = TestFixtures.CreateRenderableTwoLodMesh(lowerLodIndex: 2);
-        var bakedLod2 = mesh.AvailableLodPositions[1]
+        var bakedLod2 = mesh.Lods[1].Positions
             .Select(position => position + new Vector3(5, 0, 0))
             .ToArray();
         var document = new MorphFaceDocument(
@@ -102,7 +102,7 @@ public static class RenderingTests
             [],
             [],
             MorphFaceMaterialOverrides.Empty,
-            [mesh.AvailableLodPositions[0], bakedLod2],
+            [mesh.Lods[0].Positions, bakedLod2],
             []);
         var loaded = new LoadedMorphFace(
             document,
@@ -150,11 +150,6 @@ public static class RenderingTests
             [skinIdentity, eyeIdentity]);
         var mesh = new SkeletalMeshAsset(
             TestFixtures.CreateIdentity("Custom.AhernHead", "SkeletalMesh"),
-            positions,
-            Enumerable.Repeat(Vector3.UnitZ, positions.Length).ToArray(),
-            topology,
-            renderData,
-            [positions],
             [new SkeletalMeshLod(0, positions, Enumerable.Repeat(Vector3.UnitZ, positions.Length).ToArray(), topology, renderData)]);
         var document = new MorphFaceDocument(
             TestFixtures.CreateIdentity("Custom.AhernFace", "BioMorphFace"),
@@ -207,14 +202,13 @@ public static class RenderingTests
             1,
             "MaterialInstanceConstant");
         var baseMesh = TestFixtures.CreateRenderableTwoLodMesh();
-        var renderData = baseMesh.RenderData! with { MaterialSlots = [materialIdentity] };
-        var lods = baseMesh.AvailableLods
+        var lods = baseMesh.Lods
             .Select(lod => lod with
             {
-                RenderData = lod.RenderData with { MaterialSlots = [materialIdentity] }
+                RenderData = lod.RenderData! with { MaterialSlots = [materialIdentity] }
             })
             .ToArray();
-        var headMesh = baseMesh with { RenderData = renderData, Lods = lods };
+        var headMesh = baseMesh with { Lods = lods };
         var attachmentMesh = headMesh with
         {
             Source = new AssetIdentity(
@@ -231,7 +225,7 @@ public static class RenderingTests
             [],
             [],
             MorphFaceMaterialOverrides.Empty,
-            headMesh.AvailableLodPositions,
+            headMesh.Lods.Select(lod => lod.Positions).ToArray(),
             []);
         var resolvedScalp = new ResolvedHeadMaterial(
             MaterialIdentityKey.Create(materialIdentity),
@@ -343,7 +337,7 @@ public static class RenderingTests
             [],
             [new BoneTranslation("root", new Vector3(-4.5f, 0, -35))],
             MorphFaceMaterialOverrides.Empty,
-            mesh.AvailableLodPositions,
+            mesh.Lods.Select(lod => lod.Positions).ToArray(),
             []);
         var loaded = new LoadedMorphFace(
             document,
@@ -498,23 +492,19 @@ public static class RenderingTests
 
     private static void MaterialsClassifyByFamily()
     {
-        TestAssert.Equal(HeadMaterialFamily.Skin, HeadMaterialClassifier.Classify("HMM_HED_PROBase_MAT"));
-        TestAssert.Equal(HeadMaterialFamily.Eyes, HeadMaterialClassifier.Classify("HMM_EYE_IRIS_MAT"));
-        TestAssert.Equal(HeadMaterialFamily.SalarianSkin, HeadMaterialClassifier.Classify("SAL_HED_PRO_MAT"));
-        TestAssert.Equal(HeadMaterialFamily.SalarianEyes, HeadMaterialClassifier.Classify("SAL_HED_EYE_MAT"));
-        TestAssert.Equal(HeadMaterialFamily.BatarianSkin, HeadMaterialClassifier.Classify("BAT_HED_PRO_MASTER_MAT"));
-        TestAssert.Equal(HeadMaterialFamily.Hair, HeadMaterialClassifier.Classify("HMM_HIR_SHORT_MAT", attachment: true));
-        TestAssert.Equal(HeadMaterialFamily.MaskedHair, HeadMaterialClassifier.Classify("HMM_HIR_PROShort01_MAT_1b", attachment: true));
-        TestAssert.Equal(HeadMaterialFamily.Hair, HeadMaterialClassifier.Classify("HMM_HIR_PROShort02_MAT", attachment: true));
-        TestAssert.Equal(HeadMaterialFamily.Accessory, HeadMaterialClassifier.Classify("Visor_MAT", attachment: true));
-        TestAssert.Equal(HeadMaterialFamily.Skin,
-            HeadMaterialClassifier.ClassifyChain(["TUR_HED_PRO_MAT", "Generic_Head_Master"]));
-        TestAssert.Equal(HeadMaterialFamily.Eyes,
-            HeadMaterialClassifier.ClassifyChain(["HMM_HED_PRO_MAT", "HMM_EYE_MASTER_MAT"]));
-        TestAssert.Equal("HMM_EYE_MASTER_MAT",
-            HeadMaterialClassifier.EffectiveRootIdentity(["ASA_EYE_MIC", "HMF_EYE_PARENT", "HMM_EYE_MASTER_MAT"]));
+        TestAssert.Equal(HeadMaterialFamily.Hair,
+            HeadMaterialCatalog.Find(MorphFaceGame.LE1, "HMN_HED_PRO_ME3_MASTER_Hair_MAT")!.Family);
+        TestAssert.Equal(HeadMaterialFamily.Accessory,
+            HeadMaterialCatalog.Find(MorphFaceGame.LE2, "hmf_vsr_master_mat")!.Family);
+        TestAssert.True(HeadMaterialCatalog.Find(MorphFaceGame.LE3, "HMF_VSR_MASTER_MAT") is null,
+            "A master absent from this game was recognised.");
+        foreach (var lookalike in new[] { "My_Hair_Master", "CombinedEffect_FaceSplash", "HMM_HED_PROBase_MAT", "HMN_HED_PRO_MASTER_HAIR_MAT_Copy" })
+            TestAssert.True(HeadMaterialCatalog.Find(MorphFaceGame.LE1, lookalike) is null,
+                "A name fragment or approximate name granted a supported material treatment.");
+        TestAssert.True(!HeadMaterialCatalog.Find(MorphFaceGame.LE1, "HMN_HED_PRO_MASTER_HAIR_MAT")!.LayeredHairHighlights &&
+                        HeadMaterialCatalog.Find(MorphFaceGame.LE3, "HMN_HED_PRO_MASTER_HAIR_MAT")!.LayeredHairHighlights,
+            "The same master name lost its game-specific shader treatment.");
     }
-
     private static void BioMorphFaceSearchMatchesNamesAndPaths()
     {
         var face = new BioMorphFaceListItem(

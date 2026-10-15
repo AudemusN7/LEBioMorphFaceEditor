@@ -353,17 +353,24 @@ public sealed class MorphFacePackageReader : IDisposable
             var (master, graphDependencies) = ResolveMaterialMaster(materialExport);
             dependencies.UnionWith(graphDependencies);
 
-            // Keep the same effective-root rule used by full material evidence:
-            // a child MIC name cannot grant itself a material family.
-            var family = HumanMaterialProfiles.ClassifyMaster(master.ObjectNameString);
-            if (family == HeadMaterialFamily.Unknown)
-                family = HeadMaterialClassifier.Classify(master.InstancedFullPath);
+            var family = DescribeMaterialMaster(meshExport.Game, master)?.Family ?? HeadMaterialFamily.Unknown;
 
             return new MeshMaterialSourceSlot(pair.Key, source, family, pair.Value.ToArray());
         }).ToArray();
 
         return new MeshMaterialSourceCatalog(ToIdentity(meshExport)!, slots, dependencies);
     }
+
+    internal static HeadMaterialDefinition? DescribeMaterialMaster(MEGame game, ExportEntry? master) =>
+        master?.Game == game && master.ClassName.Equals("Material", StringComparison.OrdinalIgnoreCase)
+            ? HeadMaterialCatalog.Find(game switch
+            {
+                MEGame.LE1 => MorphFaceGame.LE1,
+                MEGame.LE2 => MorphFaceGame.LE2,
+                MEGame.LE3 => MorphFaceGame.LE3,
+                _ => MorphFaceGame.Unsupported
+            }, master.ObjectName.Instanced)
+            : null;
 
     private (ExportEntry Master, IReadOnlySet<string> Dependencies) ResolveMaterialMaster(ExportEntry material)
     {
@@ -628,15 +635,7 @@ public sealed class MorphFacePackageReader : IDisposable
             }
         }
 
-        var lod = lods[0];
-        return new SkeletalMeshAsset(
-            ToIdentity(export)!,
-            lod.Positions,
-            lod.Normals,
-            lod.Topology,
-            lod.RenderData,
-            lods.Select(value => value.Positions).ToArray(),
-            lods);
+        return new SkeletalMeshAsset(ToIdentity(export)!, lods);
     }
 
     private static SkeletalMeshLod ReadSkeletalMeshLod(

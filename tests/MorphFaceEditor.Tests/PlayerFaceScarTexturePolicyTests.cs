@@ -1,3 +1,4 @@
+using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.Core.Randomisation;
 
@@ -29,13 +30,13 @@ public static class PlayerFaceScarTexturePolicyTests
         };
         var candidates = new[]
         {
-            Candidate(TextureCatalogGame.LE2, "BIOG_HMM_HED_PROMorph.Diffuse.HMM_HED_PROCustom_Military_Diff", "BIOG_HMM_HED_PROMorph.pcc", TextureCatalogOrigin.BaseGame, 10),
-            Candidate(TextureCatalogGame.LE2, "BIOG_HMM_HED_PROMorph.Normal.HMM_HED_PROCustom_Military_Norm", "BIOG_HMM_HED_PROMorph.pcc", TextureCatalogOrigin.BaseGame, 11),
-            Candidate(TextureCatalogGame.LE2, "BIOG_HMF_HED_PROMorph_R.Diffuse.HMF_HED_PROCustom_Frek_Diff", "BIOG_HMF_HED_PROMorph_R.pcc", TextureCatalogOrigin.BaseGame, 12),
-            Candidate(TextureCatalogGame.LE2, "BIOG_HMF_HED_PROMorph_R.Normal.HMF_HED_PROCustom_Military_Norm", "BIOG_HMF_HED_PROMorph_R.pcc", TextureCatalogOrigin.BaseGame, 13),
-            Candidate(TextureCatalogGame.LE2, "BIOG_HMM_HED_PROMorph.Diffuse.HMM_HED_PROCustom_ModFace_Diff", "ThirdParty.pcc", TextureCatalogOrigin.Mod, 14),
-            Candidate(TextureCatalogGame.LE3, "BIOG_HMM_HED_PROMorph.Diffuse.HMM_HED_PROCustom_OtherGame_Diff", "BIOG_HMM_HED_PROMorph.pcc", TextureCatalogOrigin.BaseGame, 15),
-            Candidate(TextureCatalogGame.LE2, "BIOG_HMM_HED_PROMorph.Normal.HMM_HED_PROCustom_OtherGame_Norm", "BIOG_HMM_HED_PROMorph.pcc", TextureCatalogOrigin.BaseGame, 16)
+            Candidate(MorphFaceGame.LE2, "BIOG_HMM_HED_PROMorph.Diffuse.HMM_HED_PROCustom_Military_Diff", "BIOG_HMM_HED_PROMorph.pcc", TextureCatalogOrigin.BaseGame, 10),
+            Candidate(MorphFaceGame.LE2, "BIOG_HMM_HED_PROMorph.Normal.HMM_HED_PROCustom_Military_Norm", "BIOG_HMM_HED_PROMorph.pcc", TextureCatalogOrigin.BaseGame, 11),
+            Candidate(MorphFaceGame.LE2, "BIOG_HMF_HED_PROMorph_R.Diffuse.HMF_HED_PROCustom_Frek_Diff", "BIOG_HMF_HED_PROMorph_R.pcc", TextureCatalogOrigin.BaseGame, 12),
+            Candidate(MorphFaceGame.LE2, "BIOG_HMF_HED_PROMorph_R.Normal.HMF_HED_PROCustom_Military_Norm", "BIOG_HMF_HED_PROMorph_R.pcc", TextureCatalogOrigin.BaseGame, 13),
+            Candidate(MorphFaceGame.LE2, "BIOG_HMM_HED_PROMorph.Diffuse.HMM_HED_PROCustom_ModFace_Diff", "ThirdParty.pcc", TextureCatalogOrigin.Mod, 14),
+            Candidate(MorphFaceGame.LE3, "BIOG_HMM_HED_PROMorph.Diffuse.HMM_HED_PROCustom_OtherGame_Diff", "BIOG_HMM_HED_PROMorph.pcc", TextureCatalogOrigin.BaseGame, 15),
+            Candidate(MorphFaceGame.LE2, "BIOG_HMM_HED_PROMorph.Normal.HMM_HED_PROCustom_OtherGame_Norm", "BIOG_HMM_HED_PROMorph.pcc", TextureCatalogOrigin.BaseGame, 16)
         };
 
         var pool = PlayerFaceScarTexturePolicy.CreateFacePool("le2-human-male", npc, candidates);
@@ -63,8 +64,8 @@ public static class PlayerFaceScarTexturePolicyTests
         };
         var candidates = new[]
         {
-            Candidate(TextureCatalogGame.LE1, "BIOG_HMF_HED_PROMorph_R.Diffuse.HMF_HED_PROCustom_Frek_Diff", "BIOG_HMF_HED_PROMorph_R.pcc", TextureCatalogOrigin.BaseGame, 1),
-            Candidate(TextureCatalogGame.LE1, "BIOG_HMF_HED_PROMorph_R.Normal.HMF_HED_PROCustom_Military_Norm", "BIOG_HMF_HED_PROMorph_R.pcc", TextureCatalogOrigin.BaseGame, 2)
+            Candidate(MorphFaceGame.LE1, "BIOG_HMF_HED_PROMorph_R.Diffuse.HMF_HED_PROCustom_Frek_Diff", "BIOG_HMF_HED_PROMorph_R.pcc", TextureCatalogOrigin.BaseGame, 1),
+            Candidate(MorphFaceGame.LE1, "BIOG_HMF_HED_PROMorph_R.Normal.HMF_HED_PROCustom_Military_Norm", "BIOG_HMF_HED_PROMorph_R.pcc", TextureCatalogOrigin.BaseGame, 2)
         };
         var pool = PlayerFaceScarTexturePolicy.CreateFacePool("le1-human-female", npc, candidates);
         var validPairs = pool.Select(value => (value.DiffusePath, value.NormalPath)).ToHashSet();
@@ -89,10 +90,10 @@ public static class PlayerFaceScarTexturePolicyTests
             TextureCatalogOrigin.OfficialDlc, 72, 500);
         var candidates = new[]
         {
-            new TextureCatalogCandidate(TextureCatalogGame.LE3,
+            new TextureCatalogCandidate(MorphFaceGame.LE3,
                 "BIOG_HMF_HED_PROMorph_R.Diffuse.HMF_HED_PROCustom_Official_Diff",
                 dlcDiffuse, [baseDiffuse, dlcDiffuse, modDiffuse]) { IsEligibleOfficialDefault = true },
-            new TextureCatalogCandidate(TextureCatalogGame.LE3,
+            new TextureCatalogCandidate(MorphFaceGame.LE3,
                 "BIOG_HMF_HED_PROMorph_R.Normal.HMF_HED_PROCustom_Official_Norm",
                 dlcNormal, [baseNormal, dlcNormal]) { IsEligibleOfficialDefault = true }
         };
@@ -108,7 +109,7 @@ public static class PlayerFaceScarTexturePolicyTests
 
     private static void HmfRoughSetIsIncluded()
     {
-        foreach (var game in Enum.GetValues<TextureCatalogGame>())
+        foreach (var game in new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 })
         {
             const string package = "BIOG_HMF_HED_PROMorph_R.pcc";
             var candidates = new[]
@@ -135,8 +136,8 @@ public static class PlayerFaceScarTexturePolicyTests
     {
         var candidates = new[]
         {
-            Candidate(TextureCatalogGame.LE3, "BIOG_HMM_HED_PROMorph.Scars.HMM_HED_PROCustom_Scr1", "BIOG_HMM_HED_PROMorph.pcc", TextureCatalogOrigin.BaseGame, 21),
-            Candidate(TextureCatalogGame.LE3, "BIOG_HMM_HED_PROMorph.Scars.HMM_HED_PROCustom_Scr2", "BIOG_HMM_HED_PROMorph.pcc", TextureCatalogOrigin.BaseGame, 22)
+            Candidate(MorphFaceGame.LE3, "BIOG_HMM_HED_PROMorph.Scars.HMM_HED_PROCustom_Scr1", "BIOG_HMM_HED_PROMorph.pcc", TextureCatalogOrigin.BaseGame, 21),
+            Candidate(MorphFaceGame.LE3, "BIOG_HMM_HED_PROMorph.Scars.HMM_HED_PROCustom_Scr2", "BIOG_HMM_HED_PROMorph.pcc", TextureCatalogOrigin.BaseGame, 22)
         };
         var seenNone = false;
         var seenScar = false;
@@ -171,11 +172,11 @@ public static class PlayerFaceScarTexturePolicyTests
         var mod = Occurrence("ThirdParty.pcc", TextureCatalogOrigin.Mod, 99, 99);
         var candidates = new[]
         {
-            new TextureCatalogCandidate(TextureCatalogGame.LE2,
+            new TextureCatalogCandidate(MorphFaceGame.LE2,
                 "BIOG_HMM_HED_PROMorph.Scars.HMM_HED_PROCustom_Scr7", officialDlc,
                 [mod, baseGame, officialDlc]) { IsEligibleOfficialDefault = true },
-            Candidate(TextureCatalogGame.LE2, "BIOG_HMM_HED_PROMorph.Scars.HMM_HED_PROCustom_Scr8", "ThirdParty.pcc", TextureCatalogOrigin.Mod, 32),
-            Candidate(TextureCatalogGame.LE2, "BIOG_HMM_HED_PROMorph.Scars.HMM_HED_PROCustom_Scr9_extra", "BIOG_HMM_HED_PROMorph.pcc", TextureCatalogOrigin.BaseGame, 33)
+            Candidate(MorphFaceGame.LE2, "BIOG_HMM_HED_PROMorph.Scars.HMM_HED_PROCustom_Scr8", "ThirdParty.pcc", TextureCatalogOrigin.Mod, 32),
+            Candidate(MorphFaceGame.LE2, "BIOG_HMM_HED_PROMorph.Scars.HMM_HED_PROCustom_Scr9_extra", "BIOG_HMM_HED_PROMorph.pcc", TextureCatalogOrigin.BaseGame, 33)
         };
         var selected = Enumerable.Range(0, 64)
             .Select(seed => PlayerFaceScarTexturePolicy.SelectScar("le2-human-male", candidates, seed))
@@ -200,11 +201,11 @@ public static class PlayerFaceScarTexturePolicyTests
     {
         var le1 = new[]
         {
-            Candidate(TextureCatalogGame.LE1, "BIOG_HMF_HED_PROMorph_R.Scars.HMF_HED_PROCustom_Scr1", "BIOG_HMF_HED_PROMorph_R.pcc", TextureCatalogOrigin.BaseGame, 41)
+            Candidate(MorphFaceGame.LE1, "BIOG_HMF_HED_PROMorph_R.Scars.HMF_HED_PROCustom_Scr1", "BIOG_HMF_HED_PROMorph_R.pcc", TextureCatalogOrigin.BaseGame, 41)
         };
         var le2 = new[]
         {
-            Candidate(TextureCatalogGame.LE2, "BIOG_HMF_HED_PROMorph_R.Scars.HMF_HED_PROCustom_Scr1", "BIOG_HMF_HED_PROMorph_R.pcc", TextureCatalogOrigin.BaseGame, 42)
+            Candidate(MorphFaceGame.LE2, "BIOG_HMF_HED_PROMorph_R.Scars.HMF_HED_PROCustom_Scr1", "BIOG_HMF_HED_PROMorph_R.pcc", TextureCatalogOrigin.BaseGame, 42)
         };
 
         var hmfScar = Enumerable.Range(0, 64)
@@ -231,11 +232,11 @@ public static class PlayerFaceScarTexturePolicyTests
         var scarOccurrence = Occurrence(hmmPackage, TextureCatalogOrigin.BaseGame, 93, 1);
         var candidates = new[]
         {
-            new TextureCatalogCandidate(TextureCatalogGame.LE2, diffusePath,
+            new TextureCatalogCandidate(MorphFaceGame.LE2, diffusePath,
                 diffuseOccurrence, [diffuseOccurrence]) { IsEligibleOfficialDefault = true },
-            new TextureCatalogCandidate(TextureCatalogGame.LE2, normalPath,
+            new TextureCatalogCandidate(MorphFaceGame.LE2, normalPath,
                 normalOccurrence, [normalOccurrence]) { IsEligibleOfficialDefault = true },
-            new TextureCatalogCandidate(TextureCatalogGame.LE2, scarPath,
+            new TextureCatalogCandidate(MorphFaceGame.LE2, scarPath,
                 scarOccurrence, [scarOccurrence]) { IsEligibleOfficialDefault = true }
         };
 
@@ -267,7 +268,7 @@ public static class PlayerFaceScarTexturePolicyTests
     }
 
     private static TextureCatalogCandidate Candidate(
-        TextureCatalogGame game,
+        MorphFaceGame game,
         string path,
         string package,
         TextureCatalogOrigin origin,

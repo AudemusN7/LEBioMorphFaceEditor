@@ -163,6 +163,7 @@ public sealed class StandalonePlayerMeshImportService
         ImportedMeshAsset? decoded = null)
     {
         var imported = decoded ?? _interchange.ReadMesh(meshPath);
+        var readPositions = _interchange.ReadMeshPositions(meshPath);
         using var reader = new MorphFacePackageReader();
         var matches = new List<StandalonePlayerMeshRecognition>();
         var candidateDiagnostics = new List<string>();
@@ -172,9 +173,9 @@ public sealed class StandalonePlayerMeshImportService
             var loaded = reader.Load(seedPath, templatePath);
             var baseLod = loaded.BaseHead.FindLod(0);
             candidateDiagnostics.Add(
-                $"{sex}: base {baseLod?.Positions.Length ?? 0} vertices/{baseLod?.RenderData.Indices.Count ?? 0} indices");
+                $"{sex}: base {baseLod?.Positions.Length ?? 0} vertices/{baseLod?.RenderData?.Indices.Count ?? 0} indices");
             var match = MorphMeshTopologyMatcher.Match(imported, loaded.BaseHead);
-            var meshCandidates = _interchange.ReadMeshPositions(meshPath, loaded.BaseHead);
+            var meshCandidates = readPositions(loaded.BaseHead);
             var trustedPrior = meshCandidates
                 .Select(candidate => candidate.Prior)
                 .FirstOrDefault(prior => prior?.BaseHeadPath.Equals(

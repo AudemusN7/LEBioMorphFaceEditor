@@ -199,7 +199,7 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
                     source.NpcFace && slot.Family != HeadMaterialFamily.Skin)
                     continue;
                 if (slot.Family == HeadMaterialFamily.Unknown ||
-                    !HeadMaterialClassifier.IsAssignableHeadFamily(slot.Family))
+                    !HeadMaterialCatalog.IsAssignableHeadFamily(slot.Family))
                 {
                     warnings.Add(
                         Loc.Format("loc_Services_CustomTemplate_SkippedUnprovenFamily", materialSource.InstancedPath));
@@ -287,7 +287,7 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
                     continue;
                 }
                 if (slot.Family == HeadMaterialFamily.Unknown ||
-                    !HeadMaterialClassifier.IsAssignableHeadFamily(slot.Family))
+                    !HeadMaterialCatalog.IsAssignableHeadFamily(slot.Family))
                 {
                     continue;
                 }

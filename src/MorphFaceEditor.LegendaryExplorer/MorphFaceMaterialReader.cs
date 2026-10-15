@@ -428,12 +428,9 @@ internal sealed class MorphFaceMaterialReader(
         }
 
         var properties = materialOverride.GetProperties(packageCache: packageCache);
-        var scalars = properties.GetProp<ArrayProperty<StructProperty>>("m_aScalarOverrides")?
-            .Select(value => new ScalarMaterialOverride(
-                value.GetProp<NameProperty>("nName")?.Value.Instanced ?? string.Empty,
-                value.GetProp<FloatProperty>("sValue")?.Value ?? 0))
+        var scalars = MorphFacePackageCodec.ReadScalars(properties)
             .Where(value => !string.IsNullOrWhiteSpace(value.Name))
-            .ToArray() ?? [];
+            .ToArray();
         var vectors = properties.GetProp<ArrayProperty<StructProperty>>("m_aColorOverrides")?
             .Select(value => new VectorMaterialOverride(
                 value.GetProp<NameProperty>("nName")?.Value.Instanced ?? string.Empty,

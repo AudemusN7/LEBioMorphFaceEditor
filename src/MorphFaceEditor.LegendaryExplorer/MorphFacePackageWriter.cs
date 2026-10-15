@@ -5,6 +5,7 @@ using LegendaryExplorerCore.Unreal;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
 using BinaryMorphFace = LegendaryExplorerCore.Unreal.BinaryConverters.BioMorphFace;
+using static MorphFaceEditor.LegendaryExplorer.MorphFacePackageCodec;
 
 namespace MorphFaceEditor.LegendaryExplorer;
 
@@ -297,31 +298,13 @@ public sealed class MorphFacePackageWriter
         ICollection<string> warnings)
     {
         var properties = face.GetProperties();
-        properties.AddOrReplaceProp(new ArrayProperty<StructProperty>(
-            draft.MorphFeatures.Select(value => new StructProperty(
-                "MorphFeature",
-                false,
-                new NameProperty(value.Name, "sFeatureName"),
-                new FloatProperty(value.Offset, "Offset"))),
-            "m_aMorphFeatures"));
-        properties.AddOrReplaceProp(new ArrayProperty<StructProperty>(
-            draft.FinalSkeleton.Select(value => new StructProperty(
-                "OffsetBonePos",
-                false,
-                new NameProperty(value.BoneName, "nName"),
-                VectorProperty(value.Translation, "vPos"))),
-            "m_aFinalSkeleton"));
-
         properties.AddOrReplaceProp(new ObjectProperty(
             ResolveDraftEntry(package, draft.BaseHeadReference, "SkeletalMesh", required: true),
             "m_oBaseHead"));
         WriteAttachmentReferences(package, properties, draft, warnings);
 
-        var binary = new BinaryMorphFace
-        {
-            LODs = draft.BakedLods.Select(lod => lod.ToArray()).ToArray()
-        };
-        face.WritePropertiesAndBinary(properties, binary);
+        WriteMorphData(face, new MorphFaceMorphData(
+            draft.MorphFeatures, draft.FinalSkeleton, draft.BakedLods), properties);
     }
 
     private static MorphFaceDocument ApplyScalpMaterialSelection(
@@ -353,35 +336,10 @@ public sealed class MorphFacePackageWriter
         IMEPackage package,
         ExportEntry materialOverride,
         MorphFaceMaterialOverrides overrides,
-        ICollection<string> warnings)
-    {
-        var properties = materialOverride.GetProperties();
-        properties.AddOrReplaceProp(new ArrayProperty<StructProperty>(
-            overrides.Scalars.Select(value => new StructProperty(
-                "ScalarParameter",
-                false,
-                new NameProperty(value.Name, "nName"),
-                new FloatProperty(value.Value, "sValue"))),
-            "m_aScalarOverrides"));
-        properties.AddOrReplaceProp(new ArrayProperty<StructProperty>(
-            overrides.Vectors.Select(value => new StructProperty(
-                "ColorParameter",
-                false,
-                new NameProperty(value.Name, "nName"),
-                LinearColorProperty(value.Value, "cValue"))),
-            "m_aColorOverrides"));
-        properties.AddOrReplaceProp(new ArrayProperty<StructProperty>(
-            overrides.Textures.Select(value => new StructProperty(
-                "TextureParameter",
-                [
-                    new NameProperty(value.Name, "nName"),
-                    new ObjectProperty(
-                        ResolveTextureDraftEntry(package, value.TextureReference, warnings),
-                        "m_pTexture")
-                ])),
-            "m_aTextureOverrides"));
-        materialOverride.WriteProperties(properties);
-    }
+        ICollection<string> warnings) =>
+        WriteMaterialData(materialOverride,
+            new MorphFaceMaterialData(overrides.Scalars, overrides.Vectors, overrides.Textures),
+            identity => ResolveTextureDraftEntry(package, identity, warnings));
 
     private static void Verify(
         string packagePath,
@@ -802,41 +760,6 @@ public sealed class MorphFacePackageWriter
         var separator = instancedPath.LastIndexOf('.');
         return separator < 0 ? objectName : $"{instancedPath[..separator]}.{objectName}";
     }
-
-    private static StructProperty VectorProperty(Vector3 value, string name) => new(
-        "Vector",
-        [
-            new FloatProperty(value.X, "X"),
-            new FloatProperty(value.Y, "Y"),
-            new FloatProperty(value.Z, "Z")
-        ],
-        name,
-        true);
-
-    private static StructProperty LinearColorProperty(Vector4 value, string name) => new(
-        "LinearColor",
-        [
-            new FloatProperty(value.X, "R"),
-            new FloatProperty(value.Y, "G"),
-            new FloatProperty(value.Z, "B"),
-            new FloatProperty(value.W, "A")
-        ],
-        name,
-        true);
-
-    private static string Name(StructProperty property, string field) =>
-        property.GetProp<NameProperty>(field)?.Value.Instanced ?? string.Empty;
-
-    private static Vector3 ReadVector(StructProperty? property) =>
-        property is null ? Vector3.Zero : CommonStructs.GetVector3(property);
-
-    private static Vector4 ReadLinearColor(StructProperty? property) => property is null
-        ? Vector4.Zero
-        : new Vector4(
-            property.GetProp<FloatProperty>("R")?.Value ?? 0,
-            property.GetProp<FloatProperty>("G")?.Value ?? 0,
-            property.GetProp<FloatProperty>("B")?.Value ?? 0,
-            property.GetProp<FloatProperty>("A")?.Value ?? 0);
 
     private static void VerifyReference(IEntry? actual, AssetIdentity? expected, string label)
     {

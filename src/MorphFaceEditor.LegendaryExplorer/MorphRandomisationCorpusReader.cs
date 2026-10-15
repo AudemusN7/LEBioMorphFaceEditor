@@ -50,18 +50,13 @@ public static class MorphRandomisationCorpusReader
                          string.Equals(value.ClassName, "BioMorphFace", StringComparison.OrdinalIgnoreCase)))
             {
                 var properties = export.GetProperties();
-                var features = properties.GetProp<ArrayProperty<StructProperty>>("m_aMorphFeatures")?
-                    .Select(item => new MorphFeatureValue(
-                        item.GetProp<NameProperty>("sFeatureName")?.Value.Instanced ?? string.Empty,
-                        item.GetProp<FloatProperty>("Offset")?.Value ?? 0f))
-                    .ToArray() ?? [];
                 var raw = new RawMorphRandomisationFace(
                     game,
                     path,
                     export.InstancedFullPath,
                     properties.GetProp<ObjectProperty>("m_oBaseHead")?
                         .ResolveToEntry(package)?.InstancedFullPath,
-                    features);
+                    MorphFacePackageCodec.ReadMorphFeatures(properties));
                 try
                 {
                     var evidence = materialReader.LoadRandomisationMaterialEvidence(path, export.InstancedFullPath);

@@ -23,7 +23,7 @@ public static class PackageContextTests
     public static IReadOnlyList<TestCase> All { get; } =
     [
         new("LE2 BioD workspaces retain post-load import resolution", Le2BioDWorkspaceRetainsPostLoadResolution),
-        new("LE1 context clone creates an independently named face and material child", CloneLe1Morph),
+        new("LE1 context clone and loaded save preserve authored fields and independent child ownership", CloneLe1Morph),
         new("LE1 context delete trashes a face only in its package workspace", DeleteLe1Morph),
         new("morph deletion detects incoming references without modifying the PCC", MorphDeleteReferences),
         new("LE1 morph export creates and extends a dependency-only PCC without changing paths", ExportLe1MorphPackage),
@@ -209,6 +209,18 @@ public static class PackageContextTests
                     StringComparison.OrdinalIgnoreCase),
                 "The package workspace was not created under Local AppData.");
             var source = ReadFaces(workspace.WorkingPath).First();
+            using (var package = MEPackageHandler.OpenMEPackage(workspace.WorkingPath, forceLoadFromDisk: true))
+            {
+                var face = package.FindExport(source.InstancedPath, "BioMorphFace")!;
+                var features = face.GetProperty<ArrayProperty<StructProperty>>("m_aMorphFeatures")!;
+                features.Add(new StructProperty("MorphFeature", false,
+                    new NameProperty("MFE_UnknownZero", "sFeatureName"), new FloatProperty(0, "Offset")));
+                face.WriteProperty(features);
+                face.WriteProperty(new StrProperty("Unowned face data", "MFE_PreservedField"));
+                var material = (ExportEntry)face.GetProperty<ObjectProperty>("m_oMaterialOverrides")!.ResolveToEntry(package);
+                material.WriteProperty(new StrProperty("Unowned material data", "MFE_PreservedField"));
+                package.Save(workspace.WorkingPath);
+            }
             var sourceMorph = service.CaptureMorphData(workspace.WorkingPath, source.InstancedPath);
             var sourceMaterial = service.CaptureMaterialData(workspace.WorkingPath, source.InstancedPath);
 
@@ -222,6 +234,21 @@ public static class PackageContextTests
                 "The cloned BioMorphFace did not receive the requested object name.");
             TestAssert.True(result.MaterialOverrideInstancedPath.StartsWith(result.FaceInstancedPath + ".", StringComparison.OrdinalIgnoreCase),
                 "The cloned BioMaterialOverride was not owned by the cloned face.");
+
+            using (var reader = new MorphFacePackageReader())
+            {
+                var loaded = reader.Load(workspace.WorkingPath, result.FaceInstancedPath, decodeTextures: false);
+                TestAssert.Equal(0f, loaded.Document.GetFeatureOffset("MFE_UnknownZero"));
+                new MorphFacePackageWriter().SaveExisting(loaded.Document);
+            }
+            AssertMorphEqual(sourceMorph, service.CaptureMorphData(workspace.WorkingPath, result.FaceInstancedPath));
+            using (var reopened = MEPackageHandler.OpenMEPackage(workspace.WorkingPath, forceLoadFromDisk: true))
+            {
+                TestAssert.Equal("Unowned face data", reopened.FindExport(result.FaceInstancedPath, "BioMorphFace")!
+                    .GetProperty<StrProperty>("MFE_PreservedField")!.Value);
+                TestAssert.Equal("Unowned material data", reopened.FindExport(result.MaterialOverrideInstancedPath, "BioMaterialOverride")!
+                    .GetProperty<StrProperty>("MFE_PreservedField")!.Value);
+            }
             TestAssert.Equal(sourceFingerprint, PackageFingerprint.Capture(path));
             TestAssert.True(ReadFaces(path).All(face => face.ObjectName != "MFE_ContextClone_Test"),
                 "The context clone changed the source PCC before an explicit workspace commit.");

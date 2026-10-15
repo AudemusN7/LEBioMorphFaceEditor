@@ -8,7 +8,6 @@ using LegendaryExplorerCore.Unreal.ObjectInfo;
 using MorphFaceEditor.Core.Diagnostics;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
-using BinaryMorphFace = LegendaryExplorerCore.Unreal.BinaryConverters.BioMorphFace;
 
 namespace MorphFaceEditor.LegendaryExplorer;
 
@@ -513,30 +512,17 @@ public sealed class MorphFacePackageReader : IDisposable
     private MorphFaceDocument ReadDocument(ExportEntry export)
     {
         var properties = export.GetProperties();
-        var binary = export.GetBinaryData<BinaryMorphFace>();
-        var features = properties.GetProp<ArrayProperty<StructProperty>>("m_aMorphFeatures")?
-            .Select(item => new MorphFeatureValue(
-                item.GetProp<NameProperty>("sFeatureName")?.Value.Instanced ?? string.Empty,
-                item.GetProp<FloatProperty>("Offset")?.Value ?? 0f))
-            .ToArray() ?? [];
-        var bones = properties.GetProp<ArrayProperty<StructProperty>>("m_aFinalSkeleton")?
-            .Select(item => new BoneTranslation(
-                item.GetProp<NameProperty>("nName")?.Value.Instanced ?? string.Empty,
-                ReadVector(item.GetProp<StructProperty>("vPos"))))
-            .ToArray() ?? [];
-        var lods = binary.LODs?
-            .Select(lod => lod?.ToArray() ?? [])
-            .ToArray() ?? [];
+        var morph = MorphFacePackageCodec.ReadMorphData(export, properties);
 
         return new MorphFaceDocument(
             ToIdentity(export)!,
             CaptureFingerprint(export.FileRef.FilePath),
             ToIdentity(properties.GetProp<ObjectProperty>("m_oBaseHead")?.ResolveToEntry(export.FileRef)),
             ToIdentity(properties.GetProp<ObjectProperty>("m_oHairMesh")?.ResolveToEntry(export.FileRef)),
-            features,
-            bones,
+            morph.MorphFeatures,
+            morph.FinalSkeleton,
             MorphFaceMaterialOverrides.Empty,
-            lods,
+            morph.BakedLods,
             properties.Select(property => property.Name.Instanced).ToArray());
     }
 
@@ -888,9 +874,6 @@ public sealed class MorphFacePackageReader : IDisposable
             weights[2] * scale,
             weights[3] * scale);
     }
-
-    private static Vector3 ReadVector(StructProperty? property) =>
-        property is null ? Vector3.Zero : CommonStructs.GetVector3(property);
 
     private ExportEntry? ResolveExport(IEntry? entry) => _referenceResolver.Resolve(entry);
 

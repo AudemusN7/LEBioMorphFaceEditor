@@ -82,7 +82,6 @@ internal static class ExternalSkeletalMeshMaterializer
             sourceExport,
             destinationParent: null,
             textureCatalog: null,
-            preferBiogTextures: false,
             warnings: warnings,
             applyCorpusMaterialPolicy: true,
             targetPathOverride: instancedPath);

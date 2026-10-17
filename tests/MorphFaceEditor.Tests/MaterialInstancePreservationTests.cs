@@ -55,7 +55,7 @@ internal static class MaterialInstancePreservationTests
             "Donor comparison changed the original MIC data.");
         using var destination = MEPackageHandler.CreateMemoryEmptyPackage("MFE-UnchangedMic.pcc", MEGame.LE1);
         _ = PccPackageWorkflow.ImportDependencyGraph(destination,
-            authored.FindExport(MeshPath, "SkeletalMesh")!, null, null, false,
+            authored.FindExport(MeshPath, "SkeletalMesh")!, null, null,
             targetPathOverride: MeshPath, installedAssets: resolver);
         TestAssert.True(destination.FindExport(MicPath, "MaterialInstanceConstant") is not null,
             "An unchanged stock instance unnecessarily received a new export name.");
@@ -105,7 +105,7 @@ internal static class MaterialInstancePreservationTests
             var sourceMesh = authored.FindExport(MeshPath, "SkeletalMesh")!;
             var mesh = preserveStructure
                 ? PccPackageWorkflow.ImportRootPreservingStructure(destination, sourceMesh, installedAssets: resolver)
-                : PccPackageWorkflow.ImportDependencyGraph(destination, sourceMesh, null, null, false,
+                : PccPackageWorkflow.ImportDependencyGraph(destination, sourceMesh, null, null,
                     targetPathOverride: MeshPath, installedAssets: resolver);
             var copiedMic = destination.GetUExport(mesh.GetBinaryData<SkeletalMesh>().Materials.Single());
             TestAssert.Equal(MicPath + "_MFE2", copiedMic.InstancedFullPath);
@@ -125,7 +125,7 @@ internal static class MaterialInstancePreservationTests
             "The authored edited instance was also copied at the stock name.");
         TestAssert.Equal(TexturePath, savedMic.GetProperty<ObjectProperty>("MFE_CustomTexture")!.ResolveToEntry(reopened)!.InstancedFullPath);
         using var second = MEPackageHandler.CreateMemoryEmptyPackage("MFE-MicSecondExport.pcc", MEGame.LE1);
-        var secondMesh = PccPackageWorkflow.ImportDependencyGraph(second, savedMesh, null, null, false,
+        var secondMesh = PccPackageWorkflow.ImportDependencyGraph(second, savedMesh, null, null,
             targetPathOverride: MeshPath, installedAssets: resolver);
         var secondMic = second.GetUExport(secondMesh.GetBinaryData<SkeletalMesh>().Materials.Single());
         TestAssert.Equal(MicPath + "_MFE2", secondMic.InstancedFullPath);
@@ -203,7 +203,7 @@ internal static class MaterialInstancePreservationTests
         TestAssert.True(!MaterialInstanceSourcePolicy.OverridesOfficialInstance(mic, new InstalledGameAssetResolver(), cache),
             "Official Afro copies with equivalent qualified texture paths still look edited.");
         using var destination = MEPackageHandler.CreateMemoryEmptyPackage("MFE-AfroMic.pcc", MEGame.LE1);
-        var copied = PccPackageWorkflow.ImportDependencyGraph(destination, mic, null, null, false,
+        var copied = PccPackageWorkflow.ImportDependencyGraph(destination, mic, null, null,
             targetPathOverride: "BIOG_HMF_HIR_PRO.Afro.HMF_HIR_Afr_MAT_1a");
         TestAssert.Equal("BIOG_HMF_HIR_PRO.Afro.HMF_HIR_Afr_MAT_1a", copied.InstancedFullPath);
     }
@@ -272,7 +272,7 @@ internal static class MaterialInstancePreservationTests
                 "The intact official variant was not recognized: " + string.Join(" | ", records.SelectMany(record => record.Differences)));
         using (var destination = MEPackageHandler.CreateMemoryEmptyPackage(output, MEGame.LE1))
         {
-            PccPackageWorkflow.ImportDependencyGraph(destination, source, null, null, false,
+            PccPackageWorkflow.ImportDependencyGraph(destination, source, null, null,
                 targetPathOverride: MicPath, installedAssets: resolver);
             destination.Save(output);
         }

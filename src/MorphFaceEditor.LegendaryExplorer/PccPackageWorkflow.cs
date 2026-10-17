@@ -20,14 +20,73 @@ internal static class PccPackageWorkflow
 {
     private static readonly ConditionalWeakTable<IMEPackage, ExplicitTextureLeafState> ExplicitTextureLeaves = new();
     private static readonly ConditionalWeakTable<IMEPackage, HashSet<string>> PersistedTextureLeafNames = new();
+    private static readonly ConditionalWeakTable<IMEPackage, HashSet<string>> NewFaceStartupAssets = new();
     private const string ExplicitTextureNamePrefix = "MFE_ExplicitTexture2D_";
+
+    // An independently named face PCC cannot inherit its donor's BioD/BioP
+    // loading context. Only exact globally available assets may remain external.
+    // Capture once per operation; the completed clone carries the same proof.
+    internal static void ConfigureNewFacePackage(IMEPackage package, IEnumerable<string>? startupPackagePaths = null)
+    {
+        var safeNames = EntryImporter.FilesSafeToImportFrom(package.Game).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var assets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in (startupPackagePaths ?? InstalledGameAssetResolver.GetOfficialPackageFiles(package.Game).Values)
+                     .Where(path => safeNames.Contains(Path.GetFileName(path))).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            using var startup = MEPackageHandler.UnsafePartialLoad(path, _ => false);
+            if (startup.Game != package.Game) continue;
+            foreach (var matches in startup.Exports.Where(export => InstalledAssetOccurrence.IsSupportedClass(export.ClassName))
+                         .GroupBy(export => $"{export.ClassName}|{export.MemoryFullPath}", StringComparer.OrdinalIgnoreCase))
+                if (matches.Count() == 1) assets.Add(matches.Key);
+        }
+        NewFaceStartupAssets.Add(package, assets);
+    }
+
+    private static MaterialOracleEntryKind ExpectedKind(IMEPackage destination, string className, string path,
+        bool applyCorpusMaterialPolicy = true) =>
+        NewFaceStartupAssets.TryGetValue(destination, out var startupAssets) && InstalledAssetOccurrence.IsSupportedClass(className)
+            ? startupAssets.Contains($"{className}|{path}") || IsHarmlessNativeImport(destination.Game, className, path)
+                ? MaterialOracleEntryKind.Import : MaterialOracleEntryKind.Export
+            : applyCorpusMaterialPolicy ? MaterialDependencyOracle.Instance.GetKind(destination.Game, className, path)
+                : MaterialOracleEntryKind.Unknown;
+
+    // The stock LE2 material graph references this missing texture. Community
+    // Patch may supply it, but its absence is harmless and must not block PCCs.
+    private static bool IsHarmlessNativeImport(MEGame game, string className, string path) =>
+        game == MEGame.LE2 && className.Equals("Texture2D", StringComparison.OrdinalIgnoreCase) &&
+        path.Equals("BIOG_Humanoid_MASTER_MTR_R.Skin_HumanHED_SpecMulitplier_Mask", StringComparison.OrdinalIgnoreCase);
+
+    internal static bool IsGuaranteedStartupImport(IEntry entry) => entry is ImportEntry &&
+        NewFaceStartupAssets.TryGetValue(entry.FileRef, out var assets) &&
+        assets.Contains($"{entry.ClassName}|{entry.InstancedFullPath}");
+
+    private static InvalidDataException MissingExportDependency(string className, string path) =>
+        UserFacingMessage.CreateError("loc_PccSave_MissingDependency",
+            $"Cannot include {className} '{path}' in the PCC: no exact export donor could be resolved.", className, path);
+
+    private static ExportEntry RequireExportDependency(IMEPackage destination, IEntry reference,
+        GamePackageReferenceResolver resolver, string purpose) =>
+        NewFaceStartupAssets.TryGetValue(destination, out _)
+            ? resolver.Resolve(reference) ?? throw MissingExportDependency(reference.ClassName, CanonicalPath(reference))
+            : resolver.Require(reference, purpose);
+
+    private static void VerifyNewFaceReferences(ExportEntry root, IReadOnlySet<string> startupAssets)
+    {
+        var unsafeImport = DependencyEntries(root).OfType<ImportEntry>().FirstOrDefault(entry =>
+            InstalledAssetOccurrence.IsSupportedClass(entry.ClassName) &&
+            !IsHarmlessNativeImport(root.Game, entry.ClassName, entry.InstancedFullPath) &&
+            !startupAssets.Contains($"{entry.ClassName}|{entry.InstancedFullPath}"));
+        if (unsafeImport is not null)
+            throw UserFacingMessage.CreateError("loc_PccSave_UnsafeDependency",
+                $"New face PCC retains {unsafeImport.ClassName} import '{unsafeImport.InstancedFullPath}' without an exact guaranteed startup source.",
+                unsafeImport.ClassName, unsafeImport.InstancedFullPath);
+    }
 
     internal static ExportEntry ImportDependencyGraph(
         IMEPackage destination,
         ExportEntry source,
         IEntry? destinationParent,
         IReadOnlyList<TextureCatalogCandidate>? textureCatalog,
-        bool preferBiogTextures,
         ICollection<string>? warnings = null,
         bool applyCorpusMaterialPolicy = true,
         IReadOnlyList<IEntry>? requiredExportReferences = null,
@@ -46,7 +105,6 @@ internal static class PccPackageWorkflow
         using var session = new GraphImportSession(
             destination,
             textureCatalog ?? [],
-            preferBiogTextures,
             warnings,
             applyCorpusMaterialPolicy,
             requiredExportReferences ?? [],
@@ -61,7 +119,13 @@ internal static class PccPackageWorkflow
     {
         var explicitLeaves = GetExplicitTextureLeaves(root.FileRef);
         VerifyExplicitTextureLeaves(root.FileRef, explicitLeaves);
-        return PccDependencyGraphSnapshot.Capture(root, explicitLeaves);
+        var snapshot = PccDependencyGraphSnapshot.Capture(root, explicitLeaves);
+        if (NewFaceStartupAssets.TryGetValue(root.FileRef, out var startupAssets))
+        {
+            VerifyNewFaceReferences(root, startupAssets);
+            snapshot = snapshot with { NewFaceStartupAssets = startupAssets };
+        }
+        return snapshot;
     }
 
     /// <summary>
@@ -77,6 +141,8 @@ internal static class PccPackageWorkflow
     {
         if (source.Game != destination.Game)
             throw new InvalidDataException("The completed PCC must be cloned into the same game.");
+        if (NewFaceStartupAssets.TryGetValue(source.FileRef, out var startupAssets))
+            NewFaceStartupAssets.Add(destination, startupAssets);
         var sourceEntries = DependencyEntries(source);
         var preexistingEntries = destination.Exports.Cast<IEntry>().Concat(destination.Imports).ToHashSet();
         foreach (var entry in sourceEntries.Where(entry => entry.ClassName != "Package"))
@@ -199,7 +265,11 @@ internal static class PccPackageWorkflow
         {
             ImportExportDependencies = true,
             GenerateImportsForGlobalFiles = false,
-            CheckImportsWhenExportingToPackage = checkImportsWhenExportingToPackage
+            // The new-package planner below resolves the supported graph and
+            // binds its exact donors. LEC's earlier level-import pass cannot see
+            // those bindings and would resolve the discarded source graph again.
+            CheckImportsWhenExportingToPackage = checkImportsWhenExportingToPackage &&
+                !NewFaceStartupAssets.TryGetValue(destination, out _)
         };
         var plannedMappings = new Dictionary<IEntry, IEntry>();
         PrestageExplicitTextureDonors(destination, source, explicitTextureDonors ?? [], plannedMappings);
@@ -330,7 +400,6 @@ internal static class PccPackageWorkflow
                 donor,
                 destinationParent: null,
                 textureCatalog: null,
-                preferBiogTextures: false,
                 applyCorpusMaterialPolicy: true,
                 targetPathOverride: path);
             if (!embedded.InstancedFullPath.Equals(path, StringComparison.OrdinalIgnoreCase))
@@ -394,6 +463,7 @@ internal static class PccPackageWorkflow
     {
         using var cache = new PackageCache { CacheMaxSize = 64 };
         var resolver = installedAssets ?? new InstalledGameAssetResolver();
+        var references = new GamePackageReferenceResolver(cache, resolver);
         var pending = new Queue<ExportEntry>();
         var visited = new HashSet<int>();
         pending.Enqueue(source);
@@ -407,6 +477,7 @@ internal static class PccPackageWorkflow
                 if (reference.ClassName.Equals("Package", StringComparison.OrdinalIgnoreCase)) continue;
                 if (plannedMappings.ContainsKey(reference)) continue;
                 var nativePath = CanonicalPath(reference);
+                var expected = ExpectedKind(destination, reference.ClassName, nativePath);
                 var authoredInstance = reference is ExportEntry instance && MaterialInstanceSourcePolicy.IsInstance(instance);
                 var editedInstance = authoredInstance && MaterialInstanceSourcePolicy.OverridesOfficialInstance(
                     (ExportEntry)reference, resolver, cache);
@@ -417,36 +488,33 @@ internal static class PccPackageWorkflow
                     continue;
                 }
                 if (authoredInstance &&
-                    (MaterialDependencyOracle.Instance.GetKind(destination.Game, reference.ClassName, nativePath) !=
-                         MaterialOracleEntryKind.Import ||
-                     editedInstance))
+                    (expected != MaterialOracleEntryKind.Import || editedInstance))
                 {
                     var renamed = ImportDependencyGraph(destination, (ExportEntry)reference, destinationParent: null,
-                        textureCatalog: null, preferBiogTextures: false, applyCorpusMaterialPolicy: true,
+                        textureCatalog: null, applyCorpusMaterialPolicy: true,
                         targetPathOverride: nativePath, installedAssets: resolver);
                     plannedMappings[reference] = renamed;
                     continue;
                 }
                 if (InstalledAssetOccurrence.IsSupportedClass(reference.ClassName))
                 {
-                    if (MaterialDependencyOracle.Instance.GetKind(destination.Game, reference.ClassName, nativePath) ==
-                        MaterialOracleEntryKind.Import)
+                    if (expected == MaterialOracleEntryKind.Import)
                     {
-                        plannedMappings[reference] = EnsureImport(destination, nativePath, reference.ClassName);
+                        plannedMappings[reference] = EnsureImport(destination, nativePath, reference.ClassName, reference, resolver);
                         continue;
                     }
-                    if (reference is ImportEntry &&
-                        MaterialDependencyOracle.Instance.GetKind(destination.Game, reference.ClassName, nativePath) ==
-                            MaterialOracleEntryKind.Unknown)
+                    if (reference is ImportEntry && expected == MaterialOracleEntryKind.Unknown)
                     {
                         // Installed resolution supplies content for an identity;
                         // it does not change the source package's import role.
                         // Preserve unknown-role imports instead of embedding the
                         // resolved official export as a side effect of preseed.
-                        plannedMappings[reference] = EnsureImport(destination, nativePath, reference.ClassName);
+                        plannedMappings[reference] = EnsureImport(destination, nativePath, reference.ClassName, reference, resolver);
                         continue;
                     }
                     var selected = resolver.Resolve(reference, cache);
+                    if (selected is null && NewFaceStartupAssets.TryGetValue(destination, out _))
+                        selected = RequireExportDependency(destination, reference, references, "new face PCC dependency");
                     if (selected is not null)
                     {
                         var path = PccAssetPathPolicy.FromExport(selected);
@@ -461,9 +529,9 @@ internal static class PccPackageWorkflow
                             selected,
                             destinationParent: null,
                             textureCatalog: null,
-                            preferBiogTextures: false,
                             applyCorpusMaterialPolicy: true,
                             targetPathOverride: path,
+                            installedAssets: resolver,
                             authoredMaterialDonors: AuthoredMeshMaterials(reference));
                         plannedMappings[reference] = embedded;
                         continue; // The staged official graph supplies its own dependencies.
@@ -604,7 +672,6 @@ internal static class PccPackageWorkflow
         IMEPackage destination,
         AssetIdentity identity,
         IReadOnlyList<TextureCatalogCandidate>? textureCatalog,
-        bool preferBiogTextures,
         ICollection<string>? warnings = null)
     {
         ArgumentNullException.ThrowIfNull(destination);
@@ -615,7 +682,7 @@ internal static class PccPackageWorkflow
         {
             try
             {
-                resolved = PccTextureDependencyResolver.Resolve(identity, catalog, preferBiogTextures);
+                resolved = PccTextureDependencyResolver.Resolve(identity, catalog);
             }
             catch (KeyNotFoundException)
             {
@@ -627,7 +694,7 @@ internal static class PccPackageWorkflow
                    PccAssetPathPolicy.FromDonorOccurrence(identity.InstancedPath, identity.PackagePath);
         if (PackageIntegrity.FindExactEntry(destination, path, "Texture2D") is { } existing)
             return existing;
-        var oracleKind = MaterialDependencyOracle.Instance.GetKind(destination.Game, "Texture2D", path);
+        var oracleKind = ExpectedKind(destination, "Texture2D", path);
         if (oracleKind == MaterialOracleEntryKind.Import)
         {
             return EnsureImport(destination, path, "Texture2D");
@@ -649,7 +716,9 @@ internal static class PccPackageWorkflow
     {
         expected.Verify(reopened);
         VerifyExplicitTextureLeaves(reopened, expected.ExplicitTextureLeaves.ToHashSet(StringComparer.OrdinalIgnoreCase));
-        if (verifyCorpusRoles)
+        if (expected.NewFaceStartupAssets is { } startupAssets)
+            VerifyNewFaceReferences(reopened.FindExport(expected.RootPath, expected.RootClass)!, startupAssets);
+        else if (verifyCorpusRoles)
         {
             VerifyCorpusRoles(reopened,
                 new HashSet<CorpusRoleIssue>(CorpusRoleIssueComparer.Instance),
@@ -667,7 +736,6 @@ internal static class PccPackageWorkflow
     {
         private readonly IMEPackage _destination;
         private readonly IReadOnlyList<TextureCatalogCandidate> _catalog;
-        private readonly bool _preferBiogTextures;
         private readonly ICollection<string>? _warnings;
         private readonly bool _applyCorpusMaterialPolicy;
         private readonly IReadOnlySet<string> _requiredExportIdentities;
@@ -686,7 +754,6 @@ internal static class PccPackageWorkflow
         internal GraphImportSession(
             IMEPackage destination,
             IReadOnlyList<TextureCatalogCandidate> catalog,
-            bool preferBiogTextures,
             ICollection<string>? warnings,
             bool applyCorpusMaterialPolicy,
             IReadOnlyList<IEntry> requiredExportReferences,
@@ -695,13 +762,12 @@ internal static class PccPackageWorkflow
         {
             _destination = destination;
             _catalog = catalog;
-            _preferBiogTextures = preferBiogTextures;
             _warnings = warnings;
             _applyCorpusMaterialPolicy = applyCorpusMaterialPolicy;
             _requiredExportIdentities = requiredExportReferences
                 .Select(entry => $"{entry.ClassName}|{CanonicalPath(entry)}")
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            _baselineCorpusRoleIssues = applyCorpusMaterialPolicy
+            _baselineCorpusRoleIssues = applyCorpusMaterialPolicy && !NewFaceStartupAssets.TryGetValue(destination, out _)
                 ? CaptureCorpusRoleIssues(destination)
                 : new HashSet<CorpusRoleIssue>(CorpusRoleIssueComparer.Instance);
             _preexistingExports = destination.Exports.ToHashSet();
@@ -747,7 +813,7 @@ internal static class PccPackageWorkflow
             {
                 PccTextureDependencyResolver.VerifyBulkDataPreserved(textureSource, textureDestination);
             }
-            if (_applyCorpusMaterialPolicy)
+            if (_applyCorpusMaterialPolicy && !NewFaceStartupAssets.TryGetValue(_destination, out _))
             {
                 VerifyCorpusRoles(_destination, _baselineCorpusRoleIssues, GetExplicitTextureLeaves(_destination));
             }
@@ -814,7 +880,7 @@ internal static class PccPackageWorkflow
             if (expected == MaterialOracleEntryKind.Import ||
                 reference is ImportEntry && expected == MaterialOracleEntryKind.Unknown)
             {
-                var imported = EnsureImport(_destination, targetPath, reference.ClassName);
+                var imported = EnsureImport(_destination, targetPath, reference.ClassName, reference, _officialAssets);
                 _relinker.CrossPackageMap[reference] = imported;
                 return imported;
             }
@@ -822,7 +888,7 @@ internal static class PccPackageWorkflow
             var source = reference is ExportEntry directExport &&
                          !InstalledAssetOccurrence.IsSupportedClass(reference.ClassName)
                 ? directExport
-                : _resolver.Require(reference, $"corpus export dependency of '{canonicalPath}'");
+                : RequireExportDependency(_destination, reference, _resolver, $"export dependency of '{canonicalPath}'");
             var materialized = MaterializeExport(source, targetPath, destinationParent: null, forceExport: false);
             _relinker.CrossPackageMap[reference] = materialized;
             return materialized;
@@ -843,8 +909,7 @@ internal static class PccPackageWorkflow
                             candidate.InstancedPath,
                             resolved?.UIndex ?? 0,
                             "Texture2D"),
-                        _catalog,
-                        _preferBiogTextures);
+                        _catalog);
                 }
                 catch (KeyNotFoundException)
                 {
@@ -862,7 +927,7 @@ internal static class PccPackageWorkflow
             var expected = ExpectedKind("Texture2D", targetPath);
             if (expected == MaterialOracleEntryKind.Import)
             {
-                var imported = EnsureImport(_destination, targetPath, "Texture2D");
+                var imported = EnsureImport(_destination, targetPath, "Texture2D", reference, _officialAssets);
                 _relinker.CrossPackageMap[reference] = imported;
                 return imported;
             }
@@ -874,19 +939,17 @@ internal static class PccPackageWorkflow
                             ?? throw new FileNotFoundException(
                                 $"The installed texture donor package is missing: {selection.Occurrence.PackagePath}",
                                 selection.Occurrence.PackagePath);
-                source = PccTextureDependencyResolver.ResolveSourceExport(
-                    donor,
-                    selection.InstancedPath,
-                    selection.Occurrence.ExportUIndex);
+                source = PackageAssetInspector.ResolveTextureExport(donor,
+                    new AssetIdentity(donor.FilePath, selection.InstancedPath,
+                        selection.Occurrence.ExportUIndex, "Texture2D"));
             }
             if (source is null)
             {
                 if (expected == MaterialOracleEntryKind.Export)
                 {
-                    throw new InvalidDataException(
-                        $"The corpus requires Texture2D '{targetPath}' to be an export, but no exact donor could be resolved.");
+                    throw MissingExportDependency("Texture2D", targetPath);
                 }
-                var imported = EnsureImport(_destination, targetPath, "Texture2D");
+                var imported = EnsureImport(_destination, targetPath, "Texture2D", reference, _officialAssets);
                 _relinker.CrossPackageMap[reference] = imported;
                 _warnings?.Add(
                     $"Preserved unresolved stock Texture2D import '{targetPath}' while constructing the PCC.");
@@ -927,7 +990,7 @@ internal static class PccPackageWorkflow
             var expected = ExpectedKind(source.ClassName, targetPath);
             if (!forceExport && expected == MaterialOracleEntryKind.Import)
             {
-                var imported = EnsureImport(_destination, targetPath, source.ClassName);
+                var imported = EnsureImport(_destination, targetPath, source.ClassName, source, _officialAssets);
                 _relinker.CrossPackageMap[source] = imported;
                 return imported;
             }
@@ -1025,6 +1088,9 @@ internal static class PccPackageWorkflow
                     _relinker.CrossPackageMap[sourceParent] = existing;
                     return existing;
                 }
+                if (NewFaceStartupAssets.TryGetValue(_destination, out _) &&
+                    InstalledAssetOccurrence.IsSupportedClass(sourceParent.ClassName))
+                    return PlanReference(sourceParent);
                 if (sourceParent is ExportEntry exportedParent)
                     return MaterializeExport(exportedParent, parentPath, destinationParent: null, forceExport: true);
                 var parent = _destination.CreateImport(sourceParent.ClassName,
@@ -1037,9 +1103,7 @@ internal static class PccPackageWorkflow
         }
 
         private MaterialOracleEntryKind ExpectedKind(string className, string path) =>
-            _applyCorpusMaterialPolicy
-                ? MaterialDependencyOracle.Instance.GetKind(_destination.Game, className, path)
-                : MaterialOracleEntryKind.Unknown;
+            PccPackageWorkflow.ExpectedKind(_destination, className, path, _applyCorpusMaterialPolicy);
 
         private string DependencyPath(IEntry entry) =>
             _applyCorpusMaterialPolicy || entry is ImportEntry
@@ -1118,11 +1182,6 @@ internal static class PccPackageWorkflow
         };
     }
 
-    private static void VerifyCorpusRoles(IMEPackage package)
-        => VerifyCorpusRoles(package,
-            new HashSet<CorpusRoleIssue>(CorpusRoleIssueComparer.Instance),
-            GetExplicitTextureLeaves(package));
-
     private static HashSet<CorpusRoleIssue> CaptureCorpusRoleIssues(IMEPackage package)
     {
         var issues = new HashSet<CorpusRoleIssue>(CorpusRoleIssueComparer.Instance);
@@ -1190,7 +1249,8 @@ internal static class PccPackageWorkflow
             issue.Actual);
     }
 
-    private static IEntry EnsureImport(IMEPackage destination, string path, string className)
+    private static IEntry EnsureImport(IMEPackage destination, string path, string className,
+        IEntry? source = null, InstalledGameAssetResolver? installedAssets = null)
     {
         if (PackageIntegrity.FindExactEntry(destination, path, className) is { } existing)
         {
@@ -1214,16 +1274,37 @@ internal static class PccPackageWorkflow
         // this import path's construction policy; either role can also parent
         // embedded exports in cooked MELE packages.
         IEntry? parent = null;
+        var ancestors = new Dictionary<string, IEntry>(StringComparer.OrdinalIgnoreCase);
+        for (var ancestor = source?.Parent; ancestor is not null; ancestor = ancestor.Parent)
+            ancestors.TryAdd(CanonicalPath(ancestor), ancestor);
+        NewFaceStartupAssets.TryGetValue(destination, out var startupAssets);
         var ancestorPath = string.Empty;
         foreach (var segment in segments[..^1])
         {
             ancestorPath = ancestorPath.Length == 0
                 ? segment
                 : $"{ancestorPath}.{segment}";
-            var existingParent = PackageIntegrity.FindExactEntry(destination, ancestorPath, "Package");
+            ancestors.TryGetValue(ancestorPath, out var sourceAncestor);
+            var ancestorClass = sourceAncestor?.ClassName ?? startupAssets?
+                .FirstOrDefault(key => key.EndsWith($"|{ancestorPath}", StringComparison.OrdinalIgnoreCase))?.Split('|')[0]
+                ?? destination.FindEntry(ancestorPath)?.ClassName ?? "Package";
+            var existingParent = PackageIntegrity.FindExactEntry(destination, ancestorPath, ancestorClass);
             if (existingParent is not null)
             {
                 parent = existingParent;
+                continue;
+            }
+            if (ancestorClass != "Package")
+            {
+                if (sourceAncestor is not null && ExpectedKind(destination, ancestorClass, ancestorPath) == MaterialOracleEntryKind.Export)
+                {
+                    using var cache = new PackageCache();
+                    parent = ImportDependencyGraph(destination,
+                        RequireExportDependency(destination, sourceAncestor,
+                            new GamePackageReferenceResolver(cache, installedAssets), "asset outer"),
+                        null, null, targetPathOverride: ancestorPath, installedAssets: installedAssets);
+                }
+                else parent = destination.CreateImport(ancestorClass, NameReference.FromInstancedString(segment), parent);
                 continue;
             }
             // The localized LE2 eye override resolves through Startup. Its
@@ -1241,7 +1322,7 @@ internal static class PccPackageWorkflow
                     "Package", NameReference.FromInstancedString(segment), parent);
             }
         }
-        return destination.CreateImport(
+        return PackageIntegrity.FindExactEntry(destination, path, className) ?? destination.CreateImport(
             className,
             NameReference.FromInstancedString(segments[^1]),
             parent);
@@ -1280,7 +1361,8 @@ internal sealed record PccDependencyGraphSnapshot(
     string RootClass,
     string RootPath,
     IReadOnlyList<PccDependencyNodeSnapshot> Nodes,
-    IReadOnlyList<string> ExplicitTextureLeaves)
+    IReadOnlyList<string> ExplicitTextureLeaves,
+    IReadOnlySet<string>? NewFaceStartupAssets = null)
 {
     internal static PccDependencyGraphSnapshot Capture(ExportEntry root, IReadOnlySet<string>? explicitTextureLeaves = null)
     {

@@ -1,56 +1,40 @@
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
+using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.Models;
 
 namespace MorphFaceEditor.Services;
 
-/// <summary>
-/// Player head morphs are loaded outside the package that supplied the editor
-/// preview. Only an already-authored seek-free BIOG path is safe to persist;
-/// package-relative exports must never become picker choices.
-/// </summary>
+/// <summary>Player choices use the same exact runtime-source proof as Player saving.</summary>
 public static class PlayerWorkspaceReferencePolicy
 {
-    private static readonly HashSet<string> PlayerGlobalTextureFallbacks = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "BIOG_Humanoid_MASTER_MTR_R.GBL_ARM_ALL_Black",
-        "BIOG_Humanoid_MASTER_MTR_R.GBL_ARM_ALL_Norm"
-    };
-    private const string Le3HmmShortScalpPackage = "BIOG_HMM_HIR_PRO_R.pcc";
-    private static readonly HashSet<string> Le3HmmShortScalpTextures = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "Hair_Short03.HMM_HIR_Short_Scalp_Diff",
-        "Hair_Short03.HMM_HIR_Short_Scalp_Norm",
-        "Hair_Short03.HMM_HIR_Short_Scalp_Mask"
-    };
-
-    public static bool IsSeekFreeQualified(string? instancedPath)
-    {
-        if (string.IsNullOrWhiteSpace(instancedPath))
-        {
-            return false;
-        }
-
-        var parts = instancedPath.Split('.', StringSplitOptions.RemoveEmptyEntries);
-        return parts.Length >= 3 && parts[0].StartsWith("BIOG_", StringComparison.OrdinalIgnoreCase);
-    }
+    // Used by the TSE serializer for path syntax only; source safety is proven separately.
+    public static bool IsSeekFreeQualified(string? path) => !string.IsNullOrWhiteSpace(path) &&
+        path.Split('.', StringSplitOptions.RemoveEmptyEntries) is { Length: >= 3 } parts &&
+        parts[0].StartsWith("BIOG_", StringComparison.OrdinalIgnoreCase);
 
     public static IReadOnlyList<PackageAssetListItem> SelectPackageAssets(
-        IReadOnlyList<PackageAssetListItem> candidates) =>
-        candidates.Where(candidate => IsSeekFreeQualified(candidate.Identity.InstancedPath)).ToArray();
+        IReadOnlyList<PackageAssetListItem> candidates, PlayerRuntimeAssetAvailability available) =>
+        candidates.Where(candidate => available.Allows(candidate.Identity)).ToArray();
 
     public static IReadOnlyList<TextureCatalogCandidate> SelectRegistryTextures(
-        IReadOnlyList<TextureCatalogCandidate> candidates) =>
-        candidates.Where(candidate => IsSeekFreeQualified(candidate.InstancedPath) ||
-                                      PlayerGlobalTextureFallbacks.Contains(candidate.InstancedPath) ||
-                                      IsLe3HmmShortScalpTexture(candidate)).ToArray();
+        IReadOnlyList<TextureCatalogCandidate> candidates, PlayerRuntimeAssetAvailability available) =>
+        candidates.Where(candidate => candidate.Game == available.Game).Select(candidate =>
+        {
+            var occurrences = candidate.Occurrences.Append(candidate.EffectiveOccurrence).Distinct()
+                .Where(occurrence => available.Allows(new AssetIdentity(occurrence.PackagePath,
+                    candidate.InstancedPath, occurrence.ExportUIndex, "Texture2D"))).ToArray();
+            return occurrences.Length == 0 ? null : candidate with
+            {
+                EffectiveOccurrence = occurrences.Contains(candidate.EffectiveOccurrence)
+                    ? candidate.EffectiveOccurrence : occurrences[0],
+                Occurrences = occurrences
+            };
+        }).OfType<TextureCatalogCandidate>().ToArray();
 
-    private static bool IsLe3HmmShortScalpTexture(TextureCatalogCandidate candidate) =>
-        candidate.Game == MorphFaceGame.LE3 &&
-        Le3HmmShortScalpTextures.Contains(candidate.InstancedPath) &&
-        candidate.Occurrences
-            .DefaultIfEmpty(candidate.EffectiveOccurrence)
-            .Any(occurrence => occurrence.Origin == TextureCatalogOrigin.BaseGame &&
-                               occurrence.PackageName.Equals(Le3HmmShortScalpPackage,
-                                   StringComparison.OrdinalIgnoreCase));
+    public static IReadOnlyList<AttachmentMeshCandidate> SelectRegistryMeshes(
+        IReadOnlyList<AttachmentMeshCandidate> candidates, PlayerRuntimeAssetAvailability available) =>
+        candidates.Where(candidate => available.Allows(new AssetIdentity(
+            candidate.EffectiveOccurrence.PackagePath, candidate.CanonicalPath,
+            candidate.EffectiveOccurrence.ExportUIndex, "SkeletalMesh"))).ToArray();
 }

@@ -142,7 +142,7 @@ internal static class Le2LocalizedEyeOverrideImportRoleTests
             var ported = preserveStructure
                 ? PccPackageWorkflow.ImportRootPreservingStructure(destination, sourceRoot,
                     installedAssets: installedAssets)
-                : PccPackageWorkflow.ImportDependencyGraph(destination, sourceRoot, null, null, false,
+                : PccPackageWorkflow.ImportDependencyGraph(destination, sourceRoot, null, null,
                     installedAssets: installedAssets);
             var graph = PccPackageWorkflow.CaptureDependencyGraph(ported);
             TestAssert.True(destination.FindEntry("BIOG_Humanoid_EYE_OVRD", "Package") is ImportEntry,

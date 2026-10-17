@@ -111,6 +111,17 @@ public sealed partial class MainWindowViewModel
         }
         if (!await EnsureCanAbandonWorkspaceAsync()) return false;
         if (!await OpenSourcePackagePathAsync(packagePath, facePath, game, standaloneNpc: !target.PlayerMorph, importedPath: sourcePath)) return false;
+        if (target.PlayerMorph && Editor is { } editor && _loadedFace is { } loaded)
+        {
+            var sex = HeadProfileIdentity.SuffixFromProfileKey(target.ProfileKey) == "human-male"
+                ? StandalonePlayerSex.Male : StandalonePlayerSex.Female;
+            var defaults = await Task.Run(() => _packageContextService.CapturePlayerDefaultMaterials(game, sex));
+            if (!ReferenceEquals(Editor, editor)) return false;
+            var corrections = defaults.Textures.Where(value => loaded.Document.MaterialOverrides.Textures.Any(original =>
+                original.Name.Equals(value.Name, StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(original.TextureReference?.InstancedPath, value.TextureReference?.InstancedPath, StringComparison.OrdinalIgnoreCase))).ToArray();
+            if (corrections.Length > 0) await editor.MergeMaterialDataAsync(new([], [], corrections));
+        }
         foreach (var other in Faces.Where(face => face != SelectedFace).ToArray()) Faces.Remove(other);
         _standaloneImportPath = Path.GetFullPath(sourcePath);
         return Editor is not null;
@@ -220,6 +231,8 @@ public sealed partial class MainWindowViewModel
             var target = new MaterialFaceTarget(face.ProfileKey,
                 IsPlayerWorkspace || RonNpcDonorResolver.IsPlayerOrCreator(face.InstancedPath) ||
                 RonNpcDonorResolver.IsPlayerOrCreator(_loadedFace?.Document.BaseHeadReference?.InstancedPath));
+            if (target.PlayerMorph)
+                await Task.Run(() => _packageContextService.VerifyPlayerRuntimeAssets(game, values));
             var text = MaterialRonCodec.WriteMfe(FaceMaterialFileService.Capture(game, face.ObjectName, values) with
             {
                 DefaultFace = MorphFaceProfileRegistry.CreateDefault().Profiles.Any(profile =>
@@ -233,7 +246,7 @@ public sealed partial class MainWindowViewModel
         catch (Exception exception)
         {
             AppLog.Error("FACE:MATERIAL-EXPORT-FAILED", exception);
-            ErrorMessage = exception.Message;
+            ErrorMessage = UserFacingMessageFormatter.Format(exception);
             Status = Loc.Text("loc_Shell_Status_MaterialExportFailedTheCurrent2");
             return false;
         }

@@ -35,9 +35,7 @@ public sealed partial class MainWindowViewModel
                 {
                     Directory.CreateDirectory(scratch);
                     if (source.HasHeadMorph) source.ExportHeadRon(ron);
-                    else _packageContextService.ExportRon(
-                        StandalonePlayerMorphImportService.ResolveInstalledSeed(source.Game),
-                        StandalonePlayerMorphImportService.ResolvePlayerTemplate(source.Game, source.Sex), ron);
+                    else _packageContextService.ExportPlayerDefaultsRon(source.Game, source.Sex, ron);
                 });
             }
             finally { IsBusy = false; }
@@ -96,7 +94,9 @@ public sealed partial class MainWindowViewModel
         }
     }
 
-    private static string FormatPcsavError(Exception exception) => Loc.Text(exception is PcsavException failure
+    private static string FormatPcsavError(Exception exception) => UserFacingMessage.FromException(exception) is not null
+        ? UserFacingMessageFormatter.Format(exception)
+        : Loc.Text(exception is PcsavException failure
         ? failure.Reason switch
         {
             PcsavError.UnsupportedFormat => "loc_Pcsav_Unsupported",

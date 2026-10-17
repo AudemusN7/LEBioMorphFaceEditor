@@ -121,6 +121,7 @@ public sealed class MorphFacePackageWriter
                 using var stagingPackage = stagingStream is null
                     ? MEPackageHandler.CreateMemoryEmptyPackage(destination, sourcePackage.Game)
                     : MEPackageHandler.OpenMEPackageFromStream(stagingStream, destination);
+                if (createNewPackage) PccPackageWorkflow.ConfigureNewFacePackage(stagingPackage);
                 EnsureSupportedGame(destinationPackage);
                 if (destinationPackage.Game != sourcePackage.Game)
                 {
@@ -519,7 +520,6 @@ public sealed class MorphFacePackageWriter
                    package,
                    identity,
                    textureCatalog: null,
-                   preferBiogTextures: false,
                    warnings: warnings);
     }
 
@@ -532,8 +532,9 @@ public sealed class MorphFacePackageWriter
         {
             throw new InvalidDataException("A SkeletalMesh reference is required.");
         }
-        if (package.FindEntry(identity.InstancedPath, "SkeletalMesh") is ImportEntry)
+        if (package.FindEntry(identity.InstancedPath, "SkeletalMesh") is ImportEntry imported)
         {
+            if (PccPackageWorkflow.IsGuaranteedStartupImport(imported)) return imported;
             throw new InvalidDataException(
                 $"Referenced imported SkeletalMesh '{identity.InstancedPath}' has no materialised mesh dependency graph; " +
                 "the PCC export was rejected to avoid writing an unresolved attachment.");

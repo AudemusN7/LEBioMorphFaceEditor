@@ -16,7 +16,10 @@ internal static class TextureTransferDonorPolicyTests
     [
         new("texture transfer uses the eligible official donor over a higher-mounted mod", OfficialBeatsMod),
         new("texture transfer does not automatically select a mod-only catalog occurrence", ModOnlyIsNotAutomatic),
-        new("allowlisted texture transfer preserves an explicitly selected source donor", ExplicitSourceWins)
+        new("allowlisted texture transfer preserves an explicitly selected source donor", ExplicitSourceWins),
+        new("texture transfer resolves an exact target template donor", TemplateExportResolves),
+        new("allowlisted texture transfer does not embed over a template import-only identity", TemplateImportBlocksEmbedding),
+        new("texture transfer requires qualified template identity for ordinary paths", TemplateLocalPathDoesNotSubstitute)
     ];
 
     private static void OfficialBeatsMod()
@@ -97,6 +100,49 @@ internal static class TextureTransferDonorPolicyTests
         TestAssert.Equal(Path.GetFullPath(destination.FilePath), result.MaterialData.Textures.Single().TextureReference!.PackagePath);
     }
 
+    private static void TemplateExportResolves()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        using var donors = new TempDonors();
+        var template = donors.Create("BIOG_Template", 31, MEGame.LE3);
+        using var destination = MEPackageHandler.CreateMemoryEmptyPackage("TemplateTransfer.pcc", MEGame.LE3);
+        var result = MorphFaceTextureTransferEngine.Transfer(destination, Material(TexturePath),
+            new HashSet<string>(), new HashSet<string>(), new HashSet<string>(["Add2"]),
+            MEGame.LE2, "le2-asari", string.Empty, template.PackagePath, [], [], EmptyResolver());
+        TestAssert.Equal(TexturePath, result.MaterialData.Textures.Single().TextureReference!.InstancedPath);
+        TestAssert.Equal((byte)31, new Texture2D(destination.FindExport(TexturePath, "Texture2D")!).GetTopMip().Mip[0]);
+    }
+
+    private static void TemplateImportBlocksEmbedding()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        using var donors = new TempDonors();
+        var source = donors.Create("BIOG_EmbedSource", 207, MEGame.LE2);
+        var template = donors.CreateImport(MEGame.LE1);
+        using var destination = MEPackageHandler.CreateMemoryEmptyPackage("ImportOnlyTarget.pcc", MEGame.LE1);
+        var result = MorphFaceTextureTransferEngine.Transfer(destination, Material(TexturePath),
+            new HashSet<string>(), new HashSet<string>(), new HashSet<string>(["Add2"]),
+            MEGame.LE2, "le2-asari", source.PackagePath, template, [], [], EmptyResolver());
+        TestAssert.Equal(0, result.MaterialData.Textures.Count);
+        TestAssert.True(destination.FindExport(TexturePath, "Texture2D") is null,
+            "An import-only target identity was treated as absent and the source texture was embedded.");
+        TestAssert.True(result.Warnings.Any(value => value.Contains("destination material default")),
+            "The unavailable template export did not retain its conversion warning.");
+    }
+
+    private static void TemplateLocalPathDoesNotSubstitute()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        using var donors = new TempDonors();
+        var template = donors.Create("BIOG_LocalTemplate", 31, MEGame.LE3, packageLocal: true);
+        using var destination = MEPackageHandler.CreateMemoryEmptyPackage("LocalTemplateTransfer.pcc", MEGame.LE3);
+        var result = MorphFaceTextureTransferEngine.Transfer(destination, Material("Add.ASA_HED_PRO_Add2"),
+            new HashSet<string>(), new HashSet<string>(), new HashSet<string>(["Add2"]),
+            MEGame.LE2, "le2-asari", string.Empty, template.PackagePath, [], [], EmptyResolver());
+        TestAssert.Equal(0, result.MaterialData.Textures.Count);
+        TestAssert.Equal(0, destination.ExportCount);
+    }
+
     private static MorphFaceMaterialData Material(string path) => new(
         [], [], [new TextureMaterialOverride("Add2", new AssetIdentity(string.Empty, path, 0, "Texture2D"))]);
 
@@ -121,12 +167,14 @@ internal static class TextureTransferDonorPolicyTests
     {
         private readonly List<string> _paths = [];
 
-        internal (string PackagePath, ExportEntry Entry) Create(string packageName, byte marker, MEGame game)
+        internal (string PackagePath, ExportEntry Entry) Create(string packageName, byte marker, MEGame game,
+            bool packageLocal = false)
         {
             var path = Path.Combine(Path.GetTempPath(), $"{packageName}-{Guid.NewGuid():N}.pcc");
+            int textureIndex;
             using (var package = MEPackageHandler.CreateMemoryEmptyPackage(Path.GetFileName(path), game))
             {
-                var root = package.CreatePackageExport("BIOG_Test");
+                var root = packageLocal ? null : package.CreatePackageExport("BIOG_Test");
                 var group = package.CreatePackageExport("Add", root);
                 var texture = package.CreateExport("ASA_HED_PRO_Add2", "Texture2D", group, indexed: false);
                 texture.WriteProperty(new EnumProperty(
@@ -135,12 +183,24 @@ internal static class TextureTransferDonorPolicyTests
                 {
                     Mips = [new UTexture2D.Texture2DMipMap([marker, 0, 0, 255], 1, 1)]
                 });
+                textureIndex = texture.UIndex;
                 package.Save(path);
             }
             _paths.Add(path);
             using var reopened = MEPackageHandler.OpenMEPackage(path, forceLoadFromDisk: true);
-            return (path, reopened.FindExport(TexturePath, "Texture2D") ??
-                throw new InvalidDataException($"Synthetic donor did not contain {TexturePath}."));
+            return (path, reopened.GetUExport(textureIndex));
+        }
+
+        internal string CreateImport(MEGame game)
+        {
+            var path = Path.Combine(Path.GetTempPath(), $"BIOG_ImportTemplate-{Guid.NewGuid():N}.pcc");
+            using var package = MEPackageHandler.CreateMemoryEmptyPackage(path, game);
+            var root = package.CreatePackageImport("BIOG_Test");
+            var group = package.CreateImport("Package", "Add", root);
+            package.CreateImport("Texture2D", "ASA_HED_PRO_Add2", group);
+            package.Save(path);
+            _paths.Add(path);
+            return path;
         }
 
         public void Dispose()

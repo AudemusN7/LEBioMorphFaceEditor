@@ -53,7 +53,7 @@ internal static class CanonicalAttachmentMaterialPolicy
                 var material = package.Exports.FirstOrDefault(entry =>
                     entry.ClassName.Equals("MaterialInstanceConstant", StringComparison.OrdinalIgnoreCase) &&
                     PccAssetPathPolicy.FromExport(entry).Equals(AshleyMaterialPath, StringComparison.OrdinalIgnoreCase))
-                    ?? PccPackageWorkflow.ImportDependencyGraph(package, replacement.Material!, null, null, false,
+                    ?? PccPackageWorkflow.ImportDependencyGraph(package, replacement.Material!, null, null,
                         targetPathOverride: AshleyMaterialPath, installedAssets: installedAssets);
                 binary.Materials[replacement.Slot] = material.UIndex;
             }

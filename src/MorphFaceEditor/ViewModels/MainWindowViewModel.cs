@@ -939,12 +939,14 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             var topology = result.Loaded.BaseHead.Topology;
             var oracle = result.EditingSession.Evaluation.OriginalOracleReport;
             var materialOverrides = result.Loaded.Document.MaterialOverrides;
-            var selectableTextures = IsPlayerWorkspace
-                ? PlayerWorkspaceReferencePolicy.SelectPackageAssets(_referenceCatalog.Textures)
-                : _referenceCatalog.Textures;
-            var selectableMeshes = IsPlayerWorkspace
-                ? PlayerWorkspaceReferencePolicy.SelectPackageAssets(_referenceCatalog.SkeletalMeshes)
-                : _referenceCatalog.SkeletalMeshes;
+            var playerAssets = IsPlayerWorkspace
+                ? await Task.Run(() => _packageContextService.FindAvailablePlayerAssets(result.Loaded.Game,
+                    _referenceCatalog.Textures.Concat(_referenceCatalog.SkeletalMeshes).Select(value => value.Identity)
+                        .Concat(result.Loaded.Document.MaterialOverrides.Textures.Where(value => value.TextureReference is not null)
+                            .Select(value => value.TextureReference!))
+                        .Concat(result.Loaded.Document.OtherMeshReferences.OfType<AssetIdentity>())
+                        .Concat(result.Loaded.Document.HairMeshReference is { } hair ? [hair] : []), cancellationToken), cancellationToken)
+                : null;
             var displayedFinalBoneCount = result.Profile.IgnoresAuthoredGeometry
                 ? 0
                 : result.Loaded.Document.FinalSkeleton.Count;
@@ -972,8 +974,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 _colorDialog,
                 _referenceService,
                 workspacePath,
-                selectableTextures,
-                selectableMeshes,
+                _referenceCatalog.Textures,
+                _referenceCatalog.SkeletalMeshes,
                 result.Loaded.Document.HairMeshReference,
                 result.Loaded.Document.OtherMeshReferences,
                 SetEditorError,
@@ -986,6 +988,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 isTextureRegistryPending: true,
                 ignoresAuthoredGeometry: result.Profile.IgnoresAuthoredGeometry,
                 playerRandomisationGame: IsPlayerWorkspace ? result.Profile.Game : null);
+            if (playerAssets is not null) editor.RestrictPlayerReferences(playerAssets);
             var speciesKey = PreviewCameraGrouping.SpeciesForProfile(result.Profile.Key);
             if (string.Equals(_loadedSpeciesKey, speciesKey, StringComparison.OrdinalIgnoreCase))
             {
@@ -1061,13 +1064,23 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 return;
             }
 
-            var candidates = IsPlayerWorkspace
-                ? PlayerWorkspaceReferencePolicy.SelectRegistryTextures(catalog.Candidates)
-                : catalog.Candidates;
-            editor.UpdateRegistryTextureCandidates(
-                candidates,
-                catalogProfile,
-                catalog.IsAvailable);
+            if (IsPlayerWorkspace)
+            {
+                var references = _referenceCatalog.Textures.Concat(_referenceCatalog.SkeletalMeshes).Select(value => value.Identity)
+                    .Concat(catalog.Candidates.SelectMany(candidate => candidate.Occurrences.Append(candidate.EffectiveOccurrence)
+                        .Select(occurrence => new AssetIdentity(occurrence.PackagePath, candidate.InstancedPath,
+                            occurrence.ExportUIndex, "Texture2D"))))
+                    .Concat(catalog.AttachmentMeshes.Select(candidate => new AssetIdentity(candidate.EffectiveOccurrence.PackagePath,
+                        candidate.CanonicalPath, candidate.EffectiveOccurrence.ExportUIndex, "SkeletalMesh")))
+                    .Concat(editor.CreateDraft().MaterialOverrides.Textures.Where(value => value.TextureReference is not null)
+                        .Select(value => value.TextureReference!))
+                    .Concat(editor.AttachmentMeshes.Select(value => value.Value).OfType<AssetIdentity>()).ToArray();
+                var available = await Task.Run(() => _packageContextService.FindAvailablePlayerAssets(game, references,
+                    cancellationToken), cancellationToken);
+                if (cancellationToken.IsCancellationRequested || Editor != editor) return;
+                editor.RestrictPlayerReferences(available);
+            }
+            editor.UpdateRegistryTextureCandidates(catalog.Candidates, catalogProfile, catalog.IsAvailable);
             editor.UpdateRegistryAttachmentMeshes(catalog.AttachmentMeshes, IsPlayerWorkspace);
             AppLog.Verbose(catalog.IsAvailable
                 ? $"REGISTRY:LOADED {profile.Key} COUNT:{catalog.Candidates.Count} SEC:{System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalSeconds:F1}"

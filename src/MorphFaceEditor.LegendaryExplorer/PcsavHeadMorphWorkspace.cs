@@ -139,6 +139,9 @@ public sealed class PcsavHeadMorphWorkspace
         var baseline = _editingBaseline ?? throw new InvalidOperationException("No editing baseline was captured.");
         var edited = TseHeadMorphRon.Read(ronPath);
         var merged = PcsavHeadMorphMerge.ApplyChanges(_importedHead ?? _head ?? baseline, baseline, edited);
+        // Native references omitted from the editing projection remain authoritative.
+        // A full replacement or newly created head must prove every runtime reference.
+        new PlayerRuntimeAssetValidator().Verify(Game, merged, _importedHead is null ? _head : null);
         Commit(ReplaceHead(merged), merged, destination);
     }
 

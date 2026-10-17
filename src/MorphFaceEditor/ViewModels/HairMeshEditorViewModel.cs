@@ -5,6 +5,7 @@ using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.Models;
+using MorphFaceEditor.LegendaryExplorer;
 
 namespace MorphFaceEditor.ViewModels;
 
@@ -19,6 +20,7 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
     private HairMeshOption _selected;
     private IReadOnlyList<HairMeshOption> _options;
     private readonly IReadOnlyList<HairMeshOption> _localOptions;
+    private PlayerRuntimeAssetAvailability? _playerReferences;
     private string _searchText = string.Empty;
     private HairMeshOption? _previewSelection;
     private bool _isRandomisationLocked;
@@ -84,7 +86,7 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
             // Filtering can temporarily remove the current item from the ListBox;
             // WPF then attempts to write a null SelectedItem back through the
             // binding. Keep the authored selection until the user picks a candidate.
-            if (value is null)
+            if (value is null || !CanSelect(value.Identity))
             {
                 return;
             }
@@ -119,13 +121,25 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
         set => SetProperty(ref _isRandomisationLocked, value);
     }
 
+    public void RestrictPlayerReferences(PlayerRuntimeAssetAvailability available)
+    {
+        _playerReferences = available;
+        _options = _options.Where(option => CanSelect(option.Identity)).ToArray();
+        _selected = Find(_session.Value);
+        OnPropertyChanged(nameof(Options));
+        OnPropertyChanged(nameof(Selected));
+        ApplySearch();
+    }
+
+    private bool CanSelect(AssetIdentity? identity) => identity is null || _playerReferences?.Allows(identity) != false;
+
     public void UpdateRegistryCandidates(
         IReadOnlyList<AttachmentMeshCandidate> candidates,
         bool isPlayerWorkspace)
     {
         ArgumentNullException.ThrowIfNull(candidates);
         CancelPreview();
-        var options = _localOptions.ToList();
+        var options = _localOptions.Where(option => CanSelect(option.Identity)).ToList();
         var physicalOccurrences = options.Where(option => option.Identity is not null)
             .Select(option => PhysicalOccurrenceKey(option.Identity!))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -137,9 +151,8 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var candidate in candidates)
         {
-            if (isPlayerWorkspace &&
-                !candidate.CanonicalPath.StartsWith("BIOG_", StringComparison.OrdinalIgnoreCase))
-                continue;
+            if (!CanSelect(new AssetIdentity(candidate.EffectiveOccurrence.PackagePath,
+                    candidate.CanonicalPath, candidate.EffectiveOccurrence.ExportUIndex, "SkeletalMesh"))) continue;
 
             if (candidate.IsEligibleOfficialDefault &&
                 (candidate.EffectiveOccurrence.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc) &&
@@ -158,7 +171,7 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
                              .ThenBy(value => value.ExportUIndex).First()))
                 Add(occurrence, candidate.CanonicalPath);
         }
-        if (_session.Value is { } current &&
+        if (_session.Value is { } current && CanSelect(current) &&
             !options.Any(option => Same(option.Identity, current)) &&
             !representedOfficialIdentities.Contains(MeshIdentityKey(current)))
             options.Add(new HairMeshOption(Loc.Format("loc_VM_hairMesh_currentReference", current.InstancedPath), current));
@@ -196,6 +209,7 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
 
     public void SetImportedPreview(AssetIdentity? value)
     {
+        if (!CanSelect(value)) return;
         if (value is not null && !_options.Any(option => SameCanonicalMesh(option.Identity, value)))
         {
             _options = [.. _options, new HairMeshOption(Loc.Format("loc_VM_hairMesh_importedPreview", value.InstancedPath), value)];
@@ -208,7 +222,7 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
     /// <summary>Applies an installed hairstyle choice unless this slot is protected.</summary>
     public bool TrySetRandomisedSelection(AssetIdentity? value)
     {
-        if (IsRandomisationLocked) return false;
+        if (IsRandomisationLocked || !CanSelect(value)) return false;
         if (value is not null && !_options.Any(option => SameCanonicalMesh(option.Identity, value)))
         {
             _options = [.. _options, new HairMeshOption(value.InstancedPath, value,
@@ -261,7 +275,7 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
 
     private HairMeshOption Find(AssetIdentity? value) =>
         Options.FirstOrDefault(option => Same(option.Identity, value)) ??
-        Options.First(option => SameCanonicalMesh(option.Identity, value));
+        Options.FirstOrDefault(option => SameCanonicalMesh(option.Identity, value)) ?? Options[0];
 
     private void ApplySearch()
     {

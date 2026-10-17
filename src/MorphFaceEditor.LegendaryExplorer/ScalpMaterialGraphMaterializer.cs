@@ -94,7 +94,6 @@ internal static class ScalpMaterialGraphMaterializer
                 baseHead,
                 destinationParent: null,
                 textureCatalog: null,
-                preferBiogTextures: false,
                 warnings: warnings,
                 applyCorpusMaterialPolicy: false,
                 targetPathOverride: clonePath);
@@ -110,7 +109,6 @@ internal static class ScalpMaterialGraphMaterializer
             donor,
             destinationParent: null,
             textureCatalog: null,
-            preferBiogTextures: false,
             warnings: warnings,
             applyCorpusMaterialPolicy: false,
             targetPathOverride: targetPath);

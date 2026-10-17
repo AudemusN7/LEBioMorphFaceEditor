@@ -186,15 +186,11 @@ public sealed class CustomMeshPccMaterializer
                               option.EffectiveParameterScopeKey;
             if (!materialByKey.TryGetValue(materialKey, out var material))
             {
-                var preferBiogTextures = option.EffectiveParameterScopeKey.Equals(
-                    "human",
-                    StringComparison.OrdinalIgnoreCase);
                 material = ImportMaterialSource(
                     destination,
                     packageRoot,
                     sourceIdentity,
                     request.TextureCatalog,
-                    preferBiogTextures,
                     warnings);
                 var materialName = MakeMaterialName(
                     request.MeshName,
@@ -208,7 +204,6 @@ public sealed class CustomMeshPccMaterializer
                     option.Template,
                     sourceScope,
                     request.TextureCatalog,
-                    preferBiogTextures,
                     warnings);
                 materialByKey.Add(materialKey, material);
                 materialResults.Add(new CustomMeshPccMaterialResult(
@@ -230,7 +225,6 @@ public sealed class CustomMeshPccMaterializer
         ExportEntry packageRoot,
         AssetIdentity identity,
         IReadOnlyList<TextureCatalogCandidate> textureCatalog,
-        bool preferBiogTextures,
         ICollection<string> warnings)
     {
         if (!File.Exists(identity.PackagePath))
@@ -251,7 +245,6 @@ public sealed class CustomMeshPccMaterializer
             sourceExport,
             packageRoot,
             textureCatalog,
-            preferBiogTextures,
             warnings);
     }
 
@@ -304,7 +297,6 @@ public sealed class CustomMeshPccMaterializer
         ResolvedHeadMaterial template,
         MorphFaceMaterialData source,
         IReadOnlyList<TextureCatalogCandidate> textureCatalog,
-        bool preferBiogTextures,
         ICollection<string> warnings)
     {
         var names = new List<string>();
@@ -383,7 +375,6 @@ public sealed class CustomMeshPccMaterializer
                     destination,
                     value.TextureReference,
                     textureCatalog,
-                    preferBiogTextures,
                     warnings);
                 values.Add(new StructProperty("TextureParameterValue", false,
                     ExpressionGuid(),
@@ -402,12 +393,10 @@ public sealed class CustomMeshPccMaterializer
         IMEPackage destination,
         AssetIdentity identity,
         IReadOnlyList<TextureCatalogCandidate> textureCatalog,
-        bool preferBiogTextures,
         ICollection<string> warnings) => PccPackageWorkflow.ResolveTextureReference(
             destination,
             identity,
             textureCatalog,
-            preferBiogTextures,
             warnings);
 
     private static string ParameterName(StructProperty value) =>

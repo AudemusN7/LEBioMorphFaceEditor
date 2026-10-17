@@ -5,6 +5,7 @@ using LegendaryExplorerCore.Unreal;
 using LegendaryExplorerCore.Unreal.BinaryConverters;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
+using MorphFaceEditor.Core.Services;
 using static MorphFaceEditor.LegendaryExplorer.MorphFacePackageCodec;
 
 namespace MorphFaceEditor.LegendaryExplorer;
@@ -19,6 +20,11 @@ public sealed record TransferredMaterialSaveResult(
 /// </summary>
 public sealed class MorphFacePackageContextService
 {
+    private readonly PlayerRuntimeAssetValidator _playerAssets;
+
+    public MorphFacePackageContextService() : this(new PlayerRuntimeAssetValidator()) { }
+    internal MorphFacePackageContextService(PlayerRuntimeAssetValidator playerAssets) => _playerAssets = playerAssets;
+
     private sealed record NpcRonMaterialTransfer(
         MorphFaceGame SourceGame,
         string SourceProfileKey,
@@ -85,6 +91,7 @@ public sealed class MorphFacePackageContextService
             using (var template = OpenPackage(templatePath))
             using (var package = MEPackageHandler.CreateMemoryEmptyPackage(temporaryPath, template.Game))
             {
+                PccPackageWorkflow.ConfigureNewFacePackage(package);
                 var templateFace = FindFace(template, targetTemplateFacePath);
                 NormalizeInvalidHmmMorphPackageAliases(template);
                 var stagingMessages = new List<string>();
@@ -100,11 +107,9 @@ public sealed class MorphFacePackageContextService
                     templateFace,
                     package.CreatePackageExport("MorphFaceEditor"),
                     targetTextureCatalog,
-                    preferBiogTextures: sourceProfileKey.Contains("human", StringComparison.OrdinalIgnoreCase),
                     warnings: stagingMessages,
                     requiredExportReferences: [templateBaseHead]);
                 stagingWarnings = stagingMessages;
-                VerifyConversionStage(package, "target-template staging");
                 face.ObjectName = new NameReference(objectName);
                 var materialOverride = ResolveMaterialOverride(face);
 
@@ -123,7 +128,6 @@ public sealed class MorphFacePackageContextService
                     templatePath,
                     sourceTextureCatalog,
                     targetTextureCatalog);
-                VerifyConversionStage(package, "texture staging");
                 WriteMaterialData(package, materialOverride, transfer.MaterialData);
                 attachments = MorphFaceAttachmentTransferEngine.Transfer(
                     package,
@@ -131,7 +135,6 @@ public sealed class MorphFacePackageContextService
                     sourceOtherMeshes,
                     ToMeGame(sourceGame),
                     templatePath);
-                VerifyConversionStage(package, "attachment staging");
 
                 var baseHead = draft.BaseHeadReference
                                ?? throw new InvalidDataException("The converted face has no target-game base head.");
@@ -140,7 +143,6 @@ public sealed class MorphFacePackageContextService
                                          package,
                                          baseHead,
                                          warnings: null);
-                VerifyConversionStage(package, "base-head staging");
                 var properties = face.GetProperties();
                 properties.AddOrReplaceProp(new ObjectProperty(stagedBaseHead, "m_oBaseHead"));
                 properties.AddOrReplaceProp(new ObjectProperty(materialOverride, "m_oMaterialOverrides"));
@@ -148,6 +150,8 @@ public sealed class MorphFacePackageContextService
                 WriteMorphData(face, new MorphFaceMorphData(
                     draft.MorphFeatures, draft.FinalSkeleton, draft.BakedLods));
                 WriteAttachments(face, attachments);
+                PackageIntegrity.Verify(package);
+                EnsureNoInvalidHmmMorphPackageAliases(package, "final verification");
                 using var completedPackage = MEPackageHandler.CreateMemoryEmptyPackage(destination, package.Game);
                 face = PccPackageWorkflow.CloneCompletedRoot(completedPackage, face, stagingMessages);
                 materialOverride = ResolveMaterialOverride(face);
@@ -398,6 +402,45 @@ public sealed class MorphFacePackageContextService
         });
     }
 
+    public PlayerRuntimeAssetAvailability FindAvailablePlayerAssets(MorphFaceGame game,
+        IEnumerable<AssetIdentity> references, CancellationToken cancellationToken = default) =>
+        _playerAssets.FindAvailable(game, references, cancellationToken);
+
+    public void VerifyPlayerRuntimeAssets(MorphFaceGame game, MorphFaceMaterialData materials,
+        string hairMesh = "None", IReadOnlyList<string>? accessoryMeshes = null) =>
+        _playerAssets.Verify(game, new(hairMesh, accessoryMeshes ?? [], new([], [], []), materials with
+        {
+            Textures = materials.Textures.Select(value => value.TextureReference is { } texture
+                ? value with { TextureReference = texture with { InstancedPath = TextureCatalogPicker.CanonicalPath(texture.InstancedPath, texture.PackagePath) } }
+                : value).ToArray()
+        }));
+
+    public MorphFaceMaterialData CapturePlayerDefaultMaterials(MorphFaceGame game, StandalonePlayerSex sex) =>
+        PreparePlayerDefaultMaterials(game, sex, CaptureMaterialData(
+            StandalonePlayerMorphImportService.ResolveInstalledSeed(game),
+            StandalonePlayerMorphImportService.ResolvePlayerTemplate(game, sex)));
+
+    public void ExportPlayerDefaultsRon(MorphFaceGame game, StandalonePlayerSex sex, string destinationPath,
+        RonExportProvenance? provenance = null)
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        using var package = OpenPackage(StandalonePlayerMorphImportService.ResolveInstalledSeed(game));
+        var head = ReadRonHead(FindFace(package, StandalonePlayerMorphImportService.ResolvePlayerTemplate(game, sex)), false);
+        head = head with { MaterialData = PreparePlayerDefaultMaterials(game, sex, head.MaterialData) };
+        _playerAssets.Verify(game, head);
+        TseHeadMorphRon.Write(destinationPath, head, provenance);
+    }
+
+    private static MorphFaceMaterialData PreparePlayerDefaultMaterials(MorphFaceGame game, StandalonePlayerSex sex,
+        MorphFaceMaterialData materials) => game == MorphFaceGame.LE2 && sex == StandalonePlayerSex.Female
+        ? materials with { Textures = materials.Textures.Select(value =>
+            value.Name.Equals("HED_Lash_Diff", StringComparison.OrdinalIgnoreCase) &&
+            value.TextureReference?.InstancedPath.Equals("BIOG_Humanoid_MASTER_MTR_R.Human.HMF_HED_PROLash_Opac_M01",
+                StringComparison.OrdinalIgnoreCase) == true
+                ? value with { TextureReference = new AssetIdentity("", "BIOG_HMF_HED_PROMorph_R.Average.HMF_HED_PROLash_Opac_M01", 0, "Texture2D") }
+                : value).ToArray() }
+        : materials;
+
     public void ExportRon(
         string packagePath,
         string facePath,
@@ -408,6 +451,15 @@ public sealed class MorphFacePackageContextService
         LegendaryExplorerCoreRuntime.Initialize();
         using var package = OpenPackage(packagePath);
         var face = FindFace(package, facePath);
+        var head = ReadRonHead(face, morphFeaturesOnly);
+        if (provenance is { PlayerMorph: true } && !morphFeaturesOnly)
+            _playerAssets.Verify(provenance.Game, head);
+        TseHeadMorphRon.Write(destinationPath, head, provenance, morphFeaturesOnly);
+    }
+
+    private static TseHeadMorph ReadRonHead(ExportEntry face, bool morphFeaturesOnly)
+    {
+        var package = face.FileRef;
         var properties = face.GetProperties();
         var hair = properties.GetProp<ObjectProperty>("m_oHairMesh")?.ResolveToEntry(package)?.InstancedFullPath
                    ?? "None";
@@ -417,11 +469,14 @@ public sealed class MorphFacePackageContextService
             .Cast<string>()
             .ToArray() ?? [];
         var data = ReadMorphData(face);
-        TseHeadMorphRon.Write(destinationPath, new TseHeadMorph(
+        var materials = morphFeaturesOnly ? new MorphFaceMaterialData([], [], []) : ReadMaterialData(ResolveMaterialOverride(face));
+        materials = materials with { Textures = materials.Textures.Where(value =>
+            !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(value.Name)).ToArray() };
+        return new TseHeadMorph(
             morphFeaturesOnly ? "None" : hair,
             morphFeaturesOnly ? [] : accessories,
             morphFeaturesOnly ? new(data.MorphFeatures, [], []) : data,
-            morphFeaturesOnly ? new([], [], []) : ReadMaterialData(ResolveMaterialOverride(face))), provenance, morphFeaturesOnly);
+            materials);
     }
 
     /// <summary>Replace a face in the staged PCC through the same verified mutation path as other edits.</summary>
@@ -439,11 +494,12 @@ public sealed class MorphFacePackageContextService
             else EnsureCompatibleLods(previous, ron.MorphData);
             var material = EnsureIndependentMaterialOverride(face);
             var warnings = new List<string>();
-            var resolved = ResolveRonMaterials(package, ron.MaterialData, assets, true, warnings);
+            var userWarnings = new List<UserFacingMessage>();
+            var resolved = ResolveRonMaterials(package, ron.MaterialData, assets, true, warnings, userWarnings);
             WriteMorphData(face, ron.MorphData);
             WriteMaterialData(package, material, resolved);
-            WriteRonMeshReferences(package, face, ron, assets, true, warnings, false);
-            return new PendingResult(face.InstancedFullPath, material.InstancedFullPath, ron.MorphData, resolved, warnings);
+            WriteRonMeshReferences(package, face, ron, assets, true, warnings, !player, userWarnings);
+            return new PendingResult(face.InstancedFullPath, material.InstancedFullPath, ron.MorphData, resolved, warnings, userWarnings);
         });
     }
 
@@ -478,7 +534,7 @@ public sealed class MorphFacePackageContextService
             requireMatchingAllLods: false,
             assetCatalog: assetCatalog,
             strictAssetResolution: true,
-            allowMissingHair: false);
+            allowMissingAttachments: false);
     }
 
     /// <summary>Imports a proven NPC RON while applying the shared LE1/LE2 material transfer policy.</summary>
@@ -517,7 +573,7 @@ public sealed class MorphFacePackageContextService
             assetCatalog: assetCatalog,
             strictAssetResolution: true,
             npcMaterialTransfer: transfer,
-            allowMissingHair: true,
+            allowMissingAttachments: true,
             cancellationToken: cancellationToken);
     }
 
@@ -581,7 +637,7 @@ public sealed class MorphFacePackageContextService
         StandalonePlayerAssetCatalog? assetCatalog = null,
         bool strictAssetResolution = false,
         NpcRonMaterialTransfer? npcMaterialTransfer = null,
-        bool allowMissingHair = false,
+        bool allowMissingAttachments = false,
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -610,12 +666,13 @@ public sealed class MorphFacePackageContextService
 
             var templateMaterial = ReadMaterialData(ResolveMaterialOverride(source));
             var warnings = new List<string>();
+            var userWarnings = new List<UserFacingMessage>();
             var resolvedMaterial = mergeWithTemplate
                 ? MergeLegacyMaterials(package, templateMaterial, ron.MaterialData, warnings)
                 : npcMaterialTransfer is null
-                    ? ResolveRonMaterials(package, ron.MaterialData, assetCatalog, strictAssetResolution, warnings)
+                    ? ResolveRonMaterials(package, ron.MaterialData, assetCatalog, strictAssetResolution, warnings, userWarnings)
                     : TransferNpcRonMaterials(package, ron.MaterialData, npcMaterialTransfer,
-                        assetCatalog, warnings);
+                        assetCatalog, warnings, userWarnings);
             WriteMorphData(clone, morphData);
             WriteMaterialData(package, materialOverride, resolvedMaterial);
             if (mergeWithTemplate)
@@ -631,14 +688,14 @@ public sealed class MorphFacePackageContextService
                     assetCatalog,
                     strictAssetResolution,
                     warnings,
-                    allowMissingHair);
+                    allowMissingAttachments, userWarnings);
             }
             return new PendingResult(
                 clone.InstancedFullPath,
                 materialOverride.InstancedFullPath,
                 morphData,
                 resolvedMaterial,
-                warnings);
+                warnings, userWarnings);
         }, cancellationToken);
     }
 
@@ -803,12 +860,6 @@ public sealed class MorphFacePackageContextService
         EnsureNoInvalidHmmMorphPackageAliases(package, "final verification");
     }
 
-    private static void VerifyConversionStage(IMEPackage package, string stage)
-    {
-        PackageIntegrity.Verify(package);
-        EnsureNoInvalidHmmMorphPackageAliases(package, stage);
-    }
-
     private static void NormalizeInvalidHmmMorphPackageAliases(IMEPackage package)
     {
         const string invalidName = "BIOG_HMM_HED_PROMorph_R";
@@ -902,7 +953,8 @@ public sealed class MorphFacePackageContextService
         MorphFaceMaterialData source,
         NpcRonMaterialTransfer context,
         StandalonePlayerAssetCatalog? assetCatalog,
-        ICollection<string> warnings)
+        ICollection<string> warnings,
+        ICollection<UserFacingMessage> userWarnings)
     {
         var scalars = source.Scalars.Select(value => value.Name)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -927,9 +979,8 @@ public sealed class MorphFacePackageContextService
             warnings.Add(warning);
         }
 
-        // Keep authored overrides that the reviewed cross-game policy cannot
-        // map. The ordinary RON resolver retains their exact path as an import
-        // with a visible warning rather than silently discarding source data.
+        // Resolve untransferred overrides by exact identity. Missing optional
+        // textures are omitted so the material can inherit its default.
         var mappedNames = mapped.MaterialData.Textures.Select(value => value.Name)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var untransferred = source.Textures.Where(value => !mappedNames.Contains(value.Name)).ToArray();
@@ -938,7 +989,7 @@ public sealed class MorphFacePackageContextService
             new MorphFaceMaterialData([], [], untransferred),
             assetCatalog,
             strictAssetResolution: true,
-            warnings);
+            warnings, userWarnings);
         return new MorphFaceMaterialData(
             source.Scalars,
             source.Vectors,
@@ -950,38 +1001,45 @@ public sealed class MorphFacePackageContextService
         MorphFaceMaterialData materialData,
         StandalonePlayerAssetCatalog? assetCatalog,
         bool strictAssetResolution,
-        ICollection<string> warnings)
+        ICollection<string> warnings,
+        ICollection<UserFacingMessage> userWarnings)
     {
-        var textures = materialData.Textures.Select(value =>
+        var textures = new List<TextureMaterialOverride>();
+        foreach (var value in materialData.Textures)
         {
             if (value.TextureReference is null)
             {
-                return value;
+                textures.Add(value);
+                continue;
             }
-            var existing = PackageIntegrity.FindExactEntry(package, value.TextureReference.InstancedPath, "Texture2D");
+            var path = value.TextureReference.InstancedPath;
+            var existing = PackageIntegrity.FindExactEntry(package, path, "Texture2D");
             IEntry? entry = existing as ExportEntry ?? (!strictAssetResolution ? existing : null);
             if (entry is null)
             {
                 try
                 {
-                    entry = ResolveTextureCandidate(
-                        package,
-                        value.TextureReference.InstancedPath,
-                        assetCatalog,
-                        existing as ImportEntry);
+                    entry = ResolveTextureCandidate(package, path, assetCatalog, existing as ImportEntry);
                 }
-                catch (Exception exception) when (strictAssetResolution &&
-                                                  exception is InvalidDataException or FileNotFoundException)
+                catch (UnresolvedRonTextureException exception)
                 {
-                    entry = EnsureImport(package, value.TextureReference.InstancedPath, "Texture2D");
-                    warnings.Add(
-                        $"RON texture '{value.TextureReference.InstancedPath}' is unavailable in the selected game's installed assets. " +
-                        "Its exact authored reference was retained for RON roundtrip; preview will use inherited or placeholder material data.");
+                    if (!strictAssetResolution) throw new InvalidDataException(exception.Message, exception);
+                    AddSkippedRonAssetWarning(warnings, userWarnings, "loc_RonImport_TextureSkipped",
+                        $"RON texture '{path}' for '{value.Name}' was omitted because it is unavailable; the material will use its inherited texture.",
+                        value.Name, path);
+                    continue;
                 }
             }
-            return value with { TextureReference = ToIdentity(entry) };
-        }).ToArray();
-        return materialData with { Textures = textures };
+            textures.Add(value with { TextureReference = ToIdentity(entry) });
+        }
+        return materialData with { Textures = textures.ToArray() };
+    }
+
+    private static void AddSkippedRonAssetWarning(ICollection<string> warnings,
+        ICollection<UserFacingMessage> userWarnings, string key, string diagnostic, params object?[] arguments)
+    {
+        warnings.Add(diagnostic);
+        userWarnings.Add(UserFacingMessage.CreateWarning(key, diagnostic, arguments));
     }
 
     private static MorphFaceMaterialData MergeLegacyMaterials(
@@ -1139,15 +1197,14 @@ public sealed class MorphFacePackageContextService
                                       value.InstancedPath.Equals(instancedPath, StringComparison.OrdinalIgnoreCase));
         if (candidate is null)
         {
-            throw new InvalidDataException(
+            throw new UnresolvedRonTextureException(
                 $"RON Texture2D '{instancedPath}' is not present in the standalone seed and has no exact installed-game catalogue candidate.");
         }
 
         if (!File.Exists(candidate.PackagePath))
         {
-            throw new FileNotFoundException(
-                $"The installed-game texture donor package is missing: {candidate.PackagePath}",
-                candidate.PackagePath);
+            throw new UnresolvedRonTextureException(
+                $"The installed-game texture donor package is missing: {candidate.PackagePath}");
         }
         if (existingImport is not null)
         {
@@ -1200,7 +1257,8 @@ public sealed class MorphFacePackageContextService
         StandalonePlayerAssetCatalog? assetCatalog,
         bool strictAssetResolution,
         ICollection<string> warnings,
-        bool allowMissingHair)
+        bool allowMissingAttachments,
+        ICollection<UserFacingMessage> userWarnings)
     {
         var properties = face.GetProperties();
         if (string.IsNullOrWhiteSpace(ron.HairMesh) ||
@@ -1220,12 +1278,12 @@ public sealed class MorphFacePackageContextService
                 }
                 catch (UnresolvedRonAttachmentException exception) when (strictAssetResolution)
                 {
-                    if (allowMissingHair)
+                    if (allowMissingAttachments)
                     {
                         properties.RemoveNamedProperty("m_oHairMesh");
-                        warnings.Add(
+                        AddSkippedRonAssetWarning(warnings, userWarnings, "loc_RonImport_HairSkipped",
                             $"RON hair mesh '{ron.HairMesh}' was omitted because it is unavailable in the selected game's installed assets: " +
-                            exception.Message);
+                            exception.Message, ron.HairMesh);
                         hair = null;
                     }
                     else
@@ -1257,6 +1315,13 @@ public sealed class MorphFacePackageContextService
                 }
                 catch (UnresolvedRonAttachmentException exception) when (strictAssetResolution)
                 {
+                    if (allowMissingAttachments)
+                    {
+                        AddSkippedRonAssetWarning(warnings, userWarnings, "loc_RonImport_AccessorySkipped",
+                            $"RON accessory mesh '{path}' was omitted because it is unavailable in the selected game's installed assets: " +
+                            exception.Message, path);
+                        return null;
+                    }
                     throw new InvalidDataException(
                         $"RON attachment '{path}' is unavailable in the selected game's installed assets; " +
                         "the import was rejected because an unresolved SkeletalMesh cannot be exported safely.",
@@ -1287,6 +1352,8 @@ public sealed class MorphFacePackageContextService
         }
         return entry;
     }
+
+    private sealed class UnresolvedRonTextureException(string message) : IOException(message);
 
     private sealed class UnresolvedRonAttachmentException(string message) : IOException(message);
 

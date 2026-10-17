@@ -2626,6 +2626,12 @@ Choose No to keep the current scalp textures and material.</system:String>
 <system:String x:Key="loc_RonFiles_Imported" xml:space="preserve">Imported {0} into the current face.</system:String>
     <!--localiser: {"Key":"loc_FileSave_MorphFeaturesOnly","ReviewedHash":"4301FA7477000FDDCFCF4168BA6F9D83BC837A60FDAAEFD64440950BD25C26AD","DoNotTranslate":false,"Note":"","SourceHash":null}-->
 <system:String x:Key="loc_FileSave_MorphFeaturesOnly" xml:space="preserve">Morph features were saved. Other head changes remain unsaved. Right-click the face and export the full head or a PCC to include them.</system:String>
+    <system:String x:Key="loc_PlayerAsset_SeekFreeSourceRequired" xml:space="preserve">{0} '{1}' has no matching asset in a BIOG seekfree package or a guaranteed Player runtime package. Choose an asset with a safe runtime source, or export to PCC.</system:String>
     <system:String x:Key="loc_PccSave_VerificationMismatch" xml:space="preserve">The saved PCC did not retain the requested data. Nothing was replaced.</system:String>
     <system:String x:Key="loc_PccSave_NewNonFiniteValue" xml:space="preserve">Cannot save a new or changed NaN/Infinity value in {0}. Existing invalid values can only be carried over unchanged.</system:String>
+    <system:String x:Key="loc_RonImport_TextureSkipped">Skipped missing texture '{1}' for '{0}'. The material will use its inherited texture.</system:String>
+    <system:String x:Key="loc_RonImport_HairSkipped">Skipped missing hair mesh '{0}'. The rest of the head was imported.</system:String>
+    <system:String x:Key="loc_RonImport_AccessorySkipped">Skipped missing accessory mesh '{0}'. The rest of the head was imported.</system:String>
+    <system:String x:Key="loc_PccSave_UnsafeDependency">The new PCC still refers to an external {0} '{1}' without a guaranteed startup source. Nothing was replaced.</system:String>
+    <system:String x:Key="loc_PccSave_MissingDependency">The PCC could not include {0} '{1}' because no exact source was found. Nothing was replaced.</system:String>
 </ResourceDictionary>

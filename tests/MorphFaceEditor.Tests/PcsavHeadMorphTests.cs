@@ -12,6 +12,7 @@ internal static class PcsavHeadMorphTests
         new("PCSAV rejects corrupt saves and protects externally changed sources", FailedSavesPreserveSources),
         new("PCSAV Save As preserves original and redirects subsequent saves", SaveAsCopies),
         new("PCSAV changing hair clears hidden hair textures but preserves scalp and unchanged hair", HairTextureClearing),
+        new("PCSAV rejects new unavailable assets while preserving untouched native references", RuntimeAssetChanges),
         new("PCC Save As preserves original and redirects commits", PackageSaveAsCopies),
         new("Morphs-only RON round-trips features without weakening full head validation", MorphFeaturesRonRoundTrip)
     ];
@@ -23,16 +24,18 @@ internal static class PcsavHeadMorphTests
         if (fixtureDirectory is null || !Directory.Exists(fixtureDirectory))
             throw new TestSkippedException("Local PCSAV career fixtures are not present.");
         var paths = Directory.GetFiles(fixtureDirectory, "*.pcsav").Order().ToArray();
-        var names = paths.Select(Path.GetFileNameWithoutExtension).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var names = paths.Select(path => Path.GetFileNameWithoutExtension(path)!).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var expected = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "LE1-Male-Custom", "LE1-Female-Custom", "LE1-Default",
             "LE2-Male-Custom", "LE2-Female-Custom", "LE2-Default",
             "LE3-Male-Custom", "LE3-Female-Custom", "LE3-Default"
         };
-        TestAssert.True(expected.SetEquals(names),
-            $"PCSAV fixture inventory must contain custom male/female and default saves for LE1, LE2, and LE3; found {paths.Length} files.");
-        return paths;
+        TestAssert.True(expected.IsSubsetOf(names),
+            "PCSAV fixture inventory is missing required careers: " + string.Join(", ", expected.Except(names, StringComparer.OrdinalIgnoreCase)));
+        // The QA utility also stores its additional/invalid cases here. These
+        // tests intentionally retain the original nine-career contract.
+        return paths.Where(path => expected.Contains(Path.GetFileNameWithoutExtension(path))).ToArray();
     }
 
     private static string? FindRepositoryDirectory()
@@ -143,9 +146,7 @@ internal static class PcsavHeadMorphTests
     private static void ExportEditableHead(PcsavHeadMorphWorkspace workspace, string ron)
     {
         if (workspace.HasHeadMorph) workspace.ExportHeadRon(ron);
-        else new MorphFacePackageContextService().ExportRon(
-            StandalonePlayerMorphImportService.ResolveInstalledSeed(workspace.Game),
-            StandalonePlayerMorphImportService.ResolvePlayerTemplate(workspace.Game, workspace.Sex), ron);
+        else new MorphFacePackageContextService().ExportPlayerDefaultsRon(workspace.Game, workspace.Sex, ron);
     }
 
     private static void SaveAsCopies()
@@ -172,6 +173,59 @@ internal static class PcsavHeadMorphTests
             }
             finally { Directory.Delete(directory, true); }
         }
+    }
+
+    private static void RuntimeAssetChanges()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"MFE-PcsavRuntime-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var source = Path.Combine(directory, "career.pcsav");
+            File.Copy(Fixtures().First(path => Path.GetFileName(path) == "LE2-Female-Custom.pcsav"), source);
+            var native = PcsavHeadMorphWorkspace.Open(source);
+            var missingRoot = "BIOG_MFE_Missing_" + Guid.NewGuid().ToString("N");
+            var unknown = new TextureMaterialOverride("NativeUnavailable", new("", missingRoot + ".OldTexture", 0, "Texture2D"));
+            var head = native.Head with { HairMesh = missingRoot + ".OldHair", MaterialData = native.Head.MaterialData with
+                { Textures = native.Head.MaterialData.Textures.Append(unknown).ToArray() } };
+            File.WriteAllBytes(source, native.ReplaceHead(head));
+            var workspace = PcsavHeadMorphWorkspace.Open(source);
+            var ron = Path.Combine(directory, "editing.ron");
+            var projection = head with { HairMesh = "None", MaterialData = head.MaterialData with
+                { Textures = head.MaterialData.Textures.Where(value => value != unknown).ToArray() } };
+            TseHeadMorphRon.Write(ron, projection);
+            workspace.SetEditingBaseline(ron);
+            var scalar = projection.MaterialData.Scalars.First();
+            projection = projection with { MaterialData = projection.MaterialData with { Scalars = projection.MaterialData.Scalars
+                .Select(value => value.Name == scalar.Name ? value with { Value = value.Value + 0.125f } : value).ToArray() } };
+            TseHeadMorphRon.Write(ron, projection);
+            workspace.SaveEditedRon(ron);
+            var saved = PcsavHeadMorphWorkspace.Open(source);
+            TestAssert.Equal(head.HairMesh, saved.Head.HairMesh);
+            TestAssert.Equal(unknown.TextureReference!.InstancedPath, saved.Head.MaterialData.Textures
+                .Single(value => value.Name == unknown.Name).TextureReference!.InstancedPath);
+            TestAssert.True(workspace.UnrelatedPrefix.SequenceEqual(saved.UnrelatedPrefix) &&
+                workspace.UnrelatedSuffix.SequenceEqual(saved.UnrelatedSuffix), "An unrelated edit damaged native career data.");
+            var before = File.ReadAllBytes(source);
+            var selected = projection.MaterialData.Textures.First();
+            var changed = projection with { MaterialData = projection.MaterialData with { Textures = projection.MaterialData.Textures
+                .Select(value => value == selected ? value with { TextureReference = new("", missingRoot + ".NewTexture", 0, "Texture2D") } : value)
+                .ToArray() } };
+            TseHeadMorphRon.Write(ron, changed);
+            var destination = Path.Combine(directory, "existing.pcsav");
+            File.WriteAllBytes(destination, before);
+            foreach (var target in new[] { source, destination })
+            {
+                try { workspace.SaveEditedRon(ron, target); throw new Exception("An unavailable new texture reached the career save."); }
+                catch (InvalidDataException exception)
+                {
+                    TestAssert.Equal("loc_PlayerAsset_SeekFreeSourceRequired", UserFacingMessage.FromException(exception)!.LocalizationKey);
+                }
+                TestAssert.True(before.SequenceEqual(File.ReadAllBytes(source)) && before.SequenceEqual(File.ReadAllBytes(destination)),
+                    "A rejected career save overwrote its source or destination.");
+            }
+        }
+        finally { Directory.Delete(directory, recursive: true); }
     }
 
     private static void HairTextureClearing()

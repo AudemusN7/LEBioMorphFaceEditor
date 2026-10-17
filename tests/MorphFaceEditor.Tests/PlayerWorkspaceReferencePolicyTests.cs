@@ -9,7 +9,7 @@ public static class PlayerWorkspaceReferencePolicyTests
 {
     public static IReadOnlyList<TestCase> All { get; } =
     [
-        new("Player texture projection admits only the two global HIR fallback maps", GlobalHairFallbacksAreAllowed),
+        new("Player texture projection requires proven sources for global and BIOG paths", GlobalHairFallbacksAreAllowed),
         new("Player texture projection admits LE3 HMM Short Scalp maps only from their base package", Le3ShortScalpMapsAreNarrowlyAllowed)
     ];
 
@@ -30,8 +30,10 @@ public static class PlayerWorkspaceReferencePolicyTests
             Candidate(normal),
             Candidate(unrelatedTwoPart),
             Candidate(unrelatedNonBiog),
-            Candidate(nonBiogFallback)
-        ]);
+            Candidate(nonBiogFallback),
+            Candidate("BIOG_Fake.LevelOnly.Texture")
+        ], new PlayerRuntimeAssetAvailability(MorphFaceGame.LE2, new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            { "Texture2D|" + black, "Texture2D|" + normal }));
 
         TestAssert.Equal(2, projected.Count);
         TestAssert.True(projected.Any(candidate => candidate.InstancedPath == black),
@@ -63,7 +65,13 @@ public static class PlayerWorkspaceReferencePolicyTests
                 "Hair_Short04.HMM_HIR_Short_Scalp_Diff", baseGame, [baseGame])
         };
 
-        var projected = PlayerWorkspaceReferencePolicy.SelectRegistryTextures(candidates);
+        var projected = PlayerWorkspaceReferencePolicy.SelectRegistryTextures(candidates,
+            new PlayerRuntimeAssetAvailability(MorphFaceGame.LE3, new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "Texture2D|BIOG_HMM_HIR_PRO_R." + diffuse,
+                "Texture2D|BIOG_HMM_HIR_PRO_R." + normal,
+                "Texture2D|BIOG_HMM_HIR_PRO_R." + mask
+            }));
 
         TestAssert.Equal(3, projected.Count);
         TestAssert.True(projected.Any(candidate => candidate.InstancedPath == diffuse),

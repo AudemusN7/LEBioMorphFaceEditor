@@ -16,7 +16,7 @@ public static class TextureCatalogTests
     public static IReadOnlyList<TestCase> All { get; } =
     [
         new("texture catalogue: detached mesh profile covers supported racial scopes", DetachedMeshProfileCoversSupportedRacialScopes),
-        new("player workspace: pickers admit only seek-free qualified BIOG references", PlayerPickerRequiresSeekFreePaths),
+        new("player workspace: pickers admit only proven runtime identities", PlayerPickerRequiresSeekFreePaths),
         new("texture catalogue: duplicate paths default to the official occurrence", DuplicatePathsKeepOfficialOccurrenceAsDefault),
         new("texture catalogue: BIOG and cooked aliases collapse to official defaults", PickerCollapsesAliasesAndPreservesOverride),
         new("texture catalogue: path-only lookup chooses highest official while retaining physical choices", PathOnlyLookupPrefersHighestOfficial),
@@ -52,16 +52,19 @@ public static class TextureCatalogTests
 
         var qualifiedTexture = Candidate(qualified, "EntryMenu.pcc");
         var relativeTexture = Candidate(relative, "BIOG_HMF_HED_PROMorph_R.pcc");
-        var textures = PlayerWorkspaceReferencePolicy.SelectRegistryTextures([qualifiedTexture, relativeTexture]);
-        TestAssert.Equal(1, textures.Count);
+        var available = new PlayerRuntimeAssetAvailability(MorphFaceGame.LE3,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Texture2D|" + qualified,
+                "SkeletalMesh|BIOG_HMF_HIR_PRO.Hair_PROShepard.HMF_HIR_PROShepard_MDL" });
+        var textures = PlayerWorkspaceReferencePolicy.SelectRegistryTextures([qualifiedTexture, relativeTexture], available);
+        TestAssert.Equal(2, textures.Count);
         TestAssert.Equal(qualified, textures[0].InstancedPath);
 
         var qualifiedMesh = new PackageAssetListItem(new AssetIdentity(
             "EntryMenu.pcc", "BIOG_HMF_HIR_PRO.Hair_PROShepard.HMF_HIR_PROShepard_MDL", 1, "SkeletalMesh"));
         var relativeMesh = new PackageAssetListItem(new AssetIdentity(
             "BIOG_HMF_HIR_PRO.pcc", "Hair_PROShepard.HMF_HIR_PROShepard_MDL", 2, "SkeletalMesh"));
-        var meshes = PlayerWorkspaceReferencePolicy.SelectPackageAssets([qualifiedMesh, relativeMesh]);
-        TestAssert.Equal(1, meshes.Count);
+        var meshes = PlayerWorkspaceReferencePolicy.SelectPackageAssets([qualifiedMesh, relativeMesh], available);
+        TestAssert.Equal(2, meshes.Count);
         TestAssert.Equal(qualifiedMesh.Identity, meshes[0].Identity);
     }
 

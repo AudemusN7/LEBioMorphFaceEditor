@@ -1,3 +1,4 @@
+using MorphFaceEditor.LegendaryExplorer;
 using System.Windows.Input;
 using System.IO;
 using MorphFaceEditor.Core.Domain;
@@ -62,6 +63,13 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
 
     public IReadOnlyList<MaterialScalarEditorViewModel> Scalars => _scalars;
     public IReadOnlyList<MaterialVectorEditorViewModel> Vectors => _vectors;
+    private PlayerRuntimeAssetAvailability? _playerReferences;
+    public void RestrictPlayerReferences(PlayerRuntimeAssetAvailability available)
+    {
+        _playerReferences = available;
+        foreach (var texture in Textures) texture.RestrictPlayerReferences(available);
+    }
+
     public IReadOnlyList<MaterialTextureEditorViewModel> Textures => _textures;
     public MorphFaceMaterialData CaptureInterchangeData() => _session.CaptureInterchangeData();
     public void MergeMaterialData(MorphFaceMaterialData data, IReadOnlyDictionary<string, DecodedTextureAsset?> textures) =>
@@ -201,6 +209,8 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
             .OrderBy(value => value.Group)
             .ThenBy(value => value.Label)
             .ToArray();
+        if (_playerReferences is { } available)
+            foreach (var texture in _textures) texture.RestrictPlayerReferences(available);
         OnPropertyChanged(nameof(Scalars));
         OnPropertyChanged(nameof(Vectors));
         OnPropertyChanged(nameof(Textures));

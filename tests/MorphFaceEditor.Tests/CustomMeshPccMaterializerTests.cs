@@ -69,8 +69,7 @@ public static class CustomMeshPccMaterializerTests
                     destination,
                     first,
                     authoredRoot,
-                    textureCatalog: null,
-                    preferBiogTextures: false);
+                    textureCatalog: null);
                 var reachable = ReachableExports(imported);
                 TestAssert.True(reachable.Contains(imported), "The imported cycle lost its authored root.");
                 TestAssert.Equal(3, reachable.Count);

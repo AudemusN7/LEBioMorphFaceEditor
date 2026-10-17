@@ -44,6 +44,7 @@ public static class UiSmokeTests
         new("application settings: detached diagnostics include loaded geometry and current material assignments", DiagnosticDetachedMeshIncludesState),
         new("standalone morph import is available before opening a PCC", StandaloneImportIsAvailableWithoutPackage),
         new("source file save preserves RON edits on failure and blocks multiple imports", SourceFileSaveRoundTrip),
+        new("Player pickers require seekfree backing and saving rechecks changed sources", PlayerRonRequiresSeekFreeBacking),
         new("Morphs-only RON opens its base face saves features and retains unrelated edits", MorphFeaturesFileWorkflow),
         new("MFE RON representative exports reopen full morph and material scopes across games", RepresentativeRonReopens),
         new("BAF TUF material RON audit distinguishes available female bases from safe rejection", FemaleMaterialRonAudit),
@@ -639,9 +640,10 @@ public static class UiSmokeTests
             var game = MorphFaceGame.LE2;
             var seed = StandalonePlayerMorphImportService.ResolveInstalledSeed(game);
             var seedBytes = File.ReadAllBytes(seed);
-            new MorphFacePackageContextService().ExportRon(seed,
-                StandalonePlayerMorphImportService.ResolvePlayerTemplate(game, StandalonePlayerSex.Female), path,
+            new MorphFacePackageContextService().ExportPlayerDefaultsRon(game, StandalonePlayerSex.Female, path,
                 new RonExportProvenance(RonExportProducer.MFE, "0.9.6", game, "HMF", true));
+            TestAssert.Equal("BIOG_HMF_HED_PROMorph_R.Average.HMF_HED_PROLash_Opac_M01", TseHeadMorphRon.Read(path)
+                .MaterialData.Textures.Single(value => value.Name == "HED_Lash_Diff").TextureReference!.InstancedPath);
             using var reader = new MorphFacePackageReader();
             var dialogs = new StubEditorDialogs
             {
@@ -709,6 +711,156 @@ public static class UiSmokeTests
             if (File.Exists(second)) File.Delete(second);
             if (File.Exists(copy)) File.Delete(copy);
         }
+    });
+
+    private static void PlayerRonRequiresSeekFreeBacking() => RunWithDispatcher(async () =>
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        var directory = Path.Combine(Path.GetTempPath(), $"MFE-PlayerRuntime-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var game = MorphFaceGame.LE1;
+            var ron = Path.Combine(directory, "Player.ron");
+            var output = Path.Combine(directory, "Export.ron");
+            var materials = Path.Combine(directory, "Player.materials.ron");
+            var level = Path.Combine(directory, "BioD_MFE_100.pcc");
+            var rootName = "BIOG_HMF_HED_MFE_" + Guid.NewGuid().ToString("N");
+            var runtimePath = rootName + ".Custom.HMF_HED_Test_Diff";
+            var seekfree = Path.Combine(directory, "DLC_MOD_MFE", "CookedPCConsole", rootName + ".pcc");
+            Directory.CreateDirectory(Path.GetDirectoryName(seekfree)!);
+            var pcc = Path.Combine(directory, "Export.pcc");
+            int textureIndex;
+            using (var package = MEPackageHandler.CreateMemoryEmptyPackage(level, MEGame.LE1))
+            {
+                var root = package.CreatePackageExport(rootName);
+                var group = package.CreatePackageExport("Custom", root);
+                var texture = package.CreateExport("HMF_HED_Test_Diff", "Texture2D", group, indexed: false);
+                foreach (var export in new[] { root, group, texture })
+                    export.ExportFlags |= UnrealFlags.EExportFlags.ForcedExport;
+                texture.WriteProperty(new EnumProperty(new NameReference("PF_A8R8G8B8"),
+                    new NameReference("EPixelFormat"), MEGame.LE1, "Format"));
+                texture.WriteBinary(new UTexture2D
+                {
+                    Mips = [new UTexture2D.Texture2DMipMap([31, 0, 0, 255], 1, 1)]
+                });
+                textureIndex = texture.UIndex;
+                package.Save(level);
+            }
+            void WriteSeekFree(bool forcedParent)
+            {
+                using var package = MEPackageHandler.CreateMemoryEmptyPackage(seekfree, MEGame.LE1);
+                var group = package.CreatePackageExport("Custom", forcedExport: false);
+                var texture = package.CreateExport("HMF_HED_Test_Diff", "Texture2D", group, indexed: false);
+                if (forcedParent) group.ExportFlags |= UnrealFlags.EExportFlags.ForcedExport;
+                texture.WriteProperty(new EnumProperty(new NameReference("PF_A8R8G8B8"),
+                    new NameReference("EPixelFormat"), MEGame.LE1, "Format"));
+                texture.WriteBinary(new UTexture2D { Mips = [new UTexture2D.Texture2DMipMap([31, 0, 0, 255], 1, 1)] });
+                package.Save(seekfree);
+            }
+            new MorphFacePackageContextService().ExportRon(
+                StandalonePlayerMorphImportService.ResolveInstalledSeed(game),
+                StandalonePlayerMorphImportService.ResolvePlayerTemplate(game, StandalonePlayerSex.Female), ron,
+                new RonExportProvenance(RonExportProducer.MFE, "0.10.0.9", game, "HMF", true));
+            var original = File.ReadAllBytes(ron);
+            var registry = TestFixtures.CreateMissingTextureCatalogService();
+            await registry.ReadAsync(game);
+            using var reader = new MorphFacePackageReader();
+            var dialogs = new StubEditorDialogs { RonExportPath = output, StandaloneNameChoiceResult = "RuntimeSourceTest",
+                MorphPackageDestination = new MorphPackageSaveRequest(pcc, true) };
+            var context = new MorphFacePackageContextService(new PlayerRuntimeAssetValidator(
+                requestedGame => PlayerRuntimeAssetValidator.KnownPackages(requestedGame).Append(seekfree)));
+            using var shell = CreateMainWindowViewModel(reader, dialogs, textureCatalog: registry, context: context);
+            await shell.OpenDroppedFileAsync(ron);
+            TestAssert.True(shell.Editor is not null && !shell.HasError, shell.ErrorMessage ?? "Player setup failed.");
+            var occurrence = new TextureCatalogOccurrence(level, textureIndex, 0, TextureCatalogOrigin.Manual,
+                1, 1, "PF_A8R8G8B8", "TEXTUREGROUP_Character", false, null);
+            async Task SelectLevelTexture(MainWindowViewModel target)
+            {
+                var references = target.Editor!.CreateDraft().MaterialOverrides.Textures
+                    .Where(value => value.TextureReference is not null).Select(value => value.TextureReference!)
+                    .Append(new AssetIdentity(level, runtimePath, textureIndex, "Texture2D"))
+                    .Concat(target.Editor.AttachmentMeshes.Select(value => value.Value).OfType<AssetIdentity>()).ToArray();
+                var available = await Task.Run(() => context.FindAvailablePlayerAssets(game, references));
+                target.Editor.RestrictPlayerReferences(available);
+                target.Editor.UpdateRegistryTextureCandidates(
+                    [new TextureCatalogCandidate(game, runtimePath, occurrence, [occurrence])], TextureCatalogProfile.Empty, true);
+                var control = target.Editor.Material.Textures.First(value => value.Name.Equals("HED_Diff", StringComparison.OrdinalIgnoreCase));
+                control.CommitTexture(control.Candidates.Single(value => value.InstancedPath == runtimePath));
+                for (var wait = 0; control.IsBusy && wait < 1000; wait++) await Task.Delay(10);
+                TestAssert.True(!control.IsBusy, "The level texture was not selected.");
+            }
+            var missingReferences = context.FindAvailablePlayerAssets(game,
+                [new AssetIdentity(level, runtimePath, textureIndex, "Texture2D")]);
+            shell.Editor!.RestrictPlayerReferences(missingReferences);
+            shell.Editor.UpdateRegistryTextureCandidates(
+                [new TextureCatalogCandidate(game, runtimePath, occurrence, [occurrence])], TextureCatalogProfile.Empty, true);
+            TestAssert.True(shell.Editor.Material.Textures.All(control => control.Candidates.All(value => value.InstancedPath != runtimePath)),
+                "A level-only texture remained visible in a Player picker.");
+            WriteSeekFree(false);
+            await SelectLevelTexture(shell);
+            File.Delete(seekfree);
+            TestAssert.Equal(runtimePath, shell.Editor.CreateDraft().MaterialOverrides.Textures
+                .Single(value => value.Name == "HED_Diff").TextureReference!.InstancedPath);
+            await ((AsyncRelayCommand)shell.ExportMorphRonCommand).ExecuteAsync();
+            TestAssert.True(shell.HasError && !File.Exists(output),
+                $"Player RON export wrote a level-only texture '{runtimePath}' without a seekfree source.");
+            TestAssert.True(shell.ErrorMessage!.Contains(runtimePath) && shell.ErrorMessage.Contains("BIOG seekfree"),
+                "The rejection did not identify the missing runtime asset through the localised message.");
+            await ((AsyncRelayCommand)shell.SaveCommand).ExecuteAsync();
+            TestAssert.True(shell.HasError && shell.IsDirty && original.SequenceEqual(File.ReadAllBytes(ron)),
+                "A rejected source RON save changed the file or discarded pending edits.");
+            dialogs.RonExportPath = materials;
+            await ((AsyncRelayCommand)shell.ExportMaterialsCommand).ExecuteAsync();
+            TestAssert.True(shell.HasError && !File.Exists(materials), "A Player material preset accepted a level-only texture.");
+            dialogs.RonExportPath = output;
+
+            WriteSeekFree(false);
+            await ((AsyncRelayCommand)shell.ExportMorphRonCommand).ExecuteAsync();
+            TestAssert.True(!shell.HasError && File.Exists(output), shell.ErrorMessage ?? "A valid mod seekfree counterpart was rejected.");
+            TestAssert.Equal(runtimePath, TseHeadMorphRon.Read(output).MaterialData.Textures
+                .Single(value => value.Name == "HED_Diff").TextureReference!.InstancedPath);
+            var exported = File.ReadAllBytes(output);
+            dialogs.RonExportPath = materials;
+            await ((AsyncRelayCommand)shell.ExportMaterialsCommand).ExecuteAsync();
+            TestAssert.True(!shell.HasError && File.Exists(materials), shell.ErrorMessage ?? "A Player material preset rejected valid seekfree backing.");
+            dialogs.RonExportPath = output;
+            WriteSeekFree(true);
+            await ((AsyncRelayCommand)shell.ExportMorphRonCommand).ExecuteAsync();
+            TestAssert.True(shell.HasError && exported.SequenceEqual(File.ReadAllBytes(output)),
+                "A forced outer was accepted or a rejected export damaged the existing RON.");
+            File.Delete(seekfree);
+            await ((AsyncRelayCommand)shell.SaveMorphToPccCommand).ExecuteAsync();
+            TestAssert.True(!shell.HasError && File.Exists(pcc), shell.ErrorMessage ?? "A level-only asset could not export to PCC.");
+            using var exportedPackage = MEPackageHandler.OpenMEPackage(pcc, forceLoadFromDisk: true);
+            var saved = reader.Load(pcc, exportedPackage.Exports.Single(export => export.ClassName == "BioMorphFace").InstancedFullPath).Document;
+            TestAssert.Equal(runtimePath, saved.MaterialOverrides.Textures.Single(value => value.Name == "HED_Diff")
+                .TextureReference!.InstancedPath);
+
+            var tse = Path.Combine(directory, "Player.tse.ron");
+            File.WriteAllText(tse, MorphFaceEditor.Core.Services.MaterialRonCodec.WriteTse(shell.Editor!.Material.CaptureInterchangeData(),
+                "None", [], game.ToString(), new MaterialFaceTarget("le1-human-female", true)));
+            foreach (var preset in new[] { materials, tse })
+            {
+                using var presetReader = new MorphFacePackageReader();
+                using var presetShell = CreateMainWindowViewModel(presetReader, new StubEditorDialogs(), textureCatalog: registry, context: context);
+                await presetShell.OpenDroppedFileAsync(preset);
+                TestAssert.True(presetShell.Editor is not null && !presetShell.HasError, presetShell.ErrorMessage ?? "The preset did not open.");
+                WriteSeekFree(false);
+                await SelectLevelTexture(presetShell);
+                File.Delete(seekfree);
+                presetShell.Editor!.Material.Scalars.First().Value += 0.125f;
+                var before = File.ReadAllBytes(preset);
+                await ((AsyncRelayCommand)presetShell.SaveCommand).ExecuteAsync();
+                TestAssert.True(presetShell.HasError && presetShell.IsDirty && before.SequenceEqual(File.ReadAllBytes(preset)),
+                    "A rejected Player material-preset save changed its file or discarded pending edits.");
+                WriteSeekFree(false);
+                await ((AsyncRelayCommand)presetShell.SaveCommand).ExecuteAsync();
+                TestAssert.True(!presetShell.HasError && !presetShell.IsDirty, presetShell.ErrorMessage ?? "Valid preset save failed.");
+                File.Delete(seekfree);
+            }
+        }
+        finally { Directory.Delete(directory, recursive: true); }
     });
 
     private static void StandaloneImportIsAvailableWithoutPackage()
@@ -2910,13 +3062,14 @@ public static class UiSmokeTests
         MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureCatalogService? textureCatalog = null,
         IHdrColorDialogService? colorDialog = null,
         StartupPreferencesService? startupPreferences = null,
-        MorphRandomisationCatalog? randomisationCatalog = null)
+        MorphRandomisationCatalog? randomisationCatalog = null,
+        MorphFacePackageContextService? context = null)
     {
         var sceneFactory = new HeadPreviewSceneFactory();
         var profiles = MorphFaceProfileRegistry.CreateDefault();
         var targets = new MorphTargetCatalog();
         var writer = new MorphFacePackageWriter();
-        var context = new MorphFacePackageContextService();
+        context ??= new MorphFacePackageContextService();
         textureCatalog ??= TestFixtures.CreateMissingTextureCatalogService();
         return new MainWindowViewModel(
             dialogs ?? new StubEditorDialogs(),

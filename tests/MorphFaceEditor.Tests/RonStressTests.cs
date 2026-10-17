@@ -379,13 +379,23 @@ internal static class RonStressTests
                     using var imported = service.ImportPlayerRon(
                         game, ronPath, $"RonStress_{game}_{primary.Sex}", assets);
 
+                    var skippedTextureNames = imported.SaveResult.UserWarnings
+                        .Where(warning => warning.LocalizationKey == "loc_RonImport_TextureSkipped")
+                        .Select(warning => (string)warning.Arguments[0]!)
+                        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    expected = expected with { MaterialData = expected.MaterialData with
+                        { Textures = expected.MaterialData.Textures.Where(value => !skippedTextureNames.Contains(value.Name)).ToArray() } };
                     TestAssert.Equal(game, imported.Game);
                     TestAssert.Equal(primary.Sex, imported.Sex);
                     if (primary.FileName.Contains("LE1-2_Customizable_Sheploo", StringComparison.OrdinalIgnoreCase))
                     {
                         TestAssert.True(imported.SaveResult.Warnings.Any(value =>
                                 value.Contains("HMM_HIR_PROCustomFade01_Mask", StringComparison.OrdinalIgnoreCase)),
-                            $"{game} Sheploo silently rewrote or discarded its malformed authored texture path.");
+                            $"{game} Sheploo did not report its skipped malformed texture path.");
+                        TestAssert.True(context.CaptureMaterialData(imported.Workspace.WorkingPath, imported.ImportedFacePath)
+                            .Textures.All(value => value.TextureReference?.InstancedPath !=
+                                "BIOG_HMM_HIR_PRO_R.PROCustomFade02.HMM_HIR_PROCustomFade01_Mask"),
+                            "Sheploo retained its unavailable scalp override.");
                     }
                     if (primary.FileName.Contains("ashleyhair", StringComparison.OrdinalIgnoreCase))
                     {

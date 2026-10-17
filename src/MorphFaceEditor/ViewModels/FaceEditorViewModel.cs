@@ -1,3 +1,4 @@
+using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Core.Deformation;
@@ -315,11 +316,24 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     public bool HasLimitedCustomMaterials { get; }
     public bool IsMeshDatabaseUnavailable => !_isTextureRegistryPending && !_isTextureRegistryAvailable;
     public string AttachmentRegistryNotice => Loc.Format("loc_VM_texture_registryChoicesUnavailable", _localMeshCandidateCount);
+    private PlayerRuntimeAssetAvailability? _playerReferenceAvailability;
+
+    public void RestrictPlayerReferences(PlayerRuntimeAssetAvailability available)
+    {
+        _playerReferenceAvailability = available;
+        _registryTextureCandidates = PlayerWorkspaceReferencePolicy.SelectRegistryTextures(_registryTextureCandidates, available);
+        _registryAttachmentCandidates = PlayerWorkspaceReferencePolicy.SelectRegistryMeshes(_registryAttachmentCandidates, available);
+        Material.RestrictPlayerReferences(available);
+        foreach (var attachment in AttachmentMeshes) attachment.RestrictPlayerReferences(available);
+    }
+
     public void UpdateRegistryTextureCandidates(
         IReadOnlyList<TextureCatalogCandidate> candidates,
         TextureCatalogProfile profile,
         bool isRegistryAvailable)
     {
+        if (_playerReferenceAvailability is { } available)
+            candidates = PlayerWorkspaceReferencePolicy.SelectRegistryTextures(candidates, available);
         _registryTextureCandidates = candidates;
         Material.UpdateRegistryCandidates(candidates, profile, isRegistryAvailable);
         _isTextureRegistryAvailable = isRegistryAvailable;
@@ -330,6 +344,8 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         IReadOnlyList<AttachmentMeshCandidate> candidates,
         bool isPlayerWorkspace)
     {
+        if (_playerReferenceAvailability is { } available)
+            candidates = PlayerWorkspaceReferencePolicy.SelectRegistryMeshes(candidates, available);
         _registryAttachmentCandidates = candidates;
         foreach (var attachment in AttachmentMeshes)
             attachment.UpdateRegistryCandidates(candidates, isPlayerWorkspace);

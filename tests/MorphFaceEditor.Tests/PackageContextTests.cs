@@ -65,12 +65,12 @@ public static class PackageContextTests
         new("TSE RON export and import round-trip a real BioMorphFace", RonRoundTripsMorph),
         new("unresolved RON assets fail atomically without same-name substitution", RonUnresolvedAssetsFailAtomically),
         new("unresolved standalone RON attachments are rejected before PCC publication", StandaloneRonUnresolvedAttachmentFailsAtomically),
-        new("standalone NPC RON omits unresolved hair with a visible warning", StandaloneNpcRonUnresolvedHairDegrades),
+        new("standalone NPC RON omits missing hair accessories and textures with visible warnings", StandaloneNpcRonUnresolvedHairDegrades),
         new("standalone player RON sex detection uses per-game LOD0 topology", StandalonePlayerRonSexDetection),
         new("standalone player RON import creates a detached non-committable workspace", StandalonePlayerRonImport),
         new("standalone NPC RON import uses a detached native donor workspace", StandaloneNpcRonImport),
         new("cancelled standalone NPC construction preserves the prior workspace and cleans PCC candidates", CancelledStandaloneNpcConstructionCleansCandidates),
-        new("standalone LE1 and LE2 Asari RONs import directly in both directions", StandaloneNpcRonLe1ToLe2),
+        new("standalone LE1 and LE2 NPC RONs import and export native heads in both directions", StandaloneNpcRonLe1ToLe2),
         new("standalone NPC RON rejects cross-game LE3 routing before publication", StandaloneNpcRonRejectsLe3CrossGame),
         new("standalone player PSK import proves topology and preserves its fixed bake", StandalonePlayerPskImport),
         new("standalone player glTF export-import preserves its exact fixed bake", StandalonePlayerGltfImport),
@@ -2690,7 +2690,8 @@ public static class PackageContextTests
     private static void StandaloneNpcRonUnresolvedHairDegrades()
     {
         LegendaryExplorerCoreRuntime.Initialize();
-        WithPackageCopy("LE3 GlobalMorphs.pcc", path =>
+        foreach (var game in new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 })
+        WithPackageCopy($"{game} GlobalMorphs.pcc", path =>
         {
             var service = new MorphFacePackageContextService();
             string facePath;
@@ -2708,6 +2709,8 @@ public static class PackageContextTests
             }
 
             var ronPath = Path.Combine(Path.GetTempPath(), $"MFE-RonNpcMissingHair-{Guid.NewGuid():N}.ron");
+            const string missingAccessory = "BIOG_MFE_Missing.Accessory.Missing_MDL";
+            const string missingTexture = "BIOG_MFE_Missing.Face.Missing_Diff";
             const string missingPath = "BIOG_MFE_Missing_Npc_Hair.Hair_Missing.HMF_HIR_Missing_MDL";
             try
             {
@@ -2720,11 +2723,15 @@ public static class PackageContextTests
                 }
 
                 service.ExportRon(path, facePath, ronPath);
-                var original = File.ReadAllText(ronPath);
-                File.WriteAllText(ronPath, original.Replace(
-                    $"hair_mesh: \"{hairPath}\"",
-                    $"hair_mesh: \"{missingPath}\"",
-                    StringComparison.Ordinal));
+                var ron = TseHeadMorphRon.Read(ronPath);
+                var missingParameter = ron.MaterialData.Textures.First().Name;
+                TseHeadMorphRon.Write(ronPath, ron with
+                {
+                    HairMesh = missingPath,
+                    AccessoryMeshes = [missingAccessory],
+                    MaterialData = ron.MaterialData with { Textures = [new(missingParameter,
+                        new AssetIdentity(path, missingTexture, 0, "Texture2D"))] }
+                });
                 var expectedMorph = service.CaptureMorphData(path, facePath);
 
                 var result = service.ImportStandaloneNpcRon(
@@ -2732,14 +2739,14 @@ public static class PackageContextTests
                     facePath,
                     "MFE_Npc_UnresolvedHair",
                     ronPath,
-                    MorphFaceGame.LE3,
-                    MorphFaceGame.LE3,
-                    "le3-hmm",
+                    game,
+                    game,
+                    $"{game.ToString().ToLowerInvariant()}-hmm",
                     path,
                     [],
                     [],
                     new StandalonePlayerAssetCatalog(
-                        MorphFaceGame.LE3,
+                        game,
                         [],
                         [new AssetIdentity(path, missingPath, hairUIndex, "SkeletalMesh")]));
 
@@ -2748,6 +2755,12 @@ public static class PackageContextTests
                         warning.Contains("omitted", StringComparison.OrdinalIgnoreCase) &&
                         warning.Contains("import placeholder", StringComparison.OrdinalIgnoreCase)),
                     "The NPC import did not report the omitted hair path and reason.");
+                foreach (var skipped in new[] { missingAccessory, missingTexture })
+                    TestAssert.True(result.Warnings.Any(warning => warning.Contains(skipped) && warning.Contains("omitted")),
+                        $"{game} did not report skipped optional asset {skipped}.");
+                TestAssert.Equal(3, result.UserWarnings.Count);
+                TestAssert.True(service.CaptureMaterialData(path, result.FaceInstancedPath).Textures.All(value =>
+                    value.Name != missingParameter), "The missing texture override was retained instead of inheriting.");
                 AssertMorphEqual(expectedMorph,
                     service.CaptureMorphData(path, result.FaceInstancedPath));
 
@@ -2757,6 +2770,8 @@ public static class PackageContextTests
                     TestAssert.True(imported is not null, "The NPC import did not publish its BioMorphFace.");
                     TestAssert.True(imported!.GetProperty<ObjectProperty>("m_oHairMesh") is null,
                         "The NPC import retained an unresolved m_oHairMesh reference.");
+                    TestAssert.True(imported.GetProperty<ArrayProperty<ObjectProperty>>("m_oOtherMeshes") is null,
+                        "The NPC import retained an unresolved accessory reference.");
                 }
 
                 var exportedPath = Path.Combine(Path.GetTempPath(),
@@ -3095,46 +3110,54 @@ public static class PackageContextTests
 
     private static void StandaloneNpcRonLe1ToLe2()
     {
-        VerifyDirectNpcRonImport(MorphFaceGame.LE1, MorphFaceGame.LE2);
-        VerifyDirectNpcRonImport(MorphFaceGame.LE2, MorphFaceGame.LE1);
+        foreach (var archetype in new[] { "ASA", "HMF", "HMM" })
+        {
+            VerifyDirectNpcRonImport(MorphFaceGame.LE1, MorphFaceGame.LE2, archetype);
+            VerifyDirectNpcRonImport(MorphFaceGame.LE2, MorphFaceGame.LE1, archetype);
+        }
     }
 
-    private static void VerifyDirectNpcRonImport(MorphFaceGame sourceGame, MorphFaceGame targetGame)
+    private static void VerifyDirectNpcRonImport(MorphFaceGame sourceGame, MorphFaceGame targetGame, string archetype)
     {
         WithPackageCopy($"{sourceGame} GlobalMorphs.pcc", sourcePath =>
         WithPackageCopy($"{targetGame} GlobalMorphs.pcc", donorPath =>
         {
             var context = new MorphFacePackageContextService();
+            var suffix = archetype switch { "ASA" => "asari", "HMF" => "human-female", _ => "human-male" };
             var source = ReadFaces(sourcePath).First(face =>
-                face.ProfileKey.Equals($"{sourceGame.ToString().ToLowerInvariant()}-asari", StringComparison.OrdinalIgnoreCase));
+                face.ProfileKey.Equals($"{sourceGame.ToString().ToLowerInvariant()}-{suffix}", StringComparison.OrdinalIgnoreCase));
             var donor = ReadFaces(donorPath).First(face =>
-                face.ProfileKey.Equals($"{targetGame.ToString().ToLowerInvariant()}-asari", StringComparison.OrdinalIgnoreCase));
+                face.ProfileKey.Equals($"{targetGame.ToString().ToLowerInvariant()}-{suffix}", StringComparison.OrdinalIgnoreCase));
             var ronPath = Path.Combine(Path.GetTempPath(), $"MFE-NpcCrossGame-{Guid.NewGuid():N}.ron");
+            var outputPath = Path.Combine(Path.GetTempPath(), $"MFE-NpcCrossGameExport-{Guid.NewGuid():N}.pcc");
             var sourceFingerprint = PackageFingerprint.Capture(sourcePath);
             var donorFingerprint = PackageFingerprint.Capture(donorPath);
             try
             {
                 context.ExportRon(sourcePath, source.InstancedPath, ronPath);
                 var expectedMorph = context.CaptureMorphData(sourcePath, source.InstancedPath);
-                var expectedMaterial = context.CaptureMaterialData(sourcePath, source.InstancedPath);
+                var expectedMaterial = TseHeadMorphRon.Read(ronPath).MaterialData;
                 var registry = new TextureCatalogService(
                     new TextureRegistryStore(TextureRegistryPaths.CreateDefault()));
                 var sourceCatalog = registry.ReadAsync(sourceGame).GetAwaiter().GetResult();
                 var targetCatalog = registry.ReadAsync(targetGame).GetAwaiter().GetResult();
                 TestAssert.True(sourceCatalog.IsAvailable && targetCatalog.IsAvailable,
                     "LE1/LE2 texture databases are needed to verify direct NPC material transfer.");
+                var nativeDonor = new RonNpcDonorResolver(MorphFaceProfileRegistry.CreateDefault()).Resolve(
+                    targetGame, archetype, targetCatalog.MorphFaceTemplates, targetCatalog.OfficialPackagePaths);
+                var nativeFingerprint = PackageFingerprint.Capture(nativeDonor.PackagePath);
                 var assets = StandalonePlayerAssetCatalog.ForRon(
-                    targetGame, ronPath, targetCatalog.Candidates);
+                    targetGame, ronPath, targetCatalog.Candidates, nativeDonor.PackagePath);
 
                 using var imported = new StandaloneNpcMorphImportService().ImportNpcRon(
                     new StandaloneNpcMorphImportRequest(
                         sourceGame,
                         targetGame,
-                        "ASA",
+                        archetype,
                         ronPath,
-                        donorPath,
-                        donor.InstancedPath,
-                        "MFE_Npc_CrossGame_ASA",
+                        nativeDonor.PackagePath,
+                        nativeDonor.FacePath,
+                        $"MFE_Npc_CrossGame_{archetype}",
                         assets,
                         IsVerifiedNativeNpcDonor: true,
                         SourceTextureCatalog: sourceCatalog.Candidates,
@@ -3145,13 +3168,32 @@ public static class PackageContextTests
                     imported.Workspace.WorkingPath, imported.ImportedFacePath);
                 TestAssert.Equal(expectedMaterial.Scalars.Count, importedMaterial.Scalars.Count);
                 TestAssert.Equal(expectedMaterial.Vectors.Count, importedMaterial.Vectors.Count);
-                TestAssert.Equal(expectedMaterial.Textures.Count, importedMaterial.Textures.Count);
+                var skippedTextures = imported.SaveResult.UserWarnings
+                    .Where(warning => warning.LocalizationKey == "loc_RonImport_TextureSkipped")
+                    .Select(warning => (string)warning.Arguments[0]!).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                TestAssert.Equal(expectedMaterial.Textures.Count(value => !skippedTextures.Contains(value.Name)),
+                    importedMaterial.Textures.Count);
+                using (var reader = new MorphFacePackageReader())
+                {
+                    var loaded = reader.Load(imported.Workspace.WorkingPath, imported.ImportedFacePath);
+                    var saved = new MorphFacePackageWriter().SaveMorphToPackage(loaded.Document,
+                        nativeDonor.PackagePath, outputPath, createNewPackage: true);
+                    using var output = MEPackageHandler.OpenMEPackage(outputPath, forceLoadFromDisk: true);
+                    var head = output.FindExport(saved.FaceInstancedPath, "BioMorphFace")!
+                        .GetProperty<ObjectProperty>("m_oBaseHead")!.ResolveToEntry(output);
+                    TestAssert.True(head is ExportEntry, "The independent NPC PCC kept a level-dependent base-head import.");
+                    TestAssert.Equal(nativeDonor.BaseHeadPath, head!.InstancedFullPath);
+                    PackageIntegrity.Verify(output);
+                    AssertMorphEqual(expectedMorph, context.CaptureMorphData(outputPath, saved.FaceInstancedPath));
+                }
+                TestAssert.Equal(nativeFingerprint, PackageFingerprint.Capture(nativeDonor.PackagePath));
                 TestAssert.Equal(sourceFingerprint, PackageFingerprint.Capture(sourcePath));
                 TestAssert.Equal(donorFingerprint, PackageFingerprint.Capture(donorPath));
             }
             finally
             {
                 if (File.Exists(ronPath)) File.Delete(ronPath);
+                if (File.Exists(outputPath)) File.Delete(outputPath);
             }
         }));
     }

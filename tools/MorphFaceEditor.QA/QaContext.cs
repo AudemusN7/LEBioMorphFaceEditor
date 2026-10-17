@@ -277,17 +277,31 @@ internal sealed class QaContext : IDisposable
             int NextSeed() { var seed = random.Next(); seeds.Add(seed); return seed; }
             var editor = new FaceEditorViewModel(preview.EditingSession, preview.Profile.GetUiProfile(),
                 preview.MaterialEditingSession, new QaColorDialog(), references, path,
-                isPlayer ? PlayerWorkspaceReferencePolicy.SelectPackageAssets(packageReferences.Textures) : packageReferences.Textures,
+                packageReferences.Textures,
                 packageReferences.SkeletalMeshes, preview.Loaded.Document.HairMeshReference,
                 preview.Loaded.Document.OtherMeshReferences, message => throw new InvalidOperationException(message),
                 preview.Profile.Key, MorphRandomisationCatalog.LoadEmbedded(), NextSeed,
-                registryTextureCandidates: isPlayer ? PlayerWorkspaceReferencePolicy.SelectRegistryTextures(registry.Candidates) : registry.Candidates,
+                registryTextureCandidates: registry.Candidates,
                 textureCatalogProfile: TextureCatalogProfiles.For(preview.Profile), isTextureRegistryAvailable: true,
                 ignoresAuthoredGeometry: preview.Profile.IgnoresAuthoredGeometry,
                 allowsAttachmentEditing: detached is null,
                 customMaterialWorkspace: detached?.CustomMaterials, customMaterialOptions: detached?.MaterialOptions,
                 materialRandomisationProfileKey: detached is null ? null : "le2-salarian",
                 playerRandomisationGame: isPlayer ? preview.Loaded.Game : null);
+            if (isPlayer && detached is null)
+            {
+                var requested = packageReferences.Textures.Concat(packageReferences.SkeletalMeshes).Select(value => value.Identity)
+                    .Concat(registry.Candidates.SelectMany(candidate => candidate.Occurrences.Append(candidate.EffectiveOccurrence)
+                        .Select(occurrence => new AssetIdentity(occurrence.PackagePath, candidate.InstancedPath,
+                            occurrence.ExportUIndex, "Texture2D"))))
+                    .Concat(registry.AttachmentMeshes.Select(candidate => new AssetIdentity(candidate.EffectiveOccurrence.PackagePath,
+                        candidate.CanonicalPath, candidate.EffectiveOccurrence.ExportUIndex, "SkeletalMesh")))
+                    .Concat(preview.Loaded.Document.MaterialOverrides.Textures.Select(value => value.TextureReference).OfType<AssetIdentity>())
+                    .Concat(editor.AttachmentMeshes.Select(value => value.Value).OfType<AssetIdentity>()).ToArray();
+                var available = await Task.Run(() => new MorphFacePackageContextService()
+                    .FindAvailablePlayerAssets(preview.Loaded.Game, requested));
+                editor.RestrictPlayerReferences(available);
+            }
             editor.UpdateRegistryAttachmentMeshes(registry.AttachmentMeshes, isPlayer);
             editor.MorphRandomisationStrength = 100;
             editor.MaterialRandomisationStrength = 100;

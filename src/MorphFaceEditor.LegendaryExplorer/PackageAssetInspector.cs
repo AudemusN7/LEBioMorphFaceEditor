@@ -6,6 +6,24 @@ namespace MorphFaceEditor.LegendaryExplorer;
 
 public static class PackageAssetInspector
 {
+    // A source package may store a texture locally while RON/registry identities
+    // include its linker name. A stale UIndex never authorizes a different path.
+    internal static ExportEntry ResolveTextureExport(IMEPackage source, AssetIdentity identity)
+    {
+        bool Matches(ExportEntry export) =>
+            export.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase) &&
+            (export.InstancedFullPath.Equals(identity.InstancedPath, StringComparison.OrdinalIgnoreCase) ||
+             $"{Path.GetFileNameWithoutExtension(source.FilePath)}.{export.InstancedFullPath}"
+                 .Equals(identity.InstancedPath, StringComparison.OrdinalIgnoreCase));
+
+        if (identity.UIndex > 0 && source.IsUExport(identity.UIndex) &&
+            source.GetUExport(identity.UIndex) is { } indexed && Matches(indexed))
+            return indexed;
+        var matches = source.Exports.Where(Matches).Take(2).ToArray();
+        return matches.Length == 1 ? matches[0] : throw new InvalidDataException(
+            $"Texture2D '{identity.InstancedPath}' was {(matches.Length == 0 ? "not found" : "ambiguous")} in '{identity.PackagePath}'.");
+    }
+
     public static PackageInventory Inventory(string packagePath, IEnumerable<string>? classNames = null)
     {
         LegendaryExplorerCoreRuntime.Initialize();

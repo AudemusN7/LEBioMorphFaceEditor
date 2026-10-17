@@ -155,6 +155,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
         get => _selectedTexture;
         set
         {
+            if (!_initializing && value?.Asset is { } asset && _playerReferences?.Allows(asset.Identity) == false) return;
             if (!_initializing && value is not null)
             {
                 CancelTexturePreview();
@@ -202,12 +203,27 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
         }
     }
 
+    private PlayerRuntimeAssetAvailability? _playerReferences;
+
+    public void RestrictPlayerReferences(PlayerRuntimeAssetAvailability available)
+    {
+        _playerReferences = available;
+        var none = _allCandidates[0];
+        _allCandidates.Clear();
+        _allCandidates.Add(none);
+        _allCandidates.AddRange(BuildOptions(_session.GetSelectedTexture(Name), _physicalSourcesExpanded));
+        RebuildLookupIndices();
+        _defaultCandidates = BuildDefaultOptions(_allCandidates);
+        ApplySearch();
+        Refresh();
+    }
+
     public void Refresh()
     {
         var reference = _session.GetTextureReference(Name);
         var current = reference?.InstancedPath;
         _initializing = true;
-        if (reference is not null && !_exactPaths.ContainsKey(current!))
+        if (reference is not null && _playerReferences?.Allows(reference) != false && !_exactPaths.ContainsKey(current!))
         {
             _allCandidates.Add(new MaterialTextureOption(new MorphFaceEditor.Models.PackageAssetListItem(reference),
                 DisplayNameOverride: Loc.Format("loc_VM_texture_unresolvedReference", current)));
@@ -523,7 +539,9 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
     private IReadOnlyList<MaterialTextureOption> BuildOptions(
         DecodedTextureAsset? currentTexture, bool includePhysicalSources = false)
     {
-        var options = _localCandidates
+        var options = (_playerReferences is { } available
+                ? PlayerWorkspaceReferencePolicy.SelectPackageAssets(_localCandidates, available)
+                : _localCandidates)
             .Where(asset => !TextureRegistryDiscovery.IsExcludedPath(
                 TextureCatalogPicker.CanonicalPath(
                     asset.Identity.InstancedPath, asset.Identity.PackagePath)))
@@ -574,7 +592,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
             currentAsset.SetThumbnail(currentTexture);
             options.Add(new MaterialTextureOption(currentAsset, currentTexture));
         }
-        return options;
+        return options.Where(option => option.Asset is null || _playerReferences?.Allows(option.Asset.Identity) != false).ToArray();
     }
 
     private static IEnumerable<TextureCatalogOccurrence> PickerOccurrences(

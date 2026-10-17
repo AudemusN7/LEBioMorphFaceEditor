@@ -85,7 +85,7 @@ public sealed partial class MainWindowViewModel
         catch (Exception exception)
         {
             AppLog.Error("RON:EXPORT-FAILED", exception);
-            ErrorMessage = Loc.Format("loc_Shell_Error_TheRonHeadMorphCould", exception.Message);
+            ErrorMessage = Loc.Format("loc_Shell_Error_TheRonHeadMorphCould", UserFacingMessageFormatter.Format(exception));
             Status = Loc.Text("loc_Shell_Status_RonExportFailedThePcc");
         }
         finally
@@ -145,9 +145,7 @@ public sealed partial class MainWindowViewModel
         try
         {
             Directory.CreateDirectory(directory);
-            await Task.Run(() => _packageContextService.ExportRon(
-                StandalonePlayerMorphImportService.ResolveInstalledSeed(choice.Game),
-                StandalonePlayerMorphImportService.ResolvePlayerTemplate(choice.Game, choice.Sex), sourcePath));
+            await Task.Run(() => _packageContextService.ExportPlayerDefaultsRon(choice.Game, choice.Sex, sourcePath));
             IsBusy = false;
             await ImportStandaloneMorphAsync(sourcePath, choice.Game, newPlayerMode: true);
             if (_standaloneImportPath == sourcePath)
@@ -366,7 +364,7 @@ public sealed partial class MainWindowViewModel
                     SourceTextureCatalog: sourceCatalog.Candidates,
                     TargetTextureCatalog: textureCatalog.Candidates,
                     CancellationToken: cancellationToken)), cancellationToken);
-            importWarnings = imported.SaveResult.Warnings;
+            importWarnings = UserFacingMessageFormatter.FormatWarnings(imported.SaveResult);
 
             // Read and prepare the complete candidate before replacing the active editor.
             var candidatePath = imported.Workspace.WorkingPath;
@@ -629,7 +627,7 @@ public sealed partial class MainWindowViewModel
                     meshRecognition = meshResult.Recognition;
                 }
                 importedFacePath = saveResult.FaceInstancedPath;
-                importWarnings = saveResult.Warnings;
+                importWarnings = UserFacingMessageFormatter.FormatWarnings(saveResult);
             }
             else if (isRon)
             {
@@ -655,7 +653,7 @@ public sealed partial class MainWindowViewModel
                 _relativeBakeFacePaths.Clear();
                 PackagePath = result.Workspace.SourcePath;
                 importedFacePath = result.ImportedFacePath;
-                importWarnings = result.SaveResult.Warnings;
+                importWarnings = UserFacingMessageFormatter.FormatWarnings(result.SaveResult);
             }
             else if (isLegacy)
             {
@@ -672,7 +670,7 @@ public sealed partial class MainWindowViewModel
                 _relativeBakeFacePaths.Clear();
                 PackagePath = result.Workspace.SourcePath;
                 importedFacePath = result.ImportedFacePath;
-                importWarnings = result.SaveResult.Warnings;
+                importWarnings = UserFacingMessageFormatter.FormatWarnings(result.SaveResult);
             }
             else
             {
@@ -689,7 +687,7 @@ public sealed partial class MainWindowViewModel
                 _relativeBakeFacePaths.Clear();
                 PackagePath = result.Workspace.SourcePath;
                 importedFacePath = result.ImportedFacePath;
-                importWarnings = result.SaveResult.Warnings;
+                importWarnings = UserFacingMessageFormatter.FormatWarnings(result.SaveResult);
                 meshRecognition = result.Recognition;
             }
             _standaloneImportPath = Path.GetFullPath(career?.SourcePath ?? sourcePath);
@@ -951,7 +949,7 @@ public sealed partial class MainWindowViewModel
                 foreach (var warning in result.Warnings) AppLog.Warning(warning);
                 _dialogs.ShowInformation(
                     Loc.Text("loc_Shell_DialogTitle_NpcMorphImportedWithWarnings"),
-                    AppendDatabaseImportGuidance(Loc.Format("loc_Shell_Dialog_NpcMorphImportWarnings", string.Join("\n- ", result.Warnings))));
+                    AppendDatabaseImportGuidance(Loc.Format("loc_Shell_Dialog_NpcMorphImportWarnings", string.Join("\n- ", UserFacingMessageFormatter.FormatWarnings(result)))));
             }
             if (fit is { MaximumError: > 0.001f })
             {

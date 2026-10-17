@@ -32,10 +32,10 @@ internal static class StandaloneTextureImportTests
                 {
                     var identity = new AssetIdentity(group.Key, candidate.InstancedPath,
                         candidate.EffectiveOccurrence.ExportUIndex, "Texture2D");
-                    var resolved = ExternalTextureMaterializer.ResolveSourceExport(package, identity);
+                    var resolved = PackageAssetInspector.ResolveTextureExport(package, identity);
                     TestAssert.Equal(candidate.EffectiveOccurrence.ExportUIndex, resolved.UIndex);
                     // The same exact path must resolve even after a registry index goes stale.
-                    TestAssert.Equal(resolved, ExternalTextureMaterializer.ResolveSourceExport(package,
+                    TestAssert.Equal(resolved, PackageAssetInspector.ResolveTextureExport(package,
                         identity with { UIndex = 0 }));
                     var isLocal = !resolved.InstancedFullPath.Equals(candidate.InstancedPath, StringComparison.OrdinalIgnoreCase);
                     if (isLocal) local++; else qualified++;
@@ -62,7 +62,7 @@ internal static class StandaloneTextureImportTests
                 {
                     var canonical = PccAssetPathPolicy.FromExport(texture);
                     var identity = new AssetIdentity(package.FilePath, canonical, 0, "Texture2D");
-                    TestAssert.Equal(texture, ExternalTextureMaterializer.ResolveSourceExport(package, identity));
+                    TestAssert.Equal(texture, PackageAssetInspector.ResolveTextureExport(package, identity));
                     var isLocal = canonical != texture.InstancedFullPath;
                     if (isLocal) local++; else qualified++;
                     var sex = root.Contains("HMM", StringComparison.Ordinal) ? "HMM" : "HMF";
@@ -86,7 +86,7 @@ internal static class StandaloneTextureImportTests
             foreach (var texture in seedTextures)
             {
                 var identity = new AssetIdentity(seed.FilePath, texture.InstancedFullPath, 0, "Texture2D");
-                TestAssert.Equal(texture, ExternalTextureMaterializer.ResolveSourceExport(seed, identity));
+                TestAssert.Equal(texture, PackageAssetInspector.ResolveTextureExport(seed, identity));
             }
             totalLocal += local;
             TestAssert.True(seedTextures.Length > 0, $"{game} did not exercise seekfree texture paths.");

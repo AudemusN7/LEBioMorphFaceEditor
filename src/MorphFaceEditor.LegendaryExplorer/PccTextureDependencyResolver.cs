@@ -21,8 +21,7 @@ internal static class PccTextureDependencyResolver
     /// </summary>
     internal static PccTextureSource Resolve(
         AssetIdentity identity,
-        IReadOnlyList<TextureCatalogCandidate> catalog,
-        bool preferBiog)
+        IReadOnlyList<TextureCatalogCandidate> catalog)
     {
         ArgumentNullException.ThrowIfNull(identity);
         ArgumentNullException.ThrowIfNull(catalog);
@@ -57,21 +56,12 @@ internal static class PccTextureDependencyResolver
                 $"Texture2D '{identity.InstancedPath}' is not present in the installed texture database.");
         }
 
-        matches = matches.Where(value => value.Occurrence.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc).ToArray();
-        if (matches.Length == 0)
-        {
-            throw new KeyNotFoundException(
-                $"Texture2D '{identity.InstancedPath}' has no exact official installed donor.");
-        }
-
         var selected = matches.OrderByDescending(value => value.Occurrence.MountPriority)
             .ThenByDescending(value => IsSeekfreePackage(value.Occurrence.PackagePath))
             .ThenBy(value => value.Occurrence.PackagePath, StringComparer.OrdinalIgnoreCase).First();
         return new PccTextureSource(
-            requestedPath,
             selected.Path,
-            selected.Occurrence,
-            IsExplicitDonor: false);
+            selected.Occurrence);
     }
 
     /// <summary>
@@ -83,11 +73,10 @@ internal static class PccTextureDependencyResolver
         IMEPackage destination,
         AssetIdentity identity,
         IReadOnlyList<TextureCatalogCandidate> catalog,
-        bool preferBiog,
         ICollection<string>? warnings = null)
     {
         ArgumentNullException.ThrowIfNull(destination);
-        var source = Resolve(identity, catalog, preferBiog);
+        var source = Resolve(identity, catalog);
         return MaterializeResolved(destination, source, warnings);
     }
 
@@ -118,17 +107,7 @@ internal static class PccTextureDependencyResolver
         using var cache = new PackageCache();
         LegendaryExplorerCoreRuntime.Initialize();
         var resolver = new InstalledGameAssetResolver();
-        ExportEntry? donorTexture = source.IsExplicitDonor
-            ? resolver.Resolve(destination.Game,
-                new AssetIdentity(source.Occurrence.PackagePath, source.InstancedPath, source.Occurrence.ExportUIndex, "Texture2D")
-                { IsExplicitTextureDonor = true }, cache)
-            : resolver.Resolve(destination.Game, source.InstancedPath, "Texture2D", cache);
-        if (donorTexture is null && source.IsExplicitDonor)
-        {
-            donorTexture = ResolveSourceExport(cache.GetCachedPackage(source.Occurrence.PackagePath)
-                ?? throw new FileNotFoundException("The selected texture donor could not be opened.", source.Occurrence.PackagePath),
-                source.InstancedPath, source.Occurrence.ExportUIndex);
-        }
+        var donorTexture = resolver.Resolve(destination.Game, source.InstancedPath, "Texture2D", cache);
         if (donorTexture is null)
             throw new InvalidDataException(
                 $"Texture2D '{source.InstancedPath}' has no exact official installed donor.");
@@ -149,7 +128,6 @@ internal static class PccTextureDependencyResolver
             donorTexture,
             destinationParent: null,
             textureCatalog: null,
-            preferBiogTextures: false,
             warnings: warnings,
             applyCorpusMaterialPolicy: false,
             targetPathOverride: path);
@@ -176,29 +154,6 @@ internal static class PccTextureDependencyResolver
         var packageName = Path.GetFileNameWithoutExtension(packagePath);
         return packageName.StartsWith("BIOG", StringComparison.OrdinalIgnoreCase) &&
                !IsCharacterCreatorPackage(packagePath);
-    }
-
-    internal static ExportEntry ResolveSourceExport(
-        IMEPackage source,
-        string instancedPath,
-        int sourceUIndex)
-    {
-        bool Matches(ExportEntry export) =>
-            export.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase) &&
-            (export.InstancedFullPath.Equals(instancedPath, StringComparison.OrdinalIgnoreCase) ||
-             $"{Path.GetFileNameWithoutExtension(source.FilePath)}.{export.InstancedFullPath}"
-                 .Equals(instancedPath, StringComparison.OrdinalIgnoreCase));
-
-        if (sourceUIndex > 0 && source.IsUExport(sourceUIndex) &&
-            source.GetUExport(sourceUIndex) is { } indexed && Matches(indexed))
-        {
-            return indexed;
-        }
-        var matches = source.Exports.Where(Matches).Take(2).ToArray();
-        return matches.Length == 1
-            ? matches[0]
-            : throw new InvalidDataException(
-                $"Texture2D '{instancedPath}' was {(matches.Length == 0 ? "not found" : "ambiguous")} in '{source.FilePath}'.");
     }
 
     internal static void VerifyBulkDataPreserved(ExportEntry source, ExportEntry destination)
@@ -253,7 +208,5 @@ internal static class PccTextureDependencyResolver
 }
 
 internal sealed record PccTextureSource(
-    string RequestedPath,
     string InstancedPath,
-    TextureCatalogOccurrence Occurrence,
-    bool IsExplicitDonor = false);
+    TextureCatalogOccurrence Occurrence);

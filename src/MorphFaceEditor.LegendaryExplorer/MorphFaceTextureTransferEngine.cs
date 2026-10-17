@@ -59,13 +59,11 @@ internal static class MorphFaceTextureTransferEngine
             IEntry? targetEntry;
             if (decision.Kind == TransferKind.EmbedSource)
             {
-                var existingTargetPath = ResolveTargetPath(
-                    destination, sourcePath, targetTemplatePackagePath, donors, targetTextureCatalog, installedAssets);
-                targetEntry = existingTargetPath is not null
-                    ? MaterializeTargetTexture(
-                        destination, existingTargetPath, targetTemplatePackagePath, donors,
-                        targetTextureCatalog, warnings, installedAssets)
-                    : EmbedPackageStoredSourceTexture(
+                targetEntry = MaterializeTargetTexture(
+                    destination, sourcePath, targetTemplatePackagePath, donors,
+                    targetTextureCatalog, warnings, installedAssets, out var targetIdentityFound);
+                if (!targetIdentityFound)
+                    targetEntry = EmbedPackageStoredSourceTexture(
                         destination,
                         sourceGame,
                         sourcePackagePath,
@@ -81,20 +79,10 @@ internal static class MorphFaceTextureTransferEngine
                 var requestedPath = CrossGameAssetReconciliationCatalog.NormalizeTargetPath(
                     destination.Game,
                     decision.TargetPath ?? sourcePath)!;
-                var resolvedPath = decision.Kind == TransferKind.Alias
-                    ? requestedPath
-                    : ResolveTargetPath(
-                        destination,
-                        requestedPath,
-                        targetTemplatePackagePath,
-                        donors,
-                        targetTextureCatalog,
-                        installedAssets);
-                targetEntry = resolvedPath is null
-                    ? null
-                    : MaterializeTargetTexture(
-                        destination, resolvedPath, targetTemplatePackagePath, donors,
-                        targetTextureCatalog, warnings, installedAssets);
+                targetEntry = MaterializeTargetTexture(
+                    destination, requestedPath, targetTemplatePackagePath, donors,
+                    targetTextureCatalog, warnings, installedAssets, out _,
+                    isReviewedAlias: decision.Kind == TransferKind.Alias);
             }
 
             if (targetEntry is null)
@@ -210,66 +198,6 @@ internal static class MorphFaceTextureTransferEngine
         parameter.StartsWith("HAIR_", StringComparison.OrdinalIgnoreCase) ||
         string.Equals(parameter, "Hair_Spec", StringComparison.OrdinalIgnoreCase);
 
-    private static string? ResolveTargetPath(
-        IMEPackage destination,
-        string requestedPath,
-        string? targetTemplatePackagePath,
-        DonorPackages donors,
-        IReadOnlyList<TextureCatalogCandidate> targetTextureCatalog,
-        InstalledGameAssetResolver installedAssets)
-    {
-        if (installedAssets.Resolve(destination.Game, requestedPath, "Texture2D", donors.Cache) is not null)
-        {
-            return requestedPath;
-        }
-        if (FindEntryByCanonicalPath(destination, requestedPath, "Texture2D") is not null)
-        {
-            return requestedPath;
-        }
-
-        if (FindCatalogCandidate(targetTextureCatalog, requestedPath) is not null)
-        {
-            return requestedPath;
-        }
-
-        var candidates = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
-        foreach (var path in TargetDonorPaths(targetTemplatePackagePath))
-        {
-            if (!File.Exists(path) || SamePath(path, destination.FilePath))
-            {
-                continue;
-            }
-            var donor = donors.Open(path);
-            if (donor.Game != destination.Game)
-            {
-                continue;
-            }
-            foreach (var entry in TextureEntries(donor))
-            {
-                var canonicalPath = CanonicalPath(donor, entry);
-                if (!candidates.TryGetValue(canonicalPath, out var packagePaths))
-                {
-                    candidates[canonicalPath] = packagePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                }
-                packagePaths.Add(path);
-            }
-        }
-
-        if (candidates.ContainsKey(requestedPath))
-        {
-            return requestedPath;
-        }
-        return null;
-    }
-
-    private static IEnumerable<string> TargetDonorPaths(string? targetTemplatePackagePath)
-    {
-        if (!string.IsNullOrWhiteSpace(targetTemplatePackagePath))
-        {
-            yield return Path.GetFullPath(targetTemplatePackagePath);
-        }
-    }
-
     private static IEntry? MaterializeTargetTexture(
         IMEPackage destination,
         string canonicalPath,
@@ -277,15 +205,17 @@ internal static class MorphFaceTextureTransferEngine
         DonorPackages donors,
         IReadOnlyList<TextureCatalogCandidate> targetTextureCatalog,
         ICollection<string> warnings,
-        InstalledGameAssetResolver installedAssets)
+        InstalledGameAssetResolver installedAssets,
+        out bool targetIdentityFound,
+        bool isReviewedAlias = false)
     {
+        targetIdentityFound = true;
         if (installedAssets.Resolve(destination.Game, canonicalPath, "Texture2D", donors.Cache) is { } official)
         {
             return PccPackageWorkflow.ResolveTextureReference(
                 destination,
                 new AssetIdentity(official.FileRef.FilePath, canonicalPath, official.UIndex, "Texture2D"),
                 textureCatalog: null,
-                preferBiogTextures: false,
                 warnings: warnings);
         }
         if (FindEntryByCanonicalPath(destination, canonicalPath, "Texture2D") is { } existing)
@@ -304,26 +234,40 @@ internal static class MorphFaceTextureTransferEngine
                     occurrence.ExportUIndex,
                     "Texture2D"),
                 textureCatalog: null,
-                preferBiogTextures: false,
                 warnings: warnings);
         }
-        foreach (var path in TargetDonorPaths(targetTemplatePackagePath))
+        if (!string.IsNullOrWhiteSpace(targetTemplatePackagePath))
         {
-            if (!File.Exists(path) || SamePath(path, destination.FilePath)) continue;
-            var donor = donors.Open(path);
-            if (donor.Game != destination.Game)
+            var path = Path.GetFullPath(targetTemplatePackagePath);
+            if (File.Exists(path) && !SamePath(path, destination.FilePath))
             {
-                continue;
+                var donor = donors.Open(path);
+                if (donor.Game == destination.Game)
+                {
+                    var export = FindEntryByCanonicalPath(donor, canonicalPath, "Texture2D") as ExportEntry;
+                    targetIdentityFound = false;
+                    foreach (var entry in TextureEntries(donor))
+                    {
+                        if (!CanonicalPath(donor, entry).Equals(canonicalPath, StringComparison.OrdinalIgnoreCase)) continue;
+                        targetIdentityFound = true;
+                        export ??= entry as ExportEntry;
+                        if (export is not null) break;
+                    }
+                    // An import-only target identity still blocks source embedding.
+                    // Reviewed aliases also retain their direct export lookup.
+                    targetIdentityFound |= isReviewedAlias && export is not null;
+                    if (targetIdentityFound)
+                    {
+                        return export is null ? null : PccPackageWorkflow.ResolveTextureReference(
+                            destination,
+                            new AssetIdentity(path, canonicalPath, export.UIndex, "Texture2D"),
+                            textureCatalog: null,
+                            warnings: warnings);
+                    }
+                }
             }
-            var export = FindExportByCanonicalPath(donor, canonicalPath, "Texture2D");
-            if (export is null) continue;
-            return PccPackageWorkflow.ResolveTextureReference(
-                destination,
-                new AssetIdentity(path, canonicalPath, export.UIndex, "Texture2D"),
-                textureCatalog: null,
-                preferBiogTextures: false,
-                warnings: warnings);
         }
+        targetIdentityFound = false;
         return null;
     }
 

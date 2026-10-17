@@ -68,12 +68,12 @@ internal static class PackageIntegrityTests
         var otherGroup = package.CreatePackageExport("Other");
         var other = package.CreateExport("Scar", "Texture2D", otherGroup, indexed: false);
         var identity = new AssetIdentity(package.FilePath, "BIOG_Test.Scars.Scar", other.UIndex, "Texture2D");
-        TestAssert.Equal(expected, ExternalTextureMaterializer.ResolveSourceExport(package, identity));
-        TestAssert.Equal(expected, ExternalTextureMaterializer.ResolveSourceExport(package,
+        TestAssert.Equal(expected, PackageAssetInspector.ResolveTextureExport(package, identity));
+        TestAssert.Equal(expected, PackageAssetInspector.ResolveTextureExport(package,
             identity with { InstancedPath = "Scars.Scar" }));
-        Reject(() => ExternalTextureMaterializer.ResolveSourceExport(package,
+        Reject(() => PackageAssetInspector.ResolveTextureExport(package,
             identity with { InstancedPath = "WrongPackage.Scars.Scar", UIndex = expected.UIndex }), "not found");
-        Reject(() => ExternalTextureMaterializer.ResolveSourceExport(package,
+        Reject(() => PackageAssetInspector.ResolveTextureExport(package,
             identity with { InstancedPath = "BIOG_Test.Missing.Scar", UIndex = expected.UIndex }), "not found");
     }
 
@@ -179,15 +179,15 @@ internal static class PackageIntegrityTests
         var existingMaterial = Add(destination, material, "Material", false);
         foreach (var texture in new[] { existingBlack, existingWhite })
             TestAssert.Equal(texture, PccPackageWorkflow.ResolveTextureReference(destination,
-                new AssetIdentity(string.Empty, texture.InstancedFullPath, 0, "Texture2D"), null, false));
+                new AssetIdentity(string.Empty, texture.InstancedFullPath, 0, "Texture2D"), null));
         var copied = preserveStructure
             ? PccPackageWorkflow.ImportRootPreservingStructure(destination, root)
-            : PccPackageWorkflow.ImportDependencyGraph(destination, root, null, null, false,
+            : PccPackageWorkflow.ImportDependencyGraph(destination, root, null, null,
                 targetPathOverride: root.InstancedFullPath);
         foreach (var (name, expected) in new[] { ("Black", existingBlack), ("White", (IEntry)existingWhite), ("Material", existingMaterial) })
             TestAssert.Equal(expected, copied.GetProperty<ObjectProperty>(name)!.ResolveToEntry(destination));
         // This is a real export requirement, unlike automatic dependency reuse.
-        Reject(() => PccPackageWorkflow.ImportDependencyGraph(destination, sourceBlack, null, null, false,
+        Reject(() => PccPackageWorkflow.ImportDependencyGraph(destination, sourceBlack, null, null,
             targetPathOverride: black), "import occupies");
         var graph = PccPackageWorkflow.CaptureDependencyGraph(copied);
         var output = Path.Combine(Path.GetTempPath(), $"MFE-DependencyRoles-{Guid.NewGuid():N}.pcc");
@@ -203,6 +203,116 @@ internal static class PackageIntegrityTests
             TestAssert.True(PackageIntegrity.FindExactEntry(reopened, material, "Material") is ImportEntry, "The material's native import was replaced.");
         }
         finally { File.Delete(output); }
+        NewFaceDependencyRoles(preserveStructure);
+    }
+
+    private static void NewFaceDependencyRoles(bool preserveStructure)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"MFE-NewNpcRoles-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        IEntry Add(IMEPackage package, string name, string className, bool export = true)
+        {
+            var parent = package.FindEntry("BIOG_MFE_Roles") ?? package.CreatePackageExport("BIOG_MFE_Roles");
+            return export ? package.CreateExport(name, className, parent, indexed: false)
+                : package.CreateImport(className, name, parent);
+        }
+        try
+        {
+            var startupPath = Path.Combine(directory, "Engine.pcc");
+            using (var startup = Empty("StartupFixture", MEGame.LE2))
+            {
+                Add(startup, "Global", "Texture2D");
+                Add(startup, "WrongClass", "Material");
+                var cube = (ExportEntry)Add(startup, "GlobalCube", "TextureCube");
+                cube.WriteBinary(new UTextureCube());
+                var face = startup.CreateExport("Face", "Texture2D", cube, indexed: false);
+                face.WriteBinary(UTexture2D.Create());
+                startup.Save(startupPath);
+            }
+            var postLoadPath = Path.Combine(directory, "Startup_METR_Patch01_INT.pcc");
+            using (var startup = MEPackageHandler.CreateMemoryEmptyPackage(postLoadPath, MEGame.LE2))
+            {
+                Add(startup, "PostLoadOnly", "Texture2D");
+                startup.Save(postLoadPath);
+            }
+            var donorPath = Path.Combine(directory, "BIOG_MFE_Roles.pcc");
+            using (var donor = MEPackageHandler.CreateMemoryEmptyPackage(donorPath, MEGame.LE2))
+            {
+                var master = (ExportEntry)Add(donor, "Master", "Material");
+                master.WriteBinary(Material.Create());
+                var effects = (ExportEntry)Add(donor, "Effects", "RvrEffectsMaterialUser");
+                effects.WriteProperty(new ObjectProperty(master, "m_pBaseMaterial"));
+                var mic = (ExportEntry)Add(donor, "Instance", "MaterialInstanceConstant");
+                mic.WriteBinary(MaterialInstance.Create());
+                mic.WriteProperty(new ObjectProperty(effects, "Parent"));
+                var mesh = (ExportEntry)Add(donor, "Mesh", "SkeletalMesh");
+                var binary = SkeletalMesh.Create();
+                binary.Materials = [mic.UIndex];
+                mesh.WriteBinary(binary);
+                donor.Save(donorPath);
+            }
+            using var source = MEPackageHandler.CreateMemoryEmptyPackage(Path.Combine(directory, "Source.pcc"), MEGame.LE2);
+            var root = (ExportEntry)Add(source, "Root", "Object");
+            foreach (var name in new[] { "Global", "PostLoadOnly", "WrongClass" })
+            {
+                var texture = (ExportEntry)Add(source, name, "Texture2D");
+                texture.WriteBinary(UTexture2D.Create());
+                root.WriteProperty(new ObjectProperty(texture, name));
+            }
+            root.WriteProperty(new ObjectProperty(Add(source, "Mesh", "SkeletalMesh", false), "Mesh"));
+            var sourceCube = Add(source, "GlobalCube", "TextureCube", false);
+            root.WriteProperty(new ObjectProperty(source.CreateImport("Texture2D", "Face", sourceCube), "CubeFace"));
+            const string stockMask = "BIOG_Humanoid_MASTER_MTR_R.Skin_HumanHED_SpecMulitplier_Mask";
+            var nativeMask = source.CreateImport("Texture2D", "Skin_HumanHED_SpecMulitplier_Mask",
+                PackageIntegrity.EnsurePackagePath(source, stockMask));
+            root.WriteProperty(new ObjectProperty(nativeMask, "StockMask"));
+            using var stage = Empty("NewNpcStage", MEGame.LE2);
+            PccPackageWorkflow.ConfigureNewFacePackage(stage, [startupPath, postLoadPath]);
+            var resolver = new InstalledGameAssetResolver(_ => new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                { ["BIOG_MFE_Roles.pcc"] = donorPath }, _ => null);
+            var staged = preserveStructure
+                ? PccPackageWorkflow.ImportRootPreservingStructure(stage, root, installedAssets: resolver)
+                : PccPackageWorkflow.ImportDependencyGraph(stage, root, null, null,
+                    targetPathOverride: root.InstancedFullPath, installedAssets: resolver);
+            using var destination = Empty("NewNpcCompleted", MEGame.LE2);
+            var copied = PccPackageWorkflow.CloneCompletedRoot(destination, staged);
+            var snapshot = PccPackageWorkflow.CaptureDependencyGraph(copied);
+            var output = Path.Combine(directory, "Completed.pcc");
+            destination.Save(output);
+            using var reopened = MEPackageHandler.OpenMEPackage(output, forceLoadFromDisk: true);
+            PackageIntegrity.Verify(reopened);
+            PccPackageWorkflow.VerifyDependencyGraph(reopened, snapshot);
+            TestAssert.True(reopened.FindEntry("BIOG_MFE_Roles.Global", "Texture2D") is ImportEntry,
+                "An exact guaranteed startup dependency was embedded unnecessarily.");
+            var savedFace = reopened.FindEntry("BIOG_MFE_Roles.GlobalCube.Face", "Texture2D");
+            TestAssert.True(savedFace is ImportEntry && savedFace.Parent is ImportEntry { ClassName: "TextureCube" },
+                "An imported startup texture lost its actual TextureCube outer.");
+            TestAssert.True(reopened.FindEntry(stockMask, "Texture2D") is ImportEntry,
+                "The documented harmless LE2 mask import was not preserved.");
+            foreach (var (name, className) in new[] { ("PostLoadOnly", "Texture2D"), ("WrongClass", "Texture2D"),
+                         ("Mesh", "SkeletalMesh"), ("Instance", "MaterialInstanceConstant"),
+                         ("Effects", "RvrEffectsMaterialUser"), ("Master", "Material") })
+                TestAssert.True(reopened.FindEntry($"BIOG_MFE_Roles.{name}", className) is ExportEntry,
+                    $"The new NPC PCC retained a context-dependent {className} '{name}' import.");
+            // The native exception must not admit similarly named missing assets.
+            var missingPath = stockMask + "_Missing";
+            root.WriteProperty(new ObjectProperty(source.CreateImport("Texture2D",
+                "Skin_HumanHED_SpecMulitplier_Mask_Missing", nativeMask.Parent), "MissingMask"));
+            using var rejected = Empty("NewNpcRejected", MEGame.LE2);
+            PccPackageWorkflow.ConfigureNewFacePackage(rejected, [startupPath, postLoadPath]);
+            Reject(() =>
+            {
+                if (preserveStructure)
+                    PccPackageWorkflow.ImportRootPreservingStructure(rejected, root, installedAssets: resolver);
+                else PccPackageWorkflow.ImportDependencyGraph(rejected, root, null, null,
+                    targetPathOverride: root.InstancedFullPath, installedAssets: resolver);
+            }, missingPath);
+        }
+        finally
+        {
+            foreach (var path in Directory.EnumerateFiles(directory)) File.Delete(path);
+            Directory.Delete(directory);
+        }
     }
 
     private static void AncestorPreflight()
@@ -247,7 +357,7 @@ internal static class PackageIntegrityTests
                 }
                 var imported = preserveStructure
                     ? PccPackageWorkflow.ImportRootPreservingStructure(destination, asset)
-                    : PccPackageWorkflow.ImportDependencyGraph(destination, asset, null, null, false,
+                    : PccPackageWorkflow.ImportDependencyGraph(destination, asset, null, null,
                         targetPathOverride: asset.InstancedFullPath);
                 TestAssert.Equal(asset.InstancedFullPath, imported.InstancedFullPath);
                 TestAssert.True(imported.Parent is ImportEntry,
@@ -655,8 +765,7 @@ internal static class PackageIntegrityTests
                 snapshot: _ => null);
 
             var stagedRoot = PccPackageWorkflow.ImportDependencyGraph(
-                destination, authoredRoot, destinationParent: null, textureCatalog: null,
-                preferBiogTextures: false, installedAssets: resolver);
+                destination, authoredRoot, destinationParent: null, textureCatalog: null, installedAssets: resolver);
             var stagedMaterial = destination.FindExport("BIOG_Test.SharedMaterial", "Material");
             var officialMarker = destination.FindExport("BIOG_Test.OfficialMarker", "Object");
             TestAssert.True(stagedMaterial is not null && officialMarker is not null,

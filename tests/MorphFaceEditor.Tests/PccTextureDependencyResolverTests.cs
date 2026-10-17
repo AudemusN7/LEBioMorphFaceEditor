@@ -71,8 +71,7 @@ public static class PccTextureDependencyResolverTests
 
         var resolved = PccTextureDependencyResolver.Resolve(
             new AssetIdentity("BIOG_HMF_HED_PROMorph_R.pcc", path, 1, "Texture2D"),
-            [candidate],
-            preferBiog: true);
+            [candidate]);
 
         TestAssert.Equal(Path.GetFileName("BIOG_HMF_HED_PROMorph_R.pcc"), resolved.Occurrence.PackageName);
     }
@@ -86,7 +85,7 @@ public static class PccTextureDependencyResolverTests
 
         var resolved = PccTextureDependencyResolver.Resolve(
             new AssetIdentity("BIOA_TEST.pcc", fullPath, 2, "Texture2D"),
-            [level, biog], preferBiog: true);
+            [level, biog]);
         TestAssert.Equal("BIOA_TEST.pcc", resolved.Occurrence.PackagePath);
         TestAssert.Equal(fullPath, resolved.InstancedPath);
     }
@@ -99,8 +98,7 @@ public static class PccTextureDependencyResolverTests
         var candidate = Candidate(path, mod, official);
         var resolved = PccTextureDependencyResolver.Resolve(
             new AssetIdentity("BIOG_Test_Mod.pcc", path, 5, "Texture2D"),
-            [candidate],
-            preferBiog: false);
+            [candidate]);
         TestAssert.Equal("BIOG_Test.pcc", resolved.Occurrence.PackageName);
     }
 
@@ -112,8 +110,7 @@ public static class PccTextureDependencyResolverTests
 
         var resolved = PccTextureDependencyResolver.Resolve(
             new AssetIdentity("Missing.pcc", path, 1, "Texture2D"),
-            [candidate],
-            preferBiog: true);
+            [candidate]);
 
         TestAssert.Equal(Path.GetFileName("BioP_Char.pcc"), resolved.Occurrence.PackageName);
     }
@@ -128,7 +125,7 @@ public static class PccTextureDependencyResolverTests
         try
         {
             _ = PccTextureDependencyResolver.Resolve(
-                new AssetIdentity(string.Empty, path, 0, "Texture2D"), [shadowed], preferBiog: true);
+                new AssetIdentity(string.Empty, path, 0, "Texture2D"), [shadowed]);
             throw new Exception("A filename-shadowed official copy became a default donor.");
         }
         catch (KeyNotFoundException)
@@ -145,8 +142,7 @@ public static class PccTextureDependencyResolverTests
 
         var resolved = PccTextureDependencyResolver.Resolve(
             new AssetIdentity("BioP_Char.pcc", localPath, 1, "Texture2D"),
-            [candidate],
-            preferBiog: true);
+            [candidate]);
 
         TestAssert.Equal("BIOG_HMF_HIR_PRO.Hair_CrewCut.HMF_HIR_Cru_Diff", resolved.InstancedPath);
         TestAssert.Equal(Path.GetFileName("BIOG_HMF_HIR_PRO.pcc"), resolved.Occurrence.PackageName);
@@ -157,8 +153,7 @@ public static class PccTextureDependencyResolverTests
                 "BIOG_HMF_HIR_PRO.Hair_CrewCut.HMF_HIR_Cru_Diff",
                 1,
                 "Texture2D"),
-            [candidate],
-            preferBiog: true);
+            [candidate]);
         TestAssert.Equal(resolved.InstancedPath, alreadyQualified.InstancedPath);
         TestAssert.Equal(resolved.Occurrence.PackagePath, alreadyQualified.Occurrence.PackagePath);
     }
@@ -204,8 +199,7 @@ public static class PccTextureDependencyResolverTests
                 candidateAndOccurrence.Candidate.InstancedPath,
                 candidateAndOccurrence.Occurrence.ExportUIndex,
                 "Texture2D"),
-            [candidateAndOccurrence.Candidate],
-            preferBiog: true);
+            [candidateAndOccurrence.Candidate]);
         TestAssert.Equal(candidateAndOccurrence.TargetPath, resolved.InstancedPath);
 
         using var destination = MEPackageHandler.CreateMemoryEmptyPackage(
@@ -218,8 +212,7 @@ public static class PccTextureDependencyResolverTests
                 candidateAndOccurrence.Candidate.InstancedPath,
                 candidateAndOccurrence.Occurrence.ExportUIndex,
                 "Texture2D"),
-            [candidateAndOccurrence.Candidate],
-            preferBiog: true);
+            [candidateAndOccurrence.Candidate]);
         TestAssert.Equal(candidateAndOccurrence.TargetPath, materialised.InstancedFullPath);
         var localPath = InstalledGameAssetResolver.RequireExact(donorCache, candidateAndOccurrence.Occurrence.PackagePath,
             candidateAndOccurrence.TargetPath, "Texture2D", candidateAndOccurrence.Occurrence.ExportUIndex).InstancedFullPath;
@@ -358,8 +351,7 @@ public static class PccTextureDependencyResolverTests
         {
             _ = PccTextureDependencyResolver.Resolve(
                 new AssetIdentity("Missing.pcc", "Missing.HMF_HED_PROBase_Diff", 1, "Texture2D"),
-                [seekfree, characterCreator],
-                preferBiog: true);
+                [seekfree, characterCreator]);
             throw new Exception("An absent exact texture path was silently remapped by object name.");
         }
         catch (KeyNotFoundException)
@@ -377,15 +369,13 @@ public static class PccTextureDependencyResolverTests
 
         var resolved = PccTextureDependencyResolver.Resolve(
             new AssetIdentity(string.Empty, path, 1, "Texture2D"),
-            [candidate],
-            preferBiog: false);
+            [candidate]);
 
         TestAssert.Equal(Path.GetFileName(alternate.PackagePath), resolved.Occurrence.PackageName);
 
         var explicitlySelected = PccTextureDependencyResolver.Resolve(
             new AssetIdentity(alternate.PackagePath, path, 1, "Texture2D"),
-            [candidate],
-            preferBiog: false);
+            [candidate]);
         TestAssert.Equal(Path.GetFileName(alternate.PackagePath), explicitlySelected.Occurrence.PackageName);
     }
 
@@ -400,8 +390,7 @@ public static class PccTextureDependencyResolverTests
 
         var resolved = PccTextureDependencyResolver.Resolve(
             new AssetIdentity(string.Empty, first.InstancedPath, 0, "Texture2D"),
-            [first, second],
-            preferBiog: false);
+            [first, second]);
         TestAssert.Equal(first.InstancedPath, resolved.InstancedPath);
     }
 
@@ -465,8 +454,7 @@ public static class PccTextureDependencyResolverTests
         var imported = PccTextureDependencyResolver.Materialize(
             destination,
             new AssetIdentity(donorPath, candidate.InstancedPath, source.UIndex, "Texture2D"),
-            [candidate],
-            preferBiog: true);
+            [candidate]);
         var importedTexture = new Texture2D(imported);
         var importedMips = importedTexture.Mips
             .Where(mip => mip.storageType != StorageTypes.empty)

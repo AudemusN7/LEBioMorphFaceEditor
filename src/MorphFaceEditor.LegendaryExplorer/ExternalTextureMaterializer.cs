@@ -24,7 +24,7 @@ internal static class ExternalTextureMaterializer
         LegendaryExplorerCoreRuntime.Initialize();
         var sourceExport = new InstalledGameAssetResolver().Resolve(
             destination.Game, identity with { IsExplicitTextureDonor = true }, cache)
-            ?? ResolveSourceExport(cache.GetCachedPackage(identity.PackagePath)
+            ?? PackageAssetInspector.ResolveTextureExport(cache.GetCachedPackage(identity.PackagePath)
                 ?? throw new FileNotFoundException("The selected texture's source package could not be opened.", identity.PackagePath), identity);
         if (sourceExport.Game != destination.Game)
             throw new InvalidDataException($"Texture '{identity.InstancedPath}' is from {sourceExport.Game}, but the destination is {destination.Game}.");
@@ -34,7 +34,6 @@ internal static class ExternalTextureMaterializer
             sourceExport,
             destinationParent: null,
             textureCatalog: null,
-            preferBiogTextures: false,
             warnings: warnings,
             applyCorpusMaterialPolicy: false,
             targetPathOverride: identity.InstancedPath);
@@ -54,28 +53,6 @@ internal static class ExternalTextureMaterializer
             textureExport.GetProperties(),
             isPackageStored: true));
         return textureExport;
-    }
-
-    internal static ExportEntry ResolveSourceExport(IMEPackage source, AssetIdentity identity)
-    {
-        // A package can store Scars.Texture locally while RON and the registry
-        // address it as Package.Scars.Texture. Only the source package's exact
-        // name may qualify that local path; UIndex alone is not identity proof.
-        bool Matches(ExportEntry export) =>
-            export.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase) &&
-            (export.InstancedFullPath.Equals(identity.InstancedPath, StringComparison.OrdinalIgnoreCase) ||
-             $"{Path.GetFileNameWithoutExtension(source.FilePath)}.{export.InstancedFullPath}"
-                 .Equals(identity.InstancedPath, StringComparison.OrdinalIgnoreCase));
-
-        if (identity.UIndex > 0 && source.IsUExport(identity.UIndex) &&
-            source.GetUExport(identity.UIndex) is { } indexed &&
-            Matches(indexed))
-        {
-            return indexed;
-        }
-        var matches = source.Exports.Where(Matches).Take(2).ToArray();
-        return matches.Length == 1 ? matches[0] : throw new InvalidDataException(
-            $"Texture2D '{identity.InstancedPath}' was {(matches.Length == 0 ? "not found" : "ambiguous")} in '{identity.PackagePath}'.");
     }
 
     private static void AddWarnings(ICollection<string>? target, IEnumerable<string> warnings)

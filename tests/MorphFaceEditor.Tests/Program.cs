@@ -47,7 +47,7 @@ var suites = new Dictionary<string, IReadOnlyList<TestCase>>(StringComparer.Ordi
         .Concat(NativeDetachedCapMaterialTests.All)
         .Concat(NativeVisorLensTests.All)
         .Concat(CustomHumanMaterialCatalogTests.All)
-        .Concat(MorphFaceInterchangeExportTests.All).Concat(PcsavHeadMorphTests.All).ToArray(),
+        .Concat(MorphFaceInterchangeExportTests.All).Concat(PcsavHeadMorphTests.All).Concat(PlayerRuntimeAssetTests.All).ToArray(),
     ["c4"] = ImportedSkeletalMeshWriterTests.All
         .Concat(CustomMeshPccMaterializerTests.All)
         .Concat(CustomMeshForcedExportTests.All)

@@ -1,3 +1,5 @@
+using MorphFaceEditor.LegendaryExplorer;
+using MorphFaceEditor.Services;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.Core.Randomisation;
@@ -17,7 +19,7 @@ public static class PlayerHairStyleCatalogTests
         new("paired scalp lock classification follows reviewed mesh across games and sexes", PairedMeshClassificationIsGameAndSexScoped),
         new("NPC HMF Afr prefers the native mesh when custom and native variants exist", NpcHmfAfrPrefersNativeMesh),
         new("HMF Mom scalp uses its own diffuse and normal with shared mask", HmfMomScalpUsesDedicatedMaps),
-        new("official DLC hair styles are eligible but mod-only styles are not", OfficialDlcIsEligibleAndModsAreNot),
+        new("Player official DLC hair styles also require runtime backing", OfficialDlcIsEligibleAndModsAreNot),
         new("locked Player hair mesh retains independent scalp styles only", MeshLockKeepsIndependentScalps),
         new("Ssk slot exposes one style with two meshes and a no-mesh outcome", SskSlotHasThreeEqualOutcomes),
         new("Player hair catalogue chooses the highest eligible official occurrence under mod override", OfficialIdentitySurvivesOverride)
@@ -67,9 +69,16 @@ public static class PlayerHairStyleCatalogTests
             textures, [ftl, modOnly]);
         TestAssert.True(options.Any(value => value.Id == "hmf-ftl-long-hair" &&
                                             value.MeshAction == PlayerHairMeshAction.Set),
-            "A reviewed official DLC style must remain eligible.");
+            "The broader NPC/PCC catalogue lost a reviewed official style.");
         TestAssert.True(!options.Any(value => value.Id == "hmf-jack"),
             "A mod-only occurrence must not introduce a style into the core pool.");
+        var unavailable = new PlayerRuntimeAssetAvailability(MorphFaceGame.LE3,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+        var playerMeshes = PlayerWorkspaceReferencePolicy.SelectRegistryMeshes([ftl, modOnly], unavailable);
+        var playerOptions = PlayerHairStyleCatalog.Resolve(MorphFaceGame.LE3, PlayerHairSex.Female, textures, playerMeshes);
+        TestAssert.True(!playerOptions.Any(value => value.Id == "hmf-ftl-long-hair"),
+            "Official origin alone admitted level-only FTL hair into the Player pool.");
+
     }
 
     private static void PairedScalpsPreferDedicatedMaps()

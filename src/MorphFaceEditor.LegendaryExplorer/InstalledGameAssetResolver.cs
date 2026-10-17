@@ -1,4 +1,5 @@
 using LegendaryExplorerCore.Packages;
+using LegendaryExplorerCore.Packages.CloningImportingAndRelinking;
 using System.Runtime.CompilerServices;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
@@ -27,7 +28,16 @@ public sealed class InstalledGameAssetResolver
     {
         if (!InstalledAssetOccurrence.IsSupportedClass(entry.ClassName)) return null;
         var path = entry is ExportEntry export ? PccAssetPathPolicy.FromExport(export) : entry.InstancedFullPath;
-        return Resolve(entry.Game, path, entry.ClassName, cache);
+        var resolved = Resolve(entry.Game, path, entry.ClassName, cache);
+        if (resolved is not null || entry is not ImportEntry import) return resolved;
+        // A level import can belong to its BioP/parent level rather than a
+        // same-named BIOG. Keep LEC's contextual search, using official winners.
+        var files = GetPackageFiles(entry.Game);
+        foreach (var name in EntryImporter.GetPossibleImportFiles(import))
+            if (files.TryGetValue(name, out var packagePath) &&
+                TryExact(cache, packagePath, path, entry.ClassName) is { } contextual)
+                return contextual;
+        return null;
     }
 
     internal bool CanUseLocalAsset(ExportEntry entry)

@@ -148,7 +148,8 @@ public sealed partial class MainWindowViewModel
             {
                 if (LoadedFacePath != source.FacePath || Editor is not { } editor) return false;
                 var values = editor.Material.CaptureInterchangeData();
-                var document = FaceMaterialFileService.Capture(ResolveMaterialFileGame(), face.ObjectName, values) with
+                var game = ResolveMaterialFileGame();
+                var document = FaceMaterialFileService.Capture(game, face.ObjectName, values) with
                 {
                     DefaultFace = new MaterialFaceTarget(face.ProfileKey, player)
                 };
@@ -156,12 +157,17 @@ public sealed partial class MainWindowViewModel
                 if (source.Format == SourceFileFormat.TseMaterialsRon)
                 {
                     var original = MaterialRonCodec.ReadTseDocument(await File.ReadAllTextAsync(source.Path));
+                    if (player)
+                        await Task.Run(() => _packageContextService.VerifyPlayerRuntimeAssets(game, values,
+                            original.HairMesh ?? "None", original.AccessoryMeshes ?? []));
                     text = MaterialRonCodec.WriteTse(values, original.HairMesh ?? "None",
                         original.AccessoryMeshes ?? [], document.Game, document.DefaultFace);
                 }
                 else
                 {
                     var original = MaterialRonCodec.ReadMfe(await File.ReadAllTextAsync(source.Path));
+                    if (player)
+                        await Task.Run(() => _packageContextService.VerifyPlayerRuntimeAssets(game, values));
                     text = MaterialRonCodec.WriteMfe(original with { Parameters = document.Parameters });
                 }
                 await File.WriteAllTextAsync(candidate, text);

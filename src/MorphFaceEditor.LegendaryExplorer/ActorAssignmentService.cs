@@ -1,6 +1,7 @@
 using LegendaryExplorerCore.Packages;
 using LegendaryExplorerCore.Unreal;
 using LegendaryExplorerCore.Unreal.ObjectInfo;
+using LegendaryExplorerCore.Helpers;
 using MorphFaceEditor.Core.Domain;
 
 namespace MorphFaceEditor.LegendaryExplorer;
@@ -11,8 +12,6 @@ namespace MorphFaceEditor.LegendaryExplorer;
 /// </summary>
 public sealed class ActorAssignmentService
 {
-    private static readonly string[] MicArrayNames =
-        ["TextureParameterValues", "VectorParameterValues", "ScalarParameterValues"];
     private readonly ActorAssignmentInventoryService _inventory;
 
     public ActorAssignmentService(ActorAssignmentInventoryService? inventory = null) =>
@@ -78,10 +77,10 @@ public sealed class ActorAssignmentService
     {
         var inventory = _inventory.Read(packagePath, selectedFaceSelector, selectedProfileKey);
         var candidate = RequireCandidate(inventory, actorUIndex);
-        if (!candidate.CanAssignMaterials || candidate.MaterialTargets.Count == 0)
+        if (!candidate.CanAssignMaterials)
         {
-            throw new InvalidOperationException(candidate.MaterialIneligibilityReason ??
-                                                "The selected actor has no safe local MIC targets.");
+            throw UserFacingMessage.CreateError("loc_VM_actorAssignment_noMaterialOrAttachmentTargets",
+                candidate.MaterialIneligibilityReason ?? "The selected actor has no material or attachment targets.");
         }
 
         var fingerprint = PackageFingerprint.Capture(packagePath);
@@ -90,9 +89,10 @@ public sealed class ActorAssignmentService
         {
             var temporaryPath = save.CandidatePath;
             File.Copy(packagePath, temporaryPath, overwrite: false);
+            IReadOnlyDictionary<int, byte[]> attachmentData;
             using (var package = MEPackageHandler.OpenMEPackage(temporaryPath, forceLoadFromDisk: true))
             {
-                foreach (var target in candidate.MaterialTargets.DistinctBy(value => value.UIndex))
+                foreach (var target in plan.Targets.DistinctBy(value => value.UIndex))
                 {
                     var mic = RequireExport(package, target.UIndex, "MaterialInstanceConstant");
                     var properties = mic.GetProperties();
@@ -103,34 +103,28 @@ public sealed class ActorAssignmentService
                         plan.ExpectedBodyMicData.Add(target.UIndex, mic.Data.ToArray());
                         continue;
                     }
-                    if (plan.Textures is not null)
-                    {
-                        properties.AddOrReplaceProp(BuildTextureValues(plan.Textures));
-                    }
-                    if (plan.Vectors is not null)
-                    {
-                        properties.AddOrReplaceProp(BuildVectorValues(plan.Vectors));
-                    }
-                    if (plan.Scalars is not null)
-                    {
-                        properties.AddOrReplaceProp(BuildScalarValues(plan.Scalars));
-                    }
+                    ApplyFaceParameters(properties, plan);
                     mic.WriteProperties(properties);
                 }
+                attachmentData = ApplyAttachments(package, Path.GetFullPath(packagePath), candidate.AttachmentTargets, plan);
                 package.Save();
             }
 
-            VerifyMaterials(temporaryPath, plan, candidate);
+            VerifyMaterials(temporaryPath, plan, attachmentData);
             save.Commit("The temporary workspace changed while actor assignment was being written. Nothing was replaced.");
             return new ActorMaterialAssignmentResult(
                 candidate.UIndex,
                 candidate.InstancedPath,
                 plan.MaterialOverridePath,
-                candidate.MaterialTargets,
+                plan.Targets,
                 candidate.SkippedMaterials,
                 plan.Textures is not null,
                 plan.Vectors is not null,
-                plan.Scalars is not null);
+                plan.Scalars is not null)
+            {
+                ChangedAttachments = candidate.AttachmentTargets,
+                UserWarnings = candidate.AttachmentWarnings
+            };
         }
     }
 
@@ -171,6 +165,116 @@ public sealed class ActorAssignmentService
         }
     }
 
+    private static IReadOnlyDictionary<int, byte[]> ApplyAttachments(
+        IMEPackage package, string originalPackagePath, IReadOnlyList<ActorAssignmentAttachmentTarget> targets, MaterialPlan plan)
+    {
+        using var cache = new PackageCache();
+        var resolver = new GamePackageReferenceResolver(cache);
+        var changed = new HashSet<ExportEntry>();
+        foreach (var target in targets)
+        {
+            var component = RequireExport(package, target.ComponentUIndex, "SkeletalMeshComponent");
+            var properties = component.GetProperties();
+            properties.AddOrReplaceProp(new ObjectProperty(target.SourceMeshUIndex, "SkeletalMesh"));
+            var slots = target.SourceMeshUIndex == 0 ? [] : target.MaterialSlots
+                .Where(slot => target.ApplyMaterialParameters || slot.OverridePath is not null).ToArray();
+            if (!target.MaterialSlotsKnown && slots.Length > 0)
+                throw MissingAttachmentMaterials(target.SourceMeshPath!);
+            ArrayProperty<ObjectProperty>? replacements = null;
+            foreach (var slot in slots)
+            {
+                var parent = LocalMaterial(slot.SourceMaterial, target.SourceMeshPath!);
+                var mic = slot.LocalMicUIndex != 0
+                    ? RequireExport(package, slot.LocalMicUIndex, "MaterialInstanceConstant") : null;
+                if (mic is null && parent is not null && target.ApplyMaterialParameters)
+                {
+                    mic = ExportCreator.CreateExport(package, "MaterialInstanceConstant", "MaterialInstanceConstant", component);
+                    var values = mic.GetProperties();
+                    ApplyFaceParameters(values, plan);
+                    mic.WriteProperties(values);
+                    plan.Targets.Add(new ActorAssignmentMaterialTarget(mic.UIndex, mic.ObjectNameString,
+                        mic.InstancedFullPath, target.Role, target.ComponentPath, slot.SlotIndex,
+                        MorphFaceEditor.Core.Materials.HeadMaterialFamily.Unknown, null, [], false));
+                }
+                if (mic is not null && parent is not null)
+                {
+                    plan.ParentUIndices[mic.UIndex] = parent.UIndex;
+                    if (!ReferenceEquals(mic, parent))
+                    {
+                        mic.WriteProperty(new ObjectProperty(parent, "Parent"));
+                        changed.Add(mic);
+                    }
+                    if (target.LocalMaterialOverrides is not { } existing ||
+                        slot.SlotIndex >= existing.Count || existing[slot.SlotIndex] != mic.UIndex)
+                    {
+                        replacements ??= new ArrayProperty<ObjectProperty>(
+                            target.LocalMaterialOverrides?.Select(value => new ObjectProperty(value)) ?? [], "Materials");
+                        while (replacements.Count <= slot.SlotIndex) replacements.Add(new ObjectProperty(0));
+                        replacements[slot.SlotIndex] = new ObjectProperty(mic);
+                    }
+                }
+                else
+                {
+                    // Imported/non-instance overrides remain read-only. Use the authored
+                    // mesh material on this component without creating a MIC.
+                    replacements ??= new ArrayProperty<ObjectProperty>(
+                        target.LocalMaterialOverrides is { } values
+                            ? values.Select(value => new ObjectProperty(value))
+                            : target.MaterialSlots.Select(value =>
+                                new ObjectProperty(LocalMaterial(value.SourceMaterial, target.SourceMeshPath!))),
+                        "Materials");
+                    replacements[slot.SlotIndex] = new ObjectProperty(parent);
+                }
+            }
+            if (replacements is not null) properties.AddOrReplaceProp(replacements);
+            foreach (var reference in target.MaterialParentsToClear)
+            {
+                var mic = RequireExport(package, reference.UIndex, "MaterialInstanceConstant");
+                var values = mic.GetProperties();
+                values.AddOrReplaceProp(new ObjectProperty(0, "Parent"));
+                if (target.SourceMeshUIndex == 0)
+                {
+                    values.AddOrReplaceProp(new ArrayProperty<StructProperty>("TextureParameterValues"));
+                    values.AddOrReplaceProp(new ArrayProperty<StructProperty>("VectorParameterValues"));
+                    values.AddOrReplaceProp(new ArrayProperty<StructProperty>("ScalarParameterValues"));
+                    plan.ClearedMicUIndices.Add(mic.UIndex);
+                }
+                mic.WriteProperties(values);
+                plan.ParentUIndices[mic.UIndex] = 0;
+                changed.Add(mic);
+            }
+            component.WriteProperties(properties);
+            changed.Add(component);
+        }
+        return changed.ToDictionary(export => export.UIndex, export => export.Data.ToArray());
+
+        IEntry? LocalMaterial(AssetIdentity? material, string meshPath)
+        {
+            if (material is null) return null;
+            if (material.PackagePath.Equals(originalPackagePath, StringComparison.OrdinalIgnoreCase))
+                return package.GetEntry(material.UIndex);
+            if (PackageIntegrity.FindExactEntry(package, material.InstancedPath, material.ClassName) is { } existing)
+                return existing;
+            var source = cache.GetCachedPackage(material.PackagePath)?.GetEntry(material.UIndex);
+            if (source is null || !source.ClassName.Equals(material.ClassName, StringComparison.OrdinalIgnoreCase) ||
+                !PccPackageWorkflow.CanonicalPath(source).Equals(material.InstancedPath, StringComparison.OrdinalIgnoreCase))
+                throw MissingAttachmentMaterials(meshPath);
+            return PccPackageWorkflow.ImportDependencyGraph(package,
+                source as ExportEntry ?? resolver.Resolve(source) ?? throw MissingAttachmentMaterials(meshPath), null, null);
+        }
+    }
+    private static InvalidDataException MissingAttachmentMaterials(string meshPath) =>
+        UserFacingMessage.CreateError("loc_ActorAssignment_AttachmentMaterialsUnavailable",
+            $"Could not read material data for actor attachment '{meshPath}'.", meshPath);
+
+    private static void VerifyAttachments(IMEPackage package, IReadOnlyDictionary<int, byte[]> expectedData)
+    {
+        foreach (var (uIndex, expected) in expectedData)
+            if (!package.GetUExport(uIndex).Data.SequenceEqual(expected))
+                throw UserFacingMessage.CreateError("loc_PccSave_VerificationMismatch",
+                    "The saved PCC did not retain the requested actor attachment data.");
+    }
+
     private static MaterialPlan ReadMaterialPlan(
         string packagePath,
         ActorAssignmentInventory inventory,
@@ -181,27 +285,24 @@ public sealed class ActorAssignmentService
         var face = ExportSelector.Find(package, inventory.SelectedFaceUIndex.ToString(), "BioMorphFace");
         var overrideEntry = face.GetProperty<ObjectProperty>("m_oMaterialOverrides")?.ResolveToEntry(package)
                             as ExportEntry;
-        if (overrideEntry is null || !overrideEntry.IsA("BioMaterialOverride") ||
-            !ReferenceEquals(overrideEntry.FileRef, package))
-        {
-            throw new InvalidOperationException(
-                $"Selected face '{inventory.SelectedFacePath}' has no local BioMaterialOverride.");
-        }
+        if (overrideEntry is not null && !overrideEntry.IsA("BioMaterialOverride")) overrideEntry = null;
 
-        var textures = overrideEntry.GetProperty<ArrayProperty<StructProperty>>("m_aTextureOverrides")?
+        var textures = overrideEntry?.GetProperty<ArrayProperty<StructProperty>>("m_aTextureOverrides")?
             .Select(ReadTexture).ToArray();
-        var vectors = overrideEntry.GetProperty<ArrayProperty<StructProperty>>("m_aColorOverrides")?
+        var vectors = overrideEntry?.GetProperty<ArrayProperty<StructProperty>>("m_aColorOverrides")?
             .Select(ReadVector).ToArray();
-        var scalars = overrideEntry.GetProperty<ArrayProperty<StructProperty>>("m_aScalarOverrides")?
+        var scalars = overrideEntry?.GetProperty<ArrayProperty<StructProperty>>("m_aScalarOverrides")?
             .Select(ReadScalar).ToArray();
-        if (textures is null && vectors is null && scalars is null)
+        var hasParameters = textures is not null || vectors is not null || scalars is not null;
+        if (!hasParameters && candidate.AttachmentTargets.Count == 0)
         {
             throw new InvalidOperationException("The selected face's BioMaterialOverride has no parameter categories to assign.");
         }
 
-        var targetIds = candidate.MaterialTargets.Select(value => value.UIndex).ToHashSet();
+        var targets = hasParameters ? candidate.MaterialTargets : [];
+        var targetIds = targets.Select(value => value.UIndex).ToHashSet();
         var protectedData = package.Exports
-            .Where(export => export.IsA("MaterialInstanceConstant") && !targetIds.Contains(export.UIndex))
+            .Where(export => ActorAssignmentInventoryService.IsWritableMic(export, package) && !targetIds.Contains(export.UIndex))
             .ToDictionary(export => export.UIndex, export => export.Data.ToArray());
         var parents = targetIds.ToDictionary(
             id => id,
@@ -210,9 +311,10 @@ public sealed class ActorAssignmentService
         return new MaterialPlan(
             inventory.SelectedFaceUIndex,
             face.Data.ToArray(),
-            overrideEntry.UIndex,
-            overrideEntry.InstancedFullPath,
-            overrideEntry.Data.ToArray(),
+            overrideEntry?.UIndex ?? 0,
+            overrideEntry?.InstancedFullPath,
+            overrideEntry?.Data.ToArray(),
+            targets.ToList(),
             textures,
             vectors,
             scalars,
@@ -246,6 +348,13 @@ public sealed class ActorAssignmentService
     private static float RequiredFloat(StructProperty property, string name) =>
         property.GetProp<FloatProperty>(name)?.Value
         ?? throw new InvalidDataException($"A material override is missing {name}.");
+
+    private static void ApplyFaceParameters(PropertyCollection properties, MaterialPlan plan)
+    {
+        if (plan.Textures is not null) properties.AddOrReplaceProp(BuildTextureValues(plan.Textures));
+        if (plan.Vectors is not null) properties.AddOrReplaceProp(BuildVectorValues(plan.Vectors));
+        if (plan.Scalars is not null) properties.AddOrReplaceProp(BuildScalarValues(plan.Scalars));
+    }
 
     private static ArrayProperty<StructProperty> BuildTextureValues(IEnumerable<TextureValue> values) => new(
         values.Select(value => new StructProperty("TextureParameterValue", false,
@@ -314,11 +423,11 @@ public sealed class ActorAssignmentService
     private static void VerifyMaterials(
         string temporaryPath,
         MaterialPlan plan,
-        ActorAssignmentCandidate candidate)
+        IReadOnlyDictionary<int, byte[]> attachmentData)
     {
         using var package = MEPackageHandler.OpenMEPackage(temporaryPath, forceLoadFromDisk: true);
         if (!RequireExport(package, plan.FaceUIndex, "BioMorphFace").Data.SequenceEqual(plan.FaceData) ||
-            !RequireExport(package, plan.MaterialOverrideUIndex, "BioMaterialOverride").Data
+            plan.MaterialOverrideUIndex != 0 && !RequireExport(package, plan.MaterialOverrideUIndex, "BioMaterialOverride").Data
                 .SequenceEqual(plan.MaterialOverrideData))
         {
             throw new InvalidDataException("Verification failed: the source BioMorphFace or BioMaterialOverride changed.");
@@ -326,14 +435,24 @@ public sealed class ActorAssignmentService
         foreach (var protectedExport in plan.ProtectedMicData)
         {
             if (!RequireExport(package, protectedExport.Key, "MaterialInstanceConstant").Data
-                    .SequenceEqual(protectedExport.Value))
+                    .SequenceEqual(attachmentData.GetValueOrDefault(protectedExport.Key, protectedExport.Value)))
             {
                 throw new InvalidDataException(
                     $"Verification failed: non-target MIC #{protectedExport.Key} changed.");
             }
         }
-        foreach (var target in candidate.MaterialTargets.DistinctBy(value => value.UIndex))
+        foreach (var id in plan.ClearedMicUIndices)
         {
+            var mic = RequireExport(package, id, "MaterialInstanceConstant");
+            if ((mic.GetProperty<ObjectProperty>("Parent")?.Value ?? 0) != 0)
+                throw new InvalidDataException($"Verification failed: cleared MIC '{mic.InstancedFullPath}' retains its Parent.");
+            VerifyArray<TextureValue>(mic, "TextureParameterValues", [], ReadMicTexture);
+            VerifyArray<VectorValue>(mic, "VectorParameterValues", [], ReadMicVector);
+            VerifyArray<ScalarValue>(mic, "ScalarParameterValues", [], ReadMicScalar);
+        }
+        foreach (var target in plan.Targets.DistinctBy(value => value.UIndex))
+        {
+            if (plan.ClearedMicUIndices.Contains(target.UIndex)) continue;
             var mic = RequireExport(package, target.UIndex, "MaterialInstanceConstant");
             if ((mic.GetProperty<ObjectProperty>("Parent")?.Value ?? 0) != plan.ParentUIndices[target.UIndex])
             {
@@ -352,6 +471,7 @@ public sealed class ActorAssignmentService
             VerifyArray(mic, "VectorParameterValues", plan.Vectors, ReadMicVector);
             VerifyArray(mic, "ScalarParameterValues", plan.Scalars, ReadMicScalar);
         }
+        VerifyAttachments(package, attachmentData);
     }
 
     private static void VerifyArray<T>(
@@ -406,14 +526,18 @@ public sealed class ActorAssignmentService
         int FaceUIndex,
         byte[] FaceData,
         int MaterialOverrideUIndex,
-        string MaterialOverridePath,
-        byte[] MaterialOverrideData,
+        string? MaterialOverridePath,
+        byte[]? MaterialOverrideData,
+        List<ActorAssignmentMaterialTarget> Targets,
         IReadOnlyList<TextureValue>? Textures,
         IReadOnlyList<VectorValue>? Vectors,
         IReadOnlyList<ScalarValue>? Scalars,
         IReadOnlyDictionary<int, byte[]> ProtectedMicData,
-        IReadOnlyDictionary<int, int> ParentUIndices,
-        Dictionary<int, byte[]> ExpectedBodyMicData);
+        Dictionary<int, int> ParentUIndices,
+        Dictionary<int, byte[]> ExpectedBodyMicData)
+    {
+        public HashSet<int> ClearedMicUIndices { get; } = [];
+    }
 
     private sealed record TextureValue(string Name, int TextureUIndex);
     private sealed record VectorValue(string Name, float R, float G, float B, float A);

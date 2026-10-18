@@ -1,6 +1,7 @@
 using LegendaryExplorerCore.Packages;
 using LegendaryExplorerCore.Packages.CloningImportingAndRelinking;
 using LegendaryExplorerCore.Unreal;
+using LegendaryExplorerCore.Unreal.BinaryConverters;
 using LegendaryExplorerCore.Unreal.ObjectInfo;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.LegendaryExplorer;
@@ -33,7 +34,7 @@ public static class ActorAssignmentInventoryTests
         {
             WithPackage(game, (path, package) =>
             {
-                var face = package.CreateExport("SelectedFace", "BioMorphFace", indexed: false);
+                var face = CreateSelectedFace(package);
                 foreach (var className in expectedClasses)
                 {
                     package.CreateExport($"Candidate_{className}", className, indexed: false);
@@ -75,7 +76,7 @@ public static class ActorAssignmentInventoryTests
     {
         WithPackage(MEGame.LE2, (path, package) =>
         {
-            var face = package.CreateExport("SelectedFace", "BioMorphFace", indexed: false);
+            var face = CreateSelectedFace(package);
             var actorType = package.CreateExport("GarrusActorType", "BioPawnType", indexed: false);
             actorType.WriteProperty(new StringRefProperty(4242, "ActorGameNameStrRef"));
             actorType.WriteProperty(new NameProperty("TypeAlias", "UniqueTag"));
@@ -120,7 +121,7 @@ public static class ActorAssignmentInventoryTests
     {
         WithPackage(MEGame.LE1, (path, package) =>
         {
-            var selected = package.CreateExport("SelectedFace", "BioMorphFace", indexed: false);
+            var selected = CreateSelectedFace(package);
             var oldFace = package.CreateExport("OldFace", "BioMorphFace", indexed: false);
             var head = CreateHeadComponent(package, "HMM_HED_PROBase_MDL", "HeadMesh0");
             oldFace.WriteProperty(new ObjectProperty(
@@ -143,6 +144,12 @@ public static class ActorAssignmentInventoryTests
             sharedOnlyPawn.WriteProperty(new ObjectProperty(head, "m_oHeadMesh"));
             var factory = package.CreateExport("HenchFactory", "ActorFactory", indexed: false);
             factory.WriteProperty(new ObjectProperty(type, "SpawnTemplate"));
+            var otherType = package.CreateExport("OtherType", "BioPawnChallengeScaledType", indexed: false);
+            otherType.WriteProperty(new ObjectProperty(oldFace, "m_oMorphFace"));
+            var otherFactory = package.CreateExport("OtherFactory", "ActorFactory", indexed: false);
+            otherFactory.WriteProperty(new ObjectProperty(otherType, "SpawnTemplate"));
+            var thirdHop = package.CreateExport("BeyondFanOut", "Object", indexed: false);
+            thirdHop.WriteProperty(new ObjectProperty(pawn, "Pawn"));
             package.Save();
 
             var inventory = new ActorAssignmentInventoryService((_, _) => null)
@@ -169,6 +176,12 @@ public static class ActorAssignmentInventoryTests
                 $"Spawn-template fan-out evidence omitted local factory/behavior referrers. Found: {string.Join("; ", spawn.ReferencedBy.Select(value => $"{value.InstancedPath}:{value.PropertyPath}"))}");
             TestAssert.True(spawn.Warnings.Any(value => value.Contains("every actor", StringComparison.OrdinalIgnoreCase)),
                 "Spawn-template fan-out warning was not emitted.");
+            TestAssert.True(spawn.ReferencedBy.All(reference =>
+                    reference.UIndex != thirdHop.UIndex && reference.UIndex != otherFactory.UIndex),
+                "Fan-out evidence included another template's factory or exceeded two reference hops.");
+            var otherSpawn = inventory.Candidates.Single(value => value.UIndex == otherType.UIndex);
+            TestAssert.Equal(1, otherSpawn.ReferencedBy.Count);
+            TestAssert.Equal(otherFactory.UIndex, otherSpawn.ReferencedBy.Single().UIndex);
         });
     }
 
@@ -176,7 +189,7 @@ public static class ActorAssignmentInventoryTests
     {
         WithPackage(MEGame.LE2, (path, package) =>
         {
-            var selected = package.CreateExport("SelectedFace", "BioMorphFace", indexed: false);
+            var selected = CreateSelectedFace(package);
             var incompatibleHead = CreateHeadComponent(package, "HMF_HED_PROBase_MDL", "HeadMesh0");
             var hmmMic = CreateMic(package, "HMM_HED_PRO_Face_Mat", "HMM_HED_PRONPC_MASTER_FACE_MAT");
             incompatibleHead.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(hmmMic)], "Materials"));
@@ -193,11 +206,17 @@ public static class ActorAssignmentInventoryTests
                 "Recognized incompatible head mesh did not block morph assignment.");
             TestAssert.True(candidate.CanAssignMaterials && candidate.SafeMaterialCount == 1,
                 "A compatible local MIC was suppressed by independently incompatible head geometry.");
+            selected.WriteProperty(new ObjectProperty(0, "m_oMaterialOverrides"));
+            package.Save();
+            candidate = new ActorAssignmentInventoryService((_, _) => null)
+                .Read(path, selected.UIndex.ToString(), "le2-human-male").Candidates.Single();
+            TestAssert.True(!candidate.CanAssignMaterials && candidate.SafeMaterialCount == 0,
+                "Materials was offered with neither source parameter categories nor attachment targets.");
         });
 
         WithPackage(MEGame.LE2, (path, package) =>
         {
-            var selected = package.CreateExport("SelectedFace", "BioMorphFace", indexed: false);
+            var selected = CreateSelectedFace(package);
             var head = CreateHeadComponent(package, "HMM_HED_PROBase_MDL", "HeadMesh0");
             var customEye = CreateMic(package, "Custom_Eye_Instance", "Custom_Eye_Master");
             head.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(customEye)], "Materials"));
@@ -219,7 +238,7 @@ public static class ActorAssignmentInventoryTests
     {
         WithPackage(MEGame.LE3, (path, package) =>
         {
-            var selected = package.CreateExport("SelectedFace", "BioMorphFace", indexed: false);
+            var selected = CreateSelectedFace(package);
             var validFace = CreateMic(package, "HMM_HED_PRO_Face_Mat", "HMM_HED_PRONPC_MASTER_FACE_MAT");
             var body = CreateMic(package, "HMM_ARM_Casual_Mat", "HMM_ARM_Casual_Master");
             var customEye = CreateMic(package, "Custom_Eye_Instance", "Custom_Eye_Master");
@@ -284,7 +303,7 @@ public static class ActorAssignmentInventoryTests
     {
         WithPackage(MEGame.LE2, (path, package) =>
         {
-            var face = package.CreateExport("SelectedFace", "BioMorphFace", indexed: false);
+            var face = CreateSelectedFace(package);
             var localBodyMic = CreateMic(package, "LocalBodyMaterial", "UnknownBodyParent");
             var importRoot = package.CreatePackageImport("MFEFixture_ImportedBody");
             var importedBodyMic = package.CreateImport("MaterialInstanceConstant", "ImportedBodyMaterial", importRoot);
@@ -312,7 +331,7 @@ public static class ActorAssignmentInventoryTests
     {
         WithPackage(MEGame.LE3, (path, package) =>
         {
-            var selected = package.CreateExport("SelectedFace", "BioMorphFace", indexed: false);
+            var selected = CreateSelectedFace(package);
             var tufHead = CreateHeadComponent(package, "TUF_HED_PROBase_MDL", "TufHeadMesh0");
             var tufMic = CreateMic(package, "TUF_HED_PRO_Face_Mat", "TUR_HED_PRO_MASTER_MAT");
             tufHead.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(tufMic)], "Materials"));
@@ -343,7 +362,7 @@ public static class ActorAssignmentInventoryTests
     {
         WithPackage(MEGame.LE3, (path, package) =>
         {
-            var selected = package.CreateExport("SelectedFace", "BioMorphFace", indexed: false);
+            var selected = CreateSelectedFace(package);
             var head = CreateHeadComponent(package, "ASA_HED_PROBase_MDL", "HeadMesh0");
             var eyeRoot = CreateMic(package, "HMM_EYE_SharedParent", "HMM_EYE_MASTER_MAT");
             var eye = package.CreateExport("ASA_EYE_LocalChild", "MaterialInstanceConstant", indexed: false);
@@ -356,9 +375,13 @@ public static class ActorAssignmentInventoryTests
             var hairComponent = CreateHeadComponent(package, "HMF_HIR_Long_MDL", "HairMesh0");
             var hair = CreateMic(package, "BioMaterialInstanceConstant_123", "HMN_HED_PRO_MASTER_HAIR_MAT");
             hairComponent.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(hair)], "Materials"));
+            var hairMesh = package.GetUExport(hairComponent.GetProperty<ObjectProperty>("SkeletalMesh")!.Value);
+            var binary = SkeletalMesh.Create();
+            binary.Materials = [hair.UIndex];
+            hairMesh.WriteBinary(binary);
             var actor = package.CreateExport("AsariWithSharedMaterials", "BioPawn", indexed: false);
             actor.WriteProperty(new ObjectProperty(head, "HeadMesh"));
-            actor.WriteProperty(new ObjectProperty(hairComponent, "HairMesh"));
+            actor.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(hairComponent)], "m_aoAccessories"));
             package.Save();
 
             var candidate = new ActorAssignmentInventoryService((_, _) => null)
@@ -401,6 +424,15 @@ public static class ActorAssignmentInventoryTests
         var mic = package.CreateExport(name, "MaterialInstanceConstant", indexed: false);
         mic.WriteProperty(new ObjectProperty(parent, "Parent"));
         return mic;
+    }
+
+    private static ExportEntry CreateSelectedFace(IMEPackage package)
+    {
+        var face = package.CreateExport("SelectedFace", "BioMorphFace", indexed: false);
+        var bmo = package.CreateExport("AssignmentValues", "BioMaterialOverride", face, indexed: false);
+        bmo.WriteProperty(new ArrayProperty<StructProperty>("m_aScalarOverrides"));
+        face.WriteProperty(new ObjectProperty(bmo, "m_oMaterialOverrides"));
+        return face;
     }
 
     private static void WithPackage(MEGame game, Action<string, IMEPackage> action)

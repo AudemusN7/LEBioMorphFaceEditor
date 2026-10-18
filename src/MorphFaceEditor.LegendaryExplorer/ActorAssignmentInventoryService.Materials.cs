@@ -15,6 +15,8 @@ public sealed partial class ActorAssignmentInventoryService
         string selectedProfileKey,
         string? headProfileKey,
         bool hasSkinVectors,
+        ActorAssignmentAttachmentTarget? attachment,
+        IEnumerable<ExportEntry> ownedMics,
         GamePackageReferenceResolver resolver,
         PackageCache cache,
         ICollection<ActorAssignmentMaterialTarget> eligible,
@@ -24,23 +26,32 @@ public sealed partial class ActorAssignmentInventoryService
         var componentPackage = component.IsLocal
             ? package
             : cache.GetCachedPackage(component.PackagePath);
-        var componentExport = componentPackage?.Exports.FirstOrDefault(export =>
-            export.InstancedFullPath.Equals(component.InstancedPath, StringComparison.OrdinalIgnoreCase));
+        var componentExport = componentPackage?.GetEntry(component.UIndex) as ExportEntry;
         if (componentExport is null)
         {
             warnings.Add($"Component '{component.InstancedPath}' could not be reopened for material inspection.");
             return;
         }
-        var materialsProperty = FindProperty<ArrayProperty<ObjectProperty>>(
-            componentExport, "Materials", resolver, cache);
-        if (materialsProperty is null) return;
-
-        for (var slot = 0; slot < materialsProperty.Property.Count; slot++)
+        var materialsProperty = FindProperty<ArrayProperty<ObjectProperty>>(componentExport, "Materials", resolver, cache);
+        var entries = materialsProperty?.Property.Select((value, slot) =>
+                (Entry: (IEntry?)value.ResolveToEntry(materialsProperty.Owner.FileRef), Slot: slot)) ?? [];
+        var children = ownedMics.Select(entry => (Entry: (IEntry?)entry, Slot: -1));
+        foreach (var (rawEntry, slot) in entries.Concat(children)
+                     .DistinctBy(value => (value.Entry?.FileRef.FilePath, value.Entry?.UIndex)))
         {
-            var rawEntry = materialsProperty.Property[slot].ResolveToEntry(materialsProperty.Owner.FileRef);
             if (rawEntry is null) continue;
             var resolved = resolver.Resolve(rawEntry);
-            var chain = BuildMaterialChain(rawEntry, package, resolver, cache, out var master);
+            var chain = BuildMaterialChain(rawEntry, resolved, package, resolver, cache, out var master);
+            // Eligibility follows the material this same transaction will assign.
+            var planned = attachment?.MaterialSlots.FirstOrDefault(value => value.SlotIndex == slot &&
+                value.LocalMicUIndex == rawEntry.UIndex)?.SourceMaterial;
+            if (planned is not null)
+            {
+                var sourcePackage = planned.PackagePath.Equals(package.FilePath, StringComparison.OrdinalIgnoreCase)
+                    ? package : cache.GetCachedPackage(planned.PackagePath);
+                if (sourcePackage?.GetEntry(planned.UIndex) is { } source)
+                    BuildMaterialChain(source, resolver.Resolve(source), package, resolver, cache, out master);
+            }
             var definition = MorphFacePackageReader.DescribeMaterialMaster(package.Game, master);
             var family = definition?.Family ?? HeadMaterialFamily.Unknown;
             var rootSuffix = definition?.ProfileSuffix;
@@ -50,9 +61,9 @@ public sealed partial class ActorAssignmentInventoryService
 
             string? reason = null;
             UserFacingMessage? userReason = null;
-            var localMic = rawEntry is ExportEntry local && ReferenceEquals(local.FileRef, package) &&
-                           (local.IsA("MaterialInstanceConstant") ||
-                            local.ClassName.Equals("BioMaterialInstanceConstant", StringComparison.OrdinalIgnoreCase));
+            var localMic = IsWritableMic(rawEntry, package);
+            var unparented = localMic && (slot >= 0 || rawEntry.idxLink == componentExport.UIndex) &&
+                (FindProperty<ObjectProperty>((ExportEntry)rawEntry, "Parent", resolver, cache)?.Property.Value ?? 0) == 0;
             if (!localMic)
             {
                 reason = rawEntry is ImportEntry || resolved is not null && !ReferenceEquals(resolved.FileRef, package)
@@ -67,6 +78,13 @@ public sealed partial class ActorAssignmentInventoryService
                     reason = "The selected face has no SkinTone or SkinLightScattering value to assign to body MICs.";
                     userReason = UserFacingMessage.Create("loc_VM_actorAssignment_bodySkinParametersMissing");
                 }
+            }
+            else if (HeadProfileIdentity.IsGeometryCompatible(selectedProfileKey, headProfileKey) &&
+                     (unparented || attachment is not null || component.Role == ActorComponentRole.Other ||
+                      component.Role == ActorComponentRole.Accessory && family == HeadMaterialFamily.Accessory))
+            {
+                // Proven attachment ownership applies to every child MIC, including
+                // a retained child whose old Parent no longer describes this face.
             }
             else if (!HeadMaterialCatalog.IsAssignableHeadFamily(family))
             {
@@ -93,14 +111,14 @@ public sealed partial class ActorAssignmentInventoryService
                 eligible.Add(new ActorAssignmentMaterialTarget(
                     rawEntry.UIndex, rawEntry.ObjectNameString, rawEntry.InstancedFullPath,
                     component.Role, component.InstancedPath, slot, family, materialProfileKey,
-                    chain, materialsProperty.Inherited));
+                    chain, slot >= 0 && materialsProperty?.Inherited == true));
             }
             else
             {
                 skipped.Add(new ActorAssignmentSkippedMaterial(
                     rawEntry.UIndex, rawEntry.ObjectNameString, rawEntry.InstancedFullPath,
                     component.Role, component.InstancedPath, slot, family, materialProfileKey,
-                    reason, chain, materialsProperty.Inherited)
+                    reason, chain, slot >= 0 && materialsProperty?.Inherited == true)
                 {
                     UserReason = userReason
                 });
@@ -114,6 +132,7 @@ public sealed partial class ActorAssignmentInventoryService
 
     private static IReadOnlyList<ActorMaterialChainEntry> BuildMaterialChain(
         IEntry start,
+        ExportEntry? resolvedStart,
         IMEPackage workspacePackage,
         GamePackageReferenceResolver resolver,
         PackageCache cache,
@@ -127,7 +146,7 @@ public sealed partial class ActorAssignmentInventoryService
         {
             var key = $"{raw.FileRef.FilePath}|{raw.UIndex}|{raw.InstancedFullPath}";
             if (!visited.Add(key)) break;
-            var resolved = resolver.Resolve(raw);
+            var resolved = ReferenceEquals(raw, start) ? resolvedStart : resolver.Resolve(raw);
             var identity = (IEntry?)resolved ?? raw;
             result.Add(new ActorMaterialChainEntry(
                 raw.UIndex,

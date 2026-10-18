@@ -329,8 +329,8 @@
                                     <MenuItem Header="{DynamicResource loc_View_MainWindow_MD5}" Command="{Binding ExportMorphMd5Command}" />
                                 </MenuItem>
                                 <Separator Style="{StaticResource PccContextSeparator}" />
-                                <MenuItem Header="{DynamicResource loc_View_MainWindow_AssignMorphToActor}" Style="{StaticResource PccContextAction}" Command="{Binding AssignMorphToActorCommand}" />
-                                <MenuItem Header="{DynamicResource loc_View_MainWindow_AssignMaterialsToActor}" Style="{StaticResource PccContextAction}" Command="{Binding AssignMaterialsToActorCommand}" />
+                                <MenuItem Header="{DynamicResource loc_View_MainWindow_AssignMorphToActor}" ToolTip="{DynamicResource loc_ActorAssignment_MorphTooltip}" Style="{StaticResource PccContextAction}" Command="{Binding AssignMorphToActorCommand}" />
+                                <MenuItem Header="{DynamicResource loc_View_MainWindow_AssignMaterialsToActor}" ToolTip="{DynamicResource loc_ActorAssignment_MaterialsTooltip}" Style="{StaticResource PccContextAction}" Command="{Binding AssignMaterialsToActorCommand}" />
                                 <Separator Visibility="{Binding IsMaterialFileWorkspace, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                 <MenuItem Header="{DynamicResource loc_RonFiles_ExportMorphs}" Style="{StaticResource PccContextAction}" Command="{Binding ExportMorphFeaturesRonCommand}" />
                                 <MenuItem Header="{DynamicResource loc_RonFiles_ImportMorphs}" Style="{StaticResource PccContextAction}" Command="{Binding ImportMorphFeaturesRonCommand}" />

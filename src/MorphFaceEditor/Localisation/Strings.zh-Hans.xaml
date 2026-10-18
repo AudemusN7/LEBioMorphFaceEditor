@@ -1801,17 +1801,17 @@
   <system:String x:Key="loc_WpfEditorDialogService_UModelExportFolderTitle" xml:space="preserve">为 UModel 网格导出选择文件夹</system:String>
   <system:String x:Key="loc_Services_Taxonomy_MeshOnlyMaterialLabel" xml:space="preserve">{0}（网格）</system:String>
   <system:String x:Key="loc_Services_MetadataText_Shared_aniso_highlight_1_Label" xml:space="preserve">头发高光 1 强度</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_aniso_highlight_1_Description" xml:space="preserve">Aniso_Highlight_1</system:String>
+
   <system:String x:Key="loc_Services_MetadataText_Shared_aniso_highlight_2_Label" xml:space="preserve">头发高光 2 强度</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_aniso_highlight_2_Description" xml:space="preserve">Aniso_Highlight_2</system:String>
+
   <system:String x:Key="loc_Services_MetadataText_Shared_aniso_color_1_Label" xml:space="preserve">头发高光 1 颜色</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_aniso_color_1_Description" xml:space="preserve">Aniso_Color_1</system:String>
+
   <system:String x:Key="loc_Services_MetadataText_Shared_aniso_color_2_Label" xml:space="preserve">头发高光 2 颜色</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_aniso_color_2_Description" xml:space="preserve">Aniso_Color_2</system:String>
+
   <system:String x:Key="loc_Services_MetadataText_Shared_hair_color_Label" xml:space="preserve">头发颜色</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_hair_color_Description" xml:space="preserve">Hair_Color</system:String>
+
   <system:String x:Key="loc_Services_MetadataText_Shared_hair_stack_Label" xml:space="preserve">詹姆斯·维加头发纹理</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_hair_stack_Description" xml:space="preserve">Hair_Stack</system:String>
+
   <system:String x:Key="loc_VM_actorAssignment_bodySkinParametersMissing" xml:space="preserve">所选面部没有可分配给身体 MIC 的 SkinTone 或 SkinLightScattering 值。</system:String>
   <system:String x:Key="loc_Services_AttachmentTransfer_ExcludedNativeMesh" xml:space="preserve">已省略可选附件“{0}”，因为它已损坏、属于多余重复项或被有意设为不支持。</system:String>
   <system:String x:Key="loc_Services_AttachmentTransfer_ReviewedDonorMissing" xml:space="preserve">已审核的 {0}→{1} 供体映射中缺少附件网格“{2}”；Morph Face Editor 不支持将其移植到该游戏。</system:String>
@@ -1826,10 +1826,10 @@
   <system:String x:Key="loc_Services_CustomTemplate_JamesHair" xml:space="preserve">詹姆斯·维加发型</system:String>
     <!--localiser: {"Key":"loc_ArchetypeTag_FemaleBatarian","ReviewedHash":null,"DoNotTranslate":false,"Note":"Do not translate [TAG]","SourceHash":null}-->
     <system:String x:Key="loc_ArchetypeTag_FemaleBatarian" xml:space="preserve">女性巴塔瑞人 [BAF]</system:String>
-    <!--localiser: {"Key":"loc_Services_ProfileArchetype_FemaleBatarian","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
-    <system:String x:Key="loc_Services_ProfileArchetype_FemaleBatarian" xml:space="preserve">女性巴塔瑞人</system:String>
-    <!--localiser: {"Key":"loc_Shell_ProfileSpecies_FemaleBatarian","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
-    <system:String x:Key="loc_Shell_ProfileSpecies_FemaleBatarian" xml:space="preserve">女性巴塔瑞人</system:String>
+
+    <!--localiser: {"Key":"loc_Services_ProfileArchetype_FemaleBatarian","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}--><system:String x:Key="loc_Services_ProfileArchetype_FemaleBatarian" xml:space="preserve">女性巴塔瑞人</system:String>
+
+    <!--localiser: {"Key":"loc_Shell_ProfileSpecies_FemaleBatarian","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}--><system:String x:Key="loc_Shell_ProfileSpecies_FemaleBatarian" xml:space="preserve">女性巴塔瑞人</system:String>
     <!--localiser: {"Key":"loc_VM_textureRegistry_developmentSchemaUnsupported","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"0D390E7F60DCCF250CA311CA97646099675817EA2955C208D1FBF6704A105D5B"}--><system:String x:Key="loc_VM_textureRegistry_developmentSchemaUnsupported" xml:space="preserve">不再支持开发版架构 v{0}</system:String>
     <!--localiser: {"Key":"loc_VM_textureRegistry_schemaUnsupported","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"808012EA616FA543B3F7F5D6EC3419937AD2BB04D91568B2E483D60710CEBDA9"}--><system:String x:Key="loc_VM_textureRegistry_schemaUnsupported" xml:space="preserve">不再支持注册库架构 v{0}</system:String>
     <!--localiser: {"Key":"loc_Shell_Error_CcScalp_DonorNotMaterial","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"8679520AFEF07260F5B247B4D98FCBF7812F3956CBACC905B31CA7F8E32841B1"}--><system:String x:Key="loc_Shell_Error_CcScalp_DonorNotMaterial" xml:space="preserve">所选头皮供体“{0}”的类型为 {1}，而非材质实例。</system:String>
@@ -1890,4 +1890,41 @@
     <!--localiser: {"Key":"loc_RonFiles_ImportFailed","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"80889B1A2358BF73D67A4ACC55E627964B1C5534F15CD56FBA8C4730B0DC1EC9"}--><system:String x:Key="loc_RonFiles_ImportFailed" xml:space="preserve">无法导入RON。现有编辑内容已保留。</system:String>
     <!--localiser: {"Key":"loc_RonFiles_Imported","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"9AE578D4C686119D2A5F6878631E1EC2447BF081EE90738DFBC96E8A574C77CD"}--><system:String x:Key="loc_RonFiles_Imported" xml:space="preserve">已将{0}导入当前面部。</system:String>
     <!--localiser: {"Key":"loc_FileSave_MorphFeaturesOnly","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"4301FA7477000FDDCFCF4168BA6F9D83BC837A60FDAAEFD64440950BD25C26AD"}--><system:String x:Key="loc_FileSave_MorphFeaturesOnly" xml:space="preserve">变形特征已保存。其他头部修改仍未保存。右键点击面部并导出完整头部或PCC，以包含这些修改。</system:String>
+  <system:String x:Key="loc_VM_actorAssignment_componentRoleBody" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">身体</system:String>
+  <system:String x:Key="loc_VM_actorAssignment_bodySkinOnly" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">仅 SkinTone / SkinLightScattering</system:String>
+  <system:String x:Key="loc_Shell_ActorAssignment_BodySkinOnly" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">身体 MIC：仅添加或更新源中已有的 SkinTone / SkinLightScattering 值。其他所有身体材质数据均已保留。</system:String>
+  <system:String x:Key="loc_PlayerAsset_SeekFreeSourceRequired" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">{0}“{1}”在 BIOG seekfree 包或全局/启动包中没有匹配的资源。只有导出到 PCC 才支持此行为。</system:String>
+  <system:String x:Key="loc_PccSave_VerificationMismatch" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">保存的 PCC 未保留所请求的数据。未替换任何内容。</system:String>
+  <system:String x:Key="loc_PccSave_NewNonFiniteValue" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">无法在 {0} 中保存新建或已更改的 NaN/Infinity 值。只有原样保留现有无效值时才能保存。</system:String>
+  <system:String x:Key="loc_RonImport_TextureSkipped" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">已跳过“{0}”的缺失纹理“{1}”。材质将使用继承的纹理作为后备。</system:String>
+  <system:String x:Key="loc_RonImport_HairSkipped" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">已跳过缺失的头发网格“{0}”。头部的其余部分已导入。</system:String>
+  <system:String x:Key="loc_RonImport_AccessorySkipped" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">已跳过缺失的配饰网格“{0}”。头部的其余部分已导入。</system:String>
+  <system:String x:Key="loc_PccSave_UnsafeDependency" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">新 PCC 仍引用外部 {0}“{1}”，但没有可保证的启动源。未替换任何内容。</system:String>
+  <system:String x:Key="loc_PccSave_MissingDependency" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">未找到精确源，因此 PCC 无法包含 {0}“{1}”。未替换任何内容。</system:String>
+  <system:String x:Key="loc_ActorAssignment_AttachmentMaterialsUnavailable" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">无法读取附件“{0}”的材质数据，因此无法更新其所属角色的材质父级。未替换任何内容。</system:String>
+  <system:String x:Key="loc_ActorAssignment_SecondHairSkipped" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">已将面部的主头发网格应用到“{1}”。第二个网格“{0}”需要同一个头发组件，因此无法应用；MFE 目前不会添加新的组件槽。</system:String>
+  <system:String x:Key="loc_ActorAssignment_MorphTooltip" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">将形变形状应用到关卡角色的面部。材质、头发和配饰请使用“分配材质”。</system:String>
+  <system:String x:Key="loc_ActorAssignment_MaterialsTooltip" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">将材质覆盖和头发/配饰网格应用到关卡角色的头部。面部形状请使用“分配形变”。</system:String>
+  <system:String x:Key="loc_ActorAssignment_MorphIntroduction" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">通过仅更改角色的 BioMorphFace 引用来分配 {0}。材质、头发和配饰由“分配材质”处理。更改会保留在工作区中，直到保存文件。</system:String>
+  <system:String x:Key="loc_ActorAssignment_MaterialsIntroduction" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">应用来自 {0} 的材质覆盖，并更新匹配的现有头发/配饰网格和材质组件。没有引用 MIC 的网格组件将使用网格材质。BioMorphFace 引用保持不变；不会添加新组件。更改会保留在工作区中，直到保存文件。</system:String>
+  <system:String x:Key="loc_ActorAssignment_MorphSummary" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">配置文件：{0} · 当前形变：{1}</system:String>
+  <system:String x:Key="loc_ActorAssignment_TargetCounts" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">参数 MaterialInstanceConstant：{0} · 头发/配饰网格：{1}</system:String>
+  <system:String x:Key="loc_VM_actorAssignment_noMaterialOrAttachmentTargets" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">未找到兼容且可写的材质或头发/配饰目标。</system:String>
+  <system:String x:Key="loc_ActorAssignment_AttachmentsHeading" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">头发 / 配饰目标</system:String>
+  <system:String x:Key="loc_ActorAssignment_MeshChange" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">网格：{0} → {1}</system:String>
+  <system:String x:Key="loc_ActorAssignment_ClearMesh" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">无（清除网格引用）</system:String>
+  <system:String x:Key="loc_ActorAssignment_ClearMaterialSlot" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">槽位 {0}：已清除 MaterialInstanceConstant；保留为空白以供重用</system:String>
+  <system:String x:Key="loc_ActorAssignment_ClearOwnedMaterialParent" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">{0}：将 Parent 清除为 None</system:String>
+  <system:String x:Key="loc_ActorAssignment_ClearOwnedMaterialValues" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">{0}：清除 Parent 以及纹理/向量/标量参数值</system:String>
+  <system:String x:Key="loc_ActorAssignment_RetainedMic" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">保留的角色 MaterialInstanceConstant（无材质槽）</system:String>
+  <system:String x:Key="loc_ActorAssignment_ChangedRetainedRow" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">• #{0} {1} — {2}，保留无材质槽的 MaterialInstanceConstant</system:String>
+  <system:String x:Key="loc_ActorAssignment_ParentChange" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">槽位 {0} · {1}：Parent {2} → {3}</system:String>
+  <system:String x:Key="loc_ActorAssignment_OverrideChange" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">槽位 {0} · {1} → {2}（已创建的网格材质）</system:String>
+  <system:String x:Key="loc_ActorAssignment_DefaultMaterial" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">槽位 {0} · {1}（网格默认材质；无需组件 MIC）</system:String>
+  <system:String x:Key="loc_ActorAssignment_CreateSlotMic" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">槽位 {0} · 新建 MaterialInstanceConstant，Parent 为 {1}，并包含当前面部参数</system:String>
+  <system:String x:Key="loc_ActorAssignment_MaterialSlotsUnavailable" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">无法检查源材质槽。更新现有覆盖需要可读取的材质数据。</system:String>
+  <system:String x:Key="loc_ActorAssignment_Accessory" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">配饰</system:String>
+  <system:String x:Key="loc_ActorAssignment_FindingMaterialTargets" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">正在查找材质和头发/配饰目标…</system:String>
+  <system:String x:Key="loc_ActorAssignment_AssigningMaterialsAndAttachments" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">正在将来自 {0} 的材质、头发和配饰应用到 {1}…</system:String>
+  <system:String x:Key="loc_ActorAssignment_AssignedMaterialTargets" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">已分配并验证 {0} 个参数 MIC 和 {1} 个头发/配饰网格。请保存文件以保留这些更改。</system:String>
 </ResourceDictionary>

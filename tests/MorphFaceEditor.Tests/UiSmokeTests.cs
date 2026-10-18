@@ -2142,6 +2142,36 @@ public static class UiSmokeTests
                                                    "HMF_HED_PRO_Face_Mat_1a → HMF_HED_PRO_MASTER_FACE_MAT",
                             StringComparison.Ordinal),
             $"Chooser details did not reduce identity noise and material chains to authoring shorthand.\n{normalizedDetails}");
+        var meshOnly = materialReady with
+        {
+            MaterialTargets = [],
+            AttachmentTargets = [new ActorAssignmentAttachmentTarget(ActorComponentRole.Hair, 100,
+                "TheWorld.PersistentLevel.BioPawn_20.HairSMC", "OldHair", 101, "AuthoredHair", true, null,
+                [new ActorAssignmentAttachmentSlot(0, null, 0, null, new AssetIdentity("source.pcc", "HairMaterial0", 200, "Material")),
+                 new ActorAssignmentAttachmentSlot(1, null, 0, null, new AssetIdentity("source.pcc", "HairMaterial1", 201, "Material"))])]
+        };
+        var meshChooser = new ActorAssignmentChooserViewModel(inventory with { Candidates = [meshOnly] }, ActorAssignmentMode.Materials);
+        TestAssert.True(meshChooser.CanConfirm && meshChooser.SelectedChoice!.Details.Contains("HAIR / ACCESSORY TARGETS") &&
+                        meshChooser.SelectedChoice.Details.Contains("Slot 1") &&
+                        meshChooser.SelectedChoice.Details.Contains("no component MIC needed") &&
+                        meshChooser.Introduction.Contains("BioMorphFace reference stays unchanged"),
+            "The material chooser omitted mesh-only targets, multiple default slots or the operation boundary.");
+        TestAssert.True(morphChooser.Introduction.Contains("only the actor's BioMorphFace reference"),
+            "Morph assignment did not explain its reference-only scope.");
+        var clear = meshOnly.AttachmentTargets[0] with
+        {
+            SourceMeshUIndex = 0, SourceMeshPath = null,
+            MaterialSlots = [new ActorAssignmentAttachmentSlot(0, "ActorMic", 200, "ExistingParent", null)],
+            MaterialParentsToClear = [new ActorAssignmentReference(200, "MaterialInstanceConstant", "ActorMic", "Parent")]
+        };
+        var clearDetails = new ActorAssignmentChoice(meshOnly with { AttachmentTargets = [clear] }, ActorAssignmentMode.Materials).Details;
+        TestAssert.True(clearDetails.Contains("cleared material instance constant, now blank but retained for reuse") &&
+                        clearDetails.Contains("ActorMic: clear Parent and texture/vector/scalar parameter values"),
+            "The clear plan omitted the component slot or its owned MIC Parent.");
+        var retained = materialReady.MaterialTargets[0] with { SlotIndex = -1 };
+        var retainedDetails = new ActorAssignmentChoice(materialReady with { MaterialTargets = [retained] }, ActorAssignmentMode.Materials).Details;
+        TestAssert.True(retainedDetails.Contains("no material slot") && !retainedDetails.Contains("Slot -1"),
+            "The chooser displayed a made-up slot number for a retained MIC.");
     }
 
     private static ActorAssignmentCandidate ActorChoiceFixture(

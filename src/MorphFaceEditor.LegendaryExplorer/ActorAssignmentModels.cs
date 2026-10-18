@@ -19,7 +19,9 @@ public enum ActorComponentRole
 {
     Head,
     Hair,
-    Body
+    Body,
+    Accessory,
+    Other
 }
 
 public enum ActorIdentityEvidenceKind
@@ -54,6 +56,29 @@ public sealed record ActorAssignmentComponent(
     bool IsLocal,
     string? SkeletalMeshPath,
     bool Inherited);
+
+/// <summary>An existing component to update independently of whether it overrides mesh materials.</summary>
+public sealed record ActorAssignmentAttachmentTarget(
+    ActorComponentRole Role,
+    int ComponentUIndex,
+    string ComponentPath,
+    string? CurrentMeshPath,
+    int SourceMeshUIndex,
+    string? SourceMeshPath,
+    bool MaterialSlotsKnown,
+    IReadOnlyList<int>? LocalMaterialOverrides,
+    IReadOnlyList<ActorAssignmentAttachmentSlot> MaterialSlots)
+{
+    public IReadOnlyList<ActorAssignmentReference> MaterialParentsToClear { get; init; } = [];
+    public bool ApplyMaterialParameters { get; init; }
+}
+
+public sealed record ActorAssignmentAttachmentSlot(
+    int SlotIndex,
+    string? OverridePath,
+    int LocalMicUIndex,
+    string? CurrentParentPath,
+    AssetIdentity? SourceMaterial);
 
 /// <summary>One node in the complete local-MIC-to-master parent chain used for classification.</summary>
 public sealed record ActorMaterialChainEntry(
@@ -138,6 +163,8 @@ public sealed record ActorAssignmentCandidate(
 {
     public int SafeMaterialCount => MaterialTargets.Select(target => target.UIndex).Distinct().Count();
     public IReadOnlyList<UserFacingMessage> UserWarnings { get; init; } = [];
+    public IReadOnlyList<ActorAssignmentAttachmentTarget> AttachmentTargets { get; init; } = [];
+    public IReadOnlyList<UserFacingMessage> AttachmentWarnings { get; init; } = [];
 }
 
 /// <summary>Read-only inventory rooted at one selected local BioMorphFace.</summary>
@@ -165,9 +192,13 @@ public sealed record ActorMorphAssignmentResult(
 public sealed record ActorMaterialAssignmentResult(
     int ActorUIndex,
     string ActorPath,
-    string SourceMaterialOverridePath,
+    string? SourceMaterialOverridePath,
     IReadOnlyList<ActorAssignmentMaterialTarget> ChangedMaterials,
     IReadOnlyList<ActorAssignmentSkippedMaterial> SkippedMaterials,
     bool ReplacedTextures,
     bool ReplacedVectors,
-    bool ReplacedScalars);
+    bool ReplacedScalars)
+{
+    public IReadOnlyList<ActorAssignmentAttachmentTarget> ChangedAttachments { get; init; } = [];
+    public IReadOnlyList<UserFacingMessage> UserWarnings { get; init; } = [];
+}

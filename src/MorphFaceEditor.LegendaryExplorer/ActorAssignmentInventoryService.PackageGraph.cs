@@ -9,23 +9,27 @@ namespace MorphFaceEditor.LegendaryExplorer;
 
 public sealed partial class ActorAssignmentInventoryService
 {
+    // Parse property references once per inventory, only when spawn templates need them.
+    private static ILookup<int, ActorAssignmentReference> IndexReferrers(IMEPackage package) =>
+        package.Exports.SelectMany(export => EnumerateObjectReferences(export.GetProperties())
+                .Select(reference => (reference.UIndex, Source: new ActorAssignmentReference(
+                    export.UIndex, export.ClassName, export.InstancedFullPath, reference.Path))))
+            .ToLookup(reference => reference.UIndex, reference => reference.Source);
+
     // Two reverse-reference hops expose factory -> type and pawn -> behavior -> type fan-out.
-    private static IReadOnlyList<ActorAssignmentReference> FindReferrers(IMEPackage package, ExportEntry target)
+    private static IReadOnlyList<ActorAssignmentReference> FindReferrers(
+        ILookup<int, ActorAssignmentReference> referrers, ExportEntry target)
     {
         var result = new List<ActorAssignmentReference>();
         var frontier = new HashSet<int> { target.UIndex };
         for (var depth = 0; depth < 2 && frontier.Count > 0; depth++)
         {
             var next = new HashSet<int>();
-            foreach (var export in package.Exports.Where(export => export.UIndex != target.UIndex))
+            foreach (var reference in frontier.SelectMany(uIndex => referrers[uIndex])
+                         .Where(reference => reference.UIndex != target.UIndex))
             {
-                foreach (var (uIndex, path) in EnumerateObjectReferences(export.GetProperties()))
-                {
-                    if (!frontier.Contains(uIndex)) continue;
-                    result.Add(new ActorAssignmentReference(
-                        export.UIndex, export.ClassName, export.InstancedFullPath, path));
-                    next.Add(export.UIndex);
-                }
+                result.Add(reference);
+                next.Add(reference.UIndex);
             }
             frontier = next;
         }
@@ -68,7 +72,7 @@ public sealed partial class ActorAssignmentInventoryService
         }
     }
 
-    private static (ExportEntry Owner, ExportEntry Value, bool Inherited)? ResolveRelated(
+    private static ExportEntry? ResolveRelated(
         ExportEntry source,
         IReadOnlyList<string> propertyNames,
         GamePackageReferenceResolver resolver,
@@ -80,13 +84,13 @@ public sealed partial class ActorAssignmentInventoryService
             if (property?.Property.ResolveToEntry(property.Owner.FileRef) is { } entry &&
                 resolver.Resolve(entry) is { } resolved)
             {
-                return (property.Owner, resolved, property.Inherited);
+                return resolved;
             }
         }
         return null;
     }
 
-    private static FoundProperty<T>? FindProperty<T>(
+    internal static FoundProperty<T>? FindProperty<T>(
         ExportEntry source,
         string propertyName,
         GamePackageReferenceResolver resolver,
@@ -127,7 +131,7 @@ public sealed partial class ActorAssignmentInventoryService
         _ => MorphFaceGame.Unsupported
     };
 
-    private sealed record FoundProperty<T>(ExportEntry Owner, T Property, bool Inherited) where T : Property;
+    internal sealed record FoundProperty<T>(ExportEntry Owner, T Property, bool Inherited) where T : Property;
 
     /// <summary>Lazy English TLK resolver; failed or absent installations degrade to technical identity.</summary>
     private sealed class InstalledGameNameResolver

@@ -12,6 +12,9 @@ internal static class QaDisplay
         "custom-human-materials" => "Custom Human Materials", "custom-human-hair" => "Custom Human Hair",
         "native-human-hair" => "Native Human Hair", "cc-scalp-switch" => "CC Scalp Switch",
         "player-cc-scalp" => "Player CC Scalp", "kaidan-preview" => "Kaidan Preview",
+        "ron-full" => "Full RON", "ron-morph" => "Morph-only RON", "ron-cross-game" => "LE1/LE2 RON",
+        "ron-missing-assets" => "RON Missing Assets", "tse-ron" => "External TSE RON",
+        "pcsav" => "PCSAV", "pcsav-extra" => "Additional PCSAV", "donor-sweep" => "Every Donor",
         _ => value
     };
 

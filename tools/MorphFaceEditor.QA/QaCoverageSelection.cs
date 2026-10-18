@@ -7,6 +7,24 @@ namespace MorphFaceEditor.QA;
 
 internal static class QaCoverageSelection
 {
+    internal static int PlannedRolls(string group) => group switch
+    {
+        "npc-randomisation" or "player-randomisation" or "custom-randomisation" => 100,
+        "undo-redo" or "pcsav" or "pcsav-extra" => 1,
+        "custom-human-hair" => 3,
+        "native-human-hair" => 4,
+        _ => 0
+    };
+
+    internal static bool SelectCase(string id, string group, string[]? filters, bool exhaustive)
+    {
+        bool ExplicitGroup() => filters?.Any(value => value.Equals(group, StringComparison.OrdinalIgnoreCase) ||
+            value.StartsWith(group + "/", StringComparison.OrdinalIgnoreCase)) == true;
+        if (group == "benchmark" && !ExplicitGroup()) return false;
+        if (group == "donor-sweep" && !exhaustive && !ExplicitGroup()) return false;
+        return filters is null || filters.Any(value => MatchesCaseFilter(id, group, value));
+    }
+
     internal static bool MatchesCaseFilter(string id, string group, string filter) =>
         id.Equals(filter, StringComparison.OrdinalIgnoreCase) ||
         group.Equals(filter, StringComparison.OrdinalIgnoreCase) ||

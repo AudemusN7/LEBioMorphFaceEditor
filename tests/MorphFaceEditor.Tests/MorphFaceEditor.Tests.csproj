@@ -10,6 +10,8 @@
     <Compile Include="../../tools/MorphFaceEditor.QA/QaCoverageSelection.cs" Link="Qa/QaCoverageSelection.cs" />
     <Compile Include="../../tools/MorphFaceEditor.QA/QaHumanMaterialCoverage.cs" Link="Qa/QaHumanMaterialCoverage.cs" />
     <Compile Include="../../tools/MorphFaceEditor.QA/QaRandomisationBatch.cs" Link="Qa/QaRandomisationBatch.cs" />
+    <Compile Include="../../tools/MorphFaceEditor.QA/QaHeadPayload.cs" Link="Qa/QaHeadPayload.cs" />
+    <Compile Include="../../tools/MorphFaceEditor.QA/QaMaterialValues.cs" Link="Qa/QaMaterialValues.cs" />
     <Compile Include="../../tools/MorphFaceEditor.QA/QaPerformance.cs" Link="Qa/QaPerformance.cs" />
     <Compile Include="../../tools/MorphFaceEditor.QA/QaReport.cs" Link="Qa/QaReport.cs" />
     <Compile Include="../../tools/MorphFaceEditor.QA/QaDisplay.cs" Link="Qa/QaDisplay.cs" />

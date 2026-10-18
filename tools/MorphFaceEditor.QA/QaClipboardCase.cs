@@ -236,17 +236,21 @@ internal sealed class QaClipboard : IMorphFaceClipboardService
 
 internal sealed class QaDialogs : IEditorDialogService
 {
+    public string? ImportPath { get; set; }
+    public string? RonExportPath { get; set; }
+    public MorphFaceGame? ImportGame { get; set; }
+    public RonImportDestinationChoice? RonDestination { get; set; }
     public List<string> Messages { get; } = [];
     private static InvalidOperationException Unexpected() => new("QA requested an unexpected interactive dialog.");
     public string? ChoosePackage(string? initialDirectory = null) => throw Unexpected();
     public MorphPackageSaveRequest? ChooseMorphPackageDestination(string suggestedFileName, string sourcePackagePath) => throw Unexpected();
     public MorphConversionSaveRequest? ChooseMorphConversionDestination(MorphFaceGame sourceGame, string suggestedFileName, string sourcePackagePath) => throw Unexpected();
     public string? ChooseCloneName(string suggestedName, IReadOnlyCollection<string> existingObjectNames) => throw Unexpected();
-    public string? ChooseMorphImportFile(string? initialDirectory = null) => throw Unexpected();
-    public MorphFaceGame? ChooseStandaloneImportGame() => throw Unexpected();
-    public RonImportDestinationChoice? ChooseRonImportDestination(MorphFaceGame targetGame, IReadOnlyList<RonNpcArchetypeOption> archetypes, bool allowPlayer) => throw Unexpected();
-    public string? ChooseStandaloneMorphName(string suggestedName, IReadOnlyCollection<string> existingObjectNames) => throw Unexpected();
-    public string? ChooseRonExportFile(string suggestedFileName, string? initialDirectory = null) => throw Unexpected();
+    public string? ChooseMorphImportFile(string? initialDirectory = null) => ImportPath ?? throw Unexpected();
+    public MorphFaceGame? ChooseStandaloneImportGame() => ImportGame ?? throw Unexpected();
+    public RonImportDestinationChoice? ChooseRonImportDestination(MorphFaceGame targetGame, IReadOnlyList<RonNpcArchetypeOption> archetypes, bool allowPlayer) => RonDestination ?? throw Unexpected();
+    public string? ChooseStandaloneMorphName(string suggestedName, IReadOnlyCollection<string> existingObjectNames) => ImportGame is not null ? "QaImported" : throw Unexpected();
+    public string? ChooseRonExportFile(string suggestedFileName, string? initialDirectory = null) => RonExportPath ?? throw Unexpected();
     public string? ChooseMeshExportDirectory(string? initialDirectory = null) => throw Unexpected();
     public ActorAssignmentCandidate? ChooseActorAssignment(ActorAssignmentInventory inventory, ActorAssignmentMode mode) => throw Unexpected();
     public bool ConfirmDeleteMorph(string facePath, bool hasReferences = false) => throw Unexpected();

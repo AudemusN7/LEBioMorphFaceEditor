@@ -9,15 +9,88 @@ internal static class QaUtilityTests
     internal static IReadOnlyList<TestCase> All { get; } =
     [
         new("QA coverage streams reproduce filtered cases and vary donors", Selection),
+        new("QA default run retains safety journeys and separates optional measurement and exhaustive work", DefaultSelection),
         new("QA BAF filter selects all games and conversion directions without BAT", BafSelection),
         new("QA LE1 HMM conversion donors exclude Hench Human Male", ConversionDonorExclusion),
         new("QA unused Asari morph exclusion preserves neighbouring face identities", UnusedCorpusFaceExclusion),
         new("QA default matrix includes every human material and scalp regression route", HumanMaterialMatrix),
         new("QA 100-roll batch retains failures and continues to the final outcome", () => Batch().GetAwaiter().GetResult()),
         new("QA final roll failure remains explicit", () => FinalFailure().GetAwaiter().GetResult()),
+        new("QA workflow batches use their requested roll count and retain single-roll failures", () => WorkflowBatch().GetAwaiter().GetResult()),
+        new("QA native save values compare separately from preserved source ordering", NativeSaveOrdering),
+        new("QA material comparison ignores name casing and row order but detects changed values and duplicate counts", MaterialNamesAndDuplicates),
         new("QA performance warnings retain functional failures", Performance),
         new("QA report presents warning category roll average and escaped evidence", Report)
     ];
+
+    private static void MaterialNamesAndDuplicates()
+    {
+        var before = new[] { (Name: "nA", Value: "None"), (Name: "Colour", Value: "1"), (Name: "colour", Value: "2") };
+        var same = new[] { (Name: "COLOUR", Value: "2"), (Name: "NA", Value: "None"), (Name: "colour", Value: "1") };
+        TestAssert.True(QaMaterialValues.Normalise(before, row => row.Name, row => row.Value)
+            .SequenceEqual(QaMaterialValues.Normalise(same, row => row.Name, row => row.Value)), "Equivalent material rows differ.");
+        TestAssert.True(!QaMaterialValues.Differences(before, same, row => row.Name, row => row.Value, "Texture").Any(),
+            "Material diagnostics report a case-only difference.");
+        foreach (var changed in new[] { same[..2], same.Append(same[0]).ToArray(), new[] { (Name: "NA", Value: "Changed") } })
+            TestAssert.True(QaMaterialValues.Differences(before, changed, row => row.Name, row => row.Value, "Texture").Any(),
+                "Material comparison concealed a change or duplicate count.");
+    }
+
+    private static void DefaultSelection()
+    {
+        foreach (var group in new[] { "load", "npc-randomisation", "player-randomisation", "ron-full", "ron-morph",
+                     "material-ron", "ron-cross-game", "ron-missing-assets", "pcsav", "pcsav-extra", "tse-ron", "pcc-audit" })
+            TestAssert.True(QaCoverageSelection.SelectCase(group + "/le1-hmm-npc", group, null, false), $"Default run lost {group} coverage.");
+        foreach (var group in new[] { "benchmark", "donor-sweep" })
+        {
+            TestAssert.True(!QaCoverageSelection.SelectCase(group + "/le1-baf", group, null, false), $"Default run repeats optional {group} work.");
+            TestAssert.True(!QaCoverageSelection.SelectCase(group + "/le1-baf", group, ["BAF"], false), $"Archetype filter unexpectedly enables {group}.");
+            TestAssert.True(QaCoverageSelection.SelectCase(group + "/le1-baf", group, [group], false),
+                $"Explicit {group} selection is unavailable.");
+        }
+        TestAssert.True(QaCoverageSelection.SelectCase("donor-sweep/le1-baf", "donor-sweep", ["BAF"], true), "Exhaustive archetype filter lost donor sweep.");
+        TestAssert.True(!QaCoverageSelection.SelectCase("benchmark/le1-baf", "benchmark", null, true), "Exhaustive run enabled benchmark duplication.");
+    }
+
+    private static async Task WorkflowBatch()
+    {
+        foreach (var count in new[] { 1, 3, 4 })
+        {
+            var calls = 0;
+            var result = await QaRandomisationBatch.Run(_ =>
+            {
+                calls++;
+                return Task.FromResult<IReadOnlyList<string>>(["Expected recorded failure"]);
+            }, attempts: count);
+            TestAssert.Equal(count, calls);
+            TestAssert.Equal(count, result.Attempts);
+            TestAssert.Equal(count, result.Failures.Count);
+            TestAssert.True(!result.FinalRollSucceeded, "Workflow batch hid its final failure.");
+        }
+    }
+
+    private static void NativeSaveOrdering()
+    {
+        var head = new MorphFaceMorphData([new("A", 0.25f), new("B", 0)],
+            [new("boneA", new(1, 2, 3)), new("boneB", new(4, 5, 6))],
+            [new System.Numerics.Vector3[] { new(1, 2, 3), new(4, 5, 6) }]);
+        var reordered = head with { MorphFeatures = head.MorphFeatures.Reverse().ToArray(),
+            FinalSkeleton = head.FinalSkeleton.Reverse().ToArray() };
+        TestAssert.True(QaHeadPayload.GeometryDifferences(head, reordered, compareNameOrder: false).Count == 0,
+            "Native semantic comparison rejected unchanged values in source order.");
+        TestAssert.True(QaHeadPayload.GeometryDifferences(head, reordered).Count > 0,
+            "Raw payload comparison stopped enforcing authored ordering.");
+        TestAssert.True(QaHeadPayload.RetainsOrder(new[] { "B", "A" }, new[] { "B", "A", "new" }), "Native append lost original ordering.");
+        TestAssert.True(!QaHeadPayload.RetainsOrder(new[] { "B", "A" }, new[] { "A", "B" }), "Native reorder was accepted.");
+        foreach (var damaged in new[]
+        {
+            reordered with { MorphFeatures = [new("B", 0), new("A", 0.5f)] },
+            reordered with { MorphFeatures = [new("B", 0), new("A", 0.25f), new("A", 0.25f)] },
+            reordered with { BakedLods = [head.BakedLods[0].Reverse().ToArray()] }
+        })
+            TestAssert.True(QaHeadPayload.GeometryDifferences(head, damaged, compareNameOrder: false).Count > 0,
+                "Native comparison concealed a changed value, duplicate or vertex order.");
+    }
 
     private static void UnusedCorpusFaceExclusion()
     {

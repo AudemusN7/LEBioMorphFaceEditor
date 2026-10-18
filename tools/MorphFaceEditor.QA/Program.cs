@@ -16,7 +16,7 @@ internal static class Program
         if (args.Contains("--help"))
         {
             Console.WriteLine("MFE QA: game and archetype workflows, cross-game conversion, randomisation and export checks.");
-            Console.WriteLine("Options: --output <new-directory> --corpus <directory> --seed <integer> --case <id> --list --audit-output <completed-run-directory> --self-check");
+            Console.WriteLine("Options: --output <new-directory> --corpus <directory> --seed <integer> --case <id> --exhaustive --list --audit-output <completed-run-directory> --self-check");
             return 0;
         }
         var cases = QaCases.All;
@@ -47,11 +47,11 @@ internal static class Program
             if (index + 1 >= args.Length) throw new ArgumentException($"{name} requires a value.");
             return args[index + 1];
         }
-        var recognized = new HashSet<string> { "--output", "--corpus", "--seed", "--case", "--poc", "--audit-output", "--self-check" };
+        var recognized = new HashSet<string> { "--output", "--corpus", "--seed", "--case", "--poc", "--audit-output", "--self-check", "--exhaustive" };
         for (var index = 0; index < args.Length; index++)
         {
             if (!recognized.Contains(args[index])) throw new ArgumentException($"Unknown option '{args[index]}'.");
-            if (args[index] is not "--poc" and not "--self-check") index++;
+            if (args[index] is not "--poc" and not "--self-check" and not "--exhaustive") index++;
         }
         var root = QaContext.FindWorkspace();
         var output = Path.GetFullPath(Option("--output") ?? Path.Combine(root, "artifacts", "qa",
@@ -70,17 +70,19 @@ internal static class Program
         var filters = filter?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var selected = args.Contains("--self-check")
             ? new[] { new QaCase("runner-self-check", "Naming, flattened companions and timing enforcement", QaRunnerCheck.Run, "runner-self-check") }
-            : QaCases.All.Where(item => filters is null || filters.Any(value =>
-                QaCoverageSelection.MatchesCaseFilter(item.Id, item.Group, value))).ToArray();
+            : QaCases.All.Where(item => QaCoverageSelection.SelectCase(item.Id, item.Group, filters, args.Contains("--exhaustive"))).ToArray();
         if (selected.Length == 0) throw new ArgumentException($"Unknown case '{filter}'. Use --list.");
         var report = new QaReport(output, context.Seed, selected.Select(item => item.Id).ToArray(), context.RunToken);
         Console.WriteLine($"MFE QA | {selected.Length} cases | Seed {context.Seed}\nEvidence: {output}");
+        Console.WriteLine($"Randomisation budget: {selected.Count(item => QaCoverageSelection.PlannedRolls(item.Group) == 100)} dedicated 100-roll cases; " +
+            $"up to {selected.Sum(item => QaCoverageSelection.PlannedRolls(item.Group))} rolls total, plus at most six shared fixture setup rolls.");
         report.Write();
         foreach (var item in selected)
         {
             Console.WriteLine($"START {QaDisplay.Case(item.Id)}");
             var result = new QaResult(item.Id, item.Description) { Group = item.Group };
             context.Current = result;
+            result.Evidence["plannedRollsUpperBound"] = QaCoverageSelection.PlannedRolls(item.Group);
             var materialComparisons = new ConcurrentQueue<MaterialInstanceComparisonDiagnostic>();
             using var comparisonObserver = MaterialInstanceSourcePolicy.ObserveComparisons(materialComparisons.Enqueue);
             var clock = Stopwatch.StartNew();

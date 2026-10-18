@@ -10,16 +10,18 @@ internal static partial class QaCases
 {
     private static async Task<(string Path, ImportedMeshAsset Mesh)> ExportMesh(QaContext c, MorphMeshFormat format)
     {
-        var source = c.Source();
+        var source = c.Source(requiredFacePath: MeshFace.FacePath);
         var preview = await c.Load(source.PackagePath, source.FacePath);
         using var scope = await c.Editor(preview, source.PackagePath);
         scope.Editor.RandomiseMaterials = false;
         var original = scope.Editor.CreateDraft();
-        await c.Randomise100(scope.Editor, "Mesh morph randomisation");
+        QaContext.Require(scope.Editor.CanEditMorphFeatures, "The dedicated mesh fixture does not support morph editing.");
+        var feature = scope.Editor.Features.First(value => value.IsEditable);
+        feature.BeginEdit(); feature.Value += 0.05f; feature.EndEdit();
         var bake = scope.Editor.CreateDraft();
         QaContext.Require(!original.MorphFeatures.SequenceEqual(bake.MorphFeatures) &&
             original.BakedLods[0].Zip(bake.BakedLods[0]).Any(pair => pair.First != pair.Second),
-            "HMM slider roll did not change the exported baked geometry.");
+            "HMM slider edit did not change the exported baked geometry.");
         var saved = await c.Save(bake, source.PackagePath, "randomised-mesh-source.pcc");
         var reopened = await c.Load(saved.PackagePath, saved.FaceInstancedPath);
         AssertGeometry(bake, reopened.Loaded.Document);
@@ -147,7 +149,7 @@ internal static partial class QaCases
         using var scope = await c.Editor(detached.Preview, path, detached: detached);
         var editor = scope.Editor;
         var before = MaterialSignature(editor.Material.CaptureInterchangeData());
-        await c.Randomise100(editor, "Custom Material randomisation");
+        await c.Randomise(editor, 100, "Custom Material randomisation");
         var parameters = editor.Material.CaptureInterchangeData();
         c.Current.Evidence["customMaterialParameters"] = parameters;
         QaContext.Require(before != MaterialSignature(parameters), "Custom randomisation changed no material values.");
@@ -230,6 +232,9 @@ internal static partial class QaCases
         var ron = MaterialRonCodec.WriteMfe(FaceMaterialFileService.Capture(preview.Loaded.Game, "QaFaceMaterials", desired));
         var file = c.Artifact("materials.ron");
         await c.Measure("material RON export", () => MeshMaterialFileService.WriteAsync(file, ron, source.PackagePath), QaStageKind.FileTransfer);
+        if (c.Face.IsPlayer)
+            VerifyPlayerOutput(c, new("None", [], new([], [], []),
+                FaceMaterialFileService.Read(await File.ReadAllTextAsync(file), allowTse: false).Parameters));
         editor.UndoCommand.Execute(null);
         AssertState(initial, editor.CreateDraft(), "material export setup undo");
         var (prepared, warnings) = await c.Measure("material RON import and application", async () =>

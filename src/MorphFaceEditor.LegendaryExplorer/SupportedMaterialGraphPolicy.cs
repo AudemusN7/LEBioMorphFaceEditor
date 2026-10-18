@@ -16,6 +16,13 @@ internal static class SupportedMaterialGraphPolicy
         MEGame game,
         ExportEntry material,
         GamePackageReferenceResolver referenceResolver,
+        out string unsupported) =>
+        ResolveSupportedMaster(game, material, referenceResolver, out unsupported) is not null;
+
+    internal static ExportEntry? ResolveSupportedMaster(
+        MEGame game,
+        ExportEntry material,
+        GamePackageReferenceResolver referenceResolver,
         out string unsupported)
     {
         ArgumentNullException.ThrowIfNull(material);
@@ -30,7 +37,7 @@ internal static class SupportedMaterialGraphPolicy
             if (!visited.Add(identity))
             {
                 unsupported = $"material parent cycle at {current.ClassName} '{path}'";
-                return false;
+                return null;
             }
 
             if (current.ClassName.Equals("Material", StringComparison.OrdinalIgnoreCase))
@@ -38,11 +45,11 @@ internal static class SupportedMaterialGraphPolicy
                 if (MorphFacePackageReader.DescribeMaterialMaster(game, current) is not null)
                 {
                     unsupported = string.Empty;
-                    return true;
+                    return current;
                 }
 
                 unsupported = $"unreviewed base material '{path}'";
-                return false;
+                return null;
             }
 
             string parentPropertyName;
@@ -58,7 +65,7 @@ internal static class SupportedMaterialGraphPolicy
             else
             {
                 unsupported = $"unsupported material graph node {current.ClassName} '{path}'";
-                return false;
+                return null;
             }
 
             var parentReference = current.GetProperty<ObjectProperty>(parentPropertyName)?
@@ -66,14 +73,14 @@ internal static class SupportedMaterialGraphPolicy
             if (parentReference is null)
             {
                 unsupported = $"unresolved {parentPropertyName} for {current.ClassName} '{path}'";
-                return false;
+                return null;
             }
 
             current = referenceResolver.Resolve(parentReference);
             if (current is null)
             {
                 unsupported = $"unresolved {parentPropertyName} for {material.ClassName} '{path}'";
-                return false;
+                return null;
             }
         }
     }

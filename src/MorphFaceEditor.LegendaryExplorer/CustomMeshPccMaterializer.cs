@@ -175,12 +175,7 @@ public sealed class CustomMeshPccMaterializer
 
         foreach (var slot in used)
         {
-            if (!assignments.TryGetValue(slot.MaterialIndex, out var assignment))
-            {
-                throw new InvalidDataException($"Material slot {slot.MaterialIndex} has no assigned material.");
-            }
-
-            var option = assignment.Option;
+            var option = assignments[slot.MaterialIndex].Option;
             var sourceIdentity = option.Template.Source;
             var materialKey = MaterialIdentityKey.Create(sourceIdentity) + "|" +
                               option.EffectiveParameterScopeKey;
@@ -371,7 +366,7 @@ public sealed class CustomMeshPccMaterializer
                 {
                     continue;
                 }
-                var texture = ResolveAuthoredTexture(
+                var texture = PccPackageWorkflow.ResolveTextureReference(
                     destination,
                     value.TextureReference,
                     textureCatalog,
@@ -388,16 +383,6 @@ public sealed class CustomMeshPccMaterializer
         material.WriteProperties(properties);
         return names;
     }
-
-    private static IEntry ResolveAuthoredTexture(
-        IMEPackage destination,
-        AssetIdentity identity,
-        IReadOnlyList<TextureCatalogCandidate> textureCatalog,
-        ICollection<string> warnings) => PccPackageWorkflow.ResolveTextureReference(
-            destination,
-            identity,
-            textureCatalog,
-            warnings);
 
     private static string ParameterName(StructProperty value) =>
         value.GetProp<NameProperty>("ParameterName")?.Value.Instanced ?? string.Empty;

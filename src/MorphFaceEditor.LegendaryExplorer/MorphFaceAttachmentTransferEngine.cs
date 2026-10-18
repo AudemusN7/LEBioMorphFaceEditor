@@ -122,13 +122,7 @@ internal static class MorphFaceAttachmentTransferEngine
                     $"Optional attachment '{canonicalPath}' was omitted because it requires unsupported material '{unsupported}'.");
                 return null;
             }
-            return ExternalSkeletalMeshMaterializer.Materialize(
-                destination,
-                installed.FileRef.FilePath,
-                canonicalPath,
-                "SkeletalMesh",
-                installed.UIndex,
-                warnings);
+            return ExternalSkeletalMeshMaterializer.MaterializeResolved(destination, installed, warnings);
         }
 
         var existingMatches = FindExactExports(destination, canonicalPath);
@@ -170,13 +164,7 @@ internal static class MorphFaceAttachmentTransferEngine
                             $"Optional attachment '{canonicalPath}' was omitted because it requires unsupported material '{unsupported}'.");
                         return null;
                     }
-                    return ExternalSkeletalMeshMaterializer.Materialize(
-                        destination,
-                        template.FilePath,
-                        canonicalPath,
-                        "SkeletalMesh",
-                        templateExport.UIndex,
-                        warnings);
+                    return ExternalSkeletalMeshMaterializer.MaterializeResolved(destination, templateExport, warnings);
                 }
             }
         }

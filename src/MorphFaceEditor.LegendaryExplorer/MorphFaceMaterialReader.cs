@@ -276,7 +276,6 @@ internal sealed class MorphFaceMaterialReader(
         if (!texture.IsA("Texture2D"))
             throw new InvalidDataException($"'{texture.InstancedFullPath}' is {texture.ClassName}, not Texture2D.");
         if (maximumDimension < 1) throw new ArgumentOutOfRangeException(nameof(maximumDimension));
-        PackageSourceCache.Verify(packageCache, texture.FileRef.FilePath);
         var current = ResolveTexture(MorphFacePackageReader.ToIdentity(texture)!);
         var typed = new Texture2DClass(current);
         var top = typed.GetTopMip() ?? throw new InvalidDataException($"Texture '{current.InstancedFullPath}' has no readable mip.");
@@ -376,7 +375,6 @@ internal sealed class MorphFaceMaterialReader(
 
     private ExportEntry ResolveTexture(AssetIdentity identity)
     {
-        PackageSourceCache.Verify(packageCache, identity.PackagePath);
         var package = PackageSourceCache.GetPackage(packageCache, identity.PackagePath)
             ?? throw new FileNotFoundException($"Package '{identity.PackagePath}' is unavailable.");
         IEntry? entry = identity.UIndex > 0 ? package.GetEntry(identity.UIndex) : null;
@@ -391,7 +389,6 @@ internal sealed class MorphFaceMaterialReader(
 
     private ExportEntry ResolveMaterialSource(AssetIdentity identity)
     {
-        PackageSourceCache.Verify(packageCache, identity.PackagePath);
         var package = PackageSourceCache.GetPackage(packageCache, identity.PackagePath)
             ?? throw new FileNotFoundException($"Material source package '{identity.PackagePath}' is unavailable.");
         IEntry? entry = identity.UIndex > 0 ? package.GetEntry(identity.UIndex) : null;
@@ -1288,7 +1285,6 @@ internal sealed class MorphFaceMaterialReader(
     {
         using var timing = new ReadTimingScope(this, ReadStage.TextureDecode);
         var source = MorphFacePackageReader.ToIdentity(export)!;
-        PackageSourceCache.Verify(packageCache, source.PackagePath);
         export = ResolveTexture(source);
         var sourceKey = MaterialIdentityKey.Create(source);
         if (_textureCache.TryGetValue(sourceKey, out var cached))

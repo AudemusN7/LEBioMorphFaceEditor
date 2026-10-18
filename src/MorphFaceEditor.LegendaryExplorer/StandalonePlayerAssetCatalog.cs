@@ -56,20 +56,27 @@ public sealed record StandalonePlayerAssetCatalog(
         IReadOnlyList<TextureCatalogCandidate> textures,
         string? referencePackagePath = null,
         IReadOnlyList<AttachmentMeshCandidate>? attachmentMeshes = null)
+        => ForHead(game, TseHeadMorphRon.Read(ronPath), textures, referencePackagePath, attachmentMeshes);
+
+    public static StandalonePlayerAssetCatalog ForHead(
+        MorphFaceGame game,
+        HeadMorphPayload head,
+        IReadOnlyList<TextureCatalogCandidate> textures,
+        string? referencePackagePath = null,
+        IReadOnlyList<AttachmentMeshCandidate>? attachmentMeshes = null)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(ronPath);
+        ArgumentNullException.ThrowIfNull(head);
         ArgumentNullException.ThrowIfNull(textures);
         LegendaryExplorerCoreRuntime.Initialize();
 
-        var ron = TseHeadMorphRon.Read(ronPath);
-        var requestedTextures = ron.MaterialData.Textures
+        var requestedTextures = head.MaterialData.Textures
             .Select(value => value.TextureReference?.InstancedPath)
             .Where(path => !string.IsNullOrWhiteSpace(path))
             .Cast<string>()
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        var requestedMeshes = ron.AccessoryMeshes
-            .Prepend(ron.HairMesh)
+        var requestedMeshes = head.AccessoryMeshes
+            .Prepend(head.HairMesh)
             .Where(path => !string.IsNullOrWhiteSpace(path) &&
                            !path.Equals("None", StringComparison.OrdinalIgnoreCase))
             .Distinct(StringComparer.OrdinalIgnoreCase)

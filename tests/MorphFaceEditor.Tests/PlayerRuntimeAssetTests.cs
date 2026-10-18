@@ -106,7 +106,7 @@ internal static class PlayerRuntimeAssetTests
                 var validator = new PlayerRuntimeAssetValidator(_ => [seekfree, startup, factory]);
                 var materials = new MorphFaceMaterialData([], [], [new("HED_Diff", new("", "BIOG_MFE_HIR.Face", 0, "Texture2D")),
                     new("Global", new("", "BIOG_Global.Black", 0, "Texture2D")), new("EYE_Diff", new("", "BIOG_Global.Eye", 0, "Texture2D"))]);
-                var head = new TseHeadMorph("BIOG_MFE_HIR.Hair", ["BIOG_MFE_HIR.Accessory"], new([], [], []), materials);
+                var head = new HeadMorphPayload("BIOG_MFE_HIR.Hair", ["BIOG_MFE_HIR.Accessory"], new([], [], []), materials);
                 validator.Verify(game, head);
                 var candidates = new[]
                 {

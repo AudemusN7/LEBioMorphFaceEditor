@@ -135,7 +135,7 @@ internal static partial class QaCases
         c.Current.Evidence["ronMode"] = morphOnly ? "Morph Only" : "Full";
     }
 
-    private static TseHeadMorph ReadPackageHead(string packagePath, string facePath)
+    private static HeadMorphPayload ReadPackageHead(string packagePath, string facePath)
     {
         var context = new MorphFacePackageContextService();
         var references = MorphFaceReferenceInspector.Inspect(packagePath).Single(value => value.FacePath == facePath);
@@ -155,7 +155,7 @@ internal static partial class QaCases
             "RON workflow changed hair or accessory identities.");
     }
 
-    private static void VerifyPlayerOutput(QaContext c, TseHeadMorph head, TseHeadMorph? preserved = null)
+    private static void VerifyPlayerOutput(QaContext c, HeadMorphPayload head, HeadMorphPayload? preserved = null)
     {
         new PlayerRuntimeAssetValidator().Verify(c.Face.Game, head, preserved);
         c.Current.Evidence["playerRuntimeSources"] = "Every newly written mesh/texture identity passed the production seekfree/startup/face-factory source validator; preserved native career references are exempt only when unchanged.";

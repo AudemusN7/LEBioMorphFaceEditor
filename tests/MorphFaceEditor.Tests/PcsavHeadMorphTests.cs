@@ -72,11 +72,12 @@ internal static class PcsavHeadMorphTests
                     defaultsObserved.Add(workspace.Game);
                 Console.WriteLine($"PCSAV {Path.GetFileName(fixture)}: {workspace.Game} {workspace.Sex}, {workspace.FirstName}, " +
                     (workspace.HasHeadMorph ? $"{workspace.Head.MorphData.BakedLods[0].Length} LOD0 vertices" : "default head"));
-                var ron = Path.Combine(directory, "head.ron");
+                var editable = ReadEditableHead(workspace);
+                workspace.SetEditingBaseline(editable);
                 if (!workspace.HasHeadMorph)
                 {
                     TestAssert.True(original.SequenceEqual(workspace.ReplaceHead(null)), "An untouched default-head career changed bytes.");
-                    ExportEditableHead(workspace, ron); workspace.SetEditingBaseline(ron); workspace.SaveEditedRon(ron);
+                    workspace.SaveEditedHead(editable);
                     var created = PcsavHeadMorphWorkspace.Open(source);
                     TestAssert.True(created.HasHeadMorph, "A default-head career did not accept a new custom head.");
                     TestAssert.True(workspace.UnrelatedPrefix.SequenceEqual(created.UnrelatedPrefix) &&
@@ -85,8 +86,7 @@ internal static class PcsavHeadMorphTests
                     TestAssert.True(original.SequenceEqual(File.ReadAllBytes(source)), "Deleting a newly created head did not restore the default career.");
                     continue;
                 }
-                workspace.ExportHeadRon(ron); workspace.SetEditingBaseline(ron);
-                workspace.SaveEditedRon(ron);
+                workspace.SaveEditedHead(editable);
                 TestAssert.True(original.SequenceEqual(File.ReadAllBytes(source)), "An untouched career changed bytes.");
 
                 var head = workspace.Head;
@@ -95,21 +95,20 @@ internal static class PcsavHeadMorphTests
                 {
                     Scalars = head.MaterialData.Scalars.Select(v => v.Name == scalar.Name ? v with { Value = v.Value + 0.125f } : v).ToArray()
                 } };
-                TseHeadMorphRon.Write(ron, modified);
-                workspace.SaveEditedRon(ron);
+                workspace.SaveEditedHead(modified);
                 var reopened = PcsavHeadMorphWorkspace.Open(source);
                 TestAssert.True(workspace.UnrelatedPrefix.SequenceEqual(reopened.UnrelatedPrefix) &&
                     workspace.UnrelatedSuffix.SequenceEqual(reopened.UnrelatedSuffix), "An unrelated career byte changed.");
                 TestAssert.Near(scalar.Value + 0.125f,
                     reopened.Head.MaterialData.Scalars.Single(v => v.Name == scalar.Name).Value, 0.00001f);
                 TestAssert.True(head.MaterialData.Textures.SequenceEqual(reopened.Head.MaterialData.Textures),
-                    "A scalar edit changed native texture entries absent from the editing projection.");
+                    "A scalar edit changed native texture entries.");
                 workspace.DeleteHeadMorph();
                 var deleted = PcsavHeadMorphWorkspace.Open(source);
                 TestAssert.True(!deleted.HasHeadMorph, "Delete left a native headmorph in the career.");
                 TestAssert.True(workspace.UnrelatedPrefix.SequenceEqual(deleted.UnrelatedPrefix) &&
                     workspace.UnrelatedSuffix.SequenceEqual(deleted.UnrelatedSuffix), "Delete changed unrelated career data.");
-                TseHeadMorphRon.Write(ron, head); workspace.SaveEditedRon(ron);
+                workspace.SaveEditedHead(head);
                 TestAssert.True(original.SequenceEqual(File.ReadAllBytes(source)), "Returning to the original head changed the career.");
                 TestAssert.True(original.SequenceEqual(File.ReadAllBytes(fixture)), "A fixture was mutated.");
             }
@@ -130,11 +129,11 @@ internal static class PcsavHeadMorphTests
             {
                 var source = Path.Combine(directory, "career.pcsav"); File.Copy(fixture, source);
                 var workspace = PcsavHeadMorphWorkspace.Open(source);
-                var ron = Path.Combine(directory, "head.ron"); ExportEditableHead(workspace, ron); workspace.SetEditingBaseline(ron);
+                var head = ReadEditableHead(workspace); workspace.SetEditingBaseline(head);
                 var corrupted = File.ReadAllBytes(source); corrupted[20] ^= 0x80; File.WriteAllBytes(source, corrupted);
                 try { _ = PcsavHeadMorphWorkspace.Open(source); throw new Exception("A corrupt save was accepted."); }
                 catch (PcsavException e) { TestAssert.Equal(PcsavError.InvalidFile, e.Reason); }
-                try { workspace.SaveEditedRon(ron); throw new Exception("An externally changed career was overwritten."); }
+                try { workspace.SaveEditedHead(head); throw new Exception("An externally changed career was overwritten."); }
                 catch (PcsavException e) { TestAssert.Equal(PcsavError.SourceChanged, e.Reason); }
                 TestAssert.True(corrupted.SequenceEqual(File.ReadAllBytes(source)), "A failed save changed its source.");
                 TestAssert.Equal(0, Directory.GetFiles(directory, ".*.tmp").Length);
@@ -143,11 +142,8 @@ internal static class PcsavHeadMorphTests
         }
     }
 
-    private static void ExportEditableHead(PcsavHeadMorphWorkspace workspace, string ron)
-    {
-        if (workspace.HasHeadMorph) workspace.ExportHeadRon(ron);
-        else new MorphFacePackageContextService().ExportPlayerDefaultsRon(workspace.Game, workspace.Sex, ron);
-    }
+    private static HeadMorphPayload ReadEditableHead(PcsavHeadMorphWorkspace workspace) => workspace.HasHeadMorph
+        ? workspace.Head : new MorphFacePackageContextService().CapturePlayerDefaultHead(workspace.Game, workspace.Sex);
 
     private static void SaveAsCopies()
     {
@@ -160,10 +156,9 @@ internal static class PcsavHeadMorphTests
                 var source = Path.Combine(directory, "original.pcsav"); File.Copy(fixture, source);
                 var original = File.ReadAllBytes(source);
                 var workspace = PcsavHeadMorphWorkspace.Open(source);
-                var ron = Path.Combine(directory, "head.ron");
-                ExportEditableHead(workspace, ron); workspace.SetEditingBaseline(ron);
+                var head = ReadEditableHead(workspace); workspace.SetEditingBaseline(head);
                 var copy = Path.Combine(directory, "copy.pcsav");
-                workspace.SaveEditedRon(ron, copy);
+                workspace.SaveEditedHead(head, copy);
                 TestAssert.Equal(copy, workspace.SourcePath);
                 var saved = PcsavHeadMorphWorkspace.Open(copy);
                 TestAssert.True(saved.HasHeadMorph && original.SequenceEqual(File.ReadAllBytes(source)), "Save As modified its original.");
@@ -190,16 +185,13 @@ internal static class PcsavHeadMorphTests
                 { Textures = native.Head.MaterialData.Textures.Append(unknown).ToArray() } };
             File.WriteAllBytes(source, native.ReplaceHead(head));
             var workspace = PcsavHeadMorphWorkspace.Open(source);
-            var ron = Path.Combine(directory, "editing.ron");
             var projection = head with { HairMesh = "None", MaterialData = head.MaterialData with
                 { Textures = head.MaterialData.Textures.Where(value => value != unknown).ToArray() } };
-            TseHeadMorphRon.Write(ron, projection);
-            workspace.SetEditingBaseline(ron);
+            workspace.SetEditingBaseline(projection);
             var scalar = projection.MaterialData.Scalars.First();
             projection = projection with { MaterialData = projection.MaterialData with { Scalars = projection.MaterialData.Scalars
                 .Select(value => value.Name == scalar.Name ? value with { Value = value.Value + 0.125f } : value).ToArray() } };
-            TseHeadMorphRon.Write(ron, projection);
-            workspace.SaveEditedRon(ron);
+            workspace.SaveEditedHead(projection);
             var saved = PcsavHeadMorphWorkspace.Open(source);
             TestAssert.Equal(head.HairMesh, saved.Head.HairMesh);
             TestAssert.Equal(unknown.TextureReference!.InstancedPath, saved.Head.MaterialData.Textures
@@ -211,12 +203,11 @@ internal static class PcsavHeadMorphTests
             var changed = projection with { MaterialData = projection.MaterialData with { Textures = projection.MaterialData.Textures
                 .Select(value => value == selected ? value with { TextureReference = new("", missingRoot + ".NewTexture", 0, "Texture2D") } : value)
                 .ToArray() } };
-            TseHeadMorphRon.Write(ron, changed);
             var destination = Path.Combine(directory, "existing.pcsav");
             File.WriteAllBytes(destination, before);
             foreach (var target in new[] { source, destination })
             {
-                try { workspace.SaveEditedRon(ron, target); throw new Exception("An unavailable new texture reached the career save."); }
+                try { workspace.SaveEditedHead(changed, target); throw new Exception("An unavailable new texture reached the career save."); }
                 catch (InvalidDataException exception)
                 {
                     TestAssert.Equal("loc_PlayerAsset_SeekFreeSourceRequired", UserFacingMessage.FromException(exception)!.LocalizationKey);
@@ -230,7 +221,7 @@ internal static class PcsavHeadMorphTests
 
     private static void HairTextureClearing()
     {
-        var original = new TseHeadMorph("Test.OldHair", [], new([], [], []), new([], [], []));
+        var original = new HeadMorphPayload("Test.OldHair", [], new([], [], []), new([], [], []));
         var hair = new TextureMaterialOverride("HAIR_DIFF", TestFixtures.CreateIdentity("Test.Hair", "Texture2D"));
         var scalp = hair with { Name = "HED_Scalp_Diff" };
         original = original with { MaterialData = original.MaterialData with { Textures = [hair, scalp] } };
@@ -275,7 +266,7 @@ internal static class PcsavHeadMorphTests
         var path = Path.Combine(Path.GetTempPath(), $"MFE-Features-{Guid.NewGuid():N}.ron");
         try
         {
-            var head = new TseHeadMorph("None", [], new([new("nose_BridgeIn", 0.25f)], [], []), new([], [], []));
+            var head = new HeadMorphPayload("None", [], new([new("nose_BridgeIn", 0.25f)], [], []), new([], [], []));
             var metadata = new RonExportProvenance(RonExportProducer.MFE, "0.9.6", MorphFaceGame.LE3, "HMM", true);
             TseHeadMorphRon.Write(path, head, metadata, morphFeaturesOnly: true);
             var read = TseHeadMorphRon.Read(path);

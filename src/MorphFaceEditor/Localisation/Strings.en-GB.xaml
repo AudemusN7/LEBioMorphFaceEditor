@@ -2606,6 +2606,10 @@ Choose No to keep the current scalp textures and material.</system:String>
 <system:String x:Key="loc_Pcsav_Deleted" xml:space="preserve">Removed the headmorph and saved {0}.</system:String>
   <!--localiser: {"Key":"loc_Pcsav_UnavailableAttachments","ReviewedHash":"253E8CD56A294E5D65BB93736E7289597039CF84E8019622D8BEBFB7DA734709","DoNotTranslate":false,"Note":"","SourceHash":null}-->
 <system:String x:Key="loc_Pcsav_UnavailableAttachments" xml:space="preserve">{0} saved hair or accessory meshes are unavailable for preview. Their original references will be preserved in the career save unless you change them.</system:String>
+  <!--localiser: {"Key":"loc_Pcsav_UnavailableHair","ReviewedHash":"CC90F9EC1F9BAFD1134E32BADC4688EF13828E1B9A6B63B42C404FF5216F379E","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_Pcsav_UnavailableHair" xml:space="preserve">Hair mesh: {0}</system:String>
+  <!--localiser: {"Key":"loc_Pcsav_UnavailableAccessory","ReviewedHash":"094BBEC11643628972102B233C89F62E133A5E7DD2FADF73DF5AECB9A7DEDBAB","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_Pcsav_UnavailableAccessory" xml:space="preserve">Accessory mesh: {0}</system:String>
     <!--localiser: {"Key":"loc_FileSave_SaveAs","ReviewedHash":"088203B4CD88789E07F4E9A8F05CF6E8C1D0B413AE32D30CAE69BEEEF94784E6","DoNotTranslate":false,"Note":"","SourceHash":null}-->
 <system:String x:Key="loc_FileSave_SaveAs" xml:space="preserve">Save As</system:String>
     <!--localiser: {"Key":"loc_Shortcut_SaveAs","ReviewedHash":"3B8157963D09DDDBDB2A3998F81237F850A3C367FA33DF50F2008FD739A998C4","DoNotTranslate":false,"Note":"","SourceHash":null}-->

@@ -103,7 +103,7 @@ public sealed partial class MainWindowViewModel
                 refreshAttempted = true;
                 if (!await RefreshWorkspaceAsync(face.InstancedPath))
                     throw new InvalidDataException(Loc.Text("loc_RonFiles_ImportFailed"));
-                _pcsavWorkspace?.SetImportedHead(snapshot, Editor!.CreateDraft());
+                _pcsavWorkspace?.SetImportedHead(TseHeadMorphRon.Read(snapshot), Editor!.CreateDraft());
                 _hasWorkspaceChanges = true;
                 OnDirtyStateChanged();
                 if (result.Warnings.Count > 0)

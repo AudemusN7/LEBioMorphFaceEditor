@@ -10,7 +10,7 @@ namespace MorphFaceEditor.LegendaryExplorer;
 /// <summary>Headmorph paths must have a real dynamically loadable source, even when selected from a level copy.</summary>
 internal sealed class PlayerRuntimeAssetValidator(Func<MorphFaceGame, IEnumerable<string>>? packagePaths = null)
 {
-    internal void Verify(MorphFaceGame game, TseHeadMorph head, TseHeadMorph? preservedHead = null)
+    internal void Verify(MorphFaceGame game, HeadMorphPayload head, HeadMorphPayload? preservedHead = null)
     {
         var preserved = References(preservedHead).GroupBy(Key, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase);
@@ -97,7 +97,7 @@ internal sealed class PlayerRuntimeAssetValidator(Func<MorphFaceGame, IEnumerabl
     private static string Key((string Slot, string Path, string ClassName) reference) =>
         $"{reference.Slot}|{reference.ClassName}|{reference.Path}";
 
-    private static IEnumerable<(string Slot, string Path, string ClassName)> References(TseHeadMorph? head)
+    private static IEnumerable<(string Slot, string Path, string ClassName)> References(HeadMorphPayload? head)
     {
         if (head is null) yield break;
         if (!string.IsNullOrWhiteSpace(head.HairMesh) && !head.HairMesh.Equals("None", StringComparison.OrdinalIgnoreCase))

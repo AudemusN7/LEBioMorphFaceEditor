@@ -333,7 +333,9 @@ public static class UiSmokeTests
                     TestAssert.True(!shell.HasWorkspace && originalBytes.SequenceEqual(File.ReadAllBytes(source)), "Cancelled blank head creation changed the workspace/source.");
                     dialogs.ConfirmCreateCareerMorphResult = true;
                 }
+                var openTimer = System.Diagnostics.Stopwatch.StartNew();
                 await shell.OpenDroppedFileAsync(source);
+                Console.WriteLine($"PCSAV OPEN {Path.GetFileName(fixture)}: {openTimer.Elapsed.TotalMilliseconds:F0} ms");
                 TestAssert.True(!shell.HasError && shell.Editor is not null, shell.ErrorMessage ?? "PCSAV did not open.");
                 TestAssert.Equal(1, shell.Faces.Count);
                 TestAssert.Equal(original.FirstName, shell.SelectedFace!.ObjectName);
@@ -348,7 +350,9 @@ public static class UiSmokeTests
                 var scalarName = scalar.Name;
                 var scalarValue = scalar.Value + 0.125f;
                 scalar.Value = scalarValue;
+                var saveTimer = System.Diagnostics.Stopwatch.StartNew();
                 await ((AsyncRelayCommand)shell.SaveCommand).ExecuteAsync();
+                Console.WriteLine($"PCSAV SAVE {Path.GetFileName(fixture)}: {saveTimer.Elapsed.TotalMilliseconds:F0} ms");
                 TestAssert.True(!shell.HasError && !shell.IsDirty, shell.ErrorMessage ?? "PCSAV save stayed dirty.");
                 TestAssert.Equal(1, shell.Faces.Count);
                 var saved = PcsavHeadMorphWorkspace.Open(source);

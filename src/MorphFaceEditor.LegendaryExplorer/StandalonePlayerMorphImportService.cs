@@ -9,7 +9,7 @@ public enum StandalonePlayerSex
     Female
 }
 
-/// <summary>Owns a detached player-head RON import and its non-committable PCC workspace.</summary>
+/// <summary>Owns a detached player-head import and its non-committable PCC workspace.</summary>
 public sealed class StandalonePlayerMorphImportResult : IDisposable
 {
     internal StandalonePlayerMorphImportResult(
@@ -36,7 +36,7 @@ public sealed class StandalonePlayerMorphImportResult : IDisposable
 }
 
 /// <summary>
-/// Imports a TSE player RON against the selected game's verified player face
+/// Imports an authored player head against the selected game's verified player face
 /// template. The installed package is copied first and can never be committed
 /// through the returned detached workspace.
 /// </summary>
@@ -68,21 +68,26 @@ public sealed class StandalonePlayerMorphImportService
         string ronPath,
         string objectName,
         StandalonePlayerAssetCatalog? assetCatalog = null)
+        => ImportPlayerHead(targetGame, ReadRon(ronPath), objectName, assetCatalog);
+
+    public StandalonePlayerMorphImportResult ImportPlayerHead(
+        MorphFaceGame targetGame,
+        HeadMorphPayload head,
+        string objectName,
+        StandalonePlayerAssetCatalog? assetCatalog = null)
     {
-        var (sourcePath, _, profile, sex) = ReadAndClassify(targetGame, ronPath);
+        var sex = IdentifySex(targetGame, head);
         ValidateAssetCatalog(targetGame, assetCatalog);
-        var seedPath = ResolveInstalledSeed(targetGame, profile.Seed);
+        var seedPath = ResolveInstalledSeed(targetGame);
         var workspace = new MorphFacePackageWorkspace(seedPath, canCommit: false);
         try
         {
-            var templatePath = sex == StandalonePlayerSex.Male
-                ? profile.MaleTemplate
-                : profile.FemaleTemplate;
-            var saveResult = new MorphFacePackageContextService().ImportStandalonePlayerRon(
+            var templatePath = ResolvePlayerTemplate(targetGame, sex);
+            var saveResult = new MorphFacePackageContextService().ImportStandalonePlayerHead(
                 workspace.WorkingPath,
                 templatePath,
                 objectName,
-                sourcePath,
+                head,
                 assetCatalog);
             return new StandalonePlayerMorphImportResult(workspace, saveResult, targetGame, sex);
         }
@@ -93,9 +98,9 @@ public sealed class StandalonePlayerMorphImportService
         }
     }
 
-    public MorphFaceSaveResult ImportPlayerRonIntoWorkspace(
+    public MorphFaceSaveResult ImportPlayerHeadIntoWorkspace(
         MorphFaceGame targetGame,
-        string ronPath,
+        HeadMorphPayload head,
         string objectName,
         MorphFacePackageWorkspace workspace,
         StandalonePlayerAssetCatalog? assetCatalog = null)
@@ -105,22 +110,20 @@ public sealed class StandalonePlayerMorphImportService
         {
             throw new InvalidOperationException("Player RONs can only be appended to a detached standalone workspace.");
         }
-        var (sourcePath, _, profile, sex) = ReadAndClassify(targetGame, ronPath);
+        var sex = IdentifySex(targetGame, head);
         ValidateAssetCatalog(targetGame, assetCatalog);
-        var expectedSeed = ResolveInstalledSeed(targetGame, profile.Seed);
+        var expectedSeed = ResolveInstalledSeed(targetGame);
         if (!string.Equals(workspace.SourcePath, expectedSeed, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException(
                 $"The open standalone workspace uses different game assets. Start a {targetGame} workspace before importing this RON.");
         }
-        var templatePath = sex == StandalonePlayerSex.Male
-            ? profile.MaleTemplate
-            : profile.FemaleTemplate;
-        return new MorphFacePackageContextService().ImportStandalonePlayerRon(
+        var templatePath = ResolvePlayerTemplate(targetGame, sex);
+        return new MorphFacePackageContextService().ImportStandalonePlayerHead(
             workspace.WorkingPath,
             templatePath,
             objectName,
-            sourcePath,
+            head,
             assetCatalog);
     }
 
@@ -128,15 +131,9 @@ public sealed class StandalonePlayerMorphImportService
         string ronPath,
         MorphFaceGame targetGame) => ImportPlayerRon(targetGame, ronPath);
 
-    private static (string SourcePath, TseHeadMorph Ron,
-        (int Male, int Female, string MaleTemplate, string FemaleTemplate, string Seed) Profile,
-        StandalonePlayerSex Sex) ReadAndClassify(MorphFaceGame targetGame, string ronPath)
+    private static HeadMorphPayload ReadRon(string ronPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(ronPath);
-        if (!Profiles.TryGetValue(targetGame, out var profile))
-        {
-            throw new InvalidDataException($"Standalone player RON import does not support '{targetGame}'.");
-        }
         var sourcePath = Path.GetFullPath(ronPath);
         if (!File.Exists(sourcePath))
         {
@@ -149,10 +146,14 @@ public sealed class StandalonePlayerMorphImportService
                 $"Standalone player import accepts .ron only; '{extension}' is not a TSE RON file. " +
                 "Gibbed head morphs and mesh files require their dedicated conversion workflows.");
         }
-        var ron = TseHeadMorphRon.Read(sourcePath);
-        if (ron.MorphData.BakedLods.Count == 0)
+        return TseHeadMorphRon.Read(sourcePath);
+    }
+
+    private static StandalonePlayerSex IdentifySex(MorphFaceGame game, HeadMorphPayload head)
+    {
+        if (head.MorphData.BakedLods.Count == 0)
             throw new InvalidDataException("This RON contains morph features only and requires a matching editing face.");
-        return (sourcePath, ron, profile, IdentifySex(targetGame, ron.MorphData.BakedLods[0].Length));
+        return IdentifySex(game, head.MorphData.BakedLods[0].Length);
     }
 
     public static StandalonePlayerSex IdentifySex(MorphFaceGame targetGame, int lod0VertexCount)

@@ -2653,11 +2653,11 @@ public static class PackageContextTests
                 var threw = false;
                 try
                 {
-                    _ = service.ImportStandalonePlayerRon(
+                    _ = service.ImportStandalonePlayerHead(
                         path,
                         facePath,
                         "MFE_UnresolvedHair",
-                        ronPath,
+                        TseHeadMorphRon.Read(ronPath),
                         new StandalonePlayerAssetCatalog(
                             MorphFaceGame.LE3,
                             [],
@@ -2890,9 +2890,9 @@ public static class PackageContextTests
                 expectedMaterial,
                 context.CaptureMaterialData(imported.Workspace.WorkingPath, imported.ImportedFacePath));
 
-            var appended = importService.ImportPlayerRonIntoWorkspace(
+            var appended = importService.ImportPlayerHeadIntoWorkspace(
                 MorphFaceGame.LE1,
-                ronPath,
+                TseHeadMorphRon.Read(ronPath),
                 "Ryan_Second_Morph",
                 imported.Workspace);
             TestAssert.Equal("BIOG_MORPH_FACE.Ryan_Second_Morph", appended.FaceInstancedPath);

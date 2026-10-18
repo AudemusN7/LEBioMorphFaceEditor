@@ -2626,12 +2626,74 @@ Choose No to keep the current scalp textures and material.</system:String>
 <system:String x:Key="loc_RonFiles_Imported" xml:space="preserve">Imported {0} into the current face.</system:String>
     <!--localiser: {"Key":"loc_FileSave_MorphFeaturesOnly","ReviewedHash":"4301FA7477000FDDCFCF4168BA6F9D83BC837A60FDAAEFD64440950BD25C26AD","DoNotTranslate":false,"Note":"","SourceHash":null}-->
 <system:String x:Key="loc_FileSave_MorphFeaturesOnly" xml:space="preserve">Morph features were saved. Other head changes remain unsaved. Right-click the face and export the full head or a PCC to include them.</system:String>
-    <system:String x:Key="loc_PlayerAsset_SeekFreeSourceRequired" xml:space="preserve">{0} '{1}' has no matching asset in a BIOG seekfree package or a guaranteed Player runtime package. Choose an asset with a safe runtime source, or export to PCC.</system:String>
-    <system:String x:Key="loc_PccSave_VerificationMismatch" xml:space="preserve">The saved PCC did not retain the requested data. Nothing was replaced.</system:String>
-    <system:String x:Key="loc_PccSave_NewNonFiniteValue" xml:space="preserve">Cannot save a new or changed NaN/Infinity value in {0}. Existing invalid values can only be carried over unchanged.</system:String>
-    <system:String x:Key="loc_RonImport_TextureSkipped">Skipped missing texture '{1}' for '{0}'. The material will use its inherited texture.</system:String>
-    <system:String x:Key="loc_RonImport_HairSkipped">Skipped missing hair mesh '{0}'. The rest of the head was imported.</system:String>
-    <system:String x:Key="loc_RonImport_AccessorySkipped">Skipped missing accessory mesh '{0}'. The rest of the head was imported.</system:String>
-    <system:String x:Key="loc_PccSave_UnsafeDependency">The new PCC still refers to an external {0} '{1}' without a guaranteed startup source. Nothing was replaced.</system:String>
-    <system:String x:Key="loc_PccSave_MissingDependency">The PCC could not include {0} '{1}' because no exact source was found. Nothing was replaced.</system:String>
+    <!--localiser: {"Key":"loc_PlayerAsset_SeekFreeSourceRequired","ReviewedHash":"949AADEEDB4FCDD377DFBE3AE9F5CD48BED267EF410C68F16353D23B0F4B733D","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_PlayerAsset_SeekFreeSourceRequired" xml:space="preserve">{0} '{1}' has no matching asset in a BIOG seekfree package or a global/startup package. Only export to PCC supports this behaviour.</system:String>
+    <!--localiser: {"Key":"loc_PccSave_VerificationMismatch","ReviewedHash":"96EFEF4B208E770FDD1C702DA8170F7519124F78B6FB4486014C4A5A989B725E","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_PccSave_VerificationMismatch" xml:space="preserve">The saved PCC did not retain the requested data. Nothing was replaced.</system:String>
+    <!--localiser: {"Key":"loc_PccSave_NewNonFiniteValue","ReviewedHash":"7AB1DB2709A2DA3E0232A65D3127044014F6EE70A26A0A3AF78566F5A78BDC34","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_PccSave_NewNonFiniteValue" xml:space="preserve">Cannot save a new or changed NaN/Infinity value in {0}. Existing invalid values can only be carried over unchanged.</system:String>
+    <!--localiser: {"Key":"loc_RonImport_TextureSkipped","ReviewedHash":"BA74C622389BDAE2F915C18B295D5CBA921317E3EE8EFECFC88FAC3C287C016E","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_RonImport_TextureSkipped">Skipped missing texture '{1}' for '{0}'. The material will use its inherited texture as a fallback.</system:String>
+    <!--localiser: {"Key":"loc_RonImport_HairSkipped","ReviewedHash":"CE25917D407BAF77A2AD0842D02FF6B668035C906E8343984F68275E5C4651DD","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_RonImport_HairSkipped">Skipped missing hair mesh '{0}'. The rest of the head was imported.</system:String>
+    <!--localiser: {"Key":"loc_RonImport_AccessorySkipped","ReviewedHash":"F140FCA26533B952B16A804994C9E01DAADE870E24F9D7C1D0EB0885C99028EF","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_RonImport_AccessorySkipped">Skipped missing accessory mesh '{0}'. The rest of the head was imported.</system:String>
+    <!--localiser: {"Key":"loc_PccSave_UnsafeDependency","ReviewedHash":"D787E4AABA2A8EBD34219FE64C54D7466B2A31E241B97A021506CCC70B17886B","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_PccSave_UnsafeDependency">The new PCC still refers to an external {0} '{1}' without a guaranteed startup source. Nothing was replaced.</system:String>
+    <!--localiser: {"Key":"loc_PccSave_MissingDependency","ReviewedHash":"8F2FDDE2F4535D4D02054C64BD6216FCA4E5D050130BB0845471A98F9734E169","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_PccSave_MissingDependency">The PCC could not include {0} '{1}' because no exact source was found. Nothing was replaced.</system:String>
+    <!--localiser: {"Key":"loc_ActorAssignment_AttachmentMaterialsUnavailable","ReviewedHash":"3BDCD8A5E6C7758C12EBA1FA7A0ACDB722D2FE46A523CE11D3B321F2E3B0BC4B","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_ActorAssignment_AttachmentMaterialsUnavailable">The material data for attachment '{0}' could not be read, so its actor material parents could not be updated. Nothing was replaced.</system:String>
+    <!--localiser: {"Key":"loc_ActorAssignment_SecondHairSkipped","ReviewedHash":"4E5FF7E983A0D8C08791BAA278C00D1CE9B0FE35A4B6649B4B20DDC037074DE3","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_ActorAssignment_SecondHairSkipped">The face's main hair mesh was applied to '{1}'. The second mesh '{0}' could not be applied because it needs the same hair component, and MFE does not currently add new component slots.</system:String>
+    <!--localiser: {"Key":"loc_ActorAssignment_MorphTooltip","ReviewedHash":"C49AD6344ED3AA7FA969545A6DB28618BD9AFDEBF967BA9B972928371C419FAF","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_ActorAssignment_MorphTooltip">Applies the morph shape to a level actor's face. Use Assign Materials for materials, hair and accessories.</system:String>
+    <!--localiser: {"Key":"loc_ActorAssignment_MaterialsTooltip","ReviewedHash":"344AF0895C80DE52D6A49403ED6337125311549C0A8389C0AEFB2AA1169252A3","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_ActorAssignment_MaterialsTooltip">Applies material overrides and hair/accessory meshes to a level actor's head. Use Assign Morph for face shape.</system:String>
+    <!--localiser: {"Key":"loc_ActorAssignment_MorphIntroduction","ReviewedHash":"7F3CD4179986F845650AE733DB3167A15F372B083520ECC15B5F18A2FECDE0AB","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_ActorAssignment_MorphIntroduction">Assign {0} by changing only the actor's BioMorphFace reference. Materials, hair and accessories are handled by Assign Materials. Changes remain in the workspace until Save File.</system:String>
+    <!--localiser: {"Key":"loc_ActorAssignment_MaterialsIntroduction","ReviewedHash":"254B55A5D53CA4D3626DD76BCA32D04193EE993934D77CEA572A4BCADE7BD25A","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_ActorAssignment_MaterialsIntroduction">Apply material overrides from {0} and update matching existing hair/accessory mesh/material components. Mesh components without referenced MICs use the mesh's materials. The BioMorphFace reference stays unchanged; no new components are added. Changes remain in the workspace until Save File.</system:String>
+    <!--localiser: {"Key":"loc_ActorAssignment_MorphSummary","ReviewedHash":"49340FA6335574B2E8E85469C83F00181D10E44C4268AFAF6444631A13628BCF","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_ActorAssignment_MorphSummary">Profile: {0} · Current morph: {1}</system:String>
+    <!--localiser: {"Key":"loc_ActorAssignment_TargetCounts","ReviewedHash":"F076067B52140F1208F6259CE0EF7E490EC5C9435AD8648797E62517E5F3EC13","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_ActorAssignment_TargetCounts">Parameter MaterialInstanceConstants: {0} · Hair/Accessory meshes: {1}</system:String>
+    <!--localiser: {"Key":"loc_VM_actorAssignment_noMaterialOrAttachmentTargets","ReviewedHash":"F60612C57A0AE7845611E20954C5101848740CE2FFFF2F41C7F07A9782D68936","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_VM_actorAssignment_noMaterialOrAttachmentTargets">No compatible writable material or hair/accessory targets were found.</system:String>
+    <!--localiser: {"Key":"loc_ActorAssignment_AttachmentsHeading","ReviewedHash":"6186EC472BF1E77E6A11BC99629E73D3E85A81805327A4C5C7FC36D660065BB7","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_ActorAssignment_AttachmentsHeading">HAIR / ACCESSORY TARGETS</system:String>
+    <!--localiser: {"Key":"loc_ActorAssignment_AttachmentComponent","ReviewedHash":"CD55A9D95751FB9BB9E4A0988DD7AE3B08C7B49D0A28BA51CD94D9BAFE6A27D0","DoNotTranslate":true,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_ActorAssignment_AttachmentComponent">{0} · {1}</system:String>
+    <!--localiser: {"Key":"loc_ActorAssignment_MeshChange","ReviewedHash":"A14C4EC73A66AB0D2FA944DE97830493EEB1738A02C942B66BCE96B1C8239D21","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_ActorAssignment_MeshChange">Mesh: {0} → {1}</system:String>
+    <!--localiser: {"Key":"loc_ActorAssignment_ClearMesh","ReviewedHash":"88730B4BFF76BF9712CEA50CDE13AB544C1ECA4042530886A46EBA833550AD1D","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_ActorAssignment_ClearMesh">None (clear mesh reference)</system:String>
+    <!--localiser: {"Key":"loc_ActorAssignment_ClearMaterialSlot","ReviewedHash":"A31ACB4EBCB2380003D4112BD475FAADD9D6673A246B893309EE0ADDE4FFA35F","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_ActorAssignment_ClearMaterialSlot">Slot {0}: cleared material instance constant, now blank but retained for reuse</system:String>
+    <!--localiser: {"Key":"loc_ActorAssignment_ClearOwnedMaterialParent","ReviewedHash":"04ACBE1C2A49DB79885E1B74E8069E5CCFBFBE7E0A91CB1E7F552620A975C372","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_ActorAssignment_ClearOwnedMaterialParent">{0}: clear Parent to None</system:String>
+    <!--localiser: {"Key":"loc_ActorAssignment_ClearOwnedMaterialValues","ReviewedHash":"C1A40B94022726F6CDF26454263AD1E78EAE7FAABC3E0DCD334D0A9D17036987","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_ActorAssignment_ClearOwnedMaterialValues">{0}: clear Parent and texture/vector/scalar parameter values</system:String>
+    <!--localiser: {"Key":"loc_ActorAssignment_RetainedMic","ReviewedHash":"ADB867F91FF09FC4E4643E40685699269BD351F48817712D4A0B4ADD366CF73F","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_ActorAssignment_RetainedMic">Retained actor's MaterialInstanceConstant (no material slot)</system:String>
+    <!--localiser: {"Key":"loc_ActorAssignment_ChangedRetainedRow","ReviewedHash":"A8DBC67777B1037B848E6CD868B0967A9F592F9A7B361735959BC0DBDD34D686","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_ActorAssignment_ChangedRetainedRow">• #{0} {1} — {2}, retained MaterialInstanceConstant without a material slot</system:String>
+    <!--localiser: {"Key":"loc_ActorAssignment_ParentChange","ReviewedHash":"A193EF4667BE80C69A6626EBEB351217B3F5E5A07C19A96841DAAB6847863D26","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_ActorAssignment_ParentChange">Slot {0} · {1}: parent {2} → {3}</system:String>
+    <!--localiser: {"Key":"loc_ActorAssignment_OverrideChange","ReviewedHash":"2E4657E1552C50EE29E886AABDA63BCFED5445E0262A98E45A97EB2E4F8AD72D","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_ActorAssignment_OverrideChange">Slot {0} · {1} → {2} (authored mesh material)</system:String>
+    <!--localiser: {"Key":"loc_ActorAssignment_DefaultMaterial","ReviewedHash":"E1CCEFDBC53050F2215BE76DEDADE4726E6332D2AC98AEFF4B3C06895EA0321D","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_ActorAssignment_DefaultMaterial">Slot {0} · {1} (mesh default; no component MIC needed)</system:String>
+    <!--localiser: {"Key":"loc_ActorAssignment_CreateSlotMic","ReviewedHash":"492B49DFA650CC5FF4B8FFA9BDB42D2EEC97F2655C14E687C7DB39AF0BD47120","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_ActorAssignment_CreateSlotMic">Slot {0} · new MaterialInstanceConstant with parent {1} and current face parameters</system:String>
+    <!--localiser: {"Key":"loc_ActorAssignment_MaterialSlotsUnavailable","ReviewedHash":"217E000074CCD0A58FAC00A9320753C78462CAC5A22881E879CF7DDAF87A4071","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_ActorAssignment_MaterialSlotsUnavailable">Source material slots could not be inspected. Updating existing overrides requires readable material data.</system:String>
+    <!--localiser: {"Key":"loc_ActorAssignment_Accessory","ReviewedHash":"ADF7651801AEA4615532B8DCF29730FA72FF404908A78A4B4E007EB11156C149","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_ActorAssignment_Accessory">Accessory</system:String>
+    <!--localiser: {"Key":"loc_ActorAssignment_FindingMaterialTargets","ReviewedHash":"608B6FEEDB44725DC424A4E927B0B44EE857566172D48A6EDC606A458C8FEC5A","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_ActorAssignment_FindingMaterialTargets">Finding material and hair/accessory targets…</system:String>
+    <!--localiser: {"Key":"loc_ActorAssignment_AssigningMaterialsAndAttachments","ReviewedHash":"1F5AFB00376DEFAFBAE38D5771E752031F1ABB08A3F591ED77221DF93EC22E2B","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_ActorAssignment_AssigningMaterialsAndAttachments">Applying materials, hair and accessories from {0} to {1}…</system:String>
+    <!--localiser: {"Key":"loc_ActorAssignment_AssignedMaterialTargets","ReviewedHash":"960306520DF10C9193CF5BDB5A8817FE683EC2C638B89211D80778D1D572164E","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_ActorAssignment_AssignedMaterialTargets">Assigned and verified {0} parameter MICs and {1} hair/accessory meshes. Save File to keep these changes.</system:String>
 </ResourceDictionary>

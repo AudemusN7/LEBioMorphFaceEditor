@@ -26,7 +26,7 @@ public sealed partial class MainWindowViewModel
         ErrorMessage = null;
         Status = Loc.Text(mode == ActorAssignmentMode.Morph
             ? "loc_Shell_Status_FindingCompatibleAuthoredActors"
-            : "loc_Shell_Status_FindingSafeLocalMaterials");
+            : "loc_ActorAssignment_FindingMaterialTargets");
         try
         {
             inventory = await Task.Run(() => _actorAssignmentService.ReadInventory(
@@ -55,7 +55,7 @@ public sealed partial class MainWindowViewModel
         ErrorMessage = null;
         Status = Loc.Format(mode == ActorAssignmentMode.Morph
             ? "loc_Shell_Status_AssigningMorphToActor"
-            : "loc_Shell_Status_AssigningMaterialOverridesToActor",
+            : "loc_ActorAssignment_AssigningMaterialsAndAttachments",
             source.DisplayName, candidate.DisplayName);
         var packageModified = false;
         try
@@ -88,7 +88,7 @@ public sealed partial class MainWindowViewModel
                     return;
                 }
                 var changedCount = result.ChangedMaterials.Select(value => value.UIndex).Distinct().Count();
-                Status = Loc.Format("loc_Shell_Status_AssignedAndVerifiedMaterialOverrides", changedCount);
+                Status = Loc.Format("loc_ActorAssignment_AssignedMaterialTargets", changedCount, result.ChangedAttachments.Count);
                 _dialogs.ShowInformation(Loc.Text("loc_Shell_DialogTitle_MaterialsAssigned"), BuildMaterialCompletion(result));
                 AppLog.Information($"ACTOR:MATERIALS {result.ActorPath} MICS:{changedCount} VERIFIED");
             }
@@ -116,25 +116,33 @@ public sealed partial class MainWindowViewModel
             .ToArray();
         var text = new StringBuilder()
             .AppendLine(Loc.Format("loc_Shell_ActorAssignment_Actor", result.ActorPath))
-            .AppendLine(Loc.Format("loc_Shell_ActorAssignment_SourceOverride", result.SourceMaterialOverridePath))
-            .AppendLine(Loc.Format("loc_Shell_ActorAssignment_ChangedLocalMics", changed.Length))
+            .AppendLine(Loc.Format("loc_Shell_ActorAssignment_SourceOverride",
+                result.SourceMaterialOverridePath ?? Loc.Text("loc_VM_actorAssignment_none")))
+            .AppendLine(Loc.Format("loc_ActorAssignment_TargetCounts", changed.Length, result.ChangedAttachments.Count))
             .AppendLine(Loc.Format("loc_Shell_ActorAssignment_CategoriesReplaced", string.Join(", ", new[]
             {
                 result.ReplacedTextures ? Loc.Text("loc_Shell_ActorAssignment_Textures") : null,
                 result.ReplacedVectors ? Loc.Text("loc_Shell_ActorAssignment_Vectors") : null,
                 result.ReplacedScalars ? Loc.Text("loc_Shell_ActorAssignment_Scalars") : null
-            }.Where(value => value is not null))))
+            }.Where(value => value is not null).DefaultIfEmpty(Loc.Text("loc_VM_actorAssignment_none")))))
             .AppendLine()
             .AppendLine(Loc.Text("loc_Shell_ActorAssignment_Changed"));
         foreach (var target in changed)
         {
-            text.AppendLine(Loc.Format("loc_Shell_ActorAssignment_ChangedRow",
-                target.UIndex, target.InstancedPath, LocalizedComponentRole(target.ComponentRole), target.SlotIndex, target.Family));
+            text.AppendLine(target.SlotIndex < 0
+                ? Loc.Format("loc_ActorAssignment_ChangedRetainedRow", target.UIndex, target.InstancedPath,
+                    ActorAssignmentChoice.LocalizedComponentRole(target.ComponentRole))
+                : Loc.Format("loc_Shell_ActorAssignment_ChangedRow", target.UIndex, target.InstancedPath,
+                    ActorAssignmentChoice.LocalizedComponentRole(target.ComponentRole), target.SlotIndex, target.Family));
         }
         if (changed.Any(target => target.ComponentRole == ActorComponentRole.Body))
         {
             text.AppendLine(Loc.Text("loc_Shell_ActorAssignment_BodySkinOnly"));
         }
+        text.AppendLine().AppendLine(Loc.Text("loc_ActorAssignment_AttachmentsHeading"));
+        ActorAssignmentChoice.AppendAttachmentTargets(text, result.ChangedAttachments);
+        foreach (var warning in result.UserWarnings)
+            text.AppendLine($"• {UserFacingMessageFormatter.Format(warning)}");
         text.AppendLine().AppendLine(Loc.Format("loc_Shell_ActorAssignment_SkippedSlots", result.SkippedMaterials.Count));
         foreach (var skipped in result.SkippedMaterials)
         {
@@ -146,11 +154,4 @@ public sealed partial class MainWindowViewModel
         return text.ToString();
     }
 
-    private static string LocalizedComponentRole(ActorComponentRole role) => role switch
-    {
-        ActorComponentRole.Head => Loc.Text("loc_VM_actorAssignment_componentRoleHead"),
-        ActorComponentRole.Hair => Loc.Text("loc_VM_actorAssignment_componentRoleHair"),
-        ActorComponentRole.Body => Loc.Text("loc_VM_actorAssignment_componentRoleBody"),
-        _ => Loc.Text("loc_VM_actorAssignment_componentRoleOther")
-    };
 }

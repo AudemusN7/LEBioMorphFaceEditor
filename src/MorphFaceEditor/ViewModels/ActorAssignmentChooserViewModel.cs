@@ -44,8 +44,8 @@ public sealed class ActorAssignmentChooserViewModel : ObservableObject
         ? Loc.Text("loc_VM_actorAssignment_titleMorph")
         : Loc.Text("loc_VM_actorAssignment_titleMaterials");
     public string Introduction => Mode == ActorAssignmentMode.Morph
-        ? Loc.Format("loc_VM_actorAssignment_introMorph", Inventory.SelectedFacePath)
-        : Loc.Format("loc_VM_actorAssignment_introMaterials", Inventory.SelectedFacePath);
+        ? Loc.Format("loc_ActorAssignment_MorphIntroduction", Inventory.SelectedFacePath)
+        : Loc.Format("loc_ActorAssignment_MaterialsIntroduction", Inventory.SelectedFacePath);
     public string ConfirmLabel => Mode == ActorAssignmentMode.Morph
         ? Loc.Text("loc_VM_actorAssignment_confirmMorph")
         : Loc.Text("loc_VM_actorAssignment_confirmMaterials");
@@ -102,20 +102,18 @@ public sealed class ActorAssignmentChoice
     public string DisplayName => Candidate.DisplayName;
     public string TechnicalIdentity =>
         $"#{Candidate.UIndex}  {Candidate.ClassName}  ·  {ShortLevelPath(Candidate.InstancedPath)}";
-    public string EvidenceSummary => Loc.Format(
-        "loc_VM_actorAssignment_evidenceSummary",
-        Candidate.HeadMeshProfileKey ?? Loc.Text("loc_VM_actorAssignment_unresolved"),
-        ShortObjectName(Candidate.MorphTarget?.CurrentMorphPath) ?? Loc.Text("loc_VM_actorAssignment_none"),
-        Candidate.SafeMaterialCount);
+    public string EvidenceSummary => Mode == ActorAssignmentMode.Morph
+        ? Loc.Format("loc_ActorAssignment_MorphSummary",
+            Candidate.HeadMeshProfileKey ?? Loc.Text("loc_VM_actorAssignment_unresolved"),
+            ShortObjectName(Candidate.MorphTarget?.CurrentMorphPath) ?? Loc.Text("loc_VM_actorAssignment_none"))
+        : Loc.Format("loc_ActorAssignment_TargetCounts", Candidate.SafeMaterialCount, Candidate.AttachmentTargets.Count);
     public bool IsEligible => Mode == ActorAssignmentMode.Morph
         ? Candidate.CanAssignMorph
         : Candidate.CanAssignMaterials;
     public string EligibilityLabel => IsEligible
         ? Mode == ActorAssignmentMode.Morph
             ? Loc.Text("loc_VM_actorAssignment_morphReady")
-            : Candidate.SafeMaterialCount == 1
-                ? Loc.Text("loc_VM_actorAssignment_oneMicReady")
-                : Loc.Format("loc_VM_actorAssignment_micsReady", Candidate.SafeMaterialCount)
+            : Loc.Format("loc_ActorAssignment_TargetCounts", Candidate.SafeMaterialCount, Candidate.AttachmentTargets.Count)
         : Loc.Text("loc_VM_actorAssignment_notEligible");
     public string Details { get; }
 
@@ -138,10 +136,8 @@ public sealed class ActorAssignmentChoice
         else
         {
             text.AppendLine(Loc.Format("loc_VM_actorAssignment_detailsMaterials", candidate.CanAssignMaterials
-                ? candidate.SafeMaterialCount == 1
-                    ? Loc.Text("loc_VM_actorAssignment_oneSafeLocalMic")
-                    : Loc.Format("loc_VM_actorAssignment_safeLocalMics", candidate.SafeMaterialCount)
-                : candidate.MaterialIneligibilityReason));
+                ? Loc.Format("loc_ActorAssignment_TargetCounts", candidate.SafeMaterialCount, candidate.AttachmentTargets.Count)
+                : Loc.Text("loc_VM_actorAssignment_noMaterialOrAttachmentTargets")));
         }
 
         if (mode == ActorAssignmentMode.Morph && candidate.MorphTarget is not null)
@@ -158,15 +154,26 @@ public sealed class ActorAssignmentChoice
         {
             text.AppendLine();
             text.AppendLine(Loc.Text("loc_VM_actorAssignment_safeMaterialTargetsHeading"));
-            if (candidate.MaterialTargets.Count == 0)
+            var parameterTargets = candidate.MaterialTargets.Where(value => value.ComponentRole != ActorComponentRole.Hair).ToArray();
+            if (parameterTargets.Length == 0)
             {
                 text.AppendLine(Loc.Format("loc_VM_actorAssignment_noneBullet", Loc.Text("loc_VM_actorAssignment_none")));
             }
             else
             {
                 text.AppendLine();
-                AppendMaterialTargets(text, candidate.MaterialTargets);
+                AppendMaterialTargets(text, parameterTargets);
             }
+
+            text.AppendLine();
+            text.AppendLine(Loc.Text("loc_ActorAssignment_AttachmentsHeading"));
+            AppendAttachmentTargets(text, candidate.AttachmentTargets);
+            // Hair MIC parameter targets can exist even when geometry compatibility
+            // prevents a mesh update; keep those independently assignable slots visible.
+            var hairParameters = candidate.MaterialTargets.Where(value => value.ComponentRole == ActorComponentRole.Hair).ToArray();
+            if (hairParameters.Length > 0) AppendMaterialTargets(text, hairParameters);
+            foreach (var warning in candidate.AttachmentWarnings)
+                text.AppendLine($"• {UserFacingMessageFormatter.Format(warning)}");
 
             text.AppendLine();
             text.AppendLine(Loc.Text("loc_VM_actorAssignment_skippedMaterialsHeading"));
@@ -237,7 +244,7 @@ public sealed class ActorAssignmentChoice
             {
                 if (targetIndex > 0) text.AppendLine();
                 var target = roleTargets[targetIndex];
-                text.AppendLine(Loc.Format("loc_VM_actorAssignment_slotFamily", target.SlotIndex,
+                text.AppendLine(target.SlotIndex < 0 ? Loc.Text("loc_ActorAssignment_RetainedMic") : Loc.Format("loc_VM_actorAssignment_slotFamily", target.SlotIndex,
                     target.ComponentRole == ActorComponentRole.Body
                         ? Loc.Text("loc_VM_actorAssignment_bodySkinOnly") : target.Family));
                 AppendCompactChain(text, target.ObjectName, target.ParentChain);
@@ -259,7 +266,8 @@ public sealed class ActorAssignmentChoice
             {
                 if (targetIndex > 0) text.AppendLine();
                 var skipped = roleTargets[targetIndex];
-                text.AppendLine(Loc.Format("loc_VM_actorAssignment_slotFamily", skipped.SlotIndex, skipped.Family));
+                text.AppendLine(skipped.SlotIndex < 0 ? Loc.Text("loc_ActorAssignment_RetainedMic") :
+                    Loc.Format("loc_VM_actorAssignment_slotFamily", skipped.SlotIndex, skipped.Family));
                 AppendCompactChain(text, skipped.ObjectName, skipped.ParentChain);
                 text.AppendLine(Loc.Format("loc_VM_actorAssignment_skippedReason",
                     skipped.UserReason is { } reason ? UserFacingMessageFormatter.Format(reason) : skipped.Reason));
@@ -284,6 +292,40 @@ public sealed class ActorAssignmentChoice
         if (!string.IsNullOrWhiteSpace(parentChain)) text.AppendLine(parentChain);
     }
 
+    internal static void AppendAttachmentTargets(StringBuilder text, IReadOnlyList<ActorAssignmentAttachmentTarget> targets)
+    {
+        if (targets.Count == 0) text.AppendLine(Loc.Format("loc_VM_actorAssignment_noneBullet", Loc.Text("loc_VM_actorAssignment_none")));
+        foreach (var target in targets)
+        {
+            text.AppendLine(Loc.Format("loc_ActorAssignment_AttachmentComponent", LocalizedComponentRole(target.Role),
+                ShortLevelPath(target.ComponentPath)));
+            text.AppendLine(Loc.Format("loc_ActorAssignment_MeshChange",
+                ShortObjectName(target.CurrentMeshPath) ?? Loc.Text("loc_VM_actorAssignment_none"),
+                ShortObjectName(target.SourceMeshPath) ?? Loc.Text("loc_ActorAssignment_ClearMesh")));
+            foreach (var slot in target.MaterialSlots)
+            {
+                var source = ShortObjectName(slot.SourceMaterial?.InstancedPath) ?? Loc.Text("loc_VM_actorAssignment_none");
+                text.AppendLine(target.SourceMeshUIndex == 0
+                    ? Loc.Format("loc_ActorAssignment_ClearMaterialSlot", slot.SlotIndex)
+                    : slot.LocalMicUIndex != 0
+                    ? Loc.Format("loc_ActorAssignment_ParentChange", slot.SlotIndex, ShortObjectName(slot.OverridePath),
+                        ShortObjectName(slot.CurrentParentPath) ?? Loc.Text("loc_VM_actorAssignment_none"), source)
+                    : target.ApplyMaterialParameters && slot.SourceMaterial is not null
+                        ? Loc.Format("loc_ActorAssignment_CreateSlotMic", slot.SlotIndex, source)
+                    : slot.OverridePath is not null
+                        ? Loc.Format("loc_ActorAssignment_OverrideChange", slot.SlotIndex, ShortObjectName(slot.OverridePath), source)
+                        : Loc.Format("loc_ActorAssignment_DefaultMaterial", slot.SlotIndex, source));
+            }
+            foreach (var reference in target.MaterialParentsToClear)
+                text.AppendLine(Loc.Format(target.SourceMeshUIndex == 0
+                    ? "loc_ActorAssignment_ClearOwnedMaterialValues" : "loc_ActorAssignment_ClearOwnedMaterialParent",
+                    ShortObjectName(reference.InstancedPath)));
+            if (target.SourceMeshUIndex != 0 && !target.MaterialSlotsKnown)
+                text.AppendLine(Loc.Text("loc_ActorAssignment_MaterialSlotsUnavailable"));
+            text.AppendLine();
+        }
+    }
+
     private static bool IsTransientMaterialUser(ActorMaterialChainEntry value)
     {
         var name = ShortObjectName(value.InstancedPath);
@@ -291,11 +333,12 @@ public sealed class ActorAssignmentChoice
                name?.EndsWith("_USER", StringComparison.OrdinalIgnoreCase) == true;
     }
 
-    private static string LocalizedComponentRole(ActorComponentRole role) => role switch
+    internal static string LocalizedComponentRole(ActorComponentRole role) => role switch
     {
         ActorComponentRole.Head => Loc.Text("loc_VM_actorAssignment_componentRoleHead"),
         ActorComponentRole.Hair => Loc.Text("loc_VM_actorAssignment_componentRoleHair"),
         ActorComponentRole.Body => Loc.Text("loc_VM_actorAssignment_componentRoleBody"),
+        ActorComponentRole.Accessory => Loc.Text("loc_ActorAssignment_Accessory"),
         _ => Loc.Text("loc_VM_actorAssignment_componentRoleOther")
     };
 

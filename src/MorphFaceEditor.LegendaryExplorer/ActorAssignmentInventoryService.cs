@@ -53,17 +53,35 @@ public sealed partial class ActorAssignmentInventoryService
         }
 
         var face = ExportSelector.Find(package, selectedFaceSelector, "BioMorphFace");
-        var hasSkinVectors = (face.GetProperty<ObjectProperty>("m_oMaterialOverrides")?.ResolveToEntry(package)
-            as ExportEntry)?.GetProperty<ArrayProperty<StructProperty>>("m_aColorOverrides")?
+        var materialProperties = face.GetProperty<ObjectProperty>("m_oMaterialOverrides")?.ResolveToEntry(package)
+            is ExportEntry material && material.IsA("BioMaterialOverride") ? material.GetProperties() : null;
+        var hasMaterialParameters = new[] { "m_aTextureOverrides", "m_aColorOverrides", "m_aScalarOverrides" }
+            .Any(name => materialProperties?.GetProp<ArrayProperty<StructProperty>>(name) is not null);
+        var hasSkinVectors = materialProperties?.GetProp<ArrayProperty<StructProperty>>("m_aColorOverrides")?
             .Any(value => IsBodySkinParameter(value.GetProp<NameProperty>("nName")?.Value.Name)) == true;
         var resolver = new GamePackageReferenceResolver(cache);
+        var knownMorphs = package.Exports.Where(export => export.ClassName == "BioMorphFace")
+            .Select(export => export.GetProperties()).ToArray();
+        var knownHairMeshes = knownMorphs.Select(properties =>
+                properties.GetProp<ObjectProperty>("m_oHairMesh")?.ResolveToEntry(package))
+            .OfType<IEntry>().Where(entry => entry.ClassName == "SkeletalMesh")
+            .DistinctBy(PccPackageWorkflow.CanonicalPath, StringComparer.OrdinalIgnoreCase).ToArray();
+        var knownOtherMeshes = knownMorphs
+            .Select(properties => properties.GetProp<ArrayProperty<ObjectProperty>>("m_oOtherMeshes"))
+            .Where(others => others is { Count: 1 }).Select(others => others![0].ResolveToEntry(package))
+            .OfType<IEntry>().Where(entry => entry.ClassName == "SkeletalMesh")
+            .DistinctBy(PccPackageWorkflow.CanonicalPath, StringComparer.OrdinalIgnoreCase).ToArray();
+        var referrers = new Lazy<ILookup<int, ActorAssignmentReference>>(() => IndexReferrers(package));
+        var ownedMics = new Lazy<ILookup<int, ExportEntry>>(() => package.Exports
+            .Where(entry => IsWritableMic(entry, package)).ToLookup(entry => entry.idxLink));
         var candidates = package.Exports
             .Where(export => !export.IsDefaultObject &&
                              !export.ObjectNameString.StartsWith("Default__", StringComparison.OrdinalIgnoreCase))
             .Select(export => (Export: export, Kind: GetTargetKind(export, game)))
             .Where(item => item.Kind is not null)
             .Select(item => BuildCandidate(
-                package, item.Export, item.Kind!.Value, game, selectedProfileKey, hasSkinVectors, resolver, cache))
+                package, item.Export, item.Kind!.Value, game, selectedProfileKey, face, hasMaterialParameters, hasSkinVectors,
+                knownHairMeshes, knownOtherMeshes, resolver, cache, referrers, ownedMics))
             .OrderBy(candidate => candidate.TargetKind)
             .ThenBy(candidate => candidate.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(candidate => candidate.InstancedPath, StringComparer.OrdinalIgnoreCase)
@@ -83,23 +101,30 @@ public sealed partial class ActorAssignmentInventoryService
         ActorAssignmentTargetKind targetKind,
         MorphFaceGame game,
         string selectedProfileKey,
+        ExportEntry selectedFace,
+        bool hasMaterialParameters,
         bool hasSkinVectors,
+        IReadOnlyList<IEntry> knownHairMeshes,
+        IReadOnlyList<IEntry> knownOtherMeshes,
         GamePackageReferenceResolver resolver,
-        PackageCache cache)
+        PackageCache cache,
+        Lazy<ILookup<int, ActorAssignmentReference>> referrers,
+        Lazy<ILookup<int, ExportEntry>> ownedMics)
     {
         var warnings = new List<string>();
         var userWarnings = new List<UserFacingMessage>();
-        var behavior = ResolveRelated(actor, ["m_oBehavior", "oBioComponent"], resolver, cache)?.Value;
-        var actorType = ResolveRelated(actor, ["ActorType"], resolver, cache)?.Value
+        var behavior = ResolveRelated(actor, ["m_oBehavior", "oBioComponent"], resolver, cache);
+        var actorType = ResolveRelated(actor, ["ActorType"], resolver, cache)
                         ?? (behavior is null
                             ? null
-                            : ResolveRelated(behavior, ["m_oActorType", "ActorType"], resolver, cache)?.Value);
+                            : ResolveRelated(behavior, ["m_oActorType", "ActorType"], resolver, cache));
         if (targetKind == ActorAssignmentTargetKind.SpawnTemplate)
         {
             actorType = actor;
         }
 
-        var evidence = ReadIdentityEvidence(actor, behavior, actorType, resolver, cache, game);
+        var actorChain = EnumerateArchetypeChain(actor, resolver).ToArray();
+        var evidence = ReadIdentityEvidence(actor, actorChain, behavior, actorType, resolver, cache, game);
         var displayEvidence = evidence.FirstOrDefault(value => value.Kind is
             ActorIdentityEvidenceKind.LocalTag or ActorIdentityEvidenceKind.LocalUniqueTag)
             ?? evidence.FirstOrDefault(value => value.Kind is
@@ -129,12 +154,29 @@ public sealed partial class ActorAssignmentInventoryService
         var morphReason = MorphIneligibilityReason(
             targetKind, game, selectedProfileKey, headMeshPath, headProfileKey, morphTarget);
 
+        var attachmentPlan = HeadProfileIdentity.IsGeometryCompatible(selectedProfileKey, headProfileKey)
+            ? ReadAttachmentTargets(package, actor, selectedFace, components, morphTarget,
+                knownHairMeshes, knownOtherMeshes, resolver, cache, referrers, ownedMics)
+            : (Targets: (IReadOnlyList<ActorAssignmentAttachmentTarget>)[], Warnings: (IReadOnlyList<UserFacingMessage>)[]);
+        attachmentPlan = (attachmentPlan.Targets.Select(target => target with
+            { ApplyMaterialParameters = hasMaterialParameters }).ToArray(), attachmentPlan.Warnings);
+        components = components.Select(component => component.IsLocal && attachmentPlan.Targets
+                .FirstOrDefault(value => value.ComponentUIndex == component.UIndex) is { } target
+                ? component with { Role = target.Role } : component).ToArray();
+        components = components.Concat(attachmentPlan.Targets.Where(target => !components.Any(component =>
+                component.IsLocal && component.UIndex == target.ComponentUIndex)).Select(target =>
+            new ActorAssignmentComponent(target.Role, target.ComponentUIndex,
+                package.GetUExport(target.ComponentUIndex).ObjectNameString, target.ComponentPath,
+                package.FilePath, true, target.CurrentMeshPath, false))).ToArray();
+
         var eligibleMaterials = new List<ActorAssignmentMaterialTarget>();
         var skippedMaterials = new List<ActorAssignmentSkippedMaterial>();
-        foreach (var component in components)
+        foreach (var component in hasMaterialParameters ? components : [])
         {
             InventoryComponentMaterials(
                 package, component, gamePrefix, selectedProfileKey, headProfileKey, hasSkinVectors,
+                attachmentPlan.Targets.FirstOrDefault(target => component.IsLocal && target.ComponentUIndex == component.UIndex),
+                component.IsLocal ? ownedMics.Value[component.UIndex] : [],
                 resolver, cache, eligibleMaterials, skippedMaterials, warnings);
         }
         eligibleMaterials = eligibleMaterials
@@ -162,13 +204,9 @@ public sealed partial class ActorAssignmentInventoryService
             warnings.Add("Imported materials were inspected for classification but are never writable targets.");
         }
         var hasHeadTargets = eligibleMaterials.Any(material => material.ComponentRole != ActorComponentRole.Body);
-        if (!hasHeadTargets)
-        {
-            warnings.Add("No safe compatible local head or hair MICs were found.");
-        }
 
         var referencedBy = targetKind == ActorAssignmentTargetKind.SpawnTemplate
-            ? FindReferrers(package, actor)
+            ? FindReferrers(referrers.Value, actor)
             : [];
         if (targetKind == ActorAssignmentTargetKind.SpawnTemplate)
         {
@@ -188,7 +226,7 @@ public sealed partial class ActorAssignmentInventoryService
                 headMeshPath ?? string.Empty,
                 morphTarget?.CurrentMorphPath ?? string.Empty
             ])
-            .Concat(EnumerateArchetypeChain(actor, resolver).SelectMany(value => new[]
+            .Concat(actorChain.SelectMany(value => new[]
             {
                 value.Export.ObjectNameString,
                 value.Export.ClassName,
@@ -207,6 +245,7 @@ public sealed partial class ActorAssignmentInventoryService
                 { reference.ClassName, reference.InstancedPath, reference.UIndex.ToString() }))
             .Where(value => !string.IsNullOrWhiteSpace(value));
 
+        var canAssignMaterials = hasHeadTargets || attachmentPlan.Targets.Count > 0;
         return new ActorAssignmentCandidate(
             actor.UIndex,
             actor.ClassName,
@@ -222,15 +261,17 @@ public sealed partial class ActorAssignmentInventoryService
             morphReason is null,
             morphReason,
             morphTarget,
-            hasHeadTargets,
-            hasHeadTargets ? null : "No safe compatible local head or hair MICs were found.",
+            canAssignMaterials,
+            canAssignMaterials ? null : "No safe compatible local head or hair MICs or attachment components were found.",
             components,
             eligibleMaterials,
             skippedMaterials,
             referencedBy,
             warnings.Distinct(StringComparer.Ordinal).ToArray())
         {
-            UserWarnings = userWarnings
+            UserWarnings = userWarnings,
+            AttachmentTargets = attachmentPlan.Targets,
+            AttachmentWarnings = attachmentPlan.Warnings
         };
     }
 
@@ -259,6 +300,7 @@ public sealed partial class ActorAssignmentInventoryService
 
     private IReadOnlyList<ActorIdentityEvidence> ReadIdentityEvidence(
         ExportEntry actor,
+        IReadOnlyList<(ExportEntry Export, bool Inherited)> actorChain,
         ExportEntry? behavior,
         ExportEntry? actorType,
         GamePackageReferenceResolver resolver,
@@ -266,7 +308,6 @@ public sealed partial class ActorAssignmentInventoryService
         MorphFaceGame game)
     {
         var result = new List<ActorIdentityEvidence>();
-        var actorChain = EnumerateArchetypeChain(actor, resolver).ToArray();
         foreach (var (source, inherited) in actorChain)
         {
             AddTagEvidence(result, source, inherited, cache);
@@ -379,6 +420,21 @@ public sealed partial class ActorAssignmentInventoryService
         AddComponent(ActorComponentRole.Head, HeadComponentProperties);
         AddComponent(ActorComponentRole.Hair, HairComponentProperties);
         AddComponent(ActorComponentRole.Body, BodyComponentProperties);
+        foreach (var property in new[] { "m_aoAccessories", "m_aoMeshes" })
+        {
+            var meshes = FindProperty<ArrayProperty<ObjectProperty>>(actor, property, resolver, cache);
+            foreach (var item in meshes?.Property.AsEnumerable() ?? [])
+            {
+                var component = resolver.Resolve(item.ResolveToEntry(meshes!.Owner.FileRef));
+                if (component is null || !component.IsA("SkeletalMeshComponent") || result.Any(value =>
+                        value.UIndex == component.UIndex && value.PackagePath.Equals(component.FileRef.FilePath,
+                            StringComparison.OrdinalIgnoreCase))) continue;
+                if (property == "m_aoMeshes" &&
+                    (FindProperty<ObjectProperty>(component, "SkeletalMesh", resolver, cache)?.Property.Value ?? 0) != 0) continue;
+                AddResolvedComponent(property == "m_aoAccessories" ? ActorComponentRole.Accessory : ActorComponentRole.Other,
+                    component, meshes!.Inherited);
+            }
+        }
         return result.DistinctBy(component => (component.Role, component.UIndex)).ToArray();
 
         void AddComponent(ActorComponentRole role, IReadOnlyList<string> propertyNames)
@@ -408,20 +464,20 @@ public sealed partial class ActorAssignmentInventoryService
                     continue;
                 }
 
-                var meshReference = FindProperty<ObjectProperty>(component, "SkeletalMesh", resolver, cache);
-                var rawMesh = meshReference?.Property.ResolveToEntry(meshReference.Owner.FileRef);
-                var mesh = resolver.Resolve(rawMesh);
-                result.Add(new ActorAssignmentComponent(
-                    role,
-                    component.UIndex,
-                    component.ObjectNameString,
-                    component.InstancedFullPath,
-                    component.FileRef.FilePath,
-                    ReferenceEquals(component.FileRef, actor.FileRef),
-                    mesh?.InstancedFullPath ?? rawMesh?.InstancedFullPath,
-                    reference.Inherited));
+                AddResolvedComponent(role, component, reference.Inherited);
                 break;
             }
+        }
+
+        void AddResolvedComponent(ActorComponentRole role, ExportEntry component, bool inherited)
+        {
+            var meshReference = FindProperty<ObjectProperty>(component, "SkeletalMesh", resolver, cache);
+            var rawMesh = meshReference?.Property.ResolveToEntry(meshReference.Owner.FileRef);
+            var mesh = resolver.Resolve(rawMesh);
+            result.Add(new ActorAssignmentComponent(role, component.UIndex, component.ObjectNameString,
+                component.InstancedFullPath, component.FileRef.FilePath,
+                ReferenceEquals(component.FileRef, actor.FileRef), mesh?.InstancedFullPath ?? rawMesh?.InstancedFullPath,
+                inherited));
         }
     }
 
@@ -457,8 +513,8 @@ public sealed partial class ActorAssignmentInventoryService
             propertyName = game == MorphFaceGame.LE1 ? "m_oMorphFace" : "MorphHead";
         }
 
-        var currentProperty = owner.GetProperty<ObjectProperty>(propertyName);
-        var currentEntry = currentProperty?.ResolveToEntry(owner.FileRef);
+        var currentProperty = FindProperty<ObjectProperty>(owner, propertyName, resolver, cache);
+        var currentEntry = currentProperty?.Property.ResolveToEntry(currentProperty.Owner.FileRef);
         var currentResolved = resolver.Resolve(currentEntry);
         var baseHeadReference = currentResolved is { ClassName: "BioMorphFace" }
             ? FindProperty<ObjectProperty>(currentResolved, "m_oBaseHead", resolver, cache)

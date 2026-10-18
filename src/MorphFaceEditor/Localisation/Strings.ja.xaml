@@ -1801,17 +1801,17 @@
   <system:String x:Key="loc_WpfEditorDialogService_UModelExportFolderTitle" xml:space="preserve">UModel メッシュエクスポート先のフォルダーを選択</system:String>
   <system:String x:Key="loc_Services_Taxonomy_MeshOnlyMaterialLabel" xml:space="preserve">{0}（メッシュ）</system:String>
   <system:String x:Key="loc_Services_MetadataText_Shared_aniso_highlight_1_Label" xml:space="preserve">髪のハイライト1の強さ</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_aniso_highlight_1_Description" xml:space="preserve">Aniso_Highlight_1</system:String>
+
   <system:String x:Key="loc_Services_MetadataText_Shared_aniso_highlight_2_Label" xml:space="preserve">髪のハイライト2の強さ</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_aniso_highlight_2_Description" xml:space="preserve">Aniso_Highlight_2</system:String>
+
   <system:String x:Key="loc_Services_MetadataText_Shared_aniso_color_1_Label" xml:space="preserve">髪のハイライト1の色</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_aniso_color_1_Description" xml:space="preserve">Aniso_Color_1</system:String>
+
   <system:String x:Key="loc_Services_MetadataText_Shared_aniso_color_2_Label" xml:space="preserve">髪のハイライト2の色</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_aniso_color_2_Description" xml:space="preserve">Aniso_Color_2</system:String>
+
   <system:String x:Key="loc_Services_MetadataText_Shared_hair_color_Label" xml:space="preserve">髪の色</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_hair_color_Description" xml:space="preserve">Hair_Color</system:String>
+
   <system:String x:Key="loc_Services_MetadataText_Shared_hair_stack_Label" xml:space="preserve">ジェームズ・ヴェガの髪テクスチャ</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_hair_stack_Description" xml:space="preserve">Hair_Stack</system:String>
+
   <system:String x:Key="loc_VM_actorAssignment_bodySkinParametersMissing" xml:space="preserve">選択した顔には、ボディMICに割り当てるSkinToneまたはSkinLightScatteringの値がありません。</system:String>
   <system:String x:Key="loc_Services_AttachmentTransfer_ExcludedNativeMesh" xml:space="preserve">オプションのアタッチメント「{0}」は、破損している、不要な重複である、または意図的に非対応のため省略されました。</system:String>
   <system:String x:Key="loc_Services_AttachmentTransfer_ReviewedDonorMissing" xml:space="preserve">確認済みのドナー対応 {0}→{1} にアタッチメントメッシュ「{2}」がありません。Morph Face Editorはこのゲームへの移植をサポートしていません。</system:String>
@@ -1826,10 +1826,10 @@
   <system:String x:Key="loc_Services_CustomTemplate_JamesHair" xml:space="preserve">ジェームズ・ヴェガのヘア</system:String>
     <!--localiser: {"Key":"loc_ArchetypeTag_FemaleBatarian","ReviewedHash":null,"DoNotTranslate":false,"Note":"Do not translate [TAG]","SourceHash":null}-->
     <system:String x:Key="loc_ArchetypeTag_FemaleBatarian" xml:space="preserve">女性バタリアン [BAF]</system:String>
-    <!--localiser: {"Key":"loc_Services_ProfileArchetype_FemaleBatarian","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
-    <system:String x:Key="loc_Services_ProfileArchetype_FemaleBatarian" xml:space="preserve">女性バタリアン</system:String>
-    <!--localiser: {"Key":"loc_Shell_ProfileSpecies_FemaleBatarian","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
-    <system:String x:Key="loc_Shell_ProfileSpecies_FemaleBatarian" xml:space="preserve">女性バタリアン</system:String>
+
+    <!--localiser: {"Key":"loc_Services_ProfileArchetype_FemaleBatarian","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}--><system:String x:Key="loc_Services_ProfileArchetype_FemaleBatarian" xml:space="preserve">女性バタリアン</system:String>
+
+    <!--localiser: {"Key":"loc_Shell_ProfileSpecies_FemaleBatarian","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}--><system:String x:Key="loc_Shell_ProfileSpecies_FemaleBatarian" xml:space="preserve">女性バタリアン</system:String>
     <!--localiser: {"Key":"loc_VM_textureRegistry_developmentSchemaUnsupported","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"0D390E7F60DCCF250CA311CA97646099675817EA2955C208D1FBF6704A105D5B"}--><system:String x:Key="loc_VM_textureRegistry_developmentSchemaUnsupported" xml:space="preserve">開発用スキーマ v{0} はサポートされなくなりました</system:String>
     <!--localiser: {"Key":"loc_VM_textureRegistry_schemaUnsupported","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"808012EA616FA543B3F7F5D6EC3419937AD2BB04D91568B2E483D60710CEBDA9"}--><system:String x:Key="loc_VM_textureRegistry_schemaUnsupported" xml:space="preserve">レジストリのスキーマ v{0} はサポートされなくなりました</system:String>
     <!--localiser: {"Key":"loc_Shell_Error_CcScalp_DonorNotMaterial","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"8679520AFEF07260F5B247B4D98FCBF7812F3956CBACC905B31CA7F8E32841B1"}--><system:String x:Key="loc_Shell_Error_CcScalp_DonorNotMaterial" xml:space="preserve">選択した頭皮のドナー &apos;{0}&apos; はマテリアルインスタンスではなく、{1} です。</system:String>
@@ -1890,4 +1890,41 @@
     <!--localiser: {"Key":"loc_RonFiles_ImportFailed","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"80889B1A2358BF73D67A4ACC55E627964B1C5534F15CD56FBA8C4730B0DC1EC9"}--><system:String x:Key="loc_RonFiles_ImportFailed" xml:space="preserve">RONをインポートできませんでした。既存の編集内容は保持されています。</system:String>
     <!--localiser: {"Key":"loc_RonFiles_Imported","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"9AE578D4C686119D2A5F6878631E1EC2447BF081EE90738DFBC96E8A574C77CD"}--><system:String x:Key="loc_RonFiles_Imported" xml:space="preserve">{0}を現在のフェイスにインポートしました。</system:String>
     <!--localiser: {"Key":"loc_FileSave_MorphFeaturesOnly","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"4301FA7477000FDDCFCF4168BA6F9D83BC837A60FDAAEFD64440950BD25C26AD"}--><system:String x:Key="loc_FileSave_MorphFeaturesOnly" xml:space="preserve">モーフの特徴値を保存しました。頭部のその他の変更は未保存です。フェイスを右クリックし、頭部全体またはPCCをエクスポートすると、それらの変更も含められます。</system:String>
+  <system:String x:Key="loc_VM_actorAssignment_componentRoleBody" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">ボディ</system:String>
+  <system:String x:Key="loc_VM_actorAssignment_bodySkinOnly" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">SkinTone / SkinLightScattering のみ</system:String>
+  <system:String x:Key="loc_Shell_ActorAssignment_BodySkinOnly" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">ボディ MIC: ソースに存在する SkinTone / SkinLightScattering 値のみを追加または更新しました。その他のボディマテリアルデータはすべて保持されました。</system:String>
+  <system:String x:Key="loc_PlayerAsset_SeekFreeSourceRequired" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">{0}「{1}」は BIOG seekfree パッケージ またはグローバル/スタートアップ パッケージ に一致するアセットがありません。この動作をサポートするのは PCC へのエクスポートのみです。</system:String>
+  <system:String x:Key="loc_PccSave_VerificationMismatch" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">保存した PCC に要求されたデータが保持されませんでした。何も置き換えていません。</system:String>
+  <system:String x:Key="loc_PccSave_NewNonFiniteValue" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">{0} の新規または変更された NaN/Infinity 値は保存できません。既存の無効な値は変更せずに引き継ぐ場合のみ保存できます。</system:String>
+  <system:String x:Key="loc_RonImport_TextureSkipped" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">「{0}」用のテクスチャ「{1}」が見つからないためスキップしました。マテリアルは継承元のテクスチャを代替として使用します。</system:String>
+  <system:String x:Key="loc_RonImport_HairSkipped" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">ヘアメッシュ「{0}」が見つからないためスキップしました。頭部の残りの部分はインポートされました。</system:String>
+  <system:String x:Key="loc_RonImport_AccessorySkipped" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">アクセサリメッシュ「{0}」が見つからないためスキップしました。頭部の残りの部分はインポートされました。</system:String>
+  <system:String x:Key="loc_PccSave_UnsafeDependency" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">新しい PCC は、保証されたスタートアップソースがない外部 {0}「{1}」を引き続き参照しています。何も置き換えていません。</system:String>
+  <system:String x:Key="loc_PccSave_MissingDependency" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">正確なソースが見つからなかったため、PCC に {0}「{1}」を含められませんでした。何も置き換えていません。</system:String>
+  <system:String x:Key="loc_ActorAssignment_AttachmentMaterialsUnavailable" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">アタッチメント「{0}」のマテリアルデータを読み取れなかったため、アクターのマテリアル Parent を更新できませんでした。何も置き換えていません。</system:String>
+  <system:String x:Key="loc_ActorAssignment_SecondHairSkipped" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">顔のメインヘアメッシュを「{1}」に適用しました。2つ目のメッシュ「{0}」は同じヘアコンポーネントが必要ですが、MFE は現在、新しいコンポーネントスロットを追加できないため適用できませんでした。</system:String>
+  <system:String x:Key="loc_ActorAssignment_MorphTooltip" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">レベルアクターの顔にモーフ形状を適用します。マテリアル、ヘア、アクセサリには「マテリアルを割り当て」を使用してください。</system:String>
+  <system:String x:Key="loc_ActorAssignment_MaterialsTooltip" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">マテリアルオーバーライドとヘア/アクセサリメッシュをレベルアクターの頭部に適用します。顔の形状には「モーフを割り当て」を使用してください。</system:String>
+  <system:String x:Key="loc_ActorAssignment_MorphIntroduction" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">アクターの BioMorphFace 参照のみを変更して {0} を割り当てます。マテリアル、ヘア、アクセサリは「マテリアルを割り当て」で処理します。変更は「ファイルを保存」するまでワークスペース内に保持されます。</system:String>
+  <system:String x:Key="loc_ActorAssignment_MaterialsIntroduction" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">{0} のマテリアルオーバーライドを適用し、対応する既存のヘア/アクセサリメッシュおよびマテリアルコンポーネントを更新します。参照 MIC のないメッシュコンポーネントでは、メッシュのマテリアルを使用します。BioMorphFace 参照は変更されず、新しいコンポーネントも追加されません。変更は「ファイルを保存」するまでワークスペース内に保持されます。</system:String>
+  <system:String x:Key="loc_ActorAssignment_MorphSummary" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">プロファイル: {0} · 現在のモーフ: {1}</system:String>
+  <system:String x:Key="loc_ActorAssignment_TargetCounts" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">パラメータ MaterialInstanceConstant: {0} · ヘア/アクセサリメッシュ: {1}</system:String>
+  <system:String x:Key="loc_VM_actorAssignment_noMaterialOrAttachmentTargets" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">互換性のある書き込み可能なマテリアルまたはヘア/アクセサリの対象が見つかりませんでした。</system:String>
+  <system:String x:Key="loc_ActorAssignment_AttachmentsHeading" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">ヘア / アクセサリの対象</system:String>
+  <system:String x:Key="loc_ActorAssignment_MeshChange" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">メッシュ: {0} → {1}</system:String>
+  <system:String x:Key="loc_ActorAssignment_ClearMesh" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">なし（メッシュ参照をクリア）</system:String>
+  <system:String x:Key="loc_ActorAssignment_ClearMaterialSlot" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">スロット {0}: MaterialInstanceConstant をクリアしました。空の状態で再利用できるよう保持されています</system:String>
+  <system:String x:Key="loc_ActorAssignment_ClearOwnedMaterialParent" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">{0}: Parent を None にクリア</system:String>
+  <system:String x:Key="loc_ActorAssignment_ClearOwnedMaterialValues" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">{0}: Parent とテクスチャ/ベクトル/スカラーのパラメータ値をクリア</system:String>
+  <system:String x:Key="loc_ActorAssignment_RetainedMic" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">保持されるアクターの MaterialInstanceConstant（マテリアルスロットなし）</system:String>
+  <system:String x:Key="loc_ActorAssignment_ChangedRetainedRow" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">• #{0} {1} — {2}、マテリアルスロットのない MaterialInstanceConstant を保持</system:String>
+  <system:String x:Key="loc_ActorAssignment_ParentChange" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">スロット {0} · {1}: Parent {2} → {3}</system:String>
+  <system:String x:Key="loc_ActorAssignment_OverrideChange" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">スロット {0} · {1} → {2}（作成済みメッシュマテリアル）</system:String>
+  <system:String x:Key="loc_ActorAssignment_DefaultMaterial" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">スロット {0} · {1}（メッシュのデフォルト。コンポーネント MIC は不要）</system:String>
+  <system:String x:Key="loc_ActorAssignment_CreateSlotMic" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">スロット {0} · Parent {1} と現在の顔パラメータを持つ新しい MaterialInstanceConstant</system:String>
+  <system:String x:Key="loc_ActorAssignment_MaterialSlotsUnavailable" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">ソースのマテリアルスロットを検査できませんでした。既存のオーバーライドを更新するには、読み取り可能なマテリアルデータが必要です。</system:String>
+  <system:String x:Key="loc_ActorAssignment_Accessory" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">アクセサリ</system:String>
+  <system:String x:Key="loc_ActorAssignment_FindingMaterialTargets" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">マテリアルとヘア/アクセサリの対象を検索中…</system:String>
+  <system:String x:Key="loc_ActorAssignment_AssigningMaterialsAndAttachments" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">{0} のマテリアル、ヘア、アクセサリを {1} に適用中…</system:String>
+  <system:String x:Key="loc_ActorAssignment_AssignedMaterialTargets" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">パラメータ MIC {0} 件とヘア/アクセサリメッシュ {1} 件を割り当て、検証しました。変更を保持するには「ファイルを保存」してください。</system:String>
 </ResourceDictionary>

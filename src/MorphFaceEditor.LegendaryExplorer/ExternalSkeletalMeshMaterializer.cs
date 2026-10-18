@@ -41,7 +41,7 @@ internal static class ExternalSkeletalMeshMaterializer
         var installed = new InstalledGameAssetResolver().Resolve(destination.Game,
             new AssetIdentity(donorPackagePath, instancedPath, sourceUIndex, className), cache);
         if (installed is not null)
-            return MaterializeResolved(destination, installed, PccAssetPathPolicy.FromExport(installed), className, warnings);
+            return MaterializeResolved(destination, installed, warnings);
         if (destination.FindExport(instancedPath, className) is { } existing)
             return existing;
         if (!File.Exists(donorPackagePath))
@@ -57,26 +57,17 @@ internal static class ExternalSkeletalMeshMaterializer
             throw new InvalidDataException(
                 $"{className} '{instancedPath}' is from {source.Game}, but the destination is {destination.Game}.");
         }
-        var sourceExport = ResolveSourceExport(source, instancedPath, className, sourceUIndex)
-                           ?? throw new InvalidDataException(
-                               $"{className} '{instancedPath}' was not found in '{source.FilePath}'.");
-        var targetPath = sourceExport.IsForcedExport ? sourceExport.InstancedFullPath :
-            PccAssetPathPolicy.FromDonorOccurrence(sourceExport.InstancedFullPath, donorPackagePath);
-        return MaterializeResolved(
-            destination,
-            sourceExport,
-            targetPath,
-            className,
-            warnings);
+        var sourceExport = ResolveSourceExport(source, instancedPath, className, sourceUIndex);
+        return MaterializeResolved(destination, sourceExport, warnings);
     }
 
-    private static ExportEntry MaterializeResolved(
+    internal static ExportEntry MaterializeResolved(
         IMEPackage destination,
         ExportEntry sourceExport,
-        string instancedPath,
-        string className,
         ICollection<string>? warnings)
     {
+        var instancedPath = PccAssetPathPolicy.FromExport(sourceExport);
+        var className = sourceExport.ClassName;
         var materialized = PccPackageWorkflow.ImportDependencyGraph(
             destination,
             sourceExport,
@@ -148,12 +139,11 @@ internal static class ExternalSkeletalMeshMaterializer
         }
     }
 
-    private static ExportEntry? ResolveSourceExport(
+    private static ExportEntry ResolveSourceExport(
         IMEPackage source,
         string instancedPath,
         string className,
-        int sourceUIndex,
-        bool required = true)
+        int sourceUIndex)
     {
         bool Matches(ExportEntry export) =>
             export.ClassName.Equals(className, StringComparison.OrdinalIgnoreCase) &&
@@ -168,10 +158,8 @@ internal static class ExternalSkeletalMeshMaterializer
         }
         var matches = source.Exports.Where(Matches).Take(2).ToArray();
         var found = matches.Length == 1 ? matches[0] : null;
-        return found ?? (required
-            ? throw new InvalidDataException(
-                $"{className} '{instancedPath}' was {(matches.Length == 0 ? "not found" : "ambiguous")} in '{source.FilePath}'.")
-            : null);
+        return found ?? throw new InvalidDataException(
+            $"{className} '{instancedPath}' was {(matches.Length == 0 ? "not found" : "ambiguous")} in '{source.FilePath}'.");
     }
 
     private static string CanonicalPath(IMEPackage package, IEntry entry)

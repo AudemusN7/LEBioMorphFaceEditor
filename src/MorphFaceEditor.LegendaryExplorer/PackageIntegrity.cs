@@ -22,6 +22,8 @@ internal static class PackageIntegrity
             .Concat(package.Imports)
             .FirstOrDefault(entry =>
                 entry.ClassName.Equals(className, StringComparison.OrdinalIgnoreCase) &&
+                // Avoid building unrelated ancestry paths on an indexed lookup miss.
+                instancedPath.EndsWith(entry.ObjectName.Instanced, StringComparison.OrdinalIgnoreCase) &&
                 entry.InstancedFullPath.Equals(instancedPath, StringComparison.OrdinalIgnoreCase));
 
     internal static IEntry? EnsurePackagePath(IMEPackage package, string assetPath, string? assetClass = null)
@@ -57,26 +59,24 @@ internal static class PackageIntegrity
     {
         // Full-path formatting and LEC's duplicate checker both walk parents. Validate
         // every chain (including imports) before either can encounter a cycle.
+        var missingParents = new List<(ExportEntry Export, int ParentIndex)>();
         foreach (var entry in package.Exports.Cast<IEntry>().Concat(package.Imports))
         {
             var visited = new HashSet<int> { entry.UIndex };
-            for (var link = entry.idxLink; link != 0; link = package.GetEntry(link)?.idxLink ?? 0)
+            for (var link = entry.idxLink; link != 0;)
+            {
                 if (!visited.Add(link))
                     throw new InvalidDataException($"Entry #{entry.UIndex} has a circular parent chain.");
-        }
-        var issues = new List<string>();
-        foreach (var export in package.Exports)
-        {
-            for (var link = export.idxLink; link != 0;)
-            {
                 if (package.GetEntry(link) is not { } parent)
                 {
-                    issues.Add($"Export {Identity(export)} has missing parent #{link}.");
+                    if (entry is ExportEntry export) missingParents.Add((export, link));
                     break;
                 }
                 link = parent.idxLink;
             }
         }
+        var issues = missingParents.Select(value =>
+            $"Export {Identity(value.Export)} has missing parent #{value.ParentIndex}.").ToList();
         var duplicates = EntryChecker.CheckForDuplicateIndices(package);
         issues.AddRange(duplicates.Select(value => $"Duplicate entry identity {Identity(value.Entry)}."));
         foreach (var export in package.Exports)

@@ -73,7 +73,7 @@ public sealed class MorphFaceConversionService(
                 : RequirePackage(request.TemplatePackagePath, "template")
             : RequirePackage(destinationPath, "destination");
 
-        var (templateReference, template) = FindEditableTemplate(reader, templatePath, targetProfile);
+        var (templateReference, template, templateReferences) = FindEditableTemplate(reader, templatePath, targetProfile);
         var sourceSession = CreateSession(source, sourceProfile);
         var transfer = sourceSession.CaptureSemanticTransferData();
         var targetSession = CreateSession(template, targetProfile);
@@ -103,20 +103,22 @@ public sealed class MorphFaceConversionService(
             source.Document.Source.InstancedPath.Split('.').Last(),
             request.TargetGame,
             templateReference.FacePath,
-            request.CreateNewPackage ? [] : MorphFaceReferenceInspector.Inspect(destinationPath));
+            request.CreateNewPackage ? [] : templateReferences);
 
         MorphFaceSaveResult saveResult;
         MorphFaceMaterialData mappedMaterial;
         if (request.CreateNewPackage)
         {
-            (saveResult, mappedMaterial) = CreateNewPackage(
+            var transferred = packageContext.CreateConvertedMorphPackage(
+                destinationPath,
                 convertedDraft,
+                objectName,
                 templatePath,
                 templateReference.FacePath,
-                destinationPath,
-                objectName,
                 sourceMaterial,
-                support,
+                support.Scalars,
+                support.Vectors,
+                support.Textures,
                 source.Game,
                 sourceProfile.Key,
                 sourcePath,
@@ -124,6 +126,8 @@ public sealed class MorphFaceConversionService(
                 source.Document.OtherMeshReferences,
                 sourceCatalog.Candidates,
                 targetCatalog.Candidates);
+            saveResult = transferred.SaveResult;
+            mappedMaterial = transferred.MaterialData;
         }
         else
         {
@@ -164,42 +168,6 @@ public sealed class MorphFaceConversionService(
             mappedMaterial.Vectors.Count,
             mappedMaterial.Textures.Count,
             sourceSession.CanEditMorphFeatures);
-    }
-
-    private (MorphFaceSaveResult SaveResult, MorphFaceMaterialData Material) CreateNewPackage(
-        MorphFaceDocument draft,
-        string templatePath,
-        string templateFacePath,
-        string destinationPath,
-        string objectName,
-        MorphFaceMaterialData sourceMaterial,
-        MaterialSupport support,
-        MorphFaceGame sourceGame,
-        string sourceProfileKey,
-        string sourcePackagePath,
-        AssetIdentity? sourceHair,
-        IReadOnlyList<AssetIdentity?> sourceOtherMeshes,
-        IReadOnlyList<TextureCatalogCandidate> sourceTextureCatalog,
-        IReadOnlyList<TextureCatalogCandidate> targetTextureCatalog)
-    {
-        var transferred = packageContext.CreateConvertedMorphPackage(
-            destinationPath,
-            draft,
-            objectName,
-            templatePath,
-            templateFacePath,
-            sourceMaterial,
-            support.Scalars,
-            support.Vectors,
-            support.Textures,
-            sourceGame,
-            sourceProfileKey,
-            sourcePackagePath,
-            sourceHair,
-            sourceOtherMeshes,
-            sourceTextureCatalog,
-            targetTextureCatalog);
-        return (transferred.SaveResult, transferred.MaterialData);
     }
 
     private TextureCatalogReadResult ReadTextureCatalog(MorphFaceGame game)
@@ -256,13 +224,14 @@ public sealed class MorphFaceConversionService(
         return new MorphFaceMaterialData(source.Scalars, source.Vectors, textures);
     }
 
-    private (MorphFaceMeshReferences Reference, LoadedMorphFace Loaded) FindEditableTemplate(
+    private (MorphFaceMeshReferences Reference, LoadedMorphFace Loaded,
+        IReadOnlyList<MorphFaceMeshReferences> References) FindEditableTemplate(
         MorphFacePackageReader reader,
         string templatePath,
         MorphFaceProfile profile)
     {
         var references = MorphFaceReferenceInspector.Inspect(templatePath);
-        var game = references.FirstOrDefault()?.Game ?? ReadPackageGame(templatePath);
+        var game = references.FirstOrDefault()?.Game ?? MorphFaceGame.Unsupported;
         if (game != profile.Game)
         {
             throw new InvalidDataException(
@@ -287,7 +256,7 @@ public sealed class MorphFaceConversionService(
                 var session = CreateSession(loaded, profile);
                 if (session.CanEditMorphFeatures || profile.IgnoresAuthoredGeometry)
                 {
-                    return (reference, loaded);
+                    return (reference, loaded, references);
                 }
             }
             catch
@@ -395,9 +364,6 @@ public sealed class MorphFaceConversionService(
             ? fullPath
             : throw new FileNotFoundException($"The {purpose} PCC was not found.", fullPath);
     }
-
-    private static MorphFaceGame ReadPackageGame(string path) =>
-        MorphFaceReferenceInspector.Inspect(path).FirstOrDefault()?.Game ?? MorphFaceGame.Unsupported;
 
     private static void EnsureSupportedDirection(MorphFaceGame source, MorphFaceGame target)
     {

@@ -113,7 +113,7 @@ internal static class MaterialisationVerifier
             .ToList();
 
     internal static void Verify(ExportEntry root, MEGame sourceGame, RelinkerOptionsPackage options,
-        ICollection<string>? warnings = null, bool rootOnly = false,
+        ICollection<string>? warnings = null,
         IReadOnlyDictionary<ExportEntry, (ExportEntry Source, string TargetPath)>? stagedCopies = null,
         IReadOnlySet<ExportEntry>? preservedExports = null)
     {
@@ -129,7 +129,7 @@ internal static class MaterialisationVerifier
             {
                 if (pair.Key is not ExportEntry source || pair.Value is not ExportEntry target ||
                     !ReferenceEquals(target.FileRef, root.FileRef) ||
-                    rootOnly && !ReferenceEquals(target, root) || preservedExports?.Contains(target) == true) continue;
+                    preservedExports?.Contains(target) == true) continue;
 
                 (ExportEntry Source, string TargetPath)? stagedCopy = null;
                 if (stagedCopies?.TryGetValue(target, out var recordedCopy) == true)

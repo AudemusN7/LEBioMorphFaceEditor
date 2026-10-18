@@ -2,7 +2,6 @@ using LegendaryExplorerCore.Packages;
 using LegendaryExplorerCore.Packages.CloningImportingAndRelinking;
 using LegendaryExplorerCore.Unreal;
 using LegendaryExplorerCore.Unreal.BinaryConverters;
-using LegendaryExplorerCore.Unreal.ObjectInfo;
 using MorphFaceEditor.Core.Domain;
 
 namespace MorphFaceEditor.LegendaryExplorer;
@@ -127,30 +126,11 @@ internal static class ScalpMaterialGraphMaterializer
     internal static void EnsureCanonicalCcScalpGraph(ExportEntry donor, PackageCache cache)
     {
         var resolver = new GamePackageReferenceResolver(cache);
-        if (!SupportedMaterialGraphPolicy.IsSupported(donor.Game, donor, resolver, out var unsupported))
-            throw UserFacingMessage.CreateError("loc_Shell_Error_CcScalp_UnsupportedGraph", $"Selected CC scalp material '{donor.InstancedFullPath}' has an unsupported graph: {unsupported}.", donor.InstancedFullPath);
-
-        var current = donor;
-        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        while (true)
-        {
-            var key = $"{Path.GetFullPath(current.FileRef.FilePath)}|{current.UIndex}";
-            if (!visited.Add(key))
-                throw UserFacingMessage.CreateError("loc_Shell_Error_CcScalp_ParentCycle", $"Selected CC scalp material '{donor.InstancedFullPath}' has a parent cycle.", donor.InstancedFullPath);
-            if (current.ClassName.Equals("Material", StringComparison.OrdinalIgnoreCase))
-            {
-                if (MorphFacePackageReader.DescribeMaterialMaster(donor.Game, current)?.PreviewModel !=
-                    MorphFaceEditor.Core.Materials.HumanMaterialPreviewModel.CcScalp)
-                    throw UserFacingMessage.CreateError("loc_Shell_Error_CcScalp_WrongMaster", $"Selected CC scalp material '{donor.InstancedFullPath}' terminates at '{PccAssetPathPolicy.FromExport(current)}', not the reviewed CC scalp master.", donor.InstancedFullPath, PccAssetPathPolicy.FromExport(current));
-                return;
-            }
-
-            var propertyName = current.IsA("RvrEffectsMaterialUser") ? "m_pBaseMaterial" : "Parent";
-            var parentReference = current.GetProperty<ObjectProperty>(propertyName)?.ResolveToEntry(current.FileRef)
-                ?? throw UserFacingMessage.CreateError("loc_Shell_Error_CcScalp_MissingParent", $"Selected CC scalp material '{current.InstancedFullPath}' has no resolvable {propertyName}.", current.InstancedFullPath, propertyName);
-            current = resolver.Resolve(parentReference)
-                ?? throw UserFacingMessage.CreateError("loc_Shell_Error_CcScalp_UnresolvedParent", $"Selected CC scalp material '{current.InstancedFullPath}' has an unresolved {propertyName}.", current.InstancedFullPath, propertyName);
-        }
+        var master = SupportedMaterialGraphPolicy.ResolveSupportedMaster(donor.Game, donor, resolver, out var unsupported)
+            ?? throw UserFacingMessage.CreateError("loc_Shell_Error_CcScalp_UnsupportedGraph", $"Selected CC scalp material '{donor.InstancedFullPath}' has an unsupported graph: {unsupported}.", donor.InstancedFullPath);
+        if (MorphFacePackageReader.DescribeMaterialMaster(donor.Game, master)?.PreviewModel !=
+            MorphFaceEditor.Core.Materials.HumanMaterialPreviewModel.CcScalp)
+            throw UserFacingMessage.CreateError("loc_Shell_Error_CcScalp_WrongMaster", $"Selected CC scalp material '{donor.InstancedFullPath}' terminates at '{PccAssetPathPolicy.FromExport(master)}', not the reviewed CC scalp master.", donor.InstancedFullPath, PccAssetPathPolicy.FromExport(master));
     }
 
     private static string? MaterialPath(IMEPackage package, int uIndex)

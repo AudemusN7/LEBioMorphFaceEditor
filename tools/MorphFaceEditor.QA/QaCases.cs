@@ -77,7 +77,8 @@ internal static partial class QaCases
         var seedPackage = seeded.PackagePath;
         var ron = c.Artifact("player-input.ron");
         await c.Measure("Player RON export", () => Task.Run(() =>
-            new MorphFacePackageContextService().ExportRon(seedPackage, seeded.FacePath, ron)), QaStageKind.FileTransfer);
+            new MorphFacePackageContextService().ExportRon(seedPackage, seeded.FacePath, ron, Provenance(c.Face))), QaStageKind.FileTransfer);
+        VerifyPlayerOutput(c, TseHeadMorphRon.Read(ron));
         var registry = await c.Textures.ReadAsync(game);
         if (!registry.IsAvailable) throw new QaPrerequisiteException($"{game} asset database must be Ready for Player import.");
         var assets = StandalonePlayerAssetCatalog.ForRon(game, ron, registry.Candidates,
@@ -98,7 +99,7 @@ internal static partial class QaCases
     {
         var before = editor.CreateDraft();
         var beforeMaterials = MaterialSignature(editor.Material.CaptureInterchangeData());
-        await c.Randomise100(editor);
+        await c.Randomise(editor, 100, "Production randomisation");
         var draft = editor.CreateDraft();
         QaContext.Require(!MorphFaceEditorStateComparer.Equals(before, draft), "Randomisation completed without changing authored state.");
         QaContext.Require(beforeMaterials != MaterialSignature(editor.Material.CaptureInterchangeData()),
@@ -112,6 +113,13 @@ internal static partial class QaCases
         var reopened = await c.Load(result.PackagePath, result.FaceInstancedPath, reloadMode);
         AssertGeometry(draft, reopened.Loaded.Document);
         AssertMaterials(draft, reopened.Loaded.Document);
+        if (c.Face.IsPlayer)
+        {
+            var ron = c.Artifact("randomised-player.ron");
+            await c.Measure("Export final Player RON", () => Task.Run(() =>
+                new MorphFacePackageContextService().ExportRon(result.PackagePath, result.FaceInstancedPath, ron, Provenance(c.Face))), QaStageKind.FileTransfer);
+            VerifyPlayerOutput(c, TseHeadMorphRon.Read(ron));
+        }
         await c.Render(reopened.Scene, "randomised-reopened.png");
     }
 
@@ -136,7 +144,7 @@ internal static partial class QaCases
         editor.RedoCommand.Execute(null);
         AssertState(afterMaterial, editor.CreateDraft(), "second redo restores material");
         MorphFaceDocument beforeFinalRoll = afterMaterial;
-        await c.Randomise100(editor, "History randomisation", () => beforeFinalRoll = editor.CreateDraft());
+        await c.Randomise(editor, purpose: "History randomisation", beforeFinalRoll: () => beforeFinalRoll = editor.CreateDraft());
         var afterRandom = editor.CreateDraft();
         editor.UndoCommand.Execute(null);
         AssertState(beforeFinalRoll, editor.CreateDraft(), "one undo reverses the final randomisation");
@@ -159,23 +167,17 @@ internal static partial class QaCases
         using var reader = new MorphFacePackageReader();
         using var loader = new MorphFacePreviewLoadService(c.Scenes, c.Targets, c.Profiles, reader);
         var timings = new List<double>();
-        MorphFacePreviewLoadResult? preview = null;
         for (var index = 0; index < 4; index++)
         {
-            preview = await c.Measure(index == 0 ? "Cold load" : $"Warm load {index}",
+            await c.Measure(index == 0 ? "Cold load" : $"Warm load {index}",
                 () => loader.LoadAsync(source.PackagePath, source.FacePath, geometryMode: c.Face.GeometryMode),
                 index == 0 ? QaStageKind.ColdLoad : QaStageKind.Load);
             timings.Add(c.Current.Stages[^1].DurationMs);
             c.Current.Evidence[$"loadMetrics{index}"] = reader.LastLoadMetrics;
         }
-        using var scope = await c.Editor(preview!, source.PackagePath);
-        await c.Randomise100(scope.Editor);
-        var saved = await c.Save(scope.Editor.CreateDraft(), source.PackagePath, "benchmark-result.pcc");
-        var reopened = await c.Load(saved.PackagePath, saved.FaceInstancedPath);
-        await c.Render(reopened.Scene, "benchmark-reopened.png");
         c.Current.Evidence["coldReaderMs"] = timings[0];
         c.Current.Evidence["warmMedianMs"] = timings.Skip(1).Order().ElementAt(1);
-        c.Current.Evidence["benchmarkScope"] = "Cold means a new reader, not a flushed OS disk cache. Three warm load samples and 100 randomisation rolls; export uses the final outcome.";
+        c.Current.Evidence["benchmarkScope"] = "Cold means a new reader, not a flushed OS disk cache. Three warm load samples. Randomisation and persistence belong to their dedicated cases.";
         c.Current.Evidence["slowestStages"] = c.Current.Stages.OrderByDescending(value => value.DurationMs).Take(3).ToArray();
     }
 
@@ -211,9 +213,13 @@ internal static partial class QaCases
         using var cache = new LegendaryExplorerCore.Packages.PackageCache { CacheMaxSize = 8 };
         var normalized = new
         {
-            Scalars = data.Scalars.OrderBy(value => value.Name), Vectors = data.Vectors.OrderBy(value => value.Name),
-            Textures = data.Textures.OrderBy(value => value.Name).Select(value => new
-                { value.Name, Path = MaterialIdentity(value.TextureReference, cache), Class = value.TextureReference?.ClassName.ToUpperInvariant() })
+            Scalars = QaMaterialValues.Normalise(data.Scalars, value => value.Name,
+                value => BitConverter.SingleToInt32Bits(value.Value).ToString("X8")),
+            Vectors = QaMaterialValues.Normalise(data.Vectors, value => value.Name, value =>
+                string.Join("/", new[] { value.Value.X, value.Value.Y, value.Value.Z, value.Value.W }
+                    .Select(component => BitConverter.SingleToInt32Bits(component).ToString("X8")))),
+            Textures = QaMaterialValues.Normalise(data.Textures, value => value.Name,
+                value => $"{value.TextureReference?.ClassName.ToUpperInvariant()}|{MaterialIdentity(value.TextureReference, cache)}")
         };
         return JsonSerializer.Serialize(normalized, new JsonSerializerOptions { IncludeFields = true });
     }
@@ -240,14 +246,7 @@ internal static partial class QaCases
         void Compare<T>(IEnumerable<T> left, IEnumerable<T> right, Func<T, string> name,
             Func<T, string> value, string kind)
         {
-            var desired = left.ToDictionary(name, value, StringComparer.Ordinal);
-            var restored = right.ToDictionary(name, value, StringComparer.Ordinal);
-            foreach (var key in desired.Keys.Union(restored.Keys).Order())
-            {
-                var before = desired.GetValueOrDefault(key, "<missing parameter>");
-                var after = restored.GetValueOrDefault(key, "<missing parameter>");
-                if (before != after) differences.Add($"{kind} '{key}': expected {before}; actual {after}.");
-            }
+            differences.AddRange(QaMaterialValues.Differences(left, right, name, value, kind));
         }
         Compare(expected.Scalars, actual.Scalars, value => value.Name,
             value => value.Value.ToString("R", System.Globalization.CultureInfo.InvariantCulture), "Scalar");

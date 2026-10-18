@@ -95,12 +95,70 @@ internal static partial class QaCases
                 Add("conversion", $"BAF conversion {face.Game} → {target}", face,
                     c => Conversion(c, target), target.ToString().ToLowerInvariant());
         foreach (var face in Archetypes.Where(face => !face.IsPlayer))
-            Add("npc-randomisation", "One 100% production roll, export/reopen/render", face, NpcRandomisation);
+            Add("npc-randomisation", "Dedicated 100-roll production stress, export/reopen/render", face, NpcRandomisation);
         foreach (var face in Archetypes.Where(face => face.IsPlayer))
-            Add("player-randomisation", "Standalone Player RON import, 100% roll, export/reopen/render", face, PlayerRandomisation);
+            Add("player-randomisation", "Standalone Player RON import, dedicated 100-roll stress, export/reopen/render", face, PlayerRandomisation);
+        foreach (var face in Archetypes)
+        {
+            Add("ron-full", "Full RON export/import/save/reopen, or explicit unsupported capability", face, c => RonRoundTrip(c, false));
+            Add("ron-morph", "Morph-only RON export/import/save/reopen, or explicit unsupported capability", face, c => RonRoundTrip(c, true));
+            if (!face.IsPlayer)
+                Add("donor-sweep", "Every eligible corpus donor: load/export/reopen/value preservation", face, DonorSweep);
+            if (face.Game is MorphFaceGame.LE1 or MorphFaceGame.LE2 && face.Family is not "ALN" and not "TUF" and not "BAF")
+            {
+                var target = face.Game == MorphFaceGame.LE1 ? MorphFaceGame.LE2 : MorphFaceGame.LE1;
+                Add("ron-cross-game", "Full RON between compatible LE1/LE2 games", face, c => CrossGameRon(c, target));
+            }
+        }
+        foreach (var game in new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 })
+        {
+            foreach (var career in new[] { "Male-Custom", "Female-Custom", "Default" })
+            {
+                var name = $"{game}-{career}";
+                var face = Archetypes.Single(value => value.Game == game && value.IsPlayer &&
+                    value.PlayerSex == (career == "Female-Custom" ? StandalonePlayerSex.Female : StandalonePlayerSex.Male));
+                // PCSAV owns its native/default fixture, so it needs no pre-randomised Player PCC.
+                cases.Add(new("pcsav/" + name.ToLowerInvariant(), "Career RON/randomisation/save/reopen: " + name,
+                    async c => { c.PreparedPlayer = null; c.Face = face; await PcsavJourney(c, name + ".pcsav"); }, "pcsav"));
+            }
+            var fixtures = game == MorphFaceGame.LE3
+                ? new[] { "LE3_Customizable_Sheploo", "LE3_HMF_HED_Iconic_HairIconic" }
+                : new[] { "LE1-2_Customizable_Sheploo", "LE1-2_Default_Jane_ashleyhair", "LE1-2_Default_Jane_iconichair" };
+            foreach (var fixture in fixtures)
+            {
+                var face = Archetypes.Single(value => value.Game == game && value.IsPlayer &&
+                    value.PlayerSex == (fixture.Contains("Sheploo") ? StandalonePlayerSex.Male : StandalonePlayerSex.Female));
+                cases.Add(new($"tse-ron/{game.ToString().ToLowerInvariant()}/{fixture}", "External TSE RON import/export/persistence",
+                    async c => { c.PreparedPlayer = null; c.Face = face; await c.WarmGame(game); await TseRonJourney(c, fixture); }, "tse-ron"));
+            }
+            foreach (var kind in new[] { "hair", "accessory", "texture" })
+                Add("ron-missing-assets", "NPC RON missing " + kind,
+                    Archetypes.Single(value => value.Game == game && value.Family == "HMF" && !value.IsPlayer),
+                    c => MissingRonAssets(c, kind), kind);
+        }
+        foreach (var extra in new[]
+        {
+            (File: "LE3_HMM_Key.pcsav", Reason: "LE3 male authored head with 32 rather than 33 bone entries"),
+            (File: "LE3_HMF_Commander.pcsav", Reason: "LE3 female single-LOD, zero-rich authored feature map"),
+            (File: "LE2_HMF_Dahlia.pcsav", Reason: "LE2 female single-LOD head with explicit zero features"),
+            (File: "LE1_HMF_Jane.pcsav", Reason: "LE1 female default head; curated LE1 default is male"),
+            (File: "LE3_HMF_Jane.pcsav", Reason: "LE3 female default head; curated LE3 default is male"),
+            (File: "LE1_HMM_Alistair.pcsav", Reason: "Incomplete native LOD payload: controlled refusal boundary")
+        })
+        {
+            var path = extra.File;
+            cases.Add(new("pcsav-extra/" + path, extra.Reason, async c =>
+            {
+                c.PreparedPlayer = null;
+                c.Current.Evidence["additionalCoverageReason"] = extra.Reason;
+                var input = Path.Combine(c.Root, "fixtures", "PCSAV_Test", path);
+                if (path == "LE1_HMM_Alistair.pcsav") await RejectedCareer(c, input);
+                else await PcsavJourney(c, path);
+            }, "pcsav-extra"));
+        }
         // Each interchange and Custom case builds its own seeded input.
         foreach (var format in new[] { MorphMeshFormat.Psk, MorphMeshFormat.Gltf })
-            Add("mesh-" + format.ToString().ToLowerInvariant(), "Randomised HMM baked mesh export and Custom reimport",
+            Add("mesh-" + format.ToString().ToLowerInvariant(), "Edited HMM baked mesh export and Custom reimport",
                 MeshFace, c => MeshRoundTrip(c, format));
         Add("custom-randomisation", "Four-slot HMM custom head with random material families", MeshFace, CustomRandomisation);
         foreach (var route in QaHumanMaterialCoverage.All)
@@ -110,8 +168,8 @@ internal static partial class QaCases
             var description = route.Group switch
             {
                 "custom-human-materials" => "Every Human Face/Scalp NPC/Player choice, edit/RON/history/PCC",
-                "custom-human-hair" => "Explicit hair graph with shared scalp controls, textures, 100 rolls and PCC readback",
-                "native-human-hair" => "Native attachment graph, BMO hair controls, history, 100 rolls and PCC readback",
+                "custom-human-hair" => "Explicit hair graph with shared scalp controls, textures, 3 rolls and PCC readback",
+                "native-human-hair" => "Native attachment graph, BMO hair controls, history, 4 strength/variation rolls and PCC readback",
                 "cc-scalp-switch" => "ShortAfro paired texture/material transaction, existing save and fresh export",
                 "player-cc-scalp" => "Official LE3 Player scalp defaults to the CC graph",
                 "kaidan-preview" => "Native Kaidan graph renders while remaining outside authoring capabilities",

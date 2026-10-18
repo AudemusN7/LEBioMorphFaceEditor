@@ -205,7 +205,7 @@ internal static partial class QaCases
             RequireJamesScalpColours(editor, hair, assignments[1], colourNames);
         var perRollChanges = colourNames.Keys.ToDictionary(key => key, _ => 0, StringComparer.OrdinalIgnoreCase);
         var previous = CaptureColourValues(editor, colourNames);
-        var summary = await c.Randomise100(editor, $"Custom {hairKey} colour randomisation", afterRoll: _ =>
+        var summary = await c.Randomise(editor, 3, $"Custom {hairKey} colour randomisation", afterRoll: _ =>
         {
             var current = CaptureColourValues(editor, colourNames);
             foreach (var group in colourNames.Keys)
@@ -218,10 +218,10 @@ internal static partial class QaCases
             }
             previous = current;
         });
-        QaContext.Require(summary.Successful == 100, $"Custom hair colour randomisation completed only {summary.Successful}/100 rolls.");
+        QaContext.Require(summary.Successful == 3, $"Custom hair colour randomisation completed only {summary.Successful}/3 rolls.");
         var randomised = editor.Material.CaptureInterchangeData();
         foreach (var (group, changes) in perRollChanges)
-            QaContext.Require(changes > 0, $"The 100-roll batch never changed an actual {group} control in this Custom hair scope.");
+            QaContext.Require(changes > 0, $"The 3-roll batch never changed an actual {group} control in this Custom hair scope.");
         c.Current.Evidence["hairColourRandomisation"] = new
         {
             NativeControls = colourNames,

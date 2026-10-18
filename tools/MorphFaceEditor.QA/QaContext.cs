@@ -27,6 +27,8 @@ internal sealed class QaContext : IDisposable
     private int _stageNumber;
     private string _stagePhase = "Test workflow";
     public MorphFaceMeshReferences? PreparedPlayer { get; set; }
+    public Dictionary<string, MorphFaceMeshReferences> PlayerFixtures { get; } = [];
+    public string? FixtureScope { get; set; }
     public QaResult Current { get; set; } = null!;
     public QaFaceSpec Face { get; set; } = QaCases.DefaultFace;
     public Dictionary<int, HeadMaterialFamily> HmmSlotFamilies { get; } = [];
@@ -53,7 +55,7 @@ internal sealed class QaContext : IDisposable
     {
         if (RecordedFailureSummary is { } failure) throw new InvalidDataException(failure);
     }
-    public Random RandomFor(string purpose) => QaCoverageSelection.Stream(Seed, Current.Id, purpose);
+    public Random RandomFor(string purpose) => QaCoverageSelection.Stream(Seed, FixtureScope ?? Current.Id, purpose);
 
     public QaContext(string root, string corpus, string output, int seed)
     {
@@ -82,7 +84,7 @@ internal sealed class QaContext : IDisposable
 
     public string Artifact(string filename)
     {
-        var directory = Path.GetFullPath(Path.Combine(Output, Current.Id));
+        var directory = Path.GetFullPath(Path.Combine(Output, FixtureScope ?? Current.Id));
         Directory.CreateDirectory(directory);
         var path = Path.GetFullPath(Path.Combine(directory, UniqueName(filename)));
         Current.Artifacts.Add(path);
@@ -228,7 +230,7 @@ internal sealed class QaContext : IDisposable
         return result;
     }
 
-    public MorphFaceMeshReferences Source(IReadOnlySet<string>? excludedFacePaths = null)
+    public MorphFaceMeshReferences Source(IReadOnlySet<string>? excludedFacePaths = null, string? requiredFacePath = null)
     {
         if (PreparedPlayer is not null) { Current.Evidence["sourceFace"] = PreparedPlayer; return PreparedPlayer; }
         if (ReferenceEquals(_sourceCase, Current) && _selectedSource is not null) return _selectedSource;
@@ -244,6 +246,8 @@ internal sealed class QaContext : IDisposable
             .OrderBy(value => value.FacePath, StringComparer.OrdinalIgnoreCase),
             value => value.FacePath,
             excludedFacePaths ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+        if (requiredFacePath is not null)
+            candidates = candidates.Where(value => value.FacePath.Equals(requiredFacePath, StringComparison.OrdinalIgnoreCase)).ToArray();
         var source = QaCoverageSelection.Pick(candidates, RandomFor("source"));
         _sourceCase = Current;
         _selectedSource = source;
@@ -343,8 +347,8 @@ internal sealed class QaContext : IDisposable
         return editor.UsesLiveDeformationPreview ? Scenes.CreateEditable(loaded, editor.Evaluation) : Scenes.Create(loaded);
     }
 
-    public async Task<QaRollSummary> Randomise100(FaceEditorViewModel editor, string purpose = "Production randomisation",
-        Action? beforeFinalRoll = null, Action<int>? afterRoll = null)
+    public async Task<QaRollSummary> Randomise(FaceEditorViewModel editor, int attempts = 1,
+        string purpose = "Workflow randomisation", Action? beforeFinalRoll = null, Action<int>? afterRoll = null)
     {
         var diagnostics = new List<string>();
         void Observe(string level, string message)
@@ -356,10 +360,10 @@ internal sealed class QaContext : IDisposable
         QaRollSummary summary;
         try
         {
-            summary = await Measure(purpose + " · 100 rolls", () => QaRandomisationBatch.Run(async roll =>
+            summary = await Measure(purpose + $" · {attempts} rolls", () => QaRandomisationBatch.Run(async roll =>
             {
                 lock (diagnostics) diagnostics.Clear();
-                if (roll == QaRandomisationBatch.RollCount) beforeFinalRoll?.Invoke();
+                if (roll == attempts) beforeFinalRoll?.Invoke();
                 try
                 {
                     await editor.RandomiseAsync();
@@ -370,7 +374,7 @@ internal sealed class QaContext : IDisposable
                     lock (diagnostics) diagnostics.Add(error.ToString());
                 }
                 lock (diagnostics) return (IReadOnlyList<string>)diagnostics.Distinct().ToArray();
-            }, roll => Console.WriteLine($"  Randomisation {roll}/100")), QaStageKind.Randomisation);
+            }, roll => Console.WriteLine($"  Randomisation {roll}/{attempts}"), attempts), QaStageKind.Randomisation);
         }
         finally { AppLog.MessageWritten -= Observe; }
         // The performance threshold applies to one operation, not the sum of 100.
@@ -383,10 +387,10 @@ internal sealed class QaContext : IDisposable
         {
             if (!_recordedFailures.TryGetValue(Current, out var failures))
                 _recordedFailures[Current] = failures = [];
-            failures.Add($"{purpose}: {summary.Attempts - summary.Successful}/100 rolls failed. " +
+            failures.Add($"{purpose}: {summary.Attempts - summary.Successful}/{attempts} rolls failed. " +
                 $"Per-roll failures are retained in evidence 'randomisation/{purpose}'.");
         }
-        Console.WriteLine($"  {summary.Successful}/100 successful · average {summary.AverageMs:F1} ms");
+        Console.WriteLine($"  {summary.Successful}/{attempts} successful · average {summary.AverageMs:F1} ms");
         return summary;
     }
 

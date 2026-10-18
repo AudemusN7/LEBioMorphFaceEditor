@@ -189,7 +189,7 @@ internal static partial class QaCases
         var fullStrengthValues = colourControlNames.ToDictionary(name => name, _ => new HashSet<Vector4>(),
             StringComparer.OrdinalIgnoreCase);
 
-        var rolls = await c.Randomise100(editor, $"Native hair colour stress · {sourceKey}", afterRoll: roll =>
+        var rolls = await c.Randomise(editor, 4, $"Native hair strength/variation · {sourceKey}", afterRoll: roll =>
         {
             var values = CaptureHairControlValues(editor.Material, scalarControls.Keys, vectorControls.Keys);
             foreach (var value in values.Scalars)
@@ -197,13 +197,13 @@ internal static partial class QaCases
             foreach (var value in values.Vectors)
                 QaContext.Require(IsFinite(value.Value), $"Roll {roll} produced a non-finite native hair vector '{value.Key}'.");
 
-            if (roll <= 20)
+            if (roll == 1)
             {
-                if (roll == 20) editor.MaterialRandomisationStrength = 50;
+                editor.MaterialRandomisationStrength = 50;
             }
-            else if (roll <= 50)
+            else if (roll == 2)
             {
-                if (roll == 50) editor.MaterialRandomisationStrength = 100;
+                editor.MaterialRandomisationStrength = 100;
             }
             else
             {
@@ -216,8 +216,8 @@ internal static partial class QaCases
                 }
             }
         });
-        QaContext.Require(rolls.Successful == 100,
-            $"Native hair randomisation completed {rolls.Successful}/100 rolls.");
+        QaContext.Require(rolls.Successful == 4,
+            $"Native hair randomisation completed {rolls.Successful}/4 rolls.");
         foreach (var controlName in colourControlNames)
         {
             QaContext.Require(changedAtFullStrength[controlName],
@@ -227,7 +227,7 @@ internal static partial class QaCases
         }
         QaContext.Require(editor.HairMesh.Value is { } finalHair &&
                 finalHair.InstancedPath.Equals(meshIdentity.InstancedPath, StringComparison.OrdinalIgnoreCase),
-            "Locked native hair mesh changed during the 100-roll randomisation batch.");
+            "Locked native hair mesh changed during the strength/variation checks.");
 
         var finalDraft = editor.CreateDraft();
         AssertGeometry(ronState, finalDraft);
@@ -235,9 +235,9 @@ internal static partial class QaCases
         {
             Source = sourceKey,
             Rolls = rolls,
-            StrengthPhases = new[] { new { FirstRoll = 1, LastRoll = 20, Strength = 0 },
-                new { FirstRoll = 21, LastRoll = 50, Strength = 50 },
-                new { FirstRoll = 51, LastRoll = 100, Strength = 100 } },
+            StrengthPhases = new[] { new { FirstRoll = 1, LastRoll = 1, Strength = 0 },
+                new { FirstRoll = 2, LastRoll = 2, Strength = 50 },
+                new { FirstRoll = 3, LastRoll = 4, Strength = 100 } },
             ColourVariation = colourControlNames.Select(controlName => new
             {
                 Parameter = editor.Material.SourceParameterName(controlName),

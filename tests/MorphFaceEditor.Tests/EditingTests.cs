@@ -26,6 +26,7 @@ public static class EditingTests
         new("relative-bake recomputes from a stable baseline", RelativeBakeDoesNotAccumulate),
         new("relative-bake preserves an unproven lower LOD", RelativeBakePreservesUnprovenLowerLod),
         new("relative-bake draft persists features bones and derived bake", RelativeBakeDraftPersistsState),
+        new("morph-only feature import restores target-driven bones and preserves independent bone edits", MorphOnlyPreservesBoneEdits),
         new("relative-bake slider undo and redo restore derived geometry", RelativeBakeUndoRedo),
         new("relative-bake disables on incompatible authored LOD0 topology", RelativeBakeRejectsIncompatibleTopology),
         new("base-mesh-only and blocked profiles do not expose bone editing", BaseMeshOnlyDoesNotExposeBones)
@@ -66,6 +67,20 @@ public static class EditingTests
         TestAssert.Near(new Vector3(11, 2, 3), session.Evaluation.Geometry.Positions[1], 0.000001f);
         var draft = session.CreateDraft(null, MorphFaceMaterialOverrides.Empty);
         TestAssert.Near(new Vector3(11, 2, 3), draft.BakedLods[0][1], 0.000001f);
+    }
+
+    private static void MorphOnlyPreservesBoneEdits()
+    {
+        var (mesh, document, target) = CreateRelativeBakeFixture();
+        var session = CreateRelativeSession(mesh, document, target);
+        session.SetBoneAxis("root", 0, 3f);
+        var baseline = session.Evaluation.FinalSkeleton.ToArray();
+        var authored = session.CaptureGeometryEdits();
+        session.SetFeature("Target", 1f);
+        TestAssert.True(!baseline.SequenceEqual(session.Evaluation.FinalSkeleton), "Fixture did not exercise target-driven bone movement.");
+        session.ImportFeatures(new Dictionary<string, float> { ["Target"] = 0.5f });
+        TestAssert.True(session.GeometryEditsMatch(authored), "Feature import changed independent bone/geometry edits.");
+        TestAssert.True(baseline.SequenceEqual(session.Evaluation.FinalSkeleton), "Restored features did not restore evaluated bones.");
     }
 
     private static void RelativeBakeDraftPersistsState()

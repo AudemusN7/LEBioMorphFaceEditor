@@ -11,13 +11,14 @@ internal static class QaRandomisationBatch
     internal const int RollCount = 100;
 
     internal static async Task<QaRollSummary> Run(Func<int, Task<IReadOnlyList<string>>> roll,
-        Action<int>? progress = null)
+        Action<int>? progress = null, int attempts = RollCount)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThan(attempts, 1);
         var failures = new List<QaRollFailure>();
         var total = 0d;
         var successful = 0;
         var finalSucceeded = false;
-        for (var index = 1; index <= RollCount; index++)
+        for (var index = 1; index <= attempts; index++)
         {
             var stopwatch = Stopwatch.StartNew();
             var errors = new List<string>();
@@ -27,8 +28,8 @@ internal static class QaRandomisationBatch
             finalSucceeded = errors.Count == 0;
             if (finalSucceeded) successful++;
             else failures.AddRange(errors.Distinct().Select(error => new QaRollFailure(index, error)));
-            if (index % 10 == 0) progress?.Invoke(index);
+            if (index % 10 == 0 || index == attempts) progress?.Invoke(index);
         }
-        return new(RollCount, successful, total / RollCount, total, finalSucceeded, failures);
+        return new(attempts, successful, total / attempts, total, finalSucceeded, failures);
     }
 }

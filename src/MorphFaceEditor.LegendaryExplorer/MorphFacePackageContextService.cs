@@ -422,13 +422,16 @@ public sealed class MorphFacePackageContextService
 
     public void ExportPlayerDefaultsRon(MorphFaceGame game, StandalonePlayerSex sex, string destinationPath,
         RonExportProvenance? provenance = null)
+        => TseHeadMorphRon.Write(destinationPath, CapturePlayerDefaultHead(game, sex), provenance);
+
+    public HeadMorphPayload CapturePlayerDefaultHead(MorphFaceGame game, StandalonePlayerSex sex)
     {
         LegendaryExplorerCoreRuntime.Initialize();
         using var package = OpenPackage(StandalonePlayerMorphImportService.ResolveInstalledSeed(game));
-        var head = ReadRonHead(FindFace(package, StandalonePlayerMorphImportService.ResolvePlayerTemplate(game, sex)), false);
+        var head = ReadHead(FindFace(package, StandalonePlayerMorphImportService.ResolvePlayerTemplate(game, sex)), false);
         head = head with { MaterialData = PreparePlayerDefaultMaterials(game, sex, head.MaterialData) };
         _playerAssets.Verify(game, head);
-        TseHeadMorphRon.Write(destinationPath, head, provenance);
+        return head;
     }
 
     private static MorphFaceMaterialData PreparePlayerDefaultMaterials(MorphFaceGame game, StandalonePlayerSex sex,
@@ -448,16 +451,20 @@ public sealed class MorphFacePackageContextService
         RonExportProvenance? provenance = null,
         bool morphFeaturesOnly = false)
     {
-        LegendaryExplorerCoreRuntime.Initialize();
-        using var package = OpenPackage(packagePath);
-        var face = FindFace(package, facePath);
-        var head = ReadRonHead(face, morphFeaturesOnly);
+        var head = CaptureHead(packagePath, facePath, morphFeaturesOnly);
         if (provenance is { PlayerMorph: true } && !morphFeaturesOnly)
             _playerAssets.Verify(provenance.Game, head);
         TseHeadMorphRon.Write(destinationPath, head, provenance, morphFeaturesOnly);
     }
 
-    private static TseHeadMorph ReadRonHead(ExportEntry face, bool morphFeaturesOnly)
+    public HeadMorphPayload CaptureHead(string packagePath, string facePath, bool morphFeaturesOnly = false)
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        using var package = OpenPackage(packagePath);
+        return ReadHead(FindFace(package, facePath), morphFeaturesOnly);
+    }
+
+    private static HeadMorphPayload ReadHead(ExportEntry face, bool morphFeaturesOnly)
     {
         var package = face.FileRef;
         var properties = face.GetProperties();
@@ -472,7 +479,7 @@ public sealed class MorphFacePackageContextService
         var materials = morphFeaturesOnly ? new MorphFaceMaterialData([], [], []) : ReadMaterialData(ResolveMaterialOverride(face));
         materials = materials with { Textures = materials.Textures.Where(value =>
             !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(value.Name)).ToArray() };
-        return new TseHeadMorph(
+        return new HeadMorphPayload(
             morphFeaturesOnly ? "None" : hair,
             morphFeaturesOnly ? [] : accessories,
             morphFeaturesOnly ? new(data.MorphFeatures, [], []) : data,
@@ -515,21 +522,20 @@ public sealed class MorphFacePackageContextService
     /// coverage is preserved as authored instead of being forced to match the
     /// seed BioMorphFace's stored arrays.
     /// </summary>
-    public MorphFaceSaveResult ImportStandalonePlayerRon(
+    public MorphFaceSaveResult ImportStandalonePlayerHead(
         string packagePath,
         string templateFacePath,
         string objectName,
-        string sourcePath,
+        HeadMorphPayload head,
         StandalonePlayerAssetCatalog? assetCatalog = null)
     {
         ValidateObjectName(objectName);
-        var ron = TseHeadMorphRon.Read(sourcePath);
         return ImportHeadMorph(
             packagePath,
             templateFacePath,
             objectName,
-            ron,
-            ron.MorphData,
+            head,
+            head.MorphData,
             mergeWithTemplate: false,
             requireMatchingAllLods: false,
             assetCatalog: assetCatalog,
@@ -630,7 +636,7 @@ public sealed class MorphFacePackageContextService
         string packagePath,
         string templateFacePath,
         string objectName,
-        TseHeadMorph ron,
+        HeadMorphPayload ron,
         MorphFaceMorphData morphData,
         bool mergeWithTemplate,
         bool requireMatchingAllLods = true,
@@ -1104,7 +1110,7 @@ public sealed class MorphFacePackageContextService
     private static void WriteLegacyMeshReferences(
         IMEPackage package,
         ExportEntry clone,
-        TseHeadMorph legacy,
+        HeadMorphPayload legacy,
         ICollection<string> warnings)
     {
         var properties = clone.GetProperties();
@@ -1253,7 +1259,7 @@ public sealed class MorphFacePackageContextService
     private static void WriteRonMeshReferences(
         IMEPackage package,
         ExportEntry face,
-        TseHeadMorph ron,
+        HeadMorphPayload ron,
         StandalonePlayerAssetCatalog? assetCatalog,
         bool strictAssetResolution,
         ICollection<string> warnings,

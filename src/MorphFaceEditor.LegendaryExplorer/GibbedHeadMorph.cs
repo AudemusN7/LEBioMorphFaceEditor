@@ -20,7 +20,7 @@ internal static class GibbedHeadMorph
     private static readonly byte[] Me2Magic = "GIBBEDMASSEFFECT2HEADMORPH"u8.ToArray();
     private static readonly byte[] Me3Magic = "GIBBEDMASSEFFECT3HEADMORPH"u8.ToArray();
 
-    public static TseHeadMorph Read(string path)
+    public static HeadMorphPayload Read(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         var bytes = File.ReadAllBytes(path);
@@ -82,7 +82,7 @@ internal static class GibbedHeadMorph
         {
             throw new InvalidDataException("Gibbed head-morph LOD arrays must begin at LOD0 and remain contiguous.");
         }
-        return new TseHeadMorph(
+        return new HeadMorphPayload(
             hair,
             accessories,
             new MorphFaceMorphData(features, bones, baked),

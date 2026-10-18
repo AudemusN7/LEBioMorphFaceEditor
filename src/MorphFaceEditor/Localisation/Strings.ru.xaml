@@ -1927,4 +1927,6 @@
   <system:String x:Key="loc_ActorAssignment_FindingMaterialTargets" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">Поиск целей для материалов, волос и аксессуаров…</system:String>
   <system:String x:Key="loc_ActorAssignment_AssigningMaterialsAndAttachments" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">Применение материалов, волос и аксессуаров из {0} к {1}…</system:String>
   <system:String x:Key="loc_ActorAssignment_AssignedMaterialTargets" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">Назначено и проверено параметрических MIC: {0}; сеток волос/аксессуаров: {1}. Нажмите «Сохранить файл», чтобы сохранить изменения.</system:String>
+  <system:String x:Key="loc_Pcsav_UnavailableHair" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">Меш волос: {0}</system:String>
+  <system:String x:Key="loc_Pcsav_UnavailableAccessory" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">Меш аксессуара: {0}</system:String>
 </ResourceDictionary>

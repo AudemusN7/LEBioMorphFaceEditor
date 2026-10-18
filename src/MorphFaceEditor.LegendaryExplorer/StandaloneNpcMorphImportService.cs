@@ -202,7 +202,7 @@ public sealed class StandaloneNpcMorphImportService
         }
     }
 
-    private static TseHeadMorph ReadRon(string ronPath)
+    private static HeadMorphPayload ReadRon(string ronPath)
     {
         var path = Path.GetFullPath(ronPath);
         if (!File.Exists(path))

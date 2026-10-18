@@ -6,12 +6,6 @@ using MorphFaceEditor.Core.Materials;
 
 namespace MorphFaceEditor.LegendaryExplorer;
 
-internal sealed record TseHeadMorph(
-    string HairMesh,
-    IReadOnlyList<string> AccessoryMeshes,
-    MorphFaceMorphData MorphData,
-    MorphFaceMaterialData MaterialData);
-
 public enum RonExportProducer
 {
     MFE,
@@ -44,7 +38,7 @@ public static class TseHeadMorphRon
     public static MorphFaceMorphData ReadMorphData(string path) => Read(path).MorphData;
     public static void Validate(string path) => _ = Read(path);
 
-    internal static TseHeadMorph Read(string path)
+    public static HeadMorphPayload Read(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         var source = File.ReadAllText(path);
@@ -67,7 +61,7 @@ public static class TseHeadMorphRon
 
     internal static void Write(
         string path,
-        TseHeadMorph morph,
+        HeadMorphPayload morph,
         RonExportProvenance? provenance = null,
         bool morphFeaturesOnly = false)
     {
@@ -438,7 +432,7 @@ public static class TseHeadMorphRon
             _featuresOnly = featuresOnly;
         }
 
-        public TseHeadMorph ReadHeadMorph()
+        public HeadMorphPayload ReadHeadMorph()
         {
             string hair = "None";
             IReadOnlyList<string> accessories = [];
@@ -494,7 +488,7 @@ public static class TseHeadMorphRon
             if (_featuresOnly && (baked.Length != 0 || bones.Count != 0 || accessories.Count != 0 ||
                 hair != "None" || scalars.Count != 0 || colours.Count != 0 || textures.Count != 0))
                 throw Error("A Morphs-only RON must contain only morph features.");
-            return new TseHeadMorph(
+            return new HeadMorphPayload(
                 hair,
                 accessories,
                 new MorphFaceMorphData(features, bones, baked),

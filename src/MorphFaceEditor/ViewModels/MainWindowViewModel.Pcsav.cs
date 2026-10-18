@@ -1,4 +1,5 @@
 using System.IO;
+using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.LegendaryExplorer;
 
@@ -10,8 +11,6 @@ public sealed partial class MainWindowViewModel
 
     private async Task OpenCareerSaveAsync(string path)
     {
-        var scratch = Path.Combine(Path.GetTempPath(), $"MFE-CareerImport-{Guid.NewGuid():N}");
-        var ron = Path.Combine(scratch, "PlayerHead.ron");
         try
         {
             IsBusy = true;
@@ -20,26 +19,16 @@ public sealed partial class MainWindowViewModel
             PcsavHeadMorphWorkspace source;
             try
             {
-                source = await Task.Run(() =>
-                {
-                    var document = PcsavHeadMorphWorkspace.Open(path);
-                    return document;
-                });
+                source = await Task.Run(() => PcsavHeadMorphWorkspace.Open(path));
             }
             finally { IsBusy = false; }
             if (!source.HasHeadMorph && !_dialogs.ConfirmCreateCareerMorph(source.FirstName)) return;
             IsBusy = true;
-            try
-            {
-                await Task.Run(() =>
-                {
-                    Directory.CreateDirectory(scratch);
-                    if (source.HasHeadMorph) source.ExportHeadRon(ron);
-                    else _packageContextService.ExportPlayerDefaultsRon(source.Game, source.Sex, ron);
-                });
-            }
+            HeadMorphPayload head;
+            try { head = await Task.Run(() => source.HasHeadMorph ? source.Head :
+                _packageContextService.CapturePlayerDefaultHead(source.Game, source.Sex)); }
             finally { IsBusy = false; }
-            await ImportStandaloneMorphAsync(ron, source.Game, career: source);
+            await ImportStandaloneMorphAsync(path, source.Game, career: source, playerHead: head);
             if (ReferenceEquals(_pcsavWorkspace, source) && ErrorMessage is null)
                 Status = Loc.Format(source.HasHeadMorph ? "loc_Pcsav_Opened" : "loc_Pcsav_NewHead", source.FirstName);
         }
@@ -48,11 +37,6 @@ public sealed partial class MainWindowViewModel
             AppLog.Error($"PCSAV:OPEN-FAILED FILE:{path}", exception);
             ErrorMessage = FormatPcsavError(exception);
             Status = Loc.Text("loc_Shell_Status_SelectedFileCouldNotOpen");
-        }
-        finally
-        {
-            try { if (Directory.Exists(scratch)) Directory.Delete(scratch, recursive: true); }
-            catch (IOException e) { AppLog.Warning($"PCSAV:CLEANUP-FAILED REASON:{e.Message}"); }
         }
     }
 
@@ -64,14 +48,10 @@ public sealed partial class MainWindowViewModel
         if (Editor?.IsDirty == true && !await FlushEditorToWorkspaceAsync()) return false;
         IsBusy = true;
         ErrorMessage = null;
-        var ron = Path.Combine(Path.GetTempPath(), $"MFE-CareerSave-{Guid.NewGuid():N}.ron");
         try
         {
-            await Task.Run(() =>
-            {
-                _packageContextService.ExportRon(workspace, source.FacePath, ron);
-                career.SaveEditedRon(ron, destination);
-            });
+            await Task.Run(() => career.SaveEditedHead(
+                _packageContextService.CaptureHead(workspace, source.FacePath), destination));
             _sourceFile = source with { Path = career.SourcePath, Fingerprint = FileFingerprint(career.SourcePath) };
             _standaloneImportPath = career.SourcePath;
             OnPropertyChanged(nameof(PackageName));
@@ -87,11 +67,7 @@ public sealed partial class MainWindowViewModel
             Status = Loc.Text("loc_FileSave_EditsRetained");
             return false;
         }
-        finally
-        {
-            try { if (File.Exists(ron)) File.Delete(ron); }
-            finally { IsBusy = false; }
-        }
+        finally { IsBusy = false; }
     }
 
     private static string FormatPcsavError(Exception exception) => UserFacingMessage.FromException(exception) is not null

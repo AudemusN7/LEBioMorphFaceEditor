@@ -9,7 +9,7 @@ namespace MorphFaceEditor.LegendaryExplorer;
 /// <summary>Unreal's shared PC HeadMorph wire layout, also used by TSE and Gibbed.</summary>
 internal static class UnrealHeadMorphBinaryCodec
 {
-    internal static TseHeadMorph Read(ref Reader reader)
+    internal static HeadMorphPayload Read(ref Reader reader)
     {
         var hair = reader.String();
         var accessories = reader.Array(static (ref Reader r) => r.String());
@@ -33,7 +33,7 @@ internal static class UnrealHeadMorphBinaryCodec
         return new(hair, accessories, new(features, bones, baked), new(scalars, vectors, textures));
     }
 
-    internal static byte[] Write(TseHeadMorph head)
+    internal static byte[] Write(HeadMorphPayload head)
     {
         using var stream = new MemoryStream();
         using var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true);

@@ -44,7 +44,7 @@ internal static class RonStressTests
         var temporaryPath = Path.Combine(Path.GetTempPath(), $"MFE-RonProvenance-{Guid.NewGuid():N}.ron");
         try
         {
-            var source = new TseHeadMorph("None", [],
+            var source = new HeadMorphPayload("None", [],
                 new MorphFaceMorphData([], [], [[Vector3.Zero]]),
                 new MorphFaceMaterialData([], [], []));
             TseHeadMorphRon.Write(sourcePath, source);
@@ -114,7 +114,7 @@ internal static class RonStressTests
         var temporaryPath = Path.Combine(Path.GetTempPath(), $"MFE-RonAttachment-{Guid.NewGuid():N}.ron");
         try
         {
-            var source = new TseHeadMorph("None", [], new MorphFaceMorphData([], [], [[Vector3.Zero]]),
+            var source = new HeadMorphPayload("None", [], new MorphFaceMorphData([], [], [[Vector3.Zero]]),
                 new MorphFaceMaterialData([], [],
                     [new TextureMaterialOverride("Diffuseuse", null),
                      new TextureMaterialOverride("HED_Diff", null)]));
@@ -151,7 +151,7 @@ internal static class RonStressTests
         var scalp = new TextureMaterialOverride("HED_Scalp_Diff", null);
         var original = new MorphFaceMaterialData([], [], [scalp, hair]);
         var headOnly = original with { Textures = [scalp] };
-        var morph = new TseHeadMorph("None", [], new MorphFaceMorphData([], [], [[Vector3.Zero]]), headOnly);
+        var morph = new HeadMorphPayload("None", [], new MorphFaceMorphData([], [], [[Vector3.Zero]]), headOnly);
         try
         {
             TseHeadMorphRon.Write(path, morph);

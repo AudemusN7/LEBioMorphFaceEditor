@@ -44,15 +44,16 @@ internal static partial class QaCases
         c.Current.Evidence["inputClassification"] = new { original.Game, original.Sex, original.HasHeadMorph };
         await c.WarmGame(original.Game);
         var ron = c.Artifact("career-input.ron");
-        if (original.HasHeadMorph) original.ExportHeadRon(ron);
-        else new MorphFacePackageContextService().ExportPlayerDefaultsRon(original.Game, original.Sex, ron);
+        var head = original.HasHeadMorph ? original.Head :
+            new MorphFacePackageContextService().CapturePlayerDefaultHead(original.Game, original.Sex);
         var registry = await c.Textures.ReadAsync(original.Game);
         if (!registry.IsAvailable) throw new QaPrerequisiteException("PCSAV journey requires a Ready asset database.");
-        var assets = StandalonePlayerAssetCatalog.ForRon(original.Game, ron, registry.Candidates, attachmentMeshes: registry.AttachmentMeshes);
+        var assets = StandalonePlayerAssetCatalog.ForHead(original.Game, head, registry.Candidates, attachmentMeshes: registry.AttachmentMeshes);
         // The editing projection may omit missing attachments; native bytes stay in the career workspace.
-        if (original.HasHeadMorph) original.PrepareEditingRon(ron, assets);
+        if (original.HasHeadMorph) head = original.PrepareEditingHead(assets, out _);
+        TseHeadMorphRon.Write(ron, head);
         using var imported = await c.Measure("PCSAV head to Player workspace", () => Task.Run(() =>
-            new StandalonePlayerMorphImportService().ImportPlayerRon(original.Game, ron, "QaCareer", assets)), QaStageKind.FileTransfer);
+            new StandalonePlayerMorphImportService().ImportPlayerHead(original.Game, head, "QaCareer", assets)), QaStageKind.FileTransfer);
         var preview = await c.Load(imported.Workspace.WorkingPath, imported.ImportedFacePath, MorphFaceGeometryMode.RelativeBake);
         using var scope = await c.Editor(preview, imported.Workspace.WorkingPath, player: true);
         original.SetEditingBaseline(scope.Editor.CreateDraft());
@@ -62,12 +63,12 @@ internal static partial class QaCases
         QaContext.Require(!MorphFaceEditorStateComparer.Equals(before, draft), "PCSAV randomisation changed nothing.");
         var saved = await c.Save(draft, imported.Workspace.WorkingPath, "career-edited.pcc");
         var editedRon = c.Artifact("career-edited.ron");
-        new MorphFacePackageContextService().ExportRon(saved.PackagePath, saved.FaceInstancedPath, editedRon);
-        await c.Measure("Save edited PCSAV", () => Task.Run(() => original.SaveEditedRon(editedRon)), QaStageKind.FileTransfer);
+        var edited = new MorphFacePackageContextService().CaptureHead(saved.PackagePath, saved.FaceInstancedPath);
+        TseHeadMorphRon.Write(editedRon, edited);
+        await c.Measure("Save edited PCSAV", () => Task.Run(() => original.SaveEditedHead(edited)), QaStageKind.FileTransfer);
         var reopened = PcsavHeadMorphWorkspace.Open(copy);
         QaContext.Require(reopened.HasHeadMorph && original.UnrelatedPrefix.SequenceEqual(reopened.UnrelatedPrefix) &&
             original.UnrelatedSuffix.SequenceEqual(reopened.UnrelatedSuffix), "PCSAV save changed unrelated career data.");
-        var edited = TseHeadMorphRon.Read(editedRon);
         var differences = QaHeadPayload.GeometryDifferences(edited.MorphData, reopened.Head.MorphData, compareNameOrder: false);
         QaContext.Require(differences.Count == 0, "PCSAV edited head differs: " + string.Join("; ", differences));
         if (original.HasHeadMorph)
@@ -88,7 +89,7 @@ internal static partial class QaCases
                 "PCSAV lost edited texture " + value.Name);
         VerifyPlayerOutput(c, reopened.Head, original.HasHeadMorph ? original.Head : null);
         var outputRon = c.Artifact("career-reopened.ron");
-        reopened.ExportHeadRon(outputRon);
+        TseHeadMorphRon.Write(outputRon, reopened.Head);
         RequireHead(reopened.Head, TseHeadMorphRon.Read(outputRon), "PCSAV RON export");
         var canReplaceFullHead = true;
         try { new PlayerRuntimeAssetValidator().Verify(original.Game, reopened.Head); }
@@ -138,13 +139,13 @@ internal static partial class QaCases
             UnrelatedBytesPreserved = true, FullRonReplacement = true };
     }
 
-    private static TseHeadMorph ToHead(MorphFaceDocument draft) => new(draft.HairMeshReference?.InstancedPath ?? "None",
+    private static HeadMorphPayload ToHead(MorphFaceDocument draft) => new(draft.HairMeshReference?.InstancedPath ?? "None",
         draft.OtherMeshReferences.OfType<AssetIdentity>().Select(value => value.InstancedPath).ToArray(),
         new(draft.MorphFeatures, draft.FinalSkeleton, draft.BakedLods),
         new(draft.MaterialOverrides.Scalars, draft.MaterialOverrides.Vectors, draft.MaterialOverrides.Textures
             .Where(value => !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(value.Name)).ToArray()));
 
-    private static void RequireHead(TseHeadMorph expected, TseHeadMorph actual, string purpose)
+    private static void RequireHead(HeadMorphPayload expected, HeadMorphPayload actual, string purpose)
     {
         var differences = QaHeadPayload.GeometryDifferences(expected.MorphData, actual.MorphData).ToList();
         if (!string.Equals(expected.HairMesh, actual.HairMesh, StringComparison.OrdinalIgnoreCase)) differences.Add("hair identity differs");

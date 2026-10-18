@@ -6,7 +6,7 @@ namespace MorphFaceEditor.LegendaryExplorer;
 /// <summary>Apply only authored changes from MFE's workspace projection to the complete native head.</summary>
 internal static class PcsavHeadMorphMerge
 {
-    internal static TseHeadMorph ApplyChanges(TseHeadMorph original, TseHeadMorph baseline, TseHeadMorph edited)
+    internal static HeadMorphPayload ApplyChanges(HeadMorphPayload original, HeadMorphPayload baseline, HeadMorphPayload edited)
     {
         var lods = Enumerable.Range(0, Math.Max(original.MorphData.BakedLods.Count, edited.MorphData.BakedLods.Count))
             .Select(i => (baseline.MorphData.BakedLods.ElementAtOrDefault(i) ?? [])

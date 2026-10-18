@@ -28,9 +28,9 @@ public sealed class PcsavHeadMorphWorkspace
     private readonly int _headStart;
     private readonly int _headEnd;
     private readonly int _blockSize;
-    private readonly TseHeadMorph? _head;
-    private TseHeadMorph? _editingBaseline;
-    private TseHeadMorph? _importedHead;
+    private readonly HeadMorphPayload? _head;
+    private HeadMorphPayload? _editingBaseline;
+    private HeadMorphPayload? _importedHead;
 
     private PcsavHeadMorphWorkspace(string path, byte[] bytes)
     {
@@ -84,7 +84,7 @@ public sealed class PcsavHeadMorphWorkspace
     public StandalonePlayerSex Sex { get; }
     public string FirstName { get; }
     public bool HasHeadMorph => _head is not null;
-    internal TseHeadMorph Head => _head ?? throw new PcsavException(PcsavError.MissingHeadMorph);
+    public HeadMorphPayload Head => _head ?? throw new PcsavException(PcsavError.MissingHeadMorph);
     internal ReadOnlySpan<byte> UnrelatedPrefix => _payload.AsSpan(0, _headStart);
     internal ReadOnlySpan<byte> UnrelatedSuffix => _payload.AsSpan(_headEnd);
 
@@ -101,25 +101,31 @@ public sealed class PcsavHeadMorphWorkspace
         { throw new PcsavException(PcsavError.InvalidFile, e); }
     }
 
-    public void ExportHeadRon(string destination) => TseHeadMorphRon.Write(destination, Head);
-
-    public int PrepareEditingRon(string destination, StandalonePlayerAssetCatalog assets)
+    public HeadMorphPayload PrepareEditingHead(StandalonePlayerAssetCatalog assets,
+        out IReadOnlyList<UserFacingMessage> unavailableAttachments)
     {
-        if (_head is null) return 0;
-        bool Available(string path) => path.Equals("None", StringComparison.OrdinalIgnoreCase) ||
-            assets.SkeletalMeshes.Any(v => v.InstancedPath.Equals(path, StringComparison.OrdinalIgnoreCase) && File.Exists(v.PackagePath));
-        var hair = Available(_head.HairMesh) ? _head.HairMesh : "None";
-        var accessories = _head.AccessoryMeshes.Where(Available).ToArray();
-        TseHeadMorphRon.Write(destination, _head with { HairMesh = hair, AccessoryMeshes = accessories });
-        return (hair == _head.HairMesh ? 0 : 1) + _head.AccessoryMeshes.Count - accessories.Length;
+        var head = Head;
+        var missing = new List<UserFacingMessage>();
+        string? PreviewMesh(string path, string messageKey)
+        {
+            if (path.Equals("None", StringComparison.OrdinalIgnoreCase) || assets.SkeletalMeshes.Any(v =>
+                v.InstancedPath.Equals(path, StringComparison.OrdinalIgnoreCase) && File.Exists(v.PackagePath))) return path;
+            missing.Add(UserFacingMessage.Create(messageKey, path));
+            return null;
+        }
+        var hair = PreviewMesh(head.HairMesh, "loc_Pcsav_UnavailableHair") ?? "None";
+        var accessories = head.AccessoryMeshes.Select(path => PreviewMesh(path, "loc_Pcsav_UnavailableAccessory"))
+            .OfType<string>().ToArray();
+        unavailableAttachments = missing;
+        return head with { HairMesh = hair, AccessoryMeshes = accessories, MaterialData = head.MaterialData with
+            { Textures = head.MaterialData.Textures.Where(v => !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(v.Name)).ToArray() } };
     }
 
     /// <summary>Capture MFE's projection once so unavailable assets/controls do not erase native data on save.</summary>
-    public void SetEditingBaseline(string ronPath) => _editingBaseline = TseHeadMorphRon.Read(ronPath);
+    public void SetEditingBaseline(HeadMorphPayload head) => _editingBaseline = head;
 
-    public void SetImportedHead(string ronPath, MorphFaceDocument draft)
+    public void SetImportedHead(HeadMorphPayload head, MorphFaceDocument draft)
     {
-        var head = TseHeadMorphRon.Read(ronPath);
         if (!string.Equals(head.HairMesh, (_importedHead ?? _head)?.HairMesh, StringComparison.OrdinalIgnoreCase))
             head = head with { MaterialData = head.MaterialData with { Textures = head.MaterialData.Textures
                 .Where(v => !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(v.Name)).ToArray() } };
@@ -134,10 +140,9 @@ public sealed class PcsavHeadMorphWorkspace
         new(draft.MaterialOverrides.Scalars, draft.MaterialOverrides.Vectors,
             draft.MaterialOverrides.Textures.Where(v => !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(v.Name)).ToArray()));
 
-    public void SaveEditedRon(string ronPath, string? destination = null)
+    public void SaveEditedHead(HeadMorphPayload edited, string? destination = null)
     {
         var baseline = _editingBaseline ?? throw new InvalidOperationException("No editing baseline was captured.");
-        var edited = TseHeadMorphRon.Read(ronPath);
         var merged = PcsavHeadMorphMerge.ApplyChanges(_importedHead ?? _head ?? baseline, baseline, edited);
         // Native references omitted from the editing projection remain authoritative.
         // A full replacement or newly created head must prove every runtime reference.
@@ -147,7 +152,7 @@ public sealed class PcsavHeadMorphWorkspace
 
     public void DeleteHeadMorph() => Commit(ReplaceHead(null), null);
 
-    private void Commit(byte[] bytes, TseHeadMorph? head, string? destination = null)
+    private void Commit(byte[] bytes, HeadMorphPayload? head, string? destination = null)
     {
         var target = Path.GetFullPath(destination ?? SourcePath);
         var savingSource = target.Equals(SourcePath, StringComparison.OrdinalIgnoreCase);
@@ -175,7 +180,7 @@ public sealed class PcsavHeadMorphWorkspace
         finally { if (File.Exists(candidatePath)) File.Delete(candidatePath); }
     }
 
-    internal byte[] ReplaceHead(TseHeadMorph? head)
+    internal byte[] ReplaceHead(HeadMorphPayload? head)
     {
         if (head is null && _head is null || head is not null && _head is not null &&
             UnrealHeadMorphBinaryCodec.Write(head).AsSpan().SequenceEqual(UnrealHeadMorphBinaryCodec.Write(_head)))

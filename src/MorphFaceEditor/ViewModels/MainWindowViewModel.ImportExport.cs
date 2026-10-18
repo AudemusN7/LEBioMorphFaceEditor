@@ -491,13 +491,13 @@ public sealed partial class MainWindowViewModel
     }
 
     private async Task ImportStandaloneMorphAsync(string sourcePath, MorphFaceGame game, bool newPlayerMode = false,
-        PcsavHeadMorphWorkspace? career = null)
+        PcsavHeadMorphWorkspace? career = null, HeadMorphPayload? playerHead = null)
     {
         var extension = Path.GetExtension(sourcePath).ToLowerInvariant();
-        var isRon = extension == ".ron";
+        var isPlayerHead = playerHead is not null || extension == ".ron";
         var isLegacy = extension is ".me2headmorph" or ".me3headmorph";
         var isMesh = extension is ".psk" or ".pskx" or ".gltf" or ".glb";
-        if (!isRon && !isLegacy && !isMesh)
+        if (!isPlayerHead && !isLegacy && !isMesh)
         {
             ErrorMessage = Loc.Text("loc_Shell_Error_StandaloneImportSupportedFormats");
             Status = Loc.Text("loc_Shell_Status_StandaloneImportRequiresASupported");
@@ -568,7 +568,7 @@ public sealed partial class MainWindowViewModel
         ErrorMessage = null;
         Status = career is not null ? Loc.Text("loc_Pcsav_Reading") :
             Loc.Format("loc_Shell_Status_ImportingAsAStandalonePlayer", Path.GetFileName(sourcePath), game);
-        var unavailableCareerAttachments = 0;
+        IReadOnlyList<UserFacingMessage> unavailableCareerAttachments = [];
         try
         {
             if (meshAnalysis is { Recognition: null })
@@ -580,14 +580,15 @@ public sealed partial class MainWindowViewModel
             }
 
             StandalonePlayerAssetCatalog? assetCatalog = null;
-            if (isRon)
+            if (isPlayerHead)
             {
+                playerHead ??= await Task.Run(() => TseHeadMorphRon.Read(sourcePath));
                 var textureCatalog = await _referenceService.ReadTextureCatalogAsync(game);
                 if (textureCatalog.IsAvailable)
                 {
-                    assetCatalog = await Task.Run(() => StandalonePlayerAssetCatalog.ForRon(
+                    assetCatalog = await Task.Run(() => StandalonePlayerAssetCatalog.ForHead(
                         game,
-                        sourcePath,
+                        playerHead,
                         textureCatalog.Candidates,
                         attachmentMeshes: textureCatalog.AttachmentMeshes));
                 }
@@ -597,8 +598,9 @@ public sealed partial class MainWindowViewModel
                 }
                 if (career is not null)
                 {
-                    assetCatalog ??= await Task.Run(() => StandalonePlayerAssetCatalog.ForRon(game, sourcePath, []));
-                    unavailableCareerAttachments = await Task.Run(() => career.PrepareEditingRon(sourcePath, assetCatalog));
+                    assetCatalog ??= await Task.Run(() => StandalonePlayerAssetCatalog.ForHead(game, playerHead, []));
+                    playerHead = await Task.Run(() => career.HasHeadMorph
+                        ? career.PrepareEditingHead(assetCatalog, out unavailableCareerAttachments) : playerHead);
                 }
             }
 
@@ -609,10 +611,10 @@ public sealed partial class MainWindowViewModel
             {
                 var workspace = _packageWorkspace!;
                 MorphFaceSaveResult saveResult;
-                if (isRon)
+                if (isPlayerHead)
                 {
-                    saveResult = await Task.Run(() => _standaloneImportService.ImportPlayerRonIntoWorkspace(
-                        game, sourcePath, objectName, workspace, assetCatalog));
+                    saveResult = await Task.Run(() => _standaloneImportService.ImportPlayerHeadIntoWorkspace(
+                        game, playerHead!, objectName, workspace, assetCatalog));
                 }
                 else if (isLegacy)
                 {
@@ -629,10 +631,10 @@ public sealed partial class MainWindowViewModel
                 importedFacePath = saveResult.FaceInstancedPath;
                 importWarnings = UserFacingMessageFormatter.FormatWarnings(saveResult);
             }
-            else if (isRon)
+            else if (isPlayerHead)
             {
-                var result = await Task.Run(() => _standaloneImportService.ImportPlayerRon(
-                    game, sourcePath, objectName, assetCatalog));
+                var result = await Task.Run(() => _standaloneImportService.ImportPlayerHead(
+                    game, playerHead!, objectName, assetCatalog));
                 if (career is not null)
                 {
                     try
@@ -693,9 +695,9 @@ public sealed partial class MainWindowViewModel
             _standaloneImportPath = Path.GetFullPath(career?.SourcePath ?? sourcePath);
             LogWorkspaceCreated(newPlayerMode ? "NEW-PLAYER" : "PLAYER", game,
                 career?.SourcePath ?? sourcePath, _packageWorkspace!.SourcePath, append: appendingToCurrentGame);
-            if (isRon)
+            if (isPlayerHead)
             {
-                // A classified Player RON's LOD0 array is ordered for the exact
+                // A classified Player head's LOD0 array is ordered for the exact
                 // selected-game HMM/HMF template. Its authored bake therefore
                 // supports canonical target deltas without inverse fitting.
                 _relativeBakeFacePaths.Add(importedFacePath);
@@ -708,7 +710,7 @@ public sealed partial class MainWindowViewModel
             }
             if (!appendingToCurrentGame) _hasWorkspaceChanges = career is { HasHeadMorph: false };
             TrackSourceFile(career?.SourcePath ?? sourcePath, importedFacePath,
-                career is not null ? SourceFileFormat.Pcsav : isRon ? SourceFileFormat.MorphRon :
+                career is not null ? SourceFileFormat.Pcsav : isPlayerHead ? SourceFileFormat.MorphRon :
                 isMesh ? SourceFileFormat.Mesh : SourceFileFormat.LegacyMorph);
             OnPropertyChanged(nameof(PackageName));
             OnPropertyChanged(nameof(PackageDisplayName));
@@ -729,7 +731,7 @@ public sealed partial class MainWindowViewModel
                     Loc.Text("loc_Shell_DialogTitle_PlayerMorphImportedWithWarnings"),
                     AppendDatabaseImportGuidance(Loc.Format("loc_Shell_Dialog_PlayerMorphImportWarnings", string.Join("\n- ", importWarnings))));
             }
-            else if (isRon)
+            else if (isPlayerHead)
             {
                 Status = Loc.Format("loc_Shell_Status_ImportedAsCanonicalPlayerReady", importedFacePath, game);
             }
@@ -739,9 +741,10 @@ public sealed partial class MainWindowViewModel
                     meshRecognition.Sex, meshRecognition.CoordinateSystem);
             }
             if (career is not null && Editor is not null) career.SetEditingBaseline(Editor.CreateDraft());
-            if (unavailableCareerAttachments > 0 && Editor is not null)
+            if (unavailableCareerAttachments.Count > 0 && Editor is not null)
                 _dialogs.ShowInformation(Loc.Text("loc_Shell_DialogTitle_PlayerMorphImportedWithWarnings"),
-                    Loc.Format("loc_Pcsav_UnavailableAttachments", unavailableCareerAttachments));
+                    Loc.Format("loc_Pcsav_UnavailableAttachments", unavailableCareerAttachments.Count) + "\n\n" +
+                    string.Join("\n", unavailableCareerAttachments.Select(UserFacingMessageFormatter.Format)));
         }
         catch (Exception exception)
         {

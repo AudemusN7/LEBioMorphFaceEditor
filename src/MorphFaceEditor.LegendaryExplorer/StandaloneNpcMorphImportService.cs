@@ -12,7 +12,7 @@ public sealed record StandaloneNpcMorphImportRequest(
     MorphFaceGame SourceGame,
     MorphFaceGame TargetGame,
     string Archetype,
-    string RonPath,
+    HeadMorphPayload Head,
     string DonorPackagePath,
     string DonorFacePath,
     string ObjectName,
@@ -68,7 +68,7 @@ public sealed class StandaloneNpcMorphImportService
             "ALN", "ASA", "BAT", "HMM", "HMF", "KRO", "SAL", "TUR", "TUF"
         };
 
-    public StandaloneNpcMorphImportResult ImportNpcRon(
+    public StandaloneNpcMorphImportResult ImportNpcHead(
         StandaloneNpcMorphImportRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -78,7 +78,7 @@ public sealed class StandaloneNpcMorphImportService
         var donorPackagePath = Path.GetFullPath(request.DonorPackagePath);
         ValidateDonor(donorPackagePath, request.TargetGame, request.DonorFacePath);
         request.CancellationToken.ThrowIfCancellationRequested();
-        var ron = ReadRon(request.RonPath);
+        var ron = request.Head;
         var donorMorph = new MorphFacePackageContextService().CaptureMorphData(
             donorPackagePath,
             request.DonorFacePath);
@@ -94,11 +94,11 @@ public sealed class StandaloneNpcMorphImportService
         try
         {
             request.CancellationToken.ThrowIfCancellationRequested();
-            var saveResult = new MorphFacePackageContextService().ImportStandaloneNpcRon(
+            var saveResult = new MorphFacePackageContextService().ImportStandaloneNpcHead(
                 workspace.WorkingPath,
                 request.DonorFacePath,
                 request.ObjectName,
-                Path.GetFullPath(request.RonPath),
+                ron,
                 request.SourceGame,
                 request.TargetGame,
                 $"{request.SourceGame.ToString().ToLowerInvariant()}-{request.Archetype.ToLowerInvariant()}",
@@ -148,7 +148,7 @@ public sealed class StandaloneNpcMorphImportService
                 $"'{request.Archetype}' is not a supported standalone NPC archetype.");
         }
 
-        ArgumentException.ThrowIfNullOrWhiteSpace(request.RonPath);
+        ArgumentNullException.ThrowIfNull(request.Head);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.DonorPackagePath);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.DonorFacePath);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.ObjectName);
@@ -200,20 +200,6 @@ public sealed class StandaloneNpcMorphImportService
             throw new InvalidDataException(
                 $"Native NPC donor face '{donorFacePath}' was not found in '{donorPackagePath}'.");
         }
-    }
-
-    private static HeadMorphPayload ReadRon(string ronPath)
-    {
-        var path = Path.GetFullPath(ronPath);
-        if (!File.Exists(path))
-        {
-            throw new FileNotFoundException("The NPC RON file was not found.", path);
-        }
-        if (!Path.GetExtension(path).Equals(".ron", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidDataException("Standalone NPC import accepts .ron files only.");
-        }
-        return TseHeadMorphRon.Read(path);
     }
 
     private static IReadOnlyList<string> ValidateLodVertexCounts(

@@ -70,10 +70,13 @@ public sealed class MeshMaterialFileService(PackageReferenceService references)
             .Select(AttachmentPath).ToArray(), game?.ToString(), game is { } targetGame ? InferDefaultFace(workspace, targetGame) : null);
     }
 
-    public async Task<PreparedMeshMaterialImport> PrepareAsync(string text, bool tse,
+    public Task<PreparedMeshMaterialImport> PrepareAsync(string text, bool tse,
+        CustomMaterialWorkspace workspace, IReadOnlyList<CustomMaterialAssignmentOption> options, MorphFaceGame game) =>
+        PrepareAsync(RonInputSnapshot.Parse(text), tse, workspace, options, game);
+
+    public async Task<PreparedMeshMaterialImport> PrepareAsync(RonInputSnapshot input, bool tse,
         CustomMaterialWorkspace workspace, IReadOnlyList<CustomMaterialAssignmentOption> options, MorphFaceGame game)
     {
-        var input = RonInputSnapshot.Parse(text);
         IReadOnlyDictionary<int, CustomMaterialAssignmentOption>? assignments = null;
         MorphFaceMaterialData parameters;
         var isTse = tse || !input.Root.ContainsKey("format");

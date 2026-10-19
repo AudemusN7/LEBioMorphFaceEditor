@@ -24,10 +24,10 @@ public sealed partial class MainWindowViewModel
         return Convert.ToHexString(SHA256.HashData(stream));
     }
 
-    private void TrackSourceFile(string path, string facePath, SourceFileFormat format)
+    private void TrackSourceFile(string path, string facePath, SourceFileFormat format, string? fingerprint = null)
     {
         var fullPath = Path.GetFullPath(path);
-        _sourceFile = new(fullPath, facePath, format, FileFingerprint(fullPath));
+        _sourceFile = new(fullPath, facePath, format, fingerprint ?? FileFingerprint(fullPath));
         OnDirtyStateChanged();
     }
 

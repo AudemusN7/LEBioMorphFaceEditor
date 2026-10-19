@@ -46,11 +46,10 @@ public static class FaceMaterialFileService
     /// Reads an MFE material document or a full tagged MFE/LEX head RON. An
     /// untagged TSE head is accepted only for the Player route.
     /// </summary>
-    public static PreparedImport Read(string text, bool allowTse)
-    {
-        ArgumentNullException.ThrowIfNull(text);
+    public static PreparedImport Read(string text, bool allowTse) => Read(RonInputSnapshot.Parse(text), allowTse);
 
-        var input = RonInputSnapshot.Parse(text);
+    public static PreparedImport Read(RonInputSnapshot input, bool allowTse)
+    {
         var attachments = MaterialRonCodec.ReadAttachmentReferences(input);
         if (input.Root.ContainsKey("format"))
         {

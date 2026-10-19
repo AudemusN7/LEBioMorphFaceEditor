@@ -2734,11 +2734,11 @@ public static class PackageContextTests
                 });
                 var expectedMorph = service.CaptureMorphData(path, facePath);
 
-                var result = service.ImportStandaloneNpcRon(
+                var result = service.ImportStandaloneNpcHead(
                     path,
                     facePath,
                     "MFE_Npc_UnresolvedHair",
-                    ronPath,
+                    TseHeadMorphRon.Read(ronPath),
                     game,
                     game,
                     $"{game.ToString().ToLowerInvariant()}-hmm",
@@ -2966,12 +2966,12 @@ public static class PackageContextTests
                 var expectedMorph = context.CaptureMorphData(donorPath, donor.InstancedPath);
                 var expectedMaterial = context.CaptureMaterialData(donorPath, donor.InstancedPath);
 
-                using var imported = new StandaloneNpcMorphImportService().ImportNpcRon(
+                using var imported = new StandaloneNpcMorphImportService().ImportNpcHead(
                     new StandaloneNpcMorphImportRequest(
                         MorphFaceGame.LE2,
                         MorphFaceGame.LE2,
                         "HMM",
-                        ronPath,
+                        TseHeadMorphRon.Read(ronPath),
                         donorPath,
                         donor.InstancedPath,
                         "MFE_Npc_HMM",
@@ -3070,12 +3070,12 @@ public static class PackageContextTests
                 var cancelled = false;
                 try
                 {
-                    _ = new StandaloneNpcMorphImportService().ImportNpcRon(
+                    _ = new StandaloneNpcMorphImportService().ImportNpcHead(
                         new StandaloneNpcMorphImportRequest(
                             MorphFaceGame.LE2,
                             MorphFaceGame.LE2,
                             "HMM",
-                            ronPath,
+                            TseHeadMorphRon.Read(ronPath),
                             donorPath,
                             donor.InstancedPath,
                             "MFE_Cancelled_Npc",
@@ -3149,12 +3149,12 @@ public static class PackageContextTests
                 var assets = StandalonePlayerAssetCatalog.ForRon(
                     targetGame, ronPath, targetCatalog.Candidates, nativeDonor.PackagePath);
 
-                using var imported = new StandaloneNpcMorphImportService().ImportNpcRon(
+                using var imported = new StandaloneNpcMorphImportService().ImportNpcHead(
                     new StandaloneNpcMorphImportRequest(
                         sourceGame,
                         targetGame,
                         archetype,
-                        ronPath,
+                        TseHeadMorphRon.Read(ronPath),
                         nativeDonor.PackagePath,
                         nativeDonor.FacePath,
                         $"MFE_Npc_CrossGame_{archetype}",
@@ -3212,12 +3212,12 @@ public static class PackageContextTests
                 var rejected = false;
                 try
                 {
-                    _ = new StandaloneNpcMorphImportService().ImportNpcRon(
+                    _ = new StandaloneNpcMorphImportService().ImportNpcHead(
                         new StandaloneNpcMorphImportRequest(
                             MorphFaceGame.LE3,
                             MorphFaceGame.LE2,
                             "HMM",
-                            ronPath,
+                            TseHeadMorphRon.Read(ronPath),
                             donorPath,
                             donor.InstancedPath,
                             "MFE_Invalid_Npc"));

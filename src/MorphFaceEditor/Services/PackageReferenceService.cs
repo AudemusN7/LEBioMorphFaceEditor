@@ -61,7 +61,11 @@ public sealed class PackageReferenceService(
         CancellationToken cancellationToken = default) => Task.Run(() =>
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var inventory = PackageAssetInspector.Inventory(packagePath, ["Texture2D", "SkeletalMesh"]);
+        return CreateCatalog(PackageAssetInspector.Inventory(packagePath, ["Texture2D", "SkeletalMesh"]));
+    }, cancellationToken);
+
+    internal PackageReferenceCatalog CreateCatalog(PackageInventory inventory)
+    {
         PackageAssetListItem[] Select(string className) => inventory.Entries
             .Where(entry => !entry.IsDefaultObject &&
                             string.Equals(entry.ClassName, className, StringComparison.OrdinalIgnoreCase) &&
@@ -84,7 +88,7 @@ public sealed class PackageReferenceService(
                 cancellationToken));
         }
         return new PackageReferenceCatalog(textures, Select("SkeletalMesh"));
-    }, cancellationToken);
+    }
 
     private Task<System.Windows.Media.ImageSource> LoadTextureThumbnailAsync(
         string packagePath,

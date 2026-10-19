@@ -27,6 +27,11 @@ public static class MorphFaceReferenceInspector
         }
 
         using var package = MEPackageHandler.OpenMEPackage(fullPath, forceLoadFromDisk: true);
+        return Inspect(package, out game);
+    }
+
+    internal static IReadOnlyList<MorphFaceMeshReferences> Inspect(IMEPackage package, out MorphFaceGame game)
+    {
         game = package.Game switch
         {
             MEGame.LE1 => MorphFaceGame.LE1,
@@ -42,7 +47,7 @@ public static class MorphFaceReferenceInspector
             {
                 var properties = export.GetProperties();
                 return new MorphFaceMeshReferences(
-                    fullPath,
+                    package.FilePath,
                     packageGame,
                     export.UIndex,
                     export.InstancedFullPath,

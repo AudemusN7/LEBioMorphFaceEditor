@@ -77,8 +77,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private MorphFaceGame? _standaloneGame;
     private bool _isStandaloneNpcWorkspace;
     private ImportedMeshAsset? _detachedMeshSource;
-    private readonly HashSet<string> _fixedBakeFacePaths = new(StringComparer.OrdinalIgnoreCase);
-    private readonly HashSet<string> _relativeBakeFacePaths = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, MorphFaceGeometryMode> _faceGeometryModes = new(StringComparer.OrdinalIgnoreCase);
     private bool _hasWorkspaceChanges;
     private CancellationTokenSource? _loadCancellation;
     private CancellationTokenSource? _npcImportCancellation;
@@ -794,10 +793,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _standaloneGame = standaloneGame;
         _isStandaloneNpcWorkspace = standaloneNpc;
         SetDetachedMeshSource(null);
-        _fixedBakeFacePaths.Clear();
-        _relativeBakeFacePaths.Clear();
+        _faceGeometryModes.Clear();
         _showsImportedFacesOnly = singleFace;
-        if (singleFace && preferredFacePath is not null) _relativeBakeFacePaths.Add(preferredFacePath);
+        if (singleFace && preferredFacePath is not null) _faceGeometryModes[preferredFacePath] = MorphFaceGeometryMode.RelativeBake;
         _hasWorkspaceChanges = false;
         PackagePath = workspace.SourcePath;
         OnDirtyStateChanged();
@@ -841,12 +839,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 _standaloneGame,
                 _packageWorkspace?.SourcePath,
                 _isStandaloneNpcWorkspace);
-            var catalogTask = _catalogService.ReadAsync(workspacePath, catalogProjection);
-            var referencesTask = _referenceService.ReadCatalogAsync(workspacePath);
-            await Task.WhenAll(catalogTask, referencesTask);
-            var catalog = await catalogTask;
+            var preparation = await _catalogService.ReadWorkspaceAsync(workspacePath, _referenceService, catalogProjection);
+            var catalog = preparation.Faces;
             _workspaceLogGame = catalog.Game;
-            _referenceCatalog = await referencesTask;
+            _referenceCatalog = preparation.References;
             if (clearSearch)
             {
                 FaceSearchText = string.Empty;
@@ -854,8 +850,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             Faces.Clear();
             foreach (var face in catalog.Faces)
             {
-                if (_showsImportedFacesOnly && !_relativeBakeFacePaths.Contains(face.InstancedPath) &&
-                    !_fixedBakeFacePaths.Contains(face.InstancedPath)) continue;
+                if (_showsImportedFacesOnly && !_faceGeometryModes.ContainsKey(face.InstancedPath)) continue;
                 if (_pcsavWorkspace is not null && face.InstancedPath != _sourceFile?.FacePath) continue;
                 Faces.Add(face);
             }
@@ -932,11 +927,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 workspacePath,
                 SelectedFace.UIndex.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 cancellationToken,
-                _relativeBakeFacePaths.Contains(SelectedFace.InstancedPath)
-                    ? MorphFaceGeometryMode.RelativeBake
-                    : _fixedBakeFacePaths.Contains(SelectedFace.InstancedPath)
-                        ? MorphFaceGeometryMode.FixedBake
-                        : null);
+                _faceGeometryModes.TryGetValue(SelectedFace.InstancedPath, out var geometryMode) ? geometryMode : null);
             cancellationToken.ThrowIfCancellationRequested();
             foreach (var warning in result.Loaded.Warnings)
             {
@@ -1889,8 +1880,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _sourceFile = null;
         _hasOtherStandaloneChanges = false;
         _isStandaloneNpcWorkspace = false;
-        _fixedBakeFacePaths.Clear();
-        _relativeBakeFacePaths.Clear();
+        _faceGeometryModes.Clear();
         _hasWorkspaceChanges = false;
         _referenceCatalog = new PackageReferenceCatalog([], []);
         _preservedOtherMeshAssets = [];

@@ -2389,18 +2389,18 @@ public static class UiSmokeTests
 
         standaloneGameField.SetValue(viewModel, MorphFaceGame.LE1);
 
-        var fixedBakePathsField = typeof(MainWindowViewModel).GetField(
-            "_fixedBakeFacePaths",
+        var geometryModesField = typeof(MainWindowViewModel).GetField(
+            "_faceGeometryModes",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
-            ?? throw new Exception("MainWindowViewModel._fixedBakeFacePaths was not found.");
-        var fixedBakePaths = (HashSet<string>?)fixedBakePathsField.GetValue(viewModel)
-                             ?? throw new Exception("MainWindowViewModel fixed-bake path set was null.");
+            ?? throw new Exception("MainWindowViewModel._faceGeometryModes was not found.");
+        var geometryModes = (Dictionary<string, MorphFaceGeometryMode>?)geometryModesField.GetValue(viewModel)
+                            ?? throw new Exception("MainWindowViewModel geometry modes were null.");
 
         TestAssert.True(!viewModel.CopyMaterialDataCommand.CanExecute(null) &&
                         !viewModel.PasteMaterialDataCommand.CanExecute(null),
             "A non-fixed-bake detached workspace exposed material clipboard commands.");
 
-        fixedBakePaths.Add(selectedFace.InstancedPath);
+        geometryModes[selectedFace.InstancedPath] = MorphFaceGeometryMode.FixedBake;
         viewModel.RefreshClipboardCommandAvailability();
 
         TestAssert.True(viewModel.CopyMaterialDataCommand.CanExecute(null),

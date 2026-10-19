@@ -54,11 +54,6 @@ public sealed class MorphFaceCatalogService
 
     public Task<MorphFaceCatalog> ReadAsync(
         string packagePath,
-        CancellationToken cancellationToken) =>
-        ReadAsync(packagePath, MorphFaceCatalogProjection.Default, cancellationToken);
-
-    public Task<MorphFaceCatalog> ReadAsync(
-        string packagePath,
         MorphFaceCatalogProjection projection = MorphFaceCatalogProjection.Default,
         CancellationToken cancellationToken = default) =>
         Task.Run(() =>
@@ -66,26 +61,44 @@ public sealed class MorphFaceCatalogService
             cancellationToken.ThrowIfCancellationRequested();
             var fullPath = Path.GetFullPath(packagePath);
             var references = MorphFaceReferenceInspector.Inspect(fullPath, out var game);
-            var faces = references
-                .Where(reference => !ShouldHide(reference, projection))
-                .Select(reference => (Reference: reference, Profile:
-                    _profiles.Find(reference.Game, reference.FacePath, reference.BaseHeadPath) ??
-                    _profiles.Find(reference.Game, reference.FacePath, null)))
-                .Select(item => new BioMorphFaceListItem(
-                    item.Reference.FaceUIndex,
-                    item.Reference.FacePath,
-                    item.Reference.FacePath.Split('.').Last(),
-                    item.Profile?.ExportTag ?? "[CUSTOM]",
-                    item.Profile?.GetExportTagColor() ?? "#66717D",
-                    item.Profile?.Key ?? "custom")
-                {
-                    SupportsMorphRonExport = RonNpcDonorResolver.SupportsMorphRonExport(item.Profile, item.Reference.BaseHeadPath)
-                })
-                .OrderBy(face => face.DisplayName, ExplorerNaturalStringComparer.Instance)
-                .ThenBy(face => face.InstancedPath, ExplorerNaturalStringComparer.Instance)
-                .ToArray();
-            return new MorphFaceCatalog(fullPath, faces) { Game = game };
+            return CreateCatalog(fullPath, game, references, projection);
         }, cancellationToken);
+
+    public Task<(MorphFaceCatalog Faces, PackageReferenceCatalog References)> ReadWorkspaceAsync(
+        string packagePath,
+        PackageReferenceService referenceService,
+        MorphFaceCatalogProjection projection = MorphFaceCatalogProjection.Default,
+        CancellationToken cancellationToken = default) => Task.Run(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var inventory = PackageAssetInspector.InventoryWorkspace(packagePath);
+            return (CreateCatalog(inventory.Assets.PackagePath, inventory.Game, inventory.Faces, projection),
+                referenceService.CreateCatalog(inventory.Assets));
+        }, cancellationToken);
+
+    private MorphFaceCatalog CreateCatalog(string fullPath, MorphFaceGame game,
+        IReadOnlyList<MorphFaceMeshReferences> references, MorphFaceCatalogProjection projection)
+    {
+        var faces = references
+            .Where(reference => !IsHiddenForProjection(reference, projection))
+            .Select(reference => (Reference: reference, Profile:
+                _profiles.Find(reference.Game, reference.FacePath, reference.BaseHeadPath) ??
+                _profiles.Find(reference.Game, reference.FacePath, null)))
+            .Select(item => new BioMorphFaceListItem(
+                item.Reference.FaceUIndex,
+                item.Reference.FacePath,
+                item.Reference.FacePath.Split('.').Last(),
+                item.Profile?.ExportTag ?? "[CUSTOM]",
+                item.Profile?.GetExportTagColor() ?? "#66717D",
+                item.Profile?.Key ?? "custom")
+            {
+                SupportsMorphRonExport = RonNpcDonorResolver.SupportsMorphRonExport(item.Profile, item.Reference.BaseHeadPath)
+            })
+            .OrderBy(face => face.DisplayName, ExplorerNaturalStringComparer.Instance)
+            .ThenBy(face => face.InstancedPath, ExplorerNaturalStringComparer.Instance)
+            .ToArray();
+        return new MorphFaceCatalog(fullPath, faces) { Game = game };
+    }
 
     /// <summary>
     /// Returns whether a discovered face belongs to the narrow LE1 Player
@@ -98,10 +111,4 @@ public sealed class MorphFaceCatalogService
         projection == MorphFaceCatalogProjection.Le1EntryMenuPlayerStaging &&
         reference.Game == MorphFaceGame.LE1 &&
         Le1EntryMenuPlayerStagingHiddenFaces.Contains(reference.FacePath);
-
-    private static bool ShouldHide(
-        MorphFaceMeshReferences reference,
-        MorphFaceCatalogProjection projection) =>
-        IsHiddenForProjection(reference, projection);
-
 }

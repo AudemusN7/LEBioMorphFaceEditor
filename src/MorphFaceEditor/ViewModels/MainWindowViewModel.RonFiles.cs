@@ -1,4 +1,5 @@
 using MorphFaceEditor.Core.Domain;
+using MorphFaceEditor.Core.Editing;
 using System.IO;
 using System.Windows.Input;
 using MorphFaceEditor.Infrastructure;
@@ -72,8 +73,7 @@ public sealed partial class MainWindowViewModel
         IsBusy = true;
         ErrorMessage = null;
         var backup = Path.Combine(Path.GetDirectoryName(workspace)!, $".MFE-RonImport-{Guid.NewGuid():N}.pcc");
-        var wasRelative = _relativeBakeFacePaths.Contains(face.InstancedPath);
-        var wasFixed = _fixedBakeFacePaths.Contains(face.InstancedPath);
+        var hadGeometryMode = _faceGeometryModes.TryGetValue(face.InstancedPath, out var previousGeometryMode);
         var refreshAttempted = false;
         try
         {
@@ -107,8 +107,7 @@ public sealed partial class MainWindowViewModel
                 IsBusy = true;
                 File.Copy(workspace, backup);
                 var result = await Task.Run(() => _packageContextService.ReplaceHead(workspace, face.InstancedPath, document.Head, player, assets));
-                _relativeBakeFacePaths.Add(face.InstancedPath);
-                _fixedBakeFacePaths.Remove(face.InstancedPath);
+                _faceGeometryModes[face.InstancedPath] = MorphFaceGeometryMode.RelativeBake;
                 refreshAttempted = true;
                 if (!await RefreshWorkspaceAsync(face.InstancedPath))
                     throw new InvalidDataException(Loc.Text("loc_RonFiles_ImportFailed"));
@@ -125,8 +124,8 @@ public sealed partial class MainWindowViewModel
             if (File.Exists(backup))
             {
                 File.Copy(backup, workspace, overwrite: true);
-                if (!wasRelative) _relativeBakeFacePaths.Remove(face.InstancedPath);
-                if (wasFixed) _fixedBakeFacePaths.Add(face.InstancedPath);
+                if (hadGeometryMode) _faceGeometryModes[face.InstancedPath] = previousGeometryMode;
+                else _faceGeometryModes.Remove(face.InstancedPath);
                 if (refreshAttempted) await RefreshWorkspaceAsync(face.InstancedPath);
             }
             AppLog.Error("RON:FACE-IMPORT-FAILED", exception);

@@ -28,11 +28,27 @@ public static class PackageAssetInspector
     {
         LegendaryExplorerCoreRuntime.Initialize();
         var fullPath = RequireFile(packagePath);
+
+        using var package = MEPackageHandler.OpenMEPackage(fullPath, forceLoadFromDisk: true);
+        return Inventory(package, classNames);
+    }
+
+    /// <summary>Reads both workspace catalogues from one fresh PCC; retains no open package or cache.</summary>
+    public static WorkspacePackageInventory InventoryWorkspace(string packagePath)
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        var fullPath = RequireFile(packagePath);
+        using var package = MEPackageHandler.OpenMEPackage(fullPath, forceLoadFromDisk: true);
+        var faces = MorphFaceReferenceInspector.Inspect(package, out var game);
+        return new(game, faces, Inventory(package, ["Texture2D", "SkeletalMesh"]));
+    }
+
+    private static PackageInventory Inventory(IMEPackage package, IEnumerable<string>? classNames)
+    {
         var classSet = classNames is null
             ? null
             : new HashSet<string>(classNames, StringComparer.OrdinalIgnoreCase);
 
-        using var package = MEPackageHandler.OpenMEPackage(fullPath, forceLoadFromDisk: true);
         var entries = package.Exports
             .Where(export => classSet is null || classSet.Contains(export.ClassName))
             .Select(export => new PackageEntrySummary(
@@ -52,9 +68,9 @@ public static class PackageAssetInspector
             .ToArray();
 
         return new PackageInventory(
-            fullPath,
+            package.FilePath,
             package.Game.ToString(),
-            PackageFingerprint.Capture(fullPath),
+            PackageFingerprint.Capture(package.FilePath),
             entries);
     }
 

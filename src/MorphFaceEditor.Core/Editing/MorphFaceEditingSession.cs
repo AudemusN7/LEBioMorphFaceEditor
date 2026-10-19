@@ -694,6 +694,52 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
     /// </summary>
     public void ApplyMorphData(MorphFaceMorphData data)
     {
+        ApplyMorphDataValues(data);
+        Refresh();
+    }
+
+    /// <summary>Use the normal edit path only when its complete output reproduces the imported bake.</summary>
+    public bool TryImportMatchingMorphData(MorphFaceMorphData data)
+    {
+        if (!CanEditMorphFeatures) return false;
+        var before = CaptureAuthoringState();
+        var previousEvaluation = Evaluation;
+        MorphFaceAuthoringState after;
+        try
+        {
+            ApplyMorphDataValues(data);
+            Evaluation = Evaluate(includeOracle: false);
+            var draft = CreateDraft(null, [], _document.MaterialOverrides);
+            if (GeometryMode == MorphFaceGeometryMode.RelativeBake && !IsEditableByRelativeBake(Evaluation) ||
+                draft.BakedLods.Count != data.BakedLods.Count ||
+                draft.BakedLods.Where((lod, index) => !DeformationComparison.Compare(
+                    new(lod, [], 0, []), data.BakedLods[index], OracleMismatchThreshold, 0).IsWithinTolerance).Any() ||
+                !draft.MorphFeatures.OrderBy(value => value.Name, StringComparer.OrdinalIgnoreCase)
+                    .SequenceEqual(data.MorphFeatures.OrderBy(value => value.Name, StringComparer.OrdinalIgnoreCase)) ||
+                draft.FinalSkeleton.Count != data.FinalSkeleton.Count ||
+                draft.FinalSkeleton.Zip(data.FinalSkeleton).Any(pair => pair.First.BoneName != pair.Second.BoneName ||
+                    !(Vector3.Distance(pair.First.Translation, pair.Second.Translation) <= OracleVerificationTolerance)))
+                return false;
+            after = CaptureAuthoringState();
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or InvalidDataException)
+        {
+            return false;
+        }
+        finally
+        {
+            RestoreAuthoringState(before);
+            Evaluation = previousEvaluation;
+        }
+        RestoreAuthoringState(after);
+        if (_history.Record(new SemanticMorphStateEdit(before, after)))
+            EditCommitted?.Invoke(this, EventArgs.Empty);
+        Refresh();
+        return true;
+    }
+
+    private void ApplyMorphDataValues(MorphFaceMorphData data)
+    {
         EnsureMorphEditable();
         ArgumentNullException.ThrowIfNull(data);
         var desiredFeatures = data.MorphFeatures.ToDictionary(
@@ -753,7 +799,6 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
             _boneOverrides[desired.BoneName] =
                 desired.Translation - composedByName[desired.BoneName].Translation;
         }
-        Refresh();
     }
 
     /// <summary>

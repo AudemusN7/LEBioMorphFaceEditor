@@ -75,6 +75,8 @@ internal static partial class QaCases
         var head = TseHeadMorphRon.Read(dialogs.RonExportPath);
         QaContext.Require(TseHeadMorphRon.IsMorphFeaturesOnly(dialogs.RonExportPath) == morphOnly,
             "Exported the wrong RON payload mode.");
+        if (!morphOnly)
+            RequireHead(ReadPackageHead(initial.Source.PackagePath, vm.SelectedFace!.InstancedPath), head, "Full RON export");
         if (c.Face.IsPlayer && !morphOnly) VerifyPlayerOutput(c, head);
         if (morphOnly)
         {
@@ -123,9 +125,15 @@ internal static partial class QaCases
                 "Restoring exported feature values did not restore their evaluated bone positions.");
             AssertMaterials(beforeImport, imported);
         }
-        else RequireHead(head, ReadPackageHead(imported.Source.PackagePath, vm.SelectedFace!.InstancedPath), "Full RON import");
+        else
+        {
+            // Matching imports are live edits. The RON owns the bone list; the initial
+            // evaluated draft can also contain calculated bones absent from the file.
+            AssertGeometry(initial with { FinalSkeleton = head.MorphData.FinalSkeleton }, imported);
+            AssertMaterials(initial, imported);
+        }
         AssertAttachments(initial, imported);
-        var expectedSaved = morphOnly ? ToHead(imported) : ReadPackageHead(imported.Source.PackagePath, vm.SelectedFace!.InstancedPath);
+        var expectedSaved = ToHead(imported);
         // A full import marks the workspace dirty even when values match its original file.
         await c.Measure("Save imported RON", () => Execute(vm.SaveCommand), QaStageKind.FileTransfer);
         CheckVm(vm);
@@ -135,13 +143,8 @@ internal static partial class QaCases
         c.Current.Evidence["ronMode"] = morphOnly ? "Morph Only" : "Full";
     }
 
-    private static HeadMorphPayload ReadPackageHead(string packagePath, string facePath)
-    {
-        var context = new MorphFacePackageContextService();
-        var references = MorphFaceReferenceInspector.Inspect(packagePath).Single(value => value.FacePath == facePath);
-        return new(references.HairMeshPath ?? "None", references.OtherMeshPaths,
-            context.CaptureMorphData(packagePath, facePath), context.CaptureMaterialData(packagePath, facePath));
-    }
+    private static HeadMorphPayload ReadPackageHead(string packagePath, string facePath) =>
+        new MorphFacePackageContextService().CaptureHead(packagePath, facePath);
 
     private static RonExportProvenance Provenance(QaFaceSpec face) =>
         new(RonExportProducer.MFE, "QA", face.Game, face.Family, face.IsPlayer);

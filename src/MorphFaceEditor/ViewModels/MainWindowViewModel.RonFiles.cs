@@ -31,7 +31,7 @@ public sealed partial class MainWindowViewModel
             if (!await EnsureSelectedFaceLoadedForMaterialsAsync() || Editor is null || SelectedFace is null || WorkspacePackagePath is null)
                 return true;
             var target = CreateRonExportProvenance(WorkspacePackagePath, SelectedFace, IsPlayerWorkspace);
-            if (target.Game != metadata.Game || target.Archetype != metadata.Archetype || target.PlayerMorph != metadata.PlayerMorph)
+            if (!MatchesRonTarget(metadata, target.Game, target.Archetype, target.PlayerMorph))
                 throw new InvalidDataException(Loc.Text("loc_RonFiles_Incompatible"));
             Editor.ApplyMorphFeatures(data);
             if (opened)
@@ -64,6 +64,11 @@ public sealed partial class MainWindowViewModel
     public ICommand ExportMorphFeaturesRonCommand => _exportMorphFeaturesRonCommand ??= new(
         () => ExportMorphRonAsync(true), () => CanExportMorphRon() && !IsAlnMorphClipboardFace(SelectedFace));
 
+    private static bool MatchesRonTarget(RonExportProvenance source, MorphFaceGame game, string archetype, bool player) =>
+        source.Game == game && source.Archetype.Equals(archetype, StringComparison.OrdinalIgnoreCase) &&
+        (source.PlayerMorph == player || player && !source.PlayerMorph &&
+            (archetype.Equals("HMM", StringComparison.OrdinalIgnoreCase) || archetype.Equals("HMF", StringComparison.OrdinalIgnoreCase)));
+
     private async Task ImportFaceRonAsync(bool featuresOnly)
     {
         if (!CanExportMorphRon() || SelectedFace is not { } face || WorkspacePackagePath is not { } workspace ||
@@ -76,34 +81,44 @@ public sealed partial class MainWindowViewModel
         var wasRelative = _relativeBakeFacePaths.Contains(face.InstancedPath);
         var wasFixed = _fixedBakeFacePaths.Contains(face.InstancedPath);
         var refreshAttempted = false;
-        var snapshot = backup + ".ron";
         try
         {
             var player = CreateRonExportProvenance(workspace, face, IsPlayerWorkspace).PlayerMorph;
-            File.Copy(path, snapshot);
             var game = ResolveMaterialFileGame();
-            var metadata = TseHeadMorphRon.ReadProvenance(snapshot);
-            if (metadata is null ? !player : metadata.Game != game || metadata.PlayerMorph != player ||
-                !metadata.Archetype.Equals(face.ProfileTag.Trim('[', ']'), StringComparison.OrdinalIgnoreCase))
+            var document = await Task.Run(() => TseHeadMorphRon.ReadDocument(path));
+            var metadata = document.Provenance;
+            if (metadata is null ? !player : !MatchesRonTarget(metadata, game, face.ProfileTag.Trim('[', ']'), player))
                 throw new InvalidDataException(Loc.Text("loc_RonFiles_Incompatible"));
-            var data = await Task.Run(() => TseHeadMorphRon.ReadMorphData(snapshot));
-            if (featuresOnly) Editor.ApplyMorphFeatures(data);
+            if (featuresOnly) Editor.ApplyMorphFeatures(document.Head.MorphData);
             else
             {
                 var catalog = await _referenceService.ReadTextureCatalogAsync(game);
-                var assets = await Task.Run(() => StandalonePlayerAssetCatalog.ForRon(game, snapshot,
+                var assets = await Task.Run(() => StandalonePlayerAssetCatalog.ForHead(game, document.Head,
                     catalog.Candidates, referencePackagePath: workspace, attachmentMeshes: catalog.AttachmentMeshes));
+                if (await Editor.TryImportMatchingHeadAsync(document.Head, assets,
+                    async () =>
+                    {
+                        if (player) await Task.Run(() => _packageContextService.VerifyPlayerRuntimeAssets(game,
+                            document.Head.MaterialData, document.Head.HairMesh, document.Head.AccessoryMeshes));
+                        foreach (var mesh in assets.SkeletalMeshes)
+                            await _referenceService.ValidateDetachedAttachmentAsync(mesh.PackagePath, mesh.InstancedPath);
+                    },
+                    draft => _pcsavWorkspace?.SetImportedHead(document.Head, draft, recordHistory: true)))
+                {
+                    Status = Loc.Format("loc_RonFiles_Imported", Path.GetFileName(path));
+                    return;
+                }
                 IsBusy = false;
                 if (Editor.IsDirty && !await FlushEditorToWorkspaceAsync()) return;
                 IsBusy = true;
                 File.Copy(workspace, backup);
-                var result = await Task.Run(() => _packageContextService.ReplaceRon(workspace, face.InstancedPath, snapshot, player, assets));
+                var result = await Task.Run(() => _packageContextService.ReplaceHead(workspace, face.InstancedPath, document.Head, player, assets));
                 _relativeBakeFacePaths.Add(face.InstancedPath);
                 _fixedBakeFacePaths.Remove(face.InstancedPath);
                 refreshAttempted = true;
                 if (!await RefreshWorkspaceAsync(face.InstancedPath))
                     throw new InvalidDataException(Loc.Text("loc_RonFiles_ImportFailed"));
-                _pcsavWorkspace?.SetImportedHead(TseHeadMorphRon.Read(snapshot), Editor!.CreateDraft());
+                _pcsavWorkspace?.SetImportedHead(document.Head, Editor!.CreateDraft());
                 _hasWorkspaceChanges = true;
                 OnDirtyStateChanged();
                 if (result.Warnings.Count > 0)
@@ -129,7 +144,6 @@ public sealed partial class MainWindowViewModel
             try
             {
                 if (File.Exists(backup)) File.Delete(backup);
-                if (File.Exists(snapshot)) File.Delete(snapshot);
             }
             finally { IsBusy = false; }
         }

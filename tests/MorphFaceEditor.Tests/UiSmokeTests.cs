@@ -64,6 +64,8 @@ public static class UiSmokeTests
         new("material RON metadata opens matching default NPC and Player faces", MaterialRonMetadataOpensDefaultFace),
         new("NPC import cancellation command cancels an active request", NpcImportCancellationCommandCancelsActiveRequest),
         new("human RON uses MFE metadata automatically and retains LEX destination choices", TaggedHumanRonFollowsDestination),
+        new("TSE and MFE material files round trip attachments as one undoable edit", FullTseMaterialImportUpdatesHair),
+        new("matching full RON import keeps the editor and prior Undo history", MatchingFullRonKeepsHistory),
         new("standalone Gibbed import rejects the wrong selected game before mutation", StandaloneGibbedRejectsWrongGame),
         new("standalone fixed-bake workspaces allow material clipboard commands", StandaloneFixedBakeMaterialClipboardCommands),
         new("ALN morph clipboard commands stay blocked before and after load", AlnMorphClipboardCommandsStayBlocked),
@@ -1474,6 +1476,21 @@ public static class UiSmokeTests
                     $"The selected {choice.Destination} route did not publish a {expectedWorkspace}.");
                 TestAssert.Equal(1, dialogs.RonImportDestinationChoiceCount);
                 AssertStandaloneFaceTransitionCapabilities(viewModel, expectedWorkspace);
+                if (choice.Destination == RonImportDestination.PlayerWorkspace)
+                {
+                    dialogs.MorphImportPath = ronPath;
+                    RunWithDispatcher(() => ((AsyncRelayCommand)viewModel.ImportMorphFaceRonCommand).ExecuteAsync());
+                    TestAssert.True(!viewModel.HasError, viewModel.ErrorMessage ?? "NPC full head could not be applied to a matching Player.");
+                    RunWithDispatcher(() => ((AsyncRelayCommand)viewModel.ImportMorphFeaturesRonCommand).ExecuteAsync());
+                    TestAssert.True(!viewModel.HasError, viewModel.ErrorMessage ?? "NPC morphs could not be applied to a matching Player.");
+                    var sourceHead = TseHeadMorphRon.Read(ronPath);
+                    TseHeadMorphRon.WriteMorphFeatures(incompatiblePath, sourceHead.MorphData,
+                        new(RonExportProducer.MFE, "0.1.0", MorphFaceGame.LE2, "HMM", false));
+                    var editorBeforeDrop = viewModel.Editor;
+                    RunWithDispatcher(() => viewModel.OpenDroppedFileAsync(incompatiblePath));
+                    TestAssert.True(!viewModel.HasError && ReferenceEquals(editorBeforeDrop, viewModel.Editor),
+                        viewModel.ErrorMessage ?? "NPC morphs-only drop did not apply to the existing Player.");
+                }
             }
 
             // Exercise the actual Player -> NPC -> Player edge on one editor, including
@@ -1596,6 +1613,203 @@ public static class UiSmokeTests
             if (File.Exists(incompatiblePath)) File.Delete(incompatiblePath);
         }
     }
+
+    private static void FullTseMaterialImportUpdatesHair() => RunWithDispatcher(async () =>
+    {
+        var catalog = new MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureCatalogService(
+            new MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureRegistryStore(
+                MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureRegistryPaths.CreateDefault()));
+        var snapshot = await catalog.ReadAsync(MorphFaceGame.LE2);
+        var donor = new RonNpcDonorResolver(MorphFaceProfileRegistry.CreateDefault())
+            .Resolve(MorphFaceGame.LE2, "HMM", snapshot.MorphFaceTemplates, snapshot.OfficialPackagePaths);
+        var path = Path.Combine(Path.GetTempPath(), $"MFE-TseHair-{Guid.NewGuid():N}.ron");
+        var mfePath = path + ".materials.ron";
+        try
+        {
+            var context = new MorphFacePackageContextService();
+            context.ExportRon(donor.PackagePath, donor.FacePath, path,
+                new RonExportProvenance(RonExportProducer.LEX, "0.1.0", MorphFaceGame.LE2, "HMM", false));
+            using var reader = new MorphFacePackageReader();
+            var dialogs = new StubEditorDialogs
+            {
+                StandaloneGameChoiceResult = MorphFaceGame.LE2,
+                StandaloneNameChoiceResult = "MFE_TseHair",
+                RonImportDestinationChoiceResult = new(RonImportDestination.PlayerWorkspace, null),
+                MaterialImportPath = path
+            };
+            using var shell = CreateMainWindowViewModel(reader, dialogs, textureCatalog: catalog);
+            await shell.OpenDroppedFileAsync(path);
+            TestAssert.True(!shell.HasError && shell.Editor is not null, shell.ErrorMessage ?? "Player setup failed.");
+            var editor = shell.Editor!;
+            var hair = editor.HairMesh.Options.First(option => option.Identity?.InstancedPath.Contains("_HIR", StringComparison.OrdinalIgnoreCase) == true).Identity!;
+            var head = TseHeadMorphRon.Read(path);
+            var scalar = editor.Material.Scalars.First();
+            var oldScalar = scalar.Value;
+            TseHeadMorphRon.Write(path, head with
+            {
+                HairMesh = TextureCatalogPicker.CanonicalPath(hair.InstancedPath, hair.PackagePath),
+                MaterialData = new([new(scalar.Name, oldScalar + 0.125f)], [], [])
+            }); // No provenance: ordinary TSE full-head RON.
+            editor.HairMesh.SetImportedPreview(null);
+            var before = editor.CreateDraft();
+            await ((AsyncRelayCommand)shell.ImportMaterialsCommand).ExecuteAsync();
+            TestAssert.True(!shell.HasError, shell.ErrorMessage ?? "TSE materials import failed.");
+            TestAssert.True(editor.HairMesh.Value is not null,
+                $"Import Materials discarded the full TSE hair mesh. Editable: {editor.CanEditAttachments}; requested: {hair}; warnings: {dialogs.LastInformation}");
+            TestAssert.Equal(TextureCatalogPicker.CanonicalPath(hair.InstancedPath, hair.PackagePath),
+                TextureCatalogPicker.CanonicalPath(editor.HairMesh.Value!.InstancedPath, editor.HairMesh.Value.PackagePath));
+            TestAssert.Near(oldScalar + 0.125f, scalar.Value, 0.00001f);
+            editor.UndoCommand.Execute(null);
+            TestAssert.True(MorphFaceEditorStateComparer.Equals(before, editor.CreateDraft()),
+                "Undo did not restore hair and materials together, or the import changed geometry.");
+            editor.RedoCommand.Execute(null);
+            TestAssert.True(editor.HairMesh.Value is not null, "Redo did not restore imported hair.");
+
+            var accessory = editor.OtherMeshes[0].Options.FirstOrDefault(option =>
+                option.Identity?.InstancedPath.Contains("_ACC", StringComparison.OrdinalIgnoreCase) == true)?.Identity ?? hair;
+            editor.OtherMeshes[0].SetImportedPreview(accessory);
+            dialogs.RonExportPath = mfePath;
+            await ((AsyncRelayCommand)shell.ExportMaterialsCommand).ExecuteAsync();
+            TestAssert.True(!shell.HasError, shell.ErrorMessage ?? "MFE material export failed.");
+            var exported = MaterialRonCodec.ReadMfe(File.ReadAllText(mfePath));
+            TestAssert.Equal(TextureCatalogPicker.CanonicalPath(hair.InstancedPath, hair.PackagePath), exported.HairMesh);
+            TestAssert.Equal(TextureCatalogPicker.CanonicalPath(accessory.InstancedPath, accessory.PackagePath), exported.AccessoryMeshes!.Single());
+            editor.HairMesh.SetImportedPreview(null);
+            editor.OtherMeshes[0].SetImportedPreview(null);
+            scalar.Value = oldScalar;
+            before = editor.CreateDraft();
+            dialogs.MaterialImportPath = mfePath;
+            await ((AsyncRelayCommand)shell.ImportMaterialsCommand).ExecuteAsync();
+            TestAssert.True(!shell.HasError && editor.HairMesh.Value is not null && editor.OtherMeshes[0].Value is not null,
+                shell.ErrorMessage ?? "MFE materials did not restore both attachment meshes.");
+            editor.UndoCommand.Execute(null);
+            TestAssert.True(MorphFaceEditorStateComparer.Equals(before, editor.CreateDraft()),
+                "MFE material import did not undo attachments and values together.");
+            editor.RedoCommand.Execute(null);
+            TestAssert.True(editor.HairMesh.Value is not null && editor.OtherMeshes[0].Value is not null,
+                "MFE material redo lost attachment meshes.");
+
+            var importedDraft = editor.CreateDraft();
+            await File.WriteAllTextAsync(mfePath, MaterialRonCodec.WriteMfe(exported with
+            { HairMesh = "BIOG_Missing.Hair", AccessoryMeshes = ["BIOG_Missing.Gear"] }));
+            await ((AsyncRelayCommand)shell.ImportMaterialsCommand).ExecuteAsync();
+            TestAssert.True(!shell.HasError && MorphFaceEditorStateComparer.Equals(importedDraft, editor.CreateDraft()) &&
+                dialogs.LastInformation?.Contains("BIOG_Missing.Hair", StringComparison.Ordinal) == true &&
+                dialogs.LastInformation.Contains("BIOG_Missing.Gear", StringComparison.Ordinal),
+                "Missing material attachment assets changed the current meshes or omitted their warning paths.");
+            await File.WriteAllTextAsync(mfePath, MaterialRonCodec.WriteMfe(exported));
+            using var reopenedReader = new MorphFacePackageReader();
+            var reopenedDialogs = new StubEditorDialogs { StandaloneNameChoiceResult = "MFE_MaterialSave" };
+            using var reopened = CreateMainWindowViewModel(reopenedReader, reopenedDialogs, textureCatalog: catalog);
+            await reopened.OpenDroppedFileAsync(mfePath);
+            TestAssert.True(!reopened.HasError && reopened.Editor?.HairMesh.Value is not null &&
+                reopened.Editor.OtherMeshes[0].Value is not null, reopened.ErrorMessage ?? "Opening MFE materials lost attachments.");
+            reopened.Editor!.HairMesh.SetImportedPreview(null);
+            reopened.Editor.OtherMeshes[0].SetImportedPreview(null);
+            await ((AsyncRelayCommand)reopened.SaveCommand).ExecuteAsync();
+            TestAssert.True(!reopened.HasError, reopened.ErrorMessage ?? "Saving MFE material source failed.");
+            var saved = MaterialRonCodec.ReadMfe(await File.ReadAllTextAsync(mfePath));
+            TestAssert.True(saved.HairMesh == "None" && saved.AccessoryMeshes is { Count: 0 },
+                "Saving the MFE material source retained stale attachment references.");
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+            if (File.Exists(mfePath)) File.Delete(mfePath);
+        }
+    });
+
+    private static void MatchingFullRonKeepsHistory() => RunWithDispatcher(async () =>
+    {
+        static MorphFaceDocument Canonical(MorphFaceDocument draft)
+        {
+            static AssetIdentity? Reference(AssetIdentity? asset) => asset is null ? null : asset with
+            { InstancedPath = TextureCatalogPicker.CanonicalPath(asset.InstancedPath, asset.PackagePath), PackagePath = "", UIndex = 0 };
+            return draft with
+            {
+                HairMeshReference = Reference(draft.HairMeshReference),
+                OtherMeshReferences = draft.OtherMeshReferences.Select(Reference).ToArray(),
+                MaterialOverrides = draft.MaterialOverrides with
+                { Textures = draft.MaterialOverrides.Textures.Select(value => value with { TextureReference = Reference(value.TextureReference) }).ToArray() }
+            };
+        }
+        var directory = Path.Combine(Path.GetTempPath(), $"MFE-RonUndo-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var source = Path.Combine(directory, "Career.pcsav");
+            File.Copy(PcsavHeadMorphTests.Fixtures().Single(path => Path.GetFileName(path) == "LE3-Male-Custom.pcsav"), source);
+            var originalBytes = File.ReadAllBytes(source);
+            var original = PcsavHeadMorphWorkspace.Open(source);
+            var ron = Path.Combine(directory, "Head.ron");
+            using var reader = new MorphFacePackageReader();
+            var dialogs = new StubEditorDialogs { MorphImportPath = ron };
+            using var shell = CreateMainWindowViewModel(reader, dialogs);
+            await shell.OpenDroppedFileAsync(source);
+            TestAssert.True(!shell.HasError && shell.Editor is not null, shell.ErrorMessage ?? "Career setup failed.");
+            var editor = shell.Editor!;
+            var initial = editor.CreateDraft();
+            var feature = editor.Features.First(value => value.IsEditable);
+            var scalar = editor.Material.Scalars.First();
+            var bone = editor.Bones.First(value => value.IsAvailable);
+            feature.Value += 0.03f;
+            scalar.Value += 0.125f;
+            bone.Value += 0.01f;
+            var desired = editor.CreateDraft();
+            var head = new HeadMorphPayload(desired.HairMeshReference?.InstancedPath ?? "None",
+                desired.OtherMeshReferences.OfType<AssetIdentity>().Select(value => value.InstancedPath).ToArray(),
+                new(desired.MorphFeatures, desired.FinalSkeleton, desired.BakedLods),
+                new(desired.MaterialOverrides.Scalars, desired.MaterialOverrides.Vectors, desired.MaterialOverrides.Textures));
+            TseHeadMorphRon.Write(ron, head, new(RonExportProducer.MFE, "0.1.0", MorphFaceGame.LE3, "HMM", true));
+            editor.UndoCommand.Execute(null);
+            editor.UndoCommand.Execute(null);
+            editor.UndoCommand.Execute(null);
+            TestAssert.True(MorphFaceEditorStateComparer.Equals(initial, editor.CreateDraft()), "Setup did not undo cleanly.");
+            scalar.Value += 0.0625f;
+            var beforeImport = editor.CreateDraft();
+            var clears = 0;
+            shell.PreviewCleared += (_, _) => clears++;
+            await ((AsyncRelayCommand)shell.ImportMorphFaceRonCommand).ExecuteAsync();
+            TestAssert.True(!shell.HasError, shell.ErrorMessage ?? "Full import failed.");
+            TestAssert.True(ReferenceEquals(editor, shell.Editor) && clears == 0,
+                "A reproducible full RON import reloaded the editor and discarded history.");
+            TestAssert.True(MorphFaceEditorStateComparer.Equals(Canonical(desired), Canonical(editor.CreateDraft())), "Import did not restore the complete head.");
+            editor.UndoCommand.Execute(null);
+            TestAssert.True(MorphFaceEditorStateComparer.Equals(beforeImport, editor.CreateDraft()), "Full import was not one Undo step.");
+            editor.UndoCommand.Execute(null);
+            TestAssert.True(MorphFaceEditorStateComparer.Equals(initial, editor.CreateDraft()), "Import lost the preceding edit history.");
+            editor.RedoCommand.Execute(null);
+            editor.RedoCommand.Execute(null);
+            TestAssert.True(MorphFaceEditorStateComparer.Equals(Canonical(desired), Canonical(editor.CreateDraft())), "Redo lost imported head data.");
+            TestAssert.True(originalBytes.SequenceEqual(File.ReadAllBytes(source)), "Import wrote to the native save.");
+            editor.UndoCommand.Execute(null);
+            await ((AsyncRelayCommand)shell.SaveCommand).ExecuteAsync();
+            TestAssert.True(!shell.HasError, shell.ErrorMessage ?? "Saving the undone import failed.");
+            var undone = PcsavHeadMorphWorkspace.Open(source);
+            TestAssert.Near(beforeImport.MaterialOverrides.Scalars.Single(value => value.Name == scalar.Name).Value,
+                undone.Head.MaterialData.Scalars.Single(value => value.Name == scalar.Name).Value, 0.00001f);
+            TestAssert.True(undone.Head.MorphData.FinalSkeleton.SequenceEqual(beforeImport.FinalSkeleton),
+                "Saving after Undo retained imported native bones.");
+            await ((AsyncRelayCommand)shell.ImportMorphFaceRonCommand).ExecuteAsync();
+            await ((AsyncRelayCommand)shell.SaveCommand).ExecuteAsync();
+            TestAssert.True(!shell.HasError, shell.ErrorMessage ?? "Imported head save failed.");
+            var saved = PcsavHeadMorphWorkspace.Open(source);
+            TestAssert.True(saved.Head.MorphData.BakedLods.Zip(desired.BakedLods).All(pair => pair.First.SequenceEqual(pair.Second)) &&
+                saved.Head.MorphData.FinalSkeleton.SequenceEqual(desired.FinalSkeleton), "Save lost imported geometry or bones.");
+            TestAssert.True(original.UnrelatedPrefix.SequenceEqual(saved.UnrelatedPrefix) && original.UnrelatedSuffix.SequenceEqual(saved.UnrelatedSuffix),
+                "Import/save changed unrelated career data.");
+            var sculpted = head.MorphData.BakedLods.Select(lod => lod.ToArray()).ToArray();
+            if (sculpted.Length < 2) sculpted = [.. sculpted, [new Vector3(1, 2, 3)]];
+            else sculpted[1][0] += new Vector3(1, 0, 0);
+            TseHeadMorphRon.Write(ron, head with { MorphData = head.MorphData with { BakedLods = sculpted } },
+                new(RonExportProducer.MFE, "0.1.0", MorphFaceGame.LE3, "HMM", true));
+            var beforeFallback = shell.Editor;
+            await ((AsyncRelayCommand)shell.ImportMorphFaceRonCommand).ExecuteAsync();
+            TestAssert.True(!shell.HasError && !ReferenceEquals(beforeFallback, shell.Editor), shell.ErrorMessage ?? "A lower-LOD sculpt bypassed full-data import.");
+            TestAssert.True(shell.Editor!.CreateDraft().BakedLods[1].SequenceEqual(sculpted[1]), "Fallback discarded the sculpted lower LOD.");
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    });
 
     private static void AssertStandaloneFaceTransitionCapabilities(
         MainWindowViewModel viewModel,

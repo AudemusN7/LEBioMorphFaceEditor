@@ -8,7 +8,7 @@ namespace MorphFaceEditor.Core.Services;
 
 /// <summary>
 /// Material-only RON interchange. Full player geometry validation belongs to the
-/// separate player importer; neither of these readers applies geometry or attachments.
+/// separate player importer; these readers carry attachment references without loading assets.
 /// </summary>
 public static class MaterialRonCodec
 {
@@ -16,12 +16,14 @@ public static class MaterialRonCodec
     private const string TseMaterialMarker = "// MFE RON Type: TSE Materials";
 
     /// <summary>Identifies material exports without mistaking a full head RON for a material-only file.</summary>
-    public static MaterialFileKind? IdentifyMaterialFile(string text)
+    public static MaterialFileKind? IdentifyMaterialFile(string text) => IdentifyMaterialFile(RonInputSnapshot.Parse(text));
+
+    public static MaterialFileKind? IdentifyMaterialFile(RonInputSnapshot input)
     {
-        var root = new MaterialRonReader(text).Read();
+        var root = input.MaterialRoot();
         if (root.TryGetValue("format", out var format) && Equals(format, "MorphFaceEditor.Materials"))
             return MaterialFileKind.Mfe;
-        var marked = text.Split('\n').Any(line => line.Trim() is TseMaterialMarker or
+        var marked = input.Source.Split('\n').Any(line => line.Trim() is TseMaterialMarker or
             "// Material settings only; no authored geometry or bone offsets.");
         return marked && root.TryGetValue("lod0_vertices", out var lod0) && Array(lod0).Count == 0
             ? MaterialFileKind.Tse : null;
@@ -31,34 +33,45 @@ public static class MaterialRonCodec
         string? HairMesh,
         IReadOnlyList<string>? AccessoryMeshes);
 
-    public static MorphFaceMaterialData ReadTse(string text)
+    public static MorphFaceMaterialData ReadTse(string text) => ReadTse(RonInputSnapshot.Parse(text));
+    public static MorphFaceMaterialData ReadTse(RonInputSnapshot input) => ReadParameters(TseRoot(input));
+
+    public static TseMaterialDocument ReadTseDocument(string text) => ReadTseDocument(RonInputSnapshot.Parse(text));
+
+    private static IReadOnlyDictionary<string, object> TseRoot(RonInputSnapshot input)
     {
-        var root = new MaterialRonReader(text).Read();
+        var root = input.MaterialRoot();
         if (root.ContainsKey("format")) throw new InvalidDataException("Use Import Materials for an MFE material file.");
         if (!new[] { "scalar_parameters", "vector_parameters", "texture_parameters" }.Any(root.ContainsKey))
             throw new InvalidDataException("The TSE RON contains no material parameter maps.");
-        return ReadParameters(root);
+        return root;
     }
 
-    public static TseMaterialDocument ReadTseDocument(string text)
+    public static TseMaterialDocument ReadTseDocument(RonInputSnapshot input)
     {
-        var root = new MaterialRonReader(text).Read();
-        if (root.ContainsKey("format")) throw new InvalidDataException("Use Import Materials for an MFE material file.");
-        if (!new[] { "scalar_parameters", "vector_parameters", "texture_parameters" }.Any(root.ContainsKey))
-            throw new InvalidDataException("The TSE RON contains no material parameter maps.");
+        var root = TseRoot(input);
+        var attachments = ReadAttachmentReferences(input);
+        return new(ReadParameters(root), attachments.HairMesh, attachments.AccessoryMeshes);
+    }
+
+    public static (string? HairMesh, IReadOnlyList<string>? AccessoryMeshes) ReadAttachmentReferences(RonInputSnapshot input)
+    {
+        var root = input.MaterialRoot();
         string? hair = null;
         if (root.TryGetValue("hair_mesh", out var hairValue))
-            hair = hairValue as string ?? throw new InvalidDataException("TSE hair_mesh must be a string.");
+            hair = hairValue as string ?? throw new InvalidDataException("Material hair_mesh must be a string.");
         IReadOnlyList<string>? accessories = null;
         if (root.TryGetValue("accessory_mesh", out var accessoryValue))
             accessories = Array(accessoryValue).Select(value => value as string ??
-                throw new InvalidDataException("Every TSE accessory_mesh value must be a string.")).ToArray();
-        return new TseMaterialDocument(ReadParameters(root), hair, accessories);
+                throw new InvalidDataException("Every material accessory_mesh value must be a string.")).ToArray();
+        return (hair, accessories);
     }
 
-    public static MeshMaterialDocument ReadMfe(string text)
+    public static MeshMaterialDocument ReadMfe(string text) => ReadMfe(RonInputSnapshot.Parse(text));
+
+    public static MeshMaterialDocument ReadMfe(RonInputSnapshot input)
     {
-        var root = new MaterialRonReader(text).Read();
+        var root = input.MaterialRoot();
         if (String(root, "format") != "MorphFaceEditor.Materials")
             throw new InvalidDataException("This is not an MFE material file. Use Import TSE RON for a player RON.");
         if (Number(root["version"]) != MeshMaterialDocument.CurrentVersion)
@@ -83,22 +96,26 @@ public static class MaterialRonCodec
         foreach (var scope in scopes.Keys)
             if (string.IsNullOrWhiteSpace(scope) || scope.Any(character => !char.IsAsciiLetterOrDigit(character) && character != '-'))
                 throw new InvalidDataException($"Invalid material scope '{scope}'.");
+        var attachments = ReadAttachmentReferences(input);
         return new MeshMaterialDocument(game, String(root, "mesh_name"), slots,
             scopes.ToDictionary(value => value.Key, value => ReadParameters(Object(value.Value)), StringComparer.OrdinalIgnoreCase))
         {
-            DefaultFace = ReadDefaultFace(root)
+            DefaultFace = ReadDefaultFace(root),
+            HairMesh = attachments.HairMesh,
+            AccessoryMeshes = attachments.AccessoryMeshes
         };
     }
 
     public static (string Game, MaterialFaceTarget Target)? ReadDefaultFace(string text)
     {
-        var root = new MaterialRonReader(text).Read();
+        var input = RonInputSnapshot.Parse(text);
+        var root = input.MaterialRoot();
         if (!root.TryGetValue("format", out var format) || !Equals(format, "MorphFaceEditor.Materials"))
         {
             string? Header(string name)
             {
                 var prefix = "// MFE material target " + name + ":";
-                var line = text.Split('\n').Select(value => value.Trim()).FirstOrDefault(value => value.StartsWith(prefix, StringComparison.Ordinal));
+                var line = input.Source.Split('\n').Select(value => value.Trim()).FirstOrDefault(value => value.StartsWith(prefix, StringComparison.Ordinal));
                 return line?[prefix.Length..].Trim();
             }
             var game = Header("game");
@@ -120,9 +137,12 @@ public static class MaterialRonCodec
     }
 
     /// <summary>Reads only the material maps; face workspaces do not use MESH slot or source-game metadata.</summary>
-    public static IReadOnlyDictionary<string, MorphFaceMaterialData> ReadMfeParameterScopes(string text)
+    public static IReadOnlyDictionary<string, MorphFaceMaterialData> ReadMfeParameterScopes(string text) =>
+        ReadMfeParameterScopes(RonInputSnapshot.Parse(text));
+
+    public static IReadOnlyDictionary<string, MorphFaceMaterialData> ReadMfeParameterScopes(RonInputSnapshot input)
     {
-        var root = new MaterialRonReader(text).Read();
+        var root = input.MaterialRoot();
         if (String(root, "format") != "MorphFaceEditor.Materials")
             throw new InvalidDataException("This is not an MFE material file.");
         var scopes = Object(root["parameters"]);
@@ -145,6 +165,9 @@ public static class MaterialRonCodec
             Field(output, "target_kind", target.PlayerMorph ? "Player" : "NPC", 1);
         }
         Field(output, "mesh_name", document.MeshName, 1);
+        if (document.HairMesh is not null) Field(output, "hair_mesh", document.HairMesh, 1);
+        if (document.AccessoryMeshes is not null)
+            output.Append("    accessory_mesh: [").AppendJoin(", ", document.AccessoryMeshes.Select(Quote)).AppendLine("],");
         output.AppendLine("    slots: [");
         foreach (var slot in document.Slots.OrderBy(value => value.Index))
         {

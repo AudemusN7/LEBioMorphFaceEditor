@@ -149,26 +149,30 @@ public sealed partial class MainWindowViewModel
                 if (LoadedFacePath != source.FacePath || Editor is not { } editor) return false;
                 var values = editor.Material.CaptureInterchangeData();
                 var game = ResolveMaterialFileGame();
-                var document = FaceMaterialFileService.Capture(game, face.ObjectName, values) with
+                var document = MeshMaterialFileService.WithAttachments(
+                    FaceMaterialFileService.Capture(game, face.ObjectName, values),
+                    editor.HairMesh.Value, editor.OtherMeshes.Select(mesh => mesh.Value).ToArray()) with
                 {
                     DefaultFace = new MaterialFaceTarget(face.ProfileKey, player)
                 };
+                if (player)
+                    await Task.Run(() => _packageContextService.VerifyPlayerRuntimeAssets(game, values,
+                        document.HairMesh!, document.AccessoryMeshes));
                 string text;
                 if (source.Format == SourceFileFormat.TseMaterialsRon)
                 {
-                    var original = MaterialRonCodec.ReadTseDocument(await File.ReadAllTextAsync(source.Path));
-                    if (player)
-                        await Task.Run(() => _packageContextService.VerifyPlayerRuntimeAssets(game, values,
-                            original.HairMesh ?? "None", original.AccessoryMeshes ?? []));
-                    text = MaterialRonCodec.WriteTse(values, original.HairMesh ?? "None",
-                        original.AccessoryMeshes ?? [], document.Game, document.DefaultFace);
+                    text = MaterialRonCodec.WriteTse(values, document.HairMesh!,
+                        document.AccessoryMeshes!, document.Game, document.DefaultFace);
                 }
                 else
                 {
                     var original = MaterialRonCodec.ReadMfe(await File.ReadAllTextAsync(source.Path));
-                    if (player)
-                        await Task.Run(() => _packageContextService.VerifyPlayerRuntimeAssets(game, values));
-                    text = MaterialRonCodec.WriteMfe(original with { Parameters = document.Parameters });
+                    text = MaterialRonCodec.WriteMfe(original with
+                    {
+                        Parameters = document.Parameters,
+                        HairMesh = document.HairMesh,
+                        AccessoryMeshes = document.AccessoryMeshes
+                    });
                 }
                 await File.WriteAllTextAsync(candidate, text);
                 _ = FaceMaterialFileService.Read(await File.ReadAllTextAsync(candidate), allowTse: true);

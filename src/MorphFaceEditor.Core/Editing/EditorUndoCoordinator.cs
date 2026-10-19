@@ -134,6 +134,7 @@ public sealed class EditorUndoCoordinator : IDisposable
         var sources = _aggregateSources
             ?? throw new InvalidOperationException("No editor history aggregate is active.");
         _aggregateSources = null;
+        if (sources.Count == 0) return;
         _replaying = true;
         try
         {

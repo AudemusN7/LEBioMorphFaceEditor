@@ -9,15 +9,17 @@ namespace MorphFaceEditor.Services;
 
 /// <summary>
 /// Adapts the shared material RON codec for face workspaces. Face imports apply
-/// material parameters only; geometry, bones and preview attachments are never
-/// part of the returned payload.
+/// material parameters and optional attachment references; geometry and bones
+/// are never part of the returned payload.
 /// </summary>
 public static class FaceMaterialFileService
 {
     public sealed record PreparedImport(
         MorphFaceMaterialData Parameters,
         bool IsTse,
-        IReadOnlyList<string> Warnings);
+        IReadOnlyList<string> Warnings,
+        string? HairMesh = null,
+        IReadOnlyList<string>? AccessoryMeshes = null);
 
     /// <summary>Captures face material values without requiring MESH slot assignments.</summary>
     public static MeshMaterialDocument Capture(
@@ -48,33 +50,19 @@ public static class FaceMaterialFileService
     {
         ArgumentNullException.ThrowIfNull(text);
 
-        try
+        var input = RonInputSnapshot.Parse(text);
+        var attachments = MaterialRonCodec.ReadAttachmentReferences(input);
+        if (input.Root.ContainsKey("format"))
         {
-            var scopes = MaterialRonCodec.ReadMfeParameterScopes(text);
+            var scopes = MaterialRonCodec.ReadMfeParameterScopes(input);
             var (parameters, warnings) = ReadFaceParameters(scopes);
-            return new(parameters, false, warnings);
+            return new(parameters, false, warnings, attachments.HairMesh, attachments.AccessoryMeshes);
         }
-        catch (InvalidDataException mfeError)
-        {
-            MorphFaceMaterialData parameters;
-            try
-            {
-                parameters = MaterialRonCodec.ReadTse(text);
-            }
-            catch (InvalidDataException)
-            {
-                throw mfeError;
-            }
-
-            var taggedHead = HasCompleteMfeProvenanceHeader(text);
-            if (!allowTse && !taggedHead && MaterialRonCodec.IdentifyMaterialFile(text) != MaterialRonCodec.MaterialFileKind.Tse)
-            {
-                throw new InvalidDataException(
-                    Loc.Text("loc_Services_FaceMaterialFile_OnlyTaggedMfeRonsAccepted"));
-            }
-
-            return new(parameters, !taggedHead, []);
-        }
+        var tseParameters = MaterialRonCodec.ReadTse(input);
+        var taggedHead = TseHeadMorphRon.ReadProvenance(input)?.Producer == RonExportProducer.MFE;
+        if (!allowTse && !taggedHead && MaterialRonCodec.IdentifyMaterialFile(input) != MaterialRonCodec.MaterialFileKind.Tse)
+            throw new InvalidDataException(Loc.Text("loc_Services_FaceMaterialFile_OnlyTaggedMfeRonsAccepted"));
+        return new(tseParameters, !taggedHead, [], attachments.HairMesh, attachments.AccessoryMeshes);
     }
 
     private static void AddUnscopedValues(
@@ -134,30 +122,4 @@ public static class FaceMaterialFileService
             warnings);
     }
 
-    private static bool HasCompleteMfeProvenanceHeader(string text)
-    {
-        var fields = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var mfeProducer = false;
-        foreach (var line in text.Split('\n'))
-        {
-            var body = line.TrimStart();
-            if (!body.StartsWith("//", StringComparison.Ordinal)) continue;
-            body = body[2..].TrimStart();
-            foreach (var field in new[] { "Exported from", "Game", "Archetype", "Player Morph" })
-            {
-                if (body.StartsWith(field + ":", StringComparison.OrdinalIgnoreCase))
-                {
-                    fields.Add(field);
-                    if (field.Equals("Exported from", StringComparison.OrdinalIgnoreCase))
-                    {
-                        var value = body[(field.Length + 1)..].Trim();
-                        mfeProducer = value.StartsWith("MFE ", StringComparison.OrdinalIgnoreCase) &&
-                                      value.Length > "MFE ".Length;
-                    }
-                    break;
-                }
-            }
-        }
-        return mfeProducer && fields.Count == 4;
-    }
 }

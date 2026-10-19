@@ -293,14 +293,22 @@ public static class MaterialInterchangeTests
         var tse = FaceMaterialFileService.Read(untagged, allowTse: true);
         TestAssert.True(tse.IsTse && tse.Parameters.Scalars.Single().Value == 0.25f,
             "Player TSE material import was not accepted.");
-        var irrelevantAttachment = FaceMaterialFileService.Read(
-            "(hair_mesh: 42, accessory_mesh: [7], scalar_parameters: {\"Shared\": 0.25})", allowTse: true);
-        TestAssert.Equal(0.25f, irrelevantAttachment.Parameters.Scalars.Single().Value);
+        Reject(() => FaceMaterialFileService.Read(
+            "(hair_mesh: 42, accessory_mesh: [7], scalar_parameters: {\"Shared\": 0.25})", allowTse: true));
+        var attachments = FaceMaterialFileService.Read(MaterialRonCodec.WriteMfe(
+            FaceMaterialFileService.Capture(MorphFaceGame.LE2, "face", new([], [], [])) with
+            { HairMesh = "BIOG_Hair.Hair", AccessoryMeshes = ["BIOG_Gear.Gear"] }), allowTse: true);
+        TestAssert.Equal("BIOG_Hair.Hair", attachments.HairMesh);
+        TestAssert.Equal("BIOG_Gear.Gear", attachments.AccessoryMeshes!.Single());
+        TestAssert.True(FaceMaterialFileService.Read(targeted, false).HairMesh is null,
+            "An older MFE file invented an attachment clear.");
 
         const string tagged = "// Exported from: MFE 1\n// Game: LE2\n// Archetype: HMF\n// Player Morph: NO\n" + untagged;
         var head = FaceMaterialFileService.Read(tagged, allowTse: false);
         TestAssert.True(!head.IsTse && head.Parameters.Scalars.Single().Value == 0.25f,
             "A tagged MFE head was not accepted as material-only input.");
+        Reject(() => FaceMaterialFileService.Read(tagged.Replace("Game: LE2", "Game: unknown"), allowTse: true));
+        Reject(() => FaceMaterialFileService.Read(tagged.Replace("// Archetype: HMF\n", ""), allowTse: true));
 
         var lexTagged = tagged.Replace("Exported from: MFE", "Exported from: LEX", StringComparison.Ordinal);
         Reject(() => FaceMaterialFileService.Read(lexTagged, allowTse: false));

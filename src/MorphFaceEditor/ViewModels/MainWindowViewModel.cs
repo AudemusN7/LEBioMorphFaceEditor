@@ -986,6 +986,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 textureCatalogProfile: textureCatalogProfile,
                 isTextureRegistryAvailable: false,
                 isTextureRegistryPending: true,
+                headImportHistory: _pcsavWorkspace,
                 ignoresAuthoredGeometry: result.Profile.IgnoresAuthoredGeometry,
                 playerRandomisationGame: IsPlayerWorkspace ? result.Profile.Game : null);
             if (playerAssets is not null) editor.RestrictPlayerReferences(playerAssets);

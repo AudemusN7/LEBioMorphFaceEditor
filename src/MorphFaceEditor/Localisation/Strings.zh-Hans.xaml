@@ -122,10 +122,10 @@
   <system:String x:Key="loc_Services_FeatureLod_LabelSuffix" xml:space="preserve">{0} - {1}</system:String>
   <system:String x:Key="loc_Services_FeatureLod_Marker" xml:space="preserve">仅 LOD {0}</system:String>
   <system:String x:Key="loc_Services_MeshMaterial_AssignHumanBeforeTseImport" xml:space="preserve">导入 TSE 材质设置前，请先分配人类材质。</system:String>
-  <system:String x:Key="loc_Services_MeshMaterial_AttachmentCouldNotLoad" xml:space="preserve">已找到 TSE 预览附件“{0}”，但无法加载；保留了当前预览附件。{1}</system:String>
-  <system:String x:Key="loc_Services_MeshMaterial_AttachmentPathNotFound" xml:space="preserve">在已安装的 {2} 文件中，未能按完整路径找到 TSE {0}“{1}”；保留了当前预览附件。</system:String>
-  <system:String x:Key="loc_Services_MeshMaterial_AttachmentsCouldNotResolve" xml:space="preserve">无法从已安装的 {0} 文件解析 TSE 预览附件；保留了当前预览附件。{1}</system:String>
-  <system:String x:Key="loc_Services_MeshMaterial_ExtraAccessoriesIgnored" xml:space="preserve">TSE RON 包含 {0} 个配件网格；MESH 预览目前仅使用第一个槽位。</system:String>
+  <!--localiser: {"Key":"loc_Services_MeshMaterial_AttachmentCouldNotLoad","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"B9D390DF4EC8B715F512D93FA6A1A8750A6F1650A1E7D0FC77FF61988F269035"}--><system:String x:Key="loc_Services_MeshMaterial_AttachmentCouldNotLoad" xml:space="preserve">已找到附件“{0}”，但无法加载；保留当前附件。{1}</system:String>
+  <!--localiser: {"Key":"loc_Services_MeshMaterial_AttachmentPathNotFound","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"4DF69B7E470BF9F2689D5F4B652AAA802DDD5F9A559C437A89A80E598C4383B8"}--><system:String x:Key="loc_Services_MeshMaterial_AttachmentPathNotFound" xml:space="preserve">在已安装的 {2} 文件中，未能按完整路径找到 {0}“{1}”；保留当前附件。</system:String>
+  <!--localiser: {"Key":"loc_Services_MeshMaterial_AttachmentsCouldNotResolve","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"9BABC0731987120074A43E083C274C7EC47A55785253A1FD5084F58148B2D8BD"}--><system:String x:Key="loc_Services_MeshMaterial_AttachmentsCouldNotResolve" xml:space="preserve">无法从已安装的 {0} 文件解析附件；保留当前附件。{1}</system:String>
+  <!--localiser: {"Key":"loc_Services_MeshMaterial_ExtraAccessoriesIgnored","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"C55AF04E7A8BAB16471380A64D7B3CAA977532E8027A6C8EB4D7971FD17B0C95"}--><system:String x:Key="loc_Services_MeshMaterial_ExtraAccessoriesIgnored" xml:space="preserve">RON 包含 {0} 个配件网格；只能导入第一个附件槽位。</system:String>
   <system:String x:Key="loc_Services_MeshMaterial_GameMismatch" xml:space="preserve">这些材质适用于 {0}；当前网格工作区为 {1}。</system:String>
   <system:String x:Key="loc_Services_MeshMaterial_OptionMetadataInconsistent" xml:space="preserve">材质“{0}”的材质族或作用域元数据不一致。</system:String>
   <system:String x:Key="loc_Services_MeshMaterial_OptionUnavailable" xml:space="preserve">此游戏的材质目录中没有材质“{0}”。</system:String>

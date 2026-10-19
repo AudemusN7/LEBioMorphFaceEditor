@@ -122,10 +122,14 @@
   <system:String x:Key="loc_Services_FeatureLod_LabelSuffix" xml:space="preserve">{0} - {1}</system:String>
   <system:String x:Key="loc_Services_FeatureLod_Marker" xml:space="preserve">SOLO LOD {0}</system:String>
   <system:String x:Key="loc_Services_MeshMaterial_AssignHumanBeforeTseImport" xml:space="preserve">Asigna un material humano antes de importar la configuración de materiales de TSE.</system:String>
-  <system:String x:Key="loc_Services_MeshMaterial_AttachmentCouldNotLoad" xml:space="preserve">Se encontró el accesorio «{0}» de vista previa de TSE, pero no se pudo cargar; se ha conservado el accesorio actual. {1}</system:String>
-  <system:String x:Key="loc_Services_MeshMaterial_AttachmentPathNotFound" xml:space="preserve">No se encontró el accesorio «{0}», «{1}», de TSE en su ruta completa en los archivos instalados de {2}; se ha conservado el accesorio actual de vista previa.</system:String>
-  <system:String x:Key="loc_Services_MeshMaterial_AttachmentsCouldNotResolve" xml:space="preserve">No se pudieron resolver los accesorios de vista previa de TSE de los archivos instalados de {0}; se han conservado los accesorios actuales. {1}</system:String>
-  <system:String x:Key="loc_Services_MeshMaterial_ExtraAccessoriesIgnored" xml:space="preserve">El RON de TSE contiene {0} mallas accesorias; la vista previa MESH solo usa la primera ranura.</system:String>
+  <!--localiser: {"Key":"loc_Services_MeshMaterial_AttachmentCouldNotLoad","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"B9D390DF4EC8B715F512D93FA6A1A8750A6F1650A1E7D0FC77FF61988F269035"}-->
+  <system:String x:Key="loc_Services_MeshMaterial_AttachmentCouldNotLoad" xml:space="preserve">Se resolvió el accesorio «{0}», pero no se pudo cargar; se ha conservado el accesorio actual. {1}</system:String>
+  <!--localiser: {"Key":"loc_Services_MeshMaterial_AttachmentPathNotFound","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"4DF69B7E470BF9F2689D5F4B652AAA802DDD5F9A559C437A89A80E598C4383B8"}-->
+  <system:String x:Key="loc_Services_MeshMaterial_AttachmentPathNotFound" xml:space="preserve">No se encontró «{1}» ({0}) en su ruta completa entre los archivos instalados de {2}; se ha conservado el accesorio actual.</system:String>
+  <!--localiser: {"Key":"loc_Services_MeshMaterial_AttachmentsCouldNotResolve","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"9BABC0731987120074A43E083C274C7EC47A55785253A1FD5084F58148B2D8BD"}-->
+  <system:String x:Key="loc_Services_MeshMaterial_AttachmentsCouldNotResolve" xml:space="preserve">No se pudieron resolver los accesorios en los archivos instalados de {0}; se han conservado los accesorios actuales. {1}</system:String>
+  <!--localiser: {"Key":"loc_Services_MeshMaterial_ExtraAccessoriesIgnored","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"C55AF04E7A8BAB16471380A64D7B3CAA977532E8027A6C8EB4D7971FD17B0C95"}-->
+  <system:String x:Key="loc_Services_MeshMaterial_ExtraAccessoriesIgnored" xml:space="preserve">El RON contiene {0} mallas accesorias; solo se puede importar la primera ranura de accesorio.</system:String>
   <system:String x:Key="loc_Services_MeshMaterial_GameMismatch" xml:space="preserve">Estos materiales son para {0}; el espacio de trabajo de malla actual es {1}.</system:String>
   <system:String x:Key="loc_Services_MeshMaterial_OptionMetadataInconsistent" xml:space="preserve">Los metadatos de familia o ámbito del material «{0}» son incoherentes.</system:String>
   <system:String x:Key="loc_Services_MeshMaterial_OptionUnavailable" xml:space="preserve">El material «{0}» no está disponible en el catálogo de materiales de este juego.</system:String>

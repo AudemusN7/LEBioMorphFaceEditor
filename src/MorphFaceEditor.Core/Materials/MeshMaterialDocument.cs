@@ -2,7 +2,7 @@ using MorphFaceEditor.Core.Domain;
 
 namespace MorphFaceEditor.Core.Materials;
 
-/// <summary>Portable material authoring data; the source mesh and preview attachments are not embedded.</summary>
+/// <summary>Portable material values and optional attachment references; asset content is not embedded.</summary>
 public sealed record MeshMaterialDocument(
     string Game,
     string MeshName,
@@ -11,6 +11,8 @@ public sealed record MeshMaterialDocument(
 {
     public const int CurrentVersion = 1;
     public MaterialFaceTarget? DefaultFace { get; init; }
+    public string? HairMesh { get; init; }
+    public IReadOnlyList<string>? AccessoryMeshes { get; init; }
 }
 
 public sealed record MaterialFaceTarget(string ProfileKey, bool PlayerMorph);

@@ -15,7 +15,8 @@ public sealed partial class MainWindowViewModel
     {
         if (IsBusy) throw new InvalidOperationException(Loc.Text("loc_Shell_Diagnostics_WaitForCurrentOperation"));
         var workspacePath = WorkspacePackagePath;
-        var draft = Editor?.IsDirty == true ? Editor.CreateDraft() : null;
+        var draft = Editor?.IsDirty == true ? Editor.CreateDraft() :
+            _pcsavDraftPendingInPackage ? Editor?.SavedDraft : null;
         var meshSource = _detachedMeshSource;
         var meshPath = meshSource?.SourcePath;
         var materialText = IsDetachedMeshWorkspace && Editor is { CustomMaterials: { } materials } editor &&

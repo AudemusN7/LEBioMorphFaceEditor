@@ -43,6 +43,7 @@ public static class UiSmokeTests
         new("application settings: diagnostic PCC captures pending edits without modifying live data", DiagnosticPccCapturesPendingEdits),
         new("application settings: detached diagnostics include loaded geometry and current material assignments", DiagnosticDetachedMeshIncludesState),
         new("standalone morph import is available before opening a PCC", StandaloneImportIsAvailableWithoutPackage),
+        new("New Player defaults use direct heads and save to PCC across all games and sexes", NewPlayerDefaultsUseDirectHeads),
         new("source file save preserves RON edits on failure and blocks multiple imports", SourceFileSaveRoundTrip),
         new("Player pickers require seekfree backing and saving rechecks changed sources", PlayerRonRequiresSeekFreeBacking),
         new("Morphs-only RON opens its base face saves features and retains unrelated edits", MorphFeaturesFileWorkflow),
@@ -354,11 +355,16 @@ public static class UiSmokeTests
                 var scalar = shell.Editor!.Material.Scalars.First();
                 var scalarName = scalar.Name;
                 var scalarValue = scalar.Value + 0.125f;
+                var editorBeforeSave = shell.Editor;
+                var savePreviewReloads = 0;
+                shell.PreviewSceneReady += (_, _) => savePreviewReloads++;
                 scalar.Value = scalarValue;
                 var saveTimer = System.Diagnostics.Stopwatch.StartNew();
                 await ((AsyncRelayCommand)shell.SaveCommand).ExecuteAsync();
                 Console.WriteLine($"PCSAV SAVE {Path.GetFileName(fixture)}: {saveTimer.Elapsed.TotalMilliseconds:F0} ms");
                 TestAssert.True(!shell.HasError && !shell.IsDirty, shell.ErrorMessage ?? "PCSAV save stayed dirty.");
+                TestAssert.True(ReferenceEquals(editorBeforeSave, shell.Editor) && savePreviewReloads == 0,
+                    "A numeric PCSAV save rebuilt the editor/preview.");
                 TestAssert.Equal(1, shell.Faces.Count);
                 var saved = PcsavHeadMorphWorkspace.Open(source);
                 TestAssert.True(saved.HasHeadMorph, "Save did not create or retain the native head.");
@@ -373,8 +379,41 @@ public static class UiSmokeTests
                 TestAssert.Near(scalarValue, saved.Head.MaterialData.Scalars.Single(v => v.Name == scalarName).Value, 0.00001f);
                 TestAssert.True(original.UnrelatedPrefix.SequenceEqual(saved.UnrelatedPrefix) &&
                     original.UnrelatedSuffix.SequenceEqual(saved.UnrelatedSuffix), "UI save changed unrelated career bytes.");
+                if (original.Game == MorphFaceGame.LE2 && original.HasHeadMorph && original.Sex == StandalonePlayerSex.Male)
+                {
+                    var liveEditor = shell.Editor;
+                    var workingPath = liveEditor!.CreateDraft().Source.PackagePath;
+                    var workingBefore = PackageFingerprint.Capture(workingPath);
+                    var log = Path.Combine(directory, "diagnostic.log");
+                    File.WriteAllText(log, "fixture log");
+                    var report = await shell.GenerateDiagnosticsAsync(Path.Combine(directory, "report.zip"),
+                        new DiagnosticArchiveService(new ApplicationDataPaths(directory), log));
+                    TestAssert.Equal(0, report.Warnings.Count);
+                    var extraction = Path.Combine(directory, "Report");
+                    System.IO.Compression.ZipFile.ExtractToDirectory(report.Path, extraction);
+                    var snapshotPath = Directory.GetFiles(Path.Combine(extraction, "Workspace"), "*.pcc").Single();
+                    var captured = reader.Load(snapshotPath, liveEditor.CreateDraft().Source.InstancedPath).Document;
+                    TestAssert.Near(scalarValue, captured.MaterialOverrides.Scalars.Single(v => v.Name == scalarName).Value, 0.00001f);
+                    TestAssert.True(ReferenceEquals(liveEditor, shell.Editor) && !shell.IsDirty &&
+                        workingBefore == PackageFingerprint.Capture(workingPath),
+                        "Diagnostics changed the live editor or PCC after native Save.");
+                    dialogs.RonExportPath = Path.Combine(directory, "AfterNativeSave.ron");
+                    await ((AsyncRelayCommand)shell.ExportMorphRonCommand).ExecuteAsync();
+                    TestAssert.True(!shell.HasError, shell.ErrorMessage ?? "Export after native Save failed.");
+                    TestAssert.Near(scalarValue, TseHeadMorphRon.Read(dialogs.RonExportPath).MaterialData.Scalars.Single(v => v.Name == scalarName).Value, 0.00001f);
+                    TestAssert.True(!shell.IsDirty, "Synchronising the export PCC dirtied the saved career.");
+                }
+                if (original.Game == MorphFaceGame.LE1 && original.HasHeadMorph && original.Sex == StandalonePlayerSex.Male)
+                {
+                    shell.Editor!.Material.Scalars.Single(v => v.Name == scalarName).Value += 0.25f;
+                    dialogs.ConfirmUnsavedChangesResult = UnsavedChangesChoice.Discard;
+                    await ((AsyncRelayCommand)shell.LoadSelectedFaceCommand).ExecuteAsync();
+                    TestAssert.True(!shell.HasError && !shell.IsDirty, shell.ErrorMessage ?? "Reload after native Save failed.");
+                    TestAssert.Near(scalarValue, shell.Editor!.Material.Scalars.Single(v => v.Name == scalarName).Value, 0.00001f);
+                    dialogs.ConfirmUnsavedChangesResult = UnsavedChangesChoice.Cancel;
+                }
 
-                // A real morph edit exercises the PCC rebake, not just material routing.
+                // A real morph edit exercises evaluated LODs, not just material routing.
                 var feature = shell.Editor!.Features.First(v => v.IsEditable);
                 var featureName = feature.Name;
                 var featureValue = feature.Value + 0.05f;
@@ -649,7 +688,7 @@ public static class UiSmokeTests
             var game = MorphFaceGame.LE2;
             var seed = StandalonePlayerMorphImportService.ResolveInstalledSeed(game);
             var seedBytes = File.ReadAllBytes(seed);
-            new MorphFacePackageContextService().ExportPlayerDefaultsRon(game, StandalonePlayerSex.Female, path,
+            TseHeadMorphRon.Write(path, new MorphFacePackageContextService().CapturePlayerDefaultHead(game, StandalonePlayerSex.Female),
                 new RonExportProvenance(RonExportProducer.MFE, "0.9.6", game, "HMF", true));
             TestAssert.Equal("BIOG_HMF_HED_PROMorph_R.Average.HMF_HED_PROLash_Opac_M01", TseHeadMorphRon.Read(path)
                 .MaterialData.Textures.Single(value => value.Name == "HED_Lash_Diff").TextureReference!.InstancedPath);
@@ -867,6 +906,74 @@ public static class UiSmokeTests
                 await ((AsyncRelayCommand)presetShell.SaveCommand).ExecuteAsync();
                 TestAssert.True(!presetShell.HasError && !presetShell.IsDirty, presetShell.ErrorMessage ?? "Valid preset save failed.");
                 File.Delete(seekfree);
+            }
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    });
+
+    private static void NewPlayerDefaultsUseDirectHeads() => RunWithDispatcher(async () =>
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"MFE-NewPlayerTest-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var context = new MorphFacePackageContextService();
+            foreach (var game in new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 })
+            foreach (var sex in new[] { StandalonePlayerSex.Male, StandalonePlayerSex.Female })
+            {
+                var seed = StandalonePlayerMorphImportService.ResolveInstalledSeed(game);
+                var seedFingerprint = PackageFingerprint.Capture(seed);
+                var expected = context.CapturePlayerDefaultHead(game, sex);
+                var ron = Path.Combine(directory, $"{game}-{sex}.ron");
+                var pcc = Path.Combine(directory, $"{game}-{sex}.pcc");
+                using var reader = new MorphFacePackageReader();
+                var dialogs = new StubEditorDialogs
+                {
+                    NewPlayerChoice = new(game, sex), StandaloneNameChoiceResult = "NewPlayerTest",
+                    RonExportPath = ron, MorphPackageDestination = new(pcc, true)
+                };
+                using var shell = CreateMainWindowViewModel(reader, dialogs);
+                await ((AsyncRelayCommand)shell.NewPlayerMorphCommand).ExecuteAsync();
+                TestAssert.True(!shell.HasError && shell.Editor is not null && shell.HasPreview && !shell.IsDirty,
+                    shell.ErrorMessage ?? $"New {game} {sex} Player did not open.");
+                TestAssert.Equal("PlayerMorph", dialogs.NewPlayerSuggestedName!);
+                TestAssert.Equal(0, dialogs.StandaloneGameChoiceCount);
+                TestAssert.Equal(0, dialogs.MorphImportFileChoiceCount);
+                await ((AsyncRelayCommand)shell.ExportMorphRonCommand).ExecuteAsync();
+                TestAssert.True(!shell.HasError && File.Exists(ron), shell.ErrorMessage ?? "New Player RON export failed.");
+                var actual = TseHeadMorphRon.Read(ron);
+                MorphFacePackageCodec.VerifyMorphData(actual.MorphData, expected.MorphData);
+                // Compare the old file-boundary route as well: it deliberately omits unavailable texture overrides.
+                var referenceRon = Path.Combine(directory, $"{game}-{sex}-reference.ron");
+                var referenceExport = Path.Combine(directory, $"{game}-{sex}-reference-export.ron");
+                TseHeadMorphRon.Write(referenceRon, expected);
+                using var referenceReader = new MorphFacePackageReader();
+                using var referenceShell = CreateMainWindowViewModel(referenceReader, new StubEditorDialogs
+                {
+                    StandaloneGameChoiceResult = game, StandaloneNameChoiceResult = "ReferencePlayer", RonExportPath = referenceExport
+                });
+                await referenceShell.OpenDroppedFileAsync(referenceRon);
+                TestAssert.True(!referenceShell.HasError, referenceShell.ErrorMessage ?? "Reference Player RON import failed.");
+                await ((AsyncRelayCommand)referenceShell.ExportMorphRonCommand).ExecuteAsync();
+                TestAssert.True(!referenceShell.HasError, referenceShell.ErrorMessage ?? "Reference Player RON export failed.");
+                var reference = TseHeadMorphRon.Read(referenceExport);
+                MorphFacePackageCodec.VerifyMorphData(actual.MorphData, reference.MorphData);
+                MorphFacePackageCodec.VerifyMaterialData(actual.MaterialData, reference.MaterialData);
+                TestAssert.Equal(reference.HairMesh, actual.HairMesh);
+                TestAssert.True(actual.AccessoryMeshes.SequenceEqual(reference.AccessoryMeshes), "Direct defaults changed attachments.");
+                if (game == MorphFaceGame.LE2 && sex == StandalonePlayerSex.Female)
+                {
+                    var previousEditor = shell.Editor;
+                    var previousFace = shell.LoadedFacePath;
+                    dialogs.StandaloneNameChoiceResult = null;
+                    await ((AsyncRelayCommand)shell.NewPlayerMorphCommand).ExecuteAsync();
+                    TestAssert.True(ReferenceEquals(previousEditor, shell.Editor) && shell.LoadedFacePath == previousFace,
+                        "Cancelling New Player naming replaced the existing head.");
+                    shell.Editor!.Material.Scalars.First().Value += 0.125f;
+                    await ((AsyncRelayCommand)shell.SaveCommand).ExecuteAsync();
+                    TestAssert.True(!shell.HasError && File.Exists(pcc), shell.ErrorMessage ?? "New Player Save did not use PCC export.");
+                }
+                TestAssert.Equal(seedFingerprint, PackageFingerprint.Capture(seed));
             }
         }
         finally { Directory.Delete(directory, recursive: true); }
@@ -1801,6 +1908,29 @@ public static class UiSmokeTests
                 saved.Head.MorphData.FinalSkeleton.SequenceEqual(desired.FinalSkeleton), "Save lost imported geometry or bones.");
             TestAssert.True(original.UnrelatedPrefix.SequenceEqual(saved.UnrelatedPrefix) && original.UnrelatedSuffix.SequenceEqual(saved.UnrelatedSuffix),
                 "Import/save changed unrelated career data.");
+            await ((AsyncRelayCommand)shell.ImportMorphFaceRonCommand).ExecuteAsync();
+            TestAssert.True(!shell.HasError && shell.IsDirty, "A native full-head replacement was not marked unsaved.");
+            shell.Editor!.UndoCommand.Execute(null);
+            TestAssert.True(!shell.IsDirty, "Undoing the replacement did not return to the saved native head.");
+            shell.Editor.RedoCommand.Execute(null);
+            TestAssert.True(shell.IsDirty, "Redoing the replacement did not restore its unsaved state.");
+            await ((AsyncRelayCommand)shell.SaveCommand).ExecuteAsync();
+            TestAssert.True(!shell.HasError && !shell.IsDirty, shell.ErrorMessage ?? "Saving the replacement stayed dirty.");
+            TseHeadMorphRon.Write(ron, head with { MaterialData = head.MaterialData with
+                { Scalars = head.MaterialData.Scalars.Select(value => value.Name == scalar.Name
+                    ? value with { Value = value.Value + 0.25f } : value).ToArray() } },
+                new(RonExportProducer.MFE, "0.1.0", MorphFaceGame.LE3, "HMM", true));
+            await ((AsyncRelayCommand)shell.ImportMorphFaceRonCommand).ExecuteAsync();
+            dialogs.RonExportPath = Path.Combine(directory, "PendingExport.ron");
+            await ((AsyncRelayCommand)shell.ExportMorphRonCommand).ExecuteAsync();
+            TestAssert.True(!shell.HasError && !shell.Editor!.IsDirty && shell.IsDirty,
+                "Setup did not leave an unsaved native import in a clean package projection.");
+            dialogs.ConfirmUnsavedChangesResult = UnsavedChangesChoice.Discard;
+            await ((AsyncRelayCommand)shell.LoadSelectedFaceCommand).ExecuteAsync();
+            TestAssert.True(!shell.HasError && !shell.IsDirty, shell.ErrorMessage ?? "Discard/reload retained a pending native import.");
+            await ((AsyncRelayCommand)shell.SaveCommand).ExecuteAsync();
+            TestAssert.Near(saved.Head.MaterialData.Scalars.Single(value => value.Name == scalar.Name).Value,
+                PcsavHeadMorphWorkspace.Open(source).Head.MaterialData.Scalars.Single(value => value.Name == scalar.Name).Value, 0.00001f);
             var sculpted = head.MorphData.BakedLods.Select(lod => lod.ToArray()).ToArray();
             if (sculpted.Length < 2) sculpted = [.. sculpted, [new Vector3(1, 2, 3)]];
             else sculpted[1][0] += new Vector3(1, 0, 0);
@@ -4310,6 +4440,14 @@ public static class UiSmokeTests
         public MorphFaceGame? StandaloneGameChoiceResult { get; init; }
         public Action? StandaloneGameChoiceAction { get; init; }
         public string? StandaloneNameChoiceResult { get; set; }
+        public NewPlayerMorphChoice? NewPlayerChoice { get; set; }
+        public string? NewPlayerSuggestedName { get; private set; }
+        public NewPlayerMorphChoice? ChooseNewPlayerMorph() => NewPlayerChoice;
+        public string? ChooseNewPlayerMorphName(string suggestedName, IReadOnlyCollection<string> existingObjectNames)
+        {
+            NewPlayerSuggestedName = suggestedName;
+            return StandaloneNameChoiceResult;
+        }
         public string? LastInformation { get; private set; }
         public RonImportDestinationChoice? RonImportDestinationChoiceResult { get; set; }
         public UnsavedChangesChoice ConfirmUnsavedChangesResult { get; set; } = UnsavedChangesChoice.Cancel;

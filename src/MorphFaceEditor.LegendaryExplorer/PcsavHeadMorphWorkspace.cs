@@ -32,9 +32,13 @@ public sealed class PcsavHeadMorphWorkspace : IUndoableEditSource
     private readonly HeadMorphPayload? _head;
     private HeadMorphPayload? _editingBaseline;
     private HeadMorphPayload? _importedHead;
+    private HeadMorphPayload? _savedImportedHead;
+    private HeadMorphPayload? _savedEditingBaseline;
     private readonly Stack<(ImportState Before, ImportState After)> _undoImports = new(), _redoImports = new();
     private sealed record ImportState(HeadMorphPayload? Head, HeadMorphPayload? Baseline);
     public event EventHandler? EditCommitted;
+    public event EventHandler? ImportStateChanged;
+    public bool HasPendingHeadImport => !ReferenceEquals(_importedHead, _savedImportedHead);
     public bool CanUndo => _undoImports.Count > 0;
     public bool CanRedo => _redoImports.Count > 0;
     public void ClearRedo() => _redoImports.Clear();
@@ -43,12 +47,14 @@ public sealed class PcsavHeadMorphWorkspace : IUndoableEditSource
         var edit = _undoImports.Pop();
         _redoImports.Push(edit);
         (_importedHead, _editingBaseline) = (edit.Before.Head, edit.Before.Baseline);
+        ImportStateChanged?.Invoke(this, EventArgs.Empty);
     }
     public void Redo()
     {
         var edit = _redoImports.Pop();
         _undoImports.Push(edit);
         (_importedHead, _editingBaseline) = (edit.After.Head, edit.After.Baseline);
+        ImportStateChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private PcsavHeadMorphWorkspace(string path, byte[] bytes)
@@ -141,7 +147,19 @@ public sealed class PcsavHeadMorphWorkspace : IUndoableEditSource
     }
 
     /// <summary>Capture MFE's projection once so unavailable assets/controls do not erase native data on save.</summary>
-    public void SetEditingBaseline(HeadMorphPayload head) => _editingBaseline = head;
+    public void SetEditingBaseline(HeadMorphPayload head)
+    {
+        _editingBaseline = head;
+        _savedEditingBaseline ??= head;
+    }
+
+    public void DiscardHeadImport()
+    {
+        (_importedHead, _editingBaseline) = (_savedImportedHead, _savedEditingBaseline);
+        _undoImports.Clear();
+        _redoImports.Clear();
+        ImportStateChanged?.Invoke(this, EventArgs.Empty);
+    }
 
     public void SetImportedHead(HeadMorphPayload head, MorphFaceDocument draft, bool recordHistory = false)
     {
@@ -162,9 +180,15 @@ public sealed class PcsavHeadMorphWorkspace : IUndoableEditSource
             _undoImports.Clear();
             _redoImports.Clear();
         }
+        ImportStateChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    public void SetEditingBaseline(MorphFaceDocument draft) => _editingBaseline = new(
+    public void SetEditingBaseline(MorphFaceDocument draft) => SetEditingBaseline(EditingHead(draft));
+
+    public void SaveEditedHead(MorphFaceDocument draft, string? destination = null) =>
+        SaveEditedHead(EditingHead(draft), destination);
+
+    private static HeadMorphPayload EditingHead(MorphFaceDocument draft) => new(
         draft.HairMeshReference?.InstancedPath ?? "None",
         draft.OtherMeshReferences.OfType<AssetIdentity>().Select(v => v.InstancedPath).ToArray(),
         new(draft.MorphFeatures, draft.FinalSkeleton, draft.BakedLods),
@@ -179,6 +203,8 @@ public sealed class PcsavHeadMorphWorkspace : IUndoableEditSource
         // A full replacement or newly created head must prove every runtime reference.
         new PlayerRuntimeAssetValidator().Verify(Game, merged, _importedHead is null ? _head : null);
         Commit(ReplaceHead(merged), merged, destination);
+        _savedImportedHead = _importedHead;
+        _savedEditingBaseline = _editingBaseline;
     }
 
     public void DeleteHeadMorph() => Commit(ReplaceHead(null), null);

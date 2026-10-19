@@ -300,7 +300,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public string PackageDisplayName => IsDirty ? $"{PackageName} *" : PackageName;
     public bool HasWorkspace => PackagePath is not null;
     public bool HasRecentFiles => RecentFiles.Count > 0;
-    public bool IsDirty => _hasWorkspaceChanges || Editor?.IsDirty == true;
+    public bool IsDirty => _hasWorkspaceChanges || Editor?.IsDirty == true || _pcsavWorkspace?.HasPendingHeadImport == true;
     public bool CanCommitFace => _packageWorkspace?.CanCommit == true && Editor is not null;
     public bool CanFixMorph => Editor?.CanFixMorph == true;
     public bool IsDetachedMeshWorkspace => _detachedMeshSource is not null;
@@ -910,6 +910,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             RestoreLoadedFaceSelection();
             return false;
         }
+        if (confirmUnsavedChanges && !await StageSavedCareerDraftForReloadAsync()) return false;
         SelectedFace = Faces.FirstOrDefault(face => face.UIndex == requestedFaceUIndex);
         if (SelectedFace is null)
         {
@@ -1114,6 +1115,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private void SetEditor(FaceEditorViewModel? editor, LoadedMorphFace? loaded)
     {
+        _pcsavDraftPendingInPackage = false;
         _activeRegistryProfile = null;
         _activeRegistryCatalogProfile = null;
         CancelAttachmentPreviewLoad();
@@ -1712,11 +1714,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             return false;
         }
-        if (!Editor.IsDirty)
+        if (!Editor.IsDirty && !_pcsavDraftPendingInPackage)
         {
             return true;
         }
 
+        var nativeSaveAlreadyCurrent = _pcsavDraftPendingInPackage && !IsDirty;
         using var saveLock = new SaveControlLock(this);
         IsBusy = true;
         ErrorMessage = null;
@@ -1737,6 +1740,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 return false;
             }
             Status = Loc.Format("loc_Shell_Status_TemporaryEditsUpdated", result.FaceInstancedPath);
+            if (nativeSaveAlreadyCurrent)
+            {
+                _hasWorkspaceChanges = false;
+                OnDirtyStateChanged();
+            }
             AppLog.Information($"FACE:UPDATED {result.FaceInstancedPath} VERIFIED");
             return true;
         }
@@ -1808,7 +1816,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private async Task<bool> EnsureCanAbandonEditorChangesAsync()
     {
-        if (Editor?.IsDirty != true)
+        if (Editor?.IsDirty != true && _pcsavWorkspace?.HasPendingHeadImport != true)
         {
             return true;
         }
@@ -2056,7 +2064,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _showsImportedFacesOnly = false;
         _sourceFile = null;
         _hasOtherStandaloneChanges = false;
+        if (_pcsavWorkspace is not null) _pcsavWorkspace.ImportStateChanged -= OnEditorDirtyStateChanged;
         _pcsavWorkspace = null;
+        _pcsavSavedDraft = null;
         if (_packageWorkspace is null)
         {
             return;

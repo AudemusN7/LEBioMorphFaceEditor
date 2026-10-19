@@ -420,10 +420,6 @@ public sealed class MorphFacePackageContextService
             StandalonePlayerMorphImportService.ResolveInstalledSeed(game),
             StandalonePlayerMorphImportService.ResolvePlayerTemplate(game, sex)));
 
-    public void ExportPlayerDefaultsRon(MorphFaceGame game, StandalonePlayerSex sex, string destinationPath,
-        RonExportProvenance? provenance = null)
-        => TseHeadMorphRon.Write(destinationPath, CapturePlayerDefaultHead(game, sex), provenance);
-
     public HeadMorphPayload CapturePlayerDefaultHead(MorphFaceGame game, StandalonePlayerSex sex)
     {
         LegendaryExplorerCoreRuntime.Initialize();

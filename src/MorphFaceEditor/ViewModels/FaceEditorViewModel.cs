@@ -2113,6 +2113,13 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         return result;
     }
 
+    internal bool HasAssetReferenceChanges(MorphFaceEditor.Core.Domain.MorphFaceDocument draft) =>
+        draft.HairMeshReference != _cleanState.HairMeshReference ||
+        !draft.OtherMeshReferences.SequenceEqual(_cleanState.OtherMeshReferences) ||
+        !draft.MaterialOverrides.Textures.SequenceEqual(_cleanState.MaterialOverrides.Textures);
+
+    internal MorphFaceEditor.Core.Domain.MorphFaceDocument SavedDraft => _cleanState;
+
     internal void AcceptSavedState(bool materialsOnly = false, bool featuresOnly = false)
     {
         var draft = CreateDraft();

@@ -103,7 +103,7 @@ public sealed partial class MainWindowViewModel
                     return;
                 }
                 IsBusy = false;
-                if (Editor.IsDirty && !await FlushEditorToWorkspaceAsync()) return;
+                if ((Editor.IsDirty || _pcsavDraftPendingInPackage) && !await FlushEditorToWorkspaceAsync()) return;
                 IsBusy = true;
                 File.Copy(workspace, backup);
                 var result = await Task.Run(() => _packageContextService.ReplaceHead(workspace, face.InstancedPath, document.Head, player, assets));

@@ -1929,4 +1929,5 @@ Choose No to keep the current scalp textures and material.</system:String>
   <system:String x:Key="loc_ActorAssignment_AssignedMaterialTargets" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">Assigned and verified {0} parameter MICs and {1} hair/accessory meshes. Save File to keep these changes.</system:String>
   <system:String x:Key="loc_Pcsav_UnavailableHair" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">Hair mesh: {0}</system:String>
   <system:String x:Key="loc_Pcsav_UnavailableAccessory" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">Accessory mesh: {0}</system:String>
+  <system:String x:Key="loc_RonFiles_NonFiniteExport" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">This head contains NaN or Infinity values and cannot be exported to RON. The existing file has not been changed.</system:String>
 </ResourceDictionary>

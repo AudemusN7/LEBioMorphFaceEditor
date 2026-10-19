@@ -875,61 +875,22 @@ public sealed partial class MainWindowViewModel
         var packageModified = false;
         try
         {
-            MorphFaceSaveResult result;
-            MorphFaceEditor.Core.Deformation.MorphMeshFitResult? fit = null;
-            var sourceExtension = Path.GetExtension(sourcePath);
-            var isLegacy = sourceExtension.Equals(".me2headmorph", StringComparison.OrdinalIgnoreCase) ||
-                           sourceExtension.Equals(".me3headmorph", StringComparison.OrdinalIgnoreCase);
-            if (sourceExtension.Equals(".ron", StringComparison.OrdinalIgnoreCase))
+            IsBusy = false;
+            if (!await EnsureContextTargetLoadedAsync(template) || Editor is null || _loadedFace is null)
             {
-                result = await Task.Run(() => _packageContextService.ImportHeadMorph(
-                    workspacePath,
-                    template.InstancedPath,
-                    objectName,
-                    sourcePath));
+                return;
             }
-            else if (isLegacy)
-            {
-                IsBusy = false;
-                if (!await EnsureContextTargetLoadedAsync(template) || Editor is null)
-                {
-                    return;
-                }
-                IsBusy = true;
-                Status = Loc.Format("loc_Shell_Status_ConvertingToTheSelectedLegendary", Path.GetFileName(sourcePath));
-                var legacy = await Task.Run(() => _packageContextService.ReadLegacyHeadMorph(sourcePath));
-                Editor.ApplyMorphData(legacy.MorphData);
-                var convertedDraft = Editor.CreateDraft();
-                var convertedMorph = new MorphFaceEditor.Core.Domain.MorphFaceMorphData(
-                    convertedDraft.MorphFeatures,
-                    convertedDraft.FinalSkeleton,
-                    convertedDraft.BakedLods);
-                result = await Task.Run(() => _packageContextService.ImportConvertedLegacyHeadMorph(
-                    workspacePath,
-                    template.InstancedPath,
-                    objectName,
-                    sourcePath,
-                    convertedMorph));
-            }
-            else
-            {
-                IsBusy = false;
-                if (!await EnsureContextTargetLoadedAsync(template) || Editor is null || _loadedFace is null)
-                {
-                    return;
-                }
-                IsBusy = true;
-                Status = Loc.Format("loc_Shell_Status_SolvingAgainstTheSelectedMorph", Path.GetFileName(sourcePath));
-                var candidates = await Task.Run(() => _interchangeService.ReadMeshPositions(
-                    sourcePath,
-                    _loadedFace.BaseHead));
-                fit = await Task.Run(() => Editor.FitMeshPositions(candidates));
-                result = await Task.Run(() => _packageContextService.CloneMorphWithData(
-                    workspacePath,
-                    template.InstancedPath,
-                    objectName,
-                    fit.MorphData));
-            }
+            IsBusy = true;
+            Status = Loc.Format("loc_Shell_Status_SolvingAgainstTheSelectedMorph", Path.GetFileName(sourcePath));
+            var candidates = await Task.Run(() => _interchangeService.ReadMeshPositions(
+                sourcePath,
+                _loadedFace.BaseHead));
+            var fit = await Task.Run(() => Editor.FitMeshPositions(candidates));
+            var result = await Task.Run(() => _packageContextService.CloneMorphWithData(
+                workspacePath,
+                template.InstancedPath,
+                objectName,
+                fit.MorphData));
             packageModified = true;
             MarkWorkspaceChanged();
             if (!await RefreshWorkspaceAsync(result.FaceInstancedPath))
@@ -938,20 +899,9 @@ public sealed partial class MainWindowViewModel
                 Status = Loc.Text("loc_Shell_Status_ImportCompletedWorkspaceReloadFailed");
                 return;
             }
-            Status = fit is null
-                ? isLegacy
-                    ? Loc.Format("loc_Shell_Status_ImportedLegacyMorphVerified", result.FaceInstancedPath)
-                    : Loc.Format("loc_Shell_Status_ImportedMorphVerifiedFromFormat", result.FaceInstancedPath, sourceExtension.TrimStart('.'))
-                : fit.UsedSourcePrior
-                    ? Loc.Format("loc_Shell_Status_ImportedMorphRestoredLods", result.FaceInstancedPath, fit.MaximumError)
+            Status = fit.UsedSourcePrior
+                ? Loc.Format("loc_Shell_Status_ImportedMorphRestoredLods", result.FaceInstancedPath, fit.MaximumError)
                 : Loc.Format("loc_Shell_Status_ImportedMorphRecoveredSliders", result.FaceInstancedPath, fit.RecoveredFeatureCount, fit.RootMeanSquareError, fit.MaximumError);
-            if (sourceExtension.Equals(".ron", StringComparison.OrdinalIgnoreCase) && result.Warnings.Count > 0)
-            {
-                foreach (var warning in result.Warnings) AppLog.Warning(warning);
-                _dialogs.ShowInformation(
-                    Loc.Text("loc_Shell_DialogTitle_NpcMorphImportedWithWarnings"),
-                    AppendDatabaseImportGuidance(Loc.Format("loc_Shell_Dialog_NpcMorphImportWarnings", string.Join("\n- ", UserFacingMessageFormatter.FormatWarnings(result)))));
-            }
             if (fit is { MaximumError: > 0.001f })
             {
                 _dialogs.ShowInformation(

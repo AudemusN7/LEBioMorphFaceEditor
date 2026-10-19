@@ -6,12 +6,6 @@ using MorphFaceEditor.Core.Materials;
 
 namespace MorphFaceEditor.LegendaryExplorer;
 
-public sealed record LegacyHeadMorphImport(
-    string HairMesh,
-    IReadOnlyList<string> AccessoryMeshes,
-    MorphFaceMorphData MorphData,
-    MorphFaceMaterialData MaterialData);
-
 /// <summary>Reads Gibbed's legacy ME2/ME3 Unreal-serialized head-morph files.</summary>
 internal static class GibbedHeadMorph
 {

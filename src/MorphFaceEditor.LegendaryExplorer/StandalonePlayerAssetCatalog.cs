@@ -87,9 +87,9 @@ public sealed record StandalonePlayerAssetCatalog(
         var referencePath = referencePackagePath is null
             ? StandalonePlayerMorphImportService.ResolveInstalledSeed(game)
             : Path.GetFullPath(referencePackagePath);
-        var referencePackage = packageCache.GetCachedPackage(referencePath)
-                               ?? throw new InvalidDataException(
-                                   $"Could not open installed RON reference package '{referencePath}'.");
+        IMEPackage? referencePackage = null;
+        IMEPackage ReferencePackage() => referencePackage ??= packageCache.GetCachedPackage(referencePath)
+            ?? throw new InvalidDataException($"Could not open installed RON reference package '{referencePath}'.");
         var referenceResolver = new GamePackageReferenceResolver(packageCache);
         var textureAssets = new List<AssetIdentity>();
         var installedTextures = InstalledGameAssetResolver.ResolveInstalledReferences(game, requestedTextures, "Texture2D");
@@ -119,7 +119,7 @@ public sealed record StandalonePlayerAssetCatalog(
             }
 
             if ((FindInstalledExport(loadedFiles, requestedPath, "Texture2D") ??
-                 FindReferencedExport(referencePackage, referenceResolver, requestedPath, "Texture2D")) is { } texture)
+                 FindReferencedExport(ReferencePackage(), referenceResolver, requestedPath, "Texture2D")) is { } texture)
             {
                 textureAssets.Add(texture);
             }
@@ -140,7 +140,7 @@ public sealed record StandalonePlayerAssetCatalog(
                 continue;
             }
             if ((FindInstalledExport(loadedFiles, requestedPath, "SkeletalMesh") ??
-                 FindReferencedExport(referencePackage, referenceResolver, requestedPath, "SkeletalMesh")) is { } mesh)
+                 FindReferencedExport(ReferencePackage(), referenceResolver, requestedPath, "SkeletalMesh")) is { } mesh)
             {
                 meshes.Add(mesh);
             }

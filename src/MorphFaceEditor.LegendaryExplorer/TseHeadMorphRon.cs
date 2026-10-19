@@ -425,7 +425,10 @@ public static class TseHeadMorphRon
         builder.AppendLine("    },");
     }
 
-    private static string Format(float value) => value.ToString("R", CultureInfo.InvariantCulture);
+    private static string Format(float value) => float.IsFinite(value)
+        ? value.ToString("R", CultureInfo.InvariantCulture)
+        : throw UserFacingMessage.CreateError("loc_RonFiles_NonFiniteExport",
+            "RON export cannot represent NaN or Infinity values.");
     private static string Escape(string value) => value.Replace("\\", "\\\\").Replace("\"", "\\\"");
 
 }

@@ -2700,4 +2700,6 @@ Choose No to keep the current scalp textures and material.</system:String>
 <system:String x:Key="loc_ActorAssignment_AssigningMaterialsAndAttachments">Applying materials, hair and accessories from {0} to {1}…</system:String>
     <!--localiser: {"Key":"loc_ActorAssignment_AssignedMaterialTargets","ReviewedHash":"960306520DF10C9193CF5BDB5A8817FE683EC2C638B89211D80778D1D572164E","DoNotTranslate":false,"Note":"","SourceHash":null}-->
 <system:String x:Key="loc_ActorAssignment_AssignedMaterialTargets">Assigned and verified {0} parameter MICs and {1} hair/accessory meshes. Save File to keep these changes.</system:String>
+    <!--localiser: {"Key":"loc_RonFiles_NonFiniteExport","ReviewedHash":"BD452B24B79DC09E6368E20A2544AA392DBD599160DF634DA9F863758797F1C0","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_RonFiles_NonFiniteExport" xml:space="preserve">This head contains NaN or Infinity values and cannot be exported to RON. The existing file has not been changed.</system:String>
 </ResourceDictionary>

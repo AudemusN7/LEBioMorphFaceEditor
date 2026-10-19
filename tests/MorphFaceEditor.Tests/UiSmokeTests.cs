@@ -61,6 +61,7 @@ public static class UiSmokeTests
         new("LE3 NPC RON reopens Short03 hair while retaining native texture imports", NpcRonShort03RetainsNativeImports),
         new("LE3 Asari randomisation ignores removed mod texture donors", AsariRandomisationIgnoresRemovedModTextures),
         new("NPC RON export stamps the selected face without loading it", NpcRonExportIdentifiesUnloadedFace),
+        new("RON export rejects native nonfinite fields without replacing an existing file", RonExportRejectsNonFiniteFields),
         new("MFE material RON drops use material import rather than Player import", MaterialRonDropsUseMaterialImport),
         new("material RON metadata opens matching default NPC and Player faces", MaterialRonMetadataOpensDefaultFace),
         new("Morphs-only RON transfers between LE1 and LE2 using the target head", MorphFeaturesCrossGame),
@@ -2062,6 +2063,42 @@ public static class UiSmokeTests
         {
             if (File.Exists(destination)) File.Delete(destination);
         }
+    });
+
+    private static void RonExportRejectsNonFiniteFields() => RunWithDispatcher(async () =>
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"MFE-RonNonFinite-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var source = Path.Combine(root, "Source.pcc");
+            File.Copy(Path.GetFullPath(Path.Combine("tests", "Global Morphs", "LE1 GlobalMorphs.pcc")), source);
+            var facePath = MorphFaceReferenceInspector.Inspect(source).First(face =>
+                face.BaseHeadPath?.Contains("HMM", StringComparison.OrdinalIgnoreCase) == true).FacePath;
+            using (var package = MEPackageHandler.OpenMEPackage(source, forceLoadFromDisk: true))
+            {
+                var face = package.FindExport(facePath, "BioMorphFace")!;
+                var material = (ExportEntry)face.GetProperty<ObjectProperty>("m_oMaterialOverrides")!.ResolveToEntry(package);
+                var scalars = material.GetProperty<ArrayProperty<StructProperty>>("m_aScalarOverrides")!;
+                scalars.Add(new StructProperty("ScalarParameter", false,
+                    new NameProperty("MFE_NativeNaN", "nName"), new FloatProperty(float.NaN, "sValue")));
+                material.WriteProperty(scalars);
+                package.Save(source);
+            }
+            var before = PackageFingerprint.Capture(source);
+            var destination = Path.Combine(root, "Head.ron");
+            File.WriteAllText(destination, "previous export");
+            using var reader = new MorphFacePackageReader();
+            using var shell = CreateMainWindowViewModel(reader, new StubEditorDialogs { RonExportPath = destination });
+            await shell.OpenDroppedFileAsync(source);
+            shell.SelectedFace = shell.Faces.Single(face => face.InstancedPath == facePath);
+            TestAssert.True(shell.ExportMorphRonCommand.CanExecute(null), "Fixture did not reach the RON export command.");
+            await ((AsyncRelayCommand)shell.ExportMorphRonCommand).ExecuteAsync();
+            TestAssert.True(shell.HasError && File.ReadAllText(destination) == "previous export",
+                "RON export published unreadable nonfinite values over the previous export.");
+            TestAssert.Equal(before, PackageFingerprint.Capture(source));
+        }
+        finally { Directory.Delete(root, recursive: true); }
     });
 
     private static void MaterialRonDropsUseMaterialImport() => RunWithDispatcher(async () =>

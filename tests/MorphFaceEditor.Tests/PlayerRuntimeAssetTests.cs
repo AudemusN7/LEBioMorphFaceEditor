@@ -45,7 +45,7 @@ internal static class PlayerRuntimeAssetTests
                     var materials = service.CaptureMaterialData(seed, template);
                     materials = materials with { Textures = materials.Textures.Where(value =>
                         !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(value.Name)).ToArray() };
-                    service.ExportPlayerDefaultsRon(game, sex, path);
+                    TseHeadMorphRon.Write(path, service.CapturePlayerDefaultHead(game, sex));
                     var written = TseHeadMorphRon.Read(path);
                     MorphFacePackageCodec.VerifyMorphData(written.MorphData, morph);
                     if (game == MorphFaceGame.LE2 && sex == StandalonePlayerSex.Female)

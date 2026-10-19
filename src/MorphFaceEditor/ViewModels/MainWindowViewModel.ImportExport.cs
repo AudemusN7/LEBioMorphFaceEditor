@@ -137,17 +137,15 @@ public sealed partial class MainWindowViewModel
     {
         var choice = _dialogs.ChooseNewPlayerMorph();
         if (choice is null) return;
-        var directory = Path.Combine(Path.GetTempPath(), "MFE-NewPlayer-" + Guid.NewGuid().ToString("N"));
-        var sourcePath = Path.Combine(directory, "PlayerMorph.ron");
         IsBusy = true;
         ErrorMessage = null;
         Status = Loc.Format("loc_Shell_Status_PreparingPlayerDefaults", choice.Game);
         try
         {
-            Directory.CreateDirectory(directory);
-            await Task.Run(() => _packageContextService.ExportPlayerDefaultsRon(choice.Game, choice.Sex, sourcePath));
+            var head = await Task.Run(() => _packageContextService.CapturePlayerDefaultHead(choice.Game, choice.Sex));
+            var sourcePath = StandalonePlayerMorphImportService.ResolveInstalledSeed(choice.Game);
             IsBusy = false;
-            await ImportStandaloneMorphAsync(sourcePath, choice.Game, newPlayerMode: true);
+            await ImportStandaloneMorphAsync(sourcePath, choice.Game, newPlayerMode: true, playerHead: head);
             if (_standaloneImportPath == sourcePath)
             {
                 _standaloneImportPath = null;
@@ -163,8 +161,6 @@ public sealed partial class MainWindowViewModel
         finally
         {
             IsBusy = false;
-            if (File.Exists(sourcePath)) File.Delete(sourcePath);
-            if (Directory.Exists(directory)) Directory.Delete(directory);
         }
     }
 
@@ -538,7 +534,7 @@ public sealed partial class MainWindowViewModel
             ? Faces.Select(face => face.ObjectName).ToArray()
             : Array.Empty<string>();
         var suggestedName = SuggestImportName(
-            SanitizeObjectName(Path.GetFileNameWithoutExtension(sourcePath)),
+            newPlayerMode ? "PlayerMorph" : SanitizeObjectName(Path.GetFileNameWithoutExtension(sourcePath)),
             existingNames);
         var objectName = career is not null ? SanitizeObjectName(career.FirstName) : newPlayerMode
             ? _dialogs.ChooseNewPlayerMorphName(suggestedName, existingNames)
@@ -644,6 +640,7 @@ public sealed partial class MainWindowViewModel
                 DisposePackageWorkspace();
                 _packageWorkspace = result.Workspace;
                 _pcsavWorkspace = career;
+                if (career is not null) career.ImportStateChanged += OnEditorDirtyStateChanged;
                 _standaloneGame = game;
                 _isStandaloneNpcWorkspace = false;
                 SetDetachedMeshSource(null);
@@ -705,9 +702,10 @@ public sealed partial class MainWindowViewModel
                 _relativeBakeFacePaths.Remove(importedFacePath);
             }
             if (!appendingToCurrentGame) _hasWorkspaceChanges = career is { HasHeadMorph: false };
-            TrackSourceFile(career?.SourcePath ?? sourcePath, importedFacePath,
-                career is not null ? SourceFileFormat.Pcsav : isPlayerHead ? SourceFileFormat.MorphRon :
-                isMesh ? SourceFileFormat.Mesh : SourceFileFormat.LegacyMorph, ronSource?.Fingerprint);
+            if (!newPlayerMode)
+                TrackSourceFile(career?.SourcePath ?? sourcePath, importedFacePath,
+                    career is not null ? SourceFileFormat.Pcsav : isPlayerHead ? SourceFileFormat.MorphRon :
+                    isMesh ? SourceFileFormat.Mesh : SourceFileFormat.LegacyMorph, ronSource?.Fingerprint);
             OnPropertyChanged(nameof(PackageName));
             OnPropertyChanged(nameof(PackageDisplayName));
             OnDirtyStateChanged();
@@ -736,7 +734,11 @@ public sealed partial class MainWindowViewModel
                 Status = Loc.Format("loc_Shell_Status_ImportedAsRecognisedPlayerMeshReady", importedFacePath, game,
                     meshRecognition.Sex, meshRecognition.CoordinateSystem);
             }
-            if (career is not null && Editor is not null) career.SetEditingBaseline(Editor.CreateDraft());
+            if (career is not null && Editor is not null)
+            {
+                _pcsavSavedDraft = Editor.CreateDraft();
+                career.SetEditingBaseline(_pcsavSavedDraft);
+            }
             if (unavailableCareerAttachments.Count > 0 && Editor is not null)
                 _dialogs.ShowInformation(Loc.Text("loc_Shell_DialogTitle_PlayerMorphImportedWithWarnings"),
                     Loc.Format("loc_Pcsav_UnavailableAttachments", unavailableCareerAttachments.Count) + "\n\n" +
@@ -969,7 +971,7 @@ public sealed partial class MainWindowViewModel
     }
 
     private async Task<bool> FlushSelectedExportSourceAsync(BioMorphFaceListItem selected) =>
-        !IsLoaded(selected) || Editor?.IsDirty != true || await FlushEditorToWorkspaceAsync();
+        !IsLoaded(selected) || Editor?.IsDirty != true && !_pcsavDraftPendingInPackage || await FlushEditorToWorkspaceAsync();
 
     private static string SanitizeObjectName(string value)
     {

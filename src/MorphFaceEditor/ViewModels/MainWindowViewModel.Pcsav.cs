@@ -8,6 +8,9 @@ namespace MorphFaceEditor.ViewModels;
 public sealed partial class MainWindowViewModel
 {
     private PcsavHeadMorphWorkspace? _pcsavWorkspace;
+    // Native Save can be current while the disposable PCC still holds an older editing projection.
+    private bool _pcsavDraftPendingInPackage;
+    private MorphFaceDocument? _pcsavSavedDraft;
 
     private async Task OpenCareerSaveAsync(string path)
     {
@@ -45,13 +48,25 @@ public sealed partial class MainWindowViewModel
         if (_pcsavWorkspace is not { } career || _sourceFile is not { } source ||
             WorkspacePackagePath is not { } workspace) return false;
         using var saveLock = new SaveControlLock(this);
-        if (Editor?.IsDirty == true && !await FlushEditorToWorkspaceAsync()) return false;
+        var editor = Editor;
+        var draft = editor?.CreateDraft();
+        var direct = editor is { HasPendingRepair: false } && draft is { ScalpMaterialSelection: null } &&
+            !editor.HasAssetReferenceChanges(draft);
+        if (!direct && (Editor?.IsDirty == true || _pcsavDraftPendingInPackage) && !await FlushEditorToWorkspaceAsync()) return false;
         IsBusy = true;
         ErrorMessage = null;
         try
         {
-            await Task.Run(() => career.SaveEditedHead(
-                _packageContextService.CaptureHead(workspace, source.FacePath), destination));
+            if (direct)
+            {
+                await Task.Run(() => career.SaveEditedHead(draft!, destination));
+                _pcsavDraftPendingInPackage |= editor!.IsDirty;
+                editor.AcceptSavedState();
+            }
+            else
+                await Task.Run(() => career.SaveEditedHead(
+                    _packageContextService.CaptureHead(workspace, source.FacePath), destination));
+            _pcsavSavedDraft = Editor?.SavedDraft;
             _sourceFile = source with { Path = career.SourcePath, Fingerprint = FileFingerprint(career.SourcePath) };
             _standaloneImportPath = career.SourcePath;
             OnPropertyChanged(nameof(PackageName));
@@ -80,6 +95,35 @@ public sealed partial class MainWindowViewModel
             _ => "loc_Pcsav_InvalidFile"
         }
         : "loc_Pcsav_OperationFailed");
+
+    private async Task<bool> StageSavedCareerDraftForReloadAsync()
+    {
+        var discardImport = _pcsavWorkspace?.HasPendingHeadImport == true;
+        if ((!_pcsavDraftPendingInPackage && !discardImport) || Editor is not { } editor) return true;
+        using var saveLock = new SaveControlLock(this);
+        var current = editor.CreateDraft();
+        var saved = (_pcsavSavedDraft ?? editor.SavedDraft) with
+        { Source = current.Source, SourceFingerprint = current.SourceFingerprint };
+        try
+        {
+            await Task.Run(() => _packageWriter.SaveExisting(saved));
+            _referenceService.InvalidatePackage(saved.Source.PackagePath);
+            if (discardImport)
+            {
+                _pcsavWorkspace!.DiscardHeadImport();
+                _hasWorkspaceChanges = false;
+                OnDirtyStateChanged();
+            }
+            return true;
+        }
+        catch (Exception exception)
+        {
+            AppLog.Error("PCSAV:STAGE-SAVED-HEAD-FAILED", exception);
+            ErrorMessage = FormatPcsavError(exception);
+            Status = Loc.Text("loc_FileSave_EditsRetained");
+            return false;
+        }
+    }
 
     private async Task DeleteCareerHeadMorphAsync()
     {

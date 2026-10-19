@@ -16,7 +16,7 @@ public sealed partial class MainWindowViewModel
     private bool _hasOtherStandaloneChanges;
 
     private bool HasMultipleStandaloneImports => IsStandaloneWorkspace &&
-        _relativeBakeFacePaths.Concat(_fixedBakeFacePaths).Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1;
+        _faceGeometryModes.Count > 1;
 
     private static string FileFingerprint(string path)
     {

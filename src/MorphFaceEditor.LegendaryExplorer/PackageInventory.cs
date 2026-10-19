@@ -18,6 +18,11 @@ public sealed record PackageInventory(
     PackageFingerprint Fingerprint,
     IReadOnlyList<PackageEntrySummary> Entries);
 
+public sealed record WorkspacePackageInventory(
+    MorphFaceGame Game,
+    IReadOnlyList<MorphFaceMeshReferences> Faces,
+    PackageInventory Assets);
+
 public sealed record AssetDiscoveryResult(
     string RootPath,
     int PackagesScanned,

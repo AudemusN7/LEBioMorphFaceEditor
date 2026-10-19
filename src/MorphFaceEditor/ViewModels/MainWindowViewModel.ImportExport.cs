@@ -356,11 +356,9 @@ public sealed partial class MainWindowViewModel
 
             // Read and prepare the complete candidate before replacing the active editor.
             var candidatePath = imported.Workspace.WorkingPath;
-            var catalogTask = _catalogService.ReadAsync(candidatePath, cancellationToken);
-            var referencesTask = _referenceService.ReadCatalogAsync(candidatePath, cancellationToken);
-            await Task.WhenAll(catalogTask, referencesTask);
-            var catalog = await catalogTask;
-            var references = await referencesTask;
+            var preparation = await _catalogService.ReadWorkspaceAsync(candidatePath, _referenceService, cancellationToken: cancellationToken);
+            var catalog = preparation.Faces;
+            var references = preparation.References;
             var selected = catalog.Faces.FirstOrDefault(face =>
                 string.Equals(face.InstancedPath, imported.ImportedFacePath,
                     StringComparison.OrdinalIgnoreCase)) ?? throw new InvalidDataException(
@@ -407,9 +405,8 @@ public sealed partial class MainWindowViewModel
             _isStandaloneNpcWorkspace = true;
             _standaloneImportPath = Path.GetFullPath(sourcePath);
             SetDetachedMeshSource(null);
-            _fixedBakeFacePaths.Clear();
-            _relativeBakeFacePaths.Clear();
-            _relativeBakeFacePaths.Add(selected.InstancedPath);
+            _faceGeometryModes.Clear();
+            _faceGeometryModes[selected.InstancedPath] = MorphFaceGeometryMode.RelativeBake;
             TrackSourceFile(sourcePath, selected.InstancedPath, SourceFileFormat.MorphRon, source.Fingerprint);
             _hasWorkspaceChanges = false;
             PackagePath = _packageWorkspace.SourcePath;
@@ -644,8 +641,7 @@ public sealed partial class MainWindowViewModel
                 _standaloneGame = game;
                 _isStandaloneNpcWorkspace = false;
                 SetDetachedMeshSource(null);
-                _fixedBakeFacePaths.Clear();
-                _relativeBakeFacePaths.Clear();
+                _faceGeometryModes.Clear();
                 PackagePath = result.Workspace.SourcePath;
                 importedFacePath = result.ImportedFacePath;
                 importWarnings = UserFacingMessageFormatter.FormatWarnings(result.SaveResult);
@@ -661,8 +657,7 @@ public sealed partial class MainWindowViewModel
                 _standaloneGame = game;
                 _isStandaloneNpcWorkspace = false;
                 SetDetachedMeshSource(null);
-                _fixedBakeFacePaths.Clear();
-                _relativeBakeFacePaths.Clear();
+                _faceGeometryModes.Clear();
                 PackagePath = result.Workspace.SourcePath;
                 importedFacePath = result.ImportedFacePath;
                 importWarnings = UserFacingMessageFormatter.FormatWarnings(result.SaveResult);
@@ -678,8 +673,7 @@ public sealed partial class MainWindowViewModel
                 _standaloneGame = game;
                 _isStandaloneNpcWorkspace = false;
                 SetDetachedMeshSource(null);
-                _fixedBakeFacePaths.Clear();
-                _relativeBakeFacePaths.Clear();
+                _faceGeometryModes.Clear();
                 PackagePath = result.Workspace.SourcePath;
                 importedFacePath = result.ImportedFacePath;
                 importWarnings = UserFacingMessageFormatter.FormatWarnings(result.SaveResult);
@@ -688,19 +682,11 @@ public sealed partial class MainWindowViewModel
             _standaloneImportPath = Path.GetFullPath(career?.SourcePath ?? sourcePath);
             LogWorkspaceCreated(newPlayerMode ? "NEW-PLAYER" : "PLAYER", game,
                 career?.SourcePath ?? sourcePath, _packageWorkspace!.SourcePath, append: appendingToCurrentGame);
-            if (isPlayerHead)
-            {
-                // A classified Player head's LOD0 array is ordered for the exact
-                // selected-game HMM/HMF template. Its authored bake therefore
-                // supports canonical target deltas without inverse fitting.
-                _relativeBakeFacePaths.Add(importedFacePath);
-                _fixedBakeFacePaths.Remove(importedFacePath);
-            }
-            else
-            {
-                _fixedBakeFacePaths.Add(importedFacePath);
-                _relativeBakeFacePaths.Remove(importedFacePath);
-            }
+            // Classified Player heads preserve the selected-game HMM/HMF vertex
+            // order, so canonical target deltas can edit their authored bake.
+            // Mesh and legacy imports retain the fixed-bake route.
+            _faceGeometryModes[importedFacePath] = isPlayerHead
+                ? MorphFaceGeometryMode.RelativeBake : MorphFaceGeometryMode.FixedBake;
             if (!appendingToCurrentGame) _hasWorkspaceChanges = career is { HasHeadMorph: false };
             if (!newPlayerMode)
                 TrackSourceFile(career?.SourcePath ?? sourcePath, importedFacePath,
@@ -770,8 +756,7 @@ public sealed partial class MainWindowViewModel
         _standaloneGame = game;
         _isStandaloneNpcWorkspace = false;
         _standaloneImportPath = Path.GetFullPath(sourcePath);
-        _fixedBakeFacePaths.Clear();
-        _relativeBakeFacePaths.Clear();
+        _faceGeometryModes.Clear();
         _hasWorkspaceChanges = false;
         PackagePath = Path.GetFullPath(sourcePath);
         LogWorkspaceCreated("CUSTOM-MESH", game, sourcePath);

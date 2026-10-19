@@ -19,13 +19,12 @@ public sealed partial class MainWindowViewModel
 
     private bool CanUseMaterialContextMenu() =>
         CanUseFaceContextMenu() &&
-        (_packageWorkspace?.CanCommit == true || IsStandaloneFixedBakeFace());
+        (_packageWorkspace?.CanCommit == true || IsStandaloneImportedFace());
 
-    private bool IsStandaloneFixedBakeFace() =>
+    private bool IsStandaloneImportedFace() =>
         IsStandaloneWorkspace &&
         SelectedFace is { } selectedFace &&
-        (_fixedBakeFacePaths.Contains(selectedFace.InstancedPath) ||
-         _relativeBakeFacePaths.Contains(selectedFace.InstancedPath));
+        _faceGeometryModes.ContainsKey(selectedFace.InstancedPath);
 
     private bool CanPasteMorphData() =>
         CanMutatePackageContext() && !IsAlnMorphClipboardFace(SelectedFace) &&

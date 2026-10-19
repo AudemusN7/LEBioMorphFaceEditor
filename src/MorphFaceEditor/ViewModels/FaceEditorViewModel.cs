@@ -101,7 +101,8 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         bool previewOnlyAttachments = false,
         MorphFaceGame? playerRandomisationGame = null,
         bool customMaterialRegistryAvailable = false,
-        bool isTextureRegistryPending = false)
+        bool isTextureRegistryPending = false,
+        IUndoableEditSource? headImportHistory = null)
     {
         _session = session;
         var scalpMaterials = materialSession.BaseMaterials.Materials.Values
@@ -179,6 +180,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             session, materialSession, hairSession, _scalpMaterialSession, _cursedBoneHistory
         };
         historySources.AddRange(otherMeshSessions);
+        if (headImportHistory is not null) historySources.Add(headImportHistory);
         if (customMaterialWorkspace is not null) historySources.Add(customMaterialWorkspace);
         _history = new EditorUndoCoordinator(historySources.ToArray());
         _undoCommand = new RelayCommand(_history.Undo, () => _history.CanUndo);
@@ -492,6 +494,39 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     {
         _session.ImportFeatures(data.MorphFeatures.ToDictionary(v => v.Name, v => v.Offset, StringComparer.OrdinalIgnoreCase));
         RefreshDirtyState();
+    }
+
+    internal async Task<bool> TryImportMatchingHeadAsync(HeadMorphPayload head,
+        StandalonePlayerAssetCatalog assets, Func<Task> validate,
+        Action<MorphFaceDocument>? imported)
+    {
+        if (!CanEditAttachments || _preservedOtherMeshes.Count > 0 || head.AccessoryMeshes.Count > 1 ||
+            _scalpMaterialSession.Value is not null) return false;
+        AssetIdentity? Mesh(string path) => assets.SkeletalMeshes.SingleOrDefault(value =>
+            value.InstancedPath.Equals(path, StringComparison.OrdinalIgnoreCase));
+        var hair = Mesh(head.HairMesh);
+        var accessory = head.AccessoryMeshes.Count == 0 ? null : Mesh(head.AccessoryMeshes[0]);
+        if ((!string.IsNullOrWhiteSpace(head.HairMesh) && !head.HairMesh.Equals("None", StringComparison.OrdinalIgnoreCase) && hair is null) ||
+            (head.AccessoryMeshes.Count > 0 && accessory is null)) return false;
+        var textures = head.MaterialData.Textures.Select(value => value.TextureReference is null ? value : value with
+        {
+            TextureReference = assets.Textures.SingleOrDefault(asset => asset.InstancedPath.Equals(
+                value.TextureReference.InstancedPath, StringComparison.OrdinalIgnoreCase))
+        }).ToArray();
+        if (textures.Where((value, index) => value.TextureReference is null && head.MaterialData.Textures[index].TextureReference is not null).Any() ||
+            new[] { hair, accessory }.OfType<AssetIdentity>().Any(value => _playerReferenceAvailability?.Allows(value) == false))
+            return false;
+        using var aggregate = _history.BeginAggregate();
+        if (!_session.TryImportMatchingMorphData(head.MorphData)) return false;
+        await validate();
+        await Material.ApplyDataAsync(head.MaterialData with { Textures = textures });
+        HairMesh.SetImportedPreview(hair);
+        OtherMeshes[0].SetImportedPreview(accessory);
+        _cursedBoneHistory.Set(new Dictionary<string, System.Numerics.Vector3>());
+        imported?.Invoke(CreateDraft());
+        aggregate.Commit();
+        RefreshDirtyState();
+        return true;
     }
     private void SetToDefaults()
     {
@@ -1197,6 +1232,20 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         RefreshDirtyState();
         return warnings;
     }
+    public async Task<IReadOnlyList<string>> ImportFaceMaterialDataAsync(
+        MorphFaceMaterialData data, TsePreviewAttachmentImport? attachments)
+    {
+        using var aggregate = _history.BeginAggregate();
+        var warnings = await Material.MergeMaterialDataAsync(data);
+        if (attachments is { ApplyHair: true } && CanEditAttachments)
+            HairMesh.SetImportedPreview(attachments.Hair);
+        if (attachments is { ApplyAccessory: true } && CanEditAttachments)
+            OtherMeshes[0].SetImportedPreview(attachments.Accessory);
+        aggregate.Commit();
+        RefreshDirtyState();
+        return warnings;
+    }
+
     private void OnEvaluationChanged(object? sender, EventArgs e)
     {
         foreach (var feature in Features)

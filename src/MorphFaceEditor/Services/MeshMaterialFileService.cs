@@ -25,6 +25,13 @@ public sealed record TsePreviewAttachmentImport(
 /// <summary>Owns MESH file policy, assignment resolution and texture preparation before any live edit.</summary>
 public sealed class MeshMaterialFileService(PackageReferenceService references)
 {
+    public static MeshMaterialDocument WithAttachments(MeshMaterialDocument document,
+        AssetIdentity? hair, IReadOnlyList<AssetIdentity?> accessories) => document with
+    {
+        HairMesh = hair is null ? "None" : QualifyPath(hair),
+        AccessoryMeshes = accessories.OfType<AssetIdentity>().Select(QualifyPath).ToArray()
+    };
+
     public static MeshMaterialDocument Capture(CustomMaterialWorkspace workspace, MorphFaceGame game,
         string meshName, MorphFaceMaterialData data)
     {
@@ -66,61 +73,52 @@ public sealed class MeshMaterialFileService(PackageReferenceService references)
     public async Task<PreparedMeshMaterialImport> PrepareAsync(string text, bool tse,
         CustomMaterialWorkspace workspace, IReadOnlyList<CustomMaterialAssignmentOption> options, MorphFaceGame game)
     {
+        var input = RonInputSnapshot.Parse(text);
         IReadOnlyDictionary<int, CustomMaterialAssignmentOption>? assignments = null;
         MorphFaceMaterialData parameters;
-        MaterialRonCodec.TseMaterialDocument? tseDocument = null;
+        var isTse = tse || !input.Root.ContainsKey("format");
+        string? hair;
+        IReadOnlyList<string>? accessories;
         var target = workspace;
-        if (tse)
+        if (isTse)
         {
             if (!MeshMaterialInterchange.CanImportTse(workspace))
-                throw new InvalidOperationException(Loc.Text("loc_Services_MeshMaterial_AssignHumanBeforeTseImport"));
-            tseDocument = MaterialRonCodec.ReadTseDocument(text);
-            parameters = MeshMaterialInterchange.Scope(tseDocument.Parameters, "human");
+                throw new InvalidOperationException(Loc.Text(tse
+                    ? "loc_Services_MeshMaterial_AssignHumanBeforeTseImport"
+                    : "loc_Services_MeshMaterial_TseRonNeedsHumanMaterial"));
+            var document = MaterialRonCodec.ReadTseDocument(input);
+            parameters = MeshMaterialInterchange.Scope(document.Parameters, "human");
+            hair = document.HairMesh;
+            accessories = document.AccessoryMeshes;
         }
         else
         {
-            MeshMaterialDocument? document = null;
-            try
-            {
-                document = MaterialRonCodec.ReadMfe(text);
-            }
-            catch (InvalidDataException mfeError)
-            {
-                try { tseDocument = MaterialRonCodec.ReadTseDocument(text); }
-                catch (InvalidDataException) { throw mfeError; }
-            }
-            if (tseDocument is not null)
-            {
-                if (!MeshMaterialInterchange.CanImportTse(workspace))
-                    throw new InvalidOperationException(Loc.Text("loc_Services_MeshMaterial_TseRonNeedsHumanMaterial"));
-                parameters = MeshMaterialInterchange.Scope(tseDocument.Parameters, "human");
-            }
-            else
-            {
-                if (document!.Game != game.ToString())
-                    throw new InvalidDataException(Loc.Format("loc_Services_MeshMaterial_GameMismatch", document.Game, game));
-                assignments = ResolveAssignments(document, workspace, options);
-                target = new CustomMaterialWorkspace(workspace.Source);
-                target.ReplaceAssignments(assignments);
-                parameters = MeshMaterialInterchange.Flatten(document.Parameters);
-            }
+            var document = MaterialRonCodec.ReadMfe(input);
+            if (document.Game != game.ToString())
+                throw new InvalidDataException(Loc.Format("loc_Services_MeshMaterial_GameMismatch", document.Game, game));
+            assignments = ResolveAssignments(document, workspace, options);
+            target = new CustomMaterialWorkspace(workspace.Source);
+            target.ReplaceAssignments(assignments);
+            parameters = MeshMaterialInterchange.Flatten(document.Parameters);
+            hair = document.HairMesh;
+            accessories = document.AccessoryMeshes;
         }
         var catalogue = await references.ReadTextureCatalogAsync(game);
         var prepared = await PrepareTexturesAsync(assignments, parameters, target, catalogue.Candidates, references);
-        if (tseDocument is null) return prepared;
         var warnings = prepared.Warnings.ToList();
-        var attachments = await PreparePreviewAttachmentsAsync(tseDocument, game, warnings);
-        return prepared with { Warnings = warnings, PreviewAttachments = attachments, IsTse = true };
+        var attachments = await PreparePreviewAttachmentsAsync(hair, accessories, game, warnings);
+        return prepared with { Warnings = warnings, PreviewAttachments = attachments, IsTse = isTse };
     }
 
-    private async Task<TsePreviewAttachmentImport?> PreparePreviewAttachmentsAsync(
-        MaterialRonCodec.TseMaterialDocument document,
+    internal async Task<TsePreviewAttachmentImport?> PreparePreviewAttachmentsAsync(
+        string? hairMesh,
+        IReadOnlyList<string>? accessoryMeshes,
         MorphFaceGame game,
         ICollection<string> warnings)
     {
-        if (document.HairMesh is null && document.AccessoryMeshes is null) return null;
-        var requested = (document.HairMesh is null ? [] : new[] { document.HairMesh })
-            .Concat(document.AccessoryMeshes ?? [])
+        if (hairMesh is null && accessoryMeshes is null) return null;
+        var requested = (hairMesh is null ? [] : new[] { hairMesh })
+            .Concat(accessoryMeshes ?? [])
             .Where(path => !string.IsNullOrWhiteSpace(path) && !path.Equals("None", StringComparison.OrdinalIgnoreCase))
             .ToArray();
         IReadOnlyDictionary<string, AssetIdentity> resolved;
@@ -159,15 +157,15 @@ public sealed class MeshMaterialFileService(PackageReferenceService references)
             return (false, null);
         }
 
-        var hair = Resolve(document.HairMesh, "hair mesh");
-        var accessoryPath = document.AccessoryMeshes?.FirstOrDefault();
-        var accessory = document.AccessoryMeshes is null
+        var hair = Resolve(hairMesh, "hair mesh");
+        var accessoryPath = accessoryMeshes?.FirstOrDefault();
+        var accessory = accessoryMeshes is null
             ? (Apply: false, Identity: (AssetIdentity?)null)
-            : document.AccessoryMeshes.Count == 0
+            : accessoryMeshes.Count == 0
                 ? (Apply: true, Identity: (AssetIdentity?)null)
                 : Resolve(accessoryPath, "accessory mesh");
-        if (document.AccessoryMeshes is { Count: > 1 })
-            warnings.Add(Loc.Format("loc_Services_MeshMaterial_ExtraAccessoriesIgnored", document.AccessoryMeshes.Count));
+        if (accessoryMeshes is { Count: > 1 })
+            warnings.Add(Loc.Format("loc_Services_MeshMaterial_ExtraAccessoriesIgnored", accessoryMeshes.Count));
         return new(hair.Apply, hair.Identity, accessory.Apply, accessory.Identity);
     }
 

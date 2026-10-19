@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using MorphFaceEditor.Core.Domain;
+using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Core.Materials;
 
 namespace MorphFaceEditor.LegendaryExplorer;
@@ -18,7 +19,7 @@ public sealed class PcsavException(PcsavError reason, Exception? inner = null)
 /// Only HeadMorph is decoded for editing. Every other uncompressed byte is retained.
 /// Reference: KarlitosVII/trilogy-save-editor src/unreal and src/save_data.
 /// </summary>
-public sealed class PcsavHeadMorphWorkspace
+public sealed class PcsavHeadMorphWorkspace : IUndoableEditSource
 {
     private const uint Le1Magic = 0x9E2A83C1;
     private const int MaximumFileSize = 64 * 1024 * 1024;
@@ -31,6 +32,24 @@ public sealed class PcsavHeadMorphWorkspace
     private readonly HeadMorphPayload? _head;
     private HeadMorphPayload? _editingBaseline;
     private HeadMorphPayload? _importedHead;
+    private readonly Stack<(ImportState Before, ImportState After)> _undoImports = new(), _redoImports = new();
+    private sealed record ImportState(HeadMorphPayload? Head, HeadMorphPayload? Baseline);
+    public event EventHandler? EditCommitted;
+    public bool CanUndo => _undoImports.Count > 0;
+    public bool CanRedo => _redoImports.Count > 0;
+    public void ClearRedo() => _redoImports.Clear();
+    public void Undo()
+    {
+        var edit = _undoImports.Pop();
+        _redoImports.Push(edit);
+        (_importedHead, _editingBaseline) = (edit.Before.Head, edit.Before.Baseline);
+    }
+    public void Redo()
+    {
+        var edit = _redoImports.Pop();
+        _undoImports.Push(edit);
+        (_importedHead, _editingBaseline) = (edit.After.Head, edit.After.Baseline);
+    }
 
     private PcsavHeadMorphWorkspace(string path, byte[] bytes)
     {
@@ -124,13 +143,25 @@ public sealed class PcsavHeadMorphWorkspace
     /// <summary>Capture MFE's projection once so unavailable assets/controls do not erase native data on save.</summary>
     public void SetEditingBaseline(HeadMorphPayload head) => _editingBaseline = head;
 
-    public void SetImportedHead(HeadMorphPayload head, MorphFaceDocument draft)
+    public void SetImportedHead(HeadMorphPayload head, MorphFaceDocument draft, bool recordHistory = false)
     {
+        var before = new ImportState(_importedHead, _editingBaseline);
         if (!string.Equals(head.HairMesh, (_importedHead ?? _head)?.HairMesh, StringComparison.OrdinalIgnoreCase))
             head = head with { MaterialData = head.MaterialData with { Textures = head.MaterialData.Textures
                 .Where(v => !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(v.Name)).ToArray() } };
         _importedHead = head;
         SetEditingBaseline(draft);
+        if (recordHistory)
+        {
+            _undoImports.Push((before, new(_importedHead, _editingBaseline)));
+            _redoImports.Clear();
+            EditCommitted?.Invoke(this, EventArgs.Empty);
+        }
+        else
+        {
+            _undoImports.Clear();
+            _redoImports.Clear();
+        }
     }
 
     public void SetEditingBaseline(MorphFaceDocument draft) => _editingBaseline = new(

@@ -122,10 +122,14 @@
   <system:String x:Key="loc_Services_FeatureLod_LabelSuffix" xml:space="preserve">{0} – {1}</system:String>
   <system:String x:Key="loc_Services_FeatureLod_Marker" xml:space="preserve">NUR LOD {0}</system:String>
   <system:String x:Key="loc_Services_MeshMaterial_AssignHumanBeforeTseImport" xml:space="preserve">Weise ein Menschenmaterial zu, bevor du TSE-Materialeinstellungen importierst.</system:String>
-  <system:String x:Key="loc_Services_MeshMaterial_AttachmentCouldNotLoad" xml:space="preserve">TSE-Vorschauaufsatz „{0}“ wurde gefunden, konnte aber nicht geladen werden. Der aktuelle Vorschauaufsatz bleibt erhalten. {1}</system:String>
-  <system:String x:Key="loc_Services_MeshMaterial_AttachmentPathNotFound" xml:space="preserve">TSE-{0} „{1}“ wurde in den installierten {2}-Dateien nicht unter seinem vollständigen Pfad gefunden. Der aktuelle Vorschauaufsatz bleibt erhalten.</system:String>
-  <system:String x:Key="loc_Services_MeshMaterial_AttachmentsCouldNotResolve" xml:space="preserve">TSE-Vorschauaufsätze konnten in den installierten {0}-Dateien nicht aufgelöst werden. Die aktuellen Vorschauaufsätze bleiben erhalten. {1}</system:String>
-  <system:String x:Key="loc_Services_MeshMaterial_ExtraAccessoriesIgnored" xml:space="preserve">Der TSE-RON enthält {0} Zubehör-Meshes. Die MESH-Vorschau verwendet derzeit nur den ersten Slot.</system:String>
+  <!--localiser: {"Key":"loc_Services_MeshMaterial_AttachmentCouldNotLoad","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"B9D390DF4EC8B715F512D93FA6A1A8750A6F1650A1E7D0FC77FF61988F269035"}-->
+  <system:String x:Key="loc_Services_MeshMaterial_AttachmentCouldNotLoad" xml:space="preserve">Der Aufsatz „{0}“ wurde gefunden, konnte aber nicht geladen werden. Der aktuelle Aufsatz bleibt erhalten. {1}</system:String>
+  <!--localiser: {"Key":"loc_Services_MeshMaterial_AttachmentPathNotFound","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"4DF69B7E470BF9F2689D5F4B652AAA802DDD5F9A559C437A89A80E598C4383B8"}-->
+  <system:String x:Key="loc_Services_MeshMaterial_AttachmentPathNotFound" xml:space="preserve">„{1}“ ({0}) wurde in den installierten {2}-Dateien nicht unter seinem vollständigen Pfad gefunden; der aktuelle Aufsatz bleibt erhalten.</system:String>
+  <!--localiser: {"Key":"loc_Services_MeshMaterial_AttachmentsCouldNotResolve","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"9BABC0731987120074A43E083C274C7EC47A55785253A1FD5084F58148B2D8BD"}-->
+  <system:String x:Key="loc_Services_MeshMaterial_AttachmentsCouldNotResolve" xml:space="preserve">Aufsätze konnten in den installierten {0}-Dateien nicht gefunden werden; die aktuellen Aufsätze bleiben erhalten. {1}</system:String>
+  <!--localiser: {"Key":"loc_Services_MeshMaterial_ExtraAccessoriesIgnored","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"C55AF04E7A8BAB16471380A64D7B3CAA977532E8027A6C8EB4D7971FD17B0C95"}-->
+  <system:String x:Key="loc_Services_MeshMaterial_ExtraAccessoriesIgnored" xml:space="preserve">Der RON enthält {0} Zubehör-Meshes; nur der erste Zubehörslot kann importiert werden.</system:String>
   <system:String x:Key="loc_Services_MeshMaterial_GameMismatch" xml:space="preserve">Diese Materialien sind für {0}; der aktuelle Mesh-Arbeitsbereich gehört zu {1}.</system:String>
   <system:String x:Key="loc_Services_MeshMaterial_OptionMetadataInconsistent" xml:space="preserve">Material „{0}“ hat widersprüchliche Angaben zu Familie oder Bereich.</system:String>
   <system:String x:Key="loc_Services_MeshMaterial_OptionUnavailable" xml:space="preserve">Material „{0}“ ist im Materialkatalog dieses Spiels nicht verfügbar.</system:String>

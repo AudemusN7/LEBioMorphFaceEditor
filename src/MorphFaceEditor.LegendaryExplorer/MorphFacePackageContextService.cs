@@ -487,10 +487,9 @@ public sealed class MorphFacePackageContextService
     }
 
     /// <summary>Replace a face in the staged PCC through the same verified mutation path as other edits.</summary>
-    public MorphFaceSaveResult ReplaceRon(string packagePath, string facePath, string sourcePath,
+    public MorphFaceSaveResult ReplaceHead(string packagePath, string facePath, HeadMorphPayload ron,
         bool player, StandalonePlayerAssetCatalog? assets = null)
     {
-        var ron = TseHeadMorphRon.Read(sourcePath);
         ValidateMorphData(ron.MorphData);
         ValidateMaterialData(ron.MaterialData);
         return Mutate(packagePath, package =>
@@ -503,6 +502,14 @@ public sealed class MorphFacePackageContextService
             var warnings = new List<string>();
             var userWarnings = new List<UserFacingMessage>();
             var resolved = ResolveRonMaterials(package, ron.MaterialData, assets, true, warnings, userWarnings);
+            if (player)
+                _playerAssets.Verify(package.Game switch
+                {
+                    MEGame.LE1 => MorphFaceGame.LE1,
+                    MEGame.LE2 => MorphFaceGame.LE2,
+                    MEGame.LE3 => MorphFaceGame.LE3,
+                    _ => MorphFaceGame.Unsupported
+                }, ron with { MaterialData = resolved });
             WriteMorphData(face, ron.MorphData);
             WriteMaterialData(package, material, resolved);
             WriteRonMeshReferences(package, face, ron, assets, true, warnings, !player, userWarnings);

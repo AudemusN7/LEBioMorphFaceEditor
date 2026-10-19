@@ -14,6 +14,7 @@ public static class EditingTests
         new("mixed morph material and bone history round-trips in semantic order", MixedMorphMaterialBoneHistoryRoundTrips),
         new("dirty comparison tracks authored state and ignores derived LODs", DirtyComparisonTracksAuthoredState),
         new("oracle mismatch threshold tolerates visually insignificant drift", OracleMismatchThresholdToleratesSmallDrift),
+        new("full import oracle checks lower LODs without changing rejected edits", FullImportOracleChecksEveryLod),
         new("Fix Morph rejects unsafe repair candidates", FixMorphRejectsUnsafeCandidates),
         new("fix morph rebuilds all compatible LODs and re-enables editing", FixMorphRebuildsCompatibleLods),
         new("Fix Morph remains atomic when a notification callback fails", FixMorphSurvivesNotificationFailure),
@@ -31,6 +32,30 @@ public static class EditingTests
         new("relative-bake disables on incompatible authored LOD0 topology", RelativeBakeRejectsIncompatibleTopology),
         new("base-mesh-only and blocked profiles do not expose bone editing", BaseMeshOnlyDoesNotExposeBones)
     ];
+
+    private static void FullImportOracleChecksEveryLod()
+    {
+        var (mesh, document, target) = CreateRelativeBakeFixture();
+        var session = CreateRelativeSession(mesh, document, target);
+        session.SetFeature("Target", 1f);
+        var desired = session.CreateDraft(null, MorphFaceMaterialOverrides.Empty);
+        session.Undo();
+        var before = session.CreateDraft(null, MorphFaceMaterialOverrides.Empty);
+        var lods = desired.BakedLods.Select(lod => lod.ToArray()).ToArray();
+        lods[1][0] += Vector3.One;
+        var events = 0;
+        session.EvaluationChanged += (_, _) => events++;
+        TestAssert.True(!session.TryImportMatchingMorphData(new(desired.MorphFeatures, desired.FinalSkeleton, lods)),
+            "A lower-LOD mismatch was accepted by the lightweight import.");
+        TestAssert.True(events == 0 && session.CanRedo && MorphFaceEditorStateComparer.Equals(before,
+            session.CreateDraft(null, MorphFaceMaterialOverrides.Empty)), "Rejected comparison changed the live edit or its history.");
+        lods[1][0] = desired.BakedLods[1][0] + new Vector3(0.005f, 0, 0);
+        TestAssert.True(session.TryImportMatchingMorphData(new(desired.MorphFeatures, desired.FinalSkeleton, lods)),
+            "A reproducible head within the standard tolerance was rejected.");
+        session.Undo();
+        TestAssert.True(MorphFaceEditorStateComparer.Equals(before, session.CreateDraft(null, MorphFaceMaterialOverrides.Empty)),
+            "The matching geometry import was not undoable.");
+    }
 
     private static void RelativeBakePreservesInitialAuthoredBake()
     {

@@ -3,6 +3,7 @@ using System.Numerics;
 using System.Text;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
+using MorphFaceEditor.Core.Services;
 
 namespace MorphFaceEditor.LegendaryExplorer;
 
@@ -24,6 +25,8 @@ public sealed record RonExportProvenance(
     string Archetype,
     bool PlayerMorph);
 
+public sealed record HeadMorphRonDocument(HeadMorphPayload Head, RonExportProvenance? Provenance);
+
 /// <summary>
 /// Reads and writes Trilogy Save Editor's serde/RON HeadMorph schema. This is
 /// intentionally independent of LEC's older line parser, which loses non-empty
@@ -38,14 +41,16 @@ public static class TseHeadMorphRon
     public static MorphFaceMorphData ReadMorphData(string path) => Read(path).MorphData;
     public static void Validate(string path) => _ = Read(path);
 
-    public static HeadMorphPayload Read(string path)
+    public static HeadMorphPayload Read(string path) => ReadDocument(path).Head;
+
+    public static HeadMorphRonDocument ReadDocument(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         var source = File.ReadAllText(path);
-        _ = ParseProvenance(source);
+        var provenance = ParseProvenance(source);
         var featuresOnly = source.Split('\n').Any(line => line.Trim().Equals("// MFE RON Content: Morphs", StringComparison.Ordinal));
-        var parser = new Parser(source, featuresOnly);
-        return parser.ReadHeadMorph();
+        var input = RonInputSnapshot.Parse(source, "Trilogy Save Editor");
+        return new(HeadMorphRonSchema.Read(input, featuresOnly), provenance);
     }
 
     /// <summary>Reads the optional trusted exporter header from a RON file.</summary>
@@ -58,6 +63,8 @@ public static class TseHeadMorphRon
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         return ParseProvenance(File.ReadAllText(path));
     }
+
+    public static RonExportProvenance? ReadProvenance(RonInputSnapshot input) => ParseProvenance(input.Source);
 
     internal static void Write(
         string path,
@@ -420,319 +427,4 @@ public static class TseHeadMorphRon
     private static string Format(float value) => value.ToString("R", CultureInfo.InvariantCulture);
     private static string Escape(string value) => value.Replace("\\", "\\\\").Replace("\"", "\\\"");
 
-    private sealed class Parser
-    {
-        private readonly string _source;
-        private int _index;
-
-        private readonly bool _featuresOnly;
-        public Parser(string source, bool featuresOnly = false)
-        {
-            _source = source ?? throw new ArgumentNullException(nameof(source));
-            _featuresOnly = featuresOnly;
-        }
-
-        public HeadMorphPayload ReadHeadMorph()
-        {
-            string hair = "None";
-            IReadOnlyList<string> accessories = [];
-            IReadOnlyList<MorphFeatureValue> features = [];
-            IReadOnlyList<BoneTranslation> bones = [];
-            var lods = new Vector3[4][];
-            IReadOnlyList<Core.Materials.ScalarMaterialOverride> scalars = [];
-            IReadOnlyList<Core.Materials.VectorMaterialOverride> colours = [];
-            IReadOnlyList<(string Name, string Path)> textures = [];
-            var fields = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            Expect('(');
-            while (!TryConsume(')'))
-            {
-                var field = ReadIdentifier();
-                if (!fields.Add(field))
-                {
-                    throw Error($"Duplicate HeadMorph field '{field}'.");
-                }
-                Expect(':');
-                switch (field)
-                {
-                    case "hair_mesh": hair = ReadString(); break;
-                    case "accessory_mesh": accessories = ReadStringArray(); break;
-                    case "morph_features": features = ReadFloatMap()
-                        .Select(value => new MorphFeatureValue(value.Key, value.Value)).ToArray(); break;
-                    case "offset_bones": bones = ReadVectorMap()
-                        .Select(value => new BoneTranslation(value.Key, value.Value)).ToArray(); break;
-                    case "lod0_vertices": lods[0] = ReadVectorArray(); break;
-                    case "lod1_vertices": lods[1] = ReadVectorArray(); break;
-                    case "lod2_vertices": lods[2] = ReadVectorArray(); break;
-                    case "lod3_vertices": lods[3] = ReadVectorArray(); break;
-                    case "scalar_parameters": scalars = ReadFloatMap()
-                        .Select(value => new Core.Materials.ScalarMaterialOverride(value.Key, value.Value)).ToArray(); break;
-                    case "vector_parameters": colours = ReadColourMap()
-                        .Select(value => new Core.Materials.VectorMaterialOverride(value.Key, value.Value)).ToArray(); break;
-                    case "texture_parameters": textures = ReadStringMap(); break;
-                    default: throw Error($"Unsupported HeadMorph field '{field}'.");
-                }
-                _ = TryConsume(',');
-            }
-            SkipTrivia();
-            if (_index != _source.Length)
-            {
-                throw Error("Unexpected content after the HeadMorph value.");
-            }
-            var lastLod = Array.FindLastIndex(lods, value => value is { Length: > 0 });
-            var baked = lastLod < 0 ? [] : lods.Take(lastLod + 1).Cast<Vector3[]>().ToArray();
-            if ((!_featuresOnly && baked.Length == 0) || baked.Any(value => value.Length == 0))
-            {
-                throw Error("HeadMorph LOD arrays must begin at LOD0 and remain contiguous.");
-            }
-            if (_featuresOnly && (baked.Length != 0 || bones.Count != 0 || accessories.Count != 0 ||
-                hair != "None" || scalars.Count != 0 || colours.Count != 0 || textures.Count != 0))
-                throw Error("A Morphs-only RON must contain only morph features.");
-            return new HeadMorphPayload(
-                hair,
-                accessories,
-                new MorphFaceMorphData(features, bones, baked),
-                new MorphFaceMaterialData(
-                    scalars,
-                    colours,
-                    textures.Select(value => new Core.Materials.TextureMaterialOverride(
-                        value.Name,
-                        string.IsNullOrWhiteSpace(value.Path) ||
-                        string.Equals(value.Path, "None", StringComparison.OrdinalIgnoreCase)
-                            ? null
-                            : new AssetIdentity(string.Empty, value.Path, 0, "Texture2D"))).ToArray()));
-        }
-
-        private IReadOnlyList<KeyValuePair<string, float>> ReadFloatMap() => ReadMap(ReadNumber);
-        private IReadOnlyList<KeyValuePair<string, Vector3>> ReadVectorMap() => ReadMap(ReadVector3);
-        private IReadOnlyList<KeyValuePair<string, Vector4>> ReadColourMap() => ReadMap(ReadVector4);
-        private IReadOnlyList<(string Name, string Path)> ReadStringMap() =>
-            ReadMap(ReadString).Select(value => (value.Key, value.Value)).ToArray();
-
-        private IReadOnlyList<KeyValuePair<string, T>> ReadMap<T>(Func<T> readValue)
-        {
-            var values = new List<KeyValuePair<string, T>>();
-            Expect('{');
-            while (!TryConsume('}'))
-            {
-                var key = ReadString();
-                Expect(':');
-                if (values.Any(value => string.Equals(value.Key, key, StringComparison.OrdinalIgnoreCase)))
-                {
-                    throw Error($"Duplicate map key '{key}'.");
-                }
-                values.Add(new KeyValuePair<string, T>(key, readValue()));
-                _ = TryConsume(',');
-            }
-            return values;
-        }
-
-        private IReadOnlyList<string> ReadStringArray() => ReadArray(ReadString);
-        private Vector3[] ReadVectorArray() => ReadArray(ReadVector3).ToArray();
-
-        private IReadOnlyList<T> ReadArray<T>(Func<T> readValue)
-        {
-            var values = new List<T>();
-            Expect('[');
-            while (!TryConsume(']'))
-            {
-                values.Add(readValue());
-                _ = TryConsume(',');
-            }
-            return values;
-        }
-
-        private Vector3 ReadVector3()
-        {
-            Expect('(');
-            SkipTrivia();
-            Vector3 result;
-            if (PeekIsIdentifier())
-            {
-                var components = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
-                while (!TryConsume(')'))
-                {
-                    var key = ReadIdentifier();
-                    Expect(':');
-                    if (components.ContainsKey(key))
-                    {
-                        throw Error($"Duplicate vector component '{key}'.");
-                    }
-                    components[key] = ReadNumber();
-                    _ = TryConsume(',');
-                }
-                if (components.Keys.Any(key => key is not ("x" or "y" or "z")) ||
-                    components.Count != 3)
-                {
-                    throw Error("A vector must contain exactly x, y and z components.");
-                }
-                result = new Vector3(
-                    components.GetValueOrDefault("x"),
-                    components.GetValueOrDefault("y"),
-                    components.GetValueOrDefault("z"));
-            }
-            else
-            {
-                result = new Vector3(ReadNumber(), ReadCommaNumber(), ReadCommaNumber());
-                _ = TryConsume(',');
-                Expect(')');
-            }
-            EnsureFinite(result);
-            return result;
-        }
-
-        private Vector4 ReadVector4()
-        {
-            Expect('(');
-            var value = new Vector4(ReadNumber(), ReadCommaNumber(), ReadCommaNumber(), ReadCommaNumber());
-            _ = TryConsume(',');
-            Expect(')');
-            if (!float.IsFinite(value.X) || !float.IsFinite(value.Y) ||
-                !float.IsFinite(value.Z) || !float.IsFinite(value.W))
-            {
-                throw Error("RON colour values must be finite.");
-            }
-            return value;
-        }
-
-        private float ReadCommaNumber()
-        {
-            Expect(',');
-            return ReadNumber();
-        }
-
-        private float ReadNumber()
-        {
-            SkipTrivia();
-            var start = _index;
-            while (_index < _source.Length &&
-                   (char.IsDigit(_source[_index]) || _source[_index] is '+' or '-' or '.' or 'e' or 'E'))
-            {
-                _index++;
-            }
-            if (start == _index || !float.TryParse(
-                    _source[start.._index],
-                    NumberStyles.Float,
-                    CultureInfo.InvariantCulture,
-                    out var value) || !float.IsFinite(value))
-            {
-                throw Error("Expected a finite floating-point number.");
-            }
-            return value;
-        }
-
-        private string ReadIdentifier()
-        {
-            SkipTrivia();
-            var start = _index;
-            while (_index < _source.Length &&
-                   (char.IsLetterOrDigit(_source[_index]) || _source[_index] == '_'))
-            {
-                _index++;
-            }
-            return start == _index ? throw Error("Expected an identifier.") : _source[start.._index];
-        }
-
-        private string ReadString()
-        {
-            SkipTrivia();
-            ExpectRaw('\"');
-            var builder = new StringBuilder();
-            while (_index < _source.Length)
-            {
-                var character = _source[_index++];
-                if (character == '\"')
-                {
-                    return builder.ToString();
-                }
-                if (character == '\\')
-                {
-                    if (_index >= _source.Length)
-                    {
-                        break;
-                    }
-                    var escaped = _source[_index++];
-                    builder.Append(escaped switch
-                    {
-                        '\\' => '\\',
-                        '\"' => '\"',
-                        'n' => '\n',
-                        'r' => '\r',
-                        't' => '\t',
-                        _ => throw Error($"Unsupported string escape '\\{escaped}'.")
-                    });
-                }
-                else
-                {
-                    builder.Append(character);
-                }
-            }
-            throw Error("Unterminated string literal.");
-        }
-
-        private bool PeekIsIdentifier()
-        {
-            SkipTrivia();
-            return _index < _source.Length && (char.IsLetter(_source[_index]) || _source[_index] == '_');
-        }
-
-        private void Expect(char character)
-        {
-            SkipTrivia();
-            ExpectRaw(character);
-        }
-
-        private void ExpectRaw(char character)
-        {
-            if (_index >= _source.Length || _source[_index] != character)
-            {
-                throw Error($"Expected '{character}'.");
-            }
-            _index++;
-        }
-
-        private bool TryConsume(char character)
-        {
-            SkipTrivia();
-            if (_index >= _source.Length || _source[_index] != character)
-            {
-                return false;
-            }
-            _index++;
-            return true;
-        }
-
-        private void SkipTrivia()
-        {
-            while (_index < _source.Length)
-            {
-                if (char.IsWhiteSpace(_source[_index]))
-                {
-                    _index++;
-                    continue;
-                }
-                if (_index + 1 < _source.Length && _source[_index] == '/' && _source[_index + 1] == '/')
-                {
-                    _index += 2;
-                    while (_index < _source.Length && _source[_index] != '\n')
-                    {
-                        _index++;
-                    }
-                    continue;
-                }
-                break;
-            }
-        }
-
-        private InvalidDataException Error(string message) =>
-            new($"Invalid Trilogy Save Editor RON near character {_index}: {message}");
-
-        private void EnsureFinite(Vector3 value)
-        {
-            if (!float.IsFinite(value.X) || !float.IsFinite(value.Y) || !float.IsFinite(value.Z))
-            {
-                throw Error("RON vector values must be finite.");
-            }
-        }
-    }
 }

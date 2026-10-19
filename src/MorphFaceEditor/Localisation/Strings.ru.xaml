@@ -1929,4 +1929,5 @@
   <system:String x:Key="loc_ActorAssignment_AssignedMaterialTargets" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">Назначено и проверено параметрических MIC: {0}; сеток волос/аксессуаров: {1}. Нажмите «Сохранить файл», чтобы сохранить изменения.</system:String>
   <system:String x:Key="loc_Pcsav_UnavailableHair" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">Меш волос: {0}</system:String>
   <system:String x:Key="loc_Pcsav_UnavailableAccessory" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">Меш аксессуара: {0}</system:String>
+  <system:String x:Key="loc_RonFiles_NonFiniteExport" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">Эта голова содержит значения NaN или Infinity, поэтому её нельзя экспортировать в RON. Существующий файл не был изменён.</system:String>
 </ResourceDictionary>

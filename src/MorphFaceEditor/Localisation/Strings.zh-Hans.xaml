@@ -1929,4 +1929,5 @@
   <system:String x:Key="loc_ActorAssignment_AssignedMaterialTargets" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">已分配并验证 {0} 个参数 MIC 和 {1} 个头发/配饰网格。请保存文件以保留这些更改。</system:String>
   <system:String x:Key="loc_Pcsav_UnavailableHair" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">头发网格：{0}</system:String>
   <system:String x:Key="loc_Pcsav_UnavailableAccessory" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">配饰网格：{0}</system:String>
+  <system:String x:Key="loc_RonFiles_NonFiniteExport" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">此头部包含 NaN 或 Infinity 值，无法导出为 RON。现有文件未作更改。</system:String>
 </ResourceDictionary>

@@ -1929,4 +1929,5 @@
   <system:String x:Key="loc_ActorAssignment_AssignedMaterialTargets" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">パラメータ MIC {0} 件とヘア/アクセサリメッシュ {1} 件を割り当て、検証しました。変更を保持するには「ファイルを保存」してください。</system:String>
   <system:String x:Key="loc_Pcsav_UnavailableHair" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">ヘアメッシュ: {0}</system:String>
   <system:String x:Key="loc_Pcsav_UnavailableAccessory" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">アクセサリメッシュ: {0}</system:String>
+  <system:String x:Key="loc_RonFiles_NonFiniteExport" xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:system="clr-namespace:System;assembly=mscorlib">このヘッドには NaN または Infinity の値が含まれているため、RON にエクスポートできません。既存のファイルは変更されていません。</system:String>
 </ResourceDictionary>

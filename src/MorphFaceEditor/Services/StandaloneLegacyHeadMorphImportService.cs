@@ -69,7 +69,6 @@ public sealed class StandaloneLegacyHeadMorphImportService
         {
             var saveResult = ImportIntoWorkspace(
                 targetGame,
-                sourcePath,
                 objectName,
                 workspace,
                 sex,
@@ -112,7 +111,7 @@ public sealed class StandaloneLegacyHeadMorphImportService
         var sex = StandalonePlayerMorphImportService.IdentifySex(
             targetGame,
             legacy.MorphData.BakedLods[0].Length);
-        return ImportIntoWorkspace(targetGame, sourcePath, objectName, workspace, sex, legacy);
+        return ImportIntoWorkspace(targetGame, objectName, workspace, sex, legacy);
     }
 
     public static MorphFaceGame GetSourceGame(string sourcePath)
@@ -129,15 +128,14 @@ public sealed class StandaloneLegacyHeadMorphImportService
 
     private MorphFaceSaveResult ImportIntoWorkspace(
         MorphFaceGame targetGame,
-        string sourcePath,
         string objectName,
         MorphFacePackageWorkspace workspace,
         StandalonePlayerSex sex,
-        LegacyHeadMorphImport legacy)
+        HeadMorphPayload legacy)
     {
         var templatePath = StandalonePlayerMorphImportService.ResolvePlayerTemplate(targetGame, sex);
         using var reader = new MorphFacePackageReader();
-        var loaded = reader.Load(workspace.WorkingPath, templatePath);
+        var loaded = reader.Load(workspace.WorkingPath, templatePath, decodeTextures: false);
         if (loaded.BaseHead.Topology.VertexCount != legacy.MorphData.BakedLods[0].Length)
         {
             throw new InvalidDataException(
@@ -179,7 +177,7 @@ public sealed class StandaloneLegacyHeadMorphImportService
             workspace.WorkingPath,
             templatePath,
             objectName,
-            sourcePath,
+            legacy,
             converted);
     }
 

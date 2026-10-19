@@ -513,12 +513,6 @@ public sealed class MorphFacePackageContextService
         });
     }
 
-    public MorphFaceSaveResult ImportRon(
-        string packagePath,
-        string templateFacePath,
-        string objectName,
-        string sourcePath) => ImportHeadMorph(packagePath, templateFacePath, objectName, sourcePath);
-
     /// <summary>
     /// Imports a player RON after standalone identification has already matched
     /// its LOD0 to the selected game's HMM/HMF topology. Player lower-LOD
@@ -584,44 +578,22 @@ public sealed class MorphFacePackageContextService
             cancellationToken: cancellationToken);
     }
 
-    public MorphFaceSaveResult ImportHeadMorph(
-        string packagePath,
-        string templateFacePath,
-        string objectName,
-        string sourcePath)
-    {
-        ValidateObjectName(objectName);
-        var ron = Path.GetExtension(sourcePath).ToLowerInvariant() switch
-        {
-            ".ron" => TseHeadMorphRon.Read(sourcePath),
-            ".me2headmorph" or ".me3headmorph" => throw new InvalidOperationException(
-                "Legacy Gibbed morphs must be converted against an LE face profile before package import."),
-            _ => throw new InvalidDataException("The file is not a supported serialized head morph.")
-        };
-        return ImportHeadMorph(packagePath, templateFacePath, objectName, ron, ron.MorphData, mergeWithTemplate: false);
-    }
-
-    public LegacyHeadMorphImport ReadLegacyHeadMorph(string sourcePath)
+    public HeadMorphPayload ReadLegacyHeadMorph(string sourcePath)
     {
         var morph = GibbedHeadMorph.Read(sourcePath);
         ValidateMorphData(morph.MorphData);
         ValidateMaterialData(morph.MaterialData);
-        return new LegacyHeadMorphImport(
-            morph.HairMesh,
-            morph.AccessoryMeshes,
-            morph.MorphData,
-            morph.MaterialData);
+        return morph;
     }
 
     public MorphFaceSaveResult ImportConvertedLegacyHeadMorph(
         string packagePath,
         string templateFacePath,
         string objectName,
-        string sourcePath,
+        HeadMorphPayload legacy,
         MorphFaceMorphData convertedMorphData)
     {
         ValidateObjectName(objectName);
-        var legacy = GibbedHeadMorph.Read(sourcePath);
         ValidateMorphData(convertedMorphData);
         ValidateMaterialData(legacy.MaterialData);
         return ImportHeadMorph(
@@ -671,11 +643,10 @@ public sealed class MorphFacePackageContextService
                 materialOverride.ObjectName.Name,
                 materialOverride.ObjectName.Number + 1);
 
-            var templateMaterial = ReadMaterialData(ResolveMaterialOverride(source));
             var warnings = new List<string>();
             var userWarnings = new List<UserFacingMessage>();
             var resolvedMaterial = mergeWithTemplate
-                ? MergeLegacyMaterials(package, templateMaterial, ron.MaterialData, warnings)
+                ? MergeLegacyMaterials(package, ReadMaterialData(ResolveMaterialOverride(source)), ron.MaterialData, warnings)
                 : npcMaterialTransfer is null
                     ? ResolveRonMaterials(package, ron.MaterialData, assetCatalog, strictAssetResolution, warnings, userWarnings)
                     : TransferNpcRonMaterials(package, ron.MaterialData, npcMaterialTransfer,

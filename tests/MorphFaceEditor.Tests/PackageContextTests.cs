@@ -62,8 +62,7 @@ public static class PackageContextTests
         new("LE2 context morph paste round-trips matching-profile topology", PasteLe2MorphData),
         new("LE3 context material paste round-trips every override kind", PasteLe3MaterialData),
         new("bundled human and Asari eyes recover both fixed reflection cubes", HumanAndAsariEyeCubesResolve),
-        new("TSE RON export and import round-trip a real BioMorphFace", RonRoundTripsMorph),
-        new("unresolved RON assets fail atomically without same-name substitution", RonUnresolvedAssetsFailAtomically),
+        new("full RON replacement omits unavailable textures without same-name substitution", RonReplacementOmitsUnavailableTextures),
         new("unresolved standalone RON attachments are rejected before PCC publication", StandaloneRonUnresolvedAttachmentFailsAtomically),
         new("standalone NPC RON omits missing hair accessories and textures with visible warnings", StandaloneNpcRonUnresolvedHairDegrades),
         new("standalone player RON sex detection uses per-game LOD0 topology", StandalonePlayerRonSexDetection),
@@ -2531,42 +2530,7 @@ public static class PackageContextTests
         });
     }
 
-    private static void RonRoundTripsMorph()
-    {
-        WithPackageCopy("LE1 GlobalMorphs.pcc", path =>
-        {
-            var service = new MorphFacePackageContextService();
-            var source = ReadFaces(path).First(face =>
-                service.CaptureMorphData(path, face.InstancedPath).BakedLods.Count > 0);
-            var expectedMorph = service.CaptureMorphData(path, source.InstancedPath);
-            var expectedMaterial = service.CaptureMaterialData(path, source.InstancedPath);
-            var ronPath = Path.Combine(Path.GetTempPath(), $"MFE-{Guid.NewGuid():N}.ron");
-            try
-            {
-                service.ExportRon(path, source.InstancedPath, ronPath);
-                var result = service.ImportRon(
-                    path,
-                    source.InstancedPath,
-                    "MFE_RonRoundTrip_Test",
-                    ronPath);
-                AssertMorphEqual(expectedMorph, service.CaptureMorphData(path, result.FaceInstancedPath));
-                AssertMaterialEqual(expectedMaterial, service.CaptureMaterialData(path, result.FaceInstancedPath));
-                var text = File.ReadAllText(ronPath);
-                TestAssert.True(text.Contains("morph_features", StringComparison.Ordinal) &&
-                                text.Contains("lod0_vertices", StringComparison.Ordinal),
-                    "The exported RON did not use Trilogy Save Editor's HeadMorph field names.");
-            }
-            finally
-            {
-                if (File.Exists(ronPath))
-                {
-                    File.Delete(ronPath);
-                }
-            }
-        });
-    }
-
-    private static void RonUnresolvedAssetsFailAtomically()
+    private static void RonReplacementOmitsUnavailableTextures()
     {
         WithPackageCopy("LE1 GlobalMorphs.pcc", path =>
         {
@@ -2574,33 +2538,22 @@ public static class PackageContextTests
             var source = ReadFaces(path).First(face =>
                 service.CaptureMaterialData(path, face.InstancedPath).Textures.Any(value => value.TextureReference is not null));
             var ronPath = Path.Combine(Path.GetTempPath(), $"MFE-{Guid.NewGuid():N}.ron");
-            var sourceFingerprint = PackageFingerprint.Capture(path);
             var sourceMaterial = service.CaptureMaterialData(path, source.InstancedPath);
-            var missingPath = "BIOG_MFE_Missing_Donor.MissingTexture";
+            var originalPath = sourceMaterial.Textures.First(value => value.TextureReference is not null)
+                .TextureReference!.InstancedPath;
+            var missingPath = "BIOG_MFE_Missing_Donor." + originalPath.Split('.').Last();
             try
             {
                 service.ExportRon(path, source.InstancedPath, ronPath);
                 var original = File.ReadAllText(ronPath);
-                var originalPath = sourceMaterial.Textures.First(value => value.TextureReference is not null)
-                    .TextureReference!.InstancedPath;
                 File.WriteAllText(ronPath, original.Replace(
                     $"\"{originalPath}\"", $"\"{missingPath}\"", StringComparison.Ordinal));
 
-                var threw = false;
-                try
-                {
-                    _ = service.ImportRon(path, source.InstancedPath, "MFE_UnresolvedRon", ronPath);
-                }
-                catch (InvalidDataException exception)
-                {
-                    threw = exception.Message.Contains(missingPath, StringComparison.Ordinal);
-                }
-
-                TestAssert.True(threw, "An unresolved RON texture did not fail with its exact missing path.");
-                TestAssert.Equal(sourceFingerprint, PackageFingerprint.Capture(path));
-                TestAssert.True(ReadFaces(path).All(face =>
-                    !face.ObjectName.Equals("MFE_UnresolvedRon", StringComparison.OrdinalIgnoreCase)),
-                    "An unresolved RON import left a partial BioMorphFace in the package.");
+                var result = service.ReplaceHead(path, source.InstancedPath, TseHeadMorphRon.Read(ronPath), player: false);
+                TestAssert.True(result.UserWarnings.Any(warning => warning.LocalizationKey == "loc_RonImport_TextureSkipped" &&
+                    warning.Arguments.Contains(missingPath)), "The omitted RON texture warning lost its exact missing path.");
+                TestAssert.True(service.CaptureMaterialData(path, source.InstancedPath).Textures.All(value =>
+                    value.TextureReference?.InstancedPath != originalPath), "The unresolved texture used a same-name substitute.");
             }
             finally
             {
@@ -3685,11 +3638,13 @@ public static class PackageContextTests
                             .SequenceEqual(expectedMorph.BakedLods.Select(value => value.Length)),
                         "Legacy conversion did not rebuild the selected LE profile's LOD topology.");
 
+                    // Conversion and material/attachment import use the same captured head.
+                    File.Delete(headMorphPath);
                     var result = service.ImportConvertedLegacyHeadMorph(
                         path,
                         source.InstancedPath,
                         $"MFE_GibbedME{game}_Test",
-                        headMorphPath,
+                        legacy,
                         converted);
                     TestAssert.True(result.Warnings.Any(value =>
                             value.Contains("MissingTexture", StringComparison.OrdinalIgnoreCase) &&

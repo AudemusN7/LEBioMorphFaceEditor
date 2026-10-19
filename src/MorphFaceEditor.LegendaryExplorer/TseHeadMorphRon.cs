@@ -34,23 +34,24 @@ public sealed record HeadMorphRonDocument(HeadMorphPayload Head, RonExportProven
 /// </summary>
 public static class TseHeadMorphRon
 {
-    public static bool IsMorphFeaturesOnly(string path) => File.ReadLines(path)
-        .Any(line => line.Trim().Equals("// MFE RON Content: Morphs", StringComparison.Ordinal));
+    public static bool IsMorphFeaturesOnly(string path) => File.ReadLines(path).Any(IsMorphFeaturesMarker);
+    public static bool IsMorphFeaturesOnly(RonInputSnapshot input) => input.Source.Split('\n').Any(IsMorphFeaturesMarker);
+    private static bool IsMorphFeaturesMarker(string line) => line.Trim().Equals("// MFE RON Content: Morphs", StringComparison.Ordinal);
     public static void WriteMorphFeatures(string path, MorphFaceMorphData data, RonExportProvenance provenance) =>
         Write(path, new("None", [], new(data.MorphFeatures, [], []), new([], [], [])), provenance, true);
     public static MorphFaceMorphData ReadMorphData(string path) => Read(path).MorphData;
     public static void Validate(string path) => _ = Read(path);
 
     public static HeadMorphPayload Read(string path) => ReadDocument(path).Head;
+    public static HeadMorphPayload Read(RonInputSnapshot input) => HeadMorphRonSchema.Read(input, IsMorphFeaturesOnly(input));
 
     public static HeadMorphRonDocument ReadDocument(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         var source = File.ReadAllText(path);
         var provenance = ParseProvenance(source);
-        var featuresOnly = source.Split('\n').Any(line => line.Trim().Equals("// MFE RON Content: Morphs", StringComparison.Ordinal));
         var input = RonInputSnapshot.Parse(source, "Trilogy Save Editor");
-        return new(HeadMorphRonSchema.Read(input, featuresOnly), provenance);
+        return new(Read(input), provenance);
     }
 
     /// <summary>Reads the optional trusted exporter header from a RON file.</summary>

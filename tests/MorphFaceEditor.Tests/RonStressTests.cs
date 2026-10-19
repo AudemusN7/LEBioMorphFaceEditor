@@ -57,6 +57,8 @@ internal static class RonStressTests
         try
         {
             File.WriteAllText(path, head);
+            TestAssert.True(MaterialRonCodec.IdentifyMaterialFile(RonInputSnapshot.Parse(head)) is null,
+                "Material classification rejected the full-head omitted-comma dialect.");
             var parsed = TseHeadMorphRon.Read(path);
             TestAssert.True(parsed.AccessoryMeshes.SequenceEqual(["Hair.A", "Gear.B"]), "Head arrays lost omitted-comma support or order.");
             TestAssert.True(parsed.MorphData.MorphFeatures.Select(v => v.Name).SequenceEqual(["UnknownZero", "Smile"]), "Head feature order changed.");

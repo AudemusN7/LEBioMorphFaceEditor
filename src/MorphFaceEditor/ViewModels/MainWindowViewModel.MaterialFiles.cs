@@ -15,13 +15,12 @@ public sealed partial class MainWindowViewModel
     internal static string AppendDatabaseImportGuidance(string details) =>
         details + "\n\n" + Loc.Text("loc_Shell_ImportWarnings_DatabaseGuidance");
 
-    private async Task<bool> TryImportMaterialRonAsync(string sourcePath)
+    private async Task<bool> TryImportMaterialRonAsync(string sourcePath, RonImportFile source)
     {
         MaterialRonCodec.MaterialFileKind? kind;
         try
         {
-            var text = await File.ReadAllTextAsync(sourcePath);
-            kind = await Task.Run(() => MaterialRonCodec.IdentifyMaterialFile(text));
+            kind = await Task.Run(() => MaterialRonCodec.IdentifyMaterialFile(source.Input));
         }
         catch (Exception exception)
         {
@@ -30,44 +29,36 @@ public sealed partial class MainWindowViewModel
             return true;
         }
         if (kind is null) return false;
-        var openedSourceWorkspace = false;
         if (!CanUseMeshMaterialFiles() && !CanUseFaceMaterialFiles())
         {
             try
             {
-                var target = await Task.Run(async () =>
-                    MaterialRonCodec.ReadDefaultFace(await File.ReadAllTextAsync(sourcePath)));
+                var target = await Task.Run(() => MaterialRonCodec.ReadDefaultFace(source.Input));
                 if (target is null)
                 {
                     ErrorMessage = Loc.Text("loc_Shell_Status_RonImportFailedTheCurrent");
                     AppLog.Warning("RON:MATERIAL-IMPORT-BLOCKED REASON:no-default-face WORKSPACE:none");
                     return true;
                 }
-                if (!await OpenDefaultMaterialFaceAsync(target.Value.Game, target.Value.Target, sourcePath)) return true;
-                openedSourceWorkspace = true;
+                await OpenDefaultMaterialFaceAsync(target.Value.Game, target.Value.Target, sourcePath, source,
+                    kind == MaterialRonCodec.MaterialFileKind.Tse ? SourceFileFormat.TseMaterialsRon : SourceFileFormat.MfeMaterialsRon);
             }
             catch (Exception exception)
             {
                 ErrorMessage = Loc.Format("loc_Shell_Error_TheRonProvenanceCouldNot", exception.Message);
                 return true;
             }
+            return true;
         }
         if (CanUseMeshMaterialFiles())
-            await ImportMeshMaterialsAsync(kind == MaterialRonCodec.MaterialFileKind.Tse, sourcePath);
+            await ImportMeshMaterialsAsync(kind == MaterialRonCodec.MaterialFileKind.Tse, sourcePath, source);
         else if (CanUseFaceMaterialFiles())
-            await ImportFaceMaterialsAsync(sourcePath);
-        if (openedSourceWorkspace && ErrorMessage is null && LoadedFacePath is { } facePath)
-        {
-            TrackSourceFile(sourcePath, facePath, kind == MaterialRonCodec.MaterialFileKind.Tse
-                ? SourceFileFormat.TseMaterialsRon : SourceFileFormat.MfeMaterialsRon);
-            Editor?.AcceptSavedState();
-            _hasWorkspaceChanges = false;
-            OnDirtyStateChanged();
-        }
+            await ImportFaceMaterialsAsync(sourcePath, source);
         return true;
     }
 
-    private async Task<bool> OpenDefaultMaterialFaceAsync(string gameName, MaterialFaceTarget target, string sourcePath)
+    private async Task<bool> OpenDefaultMaterialFaceAsync(string gameName, MaterialFaceTarget target, string sourcePath,
+        RonImportFile source, SourceFileFormat format, MorphFaceMorphData? features = null)
     {
         if (!Enum.TryParse<MorphFaceGame>(gameName, out var game) ||
             game is not (MorphFaceGame.LE1 or MorphFaceGame.LE2 or MorphFaceGame.LE3) ||
@@ -110,21 +101,79 @@ public sealed partial class MainWindowViewModel
             facePath = donor.FacePath;
         }
         if (!await EnsureCanAbandonWorkspaceAsync()) return false;
-        if (!await OpenSourcePackagePathAsync(packagePath, facePath, game, standaloneNpc: !target.PlayerMorph, importedPath: sourcePath)) return false;
-        if (target.PlayerMorph && Editor is { } editor && _loadedFace is { } loaded)
+        MorphFacePackageWorkspace? candidate = null;
+        IsBusy = true;
+        ErrorMessage = null;
+        Status = Loc.Text("loc_View_MainWindow_ReadingPackageAndMorphData");
+        try
         {
-            var sex = HeadProfileIdentity.SuffixFromProfileKey(target.ProfileKey) == "human-male"
-                ? StandalonePlayerSex.Male : StandalonePlayerSex.Female;
-            var defaults = await Task.Run(() => _packageContextService.CapturePlayerDefaultMaterials(game, sex));
-            if (!ReferenceEquals(Editor, editor)) return false;
-            var corrections = defaults.Textures.Where(value => loaded.Document.MaterialOverrides.Textures.Any(original =>
-                original.Name.Equals(value.Name, StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(original.TextureReference?.InstancedPath, value.TextureReference?.InstancedPath, StringComparison.OrdinalIgnoreCase))).ToArray();
-            if (corrections.Length > 0) await editor.MergeMaterialDataAsync(new([], [], corrections));
+            candidate = await Task.Run(() => new MorphFacePackageWorkspace(packagePath, canCommit: false));
+            var workspace = candidate.WorkingPath;
+            using var donorReader = new MorphFacePackageReader();
+            var donorFace = await Task.Run(() => donorReader.Load(workspace, facePath, decodeTextures: false));
+            var catalog = await _catalogService.ReadAsync(workspace);
+            // The donor supplies its native graph and base mesh, not its authored NPC edits.
+            var defaults = new MorphFaceMorphData([], donorFace.BaseHead.Topology.ReferenceSkeleton
+                .Select(bone => new BoneTranslation(bone.Name, bone.Position)).ToArray(), donorFace.BaseHead.Lods
+                .Take(donorFace.Document.BakedLods.Count).Select(lod => lod.Positions.ToArray()).ToArray());
+            var name = SuggestImportName(SanitizeObjectName(Path.GetFileNameWithoutExtension(sourcePath)),
+                catalog.Faces.Select(face => face.ObjectName).ToArray());
+            var created = await Task.Run(() => _packageContextService.CloneMorphWithData(
+                workspace, facePath, name, defaults, new MorphFaceMaterialData([], [], []), clearAttachmentReferences: true));
+            _referenceService.InvalidatePackage(workspace);
+            var preview = await _previewLoadService.LoadAsync(workspace, created.FaceInstancedPath);
+            var references = await _referenceService.ReadCatalogAsync(workspace);
+            var textureCatalog = await _referenceService.ReadTextureCatalogAsync(game);
+            string? preparationError = null;
+            using var editor = new FaceEditorViewModel(preview.EditingSession, preview.Profile.GetUiProfile(),
+                preview.MaterialEditingSession, _colorDialog, _referenceService, workspace, references.Textures,
+                references.SkeletalMeshes, preview.Loaded.Document.HairMeshReference, preview.Loaded.Document.OtherMeshReferences,
+                message => preparationError = message, preview.Profile.Key, _randomisationCatalog,
+                registryTextureCandidates: textureCatalog.Candidates, textureCatalogProfile: TextureCatalogProfiles.For(preview.Profile),
+                isTextureRegistryAvailable: textureCatalog.IsAvailable,
+                ignoresAuthoredGeometry: preview.Profile.IgnoresAuthoredGeometry);
+            if (target.PlayerMorph)
+            {
+                var available = await Task.Run(() => _packageContextService.FindAvailablePlayerAssets(game,
+                    references.Textures.Concat(references.SkeletalMeshes).Select(value => value.Identity)));
+                editor.RestrictPlayerReferences(available);
+                var sex = HeadProfileIdentity.SuffixFromProfileKey(target.ProfileKey) == "human-male"
+                    ? StandalonePlayerSex.Male : StandalonePlayerSex.Female;
+                var materialDefaults = await Task.Run(() => _packageContextService.CapturePlayerDefaultMaterials(game, sex));
+                var corrections = materialDefaults.Textures.Where(value => donorFace.Document.MaterialOverrides.Textures.Any(original =>
+                    original.Name.Equals(value.Name, StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(original.TextureReference?.InstancedPath, value.TextureReference?.InstancedPath, StringComparison.OrdinalIgnoreCase))).ToArray();
+                if (corrections.Length > 0) await editor.MergeMaterialDataAsync(new([], [], corrections));
+            }
+            IReadOnlyList<string> warnings = [];
+            if (features is not null) editor.ApplyMorphFeatures(features);
+            else
+            {
+                var imported = await Task.Run(() => FaceMaterialFileService.Read(source.Input, target.PlayerMorph));
+                warnings = await ApplyFaceMaterialsAsync(editor, imported, game, target.PlayerMorph, () => true);
+            }
+            if (preparationError is not null) throw new InvalidDataException(preparationError);
+            var draft = editor.CreateDraft();
+            await Task.Run(() => _packageWriter.SaveExisting(draft));
+
+            // Only the finished, verified working copy is attached to the live shell.
+            var preparedWorkspace = candidate;
+            candidate = null;
+            if (!await OpenSourcePackagePathAsync(packagePath, created.FaceInstancedPath, game,
+                standaloneNpc: !target.PlayerMorph, importedPath: sourcePath, preparedWorkspace: preparedWorkspace, singleFace: true)) return false;
+            _standaloneImportPath = Path.GetFullPath(sourcePath);
+            TrackSourceFile(sourcePath, created.FaceInstancedPath, format, source.Fingerprint);
+            _hasWorkspaceChanges = false;
+            OnDirtyStateChanged();
+            Status = Loc.Format("loc_RonFiles_Imported", Path.GetFileName(sourcePath));
+            ShowMaterialImportWarnings(warnings);
+            return true;
         }
-        foreach (var other in Faces.Where(face => face != SelectedFace).ToArray()) Faces.Remove(other);
-        _standaloneImportPath = Path.GetFullPath(sourcePath);
-        return Editor is not null;
+        finally
+        {
+            candidate?.Dispose();
+            IsBusy = false;
+        }
     }
     private readonly AsyncRelayCommand _exportTseMaterialsCommand;
     private readonly AsyncRelayCommand _importTseMaterialsCommand;
@@ -181,7 +230,7 @@ public sealed partial class MainWindowViewModel
         finally { IsBusy = false; }
     }
 
-    private async Task ImportMeshMaterialsAsync(bool tse, string? sourcePath = null)
+    private async Task ImportMeshMaterialsAsync(bool tse, string? sourcePath = null, RonImportFile? source = null)
     {
         if (!CanUseMeshMaterialFiles() || Editor is not { CustomMaterials: { } workspace } editor || _standaloneGame is not { } game) return;
         var path = sourcePath ?? _dialogs.ChooseMaterialImportFile(tse, Path.GetDirectoryName(_standaloneImportPath));
@@ -191,9 +240,10 @@ public sealed partial class MainWindowViewModel
         Status = Loc.Text("loc_Shell_Status_PreparingMaterialSettingsAndTexture");
         try
         {
-            var text = await File.ReadAllTextAsync(path);
+            source ??= await RonImportFile.ReadAsync(path);
+            var input = await Task.Run(() => source.Input);
             var prepared = await new MeshMaterialFileService(_referenceService).PrepareAsync(
-                text, tse, workspace, editor.CustomMaterialOptions, game);
+                input, tse, workspace, editor.CustomMaterialOptions, game);
             if (!ReferenceEquals(Editor, editor)) return;
             editor.ApplyMeshMaterialImport(prepared);
             Status = Loc.Format(prepared.IsTse ? "loc_Shell_Status_ImportedTseMaterialSettings" : "loc_Shell_Status_ImportedMaterialSettings", Path.GetFileName(path));
@@ -259,7 +309,7 @@ public sealed partial class MainWindowViewModel
         finally { IsBusy = false; }
     }
 
-    private async Task ImportFaceMaterialsAsync(string? sourcePath = null)
+    private async Task ImportFaceMaterialsAsync(string? sourcePath = null, RonImportFile? source = null)
     {
         if (!CanUseFaceMaterialFiles() || !await EnsureSelectedFaceLoadedForMaterialsAsync() ||
             Editor is not { } editor)
@@ -272,46 +322,14 @@ public sealed partial class MainWindowViewModel
         Status = Loc.Text("loc_Shell_Status_ReadingMaterialSettings");
         try
         {
-            var text = await File.ReadAllTextAsync(path);
-            var imported = FaceMaterialFileService.Read(text, allowTse: IsPlayerWorkspace);
-            var warnings = imported.Warnings.ToList();
+            source ??= await RonImportFile.ReadAsync(path);
+            var allowTse = IsPlayerWorkspace;
+            var imported = await Task.Run(() => FaceMaterialFileService.Read(source.Input, allowTse));
             var game = ResolveMaterialFileGame();
-            var attachments = editor.CanEditAttachments
-                ? await new MeshMaterialFileService(_referenceService).PreparePreviewAttachmentsAsync(
-                    imported.HairMesh, imported.AccessoryMeshes, game, warnings)
-                : null;
-            if (IsPlayerWorkspace && attachments is not null)
-            {
-                var references = editor.AttachmentMeshes.SelectMany(mesh => mesh.Options).Select(option => option.Identity)
-                    .Concat([attachments.Hair, attachments.Accessory]).OfType<AssetIdentity>().ToArray();
-                var available = await Task.Run(() => _packageContextService.FindAvailablePlayerAssets(game, references));
-                bool Safe(AssetIdentity? identity)
-                {
-                    if (identity is null || available.Allows(identity)) return true;
-                    warnings.Add(Loc.Format("loc_PlayerAsset_SeekFreeSourceRequired", identity.ClassName,
-                        TextureCatalogPicker.CanonicalPath(identity.InstancedPath, identity.PackagePath)));
-                    return false;
-                }
-                attachments = attachments with
-                {
-                    ApplyHair = attachments.ApplyHair && Safe(attachments.Hair),
-                    ApplyAccessory = attachments.ApplyAccessory && Safe(attachments.Accessory)
-                };
-                if (!ReferenceEquals(Editor, editor)) return;
-                foreach (var mesh in editor.AttachmentMeshes) mesh.RestrictPlayerReferences(available);
-            }
+            var warnings = await ApplyFaceMaterialsAsync(editor, imported, game, allowTse, () => ReferenceEquals(Editor, editor));
             if (!ReferenceEquals(Editor, editor)) return;
-            warnings.AddRange(await editor.ImportFaceMaterialDataAsync(imported.Parameters, attachments));
             Status = Loc.Format(imported.IsTse ? "loc_Shell_Status_ImportedTseMaterialSettings" : "loc_Shell_Status_ImportedMaterialSettingsFrom", Path.GetFileName(path));
-            if (warnings.Count > 0)
-            {
-                foreach (var warning in warnings) AppLog.Warning(warning);
-                const int displayLimit = 8;
-                var details = string.Join("\n\n", warnings.Take(displayLimit));
-                if (warnings.Count > displayLimit)
-                    details += Loc.Format("loc_Shell_MaterialFiles_MoreWarningsInLog", warnings.Count - displayLimit);
-                _dialogs.ShowInformation(Loc.Text("loc_Shell_DialogTitle_MaterialsImportedWithWarnings"), AppendDatabaseImportGuidance(details));
-            }
+            ShowMaterialImportWarnings(warnings);
         }
         catch (Exception exception)
         {
@@ -320,6 +338,50 @@ public sealed partial class MainWindowViewModel
             Status = Loc.Text("loc_Shell_Status_MaterialImportFailedTheCurrent2");
         }
         finally { IsBusy = false; }
+    }
+
+    private async Task<IReadOnlyList<string>> ApplyFaceMaterialsAsync(FaceEditorViewModel editor,
+        FaceMaterialFileService.PreparedImport imported, MorphFaceGame game, bool player, Func<bool> isCurrent)
+    {
+        var warnings = imported.Warnings.ToList();
+        var attachments = editor.CanEditAttachments
+            ? await new MeshMaterialFileService(_referenceService).PreparePreviewAttachmentsAsync(
+                imported.HairMesh, imported.AccessoryMeshes, game, warnings)
+            : null;
+        if (player && attachments is not null)
+        {
+            var references = editor.AttachmentMeshes.SelectMany(mesh => mesh.Options).Select(option => option.Identity)
+                .Concat([attachments.Hair, attachments.Accessory]).OfType<AssetIdentity>().ToArray();
+            var available = await Task.Run(() => _packageContextService.FindAvailablePlayerAssets(game, references));
+            bool Safe(AssetIdentity? identity)
+            {
+                if (identity is null || available.Allows(identity)) return true;
+                warnings.Add(Loc.Format("loc_PlayerAsset_SeekFreeSourceRequired", identity.ClassName,
+                    TextureCatalogPicker.CanonicalPath(identity.InstancedPath, identity.PackagePath)));
+                return false;
+            }
+            attachments = attachments with
+            {
+                ApplyHair = attachments.ApplyHair && Safe(attachments.Hair),
+                ApplyAccessory = attachments.ApplyAccessory && Safe(attachments.Accessory)
+            };
+            if (!isCurrent()) return warnings;
+            foreach (var mesh in editor.AttachmentMeshes) mesh.RestrictPlayerReferences(available);
+        }
+        if (!isCurrent()) return warnings;
+        warnings.AddRange(await editor.ImportFaceMaterialDataAsync(imported.Parameters, attachments));
+        return warnings;
+    }
+
+    private void ShowMaterialImportWarnings(IReadOnlyList<string> warnings)
+    {
+        if (warnings.Count == 0) return;
+        foreach (var warning in warnings) AppLog.Warning(warning);
+        const int displayLimit = 8;
+        var details = string.Join("\n\n", warnings.Take(displayLimit));
+        if (warnings.Count > displayLimit)
+            details += Loc.Format("loc_Shell_MaterialFiles_MoreWarningsInLog", warnings.Count - displayLimit);
+        _dialogs.ShowInformation(Loc.Text("loc_Shell_DialogTitle_MaterialsImportedWithWarnings"), AppendDatabaseImportGuidance(details));
     }
 
     private Task<bool> EnsureSelectedFaceLoadedForMaterialsAsync() =>

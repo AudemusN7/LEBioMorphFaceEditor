@@ -20,13 +20,17 @@ public static class MaterialRonCodec
 
     public static MaterialFileKind? IdentifyMaterialFile(RonInputSnapshot input)
     {
-        var root = input.MaterialRoot();
+        var root = input.Root;
         if (root.TryGetValue("format", out var format) && Equals(format, "MorphFaceEditor.Materials"))
+        {
+            _ = input.MaterialRoot();
             return MaterialFileKind.Mfe;
+        }
         var marked = input.Source.Split('\n').Any(line => line.Trim() is TseMaterialMarker or
             "// Material settings only; no authored geometry or bone offsets.");
-        return marked && root.TryGetValue("lod0_vertices", out var lod0) && Array(lod0).Count == 0
-            ? MaterialFileKind.Tse : null;
+        if (!marked || !root.TryGetValue("lod0_vertices", out var lod0) || Array(lod0).Count != 0) return null;
+        _ = input.MaterialRoot();
+        return MaterialFileKind.Tse;
     }
     public sealed record TseMaterialDocument(
         MorphFaceMaterialData Parameters,
@@ -106,9 +110,11 @@ public static class MaterialRonCodec
         };
     }
 
-    public static (string Game, MaterialFaceTarget Target)? ReadDefaultFace(string text)
+    public static (string Game, MaterialFaceTarget Target)? ReadDefaultFace(string text) =>
+        ReadDefaultFace(RonInputSnapshot.Parse(text));
+
+    public static (string Game, MaterialFaceTarget Target)? ReadDefaultFace(RonInputSnapshot input)
     {
-        var input = RonInputSnapshot.Parse(text);
         var root = input.MaterialRoot();
         if (!root.TryGetValue("format", out var format) || !Equals(format, "MorphFaceEditor.Materials"))
         {

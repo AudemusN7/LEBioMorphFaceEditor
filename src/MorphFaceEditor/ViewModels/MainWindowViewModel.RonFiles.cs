@@ -10,38 +10,31 @@ namespace MorphFaceEditor.ViewModels;
 
 public sealed partial class MainWindowViewModel
 {
-    private async Task<bool> TryImportMorphFeaturesRonAsync(string path)
+    private async Task<bool> TryImportMorphFeaturesRonAsync(string path, RonImportFile source)
     {
         try
         {
-            if (!TseHeadMorphRon.IsMorphFeaturesOnly(path)) return false;
-            var metadata = TseHeadMorphRon.ReadProvenance(path);
-            var data = TseHeadMorphRon.ReadMorphData(path);
+            if (!source.IsMorphFeaturesOnly) return false;
+            var (metadata, data) = await Task.Run(() =>
+                (TseHeadMorphRon.ReadProvenance(source.Input), TseHeadMorphRon.Read(source.Input).MorphData));
             if (metadata is null || metadata.Producer != RonExportProducer.MFE)
                 throw new InvalidDataException(Loc.Text("loc_RonFiles_Incompatible"));
-            var opened = !HasWorkspace;
-            if (opened)
+            if (!HasWorkspace)
             {
                 var profile = MorphFaceProfileRegistry.CreateDefault().Profiles.SingleOrDefault(value =>
                     value.Game == metadata.Game && value.ExportTag.Trim('[', ']').Equals(metadata.Archetype, StringComparison.OrdinalIgnoreCase));
                 if (profile is null) throw new InvalidDataException(Loc.Text("loc_RonFiles_Incompatible"));
-                if (!await OpenDefaultMaterialFaceAsync(metadata.Game.ToString(), new MaterialFaceTarget(profile.Key, metadata.PlayerMorph), path))
-                    return true;
+                if (await OpenDefaultMaterialFaceAsync(metadata.Game.ToString(), new MaterialFaceTarget(profile.Key, metadata.PlayerMorph),
+                    path, source, SourceFileFormat.MorphFeaturesRon, data))
+                    Status = Loc.Format("loc_RonFiles_Imported", Path.GetFileName(path));
+                return true;
             }
             if (!await EnsureSelectedFaceLoadedForMaterialsAsync() || Editor is null || SelectedFace is null || WorkspacePackagePath is null)
                 return true;
             var target = CreateRonExportProvenance(WorkspacePackagePath, SelectedFace, IsPlayerWorkspace);
-            if (!MatchesRonTarget(metadata, target.Game, target.Archetype, target.PlayerMorph))
+            if (!MatchesRonTarget(metadata, target.Game, target.Archetype, target.PlayerMorph, featuresOnly: true))
                 throw new InvalidDataException(Loc.Text("loc_RonFiles_Incompatible"));
             Editor.ApplyMorphFeatures(data);
-            if (opened)
-            {
-                _relativeBakeFacePaths.Add(SelectedFace.InstancedPath);
-                TrackSourceFile(path, SelectedFace.InstancedPath, SourceFileFormat.MorphFeaturesRon);
-                Editor.AcceptSavedState();
-                _hasWorkspaceChanges = false;
-                OnDirtyStateChanged();
-            }
             Status = Loc.Format("loc_RonFiles_Imported", Path.GetFileName(path));
             return true;
         }
@@ -64,8 +57,9 @@ public sealed partial class MainWindowViewModel
     public ICommand ExportMorphFeaturesRonCommand => _exportMorphFeaturesRonCommand ??= new(
         () => ExportMorphRonAsync(true), () => CanExportMorphRon() && !IsAlnMorphClipboardFace(SelectedFace));
 
-    private static bool MatchesRonTarget(RonExportProvenance source, MorphFaceGame game, string archetype, bool player) =>
-        source.Game == game && source.Archetype.Equals(archetype, StringComparison.OrdinalIgnoreCase) &&
+    private static bool MatchesRonTarget(RonExportProvenance source, MorphFaceGame game, string archetype, bool player, bool featuresOnly = false) =>
+        (source.Game == game || featuresOnly && StandaloneNpcMorphImportService.AreGamesCompatible(source.Game, game)) &&
+        source.Archetype.Equals(archetype, StringComparison.OrdinalIgnoreCase) &&
         (source.PlayerMorph == player || player && !source.PlayerMorph &&
             (archetype.Equals("HMM", StringComparison.OrdinalIgnoreCase) || archetype.Equals("HMF", StringComparison.OrdinalIgnoreCase)));
 
@@ -87,7 +81,7 @@ public sealed partial class MainWindowViewModel
             var game = ResolveMaterialFileGame();
             var document = await Task.Run(() => TseHeadMorphRon.ReadDocument(path));
             var metadata = document.Provenance;
-            if (metadata is null ? !player : !MatchesRonTarget(metadata, game, face.ProfileTag.Trim('[', ']'), player))
+            if (metadata is null ? !player : !MatchesRonTarget(metadata, game, face.ProfileTag.Trim('[', ']'), player, featuresOnly))
                 throw new InvalidDataException(Loc.Text("loc_RonFiles_Incompatible"));
             if (featuresOnly) Editor.ApplyMorphFeatures(document.Head.MorphData);
             else

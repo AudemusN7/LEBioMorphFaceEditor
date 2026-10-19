@@ -72,6 +72,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly AsyncRelayCommand _assignMorphToActorCommand;
     private readonly AsyncRelayCommand _assignMaterialsToActorCommand;
     private MorphFacePackageWorkspace? _packageWorkspace;
+    private bool _showsImportedFacesOnly;
     private string? _standaloneImportPath;
     private MorphFaceGame? _standaloneGame;
     private bool _isStandaloneNpcWorkspace;
@@ -769,12 +770,13 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private MorphFaceGame _workspaceLogGame;
 
     private async Task<bool> OpenSourcePackagePathAsync(string selectedPath, string? preferredFacePath = null,
-        MorphFaceGame? standaloneGame = null, bool standaloneNpc = false, string? importedPath = null)
+        MorphFaceGame? standaloneGame = null, bool standaloneNpc = false, string? importedPath = null,
+        MorphFacePackageWorkspace? preparedWorkspace = null, bool singleFace = false)
     {
         MorphFacePackageWorkspace workspace;
         try
         {
-            workspace = await Task.Run(() => new MorphFacePackageWorkspace(selectedPath, canCommit: standaloneGame is null));
+            workspace = preparedWorkspace ?? await Task.Run(() => new MorphFacePackageWorkspace(selectedPath, canCommit: standaloneGame is null));
         }
         catch (Exception exception)
         {
@@ -794,6 +796,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         SetDetachedMeshSource(null);
         _fixedBakeFacePaths.Clear();
         _relativeBakeFacePaths.Clear();
+        _showsImportedFacesOnly = singleFace;
+        if (singleFace && preferredFacePath is not null) _relativeBakeFacePaths.Add(preferredFacePath);
         _hasWorkspaceChanges = false;
         PackagePath = workspace.SourcePath;
         OnDirtyStateChanged();
@@ -850,6 +854,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             Faces.Clear();
             foreach (var face in catalog.Faces)
             {
+                if (_showsImportedFacesOnly && !_relativeBakeFacePaths.Contains(face.InstancedPath) &&
+                    !_fixedBakeFacePaths.Contains(face.InstancedPath)) continue;
                 if (_pcsavWorkspace is not null && face.InstancedPath != _sourceFile?.FacePath) continue;
                 Faces.Add(face);
             }
@@ -2047,6 +2053,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private void DisposePackageWorkspace()
     {
+        _showsImportedFacesOnly = false;
         _sourceFile = null;
         _hasOtherStandaloneChanges = false;
         _pcsavWorkspace = null;

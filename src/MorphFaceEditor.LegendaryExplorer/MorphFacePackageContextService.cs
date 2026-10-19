@@ -551,11 +551,11 @@ public sealed class MorphFacePackageContextService
     }
 
     /// <summary>Imports a proven NPC RON while applying the shared LE1/LE2 material transfer policy.</summary>
-    public MorphFaceSaveResult ImportStandaloneNpcRon(
+    public MorphFaceSaveResult ImportStandaloneNpcHead(
         string packagePath,
         string templateFacePath,
         string objectName,
-        string sourcePath,
+        HeadMorphPayload ron,
         MorphFaceGame sourceGame,
         MorphFaceGame targetGame,
         string sourceProfileKey,
@@ -567,8 +567,6 @@ public sealed class MorphFacePackageContextService
     {
         cancellationToken.ThrowIfCancellationRequested();
         ValidateObjectName(objectName);
-        var ron = TseHeadMorphRon.Read(sourcePath);
-        cancellationToken.ThrowIfCancellationRequested();
         var transfer = sourceGame == targetGame ? null : new NpcRonMaterialTransfer(
             sourceGame,
             sourceProfileKey,

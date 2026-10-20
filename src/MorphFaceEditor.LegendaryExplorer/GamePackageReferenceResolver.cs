@@ -11,6 +11,10 @@ internal sealed class GamePackageReferenceResolver(PackageCache packageCache, In
 {
     private readonly InstalledGameAssetResolver _installedAssets = installedAssets ?? new();
 
+    internal bool IsOfficialSource(ExportEntry export) =>
+        _installedAssets.GetPackageFiles(export.Game).TryGetValue(Path.GetFileName(export.FileRef.FilePath), out var official) &&
+        Path.GetFullPath(export.FileRef.FilePath).Equals(official, StringComparison.OrdinalIgnoreCase);
+
     public ExportEntry? Resolve(IEntry? entry)
     {
         if (entry is null) return null;

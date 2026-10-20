@@ -637,14 +637,16 @@ internal sealed class MorphFaceMaterialReader(
         var parameterSource = root ?? materialExport; // Only provenance/game when the chain has no terminal Material.
         var definition = MorphFacePackageReader.DescribeMaterialMaster(materialExport.Game, root);
         var previewModel = definition?.PreviewModel ?? HumanMaterialPreviewModel.Default;
-        // These consumers inspect the same compiled map. Share it for this read only.
-        var shaderMap = new Lazy<MaterialShaderMap>(() => ReadShaderMap(parameterSource));
-        MaterialShaderMap GetShaderMap() => shaderMap.Value;
+        // Support, sampler indices and compiled defaults share one evidence owner.
+        var shader = new Lazy<MaterialShaderMetadata>(() => StockMaterialMetadata.Find(parameterSource)?.Shader
+            ?? MaterialShaderUniformInspector.Inspect(parameterSource, ReadShaderMap(parameterSource)));
+        MaterialShaderMetadata GetShader() => shader.Value;
         if (previewModel == HumanMaterialPreviewModel.CapDecal && parameterSource.Game == MEGame.LE3)
         {
             try
             {
-                AddCompiledParameterDefaults(GetShaderMap(), scalarValues, vectorValues);
+                foreach (var (name, value) in GetShader().ScalarDefaults) scalarValues.TryAdd(name, value);
+                foreach (var (name, value) in GetShader().VectorDefaults) vectorValues.TryAdd(name, value);
             }
             catch
             {
@@ -656,15 +658,19 @@ internal sealed class MorphFaceMaterialReader(
 
         if (family == HeadMaterialFamily.AsariSkin)
         {
-            AddAsariLiteralTextures(parameterSource, textureValues, GetShaderMap);
+            AddLiteralTexture(parameterSource, textureValues, GetShader, "__ASA_SkinNoise", 6, "Asari master material");
+            AddLiteralTexture(parameterSource, textureValues, GetShader, "__ASA_SpecMultiplierMask", 7, "Asari master material");
         }
         else if (family == HeadMaterialFamily.MaskedHair)
         {
-            AddMaskedHairLiteralTextures(parameterSource, textureValues, GetShaderMap);
+            AddLiteralTexture(parameterSource, textureValues, GetShader, "__PROShort01_Opacity", 0, "PROShort01 hair master");
+            AddLiteralTexture(parameterSource, textureValues, GetShader, "__PROShort01_Diffuse", 1, "PROShort01 hair master");
+            AddLiteralTexture(parameterSource, textureValues, GetShader, "__PROShort01_Tangent", 2, "PROShort01 hair master");
+            AddLiteralTexture(parameterSource, textureValues, GetShader, "__PROShort01_Specular", 3, "PROShort01 hair master");
         }
         if (previewModel == HumanMaterialPreviewModel.CapLe2)
         {
-            AddAttachmentLiteralTexture(parameterSource, textureValues, GetShaderMap, "__CapCrewDiffuse", 1);
+            AddLiteralTexture(parameterSource, textureValues, GetShader, "__CapCrewDiffuse", 1);
         }
         if (previewModel == HumanMaterialPreviewModel.VisorLens)
         {
@@ -672,10 +678,10 @@ internal sealed class MorphFaceMaterialReader(
             // retained texture-parameter expressions. Bind its compiled
             // sampler table directly so the preview can resolve the same
             // four 2D inputs as the native shader.
-            AddAttachmentLiteralTexture(parameterSource, textureValues, GetShaderMap, "__LensScanline", 0);
-            AddAttachmentLiteralTexture(parameterSource, textureValues, GetShaderMap, "__LensEmission", 1);
-            AddAttachmentLiteralTexture(parameterSource, textureValues, GetShaderMap, "__LensDistortion", 2);
-            AddAttachmentLiteralTexture(parameterSource, textureValues, GetShaderMap, "__LensFractal", 3);
+            AddLiteralTexture(parameterSource, textureValues, GetShader, "__LensScanline", 0);
+            AddLiteralTexture(parameterSource, textureValues, GetShader, "__LensEmission", 1);
+            AddLiteralTexture(parameterSource, textureValues, GetShader, "__LensDistortion", 2);
+            AddLiteralTexture(parameterSource, textureValues, GetShader, "__LensFractal", 3);
         }
         if (parameterSource.Game == MEGame.LE1 && family == HeadMaterialFamily.Hair &&
             !textureValues.ContainsKey("HAIR_Diff"))
@@ -713,30 +719,30 @@ internal sealed class MorphFaceMaterialReader(
         var isDedicatedAttachmentPreview = definition?.IsAttachmentPreview == true;
         var fixedCubeTexture = isDedicatedAttachmentPreview
             ? ReadFixedCubeTexture(
-                parameterSource, 0, HeadMaterialFamily.Accessory, "__Attachment_Cube", "attachment reflection cube", GetShaderMap)
+                parameterSource, 0, "attachment reflection cube", GetShader)
             : family switch
         {
             HeadMaterialFamily.Eyes => ReadFixedCubeTexture(
-                parameterSource, 0, family, "__HUM_Eye_Primary_Cube", "Human eye primary reflection cube", GetShaderMap),
+                parameterSource, 0, "Human eye primary reflection cube", GetShader),
             HeadMaterialFamily.KroganEyes => ReadFixedCubeTexture(
-                parameterSource, 0, family, "__KRO_Eye_Cube", "Krogan eye reflection cube", GetShaderMap),
+                parameterSource, 0, "Krogan eye reflection cube", GetShader),
             HeadMaterialFamily.SalarianEyes => ReadFixedCubeTexture(
-                parameterSource, 0, family, "__SAL_Eye_Chrome_Cube", "Salarian chrome reflection cube", GetShaderMap),
+                parameterSource, 0, "Salarian chrome reflection cube", GetShader),
             HeadMaterialFamily.TurianEyes when parameterSource.Game == MEGame.LE3 => ReadFixedCubeTexture(
-                parameterSource, 0, family, "__TUR_Eye_Chrome_Cube", "LE3 Turian chrome reflection cube", GetShaderMap),
+                parameterSource, 0, "LE3 Turian chrome reflection cube", GetShader),
             _ => null
         };
         var secondaryFixedCubeTexture = isDedicatedAttachmentPreview
             ? ReadFixedCubeTexture(
-                parameterSource, 1, HeadMaterialFamily.Accessory, "__Attachment_Secondary_Cube", "secondary attachment reflection cube", GetShaderMap)
+                parameterSource, 1, "secondary attachment reflection cube", GetShader)
             : family switch
         {
             HeadMaterialFamily.Eyes => ReadFixedCubeTexture(
-                parameterSource, 1, family, "__HUM_Eye_Secondary_Cube", "Human eye secondary reflection cube", GetShaderMap),
+                parameterSource, 1, "Human eye secondary reflection cube", GetShader),
             HeadMaterialFamily.SalarianEyes => ReadFixedCubeTexture(
-                parameterSource, 1, family, "__SAL_Eye_Visor_Cube", "Salarian visor reflection cube", GetShaderMap),
+                parameterSource, 1, "Salarian visor reflection cube", GetShader),
             HeadMaterialFamily.TurianEyes when parameterSource.Game == MEGame.LE3 => ReadFixedCubeTexture(
-                parameterSource, 1, family, "__TUR_Eye_Parameter_Cube", "LE3 Turian parameter reflection cube", GetShaderMap),
+                parameterSource, 1, "LE3 Turian parameter reflection cube", GetShader),
             _ => null
         };
         var attachmentCubeParameterName = previewModel == HumanMaterialPreviewModel.Visor
@@ -753,7 +759,7 @@ internal sealed class MorphFaceMaterialReader(
         MaterialShaderParameterSupport? support = null;
         try
         {
-            if (root is not null) support = MaterialShaderUniformInspector.InspectSupport(root, GetShaderMap);
+            if (root is not null) support = GetShader().Support;
         }
         catch
         {
@@ -862,25 +868,6 @@ internal sealed class MorphFaceMaterialReader(
         master.GetProperty<BoolProperty>("bTwoSided")?.Value ??
         master.GetProperty<BoolProperty>("TwoSided")?.Value;
 
-    private static void AddCompiledParameterDefaults(
-        MaterialShaderMap shaderMap,
-        Dictionary<string, float> scalars,
-        Dictionary<string, Vector4> vectors)
-    {
-        foreach (var expression in shaderMap.UniformPixelScalarExpressions.OfType<MaterialUniformExpressionScalarParameter>())
-        {
-            var name = expression.ParameterName.Instanced;
-            if (!string.IsNullOrWhiteSpace(name)) scalars.TryAdd(name, expression.DefaultValue);
-        }
-        foreach (var expression in shaderMap.UniformPixelVectorExpressions.OfType<MaterialUniformExpressionVectorParameter>())
-        {
-            var name = expression.ParameterName.Instanced;
-            if (string.IsNullOrWhiteSpace(name)) continue;
-            var value = expression.DefaultValue;
-            vectors.TryAdd(name, new Vector4(value.R, value.G, value.B, value.A));
-        }
-    }
-
     /// <summary>
     /// Provides neutral editor defaults for inherited player-material states
     /// that rely on character-creation inputs. Source scalar values remain
@@ -918,27 +905,13 @@ internal sealed class MorphFaceMaterialReader(
     private CubeMetadata? ReadFixedCubeTexture(
         ExportEntry master,
         int expressionIndex,
-        HeadMaterialFamily family,
-        string parameterName,
         string label,
-        Func<MaterialShaderMap> shaderMapProvider)
+        Func<MaterialShaderMetadata> shaderProvider)
     {
         var material = ObjectBinary.From<Material>(master);
         var uniformTextures = material.SM3MaterialResource.UniformExpressionTextures;
-        MaterialUniformExpressionTexture[]? expressions;
-        if (master.Game is MEGame.ME1 or MEGame.ME2)
-        {
-            expressions = material.SM3MaterialResource.UniformCubeTextureExpressions;
-        }
-        else
-        {
-            var shaderMap = shaderMapProvider();
-            expressions = shaderMap.UniformCubeTextureExpressions;
-        }
-        var expression = expressions is not null && expressionIndex >= 0 && expressionIndex < expressions.Length
-            ? expressions[expressionIndex]
-            : null;
-        var textureIndex = expression?.TextureIndex;
+        var indices = shaderProvider().CubeIndices;
+        int? textureIndex = expressionIndex >= 0 && expressionIndex < indices.Length ? indices[expressionIndex] : null;
         if (textureIndex is null or < 0 || textureIndex >= uniformTextures.Length)
         {
             // Older cooked material resources do not consistently retain the
@@ -990,90 +963,23 @@ internal sealed class MorphFaceMaterialReader(
         return new CubeMetadata(identity, faces);
     }
 
-    private void AddAsariLiteralTextures(
+    private void AddLiteralTexture(
         ExportEntry master,
         Dictionary<string, ExportEntry> textures,
-        Func<MaterialShaderMap> shaderMapProvider)
-    {
-        var material = ObjectBinary.From<Material>(master);
-        var uniformTextures = material.SM3MaterialResource.UniformExpressionTextures;
-        var shaderMap = shaderMapProvider();
-        AddLiteral("__ASA_SkinNoise", 6);
-        AddLiteral("__ASA_SpecMultiplierMask", 7);
-        return;
-
-        void AddLiteral(string name, int uniformIndex)
-        {
-            if (uniformIndex >= shaderMap.Uniform2DTextureExpressions.Length)
-            {
-                return;
-            }
-            var textureIndex = shaderMap.Uniform2DTextureExpressions[uniformIndex].TextureIndex;
-            if (textureIndex < 0 || textureIndex >= uniformTextures.Length)
-            {
-                return;
-            }
-            var source = ResolveOptional(
-                master.FileRef.GetEntry(uniformTextures[textureIndex]),
-                $"Asari master material '{master.InstancedFullPath}' uniform texture {uniformIndex}");
-            if (source is not null)
-            {
-                textures[name] = source;
-            }
-        }
-    }
-
-    private void AddMaskedHairLiteralTextures(
-        ExportEntry master,
-        Dictionary<string, ExportEntry> textures,
-        Func<MaterialShaderMap> shaderMapProvider)
-    {
-        var material = ObjectBinary.From<Material>(master);
-        var uniformTextures = material.SM3MaterialResource.UniformExpressionTextures;
-        var shaderMap = shaderMapProvider();
-        AddLiteral("__PROShort01_Opacity", 0);
-        AddLiteral("__PROShort01_Diffuse", 1);
-        AddLiteral("__PROShort01_Tangent", 2);
-        AddLiteral("__PROShort01_Specular", 3);
-        return;
-
-        void AddLiteral(string name, int uniformIndex)
-        {
-            if (uniformIndex >= shaderMap.Uniform2DTextureExpressions.Length)
-            {
-                return;
-            }
-            var textureIndex = shaderMap.Uniform2DTextureExpressions[uniformIndex].TextureIndex;
-            if (textureIndex < 0 || textureIndex >= uniformTextures.Length)
-            {
-                return;
-            }
-            var source = ResolveOptional(
-                master.FileRef.GetEntry(uniformTextures[textureIndex]),
-                $"PROShort01 hair master '{master.InstancedFullPath}' uniform texture {uniformIndex}");
-            if (source is not null)
-            {
-                textures[name] = source;
-            }
-        }
-    }
-
-    private void AddAttachmentLiteralTexture(
-        ExportEntry master,
-        Dictionary<string, ExportEntry> textures,
-        Func<MaterialShaderMap> shaderMapProvider,
+        Func<MaterialShaderMetadata> shaderProvider,
         string parameterName,
-        int uniformIndex)
+        int uniformIndex,
+        string label = "attachment master material")
     {
         var material = ObjectBinary.From<Material>(master);
         var uniformTextures = material.SM3MaterialResource.UniformExpressionTextures;
-        var expressions = shaderMapProvider().Uniform2DTextureExpressions;
+        var expressions = shaderProvider().TextureIndices;
         if (uniformIndex < 0 || uniformIndex >= expressions.Length) return;
-        var textureIndex = expressions[uniformIndex].TextureIndex;
+        var textureIndex = expressions[uniformIndex];
         if (textureIndex < 0 || textureIndex >= uniformTextures.Length) return;
         var source = ResolveOptional(
             master.FileRef.GetEntry(uniformTextures[textureIndex]),
-            $"attachment master material '{master.InstancedFullPath}' uniform texture {uniformIndex}");
+            $"{label} '{master.InstancedFullPath}' uniform texture {uniformIndex}");
         if (source is not null) textures[parameterName] = source;
     }
 
@@ -1186,6 +1092,22 @@ internal sealed class MorphFaceMaterialReader(
         Dictionary<string, Vector4> vectors,
         Dictionary<string, ExportEntry> textures)
     {
+        if (StockMaterialMetadata.Find(material) is { } stock && referenceResolver.IsOfficialSource(material))
+        {
+            foreach (var (name, value) in stock.Scalars) scalars[name] = value;
+            foreach (var (name, value) in stock.Vectors) vectors[name] = value;
+            // Resolve logical defaults against this package, then use the normal donor/freshness policy.
+            // Never retain audit-time file paths or UIndexes in the generated data.
+            foreach (var (name, value) in stock.Textures)
+            {
+                var entry = material.FileRef.FindEntry(value.Path, value.ClassName);
+                if (entry is null && value.Path.StartsWith(material.FileRef.FileNameNoExtension + ".", StringComparison.OrdinalIgnoreCase))
+                    entry = material.FileRef.FindEntry(value.Path[(material.FileRef.FileNameNoExtension.Length + 1)..], value.ClassName);
+                if (ResolveOptional(entry, $"master '{material.InstancedFullPath}' default texture '{name}'") is { } texture)
+                    textures[name] = texture;
+            }
+            return;
+        }
         var expressions = material.GetProperty<ArrayProperty<ObjectProperty>>("Expressions", packageCache);
         if (expressions is null)
         {

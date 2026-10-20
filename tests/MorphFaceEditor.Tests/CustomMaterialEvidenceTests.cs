@@ -18,6 +18,7 @@ public static class CustomMaterialEvidenceTests
         new("custom material evidence tries highest mounted official source first", IndexedEvidencePrefersHighestOfficialSource),
         new("custom material evidence retains duplicate source material refs", RetainsDuplicateSourceMaterialRefs),
         new("custom material shader maps follow explicit and automatic source invalidation", ShaderMapsFollowSourceInvalidation),
+        new("material evidence preserves custom defaults and empty versus missing compiled support", CustomDefaultsAndCompiledEvidence),
         new("custom material catalogue exposes only proven installed families", CatalogueExposesProvenFamilies),
         new("attachment picker discovers hair and hat meshes while excluding audited suffixes", HirReviewMeshesAreExcluded),
         new("BIOG attachment preview loads package-qualified registry identity", BiogAttachmentPreviewLoadsCanonicalIdentity),
@@ -25,6 +26,60 @@ public static class CustomMaterialEvidenceTests
         new("used null attachment material slots remain invalid", UsedNullAttachmentMaterialSlotsRemainInvalid),
         new("D1 human scar and teeth support follows compiled material evidence", HumanScarAndTeethSupportFollowsEvidence)
     ];
+
+    private static void CustomDefaultsAndCompiledEvidence()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        foreach (var kind in new[] { "stock", "empty", "missing" })
+        {
+            var path = Path.Combine(Path.GetTempPath(), $"MFE-MaterialEvidence-{Guid.NewGuid():N}.pcc");
+            try
+            {
+                using (var package = MEPackageHandler.CreateMemoryEmptyPackage(path, MEGame.LE2))
+                {
+                    var master = package.CreateExport("HMN_HED_LASH_Unlit_MASTER_MAT", "Material", indexed: false);
+                    var binary = Material.Create();
+                    binary.SM3MaterialResource.ID = kind == "stock"
+                        ? Guid.Parse("4371b470-440b-4b66-affa-f9c2ab41dc3d") : Guid.NewGuid();
+                    master.WriteBinary(binary);
+                    var expression = package.CreateExport("Opacity", "MaterialExpressionScalarParameter", master, indexed: false);
+                    expression.WriteProperty(new NameProperty("HED_Lash_Opac_Scalar", "ParameterName"));
+                    expression.WriteProperty(new FloatProperty(0.25f, "DefaultValue"));
+                    master.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(expression)], "Expressions"));
+                    var mic = package.CreateExport("Custom_MIC", "MaterialInstanceConstant", indexed: false);
+                    mic.WriteProperty(new ObjectProperty(master, "Parent"));
+                    mic.WriteProperty(new ArrayProperty<StructProperty>([new StructProperty("ScalarParameterValue", false,
+                        new NameProperty("HED_Lash_Opac_Scalar", "ParameterName"), new FloatProperty(0.75f, "ParameterValue"))], "ScalarParameterValues"));
+                    if (kind == "empty")
+                    {
+                        var key = (StaticParameterSet)binary.SM3MaterialResource.ID;
+                        var cache = ShaderCache.Create();
+                        cache.MaterialShaderMaps.Add(key, new MaterialShaderMap
+                        {
+                            ID = binary.SM3MaterialResource.ID, FriendlyName = "Empty", StaticParameters = key,
+                            Shaders = [], MeshShaderMaps = [], UniformPixelScalarExpressions = [],
+                            UniformPixelVectorExpressions = [], Uniform2DTextureExpressions = [], UniformCubeTextureExpressions = [],
+                            UniformVertexVectorExpressions = [], UniformVertexScalarExpressions = []
+                        });
+                        package.CreateExport("SeekFreeShaderCache", "ShaderCache", indexed: false).WriteBinary(cache);
+                    }
+                    package.Save(path);
+                }
+                using var packageCache = new PackageCache();
+                var installed = new InstalledGameAssetResolver(_ => new Dictionary<string, string>(), _ => null);
+                var reader = new MorphFaceMaterialReader(packageCache, new GamePackageReferenceResolver(packageCache, installed));
+                var reopened = PackageSourceCache.GetPackage(packageCache, path)!;
+                var masterEvidence = reader.ReadMaterialEvidence(reopened.FindExport("HMN_HED_LASH_Unlit_MASTER_MAT", "Material")!, false);
+                TestAssert.Near(0.25f, masterEvidence.Scalars["HED_Lash_Opac_Scalar"], 0);
+                TestAssert.Equal(kind != "missing", masterEvidence.HasCompiledParameterSupport);
+                TestAssert.Equal(kind != "empty", masterEvidence.SupportedScalars.Contains("HED_Lash_Opac_Scalar"));
+                var instanceEvidence = reader.ReadMaterialEvidence(reopened.FindExport("Custom_MIC", "MaterialInstanceConstant")!, false);
+                TestAssert.Near(0.75f, instanceEvidence.Scalars["HED_Lash_Opac_Scalar"], 0);
+                TestAssert.Equal(masterEvidence.HasCompiledParameterSupport, instanceEvidence.HasCompiledParameterSupport);
+            }
+            finally { File.Delete(path); }
+        }
+    }
 
     private static void ShaderMapsFollowSourceInvalidation()
     {

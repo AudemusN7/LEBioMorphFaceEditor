@@ -12,6 +12,12 @@ using LegendaryExplorerCore.Localization;
 using LegendaryExplorerCore.Unreal;
 using LegendaryExplorerCore.Unreal.ObjectInfo;
 
+if (args.Length == 3 && args[0] == "material-metadata")
+{
+    StockMaterialMetadataCompiler.Run(args[1], args[2]);
+    return 0;
+}
+
 if (args.Length is 3 or 4 && args[0] == "conversion-stress")
 {
     var seed = args.Length == 4

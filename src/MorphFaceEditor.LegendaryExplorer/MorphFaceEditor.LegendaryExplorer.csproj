@@ -28,6 +28,8 @@
                       LogicalName="MorphFaceEditor.CrossGameAssetReconciliation.json" />
     <EmbeddedResource Include="Assets\MaterialDependencyOracle.json"
                       LogicalName="MorphFaceEditor.MaterialDependencyOracle.json" />
+    <EmbeddedResource Include="Assets\StockMaterialMetadata.json"
+                      LogicalName="MorphFaceEditor.StockMaterialMetadata.json" />
   </ItemGroup>
 
   <ItemGroup>

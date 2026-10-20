@@ -527,6 +527,7 @@ public sealed class MorphFacePackageContextService
         StandalonePlayerAssetCatalog? assetCatalog = null)
     {
         ValidateObjectName(objectName);
+        // Disposable Player workspaces do not need the seed recompressed on import.
         return ImportHeadMorph(
             packagePath,
             templateFacePath,
@@ -537,7 +538,8 @@ public sealed class MorphFacePackageContextService
             requireMatchingAllLods: false,
             assetCatalog: assetCatalog,
             strictAssetResolution: true,
-            allowMissingAttachments: false);
+            allowMissingAttachments: false,
+            compress: false);
     }
 
     /// <summary>Imports a proven NPC RON while applying the shared LE1/LE2 material transfer policy.</summary>
@@ -617,7 +619,8 @@ public sealed class MorphFacePackageContextService
         bool strictAssetResolution = false,
         NpcRonMaterialTransfer? npcMaterialTransfer = null,
         bool allowMissingAttachments = false,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool? compress = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         ValidateMorphData(ron.MorphData);
@@ -674,7 +677,7 @@ public sealed class MorphFacePackageContextService
                 morphData,
                 resolvedMaterial,
                 warnings, userWarnings);
-        }, cancellationToken);
+        }, cancellationToken, compress);
     }
 
     public MorphFaceSaveResult PasteMorphData(
@@ -874,7 +877,8 @@ public sealed class MorphFacePackageContextService
     private static MorphFaceSaveResult Mutate(
         string packagePath,
         Func<IMEPackage, PendingResult> mutation,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool? compress = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(packagePath);
         ArgumentNullException.ThrowIfNull(mutation);
@@ -886,8 +890,6 @@ public sealed class MorphFacePackageContextService
 
         var originalFingerprint = PackageFingerprint.Capture(path);
         IReadOnlySet<string> integrityBaseline;
-        using (var original = OpenPackage(path))
-            integrityBaseline = PackageIntegrity.CaptureIssues(original);
         using (var save = new FileSaveTransaction(path, originalFingerprint))
         {
             var temporaryPath = save.CandidatePath;
@@ -898,9 +900,12 @@ public sealed class MorphFacePackageContextService
             using (var package = MEPackageHandler.OpenMEPackage(temporaryPath, forceLoadFromDisk: true))
             {
                 EnsureSupportedGame(package);
+                // Capture the unchanged candidate before editing; the saved result is
+                // still independently reopened and checked against this baseline.
+                integrityBaseline = PackageIntegrity.CaptureIssues(package);
                 pending = mutation(package);
                 cancellationToken.ThrowIfCancellationRequested();
-                package.Save(temporaryPath);
+                package.Save(temporaryPath, compress: compress);
             }
 
             cancellationToken.ThrowIfCancellationRequested();

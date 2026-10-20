@@ -2624,6 +2624,7 @@ Choose No to keep the current scalp textures and material.</system:String>
 <system:String x:Key="loc_RonFiles_ExportMorphs" xml:space="preserve">Export Morphs</system:String>
     <!--localiser: {"Key":"loc_RonFiles_Incompatible","ReviewedHash":"8D8EA87BF3F7644F8F3EB3EAE10E090A7B8762E363AED5A6E10DF1A05DE50F99","DoNotTranslate":false,"Note":"","SourceHash":null}-->
 <system:String x:Key="loc_RonFiles_Incompatible" xml:space="preserve">This RON belongs to a different game or face type. Convert it before importing.</system:String>
+<system:String x:Key="loc_RonFiles_InvalidMetadata" xml:space="preserve">The RON file has invalid or unsupported export metadata.</system:String>
     <!--localiser: {"Key":"loc_RonFiles_ImportFailed","ReviewedHash":"80889B1A2358BF73D67A4ACC55E627964B1C5534F15CD56FBA8C4730B0DC1EC9","DoNotTranslate":false,"Note":"","SourceHash":null}-->
 <system:String x:Key="loc_RonFiles_ImportFailed" xml:space="preserve">The RON could not be imported. Your existing edits have been retained.</system:String>
     <!--localiser: {"Key":"loc_RonFiles_Imported","ReviewedHash":"9AE578D4C686119D2A5F6878631E1EC2447BF081EE90738DFBC96E8A574C77CD","DoNotTranslate":false,"Note":"","SourceHash":null}-->

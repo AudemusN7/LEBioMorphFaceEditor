@@ -20,7 +20,6 @@ public enum RonExportProducer
 /// </summary>
 public sealed record RonExportProvenance(
     RonExportProducer Producer,
-    string Version,
     MorphFaceGame Game,
     string Archetype,
     bool PlayerMorph);
@@ -34,38 +33,37 @@ public sealed record HeadMorphRonDocument(HeadMorphPayload Head, RonExportProven
 /// </summary>
 public static class TseHeadMorphRon
 {
-    public static bool IsMorphFeaturesOnly(string path) => File.ReadLines(path).Any(IsMorphFeaturesMarker);
-    public static bool IsMorphFeaturesOnly(RonInputSnapshot input) => input.Source.Split('\n').Any(IsMorphFeaturesMarker);
-    private static bool IsMorphFeaturesMarker(string line) => line.Trim().Equals("// MFE RON Content: Morphs", StringComparison.Ordinal);
+    public static bool IsMorphFeaturesOnly(string path) =>
+        IsMorphFeaturesOnly(RonInputSnapshot.Parse(File.ReadAllText(path)));
+    public static bool IsMorphFeaturesOnly(RonInputSnapshot input) =>
+        MfeRonMetadata.TryRead(input)?.Format == MfeRonMetadata.Morphs;
     public static void WriteMorphFeatures(string path, MorphFaceMorphData data, RonExportProvenance provenance) =>
         Write(path, new("None", [], new(data.MorphFeatures, [], []), new([], [], [])), provenance, true);
     public static MorphFaceMorphData ReadMorphData(string path) => Read(path).MorphData;
     public static void Validate(string path) => _ = Read(path);
-
     public static HeadMorphPayload Read(string path) => ReadDocument(path).Head;
-    public static HeadMorphPayload Read(RonInputSnapshot input) => HeadMorphRonSchema.Read(input, IsMorphFeaturesOnly(input));
-
-    public static HeadMorphRonDocument ReadDocument(string path)
+    public static HeadMorphPayload Read(RonInputSnapshot input) => ReadDocument(input).Head;
+    public static HeadMorphRonDocument ReadDocument(string path) =>
+        ReadDocument(RonInputSnapshot.Parse(File.ReadAllText(path), "Trilogy Save Editor"));
+    public static HeadMorphRonDocument ReadDocument(RonInputSnapshot input)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        var source = File.ReadAllText(path);
-        var provenance = ParseProvenance(source);
-        var input = RonInputSnapshot.Parse(source, "Trilogy Save Editor");
-        return new(Read(input), provenance);
+        var provenance = ReadProvenance(input);
+        return new(HeadMorphRonSchema.Read(input, IsMorphFeaturesOnly(input)), provenance);
     }
+    public static RonExportProvenance? ReadProvenance(string path) =>
+        ReadProvenance(RonInputSnapshot.Parse(File.ReadAllText(path)));
 
-    /// <summary>Reads the optional trusted exporter header from a RON file.</summary>
-    /// <exception cref="InvalidDataException">
-    /// A recognised header is malformed, incomplete, duplicated, or uses an
-    /// unsupported producer, game, or archetype.
-    /// </exception>
-    public static RonExportProvenance? ReadProvenance(string path)
+    public static RonExportProvenance? ReadProvenance(RonInputSnapshot input)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        return ParseProvenance(File.ReadAllText(path));
+        if (!input.Root.ContainsKey("format")) return ReadLexProvenance(input.Source);
+        var metadata = MfeRonMetadata.TryRead(input);
+        if (metadata?.Format is not (MfeRonMetadata.Head or MfeRonMetadata.Morphs) || metadata.Target is not { } target)
+            throw MetadataError();
+        var profile = MorphFaceProfileRegistry.CreateDefault().Profiles.SingleOrDefault(profile =>
+            profile.Key == target.ProfileKey && profile.Game.ToString() == metadata.Game);
+        if (profile is null) throw MetadataError();
+        return new(RonExportProducer.MFE, profile.Game, profile.ExportTag.Trim('[', ']'), target.PlayerMorph);
     }
-
-    public static RonExportProvenance? ReadProvenance(RonInputSnapshot input) => ParseProvenance(input.Source);
 
     internal static void Write(
         string path,
@@ -76,12 +74,16 @@ public static class TseHeadMorphRon
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentNullException.ThrowIfNull(morph);
         var builder = new StringBuilder();
-        if (morphFeaturesOnly) builder.AppendLine("// MFE RON Content: Morphs");
         if (provenance is not null)
         {
-            WriteProvenance(builder, ValidateProvenance(provenance));
+            if (provenance.Producer != RonExportProducer.MFE) throw MetadataError();
+            var profile = MorphFaceProfileRegistry.CreateDefault().Profiles.SingleOrDefault(profile =>
+                profile.Game == provenance.Game && profile.ExportTag.Trim('[', ']').Equals(provenance.Archetype, StringComparison.OrdinalIgnoreCase));
+            if (profile is null) throw MetadataError();
+            new MfeRonMetadata(morphFeaturesOnly ? MfeRonMetadata.Morphs : MfeRonMetadata.Head,
+                provenance.Game.ToString(), new(profile.Key, provenance.PlayerMorph)).Write(builder);
         }
-        builder.AppendLine("(");
+        else builder.AppendLine("(");
         WriteStringField(builder, "hair_mesh", morph.HairMesh);
         WriteStringArray(builder, "accessory_mesh", morph.AccessoryMeshes);
         WriteScalarMap(builder, "morph_features", morph.MorphData.MorphFeatures,
@@ -104,199 +106,33 @@ public static class TseHeadMorphRon
         File.WriteAllText(path, builder.ToString(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
     }
 
-    private static readonly HashSet<string> SupportedArchetypes = new(StringComparer.OrdinalIgnoreCase)
+    private static RonExportProvenance? ReadLexProvenance(string source)
     {
-        "ALN", "ASA", "BAT", "HMM", "HMF", "KRO", "SAL", "TUR", "TUF"
-    };
-
-    private static RonExportProvenance? ParseProvenance(string source)
-    {
-        ArgumentNullException.ThrowIfNull(source);
-        RonExportProducer? producer = null;
-        string? version = null;
-        MorphFaceGame? game = null;
-        string? archetype = null;
-        bool? playerMorph = null;
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var recognised = 0;
-        var lineNumber = 0;
-
-        foreach (var line in source.Split('\n'))
+        var comments = source.Split('\n').Select(line => line.Trim()).Where(line => line.StartsWith("//", StringComparison.Ordinal))
+            .Select(line => line[2..].Trim()).ToArray();
+        string? Header(string key)
         {
-            lineNumber++;
-            var comment = line.TrimStart();
-            if (!comment.StartsWith("//", StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            var body = comment[2..].Trim();
-            if (!TryGetMetadataField(body, lineNumber, out var key, out var value))
-            {
-                continue;
-            }
-            recognised++;
-            if (!seen.Add(key))
-            {
-                throw MetadataError(lineNumber, $"duplicate '{key}' field");
-            }
-
-            switch (key)
-            {
-                case "Exported from":
-                    (producer, version) = ParseProducer(value, lineNumber);
-                    break;
-                case "Game":
-                    game = ParseGame(value, lineNumber);
-                    break;
-                case "Archetype":
-                    archetype = ParseArchetype(value, lineNumber);
-                    break;
-                case "Player Morph":
-                    playerMorph = ParsePlayerMorph(value, lineNumber);
-                    break;
-            }
+            var matches = comments.Where(line => line.StartsWith(key, StringComparison.OrdinalIgnoreCase)).ToArray();
+            if (matches.Length == 0) return null;
+            if (matches.Length != 1) throw MetadataError();
+            var remainder = matches[0][key.Length..].TrimStart();
+            if (!remainder.StartsWith(':')) throw MetadataError();
+            return remainder[1..].Trim();
         }
-
-        if (recognised == 0)
-        {
-            return null;
-        }
-
-        var missing = new[]
-        {
-            producer is null || version is null ? "Exported from" : null,
-            game is null ? "Game" : null,
-            archetype is null ? "Archetype" : null,
-            playerMorph is null ? "Player Morph" : null
-        }.Where(value => value is not null).ToArray();
-        if (missing.Length > 0)
-        {
-            throw MetadataError(lineNumber,
-                $"incomplete header; missing {string.Join(", ", missing.Select(value => $"'{value}'"))}");
-        }
-
-        return ValidateProvenance(new RonExportProvenance(
-            producer!.Value,
-            version!,
-            game!.Value,
-            archetype!,
-            playerMorph!.Value));
+        var exporter = Header("Exported from");
+        if (exporter is null || !exporter.StartsWith("LEX", StringComparison.OrdinalIgnoreCase)) return null;
+        var archetype = Header("Archetype")?.ToUpperInvariant();
+        var player = Header("Player Morph")?.ToUpperInvariant();
+        if (exporter.Length < 4 || exporter[3] is not (' ' or '\t') || string.IsNullOrWhiteSpace(exporter[4..]) ||
+            !Enum.TryParse<MorphFaceGame>(Header("Game"), true, out var game) ||
+            game is not (MorphFaceGame.LE1 or MorphFaceGame.LE2 or MorphFaceGame.LE3) ||
+            archetype is not ("ALN" or "ASA" or "BAT" or "HMM" or "HMF" or "KRO" or "SAL" or "TUR" or "TUF") ||
+            player is not ("YES" or "NO")) throw MetadataError();
+        return new(RonExportProducer.LEX, game, archetype, player == "YES");
     }
 
-    private static bool TryGetMetadataField(
-        string body,
-        int lineNumber,
-        out string key,
-        out string value)
-    {
-        foreach (var candidate in new[] { "Exported from", "Player Morph", "Archetype", "Game" })
-        {
-            if (!body.StartsWith(candidate, StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            var remainder = body[candidate.Length..].TrimStart();
-            if (!remainder.StartsWith(':'))
-            {
-                throw MetadataError(lineNumber, $"'{candidate}' field must use the form '// {candidate}: value'");
-            }
-            key = candidate;
-            value = remainder[1..].Trim();
-            return true;
-        }
-
-        key = string.Empty;
-        value = string.Empty;
-        return false;
-    }
-
-    private static (RonExportProducer Producer, string Version) ParseProducer(string value, int lineNumber)
-    {
-        var separator = value.IndexOfAny([' ', '\t']);
-        if (separator <= 0 || separator == value.Length - 1)
-        {
-            throw MetadataError(lineNumber,
-                "'Exported from' must name MFE or LEX followed by a version");
-        }
-        var producerText = value[..separator];
-        var version = value[separator..].Trim();
-        if (!Enum.TryParse<RonExportProducer>(producerText, ignoreCase: true, out var producer) ||
-            !Enum.IsDefined(producer))
-        {
-            throw MetadataError(lineNumber, $"unsupported trusted producer '{producerText}'");
-        }
-        if (version.Length == 0 || version.Contains('\r') || version.Contains('\n'))
-        {
-            throw MetadataError(lineNumber, "exporter version must be non-empty");
-        }
-        return (producer, version);
-    }
-
-    private static MorphFaceGame ParseGame(string value, int lineNumber)
-    {
-        if (!Enum.TryParse<MorphFaceGame>(value, ignoreCase: true, out var game) ||
-            game is not (MorphFaceGame.LE1 or MorphFaceGame.LE2 or MorphFaceGame.LE3))
-        {
-            throw MetadataError(lineNumber, $"unsupported game '{value}'");
-        }
-        return game;
-    }
-
-    private static string ParseArchetype(string value, int lineNumber)
-    {
-        var archetype = value.ToUpperInvariant();
-        if (!SupportedArchetypes.Contains(archetype))
-        {
-            throw MetadataError(lineNumber, $"unsupported archetype '{value}'");
-        }
-        return archetype;
-    }
-
-    private static bool ParsePlayerMorph(string value, int lineNumber) => value.ToUpperInvariant() switch
-    {
-        "YES" => true,
-        "NO" => false,
-        _ => throw MetadataError(lineNumber, $"Player Morph must be YES or NO, not '{value}'")
-    };
-
-    private static RonExportProvenance ValidateProvenance(RonExportProvenance provenance)
-    {
-        if (!Enum.IsDefined(provenance.Producer))
-        {
-            throw new InvalidDataException($"Unsupported RON export producer '{provenance.Producer}'.");
-        }
-        if (string.IsNullOrWhiteSpace(provenance.Version) ||
-            provenance.Version.Contains('\r') || provenance.Version.Contains('\n'))
-        {
-            throw new InvalidDataException("RON export metadata requires a non-empty single-line version.");
-        }
-        if (provenance.Game is not (MorphFaceGame.LE1 or MorphFaceGame.LE2 or MorphFaceGame.LE3))
-        {
-            throw new InvalidDataException($"Unsupported RON export game '{provenance.Game}'.");
-        }
-        var archetype = provenance.Archetype?.Trim().ToUpperInvariant();
-        if (archetype is null || !SupportedArchetypes.Contains(archetype))
-        {
-            throw new InvalidDataException($"Unsupported RON export archetype '{provenance.Archetype}'.");
-        }
-        return provenance with { Version = provenance.Version.Trim(), Archetype = archetype };
-    }
-
-    private static void WriteProvenance(StringBuilder builder, RonExportProvenance provenance)
-    {
-        builder.Append("// Exported from: ").Append(provenance.Producer).Append(' ')
-            .AppendLine(provenance.Version);
-        builder.Append("// Game: ").AppendLine(provenance.Game.ToString());
-        builder.Append("// Archetype: ").AppendLine(provenance.Archetype);
-        builder.Append("// Player Morph: ").AppendLine(provenance.PlayerMorph ? "YES" : "NO");
-    }
-
-    private static InvalidDataException MetadataError(int lineNumber, string message) =>
-        new(lineNumber > 0
-            ? $"Invalid RON export metadata on line {lineNumber}: {message}."
-            : $"Invalid RON export metadata: {message}.");
+    private static InvalidDataException MetadataError() => UserFacingMessage.CreateError(
+        "loc_RonFiles_InvalidMetadata", "The RON file has invalid or unsupported export metadata.");
 
     private static void WriteStringField(StringBuilder builder, string name, string value) =>
         builder.Append("    ").Append(name).Append(": \"").Append(Escape(value)).AppendLine("\",");

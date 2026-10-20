@@ -147,7 +147,7 @@ internal static partial class QaCases
         new MorphFacePackageContextService().CaptureHead(packagePath, facePath);
 
     private static RonExportProvenance Provenance(QaFaceSpec face) =>
-        new(RonExportProducer.MFE, "QA", face.Game, face.Family, face.IsPlayer);
+        new(RonExportProducer.MFE, face.Game, face.Family, face.IsPlayer);
 
     private static void AssertAttachments(MorphFaceDocument expected, MorphFaceDocument actual)
     {

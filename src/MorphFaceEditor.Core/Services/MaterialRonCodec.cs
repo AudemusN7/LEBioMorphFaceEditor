@@ -21,8 +21,10 @@ public static class MaterialRonCodec
     public static MaterialFileKind? IdentifyMaterialFile(RonInputSnapshot input)
     {
         var root = input.Root;
-        if (root.TryGetValue("format", out var format) && Equals(format, "MorphFaceEditor.Materials"))
+        if (root.ContainsKey("format"))
         {
+            var metadata = MfeRonMetadata.TryRead(input) ?? throw new InvalidDataException("This is not an MFE material file.");
+            if (metadata.Format != MfeRonMetadata.Materials) return null;
             _ = input.MaterialRoot();
             return MaterialFileKind.Mfe;
         }
@@ -45,7 +47,8 @@ public static class MaterialRonCodec
     private static IReadOnlyDictionary<string, object> TseRoot(RonInputSnapshot input)
     {
         var root = input.MaterialRoot();
-        if (root.ContainsKey("format")) throw new InvalidDataException("Use Import Materials for an MFE material file.");
+        if (root.ContainsKey("format") && MfeRonMetadata.TryRead(input)?.Format is not (MfeRonMetadata.Head or MfeRonMetadata.Morphs))
+            throw new InvalidDataException("Use Import Materials for an MFE material file.");
         if (!new[] { "scalar_parameters", "vector_parameters", "texture_parameters" }.Any(root.ContainsKey))
             throw new InvalidDataException("The TSE RON contains no material parameter maps.");
         return root;
@@ -76,12 +79,9 @@ public static class MaterialRonCodec
     public static MeshMaterialDocument ReadMfe(RonInputSnapshot input)
     {
         var root = input.MaterialRoot();
-        if (String(root, "format") != "MorphFaceEditor.Materials")
+        var metadata = MfeRonMetadata.TryRead(input);
+        if (metadata?.Format != MfeRonMetadata.Materials)
             throw new InvalidDataException("This is not an MFE material file. Use Import TSE RON for a player RON.");
-        if (Number(root["version"]) != MeshMaterialDocument.CurrentVersion)
-            throw new InvalidDataException("This MFE material file uses an unsupported version.");
-        var game = String(root, "game");
-        if (game is not ("LE1" or "LE2" or "LE3")) throw new InvalidDataException("Invalid material file game.");
         var slots = Array(root["slots"]).Select(item =>
         {
             var slot = Object(item);
@@ -101,10 +101,10 @@ public static class MaterialRonCodec
             if (string.IsNullOrWhiteSpace(scope) || scope.Any(character => !char.IsAsciiLetterOrDigit(character) && character != '-'))
                 throw new InvalidDataException($"Invalid material scope '{scope}'.");
         var attachments = ReadAttachmentReferences(input);
-        return new MeshMaterialDocument(game, String(root, "mesh_name"), slots,
+        return new MeshMaterialDocument(metadata.Game, String(root, "mesh_name"), slots,
             scopes.ToDictionary(value => value.Key, value => ReadParameters(Object(value.Value)), StringComparer.OrdinalIgnoreCase))
         {
-            DefaultFace = ReadDefaultFace(root),
+            DefaultFace = metadata.Target,
             HairMesh = attachments.HairMesh,
             AccessoryMeshes = attachments.AccessoryMeshes
         };
@@ -116,7 +116,7 @@ public static class MaterialRonCodec
     public static (string Game, MaterialFaceTarget Target)? ReadDefaultFace(RonInputSnapshot input)
     {
         var root = input.MaterialRoot();
-        if (!root.TryGetValue("format", out var format) || !Equals(format, "MorphFaceEditor.Materials"))
+        if (!root.ContainsKey("format"))
         {
             string? Header(string name)
             {
@@ -130,16 +130,8 @@ public static class MaterialRonCodec
             return game is not null && profile is not null && kind is "Player" or "NPC"
                 ? (game, new MaterialFaceTarget(profile, kind == "Player")) : null;
         }
-        var target = ReadDefaultFace(root);
-        return target is null ? null : (String(root, "game"), target);
-    }
-
-    private static MaterialFaceTarget? ReadDefaultFace(IReadOnlyDictionary<string, object> root)
-    {
-        if (!root.ContainsKey("target_profile") && !root.ContainsKey("target_kind")) return null;
-        var kind = String(root, "target_kind");
-        if (kind is not ("Player" or "NPC")) return null;
-        return new(String(root, "target_profile"), kind == "Player");
+        var metadata = MfeRonMetadata.TryRead(input);
+        return metadata?.Target is { } target ? (metadata.Game, target) : null;
     }
 
     /// <summary>Reads only the material maps; face workspaces do not use MESH slot or source-game metadata.</summary>
@@ -149,7 +141,7 @@ public static class MaterialRonCodec
     public static IReadOnlyDictionary<string, MorphFaceMaterialData> ReadMfeParameterScopes(RonInputSnapshot input)
     {
         var root = input.MaterialRoot();
-        if (String(root, "format") != "MorphFaceEditor.Materials")
+        if (MfeRonMetadata.TryRead(input)?.Format != MfeRonMetadata.Materials)
             throw new InvalidDataException("This is not an MFE material file.");
         var scopes = Object(root["parameters"]);
         return scopes.ToDictionary(value => value.Key,
@@ -158,18 +150,8 @@ public static class MaterialRonCodec
 
     public static string WriteMfe(MeshMaterialDocument document)
     {
-        var output = new StringBuilder("// Material settings only; no authored geometry or bone offsets.\n");
-        output.AppendLine($"// MFE material export version: {MeshMaterialDocument.CurrentVersion}");
-        output.AppendLine($"// Material target game: {document.Game}");
-        output.AppendLine("(");
-        Field(output, "format", "MorphFaceEditor.Materials", 1);
-        output.AppendLine($"    version: {MeshMaterialDocument.CurrentVersion},");
-        Field(output, "game", document.Game, 1);
-        if (document.DefaultFace is { } target)
-        {
-            Field(output, "target_profile", target.ProfileKey, 1);
-            Field(output, "target_kind", target.PlayerMorph ? "Player" : "NPC", 1);
-        }
+        var output = new StringBuilder();
+        new MfeRonMetadata(MfeRonMetadata.Materials, document.Game, document.DefaultFace).Write(output);
         Field(output, "mesh_name", document.MeshName, 1);
         if (document.HairMesh is not null) Field(output, "hair_mesh", document.HairMesh, 1);
         if (document.AccessoryMeshes is not null)

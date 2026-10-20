@@ -127,7 +127,6 @@ public sealed partial class MainWindowViewModel
                      basePath.Contains("CharacterCreation_Base_", StringComparison.OrdinalIgnoreCase);
         return new RonExportProvenance(
             RonExportProducer.MFE,
-            typeof(MainWindowViewModel).Assembly.GetName().Version?.ToString() ?? "0.0.0",
             reference.Game,
             archetype,
             player);
@@ -225,7 +224,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception exception)
         {
-            ErrorMessage = Loc.Format("loc_Shell_Error_TheRonProvenanceCouldNot", exception.Message);
+            ErrorMessage = Loc.Format("loc_Shell_Error_TheRonProvenanceCouldNot", UserFacingMessageFormatter.Format(exception));
             Status = Loc.Text("loc_Shell_Status_RonImportFailedTheCurrent");
             return;
         }

@@ -24,6 +24,7 @@ internal static class HeadMorphRonSchema
         {
             switch (field)
             {
+                case "format" or "version" or "game" or "target_profile" or "target_kind" when input.Root.ContainsKey("format"): break;
                 case "hair_mesh": hair = Text(value); break;
                 case "accessory_mesh": accessories = Sequence(value, '[').Select(Text).ToArray(); break;
                 case "morph_features": features = Map(value, '{')

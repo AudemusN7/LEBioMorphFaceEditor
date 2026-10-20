@@ -80,6 +80,7 @@ internal static class RonStressTests
                 "(lod0_vertices: [],)",
                 "(lod0_vertices: [(0,0,0)], lod2_vertices: [(0,0,0)],)",
                 "(lod0_vertices: [(0,0,0)], unknown: 1,)",
+                "(game: \"LE2\", lod0_vertices: [(0,0,0)],)",
                 head + " unexpected",
                 head.Replace("0.5", "1e999")
             })
@@ -101,73 +102,49 @@ internal static class RonStressTests
 
     private static void ProvenanceMetadata()
     {
-        var sourcePath = Path.Combine(Path.GetTempPath(), $"MFE-RonProvenanceSource-{Guid.NewGuid():N}.ron");
-        var temporaryPath = Path.Combine(Path.GetTempPath(), $"MFE-RonProvenance-{Guid.NewGuid():N}.ron");
+        var path = Path.Combine(Path.GetTempPath(), $"MFE-RonMetadata-{Guid.NewGuid():N}.ron");
+        var head = new HeadMorphPayload("None", [], new([], [], [[Vector3.Zero]]), new([], [], []));
+        var expected = new RonExportProvenance(RonExportProducer.MFE, MorphFaceGame.LE2, "ASA", false);
         try
         {
-            var source = new HeadMorphPayload("None", [],
-                new MorphFaceMorphData([], [], [[Vector3.Zero]]),
-                new MorphFaceMaterialData([], [], []));
-            TseHeadMorphRon.Write(sourcePath, source);
-            var expected = new RonExportProvenance(
-                RonExportProducer.MFE,
-                "0.9.17",
-                MorphFaceGame.LE2,
-                "ASA",
-                PlayerMorph: false);
-            TseHeadMorphRon.Write(temporaryPath, TseHeadMorphRon.Read(sourcePath), expected);
-            var actual = TseHeadMorphRon.ReadProvenance(temporaryPath);
-            TestAssert.Equal(expected, actual);
-            TestAssert.True(File.ReadLines(temporaryPath).Take(4).SequenceEqual(
-                    [
-                        "// Exported from: MFE 0.9.17",
-                        "// Game: LE2",
-                        "// Archetype: ASA",
-                        "// Player Morph: NO"
-                    ]),
-                "RON provenance was not written as the four-line comment header.");
-            TestAssert.True(TseHeadMorphRon.ReadProvenance(sourcePath) is null,
-                "An untagged legacy RON unexpectedly reported exporter provenance.");
-
-            File.WriteAllText(temporaryPath, "// Game: LE2\n(\n)");
-            var partialRejected = false;
-            try
+            TseHeadMorphRon.Write(path, head, expected);
+            var text = File.ReadAllText(path);
+            TestAssert.Equal(expected, TseHeadMorphRon.ReadProvenance(path));
+            var metadata = MfeRonMetadata.TryRead(RonInputSnapshot.Parse(text))!;
+            TestAssert.Equal(MfeRonMetadata.Head, metadata.Format);
+            TestAssert.Equal(new MaterialFaceTarget("le2-asari", false), metadata.Target);
+            TestAssert.Equal(1, File.ReadLines(path).TakeWhile(line => line.StartsWith("//", StringComparison.Ordinal)).Count());
+            TestAssert.True(!text.Contains("// Exported from:") && !text.Contains("// Game:"), "MFE still exports comment metadata.");
+            foreach (var invalid in new[]
             {
-                _ = TseHeadMorphRon.ReadProvenance(temporaryPath);
-            }
-            catch (InvalidDataException exception)
+                text.Replace("version: 1", "version: 2"),
+                text.Replace("MorphFaceEditor.Head", "Unknown.Head"),
+                text.Replace("game: \"LE2\"", "game: \"LE3\""),
+                text.Replace("target_kind: \"NPC\"", "target_kind: \"Unknown\"")
+            })
             {
-                partialRejected = exception.Message.Contains("incomplete header", StringComparison.OrdinalIgnoreCase) &&
-                    exception.Message.Contains("Archetype", StringComparison.Ordinal);
+                File.WriteAllText(path, invalid);
+                try { _ = TseHeadMorphRon.ReadProvenance(path); throw new Exception("Invalid MFE metadata was accepted."); }
+                catch (InvalidDataException) { }
             }
-            TestAssert.True(partialRejected,
-                "A partial recognised RON provenance header did not report its missing fields.");
-
-            File.WriteAllText(temporaryPath,
-                "// Exported from: UntrustedTool 1\n// Game: LE2\n// Archetype: ASA\n// Player Morph: NO\n(\n)");
-            var untrustedRejected = false;
-            try
+            TestFixtures.WriteLexRon(path, head, MorphFaceGame.LE2, "ASA", false);
+            TestAssert.Equal(expected with { Producer = RonExportProducer.LEX }, TseHeadMorphRon.ReadProvenance(path));
+            TestAssert.Equal(1, TseHeadMorphRon.Read(path).MorphData.BakedLods.Count);
+            var lex = File.ReadAllText(path);
+            File.WriteAllText(path, lex.Replace("from: LEX 1", "from : LEX\t1").Replace("Game:", "Game :"));
+            TestAssert.Equal(expected with { Producer = RonExportProducer.LEX }, TseHeadMorphRon.ReadProvenance(path));
+            foreach (var invalid in new[] { lex.Replace("// Archetype: ASA\n", ""), lex.Replace("// Game: LE2", "// Game: LE2\n// Game: LE3") })
             {
-                _ = TseHeadMorphRon.ReadProvenance(temporaryPath);
+                File.WriteAllText(path, invalid);
+                try { _ = TseHeadMorphRon.ReadProvenance(path); throw new Exception("Malformed LEX metadata was accepted."); }
+                catch (InvalidDataException) { }
             }
-            catch (InvalidDataException exception)
-            {
-                untrustedRejected = exception.Message.Contains("trusted producer", StringComparison.OrdinalIgnoreCase);
-            }
-            TestAssert.True(untrustedRejected,
-                "An untrusted RON exporter was accepted as provenance.");
+            File.WriteAllText(path, lex.Replace("Exported from: LEX", "Exported from: MFE"));
+            TestAssert.True(TseHeadMorphRon.ReadProvenance(path) is null, "Old MFE comments still control routing.");
+            TseHeadMorphRon.Write(path, head);
+            TestAssert.True(TseHeadMorphRon.ReadProvenance(path) is null, "An untagged TSE head reported MFE metadata.");
         }
-        finally
-        {
-            if (File.Exists(temporaryPath))
-            {
-                File.Delete(temporaryPath);
-            }
-            if (File.Exists(sourcePath))
-            {
-                File.Delete(sourcePath);
-            }
-        }
+        finally { if (File.Exists(path)) File.Delete(path); }
     }
 
     private static void RonOmitsAttachmentTexture()
@@ -193,17 +170,8 @@ internal static class RonStressTests
         }
     }
 
-    private static bool IsMfeRonExport(string path)
-    {
-        foreach (var line in File.ReadLines(path))
-        {
-            var header = line.Trim().TrimStart('\uFEFF');
-            if (header.Length == 0) continue;
-            if (!header.StartsWith("//", StringComparison.Ordinal)) break;
-            if (header.StartsWith("// MFE material export version:", StringComparison.OrdinalIgnoreCase)) return true;
-        }
-        return TseHeadMorphRon.ReadProvenance(path)?.Producer == RonExportProducer.MFE;
-    }
+    private static bool IsMfeRonExport(string path) =>
+        TseHeadMorphRon.ReadProvenance(path)?.Producer == RonExportProducer.MFE;
 
     private static void HairTextureComparisonUsesExporterHeader()
     {
@@ -225,16 +193,14 @@ internal static class RonStressTests
             TestAssert.True(rejected, "An untagged TSE comparison silently skipped its hair entries.");
 
             TseHeadMorphRon.Write(path, morph,
-                new RonExportProvenance(RonExportProducer.MFE, "0.9.17", MorphFaceGame.LE1, "HMF", true));
+                new RonExportProvenance(RonExportProducer.MFE, MorphFaceGame.LE1, "HMF", true));
             TestAssert.True(IsMfeRonExport(path), "The full-head MFE exporter header was not recognised.");
             AssertMaterialEqual(original, headOnly, "MFE full-head readback",
                 ignoreAttachmentTextures: IsMfeRonExport(path));
 
             TseHeadMorphRon.Write(path, morph);
             File.WriteAllText(path, "// MFE material export version: 1\n" + File.ReadAllText(path));
-            TestAssert.True(IsMfeRonExport(path), "The material-only MFE exporter header was not recognised.");
-            AssertMaterialEqual(original, headOnly, "MFE material readback",
-                ignoreAttachmentTextures: IsMfeRonExport(path));
+            TestAssert.True(!IsMfeRonExport(path), "A redundant material-version comment was treated as full-head provenance.");
 
             // Header detection must not mistake a payload comment for exporter provenance.
             TseHeadMorphRon.Write(path, morph);
@@ -500,7 +466,7 @@ internal static class RonStressTests
                             $"{game} {primary.FileName}");
                     }
 
-                    var provenance = new RonExportProvenance(RonExportProducer.MFE, "0.9.17", game,
+                    var provenance = new RonExportProvenance(RonExportProducer.MFE, game,
                         primary.Sex == StandalonePlayerSex.Male ? "HMM" : "HMF", PlayerMorph: true);
                     context.ExportRon(imported.Workspace.WorkingPath, imported.ImportedFacePath, readbackPath, provenance);
                     var readback = TseHeadMorphRon.Read(readbackPath);

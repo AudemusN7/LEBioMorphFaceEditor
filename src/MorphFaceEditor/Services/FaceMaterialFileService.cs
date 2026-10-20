@@ -51,7 +51,7 @@ public static class FaceMaterialFileService
     public static PreparedImport Read(RonInputSnapshot input, bool allowTse)
     {
         var attachments = MaterialRonCodec.ReadAttachmentReferences(input);
-        if (input.Root.ContainsKey("format"))
+        if (MaterialRonCodec.IdentifyMaterialFile(input) == MaterialRonCodec.MaterialFileKind.Mfe)
         {
             var scopes = MaterialRonCodec.ReadMfeParameterScopes(input);
             var (parameters, warnings) = ReadFaceParameters(scopes);

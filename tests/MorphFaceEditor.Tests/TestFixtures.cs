@@ -7,6 +7,12 @@ namespace MorphFaceEditor.Tests;
 
 public static class TestFixtures
 {
+    public static void WriteLexRon(string path, HeadMorphPayload head, MorphFaceGame game, string archetype, bool player)
+    {
+        TseHeadMorphRon.Write(path, head);
+        File.WriteAllText(path, $"// Exported from: LEX 1\n// Game: {game}\n// Archetype: {archetype}\n// Player Morph: {(player ? "YES" : "NO")}\n" + File.ReadAllText(path));
+    }
+
     private static readonly Lazy<TextureCatalogService> CorpusTextureCatalog =
         new(BuildCorpusTextureCatalog);
 

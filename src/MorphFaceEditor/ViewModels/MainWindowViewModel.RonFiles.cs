@@ -16,9 +16,8 @@ public sealed partial class MainWindowViewModel
     {
         try
         {
-            if (!source.IsMorphFeaturesOnly) return false;
-            var (metadata, data) = await Task.Run(() =>
-                (TseHeadMorphRon.ReadProvenance(source.Input), TseHeadMorphRon.Read(source.Input).MorphData));
+            if (!await Task.Run(() => TseHeadMorphRon.IsMorphFeaturesOnly(source.Input))) return false;
+            var (head, metadata) = await Task.Run(() => TseHeadMorphRon.ReadDocument(source.Input));
             if (metadata is null || metadata.Producer != RonExportProducer.MFE)
                 throw new InvalidDataException(Loc.Text("loc_RonFiles_Incompatible"));
             if (!HasWorkspace)
@@ -27,7 +26,7 @@ public sealed partial class MainWindowViewModel
                     value.Game == metadata.Game && value.ExportTag.Trim('[', ']').Equals(metadata.Archetype, StringComparison.OrdinalIgnoreCase));
                 if (profile is null) throw new InvalidDataException(Loc.Text("loc_RonFiles_Incompatible"));
                 if (await OpenDefaultMaterialFaceAsync(metadata.Game.ToString(), new MaterialFaceTarget(profile.Key, metadata.PlayerMorph),
-                    path, source, WorkspaceFileFormat.MorphFeaturesRon, data))
+                    path, source, WorkspaceFileFormat.MorphFeaturesRon, head.MorphData))
                     Status = Loc.Format("loc_RonFiles_Imported", Path.GetFileName(path));
                 return true;
             }
@@ -36,7 +35,7 @@ public sealed partial class MainWindowViewModel
             var target = CreateRonExportProvenance(WorkspacePackagePath, SelectedFace, IsPlayerWorkspace);
             if (!MatchesRonTarget(metadata, target.Game, target.Archetype, target.PlayerMorph, featuresOnly: true))
                 throw new InvalidDataException(Loc.Text("loc_RonFiles_Incompatible"));
-            Editor.ApplyMorphFeatures(data);
+            Editor.ApplyMorphFeatures(head.MorphData);
             Status = Loc.Format("loc_RonFiles_Imported", Path.GetFileName(path));
             return true;
         }

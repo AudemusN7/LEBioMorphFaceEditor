@@ -1,5 +1,6 @@
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
+using MorphFaceEditor.Core.Services;
 using MorphFaceEditor.LegendaryExplorer;
 
 namespace MorphFaceEditor.Tests;
@@ -284,7 +285,7 @@ internal static class PcsavHeadMorphTests
         try
         {
             var head = new HeadMorphPayload("None", [], new([new("nose_BridgeIn", 0.25f)], [], []), new([], [], []));
-            var metadata = new RonExportProvenance(RonExportProducer.MFE, "0.9.6", MorphFaceGame.LE3, "HMM", true);
+            var metadata = new RonExportProvenance(RonExportProducer.MFE, MorphFaceGame.LE3, "HMM", true);
             TseHeadMorphRon.Write(path, head, metadata, morphFeaturesOnly: true);
             var read = TseHeadMorphRon.Read(path);
             TestAssert.True(head.MorphData.MorphFeatures.SequenceEqual(read.MorphData.MorphFeatures), "Features did not round-trip.");
@@ -299,7 +300,7 @@ internal static class PcsavHeadMorphTests
                 TestAssert.True(exception.Message.Contains("features only"), "The full-head importer did not explain the missing geometry.");
             }
             var text = File.ReadAllText(path);
-            File.WriteAllText(path, text.Replace("// MFE RON Content: Morphs", ""));
+            File.WriteAllText(path, text.Replace(MfeRonMetadata.Morphs, MfeRonMetadata.Head));
             try { TseHeadMorphRon.Validate(path); throw new Exception("An empty full head was accepted."); }
             catch (InvalidDataException) { }
         }

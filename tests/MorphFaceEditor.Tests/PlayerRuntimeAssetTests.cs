@@ -52,7 +52,7 @@ internal static class PlayerRuntimeAssetTests
                     {
                         TestAssert.Equal("BIOG_HMF_HED_PROMorph_R.Average.HMF_HED_PROLash_Opac_M01", written.MaterialData.Textures
                             .Single(value => value.Name == "HED_Lash_Diff").TextureReference!.InstancedPath);
-                        service.ExportRon(seed, template, path, new(RonExportProducer.MFE, "0.10.0.9", game, "HMF", true));
+                        service.ExportRon(seed, template, path, new(RonExportProducer.MFE, game, "HMF", true));
                         TestAssert.Equal(materials.Textures.Single(value => value.Name == "HED_Lash_Diff").TextureReference!.InstancedPath,
                             TseHeadMorphRon.Read(path).MaterialData.Textures.Single(value => value.Name == "HED_Lash_Diff").TextureReference!.InstancedPath);
                         materials = materials with { Textures = materials.Textures.Where(value => value.Name != "HED_Lash_Diff").ToArray() };

@@ -77,7 +77,7 @@ public sealed class MeshMaterialFileService(PackageReferenceService references)
         CustomMaterialWorkspace workspace, MorphFaceGame game)
     {
         MorphFaceMaterialData parameters;
-        var isTse = tse || !input.Root.ContainsKey("format");
+        var isTse = tse || MfeRonMetadata.TryRead(input)?.Format != MfeRonMetadata.Materials;
         string? hair;
         IReadOnlyList<string>? accessories;
         if (isTse)

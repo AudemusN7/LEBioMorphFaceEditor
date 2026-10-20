@@ -9,7 +9,6 @@ public sealed record MeshMaterialDocument(
     IReadOnlyList<MeshMaterialSlotData> Slots,
     IReadOnlyDictionary<string, MorphFaceMaterialData> Parameters)
 {
-    public const int CurrentVersion = 1;
     public MaterialFaceTarget? DefaultFace { get; init; }
     public string? HairMesh { get; init; }
     public IReadOnlyList<string>? AccessoryMeshes { get; init; }

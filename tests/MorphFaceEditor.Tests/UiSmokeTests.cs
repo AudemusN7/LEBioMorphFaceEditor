@@ -551,7 +551,7 @@ public static class UiSmokeTests
                     if (scope == "Materials")
                         File.WriteAllText(path, MaterialRonCodec.WriteMfe(FaceMaterialFileService.Capture(game, "Audit", materials)
                             with { DefaultFace = new(profile.Key, player) }));
-                    else context.ExportRon(package, face, path, new(RonExportProducer.MFE, "0.9.6", game, tag, player), scope == "Morphs");
+                    else context.ExportRon(package, face, path, new(RonExportProducer.MFE, game, tag, player), scope == "Morphs");
                     var bytes = File.ReadAllBytes(path);
                     using var reader = new MorphFacePackageReader();
                     var dialogs = new StubEditorDialogs { StandaloneNameChoiceResult = "Audit" };
@@ -626,7 +626,7 @@ public static class UiSmokeTests
             var reported = Path.GetFullPath(Path.Combine(".codex-temp", "MorphsOnly", "John.ron"));
             if (File.Exists(reported) && TseHeadMorphRon.IsMorphFeaturesOnly(reported)) File.Copy(reported, path);
             else TseHeadMorphRon.WriteMorphFeatures(path, original,
-                new(RonExportProducer.MFE, "0.9.6", game, "HMM", true));
+                new(RonExportProducer.MFE, game, "HMM", true));
             var imported = TseHeadMorphRon.ReadMorphData(path);
             var before = File.ReadAllBytes(path);
             using var reader = new MorphFacePackageReader();
@@ -694,7 +694,7 @@ public static class UiSmokeTests
             var seed = StandalonePlayerMorphImportService.ResolveInstalledSeed(game);
             var seedBytes = File.ReadAllBytes(seed);
             TseHeadMorphRon.Write(path, new MorphFacePackageContextService().CapturePlayerDefaultHead(game, StandalonePlayerSex.Female),
-                new RonExportProvenance(RonExportProducer.MFE, "0.9.6", game, "HMF", true));
+                new RonExportProvenance(RonExportProducer.MFE, game, "HMF", true));
             TestAssert.Equal("BIOG_HMF_HED_PROMorph_R.Average.HMF_HED_PROLash_Opac_M01", TseHeadMorphRon.Read(path)
                 .MaterialData.Textures.Single(value => value.Name == "HED_Lash_Diff").TextureReference!.InstancedPath);
             using var reader = new MorphFacePackageReader();
@@ -854,7 +854,7 @@ public static class UiSmokeTests
             var source = Path.Combine(directory, "Player.ron");
             var exported = Path.Combine(directory, "OtherFace.ron");
             var head = new MorphFacePackageContextService().CapturePlayerDefaultHead(MorphFaceGame.LE1, StandalonePlayerSex.Male);
-            TseHeadMorphRon.Write(source, head, new(RonExportProducer.MFE, "0.10.0", MorphFaceGame.LE1, "HMM", true));
+            TseHeadMorphRon.Write(source, head, new(RonExportProducer.MFE, MorphFaceGame.LE1, "HMM", true));
             using var reader = new MorphFacePackageReader();
             var dialogs = new StubEditorDialogs { StandaloneNameChoiceResult = "MFE_RonSource", RonExportPath = exported };
             using var shell = CreateMainWindowViewModel(reader, dialogs);
@@ -938,7 +938,7 @@ public static class UiSmokeTests
             new MorphFacePackageContextService().ExportRon(
                 StandalonePlayerMorphImportService.ResolveInstalledSeed(game),
                 StandalonePlayerMorphImportService.ResolvePlayerTemplate(game, StandalonePlayerSex.Female), ron,
-                new RonExportProvenance(RonExportProducer.MFE, "0.10.0.9", game, "HMF", true));
+                new RonExportProvenance(RonExportProducer.MFE, game, "HMF", true));
             var original = File.ReadAllBytes(ron);
             var registry = TestFixtures.CreateMissingTextureCatalogService();
             await registry.ReadAsync(game);
@@ -1501,7 +1501,7 @@ public static class UiSmokeTests
                 donor.PackagePath,
                 donor.FacePath,
                 ronPath,
-                new RonExportProvenance(RonExportProducer.MFE, "0.1.0", MorphFaceGame.LE2, "SAL", false));
+                new RonExportProvenance(RonExportProducer.MFE, MorphFaceGame.LE2, "SAL", false));
             using var reader = new MorphFacePackageReader();
             var dialogs = new StubEditorDialogs
             {
@@ -1532,7 +1532,7 @@ public static class UiSmokeTests
         var pccPath = Path.ChangeExtension(ronPath, ".pcc");
         new MorphFacePackageContextService().ExportRon(
             Path.GetFullPath("tests/Global Morphs/LE3 GlobalMorphs.pcc"), "HMM.BioFace_end001_alliance_major", ronPath,
-            new RonExportProvenance(RonExportProducer.MFE, "0.10.0.7", MorphFaceGame.LE3, "HMM", false));
+            new RonExportProvenance(RonExportProducer.MFE, MorphFaceGame.LE3, "HMM", false));
         try
         {
             var originalRon = File.ReadAllBytes(ronPath);
@@ -1677,7 +1677,7 @@ public static class UiSmokeTests
                 donor.PackagePath,
                 donor.FacePath,
                 ronPath,
-                new RonExportProvenance(RonExportProducer.MFE, "0.1.0", MorphFaceGame.LE2, "HMM", false));
+                new RonExportProvenance(RonExportProducer.MFE, MorphFaceGame.LE2, "HMM", false));
             using (var reader = new MorphFacePackageReader())
             {
                 var dialogs = new StubEditorDialogs
@@ -1693,8 +1693,8 @@ public static class UiSmokeTests
                 TestAssert.Equal(0, dialogs.StandaloneGameChoiceCount);
                 TestAssert.Equal(0, dialogs.RonImportDestinationChoiceCount);
             }
-            new MorphFacePackageContextService().ExportRon(donor.PackagePath, donor.FacePath, ronPath,
-                new RonExportProvenance(RonExportProducer.LEX, "0.1.0", MorphFaceGame.LE2, "HMM", false));
+            TestFixtures.WriteLexRon(ronPath, new MorphFacePackageContextService().CaptureHead(donor.PackagePath, donor.FacePath),
+                MorphFaceGame.LE2, "HMM", false);
             foreach (var (choice, expectedWorkspace) in new[]
                      {
                          (new RonImportDestinationChoice(RonImportDestination.NpcFace, "HMM"), "NPC Workspace"),
@@ -1725,7 +1725,7 @@ public static class UiSmokeTests
                     TestAssert.True(!viewModel.HasError, viewModel.ErrorMessage ?? "NPC morphs could not be applied to a matching Player.");
                     var sourceHead = TseHeadMorphRon.Read(ronPath);
                     TseHeadMorphRon.WriteMorphFeatures(incompatiblePath, sourceHead.MorphData,
-                        new(RonExportProducer.MFE, "0.1.0", MorphFaceGame.LE2, "HMM", false));
+                        new(RonExportProducer.MFE, MorphFaceGame.LE2, "HMM", false));
                     var editorBeforeDrop = viewModel.Editor;
                     RunWithDispatcher(() => viewModel.OpenDroppedFileAsync(incompatiblePath));
                     TestAssert.True(!viewModel.HasError && ReferenceEquals(editorBeforeDrop, viewModel.Editor),
@@ -1822,7 +1822,7 @@ public static class UiSmokeTests
             TseHeadMorphRon.Write(
                 incompatiblePath,
                 authored with { MorphData = authored.MorphData with { BakedLods = shortenedLods } },
-                new RonExportProvenance(RonExportProducer.MFE, "0.1.0", MorphFaceGame.LE2, "HMM", false));
+                new RonExportProvenance(RonExportProducer.MFE, MorphFaceGame.LE2, "HMM", false));
             using (var reader = new MorphFacePackageReader())
             {
                 var dialogs = new StubEditorDialogs
@@ -1867,8 +1867,7 @@ public static class UiSmokeTests
         try
         {
             var context = new MorphFacePackageContextService();
-            context.ExportRon(donor.PackagePath, donor.FacePath, path,
-                new RonExportProvenance(RonExportProducer.LEX, "0.1.0", MorphFaceGame.LE2, "HMM", false));
+            TestFixtures.WriteLexRon(path, context.CaptureHead(donor.PackagePath, donor.FacePath), MorphFaceGame.LE2, "HMM", false);
             using var reader = new MorphFacePackageReader();
             var dialogs = new StubEditorDialogs
             {
@@ -2000,7 +1999,7 @@ public static class UiSmokeTests
                 desired.OtherMeshReferences.OfType<AssetIdentity>().Select(value => value.InstancedPath).ToArray(),
                 new(desired.MorphFeatures, desired.FinalSkeleton, desired.BakedLods),
                 new(desired.MaterialOverrides.Scalars, desired.MaterialOverrides.Vectors, desired.MaterialOverrides.Textures));
-            TseHeadMorphRon.Write(ron, head, new(RonExportProducer.MFE, "0.1.0", MorphFaceGame.LE3, "HMM", true));
+            TseHeadMorphRon.Write(ron, head, new(RonExportProducer.MFE, MorphFaceGame.LE3, "HMM", true));
             editor.UndoCommand.Execute(null);
             editor.UndoCommand.Execute(null);
             editor.UndoCommand.Execute(null);
@@ -2049,7 +2048,7 @@ public static class UiSmokeTests
             TseHeadMorphRon.Write(ron, head with { MaterialData = head.MaterialData with
                 { Scalars = head.MaterialData.Scalars.Select(value => value.Name == scalar.Name
                     ? value with { Value = value.Value + 0.25f } : value).ToArray() } },
-                new(RonExportProducer.MFE, "0.1.0", MorphFaceGame.LE3, "HMM", true));
+                new(RonExportProducer.MFE, MorphFaceGame.LE3, "HMM", true));
             await ((AsyncRelayCommand)shell.ImportMorphFaceRonCommand).ExecuteAsync();
             dialogs.RonExportPath = Path.Combine(directory, "PendingExport.ron");
             await ((AsyncRelayCommand)shell.ExportMorphRonCommand).ExecuteAsync();
@@ -2065,7 +2064,7 @@ public static class UiSmokeTests
             if (sculpted.Length < 2) sculpted = [.. sculpted, [new Vector3(1, 2, 3)]];
             else sculpted[1][0] += new Vector3(1, 0, 0);
             TseHeadMorphRon.Write(ron, head with { MorphData = head.MorphData with { BakedLods = sculpted } },
-                new(RonExportProducer.MFE, "0.1.0", MorphFaceGame.LE3, "HMM", true));
+                new(RonExportProducer.MFE, MorphFaceGame.LE3, "HMM", true));
             var beforeFallback = shell.Editor;
             await ((AsyncRelayCommand)shell.ImportMorphFaceRonCommand).ExecuteAsync();
             TestAssert.True(!shell.HasError && !ReferenceEquals(beforeFallback, shell.Editor), shell.ErrorMessage ?? "A lower-LOD sculpt bypassed full-data import.");
@@ -2079,7 +2078,8 @@ public static class UiSmokeTests
         var path = Path.Combine(Path.GetTempPath(), $"MFE-MalformedMorphs-{Guid.NewGuid():N}.ron");
         try
         {
-            File.WriteAllText(path, "// MFE RON Content: Morphs\n(morph_features: [");
+            File.WriteAllText(path, "(format: \"MorphFaceEditor.Morphs\", version: 1, game: \"LE2\", " +
+                "target_profile: \"le2-human-male\", target_kind: \"Player\", morph_features: [");
             using var reader = new MorphFacePackageReader();
             var dialogs = new StubEditorDialogs();
             using var shell = CreateMainWindowViewModel(reader, dialogs);
@@ -2098,7 +2098,7 @@ public static class UiSmokeTests
         try
         {
             var head = new MorphFacePackageContextService().CapturePlayerDefaultHead(MorphFaceGame.LE2, StandalonePlayerSex.Male);
-            TseHeadMorphRon.Write(path, head, new(RonExportProducer.LEX, "0.1.0", MorphFaceGame.LE2, "HMM", true));
+            TestFixtures.WriteLexRon(path, head, MorphFaceGame.LE2, "HMM", true);
             var legacySyntax = File.ReadAllText(path).Replace(",\r\n", "\r\n").Replace(",\n", "\n");
             File.WriteAllText(path, legacySyntax, Encoding.Unicode);
             using var reader = new MorphFacePackageReader();
@@ -2355,13 +2355,13 @@ public static class UiSmokeTests
                 var feature = editor.Features.First(value => value.IsEditable);
                 var data = new MorphFaceMorphData([new(feature.Name, feature.Value + 0.2f)], [], []);
                 var originalMaterials = editor.CreateDraft().MaterialOverrides;
-                TseHeadMorphRon.WriteMorphFeatures(path, data, new(RonExportProducer.MFE, "0.10.0.15", game, "HMM", false));
+                TseHeadMorphRon.WriteMorphFeatures(path, data, new(RonExportProducer.MFE, game, "HMM", false));
                 await ((AsyncRelayCommand)shell.ImportMorphFeaturesRonCommand).ExecuteAsync();
                 TestAssert.True(!shell.HasError, shell.ErrorMessage ?? "Same-game features import failed.");
                 var expected = editor.CreateDraft();
                 editor.UndoCommand.Execute(null);
                 var sourceGame = game == MorphFaceGame.LE1 ? MorphFaceGame.LE2 : MorphFaceGame.LE1;
-                TseHeadMorphRon.WriteMorphFeatures(path, data, new(RonExportProducer.MFE, "0.10.0.15", sourceGame, "HMM", false));
+                TseHeadMorphRon.WriteMorphFeatures(path, data, new(RonExportProducer.MFE, sourceGame, "HMM", false));
                 await shell.OpenDroppedFileAsync(path);
                 TestAssert.True(!shell.HasError && ReferenceEquals(editor, shell.Editor), shell.ErrorMessage ?? "Cross-game drop replaced the target.");
                 TestAssert.True(editor.CreateDraft().BakedLods.SelectMany(lod => lod).SequenceEqual(expected.BakedLods.SelectMany(lod => lod)),
@@ -2374,7 +2374,7 @@ public static class UiSmokeTests
                 editor.UndoCommand.Execute(null);
                 await ((AsyncRelayCommand)shell.ImportMorphFeaturesRonCommand).ExecuteAsync();
                 TestAssert.True(!shell.HasError, shell.ErrorMessage ?? "Cross-game Import Morphs failed.");
-                TseHeadMorphRon.WriteMorphFeatures(path, data, new(RonExportProducer.MFE, "0.10.0.15", MorphFaceGame.LE3, "HMM", false));
+                TseHeadMorphRon.WriteMorphFeatures(path, data, new(RonExportProducer.MFE, MorphFaceGame.LE3, "HMM", false));
                 await shell.OpenDroppedFileAsync(path);
                 TestAssert.True(shell.HasError && ReferenceEquals(editor, shell.Editor), "LE3 cross-game features were accepted.");
             }
@@ -2451,7 +2451,7 @@ public static class UiSmokeTests
                 }
                 var importedFeature = shell.Editor.Features.First(value => value.IsEditable);
                 TseHeadMorphRon.WriteMorphFeatures(path, new([new(importedFeature.Name, 0.2f)], [], []),
-                    new(RonExportProducer.MFE, "0.10.0.15", MorphFaceGame.LE2, target.PlayerMorph ? "HMF" : "SAL", target.PlayerMorph));
+                    new(RonExportProducer.MFE, MorphFaceGame.LE2, target.PlayerMorph ? "HMF" : "SAL", target.PlayerMorph));
                 using var morphReader = new MorphFacePackageReader();
                 using var morphShell = CreateMainWindowViewModel(morphReader, new StubEditorDialogs { RonExportPath = fullPath }, textureCatalog: textureCatalog);
                 var morphPreviews = 0;
@@ -2614,7 +2614,7 @@ public static class UiSmokeTests
             var ron = Path.Combine(root, "Player.ron");
             TseHeadMorphRon.Write(ron, new MorphFacePackageContextService().CapturePlayerDefaultHead(
                 MorphFaceGame.LE2, StandalonePlayerSex.Female),
-                new RonExportProvenance(RonExportProducer.MFE, "test", MorphFaceGame.LE2, "HMF", true));
+                new RonExportProvenance(RonExportProducer.MFE, MorphFaceGame.LE2, "HMF", true));
             var sourceRon = File.ReadAllBytes(ron);
             var beforeCandidates = Directory.GetFiles(Path.GetDirectoryName(workingPath)!).ToHashSet(StringComparer.OrdinalIgnoreCase);
             await shell.OpenDroppedFileAsync(ron);

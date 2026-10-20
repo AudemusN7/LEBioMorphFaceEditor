@@ -264,10 +264,11 @@ public static class MaterialInterchangeTests
             MorphFaceGame.LE2, "BioFace_doctor", data));
 
         TestAssert.True(text.Contains("Material settings only; no authored geometry or bone offsets.", StringComparison.Ordinal) &&
-                        text.Contains("MFE material export version: 1", StringComparison.Ordinal) &&
-                        text.Contains("Material target game: LE2", StringComparison.Ordinal) &&
+                        !text.Contains("MFE material export version:", StringComparison.Ordinal) &&
+                        !text.Contains("Material target game:", StringComparison.Ordinal) &&
                         text.Contains("\"face\"", StringComparison.Ordinal),
-            "Face material export did not include its safe metadata and neutral scope.");
+            "Face material export lost its explanation/scope or repeated its structured metadata in comments.");
+        TestAssert.Equal("LE2", MaterialRonCodec.ReadMfe(text).Game);
         var prepared = FaceMaterialFileService.Read(text, allowTse: false);
         TestAssert.Equal(0.75f, prepared.Parameters.Scalars.Single().Value);
         TestAssert.Equal("Shared", prepared.Parameters.Scalars.Single().Name);
@@ -312,17 +313,18 @@ public static class MaterialInterchangeTests
         TestAssert.True(FaceMaterialFileService.Read(targeted, false).HairMesh is null,
             "An older MFE file invented an attachment clear.");
 
-        const string tagged = "// Exported from: MFE 1\n// Game: LE2\n// Archetype: HMF\n// Player Morph: NO\n" + untagged;
+        var tagged = "(format: \"MorphFaceEditor.Head\", version: 1, game: \"LE2\", " +
+            "target_profile: \"le2-human-female\", target_kind: \"NPC\", " + untagged[1..];
         var head = FaceMaterialFileService.Read(tagged, allowTse: false);
         TestAssert.True(!head.IsTse && head.Parameters.Scalars.Single().Value == 0.25f,
             "A tagged MFE head was not accepted as material-only input.");
-        Reject(() => FaceMaterialFileService.Read(tagged.Replace("Game: LE2", "Game: unknown"), allowTse: true));
-        Reject(() => FaceMaterialFileService.Read(tagged.Replace("// Archetype: HMF\n", ""), allowTse: true));
+        Reject(() => FaceMaterialFileService.Read(tagged.Replace("game: \"LE2\"", "game: \"unknown\""), allowTse: true));
+        Reject(() => FaceMaterialFileService.Read(tagged.Replace("target_kind: \"NPC\", ", ""), allowTse: true));
 
-        var lexTagged = tagged.Replace("Exported from: MFE", "Exported from: LEX", StringComparison.Ordinal);
+        const string lexTagged = "// Exported from: LEX 1\n// Game: LE2\n// Archetype: HMF\n// Player Morph: NO\n" + untagged;
         Reject(() => FaceMaterialFileService.Read(lexTagged, allowTse: false));
         var ignoredMetadata = FaceMaterialFileService.Read(
-            "(format: \"MorphFaceEditor.Materials\", version: 50, game: \"LE2\", " +
+            "(format: \"MorphFaceEditor.Materials\", version: 1, game: \"LE2\", " +
             "mesh_name: \"face\", slots: [\"irrelevant\"], " +
             "parameters: {\"face\": (scalar_parameters: {\"Shared\": 0.5})})", allowTse: false);
         TestAssert.Equal(0.5f, ignoredMetadata.Parameters.Scalars.Single().Value);

@@ -286,6 +286,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _ => Path.GetFileName(PackagePath)!
     };
     public string PackageDisplayName => IsDirty ? $"{PackageName} *" : PackageName;
+    public string? WorkspaceGameIcon => _workspace is { Game: not MorphFaceGame.Unsupported }
+        ? $"pack://application:,,,/MorphFaceEditor;component/Assets/GameIcons/{_workspace.Game}.png" : null;
     public bool HasWorkspace => _workspace is not null;
     public bool HasRecentFiles => RecentFiles.Count > 0;
     public bool IsDirty => _workspace?.HasPendingChanges == true || Editor?.IsDirty == true;
@@ -1866,6 +1868,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         OnPropertyChanged(nameof(PackagePath));
         OnPropertyChanged(nameof(PackageName));
+        OnPropertyChanged(nameof(WorkspaceGameIcon));
         OnPropertyChanged(nameof(HasWorkspace));
         OnPropertyChanged(nameof(IsDetachedMeshWorkspace));
         OnDirtyStateChanged();

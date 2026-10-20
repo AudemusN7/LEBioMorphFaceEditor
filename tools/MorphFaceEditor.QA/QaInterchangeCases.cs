@@ -67,7 +67,7 @@ internal static partial class QaCases
         // glTF coordinates can be rounded by UModel; measure before applying MFE's recovery corrections.
         c.Current.Evidence["rawMappedErrorScope"] = "Uses the exporter's inverse-morph sidecar map; independently checks the raw vertex set below because interchange may reorder vertices.";
         var rawMatches = candidates.Where(value => value.Positions.Count == bake.BakedLods[0].Length &&
-                value.CoordinateSystem.EndsWith("file order", StringComparison.Ordinal))
+                value.IsFileOrder)
             .Select(value => (value.CoordinateSystem, Error: MatchRawVertices(value.Positions, bake.BakedLods[0])))
             .Append((CoordinateSystem: "Custom decoder canonical coordinates", Error: mesh.Positions.Length == bake.BakedLods[0].Length
                 ? MatchRawVertices(mesh.Positions, bake.BakedLods[0]) : null))

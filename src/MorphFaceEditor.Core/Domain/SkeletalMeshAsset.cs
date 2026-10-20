@@ -77,4 +77,14 @@ public sealed record SkeletalMeshAsset(
 
     public SkeletalMeshLod? FindLod(int lodIndex) =>
         Lods.FirstOrDefault(lod => lod.LodIndex == lodIndex);
+
+    /// <summary>Maps a native LOD index to its position in the ordered mesh/baked-LOD collection.</summary>
+    public int FindLodOrdinal(int lodIndex)
+    {
+        for (var ordinal = 0; ordinal < Lods.Count; ordinal++)
+        {
+            if (Lods[ordinal].LodIndex == lodIndex) return ordinal;
+        }
+        return -1;
+    }
 }

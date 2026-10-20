@@ -29,7 +29,8 @@ public static class GltfInverseMorphTests
         WriteGltf(gltf, [2, 0, 1]);
         var service = new MorphFaceInterchangeService();
         var raw = service.ReadMeshPositions(gltf, BaseHead).Single(value =>
-            value.CoordinateSystem.EndsWith("XZY, file order", StringComparison.Ordinal));
+            value.IsFileOrder &&
+            value.CoordinateSystem == "glTF stream 1, XZY, file order");
         var custom = service.ReadMesh(gltf);
         for (var index = 0; index < 3; index++)
         {
@@ -75,7 +76,8 @@ public static class GltfInverseMorphTests
             TestAssert.True(new Vector3(corrections[index * 3], corrections[index * 3 + 1], corrections[index * 3 + 2]).Length() <= 0.001f,
                 "Sidecar corrections concealed a basis or correspondence mismatch.");
         var positions = new MorphFaceInterchangeService().ReadMeshPositions(gltf, BaseHead)[0];
-        TestAssert.True(positions.CoordinateSystem.EndsWith("MFE vertex map", StringComparison.Ordinal), "The sidecar was not consumed.");
+        TestAssert.True(positions.HasValidatedSidecarMap, "The sidecar was not consumed.");
+        TestAssert.True(positions.Prior is not null, "Sidecar correspondence lost its source payload.");
         for (var index = 0; index < 3; index++) TestAssert.Near(Baked[index], positions.Positions[index], 0.000001f);
     }
 

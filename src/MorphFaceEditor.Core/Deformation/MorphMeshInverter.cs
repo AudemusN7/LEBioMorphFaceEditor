@@ -12,7 +12,11 @@ public sealed record MorphMeshFitPrior(
 public sealed record MorphMeshPositionCandidate(
     string CoordinateSystem,
     IReadOnlyList<Vector3> Positions,
-    MorphMeshFitPrior? Prior = null);
+    MorphMeshFitPrior? Prior = null)
+{
+    public bool IsFileOrder { get; init; }
+    public bool HasValidatedSidecarMap { get; init; }
+}
 
 public sealed record MorphMeshFitResult(
     MorphFaceMorphData MorphData,

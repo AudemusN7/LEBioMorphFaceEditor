@@ -36,7 +36,7 @@ internal sealed class RelativeMorphBakeEvaluator
     {
         get
         {
-            var ordinal = FindStoredLodOrdinal(0);
+            var ordinal = _baseHead.FindLodOrdinal(0);
             return _baselineLods.Count > 0 && ordinal >= 0 && IsLodCompatible(ordinal, 0);
         }
     }
@@ -100,25 +100,13 @@ internal sealed class RelativeMorphBakeEvaluator
         var result = CloneLods(_baselineLods).ToArray();
         foreach (var (lodIndex, evaluated) in evaluatedLods)
         {
-            var ordinal = FindStoredLodOrdinal(lodIndex);
+            var ordinal = _baseHead.FindLodOrdinal(lodIndex);
             if (ordinal >= 0 && IsLodCompatible(ordinal, lodIndex))
             {
                 result[ordinal] = evaluated.Positions.ToArray();
             }
         }
         return result;
-    }
-
-    private int FindStoredLodOrdinal(int lodIndex)
-    {
-        for (var ordinal = 0; ordinal < _baselineLods.Count; ordinal++)
-        {
-            if (ordinal < _orderedBaseLods.Count && _orderedBaseLods[ordinal].LodIndex == lodIndex)
-            {
-                return ordinal;
-            }
-        }
-        return -1;
     }
 
     private bool IsLodCompatible(int ordinal, int lodIndex)

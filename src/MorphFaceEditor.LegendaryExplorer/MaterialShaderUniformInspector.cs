@@ -1,6 +1,6 @@
 using System.Reflection;
+using System.Numerics;
 using LegendaryExplorerCore.Packages;
-using LegendaryExplorerCore.Shaders;
 using LegendaryExplorerCore.Unreal.BinaryConverters;
 using LegendaryExplorerCore.Unreal.ObjectInfo;
 
@@ -11,21 +11,33 @@ internal sealed record MaterialShaderParameterSupport(
     IReadOnlySet<string> Vectors,
     IReadOnlySet<string> Textures);
 
-/// <summary>Extracts only the compiled parameter capability data required by production material loading.</summary>
+/// <summary>Projects compiled support, sampler indices and defaults without retaining shader bytecode.</summary>
 internal static class MaterialShaderUniformInspector
 {
-    public static MaterialShaderParameterSupport InspectSupport(
+    public static MaterialShaderMetadata Inspect(
         ExportEntry master,
-        Func<MaterialShaderMap>? shaderMapProvider = null)
+        MaterialShaderMap shaderMap)
     {
-        var shaderMap = shaderMapProvider is null
-            ? ShaderCacheManipulator.GetMaterialShaderMapAndShaders(master).Item1
-            : shaderMapProvider();
         var expressions = GetUniformExpressions(master, shaderMap);
-        return new MaterialShaderParameterSupport(
-            ParameterNames(expressions.Scalars),
-            ParameterNames(expressions.Vectors),
-            ParameterNames(expressions.Textures));
+        return new MaterialShaderMetadata(
+            new MaterialShaderParameterSupport(ParameterNames(expressions.Scalars),
+                ParameterNames(expressions.Vectors), ParameterNames(expressions.Textures)),
+            expressions.Textures.Select(value => value.TextureIndex).ToArray(),
+            (master.Game is MEGame.ME1 or MEGame.ME2
+                ? ObjectBinary.From<Material>(master).SM3MaterialResource.UniformCubeTextureExpressions
+                : shaderMap.UniformCubeTextureExpressions)?.Select(value => value.TextureIndex).ToArray() ?? [],
+            shaderMap.UniformPixelScalarExpressions.OfType<MaterialUniformExpressionScalarParameter>()
+                .Where(value => !string.IsNullOrWhiteSpace(value.ParameterName.Instanced))
+                .GroupBy(value => value.ParameterName.Instanced, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.First().DefaultValue, StringComparer.OrdinalIgnoreCase),
+            shaderMap.UniformPixelVectorExpressions.OfType<MaterialUniformExpressionVectorParameter>()
+                .Where(value => !string.IsNullOrWhiteSpace(value.ParameterName.Instanced))
+                .GroupBy(value => value.ParameterName.Instanced, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group =>
+                {
+                    var value = group.First().DefaultValue;
+                    return new Vector4(value.R, value.G, value.B, value.A);
+                }, StringComparer.OrdinalIgnoreCase));
     }
 
     private static (

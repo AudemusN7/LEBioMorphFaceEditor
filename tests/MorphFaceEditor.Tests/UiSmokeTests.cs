@@ -45,6 +45,8 @@ public static class UiSmokeTests
         new("standalone morph import is available before opening a PCC", StandaloneImportIsAvailableWithoutPackage),
         new("New Player defaults use direct heads and save to PCC across all games and sexes", NewPlayerDefaultsUseDirectHeads),
         new("source file save preserves RON edits on failure and blocks multiple imports", SourceFileSaveRoundTrip),
+        new("PCC Save As retains staged faces on failure and adopts the successful copy", PccSaveAsAdoptsSuccessfulCopy),
+        new("full RON source save retains staged edits to other faces", RonSourceSaveRetainsOtherFaces),
         new("Player pickers require seekfree backing and saving rechecks changed sources", PlayerRonRequiresSeekFreeBacking),
         new("Morphs-only RON opens its base face saves features and retains unrelated edits", MorphFeaturesFileWorkflow),
         new("MFE RON representative exports reopen full morph and material scopes across games", RepresentativeRonReopens),
@@ -762,6 +764,116 @@ public static class UiSmokeTests
         }
     });
 
+    private static void PccSaveAsAdoptsSuccessfulCopy() => RunWithDispatcher(async () =>
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"MFE-WorkspaceSaveAs-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var source = Path.Combine(directory, "Source.pcc");
+            var copy = Path.Combine(directory, "Copy.pcc");
+            var lockedPath = Path.Combine(directory, "Locked.pcc");
+            File.Copy(Path.GetFullPath("tests/Global Morphs/LE1 GlobalMorphs.pcc"), source);
+            File.Copy(source, lockedPath);
+            var original = PackageFingerprint.Capture(source);
+            using var reader = new MorphFacePackageReader();
+            var dialogs = new StubEditorDialogs { ConfirmUnsavedChangesResult = UnsavedChangesChoice.Save,
+                CloneNameChoiceResult = "MFE_WorkspaceClone", SaveAsPath = lockedPath };
+            using var shell = CreateMainWindowViewModel(reader, dialogs);
+            await shell.OpenDroppedFileAsync(source);
+            shell.SelectedFace = shell.Faces.First(face => face.ProfileKey == "le1-human-male");
+            await ((AsyncRelayCommand)shell.LoadSelectedFaceCommand).ExecuteAsync();
+            var firstFace = shell.LoadedFacePath!;
+            var scalar = shell.Editor!.Material.Scalars.First();
+            var firstName = scalar.Name;
+            var firstValue = scalar.Value + 0.125f;
+            scalar.Value = firstValue;
+            shell.SelectedFace = shell.Faces.First(face => face.ProfileKey == "le1-human-female");
+            await ((AsyncRelayCommand)shell.LoadSelectedFaceCommand).ExecuteAsync();
+            TestAssert.True(!shell.HasError && shell.Editor?.IsDirty == false && shell.IsDirty,
+                shell.ErrorMessage ?? "Switching faces lost the first face's staged edits.");
+            await ((AsyncRelayCommand)shell.CloneMorphCommand).ExecuteAsync();
+            TestAssert.True(!shell.HasError && shell.IsDirty, shell.ErrorMessage ?? "Clone did not remain staged.");
+            var clonedFace = shell.LoadedFacePath!;
+            using (var locked = new FileStream(lockedPath, FileMode.Open, FileAccess.Read, FileShare.None))
+            {
+                await ((AsyncRelayCommand)shell.SaveAsCommand).ExecuteAsync();
+                TestAssert.True(shell.HasError && shell.IsDirty && shell.PackagePath == source,
+                    "Failed Save As adopted its destination or cleared staged edits.");
+            }
+            dialogs.SaveAsPath = copy;
+            await ((AsyncRelayCommand)shell.SaveAsCommand).ExecuteAsync();
+            TestAssert.True(!shell.HasError && !shell.IsDirty && shell.PackagePath == copy && shell.PackageName == "Copy.pcc",
+                shell.ErrorMessage ?? "Successful Save As did not adopt its copy.");
+            var context = new MorphFacePackageContextService();
+            TestAssert.Near(firstValue, context.CaptureMaterialData(copy, firstFace).Scalars.Single(value => value.Name == firstName).Value, 0.00001f);
+            TestAssert.True(MorphFaceReferenceInspector.Inspect(copy).Any(face => face.FacePath == clonedFace), "Save As lost the staged clone.");
+            scalar = shell.Editor!.Material.Scalars.First();
+            var nextName = scalar.Name;
+            var nextValue = scalar.Value + 0.25f;
+            scalar.Value = nextValue;
+            await ((AsyncRelayCommand)shell.SaveCommand).ExecuteAsync();
+            TestAssert.True(!shell.HasError && !shell.IsDirty && shell.PackagePath == copy,
+                shell.ErrorMessage ?? "Subsequent Save did not target the adopted PCC.");
+            TestAssert.Near(nextValue, context.CaptureMaterialData(copy, clonedFace).Scalars.Single(value => value.Name == nextName).Value, 0.00001f);
+            TestAssert.Equal(original, PackageFingerprint.Capture(source));
+            shell.Editor!.Material.Scalars.First().Value += 0.125f;
+            dialogs.ConfirmUnsavedChangesResult = UnsavedChangesChoice.Cancel;
+            TestAssert.True(!await shell.ConfirmCloseAsync() && shell.HasWorkspace && shell.IsDirty, "Cancel close lost the active workspace.");
+            var workingPath = shell.Editor.CreateDraft().Source.PackagePath;
+            dialogs.ConfirmUnsavedChangesResult = UnsavedChangesChoice.Discard;
+            await shell.CloseWorkspaceAsync();
+            TestAssert.True(!shell.HasWorkspace && shell.Editor is null && !shell.IsDirty && !File.Exists(workingPath) &&
+                !shell.SaveAsCommand.CanExecute(null), "Closing retained workspace resources, staged edits or save commands.");
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    });
+
+    private static void RonSourceSaveRetainsOtherFaces() => RunWithDispatcher(async () =>
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"MFE-RonOtherFaces-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var source = Path.Combine(directory, "Player.ron");
+            var exported = Path.Combine(directory, "OtherFace.ron");
+            var head = new MorphFacePackageContextService().CapturePlayerDefaultHead(MorphFaceGame.LE1, StandalonePlayerSex.Male);
+            TseHeadMorphRon.Write(source, head, new(RonExportProducer.MFE, "0.10.0", MorphFaceGame.LE1, "HMM", true));
+            using var reader = new MorphFacePackageReader();
+            var dialogs = new StubEditorDialogs { StandaloneNameChoiceResult = "MFE_RonSource", RonExportPath = exported };
+            using var shell = CreateMainWindowViewModel(reader, dialogs);
+            await shell.OpenDroppedFileAsync(source);
+            TestAssert.True(!shell.HasError && shell.Editor is not null, shell.ErrorMessage ?? "Player source did not open.");
+            var sourceFace = shell.LoadedFacePath!;
+            shell.SelectedFace = shell.Faces.First(face => face.ProfileKey == "le1-human-male" && face.InstancedPath != sourceFace);
+            await ((AsyncRelayCommand)shell.LoadSelectedFaceCommand).ExecuteAsync();
+            var scalar = shell.Editor!.Material.Scalars.First();
+            var otherName = scalar.Name;
+            var otherValue = scalar.Value + 0.125f;
+            scalar.Value = otherValue;
+            await ((AsyncRelayCommand)shell.ExportMorphRonCommand).ExecuteAsync();
+            TestAssert.True(!shell.HasError && shell.Editor?.IsDirty == false && shell.IsDirty,
+                shell.ErrorMessage ?? "Exporting another face did not retain its staged edits.");
+            TestAssert.Near(otherValue, TseHeadMorphRon.Read(exported).MaterialData.Scalars.Single(value => value.Name == otherName).Value, 0.00001f);
+            await ((AsyncRelayCommand)shell.SaveCommand).ExecuteAsync();
+            TestAssert.True(!shell.HasError && shell.IsDirty, shell.ErrorMessage ?? "Saving the source RON cleared another face's edits.");
+            shell.SelectedFace = shell.Faces.Single(face => face.InstancedPath == sourceFace);
+            await ((AsyncRelayCommand)shell.LoadSelectedFaceCommand).ExecuteAsync();
+            scalar = shell.Editor!.Material.Scalars.First();
+            var sourceName = scalar.Name;
+            var sourceValue = scalar.Value + 0.25f;
+            scalar.Value = sourceValue;
+            await ((AsyncRelayCommand)shell.SaveCommand).ExecuteAsync();
+            TestAssert.True(!shell.HasError && shell.IsDirty && shell.Editor?.IsDirty == false,
+                shell.ErrorMessage ?? "Saving the source face discarded staged edits to its sibling.");
+            TestAssert.Near(sourceValue, TseHeadMorphRon.Read(source).MaterialData.Scalars.Single(value => value.Name == sourceName).Value, 0.00001f);
+            dialogs.ConfirmUnsavedChangesResult = UnsavedChangesChoice.Save;
+            TestAssert.True(!await shell.ConfirmCloseAsync() && shell.HasWorkspace,
+                "Saving one face allowed the workspace to close with other staged edits.");
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    });
+
     private static void PlayerRonRequiresSeekFreeBacking() => RunWithDispatcher(async () =>
     {
         LegendaryExplorerCoreRuntime.Initialize();
@@ -1422,8 +1534,8 @@ public static class UiSmokeTests
             await shell.OpenDroppedFileAsync(ronPath);
             TestAssert.True(!shell.HasError && shell.Editor is not null && shell.HasPreview,
                 shell.ErrorMessage ?? "The NPC RON did not reopen with an editor and preview.");
-            var workspace = (MorphFacePackageWorkspace)typeof(MainWindowViewModel).GetField("_packageWorkspace",
-                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(shell)!;
+            var workspace = ((EditorWorkspace)typeof(MainWindowViewModel).GetField("_workspace",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(shell)!).Package!;
             var restored = new MorphFacePackageContextService().CaptureMorphData(workspace.WorkingPath, shell.LoadedFacePath!);
             TestAssert.Equal(expected.MorphData.BakedLods.Count, restored.BakedLods.Count);
             for (var lod = 0; lod < restored.BakedLods.Count; lod++)
@@ -2366,11 +2478,11 @@ public static class UiSmokeTests
             ProfileKey: "le1-human-male");
 
         var workspaceField = typeof(MainWindowViewModel).GetField(
-            "_packageWorkspace",
+            "_workspace",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
-            ?? throw new Exception("MainWindowViewModel._packageWorkspace was not found.");
+            ?? throw new Exception("MainWindowViewModel._workspace was not found.");
         var detachedWorkspace = new MorphFacePackageWorkspace(packagePath, canCommit: false);
-        workspaceField.SetValue(viewModel, detachedWorkspace);
+        workspaceField.SetValue(viewModel, EditorWorkspace.ForPcc(detachedWorkspace));
         viewModel.SelectedFace = selectedFace;
 
         TestAssert.True(viewModel.IsMaterialFileWorkspace &&
@@ -2378,29 +2490,18 @@ public static class UiSmokeTests
                         viewModel.ImportMaterialsCommand.CanExecute(null),
             "A selected PCC face did not expose material file actions before it was loaded.");
 
-        var standaloneGameField = typeof(MainWindowViewModel).GetField(
-            "_standaloneGame",
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
-            ?? throw new Exception("MainWindowViewModel._standaloneGame was not found.");
-
         TestAssert.True(!viewModel.CopyMaterialDataCommand.CanExecute(null) &&
                         !viewModel.PasteMaterialDataCommand.CanExecute(null),
             "A non-committable non-standalone workspace exposed material clipboard commands.");
 
-        standaloneGameField.SetValue(viewModel, MorphFaceGame.LE1);
-
-        var geometryModesField = typeof(MainWindowViewModel).GetField(
-            "_faceGeometryModes",
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
-            ?? throw new Exception("MainWindowViewModel._faceGeometryModes was not found.");
-        var geometryModes = (Dictionary<string, MorphFaceGeometryMode>?)geometryModesField.GetValue(viewModel)
-                            ?? throw new Exception("MainWindowViewModel geometry modes were null.");
+        var standaloneWorkspace = EditorWorkspace.ForPlayer(detachedWorkspace, MorphFaceGame.LE1);
+        workspaceField.SetValue(viewModel, standaloneWorkspace);
 
         TestAssert.True(!viewModel.CopyMaterialDataCommand.CanExecute(null) &&
                         !viewModel.PasteMaterialDataCommand.CanExecute(null),
-            "A non-fixed-bake detached workspace exposed material clipboard commands.");
+            "A standalone base face exposed material clipboard commands before any import.");
 
-        geometryModes[selectedFace.InstancedPath] = MorphFaceGeometryMode.FixedBake;
+        standaloneWorkspace.GeometryModes[selectedFace.InstancedPath] = MorphFaceGeometryMode.FixedBake;
         viewModel.RefreshClipboardCommandAvailability();
 
         TestAssert.True(viewModel.CopyMaterialDataCommand.CanExecute(null),
@@ -2422,10 +2523,10 @@ public static class UiSmokeTests
         var clipboard = new TrackingClipboard(payload, materialPayload);
         using var viewModel = CreateMainWindowViewModel(reader, clipboard: clipboard);
         var workspaceField = typeof(MainWindowViewModel).GetField(
-            "_packageWorkspace",
+            "_workspace",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
-            ?? throw new Exception("MainWindowViewModel._packageWorkspace was not found.");
-        workspaceField.SetValue(viewModel, new MorphFacePackageWorkspace(packagePath, canCommit: true));
+            ?? throw new Exception("MainWindowViewModel._workspace was not found.");
+        workspaceField.SetValue(viewModel, EditorWorkspace.ForPcc(new MorphFacePackageWorkspace(packagePath, canCommit: true)));
         var selectedFace = new BioMorphFaceListItem(
             1,
             "BIOG_ALN_HED_PROMorph_R.Face",
@@ -4492,7 +4593,8 @@ public static class UiSmokeTests
         public string? ChoosePackage(string? initialDirectory = null) => null;
         public MorphPackageSaveRequest? ChooseMorphPackageDestination(string suggestedFileName, string sourcePackagePath) => MorphPackageDestination;
         public MorphConversionSaveRequest? ChooseMorphConversionDestination(MorphFaceGame sourceGame, string suggestedFileName, string sourcePackagePath) => null;
-        public string? ChooseCloneName(string suggestedName, IReadOnlyCollection<string> existingObjectNames) => null;
+        public string? CloneNameChoiceResult { get; set; }
+        public string? ChooseCloneName(string suggestedName, IReadOnlyCollection<string> existingObjectNames) => CloneNameChoiceResult;
         public string? ChooseMorphImportFile(string? initialDirectory = null)
         {
             MorphImportFileChoiceCount++;

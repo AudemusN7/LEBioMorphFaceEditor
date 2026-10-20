@@ -145,12 +145,8 @@ public sealed partial class MainWindowViewModel
             var head = await Task.Run(() => _packageContextService.CapturePlayerDefaultHead(choice.Game, choice.Sex));
             var sourcePath = StandalonePlayerMorphImportService.ResolveInstalledSeed(choice.Game);
             IsBusy = false;
-            await ImportStandaloneMorphAsync(sourcePath, choice.Game, newPlayerMode: true, playerHead: head);
-            if (_standaloneImportPath == sourcePath)
-            {
-                _standaloneImportPath = null;
-                if (ErrorMessage is null) Status = Loc.Format("loc_Shell_Status_CreatedFromPlayerDefaults", LoadedFacePath, choice.Game);
-            }
+            if (await ImportStandaloneMorphAsync(sourcePath, choice.Game, newPlayerMode: true, playerHead: head))
+                Status = Loc.Format("loc_Shell_Status_CreatedFromPlayerDefaults", LoadedFacePath, choice.Game);
         }
         catch (Exception exception)
         {
@@ -171,10 +167,7 @@ public sealed partial class MainWindowViewModel
         {
             return;
         }
-        var sourcePath = _dialogs.ChooseMorphImportFile(
-            _standaloneImportPath is not null
-                ? Path.GetDirectoryName(_standaloneImportPath)
-                : PackagePath is null ? null : Path.GetDirectoryName(PackagePath));
+        var sourcePath = _dialogs.ChooseMorphImportFile(Path.GetDirectoryName(_workspace?.BrowsePath));
         if (sourcePath is null)
         {
             return;
@@ -396,21 +389,11 @@ public sealed partial class MainWindowViewModel
                 ignoresAuthoredGeometry: preview.Profile.IgnoresAuthoredGeometry);
 
             cancellationToken.ThrowIfCancellationRequested();
-            CancelPendingLoad();
-            SetEditor(null, null);
-            DisposePackageWorkspace();
-            _packageWorkspace = imported.Workspace;
+            ReplaceWorkspace(EditorWorkspace.ForNpc(imported.Workspace, targetGame));
             imported = null;
-            _standaloneGame = targetGame;
-            _isStandaloneNpcWorkspace = true;
-            _standaloneImportPath = Path.GetFullPath(sourcePath);
-            SetDetachedMeshSource(null);
-            _faceGeometryModes.Clear();
-            _faceGeometryModes[selected.InstancedPath] = MorphFaceGeometryMode.RelativeBake;
-            TrackSourceFile(sourcePath, selected.InstancedPath, SourceFileFormat.MorphRon, source.Fingerprint);
-            _hasWorkspaceChanges = false;
-            PackagePath = _packageWorkspace.SourcePath;
-            LogWorkspaceCreated("NPC", targetGame, sourcePath, _packageWorkspace.SourcePath);
+            _workspace!.GeometryModes[selected.InstancedPath] = MorphFaceGeometryMode.RelativeBake;
+            _workspace.TrackImportedFile(sourcePath, selected.InstancedPath, WorkspaceFileFormat.MorphRon, source.Fingerprint);
+            LogWorkspaceCreated("NPC", targetGame, sourcePath, PackageWorkspace!.SourcePath);
             _referenceCatalog = references;
             FaceSearchText = string.Empty;
             Faces.Clear();
@@ -475,7 +458,7 @@ public sealed partial class MainWindowViewModel
         }
     }
 
-    private async Task ImportStandaloneMorphAsync(string sourcePath, MorphFaceGame game, bool newPlayerMode = false,
+    private async Task<bool> ImportStandaloneMorphAsync(string sourcePath, MorphFaceGame game, bool newPlayerMode = false,
         PcsavHeadMorphWorkspace? career = null, HeadMorphPayload? playerHead = null, RonImportFile? ronSource = null)
     {
         var extension = Path.GetExtension(sourcePath).ToLowerInvariant();
@@ -486,7 +469,7 @@ public sealed partial class MainWindowViewModel
         {
             ErrorMessage = Loc.Text("loc_Shell_Error_StandaloneImportSupportedFormats");
             Status = Loc.Text("loc_Shell_Status_StandaloneImportRequiresASupported");
-            return;
+            return false;
         }
         if (isLegacy)
         {
@@ -498,7 +481,7 @@ public sealed partial class MainWindowViewModel
             {
                 ErrorMessage = exception.Message;
                 Status = Loc.Text("loc_Shell_Status_TheSelectedGameDoesNot");
-                return;
+                return false;
             }
         }
         StandalonePlayerMeshAnalysis? meshAnalysis = null;
@@ -516,16 +499,15 @@ public sealed partial class MainWindowViewModel
                 AppLog.Error($"MESH:ANALYSIS-FAILED {game} FILE:{sourcePath}", exception);
                 ErrorMessage = Loc.Format("loc_Shell_Error_TheMeshCouldNotBe", exception.Message);
                 Status = Loc.Text("loc_Shell_Status_MeshImportFailedTheCurrent");
-                return;
+                return false;
             }
             finally
             {
                 IsBusy = false;
             }
         }
-        var appendingToCurrentGame = career is null && _pcsavWorkspace is null &&
-                                     _standaloneGame == game && _packageWorkspace is not null &&
-                                     !_isStandaloneNpcWorkspace &&
+        var appendingToCurrentGame = career is null && _workspace is { Kind: EditorWorkspaceKind.Player, Career: null } &&
+                                     _workspace.Game == game &&
                                      (meshAnalysis is null || meshAnalysis.Recognition is not null);
         var existingNames = appendingToCurrentGame
             ? Faces.Select(face => face.ObjectName).ToArray()
@@ -538,7 +520,7 @@ public sealed partial class MainWindowViewModel
             : _dialogs.ChooseStandaloneMorphName(suggestedName, existingNames);
         if (objectName is null)
         {
-            return;
+            return false;
         }
 
         var canContinue = appendingToCurrentGame
@@ -546,7 +528,7 @@ public sealed partial class MainWindowViewModel
             : await EnsureCanAbandonWorkspaceAsync();
         if (!canContinue)
         {
-            return;
+            return false;
         }
 
         IsBusy = true;
@@ -561,7 +543,7 @@ public sealed partial class MainWindowViewModel
                 var detached = await Task.Run(() =>
                     _detachedMeshPreviewLoadService.Load(game, meshAnalysis.ImportedMesh));
                 PublishDetachedMeshWorkspace(detached, sourcePath, objectName, game);
-                return;
+                return true;
             }
 
             StandalonePlayerAssetCatalog? assetCatalog = null;
@@ -598,7 +580,7 @@ public sealed partial class MainWindowViewModel
             StandalonePlayerMeshRecognition? meshRecognition = null;
             if (appendingToCurrentGame)
             {
-                var workspace = _packageWorkspace!;
+                var workspace = PackageWorkspace!;
                 MorphFaceSaveResult saveResult;
                 if (isPlayerHead)
                 {
@@ -620,78 +602,53 @@ public sealed partial class MainWindowViewModel
                 importedFacePath = saveResult.FaceInstancedPath;
                 importWarnings = UserFacingMessageFormatter.FormatWarnings(saveResult);
             }
-            else if (isPlayerHead)
-            {
-                var result = await Task.Run(() => _standaloneImportService.ImportPlayerHead(
-                    game, playerHead!, objectName, assetCatalog));
-                if (career is not null)
-                {
-                    try
-                    {
-                        if (result.Sex != career.Sex) throw new PcsavException(PcsavError.InvalidFile);
-                    }
-                    catch { result.Dispose(); throw; }
-                }
-                CancelPendingLoad();
-                SetEditor(null, null);
-                DisposePackageWorkspace();
-                _packageWorkspace = result.Workspace;
-                _pcsavWorkspace = career;
-                if (career is not null) career.ImportStateChanged += OnEditorDirtyStateChanged;
-                _standaloneGame = game;
-                _isStandaloneNpcWorkspace = false;
-                SetDetachedMeshSource(null);
-                _faceGeometryModes.Clear();
-                PackagePath = result.Workspace.SourcePath;
-                importedFacePath = result.ImportedFacePath;
-                importWarnings = UserFacingMessageFormatter.FormatWarnings(result.SaveResult);
-            }
-            else if (isLegacy)
-            {
-                var result = await Task.Run(() => _standaloneLegacyImportService.Import(
-                    game, sourcePath, objectName));
-                CancelPendingLoad();
-                SetEditor(null, null);
-                DisposePackageWorkspace();
-                _packageWorkspace = result.Workspace;
-                _standaloneGame = game;
-                _isStandaloneNpcWorkspace = false;
-                SetDetachedMeshSource(null);
-                _faceGeometryModes.Clear();
-                PackagePath = result.Workspace.SourcePath;
-                importedFacePath = result.ImportedFacePath;
-                importWarnings = UserFacingMessageFormatter.FormatWarnings(result.SaveResult);
-            }
             else
             {
-                var result = await Task.Run(() => _standaloneMeshImportService.Import(
-                    game, objectName, meshAnalysis!));
-                CancelPendingLoad();
-                SetEditor(null, null);
-                DisposePackageWorkspace();
-                _packageWorkspace = result.Workspace;
-                _standaloneGame = game;
-                _isStandaloneNpcWorkspace = false;
-                SetDetachedMeshSource(null);
-                _faceGeometryModes.Clear();
-                PackagePath = result.Workspace.SourcePath;
-                importedFacePath = result.ImportedFacePath;
-                importWarnings = UserFacingMessageFormatter.FormatWarnings(result.SaveResult);
-                meshRecognition = result.Recognition;
+                MorphFacePackageWorkspace createdWorkspace;
+                if (isPlayerHead)
+                {
+                    var result = await Task.Run(() => _standaloneImportService.ImportPlayerHead(
+                        game, playerHead!, objectName, assetCatalog));
+                    if (career is not null)
+                    {
+                        try { if (result.Sex != career.Sex) throw new PcsavException(PcsavError.InvalidFile); }
+                        catch { result.Dispose(); throw; }
+                    }
+                    createdWorkspace = result.Workspace;
+                    importedFacePath = result.ImportedFacePath;
+                    importWarnings = UserFacingMessageFormatter.FormatWarnings(result.SaveResult);
+                }
+                else if (isLegacy)
+                {
+                    var result = await Task.Run(() => _standaloneLegacyImportService.Import(game, sourcePath, objectName));
+                    createdWorkspace = result.Workspace;
+                    importedFacePath = result.ImportedFacePath;
+                    importWarnings = UserFacingMessageFormatter.FormatWarnings(result.SaveResult);
+                }
+                else
+                {
+                    var result = await Task.Run(() => _standaloneMeshImportService.Import(game, objectName, meshAnalysis!));
+                    createdWorkspace = result.Workspace;
+                    importedFacePath = result.ImportedFacePath;
+                    importWarnings = UserFacingMessageFormatter.FormatWarnings(result.SaveResult);
+                    meshRecognition = result.Recognition;
+                }
+                ReplaceWorkspace(career is null ? EditorWorkspace.ForPlayer(createdWorkspace, game)
+                    : EditorWorkspace.ForCareer(createdWorkspace, career, importedFacePath));
             }
-            _standaloneImportPath = Path.GetFullPath(career?.SourcePath ?? sourcePath);
             LogWorkspaceCreated(newPlayerMode ? "NEW-PLAYER" : "PLAYER", game,
-                career?.SourcePath ?? sourcePath, _packageWorkspace!.SourcePath, append: appendingToCurrentGame);
+                career?.SourcePath ?? sourcePath, PackageWorkspace!.SourcePath, append: appendingToCurrentGame);
             // Classified Player heads preserve the selected-game HMM/HMF vertex
             // order, so canonical target deltas can edit their authored bake.
             // Mesh and legacy imports retain the fixed-bake route.
-            _faceGeometryModes[importedFacePath] = isPlayerHead
+            _workspace!.GeometryModes[importedFacePath] = isPlayerHead
                 ? MorphFaceGeometryMode.RelativeBake : MorphFaceGeometryMode.FixedBake;
-            if (!appendingToCurrentGame) _hasWorkspaceChanges = career is { HasHeadMorph: false };
-            if (!newPlayerMode)
-                TrackSourceFile(career?.SourcePath ?? sourcePath, importedFacePath,
-                    career is not null ? SourceFileFormat.Pcsav : isPlayerHead ? SourceFileFormat.MorphRon :
-                    isMesh ? SourceFileFormat.Mesh : SourceFileFormat.LegacyMorph, ronSource?.Fingerprint);
+            if (career is { HasHeadMorph: false }) _workspace.MarkChanged(importedFacePath);
+            if (newPlayerMode) _workspace.ImportedFile = null;
+            else if (career is null)
+                _workspace.TrackImportedFile(sourcePath, importedFacePath,
+                    isPlayerHead ? WorkspaceFileFormat.MorphRon :
+                    isMesh ? WorkspaceFileFormat.Mesh : WorkspaceFileFormat.LegacyMorph, ronSource?.Fingerprint);
             OnPropertyChanged(nameof(PackageName));
             OnPropertyChanged(nameof(PackageDisplayName));
             OnDirtyStateChanged();
@@ -722,13 +679,14 @@ public sealed partial class MainWindowViewModel
             }
             if (career is not null && Editor is not null)
             {
-                _pcsavSavedDraft = Editor.CreateDraft();
-                career.SetEditingBaseline(_pcsavSavedDraft);
+                _workspace!.SavedCareerDraft = Editor.CreateDraft();
+                career.SetEditingBaseline(_workspace!.SavedCareerDraft);
             }
             if (unavailableCareerAttachments.Count > 0 && Editor is not null)
                 _dialogs.ShowInformation(Loc.Text("loc_Shell_DialogTitle_PlayerMorphImportedWithWarnings"),
                     Loc.Format("loc_Pcsav_UnavailableAttachments", unavailableCareerAttachments.Count) + "\n\n" +
                     string.Join("\n", unavailableCareerAttachments.Select(UserFacingMessageFormatter.Format)));
+            return ErrorMessage is null;
         }
         catch (Exception exception)
         {
@@ -736,6 +694,7 @@ public sealed partial class MainWindowViewModel
             ErrorMessage = career is not null ? FormatPcsavError(exception) :
                 Loc.Format("loc_Shell_Error_TheStandalonePlayerMorphCould", UserFacingMessageFormatter.Format(exception));
             Status = Loc.Text("loc_Shell_Status_StandaloneImportFailedTheCurrent");
+            return false;
         }
         finally
         {
@@ -749,16 +708,7 @@ public sealed partial class MainWindowViewModel
         string objectName,
         MorphFaceGame game)
     {
-        CancelPendingLoad();
-        SetEditor(null, null);
-        DisposePackageWorkspace();
-        SetDetachedMeshSource(result.Detached.Source);
-        _standaloneGame = game;
-        _isStandaloneNpcWorkspace = false;
-        _standaloneImportPath = Path.GetFullPath(sourcePath);
-        _faceGeometryModes.Clear();
-        _hasWorkspaceChanges = false;
-        PackagePath = Path.GetFullPath(sourcePath);
+        ReplaceWorkspace(EditorWorkspace.ForMesh(result.Detached.Source, game));
         LogWorkspaceCreated("CUSTOM-MESH", game, sourcePath);
         _referenceCatalog = new PackageReferenceCatalog([], []);
         FaceSearchText = string.Empty;
@@ -773,7 +723,6 @@ public sealed partial class MainWindowViewModel
         Faces.Add(face);
         SelectedFace = face;
         LoadedFacePath = face.InstancedPath;
-        TrackSourceFile(sourcePath, face.InstancedPath, SourceFileFormat.Mesh);
 
         var topology = result.Preview.Loaded.BaseHead.Topology;
         var previewAttachmentOptions = result.PreviewAttachments
@@ -828,12 +777,6 @@ public sealed partial class MainWindowViewModel
         RaiseFaceContextCanExecuteChanged();
     }
 
-    private void SetDetachedMeshSource(ImportedMeshAsset? source)
-    {
-        _detachedMeshSource = source;
-        OnPropertyChanged(nameof(IsDetachedMeshWorkspace));
-    }
-
     private async Task ImportMorphIntoPackageAsync(string sourcePath)
     {
         if (SelectedFace is not { } template || WorkspacePackagePath is not { } workspacePath)
@@ -877,7 +820,7 @@ public sealed partial class MainWindowViewModel
                 objectName,
                 fit.MorphData));
             packageModified = true;
-            MarkWorkspaceChanged();
+            MarkWorkspaceChanged(result.FaceInstancedPath);
             if (!await RefreshWorkspaceAsync(result.FaceInstancedPath))
             {
                 ErrorMessage = Loc.Text("loc_Shell_ErrorMessage_TheMorphWasImportedBut");
@@ -906,7 +849,7 @@ public sealed partial class MainWindowViewModel
     }
 
     private async Task<bool> FlushSelectedExportSourceAsync(BioMorphFaceListItem selected) =>
-        !IsLoaded(selected) || Editor?.IsDirty != true && !_pcsavDraftPendingInPackage || await FlushEditorToWorkspaceAsync();
+        !IsLoaded(selected) || Editor?.IsDirty != true && !CareerDraftPendingInPackage || await FlushEditorToWorkspaceAsync();
 
     private static string SanitizeObjectName(string value)
     {

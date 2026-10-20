@@ -1,38 +1,17 @@
 using System.IO;
-using System.Security.Cryptography;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.Core.Services;
 using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.LegendaryExplorer;
+using MorphFaceEditor.Models;
 using MorphFaceEditor.Services;
 
 namespace MorphFaceEditor.ViewModels;
 
 public sealed partial class MainWindowViewModel
 {
-    private enum SourceFileFormat { MorphRon, MorphFeaturesRon, MfeMaterialsRon, TseMaterialsRon, Mesh, LegacyMorph, Pcsav }
-    private sealed record SourceFile(string Path, string FacePath, SourceFileFormat Format, string Fingerprint);
-    private SourceFile? _sourceFile;
-    private bool _hasOtherStandaloneChanges;
-
-    private bool HasMultipleStandaloneImports => IsStandaloneWorkspace &&
-        _faceGeometryModes.Count > 1;
-
-    private static string FileFingerprint(string path)
-    {
-        using var stream = File.OpenRead(path);
-        return Convert.ToHexString(SHA256.HashData(stream));
-    }
-
-    private void TrackSourceFile(string path, string facePath, SourceFileFormat format, string? fingerprint = null)
-    {
-        var fullPath = Path.GetFullPath(path);
-        _sourceFile = new(fullPath, facePath, format, fingerprint ?? FileFingerprint(fullPath));
-        OnDirtyStateChanged();
-    }
-
-    private bool CanSaveOriginalRon => !HasMultipleStandaloneImports && _sourceFile?.Format is
-        SourceFileFormat.MorphRon or SourceFileFormat.MorphFeaturesRon or SourceFileFormat.MfeMaterialsRon or SourceFileFormat.TseMaterialsRon;
+    private bool HasMultipleStandaloneImports => _workspace?.HasMultipleImports == true;
+    private bool CanSaveOriginalRon => _workspace?.CanSaveRon == true;
 
     private async Task<bool> SaveSourceFileAsync()
     {
@@ -41,12 +20,12 @@ public sealed partial class MainWindowViewModel
             _dialogs.ShowInformation(Loc.Text("loc_View_MainWindow_SavePackage"), Loc.Text("loc_FileSave_MultipleImports"));
             return false;
         }
-        if (_packageWorkspace?.CanCommit == true)
+        if (PackageWorkspace?.CanCommit == true)
             return await CommitWorkspaceAsync(showConfirmation: true);
-        if (_pcsavWorkspace is not null) return await SaveCareerFileAsync();
+        if (CareerWorkspace is not null) return await SaveCareerFileAsync();
         if (CanSaveOriginalRon)
             return await SaveOriginalRonAsync();
-        if (IsDetachedMeshWorkspace || _sourceFile?.Format == SourceFileFormat.Mesh)
+        if (_workspace?.NeedsMeshSaveChoice == true)
         {
             var choice = _dialogs.ChooseMeshSaveFormat();
             var saved = choice switch
@@ -59,7 +38,7 @@ public sealed partial class MainWindowViewModel
             if (saved)
             {
                 Editor?.AcceptSavedState(materialsOnly: choice == MeshSaveChoice.MaterialsRon);
-                if (choice == MeshSaveChoice.Pcc) _hasWorkspaceChanges = false;
+                if (choice == MeshSaveChoice.Pcc) _workspace!.AcceptSavedChanges();
                 OnDirtyStateChanged();
                 if (IsDirty) ShowRemainingSourceEdits();
             }
@@ -75,12 +54,11 @@ public sealed partial class MainWindowViewModel
             _dialogs.ShowInformation(Loc.Text("loc_FileSave_SaveAs"), Loc.Text("loc_FileSave_MultipleImports"));
             return;
         }
-        var source = _pcsavWorkspace?.SourcePath ?? (_packageWorkspace?.CanCommit == true ? _packageWorkspace.SourcePath :
-            CanSaveOriginalRon ? _sourceFile?.Path : null);
+        var source = _workspace?.SavePath;
         if (source is null) { await SaveSourceFileAsync(); return; }
         var destination = _dialogs.ChooseSaveAsFile(source);
         if (destination is null) return;
-        if (_pcsavWorkspace is not null) { await SaveCareerFileAsync(destination); return; }
+        if (CareerWorkspace is not null) { await SaveCareerFileAsync(destination); return; }
         if (CanSaveOriginalRon) { await SaveOriginalRonAsync(destination); return; }
         using var saveLock = new SaveControlLock(this);
         if (Editor?.IsDirty == true && !await FlushEditorToWorkspaceAsync()) return;
@@ -88,10 +66,9 @@ public sealed partial class MainWindowViewModel
         ErrorMessage = null;
         try
         {
-            await Task.Run(() => _packageWorkspace!.Commit(destination));
-            _hasWorkspaceChanges = false;
-            PackagePath = _packageWorkspace!.SourcePath;
-            OnDirtyStateChanged();
+            await Task.Run(() => PackageWorkspace!.Commit(destination));
+            _workspace!.AcceptSavedChanges();
+            OnWorkspaceChanged();
             Status = Loc.Format("loc_Shell_Status_PackageSaved", PackageName);
         }
         catch (Exception exception)
@@ -105,7 +82,7 @@ public sealed partial class MainWindowViewModel
 
     private async Task<bool> SaveOriginalRonAsync(string? destination = null)
     {
-        if (_sourceFile is not { } source || WorkspacePackagePath is not { } workspacePath)
+        if (SourceFile is not { } source || WorkspacePackagePath is not { } workspacePath)
             return false;
         using var saveLock = new SaveControlLock(this);
         // Export from the source face, even if another base head is selected in the sidebar.
@@ -114,7 +91,7 @@ public sealed partial class MainWindowViewModel
             _dialogs.ShowInformation(Loc.Text("loc_View_MainWindow_SavePackage"), Loc.Text("loc_FileSave_OtherFace"));
             return false;
         }
-        if (source.Format == SourceFileFormat.MorphRon &&
+        if (source.Format == WorkspaceFileFormat.MorphRon &&
             Editor?.IsDirty == true && !await FlushEditorToWorkspaceAsync()) return false;
         IsBusy = true;
         ErrorMessage = null;
@@ -124,10 +101,10 @@ public sealed partial class MainWindowViewModel
             $".{Path.GetFileName(target)}.{Guid.NewGuid():N}.tmp");
         try
         {
-            var targetFingerprint = File.Exists(target) ? FileFingerprint(target) : null;
+            var targetFingerprint = File.Exists(target) ? EditorWorkspace.FileFingerprint(target) : null;
             var face = Faces.Single(value => value.InstancedPath.Equals(source.FacePath, StringComparison.OrdinalIgnoreCase));
             var player = IsPlayerWorkspace;
-            if (source.Format == SourceFileFormat.MorphFeaturesRon)
+            if (source.Format == WorkspaceFileFormat.MorphFeaturesRon)
             {
                 if (LoadedFacePath != source.FacePath || Editor is null) return false;
                 var draft = Editor.CreateDraft();
@@ -135,7 +112,7 @@ public sealed partial class MainWindowViewModel
                 await Task.Run(() => TseHeadMorphRon.WriteMorphFeatures(candidate, ToMorphData(draft), provenance));
                 TseHeadMorphRon.Validate(candidate);
             }
-            else if (source.Format == SourceFileFormat.MorphRon)
+            else if (source.Format == WorkspaceFileFormat.MorphRon)
             {
                 await Task.Run(() =>
                 {
@@ -159,7 +136,7 @@ public sealed partial class MainWindowViewModel
                     await Task.Run(() => _packageContextService.VerifyPlayerRuntimeAssets(game, values,
                         document.HairMesh!, document.AccessoryMeshes));
                 string text;
-                if (source.Format == SourceFileFormat.TseMaterialsRon)
+                if (source.Format == WorkspaceFileFormat.TseMaterialsRon)
                 {
                     text = MaterialRonCodec.WriteTse(values, document.HairMesh!,
                         document.AccessoryMeshes!, document.Game, document.DefaultFace);
@@ -177,17 +154,16 @@ public sealed partial class MainWindowViewModel
                 await File.WriteAllTextAsync(candidate, text);
                 _ = FaceMaterialFileService.Read(await File.ReadAllTextAsync(candidate), allowTse: true);
             }
-            if (savingSource && FileFingerprint(source.Path) != source.Fingerprint ||
+            if (savingSource && EditorWorkspace.FileFingerprint(source.Path) != source.Fingerprint ||
                 File.Exists(target) != (targetFingerprint is not null) ||
-                targetFingerprint is not null && FileFingerprint(target) != targetFingerprint)
+                targetFingerprint is not null && EditorWorkspace.FileFingerprint(target) != targetFingerprint)
                 throw new IOException(Loc.Text("loc_FileSave_SourceChanged"));
-            var fingerprint = FileFingerprint(candidate);
+            var fingerprint = EditorWorkspace.FileFingerprint(candidate);
             File.Move(candidate, target, overwrite: true);
-            _sourceFile = source with { Path = target, Fingerprint = fingerprint };
-            _standaloneImportPath = target;
+            _workspace!.ImportedFile = source with { Path = target, Fingerprint = fingerprint };
             OnPropertyChanged(nameof(PackageName));
-            if (source.Format == SourceFileFormat.MorphRon) _hasWorkspaceChanges = _hasOtherStandaloneChanges;
-            else if (source.Format == SourceFileFormat.MorphFeaturesRon) Editor?.AcceptSavedState(featuresOnly: true);
+            if (source.Format == WorkspaceFileFormat.MorphRon) _workspace.AcceptSavedFace(source.FacePath);
+            else if (source.Format == WorkspaceFileFormat.MorphFeaturesRon) Editor?.AcceptSavedState(featuresOnly: true);
             else Editor?.AcceptSavedState(materialsOnly: true);
             OnDirtyStateChanged();
             Status = Loc.Format("loc_Shell_Status_PackageSaved", Path.GetFileName(target));
@@ -209,6 +185,6 @@ public sealed partial class MainWindowViewModel
     }
 
     private void ShowRemainingSourceEdits() => _dialogs.ShowInformation(
-        Loc.Text("loc_View_MainWindow_SavePackage"), Loc.Text(_sourceFile?.Format == SourceFileFormat.MorphFeaturesRon
+        Loc.Text("loc_View_MainWindow_SavePackage"), Loc.Text(SourceFile?.Format == WorkspaceFileFormat.MorphFeaturesRon
             ? "loc_FileSave_MorphFeaturesOnly" : "loc_FileSave_MaterialsOnly"));
 }

@@ -181,13 +181,11 @@ public sealed class StandalonePlayerMeshImportService
                 .FirstOrDefault(prior => prior?.BaseHeadPath.Equals(
                                              loaded.BaseHead.Source.InstancedPath,
                                              StringComparison.OrdinalIgnoreCase) == true);
-            var sidecarMapped = meshCandidates
-                .FirstOrDefault(candidate => candidate.CoordinateSystem.EndsWith(
-                                                   "MFE vertex map", StringComparison.Ordinal) &&
-                                             candidate.Positions.Count == loaded.BaseHead.Positions.Length &&
-                                             candidate.Prior?.BaseHeadPath.Equals(
-                                                 loaded.BaseHead.Source.InstancedPath,
-                                                 StringComparison.OrdinalIgnoreCase) == true);
+            var sidecarMapped = meshCandidates.FirstOrDefault(candidate =>
+                candidate.HasValidatedSidecarMap &&
+                candidate.Positions.Count == loaded.BaseHead.Positions.Length &&
+                candidate.Prior?.BaseHeadPath.Equals(loaded.BaseHead.Source.InstancedPath,
+                    StringComparison.OrdinalIgnoreCase) == true);
             if (match is null && sidecarMapped is null)
             {
                 continue;

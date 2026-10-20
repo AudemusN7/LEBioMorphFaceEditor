@@ -1,6 +1,5 @@
 using System.Buffers.Binary;
 using System.IO.Compression;
-using System.Security.Cryptography;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Core.Materials;
@@ -213,28 +212,23 @@ public sealed class PcsavHeadMorphWorkspace : IUndoableEditSource
     {
         var target = Path.GetFullPath(destination ?? SourcePath);
         var savingSource = target.Equals(SourcePath, StringComparison.OrdinalIgnoreCase);
-        var targetBytes = !savingSource && File.Exists(target) ? File.ReadAllBytes(target) : null;
-        var candidatePath = Path.Combine(Path.GetDirectoryName(target)!, $".{Path.GetFileName(target)}.{Guid.NewGuid():N}.tmp");
+        var targetBytes = savingSource ? _sourceBytes : File.Exists(target) ? File.ReadAllBytes(target) : null;
+        using var save = FileSaveTransaction.ForContent(target, targetBytes);
         try
         {
-            File.WriteAllBytes(candidatePath, bytes);
-            var candidate = Open(candidatePath);
+            File.WriteAllBytes(save.CandidatePath, bytes);
+            var candidate = Open(save.CandidatePath);
             if (!UnrelatedPrefix.SequenceEqual(candidate.UnrelatedPrefix) ||
                 !UnrelatedSuffix.SequenceEqual(candidate.UnrelatedSuffix) ||
                 candidate.HasHeadMorph != (head is not null) ||
                 head is not null && !UnrealHeadMorphBinaryCodec.Write(head).AsSpan().SequenceEqual(UnrealHeadMorphBinaryCodec.Write(candidate.Head)))
                 throw new PcsavException(PcsavError.InvalidFile);
-            if (savingSource && !SHA256.HashData(File.ReadAllBytes(SourcePath)).AsSpan().SequenceEqual(SHA256.HashData(_sourceBytes)))
-                throw new PcsavException(PcsavError.SourceChanged);
-            if (!savingSource && (File.Exists(target) != (targetBytes is not null) ||
-                targetBytes is not null && !File.ReadAllBytes(target).AsSpan().SequenceEqual(targetBytes)))
-                throw new PcsavException(PcsavError.SourceChanged);
-            File.Move(candidatePath, target, overwrite: true);
+            save.Commit(nameof(PcsavError.SourceChanged));
             SourcePath = target;
             _sourceBytes = bytes;
             // Keep the immutable native/baseline pair: semantic deltas include all edits since opening.
         }
-        finally { if (File.Exists(candidatePath)) File.Delete(candidatePath); }
+        catch (FileSaveConflictException exception) { throw new PcsavException(PcsavError.SourceChanged, exception); }
     }
 
     internal byte[] ReplaceHead(HeadMorphPayload? head)

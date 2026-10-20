@@ -130,6 +130,8 @@ internal static class PcsavHeadMorphTests
                 var source = Path.Combine(directory, "career.pcsav"); File.Copy(fixture, source);
                 var workspace = PcsavHeadMorphWorkspace.Open(source);
                 var head = ReadEditableHead(workspace); workspace.SetEditingBaseline(head);
+                File.SetLastWriteTimeUtc(source, File.GetLastWriteTimeUtc(source).AddMinutes(1));
+                workspace.SaveEditedHead(head);
                 var corrupted = File.ReadAllBytes(source); corrupted[20] ^= 0x80; File.WriteAllBytes(source, corrupted);
                 try { _ = PcsavHeadMorphWorkspace.Open(source); throw new Exception("A corrupt save was accepted."); }
                 catch (PcsavException e) { TestAssert.Equal(PcsavError.InvalidFile, e.Reason); }
@@ -158,6 +160,20 @@ internal static class PcsavHeadMorphTests
                 var workspace = PcsavHeadMorphWorkspace.Open(source);
                 var head = ReadEditableHead(workspace); workspace.SetEditingBaseline(head);
                 var copy = Path.Combine(directory, "copy.pcsav");
+                foreach (var existing in new[] { false, true })
+                {
+                    if (existing) File.Copy(source, copy, overwrite: true);
+                    FileSaveTransaction.BeforeCommitForTesting = (_, target) => File.WriteAllText(target, "outside edit");
+                    try { workspace.SaveEditedHead(head, copy); throw new Exception("Save As overwrote an outside edit."); }
+                    catch (PcsavException exception) { TestAssert.Equal(PcsavError.SourceChanged, exception.Reason); }
+                    TestAssert.Equal(source, workspace.SourcePath);
+                    TestAssert.Equal("outside edit", File.ReadAllText(copy));
+                    TestAssert.Equal(0, Directory.GetFiles(directory, ".*.tmp").Length);
+                }
+                FileSaveTransaction.BeforeCommitForTesting = null;
+                workspace.SaveEditedHead(head, copy);
+                TestAssert.Equal(copy, workspace.SourcePath);
+                copy += ".new.pcsav";
                 workspace.SaveEditedHead(head, copy);
                 TestAssert.Equal(copy, workspace.SourcePath);
                 var saved = PcsavHeadMorphWorkspace.Open(copy);
@@ -165,8 +181,9 @@ internal static class PcsavHeadMorphTests
                 workspace.DeleteHeadMorph();
                 TestAssert.True(!PcsavHeadMorphWorkspace.Open(copy).HasHeadMorph && original.SequenceEqual(File.ReadAllBytes(source)),
                     "Saving after Save As targeted the original.");
+                TestAssert.Equal(0, Directory.GetFiles(directory, "*.backup").Length);
             }
-            finally { Directory.Delete(directory, true); }
+            finally { FileSaveTransaction.BeforeCommitForTesting = null; Directory.Delete(directory, true); }
         }
     }
 

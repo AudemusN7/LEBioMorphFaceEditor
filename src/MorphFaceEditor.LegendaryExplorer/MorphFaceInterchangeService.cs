@@ -275,7 +275,7 @@ public sealed class MorphFaceInterchangeService
             _ => throw new ArgumentOutOfRangeException(nameof(format))
         };
         foreach (var candidate in candidates.Where(value =>
-                     value.CoordinateSystem.EndsWith("file order", StringComparison.Ordinal)))
+                     value.IsFileOrder))
         {
             if (!TryMatchExactVertexSet(candidate.Positions, bakedPositions, out var exportedToBase))
             {
@@ -297,14 +297,14 @@ public sealed class MorphFaceInterchangeService
         var md5Candidates = ReadMd5(md5Path)(baseHead);
         var gltfCandidates = ReadGltf(gltfPath)(baseHead);
         foreach (var candidate in md5Candidates.Where(value =>
-                     value.CoordinateSystem.EndsWith("file order", StringComparison.Ordinal)))
+                     value.IsFileOrder))
         {
             if (!TryMatchExactVertexSet(candidate.Positions, bakedPositions, out var md5ToBase))
             {
                 continue;
             }
             foreach (var gltfCandidate in gltfCandidates.Where(value =>
-                         value.CoordinateSystem.EndsWith("file order", StringComparison.Ordinal)))
+                          value.IsFileOrder))
             {
                 // The two UModel exporters need not use the same vertex order.
                 // Prove correspondence before borrowing the MD5-to-bake map;
@@ -457,7 +457,7 @@ public sealed class MorphFaceInterchangeService
             new MorphMeshPositionCandidate(
                 $"{source.CoordinateSystem}, MFE vertex map",
                 reordered,
-                prior),
+                prior) { HasValidatedSidecarMap = true },
             .. candidatesWithPrior
         ];
     }
@@ -520,7 +520,8 @@ public sealed class MorphFaceInterchangeService
                 : psk.Wedges.Count == reference.Positions.Count
                     ? psk.Wedges.Select(wedge => points[wedge.PointIndex]).ToArray()
                     : points;
-            return [new MorphMeshPositionCandidate("PSK (Y handedness restored), file order", positions)];
+            return [new MorphMeshPositionCandidate("PSK (Y handedness restored), file order", positions)
+                { IsFileOrder = true }];
         };
     }
 
@@ -662,7 +663,8 @@ public sealed class MorphFaceInterchangeService
             {
                 yield return new MorphMeshPositionCandidate($"{label}, {transform.Name}, flipped-V order", reordered);
             }
-            yield return new MorphMeshPositionCandidate($"{label}, {transform.Name}, file order", positions);
+            yield return new MorphMeshPositionCandidate($"{label}, {transform.Name}, file order", positions)
+                { IsFileOrder = true };
         }
     }
 

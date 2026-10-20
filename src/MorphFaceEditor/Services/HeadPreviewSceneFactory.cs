@@ -25,7 +25,7 @@ public sealed class HeadPreviewSceneFactory
     {
         Validate(loaded);
         var baseLod = RequireLod(loaded.BaseHead, lodIndex);
-        var bakedLodOrdinal = FindStoredLodOrdinal(loaded.BaseHead, lodIndex);
+        var bakedLodOrdinal = loaded.BaseHead.FindLodOrdinal(lodIndex);
         var usesBaseHeadGeometry = loaded.UsesCustomBaseMesh || loaded.IgnoresAuthoredGeometry;
         var positions = !usesBaseHeadGeometry &&
                         bakedLodOrdinal >= 0 &&
@@ -49,20 +49,6 @@ public sealed class HeadPreviewSceneFactory
             ConvertPalette(pose.SkinningMatrices),
             applySkinning: !usesBaseHeadGeometry && hasVerifiedRig,
             lodIndex);
-    }
-
-    private static int FindStoredLodOrdinal(SkeletalMeshAsset mesh, int lodIndex)
-    {
-        var ordinal = 0;
-        foreach (var lod in mesh.Lods)
-        {
-            if (lod.LodIndex == lodIndex)
-            {
-                return ordinal;
-            }
-            ordinal++;
-        }
-        return -1;
     }
 
     public HeadPreviewScene CreateEditable(LoadedMorphFace loaded, MorphFaceEvaluation evaluation, int lodIndex = 0)

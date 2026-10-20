@@ -1188,15 +1188,7 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
 
     private void ApplyCorrection(Vector3[] positions, int lodIndex)
     {
-        var lodOrdinal = -1;
-        for (var index = 0; index < _orderedBaseLods.Count; index++)
-        {
-            if (_orderedBaseLods[index].LodIndex == lodIndex)
-            {
-                lodOrdinal = index;
-                break;
-            }
-        }
+        var lodOrdinal = _baseHead.FindLodOrdinal(lodIndex);
         if (lodOrdinal < 0 || lodOrdinal >= _positionCorrections.Count)
         {
             return;

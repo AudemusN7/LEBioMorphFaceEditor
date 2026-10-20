@@ -94,7 +94,7 @@ public sealed partial class MainWindowViewModel
         }
     }
 
-    private bool CanExportMorphRon() => CanUseFaceContextMenu() &&
+    private bool CanExportMorphRon() => CanTargetPackageFace() &&
         SelectedFace is { SupportsMorphRonExport: true } face && HasSupportedRonArchetype(face.ProfileTag.Trim('[', ']'));
 
     public string? MorphRonExportUnavailableReason => SelectedFace is { } face &&
@@ -306,7 +306,6 @@ public sealed partial class MainWindowViewModel
         ErrorMessage = null;
         Status = Loc.Format("loc_Shell_Status_PreparingANativeNpcWorkspace", targetGame, archetype);
         StandaloneNpcMorphImportResult? imported = null;
-        FaceEditorViewModel? preparedEditor = null;
         IReadOnlyList<string> importWarnings = [];
         try
         {
@@ -347,80 +346,17 @@ public sealed partial class MainWindowViewModel
                     CancellationToken: cancellationToken)), cancellationToken);
             importWarnings = UserFacingMessageFormatter.FormatWarnings(imported.SaveResult);
 
-            // Read and prepare the complete candidate before replacing the active editor.
-            var candidatePath = imported.Workspace.WorkingPath;
-            var preparation = await _catalogService.ReadWorkspaceAsync(candidatePath, _referenceService, cancellationToken: cancellationToken);
-            var catalog = preparation.Faces;
-            var references = preparation.References;
-            var selected = catalog.Faces.FirstOrDefault(face =>
-                string.Equals(face.InstancedPath, imported.ImportedFacePath,
-                    StringComparison.OrdinalIgnoreCase)) ?? throw new InvalidDataException(
-                Loc.Text("loc_Shell_Error_ImportedNpcFaceMissingFromCatalogue"));
-            var preview = await _previewLoadService.LoadAsync(
-                candidatePath,
-                selected.UIndex.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                cancellationToken,
-                geometryMode: MorphFaceGeometryMode.RelativeBake);
-            if (!preview.EditingSession.CanEditMorphFeatures)
-            {
-                throw new InvalidDataException(
-                    Loc.Format("loc_Shell_Error_ImportedNpcMorphTargetsUnavailable", preview.EditingSession.EditBlockReason));
-            }
-            var textureProfile = TextureCatalogProfiles.For(preview.Profile);
-            preparedEditor = new FaceEditorViewModel(
-                preview.EditingSession,
-                preview.Profile.GetUiProfile(),
-                preview.MaterialEditingSession,
-                _colorDialog,
-                _referenceService,
-                candidatePath,
-                references.Textures,
-                references.SkeletalMeshes,
-                preview.Loaded.Document.HairMeshReference,
-                preview.Loaded.Document.OtherMeshReferences,
-                SetEditorError,
-                preview.Profile.Key,
-                _randomisationCatalog,
-                randomisationInclusionState: _randomisationInclusionState,
-                registryTextureCandidates: [],
-                textureCatalogProfile: textureProfile,
-                isTextureRegistryAvailable: false,
-                isTextureRegistryPending: true,
-                ignoresAuthoredGeometry: preview.Profile.IgnoresAuthoredGeometry);
-
-            cancellationToken.ThrowIfCancellationRequested();
-            ReplaceWorkspace(EditorWorkspace.ForNpc(imported.Workspace, targetGame));
-            imported = null;
-            _workspace!.GeometryModes[selected.InstancedPath] = MorphFaceGeometryMode.RelativeBake;
-            _workspace.TrackImportedFile(sourcePath, selected.InstancedPath, WorkspaceFileFormat.MorphRon, source.Fingerprint);
+            var candidate = EditorWorkspace.ForNpc(imported.Workspace, targetGame);
+            var importedFacePath = imported.ImportedFacePath;
+            candidate.GeometryModes[importedFacePath] = MorphFaceGeometryMode.RelativeBake;
+            candidate.TrackImportedFile(sourcePath, importedFacePath, WorkspaceFileFormat.MorphRon, source.Fingerprint);
+            imported = null; // Candidate publication now owns the disposable package, including failure cleanup.
+            var preview = (await PrepareAndPublishWorkspaceAsync(candidate, importedFacePath, cancellationToken))!;
+            var selected = SelectedFace!;
             LogWorkspaceCreated("NPC", targetGame, sourcePath, PackageWorkspace!.SourcePath);
-            _referenceCatalog = references;
-            FaceSearchText = string.Empty;
-            Faces.Clear();
-            foreach (var face in catalog.Faces)
-            {
-                Faces.Add(face);
-            }
-            SelectedFace = selected;
-            LoadedFacePath = preview.Loaded.Document.Source.InstancedPath;
             _faceDetailsPrefix = null;
             _faceDetailsHasBakedFallback = false;
             FaceDetails = Loc.Format("loc_Shell_FaceDetails_NpcNativeRelativeBake", preview.Loaded.BaseHead.Topology.VertexCount, preview.Loaded.Document.BakedLods.Count);
-            SetEditor(preparedEditor, preview.Loaded);
-            preparedEditor = null;
-            HasPreview = true;
-            var cameraFamily = PreviewCameraGrouping.ForProfile(preview.Profile.Key);
-            var resetCamera = _previewCameraFamily is not null &&
-                              !string.Equals(_previewCameraFamily, cameraFamily,
-                                  StringComparison.OrdinalIgnoreCase);
-            _previewCameraFamily = cameraFamily;
-            PreviewSceneReady?.Invoke(preview.Scene, resetCamera);
-            OnPropertyChanged(nameof(PackageName));
-            OnPropertyChanged(nameof(PackageDisplayName));
-            OnDirtyStateChanged();
-            RaiseFaceContextCanExecuteChanged();
-            _ = LoadTextureRegistryAsync(
-                Editor!, targetGame, preview.Profile, textureProfile, CancellationToken.None);
             Status = Loc.Format("loc_Shell_Status_ImportedAsNpcMorphReady", selected.DisplayName, targetGame, archetype);
             var allImportWarnings = importWarnings.Concat(preview.Loaded.Warnings).Distinct(StringComparer.Ordinal).ToArray();
             foreach (var warning in allImportWarnings)
@@ -448,7 +384,6 @@ public sealed partial class MainWindowViewModel
         }
         finally
         {
-            preparedEditor?.Dispose();
             imported?.Dispose();
             _npcImportCancellation?.Dispose();
             _npcImportCancellation = null;
@@ -536,6 +471,7 @@ public sealed partial class MainWindowViewModel
         Status = career is not null ? Loc.Text("loc_Pcsav_Reading") :
             Loc.Format("loc_Shell_Status_ImportingAsAStandalonePlayer", Path.GetFileName(sourcePath), game);
         IReadOnlyList<UserFacingMessage> unavailableCareerAttachments = [];
+        EditorWorkspace? replacement = null;
         try
         {
             if (meshAnalysis is { Recognition: null })
@@ -633,31 +569,35 @@ public sealed partial class MainWindowViewModel
                     importWarnings = UserFacingMessageFormatter.FormatWarnings(result.SaveResult);
                     meshRecognition = result.Recognition;
                 }
-                ReplaceWorkspace(career is null ? EditorWorkspace.ForPlayer(createdWorkspace, game)
-                    : EditorWorkspace.ForCareer(createdWorkspace, career, importedFacePath));
+                replacement = career is null ? EditorWorkspace.ForPlayer(createdWorkspace, game)
+                    : EditorWorkspace.ForCareer(createdWorkspace, career, importedFacePath);
             }
-            LogWorkspaceCreated(newPlayerMode ? "NEW-PLAYER" : "PLAYER", game,
-                career?.SourcePath ?? sourcePath, PackageWorkspace!.SourcePath, append: appendingToCurrentGame);
-            // Classified Player heads preserve the selected-game HMM/HMF vertex
-            // order, so canonical target deltas can edit their authored bake.
-            // Mesh and legacy imports retain the fixed-bake route.
-            _workspace!.GeometryModes[importedFacePath] = isPlayerHead
+            // Append mutates the current owner. Replacement prepares independently before the swap.
+            var target = replacement ?? _workspace!;
+            target.GeometryModes[importedFacePath] = isPlayerHead
                 ? MorphFaceGeometryMode.RelativeBake : MorphFaceGeometryMode.FixedBake;
-            if (career is { HasHeadMorph: false }) _workspace.MarkChanged(importedFacePath);
-            if (newPlayerMode) _workspace.ImportedFile = null;
+            if (career is { HasHeadMorph: false }) target.MarkChanged(importedFacePath);
+            if (newPlayerMode) target.ImportedFile = null;
             else if (career is null)
-                _workspace.TrackImportedFile(sourcePath, importedFacePath,
+                target.TrackImportedFile(sourcePath, importedFacePath,
                     isPlayerHead ? WorkspaceFileFormat.MorphRon :
                     isMesh ? WorkspaceFileFormat.Mesh : WorkspaceFileFormat.LegacyMorph, ronSource?.Fingerprint);
-            OnPropertyChanged(nameof(PackageName));
-            OnPropertyChanged(nameof(PackageDisplayName));
-            OnDirtyStateChanged();
-            if (!await RefreshWorkspaceAsync(importedFacePath, clearSearch: true))
+            if (replacement is not null)
+            {
+                replacement = null; // Preparation takes ownership even if it fails.
+                await PrepareAndPublishWorkspaceAsync(target, importedFacePath);
+            }
+            else if (!await RefreshWorkspaceAsync(importedFacePath, clearSearch: true))
             {
                 ErrorMessage ??= Loc.Text("loc_Shell_Error_PlayerMorphImportedWorkspaceCouldNotOpen");
                 Status = Loc.Text("loc_Shell_Status_StandaloneImportCompletedWorkspaceLoad");
+                return false;
             }
-            else if (importWarnings.Count > 0)
+            LogWorkspaceCreated(newPlayerMode ? "NEW-PLAYER" : "PLAYER", game,
+                career?.SourcePath ?? sourcePath, PackageWorkspace!.SourcePath, append: appendingToCurrentGame);
+            OnPropertyChanged(nameof(PackageName));
+            OnDirtyStateChanged();
+            if (importWarnings.Count > 0)
             {
                 foreach (var warning in importWarnings)
                 {
@@ -698,6 +638,7 @@ public sealed partial class MainWindowViewModel
         }
         finally
         {
+            replacement?.Dispose();
             IsBusy = false;
         }
     }
@@ -708,22 +649,6 @@ public sealed partial class MainWindowViewModel
         string objectName,
         MorphFaceGame game)
     {
-        ReplaceWorkspace(EditorWorkspace.ForMesh(result.Detached.Source, game));
-        LogWorkspaceCreated("CUSTOM-MESH", game, sourcePath);
-        _referenceCatalog = new PackageReferenceCatalog([], []);
-        FaceSearchText = string.Empty;
-        Faces.Clear();
-        var face = new BioMorphFaceListItem(
-            0,
-            result.Preview.Loaded.Document.Source.InstancedPath,
-            objectName,
-            result.Preview.Profile.ExportTag,
-            result.Preview.Profile.GetExportTagColor(),
-            result.Preview.Profile.Key);
-        Faces.Add(face);
-        SelectedFace = face;
-        LoadedFacePath = face.InstancedPath;
-
         var topology = result.Preview.Loaded.BaseHead.Topology;
         var previewAttachmentOptions = result.PreviewAttachments
             .Select(identity => new PackageAssetListItem(identity))
@@ -752,6 +677,22 @@ public sealed partial class MainWindowViewModel
             playerRandomisationGame: game,
             customMaterialRegistryAvailable: result.IsMaterialRegistryAvailable,
             isTextureRegistryPending: true);
+        ReplaceWorkspace(EditorWorkspace.ForMesh(result.Detached.Source, game));
+        LogWorkspaceCreated("CUSTOM-MESH", game, sourcePath);
+        _referenceCatalog = new PackageReferenceCatalog([], []);
+        FaceSearchText = string.Empty;
+        Faces.Clear();
+        var face = new BioMorphFaceListItem(
+            0,
+            result.Preview.Loaded.Document.Source.InstancedPath,
+            objectName,
+            result.Preview.Profile.ExportTag,
+            result.Preview.Profile.GetExportTagColor(),
+            result.Preview.Profile.Key);
+        Faces.Add(face);
+        SelectedFace = face;
+        LoadedFacePath = face.InstancedPath;
+
         SetEditor(editor, result.Preview.Loaded);
         _faceDetailsPrefix = null;
         _faceDetailsHasBakedFallback = false;

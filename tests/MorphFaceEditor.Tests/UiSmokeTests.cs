@@ -37,6 +37,7 @@ public static class UiSmokeTests
         new("texture thumbnails discard alpha", TextureThumbnailsDiscardAlpha),
         new("editor file drops recognise every supported format", EditorFileDropsRecogniseSupportedFormats),
         new("PCCs start unloaded and empty packages clear the previous head", PccEmptyHeadState),
+        new("failed replacement keeps the live PCC editor and releases its candidate", FailedReplacementKeepsLiveWorkspace),
         new("recent files persist, deduplicate, and cap at ten", RecentFilesPersistDeduplicateAndCap),
         new("startup welcome preference persists", StartupWelcomePreferencePersists),
         new("application preferences preserve current settings across independent consumers", ApplicationPreferencesPersist),
@@ -731,6 +732,7 @@ public static class UiSmokeTests
             shell.Editor!.Material.Scalars.Single(item => item.Name == name).Value = value + 0.25f;
             dialogs.ConfirmUnsavedChangesResult = UnsavedChangesChoice.Save;
             TestAssert.True(await shell.ConfirmCloseAsync(), "Closing could not save back to the original RON.");
+            TestAssert.Equal(UnsavedChangesScope.SourceFile, dialogs.LastUnsavedChangesScope!.Value);
             TestAssert.True(!shell.IsDirty && !shell.HasError, "Close-save left unsaved RON edits.");
 
             var originalBeforeCopy = File.ReadAllText(path);
@@ -792,6 +794,8 @@ public static class UiSmokeTests
             await ((AsyncRelayCommand)shell.LoadSelectedFaceCommand).ExecuteAsync();
             TestAssert.True(!shell.HasError && shell.Editor?.IsDirty == false && shell.IsDirty,
                 shell.ErrorMessage ?? "Switching faces lost the first face's staged edits.");
+            TestAssert.Equal(UnsavedChangesScope.Face, dialogs.LastUnsavedChangesScope!.Value);
+            TestAssert.Equal(original, PackageFingerprint.Capture(source));
             await ((AsyncRelayCommand)shell.CloneMorphCommand).ExecuteAsync();
             TestAssert.True(!shell.HasError && shell.IsDirty, shell.ErrorMessage ?? "Clone did not remain staged.");
             var clonedFace = shell.LoadedFacePath!;
@@ -800,6 +804,7 @@ public static class UiSmokeTests
                 await ((AsyncRelayCommand)shell.SaveAsCommand).ExecuteAsync();
                 TestAssert.True(shell.HasError && shell.IsDirty && shell.PackagePath == source,
                     "Failed Save As adopted its destination or cleared staged edits.");
+                TestAssert.Equal(Loc.Text("loc_FileSave_EditsRetained"), shell.Status);
             }
             dialogs.SaveAsPath = copy;
             await ((AsyncRelayCommand)shell.SaveAsCommand).ExecuteAsync();
@@ -820,11 +825,21 @@ public static class UiSmokeTests
             shell.Editor!.Material.Scalars.First().Value += 0.125f;
             dialogs.ConfirmUnsavedChangesResult = UnsavedChangesChoice.Cancel;
             TestAssert.True(!await shell.ConfirmCloseAsync() && shell.HasWorkspace && shell.IsDirty, "Cancel close lost the active workspace.");
+            TestAssert.Equal(UnsavedChangesScope.Package, dialogs.LastUnsavedChangesScope!.Value);
             var workingPath = shell.Editor.CreateDraft().Source.PackagePath;
             dialogs.ConfirmUnsavedChangesResult = UnsavedChangesChoice.Discard;
             await shell.CloseWorkspaceAsync();
             TestAssert.True(!shell.HasWorkspace && shell.Editor is null && !shell.IsDirty && !File.Exists(workingPath) &&
                 !shell.SaveAsCommand.CanExecute(null), "Closing retained workspace resources, staged edits or save commands.");
+
+            await shell.OpenDroppedFileAsync(source);
+            var cleanCopy = Path.Combine(directory, "CleanCopy.pcc");
+            dialogs.SaveAsPath = cleanCopy;
+            await ((AsyncRelayCommand)shell.SaveAsCommand).ExecuteAsync();
+            TestAssert.True(!shell.HasError && File.Exists(cleanCopy) && shell.PackagePath == cleanCopy &&
+                shell.PackageName == "CleanCopy.pcc" && !shell.IsDirty && shell.Editor is null,
+                shell.ErrorMessage ?? "Save As skipped the clean package or did not adopt its destination.");
+            TestAssert.Equal(original, PackageFingerprint.Capture(source));
         }
         finally { Directory.Delete(directory, recursive: true); }
     });
@@ -1207,6 +1222,7 @@ public static class UiSmokeTests
             RunWithDispatcher(viewModel.CloseWorkspaceAsync);
             TestAssert.True(viewModel.HasWorkspace && viewModel.Editor is not null && !previewWasCleared,
                 "Cancelling Close discarded the active workspace.");
+            TestAssert.Equal(UnsavedChangesScope.DetachedMaterials, dialogs.LastUnsavedChangesScope!.Value);
             dialogs.ConfirmUnsavedChangesResult = UnsavedChangesChoice.Discard;
             RunWithDispatcher(viewModel.CloseWorkspaceAsync);
             TestAssert.True(previewWasCleared && !viewModel.HasPreview,
@@ -2461,6 +2477,82 @@ public static class UiSmokeTests
             TestAssert.True(!shell.HasError, shell.ErrorMessage ?? "Last-face deletion failed.");
             CheckEmpty();
             TestAssert.True(shell.SaveCommand.CanExecute(null), "Deleting the last face disabled package Save.");
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    });
+
+    private static void FailedReplacementKeepsLiveWorkspace() => RunWithDispatcher(async () =>
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"MFE-Replacement-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var source = Path.Combine(root, "Current.pcc");
+            var replacement = Path.Combine(root, "Replacement.pcc");
+            var invalid = Path.Combine(root, $"Broken-{Guid.NewGuid():N}.pcc");
+            File.Copy(Path.GetFullPath(Path.Combine("tests", "Global Morphs", "LE1 GlobalMorphs.pcc")), source);
+            File.Copy(source, replacement);
+            File.WriteAllText(invalid, "Not a PCC");
+            var original = File.ReadAllBytes(source);
+            using var reader = new MorphFacePackageReader();
+            var dialogs = new StubEditorDialogs { ConfirmUnsavedChangesResult = UnsavedChangesChoice.Cancel,
+                StandaloneNameChoiceResult = "RejectedPreview" };
+            // Keep normal LE1 editing available, but force the LE2 candidate's final preview to fail.
+            var previewProfiles = new MorphFaceProfileRegistry(MorphFaceProfileRegistry.CreateDefault().Profiles
+                .Where(profile => profile.Game == MorphFaceGame.LE1).ToArray());
+            using var shell = CreateMainWindowViewModel(reader, dialogs, previewProfiles: previewProfiles);
+            await shell.OpenDroppedFileAsync(source);
+            shell.SelectedFace = shell.Faces.First(face => face.ProfileKey == "le1-human-male");
+            await ((AsyncRelayCommand)shell.LoadSelectedFaceCommand).ExecuteAsync();
+            var editor = shell.Editor ?? throw new Exception(shell.ErrorMessage ?? "Initial face did not load.");
+            editor.Material.Scalars[0].Value += 0.125f;
+            var workingPath = editor.CreateDraft().Source.PackagePath;
+            var faces = shell.Faces.ToArray();
+            var selected = shell.SelectedFace;
+            var loaded = shell.LoadedFacePath;
+            var details = shell.FaceDetails;
+            var clears = 0;
+            var scenes = 0;
+            shell.PreviewCleared += (_, _) => clears++;
+            shell.PreviewSceneReady += (_, _) => scenes++;
+            void CheckRetained()
+            {
+                TestAssert.True(shell.PackagePath == source && ReferenceEquals(shell.Editor, editor) &&
+                    ReferenceEquals(shell.SelectedFace, selected) && shell.Faces.SequenceEqual(faces) &&
+                    shell.LoadedFacePath == loaded && shell.FaceDetails == details && shell.HasPreview && shell.IsDirty,
+                    "Failed or cancelled replacement changed the live workspace.");
+                TestAssert.True(clears == 0 && scenes == 0 && File.Exists(workingPath) && !shell.IsBusy &&
+                    shell.SaveCommand.CanExecute(null), "Replacement retired the live preview/package or left it unusable.");
+                TestAssert.True(original.SequenceEqual(File.ReadAllBytes(source)), "Replacement changed the source PCC.");
+            }
+            await shell.OpenDroppedFileAsync(invalid);
+            TestAssert.True(!shell.HasError, "Cancelled replacement attempted to read the invalid package.");
+            CheckRetained();
+            dialogs.ConfirmUnsavedChangesResult = UnsavedChangesChoice.Discard;
+            await shell.OpenDroppedFileAsync(invalid);
+            TestAssert.True(shell.HasError, "Invalid candidate did not report its preparation error.");
+            CheckRetained();
+            TestAssert.True(!Directory.EnumerateFiles(Path.GetDirectoryName(workingPath)!,
+                Path.GetFileNameWithoutExtension(invalid) + ".*").Any(), "Failed candidate leaked a PCC or lease.");
+
+            var ron = Path.Combine(root, "Player.ron");
+            TseHeadMorphRon.Write(ron, new MorphFacePackageContextService().CapturePlayerDefaultHead(
+                MorphFaceGame.LE2, StandalonePlayerSex.Female),
+                new RonExportProvenance(RonExportProducer.MFE, "test", MorphFaceGame.LE2, "HMF", true));
+            var sourceRon = File.ReadAllBytes(ron);
+            var beforeCandidates = Directory.GetFiles(Path.GetDirectoryName(workingPath)!).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            await shell.OpenDroppedFileAsync(ron);
+            TestAssert.True(shell.ErrorMessage?.Contains("unsupported base head", StringComparison.OrdinalIgnoreCase) == true,
+                shell.ErrorMessage ?? "Candidate did not reach the simulated final preview failure.");
+            CheckRetained();
+            TestAssert.True(beforeCandidates.SetEquals(Directory.GetFiles(Path.GetDirectoryName(workingPath)!)) &&
+                sourceRon.SequenceEqual(File.ReadAllBytes(ron)), "Preview failure leaked a candidate or changed its source.");
+
+            await shell.OpenDroppedFileAsync(replacement);
+            TestAssert.True(!shell.HasError && shell.PackagePath == replacement && shell.Editor is null &&
+                shell.SelectedFace is null && shell.LoadedFacePath is null && !shell.HasPreview && !shell.IsDirty,
+                "Successful replacement did not publish an unloaded PCC.");
+            TestAssert.True(clears > 0 && !File.Exists(workingPath), "Successful replacement retained the old working PCC/preview.");
         }
         finally { Directory.Delete(root, recursive: true); }
     });
@@ -3737,7 +3829,8 @@ public static class UiSmokeTests
         IHdrColorDialogService? colorDialog = null,
         StartupPreferencesService? startupPreferences = null,
         MorphRandomisationCatalog? randomisationCatalog = null,
-        MorphFacePackageContextService? context = null)
+        MorphFacePackageContextService? context = null,
+        MorphFaceProfileRegistry? previewProfiles = null)
     {
         var sceneFactory = new HeadPreviewSceneFactory();
         var profiles = MorphFaceProfileRegistry.CreateDefault();
@@ -3748,7 +3841,7 @@ public static class UiSmokeTests
         return new MainWindowViewModel(
             dialogs ?? new StubEditorDialogs(),
             new MorphFaceCatalogService(profiles),
-            new MorphFacePreviewLoadService(sceneFactory, targets, profiles, reader),
+            new MorphFacePreviewLoadService(sceneFactory, targets, previewProfiles ?? profiles, reader),
             sceneFactory,
             colorDialog ?? new StubColorDialog(),
             new PackageReferenceService(reader, textureCatalog),
@@ -4590,6 +4683,7 @@ public static class UiSmokeTests
         public RonImportDestinationChoice? RonImportDestinationChoiceResult { get; set; }
         public UnsavedChangesChoice ConfirmUnsavedChangesResult { get; set; } = UnsavedChangesChoice.Cancel;
         public int ConfirmUnsavedChangesCount { get; private set; }
+        public UnsavedChangesScope? LastUnsavedChangesScope { get; private set; }
         public string? ChoosePackage(string? initialDirectory = null) => null;
         public MorphPackageSaveRequest? ChooseMorphPackageDestination(string suggestedFileName, string sourcePackagePath) => MorphPackageDestination;
         public MorphConversionSaveRequest? ChooseMorphConversionDestination(MorphFaceGame sourceGame, string suggestedFileName, string sourcePackagePath) => null;
@@ -4636,6 +4730,7 @@ public static class UiSmokeTests
         public UnsavedChangesChoice ConfirmUnsavedChanges(string assetPath, UnsavedChangesScope scope = UnsavedChangesScope.Package)
         {
             ConfirmUnsavedChangesCount++;
+            LastUnsavedChangesScope = scope;
             return ConfirmUnsavedChangesResult;
         }
         public void ShowInformation(string title, string message) => LastInformation = message;

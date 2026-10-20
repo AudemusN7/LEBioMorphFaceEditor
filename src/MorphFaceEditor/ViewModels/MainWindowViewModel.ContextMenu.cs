@@ -8,17 +8,14 @@ namespace MorphFaceEditor.ViewModels;
 /// <summary>Coordinates right-click export operations while package mutation stays in the LE boundary.</summary>
 public sealed partial class MainWindowViewModel
 {
-    private bool CanUseFaceContextMenu() =>
-        !IsBusy && SelectedFace is not null && WorkspacePackagePath is not null;
-
     private bool CanMutatePackageContext() =>
-        CanUseFaceContextMenu() && PackageWorkspace?.CanCommit == true;
+        CanTargetPackageFace() && PackageWorkspace?.CanCommit == true;
 
     private bool CanCopyMorphData() =>
-        CanUseFaceContextMenu() && !IsAlnMorphClipboardFace(SelectedFace);
+        CanTargetPackageFace() && !IsAlnMorphClipboardFace(SelectedFace);
 
     private bool CanUseMaterialContextMenu() =>
-        CanUseFaceContextMenu() &&
+        CanTargetPackageFace() &&
         (PackageWorkspace?.CanCommit == true || IsStandaloneImportedFace());
 
     private bool IsStandaloneImportedFace() =>

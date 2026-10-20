@@ -1,4 +1,5 @@
 using MorphFaceEditor.Core.Domain;
+using MorphFaceEditor.Core.Editing;
 using System.IO;
 using System.Windows.Input;
 using MorphFaceEditor.Core.Services;
@@ -30,7 +31,7 @@ public sealed partial class MainWindowViewModel
             return true;
         }
         if (kind is null) return false;
-        if (!CanUseMeshMaterialFiles() && !CanUseFaceMaterialFiles())
+        if (!CanUseMeshMaterialFiles() && !CanTargetPackageFace())
         {
             try
             {
@@ -53,7 +54,7 @@ public sealed partial class MainWindowViewModel
         }
         if (CanUseMeshMaterialFiles())
             await ImportMeshMaterialsAsync(kind == MaterialRonCodec.MaterialFileKind.Tse, sourcePath, source);
-        else if (CanUseFaceMaterialFiles())
+        else if (CanTargetPackageFace())
             await ImportFaceMaterialsAsync(sourcePath, source);
         return true;
     }
@@ -158,12 +159,13 @@ public sealed partial class MainWindowViewModel
             await Task.Run(() => _packageWriter.SaveExisting(draft));
 
             // Only the finished, verified working copy is attached to the live shell.
-            var preparedWorkspace = candidate;
-            candidate = null;
-            if (!await OpenSourcePackagePathAsync(packagePath, created.FaceInstancedPath, game,
-                standaloneNpc: !target.PlayerMorph, importedPath: sourcePath, preparedWorkspace: preparedWorkspace, singleFace: true)) return false;
-            _workspace!.TrackImportedFile(sourcePath, created.FaceInstancedPath, format, source.Fingerprint);
-            _workspace.AcceptSavedChanges();
+            var preparedWorkspace = target.PlayerMorph ? EditorWorkspace.ForPlayer(candidate, game, importedFacesOnly: true)
+                : EditorWorkspace.ForNpc(candidate, game, importedFacesOnly: true);
+            preparedWorkspace.GeometryModes[created.FaceInstancedPath] = MorphFaceGeometryMode.RelativeBake;
+            preparedWorkspace.TrackImportedFile(sourcePath, created.FaceInstancedPath, format, source.Fingerprint);
+            candidate = null; // Preparation takes ownership of the verified candidate.
+            await PrepareAndPublishWorkspaceAsync(preparedWorkspace, created.FaceInstancedPath);
+            LogWorkspaceCreated(target.PlayerMorph ? "PLAYER" : "NPC", game, sourcePath, packagePath);
             OnDirtyStateChanged();
             Status = Loc.Format("loc_RonFiles_Imported", Path.GetFileName(sourcePath));
             ShowMaterialImportWarnings(warnings);
@@ -187,15 +189,11 @@ public sealed partial class MainWindowViewModel
     private bool CanUseMeshMaterialFiles() => !IsBusy && IsDetachedMeshWorkspace &&
         Editor?.CustomMaterials is not null && SelectedFace?.InstancedPath == LoadedFacePath;
 
-    /// <summary>A selected package face can be loaded before its material file action.</summary>
-    private bool CanUseFaceMaterialFiles() => !IsBusy && !IsDetachedMeshWorkspace &&
-        SelectedFace is not null && WorkspacePackagePath is not null;
-
     public bool IsMaterialFileWorkspace => IsDetachedMeshWorkspace
         ? Editor is not null && SelectedFace?.InstancedPath == LoadedFacePath
         : SelectedFace is not null && WorkspacePackagePath is not null;
 
-    private bool CanUseMaterialFiles() => CanUseMeshMaterialFiles() || CanUseFaceMaterialFiles();
+    private bool CanUseMaterialFiles() => CanUseMeshMaterialFiles() || CanTargetPackageFace();
 
     private async Task<bool> ExportMeshMaterialsAsync(bool tse)
     {
@@ -268,7 +266,7 @@ public sealed partial class MainWindowViewModel
 
     private async Task<bool> ExportFaceMaterialsAsync()
     {
-        if (!CanUseFaceMaterialFiles() || !await EnsureSelectedFaceLoadedForMaterialsAsync() ||
+        if (!CanTargetPackageFace() || !await EnsureSelectedFaceLoadedForMaterialsAsync() ||
             Editor is not { } editor || SelectedFace is not { } face)
             return false;
         var path = _dialogs.ChooseMaterialExportFile(false, face.ObjectName + ".materials.ron",
@@ -311,7 +309,7 @@ public sealed partial class MainWindowViewModel
 
     private async Task ImportFaceMaterialsAsync(string? sourcePath = null, RonImportFile? source = null)
     {
-        if (!CanUseFaceMaterialFiles() || !await EnsureSelectedFaceLoadedForMaterialsAsync() ||
+        if (!CanTargetPackageFace() || !await EnsureSelectedFaceLoadedForMaterialsAsync() ||
             Editor is not { } editor)
             return;
         var path = sourcePath ?? _dialogs.ChooseMaterialImportFile(false,

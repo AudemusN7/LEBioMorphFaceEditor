@@ -66,6 +66,7 @@ public static class UiSmokeTests
         new("NPC RON export stamps the selected face without loading it", NpcRonExportIdentifiesUnloadedFace),
         new("RON export rejects native nonfinite fields without replacing an existing file", RonExportRejectsNonFiniteFields),
         new("MFE material RON drops use material import rather than Player import", MaterialRonDropsUseMaterialImport),
+        new("custom mesh material RON drops apply compatible parameters independently of slots", CustomMeshMaterialRonIgnoresSlots),
         new("material RON metadata opens matching default NPC and Player faces", MaterialRonMetadataOpensDefaultFace),
         new("Morphs-only RON transfers between LE1 and LE2 using the target head", MorphFeaturesCrossGame),
         new("NPC import cancellation command cancels an active request", NpcImportCancellationCommandCancelsActiveRequest),
@@ -2260,6 +2261,81 @@ public static class UiSmokeTests
         finally { if (File.Exists(path)) File.Delete(path); }
     });
 
+    private static void CustomMeshMaterialRonIgnoresSlots() => RunWithDispatcher(async () =>
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"MFE-CustomMaterialDrop-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var meshPath = Path.Combine(directory, "Custom.psk");
+            var ronPath = Path.Combine(directory, "Parameters.ron");
+            new PSK
+            {
+                Points = [new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)],
+                Wedges = [new() { PointIndex = 0 }, new() { PointIndex = 1, U = 1 }, new() { PointIndex = 2, V = 1 }],
+                Faces = [new() { WedgeIdx0 = 0, WedgeIdx1 = 1, WedgeIdx2 = 2, MatIndex = 1 },
+                    new() { WedgeIdx0 = 0, WedgeIdx1 = 1, WedgeIdx2 = 2, MatIndex = 3 }],
+                Materials = [new() { Name = "Unused" }, new() { Name = "Head A" }, new() { Name = "Unused" }, new() { Name = "Head B" }],
+                Bones = [], Weights = [], VertexNormals = []
+            }.ToFile(meshPath);
+            var sourceBytes = File.ReadAllBytes(meshPath);
+            var template = MaterialTestFixtures.CreateSession().Materials.Materials.Values.First();
+            var option = new CustomMaterialAssignmentOption("human-test", "Human", "human", "head", HeadMaterialFamily.Skin, template)
+                { ParameterScopeKey = "human", ParameterScopeLabel = "Human" };
+            using var reader = new MorphFacePackageReader();
+            var dialogs = new StubEditorDialogs { StandaloneGameChoiceResult = MorphFaceGame.LE1, StandaloneNameChoiceResult = "Custom" };
+            using var shell = CreateMainWindowViewModel(reader, dialogs, customMaterials: new MaterialDropCatalogue(option));
+            await shell.OpenDroppedFileAsync(meshPath);
+            var editor = shell.Editor ?? throw new Exception(shell.ErrorMessage ?? "Custom mesh did not open.");
+            foreach (var slot in editor.CustomMaterialSlots) slot.Selected = slot.Options.Single(value => value.Assignment == option);
+            var workspace = editor.CustomMaterials!;
+            var assignments = workspace.Assignments.ToArray();
+            var original = editor.CreateDraft();
+            var before = MaterialRonCodec.WriteMfe(MeshMaterialFileService.Capture(workspace, MorphFaceGame.LE1, "Before",
+                editor.Material.CaptureInterchangeData()));
+            var values = new MorphFaceMaterialData([new("HED_Norm_Blend", 0.875f), new("Unsupported", 9)],
+                [new("SkinTone", new(0.2f, 0.3f, 0.4f, 1)), new("HED_Norm_Blend", Vector4.Zero)],
+                [new("HED_Diff", null), new("UnsupportedTexture", new("missing.pcc", "Missing.Texture", 1, "Texture2D"))]);
+            var faceFile = FaceMaterialFileService.Capture(MorphFaceGame.LE1, "Face", values);
+            var scopedFile = faceFile with { Parameters = new Dictionary<string, MorphFaceMaterialData> { ["human"] = values } };
+            foreach (var document in new[] { faceFile,
+                scopedFile with { Slots = [new(0, "Other mesh", "not-installed", "Unused assignment", "human", HeadMaterialFamily.Skin)] },
+                scopedFile with { Slots = workspace.UsedSlots.Select(slot => new MeshMaterialSlotData(slot.MaterialIndex,
+                    slot.MaterialName, "not-installed", "Unused assignment", "human", HeadMaterialFamily.Skin)).ToArray() } })
+            {
+                File.WriteAllText(ronPath, MaterialRonCodec.WriteMfe(document));
+                await shell.OpenDroppedFileAsync(ronPath);
+                TestAssert.True(!shell.HasError && ReferenceEquals(editor, shell.Editor), shell.ErrorMessage ?? "Material drop replaced the editor.");
+                TestAssert.True(assignments.SequenceEqual(workspace.Assignments), "Parameter import changed material assignments.");
+                foreach (var material in editor.Material.Materials.Materials.Values)
+                {
+                    TestAssert.Near(0.875f, material.Scalars["HED_Norm_Blend"], 0);
+                    TestAssert.Equal(new Vector4(0.2f, 0.3f, 0.4f, 1), material.Vectors["SkinTone"]);
+                    TestAssert.True(!material.Scalars.ContainsKey("Unsupported") && !material.Vectors.ContainsKey("HED_Norm_Blend"),
+                        "Import added an unsupported parameter or changed its kind.");
+                }
+                TestAssert.True(editor.IsDirty && dialogs.LastInformation is null, "Unsupported values produced warnings or import lost dirty state.");
+                TestAssert.True(editor.Material.CaptureInterchangeData().Scalars.All(value => !value.Name.Contains("Unsupported")),
+                    "Ignored parameter was retained for export.");
+                editor.UndoCommand.Execute(null);
+                TestAssert.Equal(before, MaterialRonCodec.WriteMfe(MeshMaterialFileService.Capture(workspace, MorphFaceGame.LE1,
+                    "Before", editor.Material.CaptureInterchangeData())));
+                TestAssert.True(assignments.SequenceEqual(workspace.Assignments), "Undo changed slot assignments.");
+                editor.RedoCommand.Execute(null);
+                TestAssert.Near(0.875f, editor.Material.Scalars.Single(value => value.Name == MaterialParameterControlKey.Create("human", "HED_Norm_Blend")).Value, 0);
+                editor.UndoCommand.Execute(null);
+            }
+            TestAssert.True(original.BakedLods[0].SequenceEqual(editor.CreateDraft().BakedLods[0]) && sourceBytes.SequenceEqual(File.ReadAllBytes(meshPath)),
+                "Material import changed geometry or the source mesh.");
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    });
+
+    private sealed class MaterialDropCatalogue(CustomMaterialAssignmentOption option) : ICustomMaterialTemplateCatalog
+    {
+        public CustomMaterialTemplateCatalogResult Load(MorphFaceGame game) => new([option], [], []);
+    }
+
     private static void MorphFeaturesCrossGame() => RunWithDispatcher(async () =>
     {
         var path = Path.Combine(Path.GetTempPath(), $"MFE-CrossGameFeatures-{Guid.NewGuid():N}.ron");
@@ -3830,7 +3906,8 @@ public static class UiSmokeTests
         StartupPreferencesService? startupPreferences = null,
         MorphRandomisationCatalog? randomisationCatalog = null,
         MorphFacePackageContextService? context = null,
-        MorphFaceProfileRegistry? previewProfiles = null)
+        MorphFaceProfileRegistry? previewProfiles = null,
+        ICustomMaterialTemplateCatalog? customMaterials = null)
     {
         var sceneFactory = new HeadPreviewSceneFactory();
         var profiles = MorphFaceProfileRegistry.CreateDefault();
@@ -3851,6 +3928,7 @@ public static class UiSmokeTests
                 profiles, targets, context, textureCatalog),
             new MorphFaceInterchangeService(),
             clipboard ?? new StubClipboard(),
+            detachedMeshPreviewLoadService: customMaterials is null ? null : new DetachedMeshPreviewLoadService(sceneFactory, materialCatalog: customMaterials),
             randomisationCatalog: randomisationCatalog,
             startupPreferences: startupPreferences);
     }

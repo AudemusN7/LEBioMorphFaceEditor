@@ -59,13 +59,11 @@ internal static class CustomHumanMaterialCatalogTests
                 var session = new MaterialEditingSession(MorphFaceMaterialOverrides.Empty, workspace.ActiveMaterials);
                 TestAssert.True(session.ScalarNames.Count + session.VectorNames.Count + session.TextureParameters.Count > 0,
                     $"{game} {label} exposes no controls after assignment.");
-                // Renaming a choice must not break material-only RON assignment lookup.
+                // Export metadata retains the stable material identity independently of its label.
                 var document = MeshMaterialFileService.Capture(workspace, game, "HumanMaterial",
                     new MorphFaceMaterialData([], [], []));
                 var reopened = MaterialRonCodec.ReadMfe(MaterialRonCodec.WriteMfe(document));
-                var assignments = MeshMaterialFileService.ResolveAssignments(reopened,
-                    new CustomMaterialWorkspace(CreateMesh()), options);
-                TestAssert.Equal(option.Id, assignments[0].Id);
+                TestAssert.Equal(option.Id, reopened.Slots.Single().MaterialId);
             }
 
             var hair = options.Single(value => value.Label == "Human Hair");

@@ -243,7 +243,7 @@ internal static partial class QaCases
         var requested = PerturbEditableValues(before);
         QaContext.Require(requested.Scalars.Count + requested.Vectors.Count > 0,
             "Selected human materials expose no editable numeric controls for the RON/PCC roundtrip.");
-        editor.ApplyMeshMaterialImport(new PreparedMeshMaterialImport(null, requested,
+        editor.ApplyMeshMaterialImport(new PreparedMeshMaterialImport(requested,
             new Dictionary<string, DecodedTextureAsset?>(), []));
         var edited = editor.Material.CaptureInterchangeData();
         QaContext.Require(MaterialSignature(requested) == MaterialSignature(edited),
@@ -255,7 +255,7 @@ internal static partial class QaCases
         await MeshMaterialFileService.WriteAsync(ronPath, ron, workspace.Source.SourcePath);
         var references = new PackageReferenceService(reader, c.Textures);
         var prepared = await new MeshMaterialFileService(references).PrepareAsync(
-            ron, false, workspace, editor.CustomMaterialOptions, game);
+            ron, false, workspace, game);
 
         editor.UndoCommand.Execute(null);
         QaContext.Require(MaterialSignature(before) == MaterialSignature(editor.Material.CaptureInterchangeData()),

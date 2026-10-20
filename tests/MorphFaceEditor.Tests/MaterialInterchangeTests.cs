@@ -14,7 +14,7 @@ public static class MaterialInterchangeTests
 {
     public static IReadOnlyList<TestCase> All { get; } =
     [
-        new("C3 MFE material round-trip restores scopes slots None and unresolved paths with one undo", MfeRoundTrip),
+        new("MFE material import retains assignments and applies scoped values with one undo", MfeRoundTrip),
         new("C3 TSE material import preserves alien values and export qualifies attachments", TsePolicy),
         new("C3 material import rejects malformed and incompatible files before editing", RejectsInvalidFiles),
         new("C3 texture import resolves exact registry paths without name substitution", ResolvesExactTexturePaths),
@@ -47,13 +47,23 @@ public static class MaterialInterchangeTests
         TestAssert.Equal("BIOG_Missing.Diff.KeepMe", file.Parameters["krogan"].Textures.Single().TextureReference!.InstancedPath);
 
         using var target = new Fixture();
+        target.Workspace.Assign(0, target.Krogan);
+        target.Workspace.Assign(1, target.Human);
+        target.Workspace.Assign(2, target.Human);
+        var assignments = target.Workspace.Assignments.ToArray();
+        var before = target.Export();
         var originalGeometry = target.Editor.CreateDraft();
         var prepared = target.Prepare(file);
-        TestAssert.True(prepared.Warnings.Count == 2 && prepared.Warnings.Any(value => value.Contains("UnrecognisedScalar")) &&
-            prepared.Warnings.Any(value => value.Contains("BIOG_Missing.Diff.KeepMe")),
-            "The unsupported parameter and missing texture were not reported.");
+        TestAssert.True(prepared.Warnings.Count == 1 && prepared.Warnings.Any(value => value.Contains("BIOG_Missing.Diff.KeepMe")),
+            "Unsupported parameters were not ignored silently or the missing texture was not reported.");
         target.Editor.ApplyMeshMaterialImport(prepared);
-        TestAssert.Equal(text, target.Export());
+        var imported = target.Export();
+        TestAssert.True(assignments.SequenceEqual(target.Workspace.Assignments), "Import replaced existing slot assignments.");
+        TestAssert.Near(0.875f, target.Session.GetScalar(Key("human", "Shared")), 0);
+        TestAssert.Near(0.5f, target.Session.GetScalar(Key("krogan", "Shared")), 0);
+        TestAssert.Equal<AssetIdentity?>(null, target.Session.GetTextureReference(Key("human", "HED_Diff")));
+        TestAssert.Equal(new Vector4(2, 0.15f, 0.25f, 0.7f), target.Session.GetVector(Key("krogan", "SkinTone")));
+        TestAssert.True(!imported.Contains("UnrecognisedScalar"), "Ignored parameter was retained for export.");
         TestAssert.True(target.Editor.IsDirty, "Import was treated as a saved state.");
         var missingControl = target.Editor.Material.Textures.Single(value => value.Name == Key("krogan", "HED_Diff"));
         TestAssert.True(missingControl.SourceName == "BIOG_Missing.Diff.KeepMe" &&
@@ -64,11 +74,16 @@ public static class MaterialInterchangeTests
         TestAssert.Equal(originalGeometry.FinalSkeleton.Count, target.Editor.CreateDraft().FinalSkeleton.Count);
         TestAssert.True(originalGeometry.BakedLods[0].SequenceEqual(target.Editor.CreateDraft().BakedLods[0]), "Import changed geometry.");
         target.Editor.UndoCommand.Execute(null);
-        TestAssert.Equal(0, target.Workspace.Assignments.Count);
-        TestAssert.Equal(0, target.Session.CreateOverrides().Scalars.Count);
-        TestAssert.True(!target.Editor.UndoCommand.CanExecute(null), "Import needed more than one Undo.");
+        TestAssert.Equal(before, target.Export());
+        TestAssert.True(assignments.SequenceEqual(target.Workspace.Assignments), "Undo replaced slot assignments.");
         target.Editor.RedoCommand.Execute(null);
-        TestAssert.Equal(text, target.Export());
+        TestAssert.Equal(imported, target.Export());
+        target.Editor.ApplyMeshMaterialImport(target.Prepare(FaceMaterialFileService.Capture(MorphFaceGame.LE1,
+            "Neutral", new([new("Shared", 0.25f)], [], []))));
+        TestAssert.Near(0.25f, target.Session.GetScalar(Key("human", "Shared")), 0);
+        TestAssert.Near(0.25f, target.Session.GetScalar(Key("krogan", "Shared")), 0);
+        target.Editor.UndoCommand.Execute(null);
+        TestAssert.Equal(imported, target.Export());
         // A later assignment rebuild must still retain the unresolved selection.
         target.Workspace.Unassign(2);
         TestAssert.Equal("BIOG_Missing.Diff.KeepMe", target.Editor.Material.Textures
@@ -95,8 +110,8 @@ public static class MaterialInterchangeTests
         // Import Materials auto-detects TSE when no MFE format marker is present.
         var autoDetected = new MeshMaterialFileService(fixture.References).PrepareAsync(
             "(scalar_parameters: {\"Shared\": 0.125})", false, fixture.Workspace,
-            fixture.Options, MorphFaceGame.LE1).GetAwaiter().GetResult();
-        TestAssert.True(autoDetected.IsTse && autoDetected.Assignments is null,
+            MorphFaceGame.LE1).GetAwaiter().GetResult();
+        TestAssert.True(autoDetected.IsTse,
             "Import Materials did not auto-detect a TSE RON.");
         fixture.Editor.ApplyMeshMaterialImport(autoDetected);
         TestAssert.Near(0.125f, fixture.Session.GetScalar(Key("human", "Shared")), 0);
@@ -109,7 +124,7 @@ public static class MaterialInterchangeTests
 
         var hair = new AssetIdentity("hair.pcc", "BIOG_HMF_HIR_PRO.Hair.Test", 10, "SkeletalMesh");
         var accessory = new AssetIdentity("accessory.pcc", "BIOG_ACC.Accessory.Test", 20, "SkeletalMesh");
-        fixture.Editor.ApplyMeshMaterialImport(new(null, new([], [], []),
+        fixture.Editor.ApplyMeshMaterialImport(new(new([], [], []),
             new Dictionary<string, DecodedTextureAsset?>(), [],
             new TsePreviewAttachmentImport(true, hair, true, accessory), true));
         TestAssert.Equal(hair, fixture.Editor.HairMesh.Value);
@@ -143,17 +158,11 @@ public static class MaterialInterchangeTests
         Reject(() => MaterialRonCodec.ReadTse("(scalar_parameters: {\"@human/Shared\": 1})"));
         Reject(() => MaterialRonCodec.ReadTse("(texture_parameters: {\"\": \"None\"})"));
         var file = MaterialRonCodec.ReadMfe(before);
-        Reject(() => MeshMaterialFileService.ResolveAssignments(file with { Slots = file.Slots.Take(1).ToArray() },
-            fixture.Workspace, fixture.Options));
-        Reject(() => MeshMaterialFileService.ResolveAssignments(file with
-        {
-            Slots = file.Slots.Select(slot => slot.MaterialId.Length == 0 ? slot : slot with { MaterialId = "missing" }).ToArray()
-        }, fixture.Workspace, fixture.Options));
+        Reject(() => MaterialRonCodec.ReadMfe(MaterialRonCodec.WriteMfe(file with { Slots = [file.Slots[0], file.Slots[0]] })));
         Reject(() => new MeshMaterialFileService(fixture.References).PrepareAsync(
             MaterialRonCodec.WriteMfe(file with { Game = "LE2" }), false, fixture.Workspace,
-            fixture.Options, MorphFaceGame.LE1).GetAwaiter().GetResult());
+            MorphFaceGame.LE1).GetAwaiter().GetResult());
         Reject(() => fixture.Editor.ApplyMeshMaterialImport(new(
-            new Dictionary<int, CustomMaterialAssignmentOption> { [0] = fixture.Krogan },
             new([new(Key("krogan", "Shared"), float.NaN)], [], []),
             new Dictionary<string, DecodedTextureAsset?>(), [])));
         TestAssert.Equal(before, fixture.Export());
@@ -174,7 +183,7 @@ public static class MaterialInterchangeTests
             characterCreatorOccurrence, [characterCreatorOccurrence]) { IsEligibleOfficialDefault = true };
         var loader = new Loader();
         PreparedMeshMaterialImport Prepare(string texturePath, IReadOnlyList<TextureCatalogCandidate>? sources = null) =>
-            MeshMaterialFileService.PrepareTexturesAsync(null,
+            MeshMaterialFileService.PrepareTexturesAsync(
             new([], [], [new(Key("human", "HED_Diff"), new("", texturePath, 0, "Texture2D"))]),
             fixture.Workspace, sources ?? [characterCreatorCandidate, seekFreeCandidate], loader).GetAwaiter().GetResult();
         var prepared = Prepare(path);
@@ -366,11 +375,8 @@ public static class MaterialInterchangeTests
             Workspace, MorphFaceGame.LE1, "MyMesh", Session.CaptureInterchangeData()));
         public PreparedMeshMaterialImport Prepare(MeshMaterialDocument document)
         {
-            var assignments = MeshMaterialFileService.ResolveAssignments(document, Workspace, Options);
-            var target = new CustomMaterialWorkspace(Workspace.Source);
-            target.ReplaceAssignments(assignments);
-            return MeshMaterialFileService.PrepareTexturesAsync(assignments, MeshMaterialInterchange.Flatten(document.Parameters),
-                target, [], new Loader()).GetAwaiter().GetResult();
+            return new MeshMaterialFileService(References).PrepareAsync(MaterialRonCodec.WriteMfe(document), false,
+                Workspace, MorphFaceGame.LE1).GetAwaiter().GetResult();
         }
         public void Dispose() { Editor.Dispose(); _reader.Dispose(); }
     }

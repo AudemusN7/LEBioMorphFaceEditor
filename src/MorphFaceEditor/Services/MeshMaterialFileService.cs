@@ -9,7 +9,6 @@ using MorphFaceEditor.LegendaryExplorer;
 namespace MorphFaceEditor.Services;
 
 public sealed record PreparedMeshMaterialImport(
-    IReadOnlyDictionary<int, CustomMaterialAssignmentOption>? Assignments,
     MorphFaceMaterialData Parameters,
     IReadOnlyDictionary<string, DecodedTextureAsset?> Textures,
     IReadOnlyList<string> Warnings,
@@ -22,7 +21,7 @@ public sealed record TsePreviewAttachmentImport(
     bool ApplyAccessory,
     AssetIdentity? Accessory);
 
-/// <summary>Owns MESH file policy, assignment resolution and texture preparation before any live edit.</summary>
+/// <summary>Prepares compatible material parameters and textures against the mesh's current assignments.</summary>
 public sealed class MeshMaterialFileService(PackageReferenceService references)
 {
     public static MeshMaterialDocument WithAttachments(MeshMaterialDocument document,
@@ -71,18 +70,16 @@ public sealed class MeshMaterialFileService(PackageReferenceService references)
     }
 
     public Task<PreparedMeshMaterialImport> PrepareAsync(string text, bool tse,
-        CustomMaterialWorkspace workspace, IReadOnlyList<CustomMaterialAssignmentOption> options, MorphFaceGame game) =>
-        PrepareAsync(RonInputSnapshot.Parse(text), tse, workspace, options, game);
+        CustomMaterialWorkspace workspace, MorphFaceGame game) =>
+        PrepareAsync(RonInputSnapshot.Parse(text), tse, workspace, game);
 
     public async Task<PreparedMeshMaterialImport> PrepareAsync(RonInputSnapshot input, bool tse,
-        CustomMaterialWorkspace workspace, IReadOnlyList<CustomMaterialAssignmentOption> options, MorphFaceGame game)
+        CustomMaterialWorkspace workspace, MorphFaceGame game)
     {
-        IReadOnlyDictionary<int, CustomMaterialAssignmentOption>? assignments = null;
         MorphFaceMaterialData parameters;
         var isTse = tse || !input.Root.ContainsKey("format");
         string? hair;
         IReadOnlyList<string>? accessories;
-        var target = workspace;
         if (isTse)
         {
             if (!MeshMaterialInterchange.CanImportTse(workspace))
@@ -99,15 +96,12 @@ public sealed class MeshMaterialFileService(PackageReferenceService references)
             var document = MaterialRonCodec.ReadMfe(input);
             if (document.Game != game.ToString())
                 throw new InvalidDataException(Loc.Format("loc_Services_MeshMaterial_GameMismatch", document.Game, game));
-            assignments = ResolveAssignments(document, workspace, options);
-            target = new CustomMaterialWorkspace(workspace.Source);
-            target.ReplaceAssignments(assignments);
             parameters = MeshMaterialInterchange.Flatten(document.Parameters);
             hair = document.HairMesh;
             accessories = document.AccessoryMeshes;
         }
         var catalogue = await references.ReadTextureCatalogAsync(game);
-        var prepared = await PrepareTexturesAsync(assignments, parameters, target, catalogue.Candidates, references);
+        var prepared = await PrepareTexturesAsync(parameters, workspace, catalogue.Candidates, references);
         var warnings = prepared.Warnings.ToList();
         var attachments = await PreparePreviewAttachmentsAsync(hair, accessories, game, warnings);
         return prepared with { Warnings = warnings, PreviewAttachments = attachments, IsTse = isTse };
@@ -172,30 +166,41 @@ public sealed class MeshMaterialFileService(PackageReferenceService references)
         return new(hair.Apply, hair.Identity, accessory.Apply, accessory.Identity);
     }
 
-    public static IReadOnlyDictionary<int, CustomMaterialAssignmentOption> ResolveAssignments(
-        MeshMaterialDocument document, CustomMaterialWorkspace workspace, IReadOnlyList<CustomMaterialAssignmentOption> options)
+    private static MorphFaceMaterialData CompatibleParameters(MorphFaceMaterialData data, CustomMaterialWorkspace target)
     {
-        if (!document.Slots.Select(value => value.Index).Order().SequenceEqual(workspace.UsedSlots.Select(value => value.MaterialIndex).Order()))
-            throw new InvalidDataException(Loc.Text("loc_Services_MeshMaterial_SlotIndicesMismatch"));
-        var result = new Dictionary<int, CustomMaterialAssignmentOption>();
-        foreach (var slot in document.Slots.Where(value => value.MaterialId.Length > 0))
+        var assignments = target.Assignments;
+        T[] Match<T>(IEnumerable<T> values, MaterialParameterKind kind, Func<T, string> name, Func<T, string, T> rename)
         {
-            var option = options.SingleOrDefault(value => value.Id.Equals(slot.MaterialId, StringComparison.OrdinalIgnoreCase))
-                ?? throw new InvalidDataException(Loc.Format("loc_Services_MeshMaterial_OptionUnavailable", slot.MaterialName));
-            if (option.Family != slot.Family || !option.EffectiveParameterScopeKey.Equals(slot.Scope, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidDataException(Loc.Format("loc_Services_MeshMaterial_OptionMetadataInconsistent", slot.MaterialName));
-            result.Add(slot.Index, option);
+            var result = new Dictionary<string, T>(StringComparer.OrdinalIgnoreCase);
+            foreach (var value in values)
+            {
+                var scope = MaterialParameterControlKey.ScopeKey(name(value));
+                var parameter = MaterialParameterControlKey.ParameterName(name(value));
+                // PCC face exports have a neutral namespace; explicit mixed-mesh scopes remain distinct.
+                var neutral = string.Equals(scope, "face", StringComparison.OrdinalIgnoreCase);
+                var scopes = assignments.Where(assignment => (neutral || string.Equals(scope,
+                        assignment.Option.EffectiveParameterScopeKey, StringComparison.OrdinalIgnoreCase)) &&
+                        assignment.Option.Template.Supports(parameter, kind))
+                    .Select(assignment => assignment.Option.EffectiveParameterScopeKey).Distinct(StringComparer.OrdinalIgnoreCase);
+                foreach (var destination in scopes)
+                {
+                    var key = MaterialParameterControlKey.Create(destination, parameter);
+                    if (neutral) result.TryAdd(key, rename(value, key));
+                    else result[key] = rename(value, key);
+                }
+            }
+            return result.Values.ToArray();
         }
-        // Incompatible assignments must fail before any live assignments or history change.
-        var validation = new CustomMaterialWorkspace(workspace.Source);
-        validation.ReplaceAssignments(result);
-        return result;
+        return new(Match(data.Scalars, MaterialParameterKind.Scalar, value => value.Name, (value, key) => value with { Name = key }),
+            Match(data.Vectors, MaterialParameterKind.Vector, value => value.Name, (value, key) => value with { Name = key }),
+            Match(data.Textures, MaterialParameterKind.Texture, value => value.Name, (value, key) => value with { Name = key }));
     }
 
     internal static async Task<PreparedMeshMaterialImport> PrepareTexturesAsync(
-        IReadOnlyDictionary<int, CustomMaterialAssignmentOption>? assignments, MorphFaceMaterialData data,
+        MorphFaceMaterialData data,
         CustomMaterialWorkspace target, IReadOnlyList<TextureCatalogCandidate> candidates, ITextureReferenceLoader loader)
     {
+        data = CompatibleParameters(data, target);
         var decoded = new Dictionary<string, DecodedTextureAsset?>(StringComparer.OrdinalIgnoreCase);
         var warnings = new List<string>();
         var catalog = new DetachedMeshFeatureMetadataCatalog(target);
@@ -204,23 +209,11 @@ public sealed class MeshMaterialFileService(PackageReferenceService references)
                     MaterialParameterControlKey.ScopeKey(controlName), StringComparison.OrdinalIgnoreCase) &&
                     assignment.Option.Template.Supports(MaterialParameterControlKey.ParameterName(controlName), kind))
                 .Select(assignment => assignment.Option.Template);
-        void WarnUnsupported(string controlName) => warnings.Add(
-            Loc.Format("loc_Services_MeshMaterial_ParameterUnsupported", MaterialParameterControlKey.ScopeKey(controlName),
-                MaterialParameterControlKey.ParameterName(controlName)));
-        foreach (var value in data.Scalars)
-            if (!Supporting(value.Name, MaterialParameterKind.Scalar).Any()) WarnUnsupported(value.Name);
-        foreach (var value in data.Vectors)
-            if (!Supporting(value.Name, MaterialParameterKind.Vector).Any()) WarnUnsupported(value.Name);
         foreach (var value in data.Textures)
         {
             var name = MaterialParameterControlKey.ParameterName(value.Name);
             var supporting = Supporting(value.Name, MaterialParameterKind.Texture).ToArray();
-            if (supporting.Length == 0) WarnUnsupported(value.Name);
             if (value.TextureReference is not { } reference) { decoded[value.Name] = null; continue; }
-            if (supporting.Length == 0)
-            {
-                continue;
-            }
             var candidate = PreferredTextureSource(reference.InstancedPath, candidates);
             var inherited = supporting.SelectMany(material => material.Textures.Values.Concat(material.DefaultTextures.Values))
                 .FirstOrDefault(binding => QualifyPath(binding.Texture.Source).Equals(reference.InstancedPath, StringComparison.OrdinalIgnoreCase));
@@ -241,7 +234,7 @@ public sealed class MeshMaterialFileService(PackageReferenceService references)
                 warnings.Add(Loc.Format("loc_Services_MeshMaterial_TexturePreviewFailed", reference.InstancedPath, exception.Message));
             }
         }
-        return new(assignments, data, decoded, warnings);
+        return new(data, decoded, warnings);
     }
 
     internal static (TextureCatalogCandidate Candidate, TextureCatalogOccurrence Occurrence)? PreferredTextureSource(

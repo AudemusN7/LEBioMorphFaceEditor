@@ -280,7 +280,6 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         if (_customMaterialWorkspace is null) throw new InvalidOperationException(Loc.Text("loc_VM_faceEditor_meshWorkspaceRequired"));
         using (var aggregate = _history.BeginAggregate())
         {
-            if (import.Assignments is not null) _customMaterialWorkspace.ReplaceAssignments(import.Assignments);
             Material.MergeMaterialData(import.Parameters, import.Textures);
             if (import.PreviewAttachments is { } attachments)
             {

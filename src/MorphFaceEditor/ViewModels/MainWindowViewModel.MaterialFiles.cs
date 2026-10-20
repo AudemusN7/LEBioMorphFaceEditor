@@ -241,7 +241,7 @@ public sealed partial class MainWindowViewModel
             source ??= await RonImportFile.ReadAsync(path);
             var input = await Task.Run(() => source.Input);
             var prepared = await new MeshMaterialFileService(_referenceService).PrepareAsync(
-                input, tse, workspace, editor.CustomMaterialOptions, game);
+                input, tse, workspace, game);
             if (!ReferenceEquals(Editor, editor)) return;
             editor.ApplyMeshMaterialImport(prepared);
             Status = Loc.Format(prepared.IsTse ? "loc_Shell_Status_ImportedTseMaterialSettings" : "loc_Shell_Status_ImportedMaterialSettings", Path.GetFileName(path));

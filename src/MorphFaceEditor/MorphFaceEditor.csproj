@@ -18,6 +18,7 @@
     <Page Remove="Localisation\Strings.*.xaml" />
     <Resource Include="..\..\icon.ico" Link="icon.ico" />
     <Resource Include="..\..\ico_256.png" Link="ico_256.png" />
+    <Resource Include="Assets\GameIcons\*.png" />
     <EmbeddedResource Include="Assets\Randomisation\*.mfr.br"
                       LogicalName="MorphFaceEditor.Assets.Randomisation.%(Filename)%(Extension)" />
   </ItemGroup>

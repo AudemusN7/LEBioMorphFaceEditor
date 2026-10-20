@@ -241,6 +241,11 @@
                     <Button Content="{DynamicResource loc_View_MainWindow_MeshTextureDatabases}" Command="{Binding TextureRegistrySettingsCommand}"
                             Height="30" Padding="10,3" Margin="7,0,0,0"
                             ToolTip="{DynamicResource loc_View_MainWindow_ManageTheGameWideTexture2DRegistries}" />
+                    <Border Width="38" Height="38" Margin="14,0,0,0" Padding="2" CornerRadius="5"
+                            BorderBrush="{DynamicResource Accent}" BorderThickness="2"
+                            Visibility="{Binding HasWorkspace, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <Image Source="{Binding WorkspaceGameIcon}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" />
+                    </Border>
                 </StackPanel>
                 <StackPanel Grid.Column="1" Margin="16,0" VerticalAlignment="Center">
                     <TextBlock Text="{Binding PackageDisplayName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />

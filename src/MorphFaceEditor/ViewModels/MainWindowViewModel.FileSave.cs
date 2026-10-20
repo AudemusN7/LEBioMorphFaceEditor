@@ -60,24 +60,7 @@ public sealed partial class MainWindowViewModel
         if (destination is null) return;
         if (CareerWorkspace is not null) { await SaveCareerFileAsync(destination); return; }
         if (CanSaveOriginalRon) { await SaveOriginalRonAsync(destination); return; }
-        using var saveLock = new SaveControlLock(this);
-        if (Editor?.IsDirty == true && !await FlushEditorToWorkspaceAsync()) return;
-        IsBusy = true;
-        ErrorMessage = null;
-        try
-        {
-            await Task.Run(() => PackageWorkspace!.Commit(destination));
-            _workspace!.AcceptSavedChanges();
-            OnWorkspaceChanged();
-            Status = Loc.Format("loc_Shell_Status_PackageSaved", PackageName);
-        }
-        catch (Exception exception)
-        {
-            AppLog.Error("FILE:SAVE-AS-FAILED", exception);
-            ErrorMessage = Loc.Format("loc_FileSave_Failed", UserFacingMessageFormatter.Format(exception));
-            Status = Loc.Text("loc_FileSave_EditsRetained");
-        }
-        finally { IsBusy = false; }
+        _ = await CommitWorkspaceAsync(showConfirmation: false, destination);
     }
 
     private async Task<bool> SaveOriginalRonAsync(string? destination = null)

@@ -180,7 +180,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _saveAsCommand = new AsyncRelayCommand(SaveSourceFileAsAsync, () => !IsBusy && HasWorkspace);
         _saveMorphToPccCommand = new AsyncRelayCommand(
             SaveMorphToPccCommandAsync,
-            () => CanUseFaceContextMenu() ||
+            () => CanTargetPackageFace() ||
                   !IsBusy && IsDetachedMeshWorkspace && SelectedFace is not null &&
                   StandaloneGame is not null && Editor?.CustomMaterials is not null);
         _closeWorkspaceCommand = new AsyncRelayCommand(CloseWorkspaceAsync, () => !IsBusy && HasWorkspace);
@@ -201,11 +201,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _importMorphCommand = new AsyncRelayCommand(ImportMorphAsync, () => !IsBusy);
         _cancelNpcImportCommand = new RelayCommand(CancelNpcImport, () => CanCancelNpcImport);
         _exportMorphPskCommand = new AsyncRelayCommand(
-            () => ExportMorphMeshAsync(MorphMeshFormat.Psk), CanUseFaceContextMenu);
+            () => ExportMorphMeshAsync(MorphMeshFormat.Psk), CanTargetPackageFace);
         _exportMorphGltfCommand = new AsyncRelayCommand(
-            () => ExportMorphMeshAsync(MorphMeshFormat.Gltf), CanUseFaceContextMenu);
+            () => ExportMorphMeshAsync(MorphMeshFormat.Gltf), CanTargetPackageFace);
         _exportMorphMd5Command = new AsyncRelayCommand(
-            () => ExportMorphMeshAsync(MorphMeshFormat.Md5), CanUseFaceContextMenu);
+            () => ExportMorphMeshAsync(MorphMeshFormat.Md5), CanTargetPackageFace);
         _exportMorphRonCommand = new AsyncRelayCommand(ExportMorphRonAsync, CanExportMorphRon);
         _exportTseMaterialsCommand = new AsyncRelayCommand(async () => { await ExportMeshMaterialsAsync(true); },
             () => CanUseMeshMaterialFiles() && Editor?.CanExportTseMaterials == true);
@@ -754,114 +754,63 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(HasRecentFiles));
     }
 
-    private async Task<bool> OpenSourcePackagePathAsync(string selectedPath, string? preferredFacePath = null,
-        MorphFaceGame? standaloneGame = null, bool standaloneNpc = false, string? importedPath = null,
-        MorphFacePackageWorkspace? preparedWorkspace = null, bool singleFace = false)
+    private async Task<bool> OpenSourcePackagePathAsync(string selectedPath)
     {
-        MorphFacePackageWorkspace workspace;
+        IsBusy = true;
+        ErrorMessage = null;
+        Status = Loc.Text("loc_Shell_Status_ReadingBioMorphFaceExports");
         try
         {
-            workspace = preparedWorkspace ?? await Task.Run(() => new MorphFacePackageWorkspace(selectedPath, canCommit: standaloneGame is null));
+            var candidate = EditorWorkspace.ForPcc(await Task.Run(() => new MorphFacePackageWorkspace(selectedPath)));
+            await PrepareAndPublishWorkspaceAsync(candidate);
+            LogWorkspaceCreated("PCC", _workspace!.Game, selectedPath);
+            return true;
         }
         catch (Exception exception)
         {
-            AppLog.Error($"WORKSPACE:CREATE-FAILED FILE:{selectedPath}", exception);
+            AppLog.Error($"WORKSPACE:OPEN-FAILED FILE:{selectedPath}", exception);
             ErrorMessage = Loc.Format("loc_Shell_Error_PackageCouldNotOpen", exception.Message);
             Status = Loc.Text("loc_Shell_Status_PackageLoadFailed");
             return false;
         }
-
-        ReplaceWorkspace(standaloneGame is not { } game ? EditorWorkspace.ForPcc(workspace) : standaloneNpc
-            ? EditorWorkspace.ForNpc(workspace, game, singleFace) : EditorWorkspace.ForPlayer(workspace, game, singleFace));
-        if (singleFace && preferredFacePath is not null) _workspace!.GeometryModes[preferredFacePath] = MorphFaceGeometryMode.RelativeBake;
-        OnDirtyStateChanged();
-        var opened = await RefreshWorkspaceAsync(preferredFacePath, clearSearch: true);
-        if (opened)
-            LogWorkspaceCreated(standaloneGame is null ? "PCC" : standaloneNpc ? "NPC" : "PLAYER",
-                _workspace!.Game, importedPath ?? selectedPath, selectedPath);
-        return opened;
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
     private static void LogWorkspaceCreated(string type, MorphFaceGame game, string sourcePath, string? seedPath = null, bool append = false) =>
         AppLog.Information($"WORKSPACE:{(append ? "APPEND" : "CREATE")} TYPE:{type} {game} IMPORT:{Path.GetExtension(sourcePath).TrimStart('.').ToUpperInvariant()} " +
             $"SOURCE:\"{sourcePath}\"" + (seedPath is null || seedPath == sourcePath ? "" : $" SEED:\"{seedPath}\""));
 
-    private async Task<bool> RefreshWorkspaceAsync(
-        string? preferredFacePath = null,
-        bool clearSearch = false)
+    // Mutation callers retain the active owner; this refresh does not roll back their PCC edits.
+    private async Task<bool> RefreshWorkspaceAsync(string? preferredFacePath = null, bool clearSearch = false)
     {
-        var workspacePath = WorkspacePackagePath;
-        if (workspacePath is null)
-        {
-            return false;
-        }
-
+        if (_workspace?.Package is null) return false;
+        var workspacePath = _workspace.Package.WorkingPath;
         AppLog.Verbose($"WORKSPACE:REFRESH FACE:{preferredFacePath ?? "<first>"} FILE:\"{workspacePath}\"");
         CancelPendingLoad();
         SetEditor(null, null);
-        _referenceService.InvalidatePackage(workspacePath);
         IsBusy = true;
         ErrorMessage = null;
-        HasPreview = false;
-        FaceDetails = null;
-        _faceDetailsPrefix = null;
-        _faceDetailsHasBakedFallback = false;
-        LoadedFacePath = null;
         Status = Loc.Text("loc_Shell_Status_ReadingBioMorphFaceExports");
-        var opened = false;
         try
         {
-            var catalogProjection = MorphFaceCatalogProjectionPolicy.ForPlayerWorkspace(
-                StandaloneGame,
-                PackageWorkspace?.SourcePath,
-                IsNpcWorkspace);
-            var preparation = await _catalogService.ReadWorkspaceAsync(workspacePath, _referenceService, catalogProjection);
-            var catalog = preparation.Faces;
-            _workspace!.Game = catalog.Game;
-            _referenceCatalog = preparation.References;
-            if (clearSearch)
-            {
-                FaceSearchText = string.Empty;
-            }
-            Faces.Clear();
-            foreach (var face in catalog.Faces)
-            {
-                if (_workspace.ImportedFacesOnly && !_workspace.GeometryModes.ContainsKey(face.InstancedPath)) continue;
-                if (CareerWorkspace is not null && face.InstancedPath != _workspace.SourceFacePath) continue;
-                Faces.Add(face);
-            }
-            SelectedFace = preferredFacePath is null
-                ? null
-                : Faces.FirstOrDefault(face => string.Equals(
-                      face.InstancedPath,
-                      preferredFacePath,
-                      StringComparison.OrdinalIgnoreCase)) ?? Faces.FirstOrDefault();
-            Status = Faces.Count == 0
-                ? Loc.Text("loc_Shell_Status_NoBioMorphFaceExports")
-                : Loc.Format("loc_Shell_Status_BioMorphFaceExportsFound", Faces.Count);
-            AppLog.Verbose($"WORKSPACE:CATALOGUE FACES:{Faces.Count} FILE:\"{catalog.PackagePath}\"");
-            opened = true;
+            var prepared = await ReadWorkspaceContentsAsync(_workspace, preferredFacePath);
+            PublishWorkspaceContents(prepared, clearSearch);
         }
         catch (Exception exception)
         {
             AppLog.Error($"WORKSPACE:REFRESH-FAILED FILE:{workspacePath}", exception);
             ErrorMessage = Loc.Format("loc_Shell_Error_PackageCouldNotOpen", exception.Message);
             Status = Loc.Text("loc_Shell_Status_PackageLoadFailed");
+            return false;
         }
         finally
         {
             IsBusy = false;
         }
-
-        if (!opened)
-        {
-            return false;
-        }
-        if (SelectedFace is not null)
-        {
-            return await LoadSelectedFaceAsync(confirmUnsavedChanges: false);
-        }
-        return true;
+        return SelectedFace is null || await LoadSelectedFaceAsync(confirmUnsavedChanges: false);
     }
 
     private async Task LoadSelectedFaceCommandAsync() =>
@@ -899,107 +848,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         AppLog.Verbose($"FACE:LOAD {SelectedFace.InstancedPath} FILE:\"{workspacePath}\"");
         try
         {
-            var result = await _previewLoadService.LoadAsync(
-                workspacePath,
-                SelectedFace.UIndex.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                cancellationToken,
-                _workspace!.GeometryModes.TryGetValue(SelectedFace.InstancedPath, out var geometryMode) ? geometryMode : null);
-            cancellationToken.ThrowIfCancellationRequested();
-            foreach (var warning in result.Loaded.Warnings)
-            {
-                AppLog.Warning(warning);
-            }
-            var textureCatalogProfile = TextureCatalogProfiles.For(result.Profile);
-            var topology = result.Loaded.BaseHead.Topology;
-            var oracle = result.EditingSession.Evaluation.OriginalOracleReport;
-            var materialOverrides = result.Loaded.Document.MaterialOverrides;
-            var playerAssets = IsPlayerWorkspace
-                ? await Task.Run(() => _packageContextService.FindAvailablePlayerAssets(result.Loaded.Game,
-                    _referenceCatalog.Textures.Concat(_referenceCatalog.SkeletalMeshes).Select(value => value.Identity)
-                        .Concat(result.Loaded.Document.MaterialOverrides.Textures.Where(value => value.TextureReference is not null)
-                            .Select(value => value.TextureReference!))
-                        .Concat(result.Loaded.Document.OtherMeshReferences.OfType<AssetIdentity>())
-                        .Concat(result.Loaded.Document.HairMeshReference is { } hair ? [hair] : []), cancellationToken), cancellationToken)
-                : null;
-            var displayedFinalBoneCount = result.Profile.IgnoresAuthoredGeometry
-                ? 0
-                : result.Loaded.Document.FinalSkeleton.Count;
-            var geometryDetails = result.EditingSession.GeometryMode == MorphFaceGeometryMode.RelativeBake
-                ? Loc.Text("loc_Shell_FaceDetails_RelativeImportedBake")
-                : result.EditingSession.GeometryMode == MorphFaceGeometryMode.FixedBake
-                    ? Loc.Text("loc_Shell_FaceDetails_FixedImportedBake")
-                : result.EditingSession.CanEditMorphFeatures
-                    ? Loc.Format("loc_Shell_FaceDetails_OracleMax", oracle!.MaximumError)
-                : result.Profile.IgnoresAuthoredGeometry
-                    ? Loc.Text("loc_Shell_FaceDetails_BaseHeadMaterialOnlyPreview")
-                : Loc.Format("loc_Shell_FaceDetails_BakedFallback", result.EditingSession.EditBlockReason);
-            _faceDetailsPrefix = Loc.Format("loc_Shell_FaceDetails_LoadedMorphPrefix", topology.VertexCount,
-                topology.IndexCount / 3, topology.Sections.Count, displayedFinalBoneCount,
-                materialOverrides.Scalars.Count, materialOverrides.Vectors.Count, materialOverrides.Textures.Count);
-            _faceDetailsHasBakedFallback = result.EditingSession.GeometryMode != MorphFaceGeometryMode.RelativeBake &&
-                result.EditingSession.GeometryMode != MorphFaceGeometryMode.FixedBake &&
-                !result.EditingSession.CanEditMorphFeatures && !result.Profile.IgnoresAuthoredGeometry;
-            SetGeometryDetails(geometryDetails);
-            LoadedFacePath = result.Loaded.Document.Source.InstancedPath;
-            var editor = new FaceEditorViewModel(
-                result.EditingSession,
-                result.Profile.GetUiProfile(),
-                result.MaterialEditingSession,
-                _colorDialog,
-                _referenceService,
-                workspacePath,
-                _referenceCatalog.Textures,
-                _referenceCatalog.SkeletalMeshes,
-                result.Loaded.Document.HairMeshReference,
-                result.Loaded.Document.OtherMeshReferences,
-                SetEditorError,
-                result.Profile.Key,
-                _randomisationCatalog,
-                randomisationInclusionState: _randomisationInclusionState,
-                registryTextureCandidates: [],
-                textureCatalogProfile: textureCatalogProfile,
-                isTextureRegistryAvailable: false,
-                isTextureRegistryPending: true,
-                headImportHistory: CareerWorkspace,
-                ignoresAuthoredGeometry: result.Profile.IgnoresAuthoredGeometry,
-                playerRandomisationGame: IsPlayerWorkspace ? result.Profile.Game : null);
-            if (playerAssets is not null) editor.RestrictPlayerReferences(playerAssets);
-            var speciesKey = PreviewCameraGrouping.SpeciesForProfile(result.Profile.Key);
-            if (string.Equals(_loadedSpeciesKey, speciesKey, StringComparison.OrdinalIgnoreCase))
-            {
-                editor.SelectCategory(_lastCategoryKey);
-            }
-            else
-            {
-                _lastCategoryKey = null;
-            }
-            _loadedSpeciesKey = speciesKey;
-            SetEditor(editor, result.Loaded);
-            _activeRegistryProfile = result.Profile;
-            _activeRegistryCatalogProfile = textureCatalogProfile;
-            HasPreview = true;
-            var cameraFamily = PreviewCameraGrouping.ForProfile(result.Profile.Key);
-            var resetCameraPosition = _previewCameraFamily is not null &&
-                                      !string.Equals(_previewCameraFamily, cameraFamily, StringComparison.OrdinalIgnoreCase);
-            _previewCameraFamily = cameraFamily;
-            PreviewSceneReady?.Invoke(result.Scene, resetCameraPosition);
-            Status = result.EditingSession.GeometryMode == MorphFaceGeometryMode.RelativeBake
-                ? Loc.Format("loc_Shell_Status_LoadedFaceRelativeBake", SelectedFace.DisplayName, result.Profile.GetDisplayName())
-                : result.EditingSession.GeometryMode == MorphFaceGeometryMode.FixedBake
-                    ? Loc.Format("loc_Shell_Status_LoadedFaceFixedBake", SelectedFace.DisplayName, result.Profile.GetDisplayName())
-                : result.EditingSession.CanEditMorphFeatures
-                ? Loc.Format("loc_Shell_Status_LoadedFaceLiveGeometry", SelectedFace.DisplayName, result.Profile.GetDisplayName())
-                : result.Profile.IgnoresAuthoredGeometry
-                    ? Loc.Format("loc_Shell_Status_LoadedFaceBaseHeadPreview", SelectedFace.DisplayName, result.Profile.GetDisplayName(), result.EditingSession.EditBlockReason)
-                : Loc.Format("loc_Shell_Status_LoadedFaceBakedGeometryFallback", SelectedFace.DisplayName, result.Profile.GetDisplayName(), result.EditingSession.EditBlockReason);
-            AppLog.Verbose($"FACE:LOADED {LoadedFacePath} {result.Loaded.Game} EDITABLE:{result.EditingSession.CanEditMorphFeatures} " +
-                $"VERTS:{topology.VertexCount} TARGETS:{result.EditingSession.Evaluation.Resolution.WeightedTargets.Count}");
-            _ = LoadTextureRegistryAsync(
-                editor,
-                result.Loaded.Game,
-                result.Profile,
-                textureCatalogProfile,
-                cancellationToken);
+            var prepared = await PrepareFaceAsync(_workspace!, _referenceCatalog, SelectedFace, cancellationToken);
+            PublishFace(prepared, SelectedFace);
             return true;
         }
         catch (OperationCanceledException)
@@ -1726,7 +1576,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
-    private async Task<bool> CommitWorkspaceAsync(bool showConfirmation)
+    private async Task<bool> CommitWorkspaceAsync(bool showConfirmation, string? destination = null)
     {
         if (PackageWorkspace is null || PackagePath is null)
         {
@@ -1743,19 +1593,20 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             return false;
         }
-        if (!_workspace!.HasStagedChanges)
+        if (destination is null && !_workspace!.HasStagedChanges)
         {
             return true;
         }
 
         IsBusy = true;
         ErrorMessage = null;
-        Status = Loc.Text("loc_Shell_Status_CommittingAndVerifyingPackageChanges");
+        if (destination is null) Status = Loc.Text("loc_Shell_Status_CommittingAndVerifyingPackageChanges");
         try
         {
-            await Task.Run(PackageWorkspace.Commit);
+            await Task.Run(() => PackageWorkspace.Commit(destination));
             _workspace!.AcceptSavedChanges();
-            OnDirtyStateChanged();
+            if (destination is null) OnDirtyStateChanged();
+            else OnWorkspaceChanged();
             Status = Loc.Format("loc_Shell_Status_PackageSaved", PackageName);
             if (showConfirmation)
             {
@@ -1768,9 +1619,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
         catch (Exception exception)
         {
-            AppLog.Error($"PCC:SAVE-FAILED FILE:{PackagePath}", exception);
-            ErrorMessage = Loc.Format("loc_Shell_Error_PackageChangesCouldNotCommit", UserFacingMessageFormatter.Format(exception));
-            Status = Loc.Text("loc_Shell_Status_SaveFailedTemporaryEditsRetainedSourceUnmodified");
+            AppLog.Error(destination is null ? $"PCC:SAVE-FAILED FILE:{PackagePath}" : "FILE:SAVE-AS-FAILED", exception);
+            ErrorMessage = Loc.Format(destination is null ? "loc_Shell_Error_PackageChangesCouldNotCommit" : "loc_FileSave_Failed",
+                UserFacingMessageFormatter.Format(exception));
+            Status = Loc.Text(destination is null ? "loc_Shell_Status_SaveFailedTemporaryEditsRetainedSourceUnmodified" : "loc_FileSave_EditsRetained");
             return false;
         }
         finally
@@ -1779,38 +1631,24 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
-    private async Task<bool> EnsureCanAbandonEditorChangesAsync()
-    {
-        if (Editor?.IsDirty != true && CareerWorkspace?.HasPendingHeadImport != true)
-        {
-            return true;
-        }
-        return _dialogs.ConfirmUnsavedChanges(
-            LoadedFacePath ?? Loc.Text("loc_Shell_UnsavedChanges_LoadedBioMorphFace"),
-            CareerWorkspace is not null || CanSaveOriginalRon ? UnsavedChangesScope.SourceFile : IsDetachedMeshWorkspace ? UnsavedChangesScope.DetachedMaterials : IsStandaloneWorkspace
-                ? UnsavedChangesScope.StandaloneFace
-                : UnsavedChangesScope.Face) switch
-        {
-            UnsavedChangesChoice.Save => IsStandaloneWorkspace ? await SaveSourceFileAsync()
-                : await FlushEditorToWorkspaceAsync(),
-            UnsavedChangesChoice.Discard => true,
-            _ => false
-        };
-    }
+    private Task<bool> EnsureCanAbandonEditorChangesAsync() => ConfirmUnsavedChangesAsync(wholeWorkspace: false);
+    private Task<bool> EnsureCanAbandonWorkspaceAsync() => ConfirmUnsavedChangesAsync(wholeWorkspace: true);
 
-    private async Task<bool> EnsureCanAbandonWorkspaceAsync()
+    private async Task<bool> ConfirmUnsavedChangesAsync(bool wholeWorkspace)
     {
-        if (!IsDirty)
-        {
-            return true;
-        }
-        return _dialogs.ConfirmUnsavedChanges(
-            IsStandaloneWorkspace ? LoadedFacePath ?? PackageName : PackagePath ?? Loc.Text("loc_Shell_UnsavedChanges_OpenPackage"),
-            CareerWorkspace is not null || CanSaveOriginalRon ? UnsavedChangesScope.SourceFile : IsDetachedMeshWorkspace ? UnsavedChangesScope.DetachedMaterials :
-                IsStandaloneWorkspace ? UnsavedChangesScope.StandaloneFace : UnsavedChangesScope.Package) switch
+        var hasChanges = wholeWorkspace ? IsDirty : Editor?.IsDirty == true || CareerWorkspace?.HasPendingHeadImport == true;
+        if (!hasChanges) return true;
+        var subject = wholeWorkspace
+            ? IsStandaloneWorkspace ? LoadedFacePath ?? PackageName : PackagePath ?? Loc.Text("loc_Shell_UnsavedChanges_OpenPackage")
+            : LoadedFacePath ?? Loc.Text("loc_Shell_UnsavedChanges_LoadedBioMorphFace");
+        var scope = CareerWorkspace is not null || CanSaveOriginalRon ? UnsavedChangesScope.SourceFile
+            : IsDetachedMeshWorkspace ? UnsavedChangesScope.DetachedMaterials
+            : IsStandaloneWorkspace ? UnsavedChangesScope.StandaloneFace
+            : wholeWorkspace ? UnsavedChangesScope.Package : UnsavedChangesScope.Face;
+        return _dialogs.ConfirmUnsavedChanges(subject, scope) switch
         {
             UnsavedChangesChoice.Save => IsStandaloneWorkspace ? await SaveSourceFileAsync()
-                : await CommitWorkspaceAsync(showConfirmation: false),
+                : wholeWorkspace ? await CommitWorkspaceAsync(showConfirmation: false) : await FlushEditorToWorkspaceAsync(),
             UnsavedChangesChoice.Discard => true,
             _ => false
         };

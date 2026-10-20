@@ -65,7 +65,7 @@ public sealed partial class MainWindowViewModel
                 var result = await Task.Run(() => _actorAssignmentService.AssignMorph(
                     workspacePath, source.InstancedPath, source.ProfileKey, candidate.UIndex));
                 packageModified = true;
-                MarkWorkspaceChanged();
+                MarkWorkspaceChanged(source.InstancedPath);
                 if (!await RefreshWorkspaceAsync(source.InstancedPath))
                 {
                     ErrorMessage = Loc.Text("loc_Shell_ErrorMessage_TheMorphWasAssignedBut");
@@ -80,7 +80,7 @@ public sealed partial class MainWindowViewModel
                 var result = await Task.Run(() => _actorAssignmentService.AssignMaterials(
                     workspacePath, source.InstancedPath, source.ProfileKey, candidate.UIndex));
                 packageModified = true;
-                MarkWorkspaceChanged();
+                MarkWorkspaceChanged(source.InstancedPath);
                 if (!await RefreshWorkspaceAsync(source.InstancedPath))
                 {
                     ErrorMessage = Loc.Text("loc_Shell_ErrorMessage_TheMaterialsWereAssignedBut");

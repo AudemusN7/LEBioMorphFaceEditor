@@ -16,11 +16,11 @@ public sealed partial class MainWindowViewModel
         if (IsBusy) throw new InvalidOperationException(Loc.Text("loc_Shell_Diagnostics_WaitForCurrentOperation"));
         var workspacePath = WorkspacePackagePath;
         var draft = Editor?.IsDirty == true ? Editor.CreateDraft() :
-            _pcsavDraftPendingInPackage ? Editor?.SavedDraft : null;
-        var meshSource = _detachedMeshSource;
+            CareerDraftPendingInPackage ? Editor?.SavedDraft : null;
+        var meshSource = DetachedMeshSource;
         var meshPath = meshSource?.SourcePath;
         var materialText = IsDetachedMeshWorkspace && Editor is { CustomMaterials: { } materials } editor &&
-                           _standaloneGame is { } game
+                           StandaloneGame is { } game
             ? MaterialRonCodec.WriteMfe(MeshMaterialFileService.Capture(materials, game,
                 SelectedFace?.ObjectName ?? "Mesh", editor.Material.CaptureInterchangeData()))
             : null;

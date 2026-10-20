@@ -12,19 +12,19 @@ public sealed partial class MainWindowViewModel
         !IsBusy && SelectedFace is not null && WorkspacePackagePath is not null;
 
     private bool CanMutatePackageContext() =>
-        CanUseFaceContextMenu() && _packageWorkspace?.CanCommit == true;
+        CanUseFaceContextMenu() && PackageWorkspace?.CanCommit == true;
 
     private bool CanCopyMorphData() =>
         CanUseFaceContextMenu() && !IsAlnMorphClipboardFace(SelectedFace);
 
     private bool CanUseMaterialContextMenu() =>
         CanUseFaceContextMenu() &&
-        (_packageWorkspace?.CanCommit == true || IsStandaloneImportedFace());
+        (PackageWorkspace?.CanCommit == true || IsStandaloneImportedFace());
 
     private bool IsStandaloneImportedFace() =>
         IsStandaloneWorkspace &&
         SelectedFace is { } selectedFace &&
-        _faceGeometryModes.ContainsKey(selectedFace.InstancedPath);
+        _workspace!.GeometryModes.ContainsKey(selectedFace.InstancedPath);
 
     private bool CanPasteMorphData() =>
         CanMutatePackageContext() && !IsAlnMorphClipboardFace(SelectedFace) &&
@@ -69,7 +69,7 @@ public sealed partial class MainWindowViewModel
 
     private async Task DeleteMorphAsync()
     {
-        if (_pcsavWorkspace is not null)
+        if (CareerWorkspace is not null)
         {
             await DeleteCareerHeadMorphAsync();
             return;
@@ -99,7 +99,7 @@ public sealed partial class MainWindowViewModel
             AppLog.Verbose($"FACE:DELETE {source.InstancedPath} FILE:\"{workspacePath}\"");
             await Task.Run(() => _packageContextService.DeleteMorph(workspacePath, source.InstancedPath));
             packageModified = true;
-            MarkWorkspaceChanged();
+            MarkWorkspaceChanged(source.InstancedPath);
             if (!await RefreshWorkspaceAsync(preferredFacePath))
             {
                 ErrorMessage = Loc.Text("loc_Shell_ErrorMessage_TheMorphWasDeletedBut");
@@ -147,7 +147,7 @@ public sealed partial class MainWindowViewModel
             var result = await Task.Run(() =>
                 _packageContextService.CloneMorph(workspacePath, source.InstancedPath, objectName));
             packageModified = true;
-            MarkWorkspaceChanged();
+            MarkWorkspaceChanged(result.FaceInstancedPath);
             if (!await RefreshWorkspaceAsync(result.FaceInstancedPath))
             {
                 ErrorMessage = Loc.Text("loc_Shell_ErrorMessage_TheMorphWasClonedBut");

@@ -4,6 +4,7 @@ using System.IO;
 using System.Windows.Input;
 using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.LegendaryExplorer;
+using MorphFaceEditor.Models;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.Services;
 
@@ -26,7 +27,7 @@ public sealed partial class MainWindowViewModel
                     value.Game == metadata.Game && value.ExportTag.Trim('[', ']').Equals(metadata.Archetype, StringComparison.OrdinalIgnoreCase));
                 if (profile is null) throw new InvalidDataException(Loc.Text("loc_RonFiles_Incompatible"));
                 if (await OpenDefaultMaterialFaceAsync(metadata.Game.ToString(), new MaterialFaceTarget(profile.Key, metadata.PlayerMorph),
-                    path, source, SourceFileFormat.MorphFeaturesRon, data))
+                    path, source, WorkspaceFileFormat.MorphFeaturesRon, data))
                     Status = Loc.Format("loc_RonFiles_Imported", Path.GetFileName(path));
                 return true;
             }
@@ -68,12 +69,12 @@ public sealed partial class MainWindowViewModel
     {
         if (!CanExportMorphRon() || SelectedFace is not { } face || WorkspacePackagePath is not { } workspace ||
             !await EnsureSelectedFaceLoadedForMaterialsAsync() || Editor is null) return;
-        var path = _dialogs.ChooseMorphImportFile(Path.GetDirectoryName(_standaloneImportPath ?? PackagePath));
+        var path = _dialogs.ChooseMorphImportFile(Path.GetDirectoryName(_workspace?.BrowsePath));
         if (path is null) return;
         IsBusy = true;
         ErrorMessage = null;
         var backup = Path.Combine(Path.GetDirectoryName(workspace)!, $".MFE-RonImport-{Guid.NewGuid():N}.pcc");
-        var hadGeometryMode = _faceGeometryModes.TryGetValue(face.InstancedPath, out var previousGeometryMode);
+        var hadGeometryMode = _workspace!.GeometryModes.TryGetValue(face.InstancedPath, out var previousGeometryMode);
         var refreshAttempted = false;
         try
         {
@@ -97,22 +98,22 @@ public sealed partial class MainWindowViewModel
                         foreach (var mesh in assets.SkeletalMeshes)
                             await _referenceService.ValidateDetachedAttachmentAsync(mesh.PackagePath, mesh.InstancedPath);
                     },
-                    draft => _pcsavWorkspace?.SetImportedHead(document.Head, draft, recordHistory: true)))
+                    draft => CareerWorkspace?.SetImportedHead(document.Head, draft, recordHistory: true)))
                 {
                     Status = Loc.Format("loc_RonFiles_Imported", Path.GetFileName(path));
                     return;
                 }
                 IsBusy = false;
-                if ((Editor.IsDirty || _pcsavDraftPendingInPackage) && !await FlushEditorToWorkspaceAsync()) return;
+                if ((Editor.IsDirty || CareerDraftPendingInPackage) && !await FlushEditorToWorkspaceAsync()) return;
                 IsBusy = true;
                 File.Copy(workspace, backup);
                 var result = await Task.Run(() => _packageContextService.ReplaceHead(workspace, face.InstancedPath, document.Head, player, assets));
-                _faceGeometryModes[face.InstancedPath] = MorphFaceGeometryMode.RelativeBake;
+                _workspace!.GeometryModes[face.InstancedPath] = MorphFaceGeometryMode.RelativeBake;
                 refreshAttempted = true;
                 if (!await RefreshWorkspaceAsync(face.InstancedPath))
                     throw new InvalidDataException(Loc.Text("loc_RonFiles_ImportFailed"));
-                _pcsavWorkspace?.SetImportedHead(document.Head, Editor!.CreateDraft());
-                _hasWorkspaceChanges = true;
+                CareerWorkspace?.SetImportedHead(document.Head, Editor!.CreateDraft());
+                _workspace!.MarkChanged(face.InstancedPath);
                 OnDirtyStateChanged();
                 if (result.Warnings.Count > 0)
                     _dialogs.ShowInformation(Loc.Text("loc_RonFiles_ImportMorphFace"), string.Join("\n\n", result.Warnings.Take(8)));
@@ -124,8 +125,8 @@ public sealed partial class MainWindowViewModel
             if (File.Exists(backup))
             {
                 File.Copy(backup, workspace, overwrite: true);
-                if (hadGeometryMode) _faceGeometryModes[face.InstancedPath] = previousGeometryMode;
-                else _faceGeometryModes.Remove(face.InstancedPath);
+                if (hadGeometryMode) _workspace!.GeometryModes[face.InstancedPath] = previousGeometryMode;
+                else _workspace!.GeometryModes.Remove(face.InstancedPath);
                 if (refreshAttempted) await RefreshWorkspaceAsync(face.InstancedPath);
             }
             AppLog.Error("RON:FACE-IMPORT-FAILED", exception);

@@ -7,11 +7,6 @@ namespace MorphFaceEditor.ViewModels;
 
 public sealed partial class MainWindowViewModel
 {
-    private PcsavHeadMorphWorkspace? _pcsavWorkspace;
-    // Native Save can be current while the disposable PCC still holds an older editing projection.
-    private bool _pcsavDraftPendingInPackage;
-    private MorphFaceDocument? _pcsavSavedDraft;
-
     private async Task OpenCareerSaveAsync(string path)
     {
         try
@@ -32,7 +27,7 @@ public sealed partial class MainWindowViewModel
                 _packageContextService.CapturePlayerDefaultHead(source.Game, source.Sex)); }
             finally { IsBusy = false; }
             await ImportStandaloneMorphAsync(path, source.Game, career: source, playerHead: head);
-            if (ReferenceEquals(_pcsavWorkspace, source) && ErrorMessage is null)
+            if (ReferenceEquals(CareerWorkspace, source) && ErrorMessage is null)
                 Status = Loc.Format(source.HasHeadMorph ? "loc_Pcsav_Opened" : "loc_Pcsav_NewHead", source.FirstName);
         }
         catch (Exception exception)
@@ -45,14 +40,14 @@ public sealed partial class MainWindowViewModel
 
     private async Task<bool> SaveCareerFileAsync(string? destination = null)
     {
-        if (_pcsavWorkspace is not { } career || _sourceFile is not { } source ||
+        if (CareerWorkspace is not { } career || _workspace?.SourceFacePath is not { } facePath ||
             WorkspacePackagePath is not { } workspace) return false;
         using var saveLock = new SaveControlLock(this);
         var editor = Editor;
         var draft = editor?.CreateDraft();
         var direct = editor is { HasPendingRepair: false } && draft is { ScalpMaterialSelection: null } &&
             !editor.HasAssetReferenceChanges(draft);
-        if (!direct && (Editor?.IsDirty == true || _pcsavDraftPendingInPackage) && !await FlushEditorToWorkspaceAsync()) return false;
+        if (!direct && (Editor?.IsDirty == true || CareerDraftPendingInPackage) && !await FlushEditorToWorkspaceAsync()) return false;
         IsBusy = true;
         ErrorMessage = null;
         try
@@ -60,17 +55,15 @@ public sealed partial class MainWindowViewModel
             if (direct)
             {
                 await Task.Run(() => career.SaveEditedHead(draft!, destination));
-                _pcsavDraftPendingInPackage |= editor!.IsDirty;
+                _workspace!.CareerDraftPendingInPackage |= editor!.IsDirty;
                 editor.AcceptSavedState();
             }
             else
                 await Task.Run(() => career.SaveEditedHead(
-                    _packageContextService.CaptureHead(workspace, source.FacePath), destination));
-            _pcsavSavedDraft = Editor?.SavedDraft;
-            _sourceFile = source with { Path = career.SourcePath, Fingerprint = FileFingerprint(career.SourcePath) };
-            _standaloneImportPath = career.SourcePath;
+                    _packageContextService.CaptureHead(workspace, facePath), destination));
+            _workspace!.SavedCareerDraft = Editor?.SavedDraft;
             OnPropertyChanged(nameof(PackageName));
-            _hasWorkspaceChanges = false;
+            _workspace!.AcceptSavedChanges();
             OnDirtyStateChanged();
             Status = Loc.Format("loc_Shell_Status_PackageSaved", Path.GetFileName(career.SourcePath));
             return true;
@@ -98,11 +91,11 @@ public sealed partial class MainWindowViewModel
 
     private async Task<bool> StageSavedCareerDraftForReloadAsync()
     {
-        var discardImport = _pcsavWorkspace?.HasPendingHeadImport == true;
-        if ((!_pcsavDraftPendingInPackage && !discardImport) || Editor is not { } editor) return true;
+        var discardImport = CareerWorkspace?.HasPendingHeadImport == true;
+        if ((!CareerDraftPendingInPackage && !discardImport) || Editor is not { } editor) return true;
         using var saveLock = new SaveControlLock(this);
         var current = editor.CreateDraft();
-        var saved = (_pcsavSavedDraft ?? editor.SavedDraft) with
+        var saved = (_workspace!.SavedCareerDraft ?? editor.SavedDraft) with
         { Source = current.Source, SourceFingerprint = current.SourceFingerprint };
         try
         {
@@ -110,8 +103,8 @@ public sealed partial class MainWindowViewModel
             _referenceService.InvalidatePackage(saved.Source.PackagePath);
             if (discardImport)
             {
-                _pcsavWorkspace!.DiscardHeadImport();
-                _hasWorkspaceChanges = false;
+                CareerWorkspace!.DiscardHeadImport();
+                _workspace!.AcceptSavedChanges();
                 OnDirtyStateChanged();
             }
             return true;
@@ -127,7 +120,7 @@ public sealed partial class MainWindowViewModel
 
     private async Task DeleteCareerHeadMorphAsync()
     {
-        if (_pcsavWorkspace is not { } career || SelectedFace is not { } face ||
+        if (CareerWorkspace is not { } career || SelectedFace is not { } face ||
             !_dialogs.ConfirmDeleteCareerMorph(face.ObjectName)) return;
         using var saveLock = new SaveControlLock(this);
         IsBusy = true;

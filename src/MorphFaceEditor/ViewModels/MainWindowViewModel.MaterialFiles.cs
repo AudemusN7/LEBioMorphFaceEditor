@@ -5,6 +5,7 @@ using MorphFaceEditor.Core.Services;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.LegendaryExplorer;
+using MorphFaceEditor.Models;
 using MorphFaceEditor.Services;
 
 namespace MorphFaceEditor.ViewModels;
@@ -41,7 +42,7 @@ public sealed partial class MainWindowViewModel
                     return true;
                 }
                 await OpenDefaultMaterialFaceAsync(target.Value.Game, target.Value.Target, sourcePath, source,
-                    kind == MaterialRonCodec.MaterialFileKind.Tse ? SourceFileFormat.TseMaterialsRon : SourceFileFormat.MfeMaterialsRon);
+                    kind == MaterialRonCodec.MaterialFileKind.Tse ? WorkspaceFileFormat.TseMaterialsRon : WorkspaceFileFormat.MfeMaterialsRon);
             }
             catch (Exception exception)
             {
@@ -58,7 +59,7 @@ public sealed partial class MainWindowViewModel
     }
 
     private async Task<bool> OpenDefaultMaterialFaceAsync(string gameName, MaterialFaceTarget target, string sourcePath,
-        RonImportFile source, SourceFileFormat format, MorphFaceMorphData? features = null)
+        RonImportFile source, WorkspaceFileFormat format, MorphFaceMorphData? features = null)
     {
         if (!Enum.TryParse<MorphFaceGame>(gameName, out var game) ||
             game is not (MorphFaceGame.LE1 or MorphFaceGame.LE2 or MorphFaceGame.LE3) ||
@@ -161,9 +162,8 @@ public sealed partial class MainWindowViewModel
             candidate = null;
             if (!await OpenSourcePackagePathAsync(packagePath, created.FaceInstancedPath, game,
                 standaloneNpc: !target.PlayerMorph, importedPath: sourcePath, preparedWorkspace: preparedWorkspace, singleFace: true)) return false;
-            _standaloneImportPath = Path.GetFullPath(sourcePath);
-            TrackSourceFile(sourcePath, created.FaceInstancedPath, format, source.Fingerprint);
-            _hasWorkspaceChanges = false;
+            _workspace!.TrackImportedFile(sourcePath, created.FaceInstancedPath, format, source.Fingerprint);
+            _workspace.AcceptSavedChanges();
             OnDirtyStateChanged();
             Status = Loc.Format("loc_RonFiles_Imported", Path.GetFileName(sourcePath));
             ShowMaterialImportWarnings(warnings);
@@ -199,11 +199,11 @@ public sealed partial class MainWindowViewModel
 
     private async Task<bool> ExportMeshMaterialsAsync(bool tse)
     {
-        if (!CanUseMeshMaterialFiles() || Editor is not { CustomMaterials: { } workspace } editor || _standaloneGame is not { } game)
+        if (!CanUseMeshMaterialFiles() || Editor is not { CustomMaterials: { } workspace } editor || StandaloneGame is not { } game)
             return false;
         var name = SelectedFace!.ObjectName;
         var path = _dialogs.ChooseMaterialExportFile(tse, tse ? name + ".ron" : name + ".materials.ron",
-            Path.GetDirectoryName(_standaloneImportPath));
+            Path.GetDirectoryName(_workspace!.BrowsePath));
         if (path is null) return false;
         IsBusy = true;
         ErrorMessage = null;
@@ -232,8 +232,8 @@ public sealed partial class MainWindowViewModel
 
     private async Task ImportMeshMaterialsAsync(bool tse, string? sourcePath = null, RonImportFile? source = null)
     {
-        if (!CanUseMeshMaterialFiles() || Editor is not { CustomMaterials: { } workspace } editor || _standaloneGame is not { } game) return;
-        var path = sourcePath ?? _dialogs.ChooseMaterialImportFile(tse, Path.GetDirectoryName(_standaloneImportPath));
+        if (!CanUseMeshMaterialFiles() || Editor is not { CustomMaterials: { } workspace } editor || StandaloneGame is not { } game) return;
+        var path = sourcePath ?? _dialogs.ChooseMaterialImportFile(tse, Path.GetDirectoryName(_workspace!.BrowsePath));
         if (path is null) return;
         IsBusy = true;
         ErrorMessage = null;
@@ -272,7 +272,7 @@ public sealed partial class MainWindowViewModel
             Editor is not { } editor || SelectedFace is not { } face)
             return false;
         var path = _dialogs.ChooseMaterialExportFile(false, face.ObjectName + ".materials.ron",
-            Path.GetDirectoryName(_standaloneImportPath ?? _packageWorkspace?.SourcePath));
+            Path.GetDirectoryName(_workspace?.BrowsePath));
         if (path is null) return false;
         IsBusy = true;
         ErrorMessage = null;
@@ -295,7 +295,7 @@ public sealed partial class MainWindowViewModel
                     profile.Game == game && profile.Key == target.ProfileKey) ? target : null
             });
             await MeshMaterialFileService.WriteAsync(path, text,
-                _standaloneImportPath ?? _packageWorkspace?.SourcePath ?? path);
+                _workspace?.BrowsePath ?? path);
             Status = Loc.Format("loc_Shell_Status_ExportedMfeMaterialSettingsTo", Path.GetFileName(path));
             return true;
         }
@@ -315,7 +315,7 @@ public sealed partial class MainWindowViewModel
             Editor is not { } editor)
             return;
         var path = sourcePath ?? _dialogs.ChooseMaterialImportFile(false,
-            Path.GetDirectoryName(_standaloneImportPath ?? _packageWorkspace?.SourcePath));
+            Path.GetDirectoryName(_workspace?.BrowsePath));
         if (path is null) return;
         IsBusy = true;
         ErrorMessage = null;
@@ -391,15 +391,11 @@ public sealed partial class MainWindowViewModel
 
     private MorphFaceGame ResolveMaterialFileGame()
     {
-        if (_standaloneGame is { } standaloneGame) return standaloneGame;
-        if (_packageWorkspace is null || LoadedFacePath is null)
+        if (_workspace is null)
             throw new InvalidOperationException(Loc.Text("loc_Shell_Error_FaceWorkspaceHasNoSourcePackage"));
-        var reference = MorphFaceReferenceInspector.Inspect(_packageWorkspace.SourcePath)
-            .SingleOrDefault(value => string.Equals(value.FacePath, LoadedFacePath,
-                StringComparison.OrdinalIgnoreCase));
-        if (reference is null || reference.Game == MorphFaceGame.Unsupported)
+        if (_workspace.Game == MorphFaceGame.Unsupported)
             throw new InvalidOperationException(Loc.Format("loc_Shell_Error_CouldNotDetermineGameForFace", LoadedFacePath));
-        return reference.Game;
+        return _workspace.Game;
     }
 
     private void RaiseMaterialFileCanExecuteChanged()

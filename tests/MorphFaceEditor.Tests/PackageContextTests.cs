@@ -25,6 +25,7 @@ public static class PackageContextTests
         new("LE2 BioD workspaces retain post-load import resolution", Le2BioDWorkspaceRetainsPostLoadResolution),
         new("LE1 context clone and loaded save preserve authored fields and independent child ownership", CloneLe1Morph),
         new("safe-save rejects outside edits during loaded save clone and delete", SaveConflictsPreserveOutsideEdits),
+        new("context clone preserves unrelated pre-existing package damage", ClonePreservesExistingDamage),
         new("safe-save rejects a competing new morph export and cleans its candidate", NewExportConflictPreservesDestination),
         new("safe-save workspace conflicts and locked destinations retain pending edits for retry", WorkspaceSaveFailureRetainsEdits),
         new("saved value checks preserve original nonfinite PCC fields and reject newly invalid edits", NonFiniteValuesRoundTrip),
@@ -260,6 +261,32 @@ public static class PackageContextTests
 
             TestAssert.True(ReadFaces(path).Any(face => face.ObjectName == "MFE_ContextClone_Test"),
                 "The committed workspace did not install the cloned face in the source PCC.");
+        });
+    }
+
+    private static void ClonePreservesExistingDamage()
+    {
+        WithPackageCopy("LE1 GlobalMorphs.pcc", path =>
+        {
+            var facePath = ReadFaces(path).First().InstancedPath;
+            using (var package = MEPackageHandler.OpenMEPackage(path, forceLoadFromDisk: true))
+            {
+                var unrelated = package.CreateExport("MFE_PreExistingDamage", "Object", indexed: false);
+                unrelated.WriteProperty(new ObjectProperty(999999, "BrokenReference"));
+                package.Save();
+            }
+            IReadOnlySet<string> baseline;
+            using (var original = MEPackageHandler.OpenMEPackage(path, forceLoadFromDisk: true))
+                baseline = PackageIntegrity.CaptureIssues(original);
+            TestAssert.True(baseline.Count > 0, "The source did not contain the intended existing damage.");
+
+            var result = new MorphFacePackageContextService().CloneMorph(path, facePath, "MFE_BaselineClone");
+            using var saved = MEPackageHandler.OpenMEPackage(path, forceLoadFromDisk: true);
+            PackageIntegrity.Verify(saved, baseline);
+            TestAssert.True(saved.FindExport(result.FaceInstancedPath, "BioMorphFace") is not null,
+                "Unrelated existing damage prevented the requested clone.");
+            TestAssert.Equal(999999, saved.FindExport("MFE_PreExistingDamage", "Object")!
+                .GetProperty<ObjectProperty>("BrokenReference")!.Value);
         });
     }
 

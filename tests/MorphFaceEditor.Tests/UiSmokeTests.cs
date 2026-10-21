@@ -120,6 +120,7 @@ public static class UiSmokeTests
         new("mesh attachment picker filters candidates by name and path", MeshAttachmentPickerFiltersCandidates),
         new("mesh attachment picker merges installed HIR meshes and preserves mod override", MeshAttachmentPickerMergesRegistry),
         new("mesh attachment picker previews without committing history", MeshAttachmentPickerPreviewDoesNotCommit),
+        new("attachment hover and commit share edited materials without publishing failed loads", AttachmentPreparationPublication),
         new("editor error banners can be dismissed", ErrorBannerCanBeDismissed),
         new("texture registry settings command opens the settings dialog", TextureRegistrySettingsCommandOpensDialog),
         new("MFTR notices update after a scan and preserve import warnings", DatabaseGuidanceUpdatesAndPreservesWarnings),
@@ -4435,6 +4436,61 @@ public static class UiSmokeTests
                 option.SourceDescription.Contains("Custom · BIOG_HMF_HIR_Custom.pcc · 48 bones")),
             "A manually added seek-free BIOG HIR mesh was hidden from the player workspace.");
     }
+
+    private static void AttachmentPreparationPublication() => RunWithDispatcher(async () =>
+    {
+        using var reader = new MorphFacePackageReader();
+        using var shell = CreateMainWindowViewModel(reader);
+        await shell.OpenDroppedFileAsync(Path.GetFullPath(Path.Combine("tests", "Global Morphs", "LE2 GlobalMorphs.pcc")));
+        shell.SelectedFace = shell.Faces.First(face => face.ProfileKey == "le2-human-female");
+        await ((AsyncRelayCommand)shell.LoadSelectedFaceCommand).ExecuteAsync();
+        var editor = shell.Editor ?? throw new Exception(shell.ErrorMessage ?? "Initial face did not load.");
+        var choice = editor.HairMesh.Options.First(option => option.Identity is { } identity &&
+            identity != editor.HairMesh.Value && identity.InstancedPath.Contains("_HIR", StringComparison.OrdinalIgnoreCase));
+        var colour = new Vector4(0.7f, 0.1f, 0.3f, 1);
+        const string colourName = "HED_Hair_Colour_Vector";
+        TestAssert.True(editor.Material.Vectors.Any(value => value.Name == colourName), "Fixture has no shared hair colour.");
+        editor.Material.SetNumericValues(new Dictionary<string, float>(), new Dictionary<string, Vector4> { [colourName] = colour });
+        var before = editor.CreateDraft();
+        var materialState = editor.Material.Materials;
+        var nextScene = new TaskCompletionSource<HeadPreviewScene>();
+        shell.PreviewSceneReady += (scene, _) => nextScene.TrySetResult(scene);
+        editor.HairMesh.Preview(choice);
+        var hovered = await nextScene.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        TestAssert.True(MorphFaceEditorStateComparer.Equals(before, editor.CreateDraft()) &&
+                        ReferenceEquals(materialState, editor.Material.Materials),
+            "Hover published material controls or authored edits.");
+        var hoverHair = hovered.Meshes.Where(mesh => mesh.IsAttachment).SelectMany(mesh => mesh.Sections)
+            .Select(section => section.Material).First(material => material.Vectors.ContainsKey(colourName));
+        TestAssert.Equal(colour, hoverHair.Vectors[colourName]);
+        editor.HairMesh.CancelPreview();
+
+        nextScene = new TaskCompletionSource<HeadPreviewScene>();
+        editor.HairMesh.Commit(choice);
+        var committed = await nextScene.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        TestAssert.True(!shell.HasError, shell.ErrorMessage ?? "Attachment commit failed.");
+        TestAssert.Equal(choice.Identity, editor.HairMesh.Value);
+        var committedHair = committed.Meshes.Where(mesh => mesh.IsAttachment).SelectMany(mesh => mesh.Sections)
+            .Select(section => section.Material).First(material => material.Vectors.ContainsKey(colourName));
+        TestAssert.Equal(hoverHair.Key, committedHair.Key);
+        TestAssert.Equal(colour, committedHair.Vectors[colourName]);
+        nextScene = new TaskCompletionSource<HeadPreviewScene>();
+        editor.UndoCommand.Execute(null);
+        await nextScene.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        TestAssert.True(MorphFaceEditorStateComparer.Equals(before, editor.CreateDraft()),
+            "One Undo failed to restore the attachment while retaining the earlier colour edit.");
+
+        // A picker source may disappear after its candidates were enumerated.
+        var failed = new TaskCompletionSource();
+        shell.PropertyChanged += (_, args) => { if (args.PropertyName == nameof(shell.ErrorMessage) && shell.HasError) failed.TrySetResult(); };
+        nextScene = new TaskCompletionSource<HeadPreviewScene>();
+        materialState = editor.Material.Materials;
+        editor.HairMesh.Commit(new HairMeshOption("Missing source", choice.Identity! with
+            { PackagePath = Path.Combine(Path.GetTempPath(), $"MFE-Missing-{Guid.NewGuid():N}.pcc") }));
+        await failed.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        TestAssert.True(ReferenceEquals(materialState, editor.Material.Materials) && !nextScene.Task.IsCompleted,
+            "An attachment preparation failure changed the live materials or scene.");
+    });
 
     private static void MeshAttachmentPickerPreviewDoesNotCommit()
     {

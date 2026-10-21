@@ -1217,54 +1217,17 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         var packagePath = WorkspacePackagePath;
         var detachedPreview = IsDetachedMeshWorkspace;
         var references = editor.AttachmentMeshes.Select(mesh => mesh.Value).ToArray();
-        AttachmentMaterialState? materialState = null;
         try
         {
-            var attachments = new LoadedAttachment?[references.Length];
-            for (var index = 0; index < references.Length; index++)
-            {
-                if (references[index] is not { } reference)
-                {
-                    continue;
-                }
-                attachments[index] = detachedPreview ||
-                                     !Path.GetFullPath(reference.PackagePath).Equals(
-                                         Path.GetFullPath(packagePath!), StringComparison.OrdinalIgnoreCase)
-                    ? await _referenceService.LoadDetachedAttachmentAsync(
-                        reference.PackagePath, reference.InstancedPath)
-                    : await _referenceService.LoadAttachmentAsync(
-                        packagePath!, loadedFace.Document.Source.InstancedPath, reference.InstancedPath);
-            }
+            var attachments = await LoadAttachmentsAsync(references, loadedFace, packagePath, detachedPreview);
 
             if (version != _attachmentChangeVersion || Editor != editor || _loadedFace != loadedFace)
             {
                 return;
             }
 
-            var preservedOtherMeshes = _preservedOtherMeshAssets;
-            var attachmentMaterials = attachments
-                .Where(attachment => attachment is not null)
-                .Select(attachment => attachment!.Materials)
-                .Append(ResolveMeshMaterials(preservedOtherMeshes, loadedFace.Materials))
-                .Aggregate(
-                    new ResolvedHeadMaterialSet(
-                        new Dictionary<string, ResolvedHeadMaterial>(StringComparer.OrdinalIgnoreCase)),
-                    MergeMaterials);
-            var otherMeshes = attachments.Skip(1)
-                .Where(attachment => attachment is not null)
-                .Select(attachment => attachment!.Mesh)
-                .Concat(preservedOtherMeshes)
-                .ToArray();
-            var stagedMaterials = detachedPreview
-                ? MergeMaterials(
-                    editor.Material.Materials,
-                    ApplyDetachedAttachmentHairColour(attachmentMaterials, editor.Material.Materials))
-                : MergeMaterials(loadedFace.Materials, attachmentMaterials);
-            var stagedLoadedFace = loadedFace with
+            var source = loadedFace with
             {
-                HairMesh = attachments[0]?.Mesh,
-                OtherMeshes = otherMeshes,
-                Materials = stagedMaterials,
                 Document = loadedFace.Document with
                 {
                     HairMeshReference = references[0],
@@ -1273,30 +1236,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                         .ToArray()
                 }
             };
-
-            // Validate all mesh topology/skinning before touching the live material
-            // session. A rejected attachment must leave the old preview intact.
-            _ = editor.UsesLiveDeformationPreview
-                ? _sceneFactory.CreateEditable(stagedLoadedFace, editor.Evaluation, PreviewLod)
-                : _sceneFactory.Create(stagedLoadedFace, PreviewLod);
-
+            var prepared = PrepareAttachmentScene(editor, source, attachments, detachedPreview);
             _suppressMaterialPreview = true;
-            if (!detachedPreview)
-            {
-                materialState = editor.Material.CaptureAttachmentState();
-                editor.Material.ReplaceAttachmentMaterials(
-                    attachmentMaterials,
-                    attachments.ElementAtOrDefault(changedSlot.SlotIndex)?.Materials,
-                    attachments.Any(attachment => attachment?.Mesh.Topology.MaterialCount > 1));
-            }
-            var committedLoadedFace = detachedPreview
-                ? stagedLoadedFace
-                : stagedLoadedFace with { Materials = editor.Material.Materials };
-            var committedScene = editor.UsesLiveDeformationPreview
-                ? _sceneFactory.CreateEditable(committedLoadedFace, editor.Evaluation, PreviewLod)
-                : _sceneFactory.Create(committedLoadedFace, PreviewLod);
-            _loadedFace = committedLoadedFace;
-            PreviewSceneReady?.Invoke(committedScene, false);
+            if (prepared.Surface is not null) editor.Material.ApplyMaterialSurface(prepared.Surface);
+            _loadedFace = prepared.Face;
+            PreviewSceneReady?.Invoke(prepared.Scene, false);
             Status = changedSlot.Value is null
                 ? Loc.Format("loc_Shell_Status_AttachmentCleared", changedSlot.Label)
                 : Loc.Format("loc_Shell_Status_AttachmentChanged", changedSlot.Label, changedSlot.Value.InstancedPath);
@@ -1305,10 +1249,6 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             if (version == _attachmentChangeVersion)
             {
-                if (materialState is not null)
-                {
-                    editor.Material.RestoreAttachmentState(materialState);
-                }
                 AppLog.Error($"ATTACHMENT:CHANGE-FAILED SLOT:{changedSlot.Label}", exception);
                 SetEditorError(Loc.Format("loc_Shell_Error_AttachmentMeshCouldNotChange", exception.Message));
             }
@@ -1350,22 +1290,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             .ToArray();
         try
         {
-            var attachments = new LoadedAttachment?[references.Length];
-            for (var index = 0; index < references.Length; index++)
-            {
-                if (references[index] is not { } reference)
-                {
-                    continue;
-                }
-                attachments[index] = detachedPreview ||
-                                     !Path.GetFullPath(reference.PackagePath).Equals(
-                                         Path.GetFullPath(packagePath!), StringComparison.OrdinalIgnoreCase)
-                    ? await _referenceService.LoadDetachedAttachmentAsync(
-                        reference.PackagePath, reference.InstancedPath, cancellation.Token)
-                    : await _referenceService.LoadAttachmentAsync(
-                        packagePath!, loadedFace.Document.Source.InstancedPath,
-                        reference.InstancedPath, cancellation.Token);
-            }
+            var attachments = await LoadAttachmentsAsync(
+                references, loadedFace, packagePath, detachedPreview, cancellation.Token);
 
             if (version != _attachmentChangeVersion || Editor != editor || _loadedFace != loadedFace ||
                 !ReferenceEquals(changedSlot.PreviewSelection, previewSelection))
@@ -1373,35 +1299,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 return;
             }
 
-            var preservedOtherMeshes = _preservedOtherMeshAssets;
-            var attachmentMaterials = attachments
-                .Where(attachment => attachment is not null)
-                .Select(attachment => attachment!.Materials)
-                .Append(ResolveMeshMaterials(preservedOtherMeshes, loadedFace.Materials))
-                .Aggregate(
-                    new ResolvedHeadMaterialSet(
-                        new Dictionary<string, ResolvedHeadMaterial>(StringComparer.OrdinalIgnoreCase)),
-                    MergeMaterials);
-            var otherMeshes = attachments.Skip(1)
-                .Where(attachment => attachment is not null)
-                .Select(attachment => attachment!.Mesh)
-                .Concat(preservedOtherMeshes)
-                .ToArray();
-            var previewMaterials = detachedPreview
-                ? MergeMaterials(
-                    editor.Material.Materials,
-                    ApplyDetachedAttachmentHairColour(attachmentMaterials, editor.Material.Materials))
-                : MergeMaterials(editor.Material.Materials, attachmentMaterials);
-            var previewFace = loadedFace with
-            {
-                HairMesh = attachments[0]?.Mesh,
-                OtherMeshes = otherMeshes,
-                Materials = previewMaterials
-            };
-            var scene = editor.UsesLiveDeformationPreview
-                ? _sceneFactory.CreateEditable(previewFace, editor.Evaluation, PreviewLod)
-                : _sceneFactory.Create(previewFace, PreviewLod);
-            PreviewSceneReady?.Invoke(scene, false);
+            var prepared = PrepareAttachmentScene(editor, loadedFace, attachments, detachedPreview);
+            PreviewSceneReady?.Invoke(prepared.Scene, false);
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         {
@@ -1422,6 +1321,57 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             }
             cancellation.Dispose();
         }
+    }
+
+    private async Task<LoadedAttachment?[]> LoadAttachmentsAsync(
+        IReadOnlyList<AssetIdentity?> references,
+        LoadedMorphFace loadedFace,
+        string? packagePath,
+        bool detachedPreview,
+        CancellationToken cancellationToken = default)
+    {
+        var attachments = new LoadedAttachment?[references.Count];
+        for (var index = 0; index < references.Count; index++)
+        {
+            if (references[index] is not { } reference) continue;
+            attachments[index] = detachedPreview ||
+                                 !Path.GetFullPath(reference.PackagePath).Equals(
+                                     Path.GetFullPath(packagePath!), StringComparison.OrdinalIgnoreCase)
+                ? await _referenceService.LoadDetachedAttachmentAsync(
+                    reference.PackagePath, reference.InstancedPath, cancellationToken)
+                : await _referenceService.LoadAttachmentAsync(
+                    packagePath!, loadedFace.Document.Source.InstancedPath,
+                    reference.InstancedPath, cancellationToken);
+        }
+        return attachments;
+    }
+
+    private (LoadedMorphFace Face, HeadPreviewScene Scene, PreparedMaterialSurface? Surface) PrepareAttachmentScene(
+        FaceEditorViewModel editor,
+        LoadedMorphFace source,
+        IReadOnlyList<LoadedAttachment?> attachments,
+        bool detachedPreview)
+    {
+        var attachmentMaterials = attachments.OfType<LoadedAttachment>()
+            .Select(attachment => attachment.Materials)
+            .Append(ResolveMeshMaterials(_preservedOtherMeshAssets, source.Materials))
+            .Aggregate(ResolvedHeadMaterialSet.Empty, MergeMaterials);
+        var surface = detachedPreview ? null : editor.Material.PrepareAttachmentMaterials(attachmentMaterials);
+        var face = source with
+        {
+            HairMesh = attachments[0]?.Mesh,
+            OtherMeshes = attachments.Skip(1).OfType<LoadedAttachment>()
+                .Select(attachment => attachment.Mesh).Concat(_preservedOtherMeshAssets).ToArray(),
+            Materials = surface?.Materials ?? MergeMaterials(
+                editor.Material.Materials,
+                ApplyDetachedAttachmentHairColour(attachmentMaterials, editor.Material.Materials))
+        };
+        // Topology, skinning and the effective materials are validated together.
+        // Hover uses this same candidate without publishing its material controls.
+        var scene = editor.UsesLiveDeformationPreview
+            ? _sceneFactory.CreateEditable(face, editor.Evaluation, PreviewLod)
+            : _sceneFactory.Create(face, PreviewLod);
+        return (face, scene, surface);
     }
 
     private void CancelAttachmentPreviewLoad()

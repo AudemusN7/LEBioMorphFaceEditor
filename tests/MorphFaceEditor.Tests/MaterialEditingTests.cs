@@ -27,7 +27,7 @@ public static class MaterialEditingTests
         new("package texture reference supports None and undo", PackageTextureReferenceSupportsNone),
         new("transient texture preview stays outside authored state and history", TransientTexturePreviewStaysOutsideAuthoredState),
         new("None restores the rendered material default after replacement", NoneRestoresRenderedDefault),
-        new("failed attachment replacement can restore material state", AttachmentMaterialStateRestores),
+        new("attachment preparation leaves live materials and history untouched", AttachmentPreparationDoesNotPublish),
         new("attachment selection rebases live numeric material controls", AttachmentNumericControlsRebase),
         new("compiled empty hair support hides ineffective highlight controls and preserves authored overrides", EmptyCompiledHairSupportHidesHighlights),
         new("attachment numeric edits remain undoable after selection changes", AttachmentNumericEditsRemainUndoable),
@@ -591,27 +591,41 @@ public static class MaterialEditingTests
                 StringComparer.OrdinalIgnoreCase));
     }
 
-    private static void AttachmentMaterialStateRestores()
+    private static void AttachmentPreparationDoesNotPublish()
     {
-        var baseSession = CreateSession();
-        var initialHair = HairMaterial("HairMaterialA", 1f, 2f, new Vector4(0.2f, 0.1f, 0.05f, 1));
-        var session = new MaterialEditingSession(
-            MorphFaceMaterialOverrides.Empty,
-            new ResolvedHeadMaterialSet(baseSession.Materials.Materials.ToDictionary(
-                value => value.Key, value => value.Value)));
-        session.ReplaceAttachmentMaterials(initialHair);
+        var session = CreateSession();
+        session.ReplaceAttachmentMaterials(HairMaterial("HairMaterialA", 1f, 2f, Vector4.One));
+        session.SetScalar("Hightlight1Intensity", 4f);
+        var texture = session.GetSelectedTexture("HED_Diff")!;
+        session.PreviewTexture("HED_Diff", texture with { CacheKey = "hover-only" });
         var original = session.Materials;
-        var snapshot = session.CaptureAttachmentState();
-        session.ReplaceAttachmentMaterials(new ResolvedHeadMaterialSet(
-            new Dictionary<string, ResolvedHeadMaterial>(StringComparer.OrdinalIgnoreCase)));
-        TestAssert.True(!session.ScalarNames.Contains("Hightlight1Intensity", StringComparer.OrdinalIgnoreCase),
-            "Clearing the hair attachment retained its scalar control.");
-        session.RestoreAttachmentState(snapshot);
+        var changes = 0;
+        var historyChanges = 0;
+        session.MaterialsChanged += (_, _) => changes++;
+        session.HistoryChanged += (_, _) => historyChanges++;
 
-        TestAssert.Equal(original.Materials.Count, session.Materials.Materials.Count);
+        var empty = session.PrepareAttachmentMaterials(ResolvedHeadMaterialSet.Empty);
+        TestAssert.True(!empty.Materials.Materials.Values.Any(material => material.Family == HeadMaterialFamily.Hair),
+            "The candidate retained a removed attachment.");
+        TestAssert.True(ReferenceEquals(original, session.Materials) &&
+                        session.ScalarNames.Contains("Hightlight1Intensity"),
+            "Preparing a candidate changed the live preview or controls.");
+        TestAssert.Equal(0, changes);
+        TestAssert.Equal(0, historyChanges);
+
+        var replacement = session.PrepareAttachmentMaterials(HairMaterial("HairMaterialB", 3f, 8f, Vector4.Zero));
+        var hair = replacement.Materials.Materials.Values.Single(material => material.Family == HeadMaterialFamily.Hair);
+        TestAssert.Equal(4f, hair.Scalars["Hightlight1Intensity"]);
+        TestAssert.Equal(8f, hair.Scalars["Hightlight2Intensity"]);
+        session.ApplyMaterialSurface(replacement);
+        TestAssert.True(ReferenceEquals(replacement.Materials, session.Materials), "Publication rebuilt the prepared materials.");
+        TestAssert.Equal(texture.CacheKey, session.GetPreviewTexture("HED_Diff")?.CacheKey);
+        session.ClearTexturePreview("HED_Diff");
+        TestAssert.Equal(1, changes);
+        TestAssert.Equal(1, historyChanges);
+        session.Undo();
         TestAssert.Equal(1f, session.GetScalar("Hightlight1Intensity"));
-        TestAssert.Equal(new Vector4(0.2f, 0.1f, 0.05f, 1), session.GetVector("Highlight1Color"));
-        TestAssert.Equal(snapshot.TextureReferences.Count, session.ChangedTextureCount);
+        TestAssert.True(!session.CanUndo, "Surface publication added a material edit to history.");
     }
 
     private static void AttachmentNumericControlsRebase()
@@ -783,15 +797,29 @@ public static class MaterialEditingTests
             [first.Key] = first,
             [second.Key] = second
         });
-        var session = new MaterialEditingSession(MorphFaceMaterialOverrides.Empty, materials);
-        session.SetTextureReference("HAIR_Diff", firstTexture);
-        session.ReplaceAttachmentMaterials(materials, materials, hasMultiMaterialAttachment: true);
+        var session = new MaterialEditingSession(MorphFaceMaterialOverrides.Empty, ResolvedHeadMaterialSet.Empty);
+        session.ReplaceAttachmentMaterials(new ResolvedHeadMaterialSet(
+            new Dictionary<string, ResolvedHeadMaterial> { [first.Key] = first }));
+        session.ReplaceAttachmentMaterials(materials);
 
-        TestAssert.True(session.GetTextureReference("HAIR_Diff") is null,
-            "The shared Hair Diffuse picker was not reset to None.");
+        TestAssert.Equal(0, session.ChangedTextureCount);
+        TestAssert.Equal(0, session.CreateOverrides().Textures.Count);
         TestAssert.Equal(firstTexture.Source,
             session.Materials.Materials[first.Key].Textures["HAIR_Diff"].Texture.Source);
         TestAssert.Equal(secondTexture.Source,
             session.Materials.Materials[second.Key].Textures["HAIR_Diff"].Texture.Source);
+
+        ResolvedHeadMaterialSet Scoped(ResolvedHeadMaterial material) => new(
+            new Dictionary<string, ResolvedHeadMaterial> { [material.Key] = material with { ParameterScopeKey = "human" } });
+        var custom = new MaterialEditingSession(MorphFaceMaterialOverrides.Empty, Scoped(first));
+        var name = MaterialParameterControlKey.Create("human", "HAIR_Diff");
+        custom.SetTextureReference(name, secondTexture);
+        custom.RebaseMaterialSurface(ResolvedHeadMaterialSet.Empty);
+        custom.RebaseMaterialSurface(Scoped(first));
+        TestAssert.Equal(secondTexture.Source, custom.Materials.Materials[first.Key].Textures["HAIR_Diff"].Texture.Source);
+        TestAssert.Equal(secondTexture.Source, custom.CreateOverrides().Textures.Single().TextureReference);
+        custom.Undo();
+        TestAssert.Equal(firstTexture.Source, custom.Materials.Materials[first.Key].Textures["HAIR_Diff"].Texture.Source);
+
     }
 }

@@ -37,8 +37,8 @@ public sealed class MaterialEditingSession : IUndoableEditSource
             : new ResolvedHeadMaterialSet(materials.Materials
                 .Where(pair => baseMaterialKeys.Contains(pair.Key, StringComparer.OrdinalIgnoreCase))
                 .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase));
-        _defaultScalars = BuildDefaultScalars(materials, firstWins: false);
-        _defaultVectors = BuildDefaultVectors(materials, firstWins: false);
+        _defaultScalars = BuildDefaultScalars(materials, firstWins: false, _hasScopedMaterials);
+        _defaultVectors = BuildDefaultVectors(materials, firstWins: false, _hasScopedMaterials);
         _scalars = _defaultScalars
             .Concat(overrides.Scalars.Select(value => new KeyValuePair<string, float>(value.Name, value.Value)))
             .GroupBy(value => value.Key, StringComparer.OrdinalIgnoreCase)
@@ -47,7 +47,7 @@ public sealed class MaterialEditingSession : IUndoableEditSource
             .Concat(overrides.Vectors.Select(value => new KeyValuePair<string, Vector4>(value.Name, value.Value)))
             .GroupBy(value => value.Key, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.Last().Value, StringComparer.OrdinalIgnoreCase);
-        TextureParameters = BuildTextureParameters(materials, overrides.Textures);
+        TextureParameters = BuildTextureParameters(materials, overrides.Textures, _hasScopedMaterials);
         foreach (var value in overrides.Textures.Where(value => value.TextureReference is null))
         {
             _textureReferences[value.Name] = null;
@@ -244,186 +244,92 @@ public sealed class MaterialEditingSession : IUndoableEditSource
                 .Select(value => new TextureMaterialOverride(value.Key, value.Value)).ToArray());
     }
 
-    public void ReplaceAttachmentMaterials(
-        ResolvedHeadMaterialSet attachmentMaterials,
-        ResolvedHeadMaterialSet? replacementTextureMaterials = null,
-        bool hasMultiMaterialAttachment = false)
-    {
-        ArgumentNullException.ThrowIfNull(attachmentMaterials);
-        _attachmentMaterials = attachmentMaterials;
-        var merged = new Dictionary<string, ResolvedHeadMaterial>(
-            _baseMaterials.Materials,
-            StringComparer.OrdinalIgnoreCase);
-        foreach (var material in attachmentMaterials.Materials)
-        {
-            merged[material.Key] = material.Value;
-        }
-        _originalMaterials = new ResolvedHeadMaterialSet(merged);
-        _hasScopedMaterials = HasScopedMaterials(_baseMaterials);
+    public void ReplaceAttachmentMaterials(ResolvedHeadMaterialSet attachmentMaterials) =>
+        ApplyMaterialSurface(PrepareAttachmentMaterials(attachmentMaterials));
 
-        var previousScalars = new Dictionary<string, float>(_scalars, StringComparer.OrdinalIgnoreCase);
-        var previousVectors = new Dictionary<string, Vector4>(_vectors, StringComparer.OrdinalIgnoreCase);
-        _defaultScalars = BuildDefaultScalars(_originalMaterials, firstWins: _hasScopedMaterials);
-        _defaultVectors = BuildDefaultVectors(_originalMaterials, firstWins: _hasScopedMaterials);
-        RebaseNumericValues(previousScalars, previousVectors);
-        TextureParameters = BuildTextureParameters(_originalMaterials, _originalOverrides.Textures);
-        if (replacementTextureMaterials is not null)
-        {
-            RebaseAttachmentTextures(replacementTextureMaterials);
-        }
-        if (hasMultiMaterialAttachment)
-        {
-            // A face-wide diffuse selection would paint one hair map over every
-            // material slot. Null restores each slot's own material default.
-            foreach (var name in TextureParameters.Select(parameter => parameter.Name)
-                         .Where(name => GetSourceParameterName(name).Equals("HAIR_Diff", StringComparison.OrdinalIgnoreCase) ||
-                                        GetSourceParameterName(name).Equals("HAIR_ADDN_Diff", StringComparison.OrdinalIgnoreCase)))
-                _textureReferences[name] = null;
-        }
-        Refresh(MaterialChangeKind.Surface);
-    }
+    /// <summary>Prepares a candidate for scene construction without changing controls, edits or history.</summary>
+    public PreparedMaterialSurface PrepareAttachmentMaterials(ResolvedHeadMaterialSet attachmentMaterials) =>
+        PrepareMaterialSurface(_baseMaterials, attachmentMaterials, firstWins: _hasScopedMaterials);
 
     /// <summary>
-    /// Replaces the active material surface after custom slot assignment. This
-    /// is a surface rebase, not a user edit: existing history is retained and
-    /// no second history item is recorded. Custom surfaces are ordered by the
-    /// workspace from lowest material slot first, so the first default wins.
+    /// Replaces the active custom surface without adding a material history item.
+    /// The workspace orders materials by slot, so the lowest slot's default wins.
     /// </summary>
     public void RebaseMaterialSurface(ResolvedHeadMaterialSet materials) =>
         RebaseMaterialSurface(materials, firstWins: true);
 
-    private void RebaseMaterialSurface(ResolvedHeadMaterialSet materials, bool firstWins)
-    {
-        ArgumentNullException.ThrowIfNull(materials);
-        var previousScalars = new Dictionary<string, float>(_scalars, StringComparer.OrdinalIgnoreCase);
-        var previousVectors = new Dictionary<string, Vector4>(_vectors, StringComparer.OrdinalIgnoreCase);
-        var previousTextures = new Dictionary<string, DecodedTextureAsset?>(
-            _textureReferences, StringComparer.OrdinalIgnoreCase);
+    private void RebaseMaterialSurface(ResolvedHeadMaterialSet materials, bool firstWins) =>
+        ApplyMaterialSurface(PrepareMaterialSurface(materials, _attachmentMaterials, firstWins));
 
-        _baseMaterials = materials;
-        _originalMaterials = MergeMaterialSets(_baseMaterials, _attachmentMaterials);
-        _hasScopedMaterials = HasScopedMaterials(_baseMaterials);
-        _defaultScalars = BuildDefaultScalars(_originalMaterials, firstWins);
-        _defaultVectors = BuildDefaultVectors(_originalMaterials, firstWins);
-        RebaseNumericValues(previousScalars, previousVectors);
-
-        TextureParameters = BuildTextureParameters(_originalMaterials, _originalOverrides.Textures);
-        _textureReferences.Clear();
-        foreach (var value in previousTextures) _textureReferences[value.Key] = value.Value;
-        Refresh(MaterialChangeKind.Surface);
-    }
-
-    /// <summary>Convenience overload that makes custom lowest-slot ordering explicit.</summary>
-    public void RebaseMaterialSurface(MorphFaceEditor.Core.Materials.CustomMaterialWorkspace workspace)
+    public void RebaseMaterialSurface(CustomMaterialWorkspace workspace)
     {
         ArgumentNullException.ThrowIfNull(workspace);
         RebaseMaterialSurface(workspace.ActiveMaterials);
     }
 
-    public AttachmentMaterialState CaptureAttachmentState() => new(
-        _baseMaterials,
-        _attachmentMaterials,
-        _originalMaterials,
-        new Dictionary<string, float>(_defaultScalars, StringComparer.OrdinalIgnoreCase),
-        new Dictionary<string, Vector4>(_defaultVectors, StringComparer.OrdinalIgnoreCase),
-        new Dictionary<string, float>(_scalars, StringComparer.OrdinalIgnoreCase),
-        new Dictionary<string, Vector4>(_vectors, StringComparer.OrdinalIgnoreCase),
-        TextureParameters.ToArray(),
-        new Dictionary<string, DecodedTextureAsset?>(_textureReferences, StringComparer.OrdinalIgnoreCase),
-        Materials);
-
-    public void RestoreAttachmentState(AttachmentMaterialState state)
+    private PreparedMaterialSurface PrepareMaterialSurface(
+        ResolvedHeadMaterialSet baseMaterials,
+        ResolvedHeadMaterialSet attachmentMaterials,
+        bool firstWins)
     {
-        ArgumentNullException.ThrowIfNull(state);
-        _baseMaterials = state.BaseMaterials;
-        _attachmentMaterials = state.AttachmentMaterials;
-        _originalMaterials = state.OriginalMaterials;
+        ArgumentNullException.ThrowIfNull(baseMaterials);
+        ArgumentNullException.ThrowIfNull(attachmentMaterials);
+        var materials = MergeMaterialSets(baseMaterials, attachmentMaterials);
+        var scoped = HasScopedMaterials(baseMaterials);
+        var defaultScalars = BuildDefaultScalars(materials, firstWins, scoped);
+        var defaultVectors = BuildDefaultVectors(materials, firstWins, scoped);
+        var scalars = RebaseValues(defaultScalars, _scalars, _editedScalars,
+            _originalOverrides.Scalars.Select(value => KeyValuePair.Create(value.Name, value.Value)));
+        var vectors = RebaseValues(defaultVectors, _vectors, _editedVectors,
+            _originalOverrides.Vectors.Select(value => KeyValuePair.Create(value.Name, value.Value)));
+        return new PreparedMaterialSurface(baseMaterials, attachmentMaterials, materials,
+            defaultScalars, defaultVectors, scalars, vectors,
+            BuildTextureParameters(materials, _originalOverrides.Textures, scoped),
+            BuildMaterials(materials, scalars, vectors, _textureReferences, scoped));
+    }
+
+    /// <summary>Publishes a prepared surface after validation, without an intervening edit or await.</summary>
+    public void ApplyMaterialSurface(PreparedMaterialSurface surface)
+    {
+        ArgumentNullException.ThrowIfNull(surface);
+        _baseMaterials = surface.BaseMaterials;
+        _attachmentMaterials = surface.AttachmentMaterials;
+        _originalMaterials = surface.OriginalMaterials;
         _hasScopedMaterials = HasScopedMaterials(_baseMaterials);
-        _defaultScalars = state.DefaultScalars;
-        _defaultVectors = state.DefaultVectors;
+        _defaultScalars = surface.DefaultScalars;
+        _defaultVectors = surface.DefaultVectors;
         _scalars.Clear();
-        foreach (var value in state.Scalars) _scalars[value.Key] = value.Value;
+        foreach (var value in surface.Scalars) _scalars[value.Key] = value.Value;
         _vectors.Clear();
-        foreach (var value in state.Vectors) _vectors[value.Key] = value.Value;
-        TextureParameters = state.TextureParameters;
-        _textureReferences.Clear();
-        foreach (var value in state.TextureReferences)
-        {
-            _textureReferences[value.Key] = value.Value;
-        }
-        Materials = state.Materials;
+        foreach (var value in surface.Vectors) _vectors[value.Key] = value.Value;
+        TextureParameters = surface.TextureParameters;
+        // Replacing the controls ends their transient texture previews. Authored
+        // texture choices remain in the session and are never rebased from hair MICs.
+        _previewTextureReferences.Clear();
+        Materials = surface.Materials;
         MaterialsChanged?.Invoke(this, new MaterialChangedEventArgs(MaterialChangeKind.Surface, null));
+        HistoryChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    private void RebaseNumericValues(
-        IReadOnlyDictionary<string, float> previousScalars,
-        IReadOnlyDictionary<string, Vector4> previousVectors)
+    private static Dictionary<string, T> RebaseValues<T>(
+        IReadOnlyDictionary<string, T> defaults,
+        IReadOnlyDictionary<string, T> previous,
+        IReadOnlySet<string> edited,
+        IEnumerable<KeyValuePair<string, T>> authored)
     {
-        _scalars.Clear();
-        foreach (var value in _defaultScalars)
+        var values = new Dictionary<string, T>(defaults, StringComparer.OrdinalIgnoreCase);
+        foreach (var value in authored)
         {
-            _scalars[value.Key] = ShouldRetainValue(value.Key, _editedScalars,
-                _originalOverrides.Scalars.Select(item => item.Name),
-                previousScalars)
-                ? previousScalars[value.Key]
-                : value.Value;
+            if (defaults.ContainsKey(value.Key) && previous.TryGetValue(value.Key, out var retained))
+                values[value.Key] = retained;
+            else
+                values.TryAdd(value.Key, value.Value);
         }
-        // Unsupported source overrides remain available for later reapplication
-        // even when the active attachment does not expose their controls.
-        foreach (var value in _originalOverrides.Scalars)
-        {
-            if (!_scalars.ContainsKey(value.Name)) _scalars[value.Name] = value.Value;
-        }
-        foreach (var name in _editedScalars)
-        {
-            if (previousScalars.TryGetValue(name, out var value)) _scalars[name] = value;
-        }
-
-        _vectors.Clear();
-        foreach (var value in _defaultVectors)
-        {
-            _vectors[value.Key] = ShouldRetainValue(value.Key, _editedVectors,
-                _originalOverrides.Vectors.Select(item => item.Name),
-                previousVectors)
-                ? previousVectors[value.Key]
-                : value.Value;
-        }
-        foreach (var value in _originalOverrides.Vectors)
-        {
-            if (!_vectors.ContainsKey(value.Name)) _vectors[value.Name] = value.Value;
-        }
-        foreach (var name in _editedVectors)
-        {
-            if (previousVectors.TryGetValue(name, out var value)) _vectors[name] = value;
-        }
-    }
-
-    private void RebaseAttachmentTextures(ResolvedHeadMaterialSet replacementMaterials)
-    {
-        var replacementHair = replacementMaterials.Materials.Values
-            .Where(material => material.Family == HeadMaterialFamily.Hair)
-            .ToArray();
-        if (replacementHair.Length == 0)
-        {
-            return;
-        }
-
-        // BioMaterialOverride is face-global rather than material-scoped. Hair
-        // maps therefore have to follow the selected mesh explicitly, otherwise
-        // saving the face writes the previous hairstyle's maps back over it.
-        var hairTextureNames = TextureParameters
-            .Select(value => value.Name)
-            .Where(name => HumanMaterialProfiles.Describe(
-                GetSourceParameterName(name), MaterialParameterKind.Texture).Family == HeadMaterialFamily.Hair)
-            .Distinct(StringComparer.OrdinalIgnoreCase);
-        foreach (var name in hairTextureNames)
-        {
-            var parameterName = GetSourceParameterName(name);
-            var replacement = replacementHair
-                .Select(material => material.Textures.GetValueOrDefault(parameterName))
-                .FirstOrDefault(binding => binding is not null);
-            _textureReferences[name] = replacement?.Texture;
-        }
+        // Preserve edits and unsupported source values even while their controls
+        // are absent, so restoring a supporting material can expose them again.
+        foreach (var name in edited)
+            if (previous.TryGetValue(name, out var value)) values[name] = value;
+        return values;
     }
 
     public void BeginScalarEdit(string name) => _history.Begin(
@@ -772,26 +678,34 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         MaterialsChanged?.Invoke(this, new MaterialChangedEventArgs(kind, parameterName));
     }
 
-    private ResolvedHeadMaterialSet BuildMaterials()
+    private ResolvedHeadMaterialSet BuildMaterials() => BuildMaterials(
+        _originalMaterials, _scalars, _vectors,
+        _textureReferences.Concat(_previewTextureReferences), _hasScopedMaterials);
+
+    private static ResolvedHeadMaterialSet BuildMaterials(
+        ResolvedHeadMaterialSet source,
+        IReadOnlyDictionary<string, float> scalarValues,
+        IReadOnlyDictionary<string, Vector4> vectorValues,
+        IEnumerable<KeyValuePair<string, DecodedTextureAsset?>> textureValues,
+        bool scoped)
     {
-        var materials = _originalMaterials.Materials.Values.Select(material =>
+        var materials = source.Materials.Values.Select(material =>
         {
             var scalars = new Dictionary<string, float>(material.Scalars, StringComparer.OrdinalIgnoreCase);
             var vectors = new Dictionary<string, Vector4>(material.Vectors, StringComparer.OrdinalIgnoreCase);
             var textures = new Dictionary<string, MaterialTextureBinding>(material.Textures, StringComparer.OrdinalIgnoreCase);
-            foreach (var value in _scalars.Where(value => AppliesTo(material, value.Key, MaterialParameterKind.Scalar)))
+            foreach (var value in scalarValues.Where(value => AppliesTo(material, value.Key, MaterialParameterKind.Scalar, scoped)))
             {
-                scalars[GetSourceParameterName(value.Key)] = value.Value;
+                scalars[MaterialParameterControlKey.ParameterName(value.Key)] = value.Value;
             }
-            foreach (var value in _vectors.Where(value => AppliesTo(material, value.Key, MaterialParameterKind.Vector)))
+            foreach (var value in vectorValues.Where(value => AppliesTo(material, value.Key, MaterialParameterKind.Vector, scoped)))
             {
-                vectors[GetSourceParameterName(value.Key)] = value.Value;
+                vectors[MaterialParameterControlKey.ParameterName(value.Key)] = value.Value;
             }
-            foreach (var value in _textureReferences
-                         .Concat(_previewTextureReferences)
-                         .Where(value => AppliesTo(material, value.Key, MaterialParameterKind.Texture)))
+            foreach (var value in textureValues
+                         .Where(value => AppliesTo(material, value.Key, MaterialParameterKind.Texture, scoped)))
             {
-                var parameterName = GetSourceParameterName(value.Key);
+                var parameterName = MaterialParameterControlKey.ParameterName(value.Key);
                 if (value.Value is null)
                 {
                     var defaults = material.DefaultTextures.Count == 0
@@ -816,9 +730,10 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         return new ResolvedHeadMaterialSet(materials);
     }
 
-    private Dictionary<string, float> BuildDefaultScalars(
+    private static Dictionary<string, float> BuildDefaultScalars(
         ResolvedHeadMaterialSet materials,
-        bool firstWins)
+        bool firstWins,
+        bool scoped)
     {
         var values = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
         foreach (var material in materials.Materials.Values)
@@ -827,13 +742,13 @@ public sealed class MaterialEditingSession : IUndoableEditSource
             var defaults = material.DefaultScalars.Count == 0 ? material.Scalars : material.DefaultScalars;
             foreach (var value in defaults)
             {
-                var controlName = ControlName(material, value.Key);
+                var controlName = ControlName(material, value.Key, scoped);
                 if (firstWins && values.ContainsKey(controlName)) continue;
                 values[controlName] = value.Value;
             }
             foreach (var value in material.Scalars)
             {
-                var controlName = ControlName(material, value.Key);
+                var controlName = ControlName(material, value.Key, scoped);
                 if (!defaults.ContainsKey(value.Key) && !values.ContainsKey(controlName))
                 {
                     values[controlName] = value.Value;
@@ -841,7 +756,7 @@ public sealed class MaterialEditingSession : IUndoableEditSource
             }
             foreach (var name in material.SupportedScalars)
             {
-                var controlName = ControlName(material, name);
+                var controlName = ControlName(material, name, scoped);
                 if (!values.ContainsKey(controlName)) values[controlName] = material.Scalars.GetValueOrDefault(name);
             }
         }
@@ -858,9 +773,10 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         return new ResolvedHeadMaterialSet(merged);
     }
 
-    private Dictionary<string, Vector4> BuildDefaultVectors(
+    private static Dictionary<string, Vector4> BuildDefaultVectors(
         ResolvedHeadMaterialSet materials,
-        bool firstWins)
+        bool firstWins,
+        bool scoped)
     {
         var values = new Dictionary<string, Vector4>(StringComparer.OrdinalIgnoreCase);
         foreach (var material in materials.Materials.Values)
@@ -869,13 +785,13 @@ public sealed class MaterialEditingSession : IUndoableEditSource
             var defaults = material.DefaultVectors.Count == 0 ? material.Vectors : material.DefaultVectors;
             foreach (var value in defaults)
             {
-                var controlName = ControlName(material, value.Key);
+                var controlName = ControlName(material, value.Key, scoped);
                 if (firstWins && values.ContainsKey(controlName)) continue;
                 values[controlName] = value.Value;
             }
             foreach (var value in material.Vectors)
             {
-                var controlName = ControlName(material, value.Key);
+                var controlName = ControlName(material, value.Key, scoped);
                 if (!defaults.ContainsKey(value.Key) && !values.ContainsKey(controlName))
                 {
                     values[controlName] = value.Value;
@@ -883,33 +799,34 @@ public sealed class MaterialEditingSession : IUndoableEditSource
             }
             foreach (var name in material.SupportedVectors)
             {
-                var controlName = ControlName(material, name);
+                var controlName = ControlName(material, name, scoped);
                 if (!values.ContainsKey(controlName)) values[controlName] = material.Vectors.GetValueOrDefault(name);
             }
         }
         return values;
     }
 
-    private TextureMaterialOverride[] BuildTextureParameters(
+    private static TextureMaterialOverride[] BuildTextureParameters(
         ResolvedHeadMaterialSet materials,
-        IEnumerable<TextureMaterialOverride> authored)
+        IEnumerable<TextureMaterialOverride> authored,
+        bool scoped)
     {
         var values = new Dictionary<string, AssetIdentity?>(StringComparer.OrdinalIgnoreCase);
         foreach (var material in materials.Materials.Values)
         {
             if (material.IsPreviewOnlyAttachment || !material.ContributesFaceControls) continue;
             foreach (var value in material.Textures.Values)
-                values.TryAdd(ControlName(material, value.ParameterName), value.Texture.Source);
+                values.TryAdd(ControlName(material, value.ParameterName, scoped), value.Texture.Source);
             foreach (var value in material.DefaultTextures.Values)
-                values.TryAdd(ControlName(material, value.ParameterName), value.Texture.Source);
-            foreach (var name in material.SupportedTextures) values.TryAdd(ControlName(material, name), null);
+                values.TryAdd(ControlName(material, value.ParameterName, scoped), value.Texture.Source);
+            foreach (var name in material.SupportedTextures) values.TryAdd(ControlName(material, name, scoped), null);
         }
         foreach (var value in authored) values.TryAdd(value.Name, value.TextureReference);
         return values
             .Where(value => materials.Materials.Values.Any(material =>
                 !material.IsPreviewOnlyAttachment &&
                 material.ContributesFaceControls &&
-                AppliesTo(material, value.Key, MaterialParameterKind.Texture)))
+                AppliesTo(material, value.Key, MaterialParameterKind.Texture, scoped)))
             .Select(value => new TextureMaterialOverride(value.Key, value.Value))
             .ToArray();
     }
@@ -925,17 +842,20 @@ public sealed class MaterialEditingSession : IUndoableEditSource
     private static bool HasScopedMaterials(ResolvedHeadMaterialSet materials) =>
         materials.Materials.Values.Any(material => !string.IsNullOrWhiteSpace(material.ParameterScopeKey));
 
-    private string ControlName(ResolvedHeadMaterial material, string parameterName)
+    private static string ControlName(ResolvedHeadMaterial material, string parameterName, bool scoped)
     {
-        var scopeKey = EffectiveScopeKey(material);
+        var scopeKey = EffectiveScopeKey(material, scoped);
         return scopeKey is null
             ? parameterName
             : MaterialParameterControlKey.Create(scopeKey, parameterName);
     }
 
-    private string? EffectiveScopeKey(ResolvedHeadMaterial material)
+    private string? EffectiveScopeKey(ResolvedHeadMaterial material) =>
+        EffectiveScopeKey(material, _hasScopedMaterials);
+
+    private static string? EffectiveScopeKey(ResolvedHeadMaterial material, bool scoped)
     {
-        if (!_hasScopedMaterials) return null;
+        if (!scoped) return null;
         if (!string.IsNullOrWhiteSpace(material.ParameterScopeKey)) return material.ParameterScopeKey;
         // Preview-only human hair attachments remain linked to the shared Human
         // colour controls without becoming independently authored MESH slots.
@@ -948,24 +868,20 @@ public sealed class MaterialEditingSession : IUndoableEditSource
     private bool AppliesTo(
         ResolvedHeadMaterial material,
         string controlName,
-        MaterialParameterKind kind)
+        MaterialParameterKind kind) => AppliesTo(material, controlName, kind, _hasScopedMaterials);
+
+    private static bool AppliesTo(
+        ResolvedHeadMaterial material,
+        string controlName,
+        MaterialParameterKind kind,
+        bool scoped)
     {
-        var parameterName = GetSourceParameterName(controlName);
+        var parameterName = MaterialParameterControlKey.ParameterName(controlName);
         if (!material.Supports(parameterName, kind)) return false;
-        var controlScope = GetParameterScopeKey(controlName);
-        var materialScope = EffectiveScopeKey(material);
+        var controlScope = MaterialParameterControlKey.ScopeKey(controlName);
+        var materialScope = EffectiveScopeKey(material, scoped);
         return string.Equals(controlScope, materialScope, StringComparison.OrdinalIgnoreCase);
     }
-
-    private static bool ShouldRetainValue<T>(
-        string name,
-        IReadOnlySet<string> edited,
-        IEnumerable<string> authoredNames,
-        IReadOnlyDictionary<string, T> previous)
-        where T : notnull =>
-        previous.ContainsKey(name) &&
-        (edited.Contains(name) || authoredNames.Any(value =>
-            string.Equals(value, name, StringComparison.OrdinalIgnoreCase)));
 
     private void Replay(MaterialSemanticEdit edit, bool useAfter)
     {
@@ -1147,7 +1063,8 @@ public sealed class MaterialEditingSession : IUndoableEditSource
     }
 }
 
-public sealed record AttachmentMaterialState(
+/// <summary>A derived material candidate; preparation does not alter the editing session.</summary>
+public sealed record PreparedMaterialSurface(
     ResolvedHeadMaterialSet BaseMaterials,
     ResolvedHeadMaterialSet AttachmentMaterials,
     ResolvedHeadMaterialSet OriginalMaterials,
@@ -1156,7 +1073,6 @@ public sealed record AttachmentMaterialState(
     IReadOnlyDictionary<string, float> Scalars,
     IReadOnlyDictionary<string, Vector4> Vectors,
     IReadOnlyList<TextureMaterialOverride> TextureParameters,
-    IReadOnlyDictionary<string, DecodedTextureAsset?> TextureReferences,
     ResolvedHeadMaterialSet Materials);
 
 internal sealed record MaterialSemanticEdit(string Key, object? Before, object? After);

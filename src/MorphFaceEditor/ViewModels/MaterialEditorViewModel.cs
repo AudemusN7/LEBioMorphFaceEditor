@@ -395,13 +395,9 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
         _session.SetValues(values.Scalars, values.Vectors, values.Textures);
     }
     public void ResetToDefaults() => _session.ResetToDefaults();
-    public void ReplaceAttachmentMaterials(
-        ResolvedHeadMaterialSet materials,
-        ResolvedHeadMaterialSet? replacementTextureMaterials = null,
-        bool hasMultiMaterialAttachment = false) =>
-        _session.ReplaceAttachmentMaterials(materials, replacementTextureMaterials, hasMultiMaterialAttachment);
-    public AttachmentMaterialState CaptureAttachmentState() => _session.CaptureAttachmentState();
-    public void RestoreAttachmentState(AttachmentMaterialState state) => _session.RestoreAttachmentState(state);
+    public PreparedMaterialSurface PrepareAttachmentMaterials(ResolvedHeadMaterialSet materials) =>
+        _session.PrepareAttachmentMaterials(materials);
+    public void ApplyMaterialSurface(PreparedMaterialSurface surface) => _session.ApplyMaterialSurface(surface);
     public async Task ApplyDataAsync(MorphFaceMaterialData data)
     {
         ArgumentNullException.ThrowIfNull(data);

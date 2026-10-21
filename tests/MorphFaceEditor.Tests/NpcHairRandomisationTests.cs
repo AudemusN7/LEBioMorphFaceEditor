@@ -351,8 +351,8 @@ public static class NpcHairRandomisationTests
             new Dictionary<string, float> { ["Highlight1Intensity"] = 0.2f },
             new Dictionary<string, Vector4> { ["Highlight1Color"] = new(0.2f, 0.3f, 0.4f, 1f) },
             new Dictionary<string, MaterialTextureBinding>());
-        editor.Material.ReplaceAttachmentMaterials(new ResolvedHeadMaterialSet(
-            new Dictionary<string, ResolvedHeadMaterial> { [hair.Key] = hair }));
+        editor.Material.ApplyMaterialSurface(editor.Material.PrepareAttachmentMaterials(new ResolvedHeadMaterialSet(
+            new Dictionary<string, ResolvedHeadMaterial> { [hair.Key] = hair })));
         var scalar = editor.Material.Scalars.Single(value => value.Name == "Highlight1Intensity");
         var vector = editor.Material.Vectors.Single(value => value.Name == "Highlight1Color");
         var scope = new EditorRandomisationScope([], [scalar], [vector], []);

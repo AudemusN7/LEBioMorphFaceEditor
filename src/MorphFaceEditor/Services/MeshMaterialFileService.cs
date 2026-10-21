@@ -8,19 +8,6 @@ using MorphFaceEditor.LegendaryExplorer;
 
 namespace MorphFaceEditor.Services;
 
-public sealed record PreparedMeshMaterialImport(
-    MorphFaceMaterialData Parameters,
-    IReadOnlyDictionary<string, DecodedTextureAsset?> Textures,
-    IReadOnlyList<string> Warnings,
-    TsePreviewAttachmentImport? PreviewAttachments = null,
-    bool IsTse = false);
-
-public sealed record TsePreviewAttachmentImport(
-    bool ApplyHair,
-    AssetIdentity? Hair,
-    bool ApplyAccessory,
-    AssetIdentity? Accessory);
-
 /// <summary>Prepares compatible material parameters and textures against the mesh's current assignments.</summary>
 public sealed class MeshMaterialFileService(PackageReferenceService references)
 {
@@ -69,11 +56,11 @@ public sealed class MeshMaterialFileService(PackageReferenceService references)
             .Select(AttachmentPath).ToArray(), game?.ToString(), game is { } targetGame ? InferDefaultFace(workspace, targetGame) : null);
     }
 
-    public Task<PreparedMeshMaterialImport> PrepareAsync(string text, bool tse,
+    public Task<PreparedMaterialImport> PrepareAsync(string text, bool tse,
         CustomMaterialWorkspace workspace, MorphFaceGame game) =>
         PrepareAsync(RonInputSnapshot.Parse(text), tse, workspace, game);
 
-    public async Task<PreparedMeshMaterialImport> PrepareAsync(RonInputSnapshot input, bool tse,
+    public async Task<PreparedMaterialImport> PrepareAsync(RonInputSnapshot input, bool tse,
         CustomMaterialWorkspace workspace, MorphFaceGame game)
     {
         MorphFaceMaterialData parameters;
@@ -196,7 +183,7 @@ public sealed class MeshMaterialFileService(PackageReferenceService references)
             Match(data.Textures, MaterialParameterKind.Texture, value => value.Name, (value, key) => value with { Name = key }));
     }
 
-    internal static async Task<PreparedMeshMaterialImport> PrepareTexturesAsync(
+    internal static async Task<PreparedMaterialImport> PrepareTexturesAsync(
         MorphFaceMaterialData data,
         CustomMaterialWorkspace target, IReadOnlyList<TextureCatalogCandidate> candidates, ITextureReferenceLoader loader)
     {

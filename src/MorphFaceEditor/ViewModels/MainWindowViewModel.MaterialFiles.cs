@@ -160,8 +160,8 @@ public sealed partial class MainWindowViewModel
             await Task.Run(() => _packageWriter.SaveExisting(draft));
 
             // Only the finished, verified working copy is attached to the live shell.
-            var preparedWorkspace = target.PlayerMorph ? EditorWorkspace.ForPlayer(candidate, game, importedFacesOnly: true)
-                : EditorWorkspace.ForNpc(candidate, game, importedFacesOnly: true);
+            var preparedWorkspace = target.PlayerMorph ? EditorWorkspace.ForPlayer(candidate, game)
+                : EditorWorkspace.ForNpc(candidate, game);
             preparedWorkspace.GeometryModes[created.FaceInstancedPath] = MorphFaceGeometryMode.RelativeBake;
             preparedWorkspace.TrackImportedFile(sourcePath, created.FaceInstancedPath, format, source.Fingerprint);
             candidate = null; // Preparation takes ownership of the verified candidate.
@@ -244,17 +244,9 @@ public sealed partial class MainWindowViewModel
             var prepared = await new MeshMaterialFileService(_referenceService).PrepareAsync(
                 input, tse, workspace, game);
             if (!ReferenceEquals(Editor, editor)) return;
-            editor.ApplyMeshMaterialImport(prepared);
+            editor.ApplyMaterialImport(prepared);
             Status = Loc.Format(prepared.IsTse ? "loc_Shell_Status_ImportedTseMaterialSettings" : "loc_Shell_Status_ImportedMaterialSettings", Path.GetFileName(path));
-            if (prepared.Warnings.Count > 0)
-            {
-                foreach (var warning in prepared.Warnings) AppLog.Warning(warning);
-                const int displayLimit = 8;
-                var details = string.Join("\n\n", prepared.Warnings.Take(displayLimit));
-                if (prepared.Warnings.Count > displayLimit)
-                    details += Loc.Format("loc_Shell_MaterialFiles_MoreWarningsInLog", prepared.Warnings.Count - displayLimit);
-                _dialogs.ShowInformation(Loc.Text("loc_Shell_DialogTitle_MaterialsImportedWithWarnings"), AppendDatabaseImportGuidance(details));
-            }
+            ShowMaterialImportWarnings(prepared.Warnings);
         }
         catch (Exception exception)
         {
@@ -369,7 +361,10 @@ public sealed partial class MainWindowViewModel
             foreach (var mesh in editor.AttachmentMeshes) mesh.RestrictPlayerReferences(available);
         }
         if (!isCurrent()) return warnings;
-        warnings.AddRange(await editor.ImportFaceMaterialDataAsync(imported.Parameters, attachments, omitUnresolvedTextures));
+        var prepared = await editor.Material.PrepareMaterialImportAsync(imported.Parameters, omitUnresolvedTextures);
+        if (!isCurrent()) return warnings;
+        editor.ApplyMaterialImport(prepared with { PreviewAttachments = attachments });
+        warnings.AddRange(prepared.Warnings);
         return warnings;
     }
 

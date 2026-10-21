@@ -54,9 +54,12 @@ public static class MaterialInterchangeTests
         var before = target.Export();
         var originalGeometry = target.Editor.CreateDraft();
         var prepared = target.Prepare(file);
+        TestAssert.Equal(before, target.Export());
+        TestAssert.True(assignments.SequenceEqual(target.Workspace.Assignments),
+            "Preparing a material import changed the current assignments.");
         TestAssert.True(prepared.Warnings.Count == 1 && prepared.Warnings.Any(value => value.Contains("BIOG_Missing.Diff.KeepMe")),
             "Unsupported parameters were not ignored silently or the missing texture was not reported.");
-        target.Editor.ApplyMeshMaterialImport(prepared);
+        target.Editor.ApplyMaterialImport(prepared);
         var imported = target.Export();
         TestAssert.True(assignments.SequenceEqual(target.Workspace.Assignments), "Import replaced existing slot assignments.");
         TestAssert.Near(0.875f, target.Session.GetScalar(Key("human", "Shared")), 0);
@@ -78,7 +81,7 @@ public static class MaterialInterchangeTests
         TestAssert.True(assignments.SequenceEqual(target.Workspace.Assignments), "Undo replaced slot assignments.");
         target.Editor.RedoCommand.Execute(null);
         TestAssert.Equal(imported, target.Export());
-        target.Editor.ApplyMeshMaterialImport(target.Prepare(FaceMaterialFileService.Capture(MorphFaceGame.LE1,
+        target.Editor.ApplyMaterialImport(target.Prepare(FaceMaterialFileService.Capture(MorphFaceGame.LE1,
             "Neutral", new([new("Shared", 0.25f)], [], []))));
         TestAssert.Near(0.25f, target.Session.GetScalar(Key("human", "Shared")), 0);
         TestAssert.Near(0.25f, target.Session.GetScalar(Key("krogan", "Shared")), 0);
@@ -113,7 +116,7 @@ public static class MaterialInterchangeTests
             MorphFaceGame.LE1).GetAwaiter().GetResult();
         TestAssert.True(autoDetected.IsTse,
             "Import Materials did not auto-detect a TSE RON.");
-        fixture.Editor.ApplyMeshMaterialImport(autoDetected);
+        fixture.Editor.ApplyMaterialImport(autoDetected);
         TestAssert.Near(0.125f, fixture.Session.GetScalar(Key("human", "Shared")), 0);
         var alienAfter = MeshMaterialInterchange.Split(fixture.Session.CaptureInterchangeData())["krogan"];
         TestAssert.True(alienBefore.Scalars.SequenceEqual(alienAfter.Scalars) &&
@@ -124,7 +127,7 @@ public static class MaterialInterchangeTests
 
         var hair = new AssetIdentity("hair.pcc", "BIOG_HMF_HIR_PRO.Hair.Test", 10, "SkeletalMesh");
         var accessory = new AssetIdentity("accessory.pcc", "BIOG_ACC.Accessory.Test", 20, "SkeletalMesh");
-        fixture.Editor.ApplyMeshMaterialImport(new(new([], [], []),
+        fixture.Editor.ApplyMaterialImport(new(new([], [], []),
             new Dictionary<string, DecodedTextureAsset?>(), [],
             new TsePreviewAttachmentImport(true, hair, true, accessory), true));
         TestAssert.Equal(hair, fixture.Editor.HairMesh.Value);
@@ -162,7 +165,7 @@ public static class MaterialInterchangeTests
         Reject(() => new MeshMaterialFileService(fixture.References).PrepareAsync(
             MaterialRonCodec.WriteMfe(file with { Game = "LE2" }), false, fixture.Workspace,
             MorphFaceGame.LE1).GetAwaiter().GetResult());
-        Reject(() => fixture.Editor.ApplyMeshMaterialImport(new(
+        Reject(() => fixture.Editor.ApplyMaterialImport(new(
             new([new(Key("krogan", "Shared"), float.NaN)], [], []),
             new Dictionary<string, DecodedTextureAsset?>(), [])));
         TestAssert.Equal(before, fixture.Export());
@@ -182,7 +185,7 @@ public static class MaterialInterchangeTests
         var characterCreatorCandidate = new TextureCatalogCandidate(MorphFaceGame.LE1, path,
             characterCreatorOccurrence, [characterCreatorOccurrence]) { IsEligibleOfficialDefault = true };
         var loader = new Loader();
-        PreparedMeshMaterialImport Prepare(string texturePath, IReadOnlyList<TextureCatalogCandidate>? sources = null) =>
+        PreparedMaterialImport Prepare(string texturePath, IReadOnlyList<TextureCatalogCandidate>? sources = null) =>
             MeshMaterialFileService.PrepareTexturesAsync(
             new([], [], [new(Key("human", "HED_Diff"), new("", texturePath, 0, "Texture2D"))]),
             fixture.Workspace, sources ?? [characterCreatorCandidate, seekFreeCandidate], loader).GetAwaiter().GetResult();
@@ -191,7 +194,7 @@ public static class MaterialInterchangeTests
         TestAssert.Equal(path, loader.LoadedPath);
         TestAssert.Equal("BIOG_External.pcc", loader.LoadedPackage);
         TestAssert.Equal(0, prepared.Warnings.Count);
-        fixture.Editor.ApplyMeshMaterialImport(prepared);
+        fixture.Editor.ApplyMaterialImport(prepared);
         TestAssert.Equal(path, fixture.Session.GetPreviewTexture(Key("human", "HED_Diff"))!.Source.InstancedPath);
         TestAssert.True(fixture.Export().Contains(path, StringComparison.Ordinal),
             "The seek-free package-local texture identity was not requalified on export.");
@@ -375,7 +378,7 @@ public static class MaterialInterchangeTests
         }
         public string Export() => MaterialRonCodec.WriteMfe(MeshMaterialFileService.Capture(
             Workspace, MorphFaceGame.LE1, "MyMesh", Session.CaptureInterchangeData()));
-        public PreparedMeshMaterialImport Prepare(MeshMaterialDocument document)
+        public PreparedMaterialImport Prepare(MeshMaterialDocument document)
         {
             return new MeshMaterialFileService(References).PrepareAsync(MaterialRonCodec.WriteMfe(document), false,
                 Workspace, MorphFaceGame.LE1).GetAwaiter().GetResult();

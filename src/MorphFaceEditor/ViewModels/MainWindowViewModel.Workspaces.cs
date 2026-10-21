@@ -63,8 +63,10 @@ public sealed partial class MainWindowViewModel
         var catalog = await _catalogService.ReadWorkspaceAsync(workspacePath, _referenceService, projection, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         workspace.Game = catalog.Faces.Game;
+        // Staged Player/NPC packages retain donor faces for asset dependencies.
+        // Only registered imports belong in their sidebar; later imports join the same map.
         var faces = catalog.Faces.Faces.Where(face =>
-            (!workspace.ImportedFacesOnly || workspace.GeometryModes.ContainsKey(face.InstancedPath)) &&
+            (!workspace.IsStandalone || workspace.GeometryModes.ContainsKey(face.InstancedPath)) &&
             (workspace.Career is null || face.InstancedPath == workspace.SourceFacePath)).ToArray();
         var selected = preferredFacePath is null ? null : faces.FirstOrDefault(face =>
             string.Equals(face.InstancedPath, preferredFacePath, StringComparison.OrdinalIgnoreCase)) ?? faces.FirstOrDefault();

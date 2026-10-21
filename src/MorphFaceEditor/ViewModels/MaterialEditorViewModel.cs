@@ -76,14 +76,11 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
         _session.MergeMaterialData(data, textures);
 
     /// <summary>
-    /// Resolves the texture references in a partial material import and merges
-    /// the values into the current edit as one logical change. A texture that
-    /// cannot be decoded is still retained as an authored reference by the
-    /// editing session; callers receive the diagnostic so the rest of the
-    /// material import can continue. Initial standalone presets can omit those
-    /// references so their new workspace can pass package verification.
+    /// Resolves a partial material import without changing live values or history.
+    /// Undecodable authored references survive with diagnostics unless an initial
+    /// standalone preset requests omission for verified package publication.
     /// </summary>
-    public async Task<IReadOnlyList<string>> MergeMaterialDataAsync(MorphFaceMaterialData data,
+    public async Task<PreparedMaterialImport> PrepareMaterialImportAsync(MorphFaceMaterialData data,
         bool omitUnresolvedTextures = false)
     {
         ArgumentNullException.ThrowIfNull(data);
@@ -137,8 +134,7 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
         if (omitUnresolvedTextures)
             data = data with { Textures = data.Textures.Where(value => value.TextureReference is null ||
                 decoded.ContainsKey(_session.ResolveControlName(value.Name, MaterialParameterKind.Texture))).ToArray() };
-        _session.MergeMaterialData(data, decoded);
-        return warnings;
+        return new(data, decoded, warnings);
     }
 
     private async Task<DecodedTextureAsset?> ResolveHiddenTextureAsync(

@@ -47,7 +47,7 @@ public static class UiSmokeTests
         new("New Player defaults use direct heads and save to PCC across all games and sexes", NewPlayerDefaultsUseDirectHeads),
         new("source file save preserves RON edits on failure and blocks multiple imports", SourceFileSaveRoundTrip),
         new("PCC Save As retains staged faces on failure and adopts the successful copy", PccSaveAsAdoptsSuccessfulCopy),
-        new("full RON source save retains staged edits to other faces", RonSourceSaveRetainsOtherFaces),
+        new("standalone workspaces hide donors and retain additional Player imports", AdditionalPlayerImportsRetainStagedEdits),
         new("Player pickers require seekfree backing and saving rechecks changed sources", PlayerRonRequiresSeekFreeBacking),
         new("Morphs-only RON opens its base face saves features and retains unrelated edits", MorphFeaturesFileWorkflow),
         new("MFE RON representative exports reopen full morph and material scopes across games", RepresentativeRonReopens),
@@ -847,47 +847,71 @@ public static class UiSmokeTests
         finally { Directory.Delete(directory, recursive: true); }
     });
 
-    private static void RonSourceSaveRetainsOtherFaces() => RunWithDispatcher(async () =>
+    private static void AdditionalPlayerImportsRetainStagedEdits() => RunWithDispatcher(async () =>
     {
         var directory = Path.Combine(Path.GetTempPath(), $"MFE-RonOtherFaces-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directory);
         try
         {
-            var source = Path.Combine(directory, "Player.ron");
-            var exported = Path.Combine(directory, "OtherFace.ron");
-            var head = new MorphFacePackageContextService().CapturePlayerDefaultHead(MorphFaceGame.LE1, StandalonePlayerSex.Male);
-            TseHeadMorphRon.Write(source, head, new(RonExportProducer.MFE, MorphFaceGame.LE1, "HMM", true));
-            using var reader = new MorphFacePackageReader();
-            var dialogs = new StubEditorDialogs { StandaloneNameChoiceResult = "MFE_RonSource", RonExportPath = exported };
-            using var shell = CreateMainWindowViewModel(reader, dialogs);
-            await shell.OpenDroppedFileAsync(source);
-            TestAssert.True(!shell.HasError && shell.Editor is not null, shell.ErrorMessage ?? "Player source did not open.");
-            var sourceFace = shell.LoadedFacePath!;
-            shell.SelectedFace = shell.Faces.First(face => face.ProfileKey == "le1-human-male" && face.InstancedPath != sourceFace);
-            await ((AsyncRelayCommand)shell.LoadSelectedFaceCommand).ExecuteAsync();
-            var scalar = shell.Editor!.Material.Scalars.First();
-            var otherName = scalar.Name;
-            var otherValue = scalar.Value + 0.125f;
-            scalar.Value = otherValue;
-            await ((AsyncRelayCommand)shell.ExportMorphRonCommand).ExecuteAsync();
-            TestAssert.True(!shell.HasError && shell.Editor?.IsDirty == false && shell.IsDirty,
-                shell.ErrorMessage ?? "Exporting another face did not retain its staged edits.");
-            TestAssert.Near(otherValue, TseHeadMorphRon.Read(exported).MaterialData.Scalars.Single(value => value.Name == otherName).Value, 0.00001f);
-            await ((AsyncRelayCommand)shell.SaveCommand).ExecuteAsync();
-            TestAssert.True(!shell.HasError && shell.IsDirty, shell.ErrorMessage ?? "Saving the source RON cleared another face's edits.");
-            shell.SelectedFace = shell.Faces.Single(face => face.InstancedPath == sourceFace);
-            await ((AsyncRelayCommand)shell.LoadSelectedFaceCommand).ExecuteAsync();
-            scalar = shell.Editor!.Material.Scalars.First();
-            var sourceName = scalar.Name;
-            var sourceValue = scalar.Value + 0.25f;
-            scalar.Value = sourceValue;
-            await ((AsyncRelayCommand)shell.SaveCommand).ExecuteAsync();
-            TestAssert.True(!shell.HasError && shell.IsDirty && shell.Editor?.IsDirty == false,
-                shell.ErrorMessage ?? "Saving the source face discarded staged edits to its sibling.");
-            TestAssert.Near(sourceValue, TseHeadMorphRon.Read(source).MaterialData.Scalars.Single(value => value.Name == sourceName).Value, 0.00001f);
-            dialogs.ConfirmUnsavedChangesResult = UnsavedChangesChoice.Save;
-            TestAssert.True(!await shell.ConfirmCloseAsync() && shell.HasWorkspace,
-                "Saving one face allowed the workspace to close with other staged edits.");
+            foreach (var game in new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 })
+            {
+                var source = Path.Combine(directory, $"{game}-Player.ron");
+                var exported = Path.Combine(directory, $"{game}-OtherFace.ron");
+                var head = new MorphFacePackageContextService().CapturePlayerDefaultHead(game, StandalonePlayerSex.Male);
+                TseHeadMorphRon.Write(source, head, new(RonExportProducer.MFE, game, "HMM", true));
+                var sourceBytes = File.ReadAllBytes(source);
+                using var reader = new MorphFacePackageReader();
+                var dialogs = new StubEditorDialogs { StandaloneNameChoiceResult = "MFE_RonSource", RonExportPath = exported };
+                using var shell = CreateMainWindowViewModel(reader, dialogs);
+                await shell.OpenDroppedFileAsync(source);
+                TestAssert.True(!shell.HasError && shell.Editor is not null, shell.ErrorMessage ?? "Player source did not open.");
+                TestAssert.Equal(1, shell.Faces.Count);
+                var sourceFace = shell.LoadedFacePath!;
+                dialogs.StandaloneNameChoiceResult = "MFE_AdditionalPlayer";
+                await shell.OpenDroppedFileAsync(source);
+                TestAssert.True(!shell.HasError && shell.Editor is not null, shell.ErrorMessage ?? "Additional Player import failed.");
+                var addedFace = shell.LoadedFacePath!;
+                TestAssert.True(sourceFace != addedFace && shell.Faces.Count == 2 &&
+                    shell.Faces.Any(face => face.InstancedPath == sourceFace),
+                    "Appending another Player face hid or replaced an authored face.");
+                var scalar = shell.Editor!.Material.Scalars.First();
+                var otherName = scalar.Name;
+                var otherValue = scalar.Value + 0.125f;
+                scalar.Value = otherValue;
+                await ((AsyncRelayCommand)shell.ExportMorphRonCommand).ExecuteAsync();
+                TestAssert.True(!shell.HasError && shell.Editor?.IsDirty == false && shell.IsDirty,
+                    shell.ErrorMessage ?? "Exporting another face did not retain its staged edits.");
+                TestAssert.Near(otherValue, TseHeadMorphRon.Read(exported).MaterialData.Scalars.Single(value => value.Name == otherName).Value, 0.00001f);
+                await ((AsyncRelayCommand)shell.SaveCommand).ExecuteAsync();
+                TestAssert.True(dialogs.LastInformation == Loc.Text("loc_FileSave_MultipleImports") &&
+                    shell.IsDirty && sourceBytes.SequenceEqual(File.ReadAllBytes(source)),
+                    "A multiple-import workspace overwrote one source RON or discarded staged edits.");
+                shell.SelectedFace = shell.Faces.Single(face => face.InstancedPath == sourceFace);
+                await ((AsyncRelayCommand)shell.LoadSelectedFaceCommand).ExecuteAsync();
+                scalar = shell.Editor!.Material.Scalars.First();
+                var sourceName = scalar.Name;
+                var sourceValue = scalar.Value + 0.25f;
+                scalar.Value = sourceValue;
+                dialogs.RonExportPath = Path.Combine(directory, $"{game}-FirstFace.ron");
+                await ((AsyncRelayCommand)shell.ExportMorphRonCommand).ExecuteAsync();
+                TestAssert.True(!shell.HasError && shell.IsDirty && shell.Editor?.IsDirty == false,
+                    shell.ErrorMessage ?? "Exporting the first face discarded staged edits to its sibling.");
+                TestAssert.Near(sourceValue, TseHeadMorphRon.Read(dialogs.RonExportPath).MaterialData.Scalars.Single(value => value.Name == sourceName).Value, 0.00001f);
+                shell.SelectedFace = shell.Faces.Single(face => face.InstancedPath == addedFace);
+                await ((AsyncRelayCommand)shell.LoadSelectedFaceCommand).ExecuteAsync();
+                TestAssert.Near(otherValue, shell.Editor!.Material.Scalars.Single(value => value.Name == otherName).Value, 0.00001f);
+                dialogs.NewPlayerChoice = new(game, StandalonePlayerSex.Female);
+                dialogs.StandaloneNameChoiceResult = "MFE_AdditionalNewPlayer";
+                await ((AsyncRelayCommand)shell.NewPlayerMorphCommand).ExecuteAsync();
+                TestAssert.True(!shell.HasError && shell.Faces.Count == 3 &&
+                    shell.Faces.Any(face => face.InstancedPath == sourceFace) &&
+                    shell.Faces.Any(face => face.InstancedPath == addedFace) &&
+                    shell.Faces.All(face => face.ObjectName.StartsWith("MFE_", StringComparison.Ordinal)),
+                    shell.ErrorMessage ?? "Appending New Player hid authored faces or revealed donor faces.");
+                var stagedFaces = MorphFaceReferenceInspector.Inspect(shell.Editor!.CreateDraft().Source.PackagePath);
+                TestAssert.True(stagedFaces.Count > shell.Faces.Count,
+                    "Hiding donor faces removed them from the staged package.");
+            }
         }
         finally { Directory.Delete(directory, recursive: true); }
     });
@@ -1091,6 +1115,7 @@ public static class UiSmokeTests
                 await ((AsyncRelayCommand)shell.NewPlayerMorphCommand).ExecuteAsync();
                 TestAssert.True(!shell.HasError && shell.Editor is not null && shell.HasPreview && !shell.IsDirty,
                     shell.ErrorMessage ?? $"New {game} {sex} Player did not open.");
+                TestAssert.Equal(1, shell.Faces.Count);
                 TestAssert.Equal("PlayerMorph", dialogs.NewPlayerSuggestedName!);
                 TestAssert.Equal(0, dialogs.StandaloneGameChoiceCount);
                 TestAssert.Equal(0, dialogs.MorphImportFileChoiceCount);
@@ -1542,6 +1567,7 @@ public static class UiSmokeTests
                 "The NPC import was not published as a standalone NPC workspace.");
             TestAssert.True(viewModel.Editor?.CanEditMorphFeatures == true,
                 "The imported native Salarian did not expose its verified morph controls.");
+            TestAssert.Equal(1, viewModel.Faces.Count);
             TestAssert.Equal(0, dialogs.RonImportDestinationChoiceCount);
             TestAssert.True(viewModel.SaveMorphToPccCommand.CanExecute(null),
                 "The NPC workspace cannot export through the accepted PCC workflow.");
@@ -1577,6 +1603,7 @@ public static class UiSmokeTests
             await shell.OpenDroppedFileAsync(ronPath);
             TestAssert.True(!shell.HasError && shell.Editor is not null && shell.HasPreview,
                 shell.ErrorMessage ?? "The NPC RON did not reopen with an editor and preview.");
+            TestAssert.Equal(1, shell.Faces.Count);
             var workspace = ((EditorWorkspace)typeof(MainWindowViewModel).GetField("_workspace",
                 System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(shell)!).Package!;
             var restored = new MorphFacePackageContextService().CaptureMorphData(workspace.WorkingPath, shell.LoadedFacePath!);

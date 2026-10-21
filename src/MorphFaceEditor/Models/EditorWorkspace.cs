@@ -24,10 +24,10 @@ internal sealed class EditorWorkspace : IDisposable
     }
 
     public static EditorWorkspace ForPcc(MorphFacePackageWorkspace package) => new(EditorWorkspaceKind.Pcc, MorphFaceGame.Unsupported, package);
-    public static EditorWorkspace ForPlayer(MorphFacePackageWorkspace package, MorphFaceGame game, bool importedFacesOnly = false) =>
-        new(EditorWorkspaceKind.Player, game, package) { ImportedFacesOnly = importedFacesOnly };
-    public static EditorWorkspace ForNpc(MorphFacePackageWorkspace package, MorphFaceGame game, bool importedFacesOnly = false) =>
-        new(EditorWorkspaceKind.Npc, game, package) { ImportedFacesOnly = importedFacesOnly };
+    public static EditorWorkspace ForPlayer(MorphFacePackageWorkspace package, MorphFaceGame game) =>
+        new(EditorWorkspaceKind.Player, game, package);
+    public static EditorWorkspace ForNpc(MorphFacePackageWorkspace package, MorphFaceGame game) =>
+        new(EditorWorkspaceKind.Npc, game, package);
     public static EditorWorkspace ForCareer(MorphFacePackageWorkspace package, PcsavHeadMorphWorkspace career, string facePath) =>
         new(EditorWorkspaceKind.Player, career.Game, package) { Career = career, CareerFacePath = facePath };
     public static EditorWorkspace ForMesh(ImportedMeshAsset mesh, MorphFaceGame game) =>
@@ -39,7 +39,6 @@ internal sealed class EditorWorkspace : IDisposable
     public PcsavHeadMorphWorkspace? Career { get; private init; }
     public ImportedMeshAsset? Mesh { get; private init; }
     public ImportedFaceFile? ImportedFile { get; set; }
-    public bool ImportedFacesOnly { get; private init; }
     public Dictionary<string, MorphFaceGeometryMode> GeometryModes { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     // A native Save can be current while its disposable PCC still holds an older editing projection.

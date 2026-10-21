@@ -24,6 +24,21 @@ internal static class PlayerMaterialRegressionTests
             "BIOG_MORPH_FACE.Player_Base_Female").GetAwaiter().GetResult();
         var session = loaded.MaterialEditingSession;
         session.ResetToDefaults();
+        var makeup = session.GetPreviewTexture("HED_Makeup_Mask")!;
+        TestAssert.Equal("BIOG_HMF_HED_PROMorph_R.Masks.HMF_HED_PROCustom_MKup_01", makeup.Source.InstancedPath);
+        TestAssert.Equal(makeup.Source, session.CreateOverrides().Textures
+            .Single(value => value.Name == "HED_Makeup_Mask").TextureReference);
+        var output = Path.Combine(Path.GetTempPath(), $"MFE-Le1-Makeup-Defaults-{Guid.NewGuid():N}.pcc");
+        try
+        {
+            var draft = loaded.Loaded.Document with { MaterialOverrides = session.CreateOverrides() };
+            var saved = new MorphFacePackageWriter().SaveMorphToPackage(draft, draft.Source.PackagePath, output, true);
+            using var roundTripReader = new MorphFacePackageReader();
+            var reopened = roundTripReader.Load(saved.PackagePath, saved.FaceInstancedPath);
+            TestAssert.Equal(makeup.Source.InstancedPath, reopened.Materials.Materials.Values
+                .First(material => material.Family == HeadMaterialFamily.Skin).Textures["HED_Makeup_Mask"].Texture.Source.InstancedPath);
+        }
+        finally { File.Delete(output); }
         TestAssert.Near(0, session.GetScalar("HED_Lips_Tint_Scalar"), 1e-6f);
         TestAssert.True(session.CreateOverrides().Scalars.Count == 0, "Reset authored a synthetic lipstick override.");
         // Only draw the face: scalp/neck colour changes cannot mask a broken face branch.

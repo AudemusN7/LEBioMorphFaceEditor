@@ -146,6 +146,9 @@ public sealed record ResolvedHeadMaterial(
         new Dictionary<string, Vector4>(StringComparer.OrdinalIgnoreCase);
     public IReadOnlyDictionary<string, MaterialTextureBinding> DefaultTextures { get; init; } =
         new Dictionary<string, MaterialTextureBinding>(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Neutral editor defaults that require an explicit texture override in saved output.</summary>
+    public IReadOnlyDictionary<string, MaterialTextureBinding> DefaultTextureOverrides { get; init; } =
+        new Dictionary<string, MaterialTextureBinding>(StringComparer.OrdinalIgnoreCase);
     public IReadOnlySet<string> SupportedScalars { get; init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     public IReadOnlySet<string> SupportedVectors { get; init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     public IReadOnlySet<string> SupportedTextures { get; init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

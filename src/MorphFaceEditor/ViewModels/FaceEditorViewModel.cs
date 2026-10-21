@@ -565,6 +565,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                 return;
             }
 
+            var materialDefaults = RandomiseMaterials ? Material.CapturePendingRandomisationDefaults() : null;
             var playerContext = GetPlayerRandomisationContext();
             var humanHairContext = GetHumanScalpContext();
             var morphScope = RandomiseMorphs
@@ -610,7 +611,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                         !IsPlayerExclusiveTexture(Material.SourceParameterName(name)) &&
                         !Player2DaParameters.ContainsKey(Material.SourceParameterName(name)))
                     .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var hasMaterial = scalarScope.Count + vectorScope.Count + requestedTextureNames.Count > 0;
+            var hasMaterial = materialDefaults is not null || scalarScope.Count + vectorScope.Count + requestedTextureNames.Count > 0;
             if (morphScope.Count == 0 && !hasMaterial) return;
 
             int? morphSeed = morphScope.Count > 0 ? _randomSeedFactory() : null;
@@ -647,7 +648,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                     .ToHashSet(StringComparer.OrdinalIgnoreCase);
                 npcMaterial = await PrepareMaterialRandomisationAsync(
                     materialProfiles, npcScalarScope, npcVectorScope, npcTextureNames,
-                    materialSeed!.Value, morphDonor?.Id);
+                    materialSeed!.Value, morphDonor?.Id, materialDefaults);
             }
             var playerDetails = playerContext is not null && materialSeed is not null
                 ? await PreparePlayerFacialDetailsAsync(playerContext.Value, requestedTextureNames,
@@ -655,7 +656,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                 : new Dictionary<string, DecodedTextureAsset?>();
             var playerColours = playerContext is not null && materialSeed is not null
                 ? await PreparePlayer2DaAsync(playerContext.Value, requested, playerDetails,
-                    materialSeed.Value, cursed: false)
+                    materialSeed.Value, cursed: false, materialDefaults)
                 : null;
             var playerFaceScar = playerContext is not null && materialSeed is not null
                 ? await PreparePlayerFaceScarAsync(playerContext.Value, requestedTextureNames,
@@ -696,7 +697,8 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                         _session.SetBoneAxis(bone.BoneName, 2, clean.Z);
                     }
                 }
-                if (preparedMaterial is not null) Material.ApplyRandomisation(preparedMaterial);
+                if (preparedMaterial is not null || materialDefaults is not null)
+                    Material.ApplyRandomisation(preparedMaterial ?? PreparedMaterialRandomisation.Empty);
                 if (playerHair is { } hair)
                 {
                     switch (hair.Style.MeshAction)
@@ -749,10 +751,10 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             : new Dictionary<string, System.Numerics.Vector4>(StringComparer.OrdinalIgnoreCase);
         var featureValues = CursedMorphRandomiser.CreateFeatureValues(
             features, MorphRandomisationStrength, seed);
-        var retainNpcHairMesh = playerContext is null && humanHairContext is { } npcHairContext &&
-            HasNonzeroPlayerExcludedCharacterMorph(featureValues, npcHairContext.Sex);
+        // Cursed permits incompatible Character morphs and hair; only an explicit
+        // mesh lock protects the current pair here. Normal rolls keep their guard.
         var preserveCurrentHairScalp = IsCurrentPairedScalpProtected(
-            humanHairContext, retainNpcHairMesh);
+            humanHairContext, forcePreserveMesh: false);
         var materialValues = CursedMorphRandomiser.CreateExtrasProposal(
             [], scalars, vectors, MaterialRandomisationStrength, seed,
             requested.Scalars.Select(value => new MaterialRandomisationScalarBounds(
@@ -838,8 +840,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             : null;
         var playerHair = humanHairContext is not null && requestedTextureNames.Count > 0
             ? await PrepareHumanHairAsync(humanHairContext.Value, requestedTextureNames, seed,
-                requested.InclusionKey is not null, npcHairRules: playerContext is null,
-                retainCurrentMesh: retainNpcHairMesh)
+                requested.InclusionKey is not null, npcHairRules: playerContext is null)
             : null;
         if (generation != _randomisationGeneration) return;
         var preparedMaterial = MergePreparedMaterial(npcMaterial, playerDetails,
@@ -881,7 +882,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             }
             if (preparedMaterial.Scalars.Count + preparedMaterial.Vectors.Count +
                 preparedMaterial.Textures.Count > 0)
-                Material.ApplyRandomisation(preparedMaterial);
+                Material.ApplyRandomisation(preparedMaterial, cursed: true);
             if (playerHair is { } hair)
             {
                 switch (hair.Style.MeshAction)
@@ -1123,6 +1124,23 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             value.Name.Equals(name, StringComparison.OrdinalIgnoreCase))) && CanRandomiseScope(scope);
     }
 
+    private bool CanRandomiseHumanHair(EditorRandomisationScope scope,
+        (MorphFaceGame Game, PlayerHairSex Sex, string? ScopeKey)? context)
+    {
+        if (!_isTextureRegistryAvailable || context is not { } human || scope.Textures.Count < 2)
+            return false;
+        var required = new[] { "HED_Scalp_Diff", "HED_Scalp_Norm", "HED_Scalp_Spec", "HED_Tang" }
+            .Select(name => Material.FindControlName(human.ScopeKey, name, MaterialParameterKind.Texture))
+            .Where(name => name is not null).ToArray();
+        if (required.Length < 2 || !required.All(name => scope.Textures.Any(value =>
+                value.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))) return false;
+        // Reviewed hairstyles form a separate catalogue; they need no ordinary
+        // corpus texture variation. Resolve metadata only, without loading assets.
+        return PlayerHairStyleCatalog.Resolve(human.Game, human.Sex,
+            _registryTextureCandidates, _registryAttachmentCandidates,
+            HairMesh.IsRandomisationLocked || !CanEditAttachments).Count > 0;
+    }
+
     private static bool IsHumanHairMorph(MorphFeatureEditorViewModel feature, PlayerHairSex sex) =>
         sex == PlayerHairSex.Male
             ? HumanMaleHairScalpPolicy.IsHairMorph(feature.Name)
@@ -1173,7 +1191,8 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                                  materialProfiles.Count > 0;
         var hasCursedBones = includeCursedBones && CursedMode && RandomiseMorphs && CanEditBones;
         if (CursedMode) return hasMorph || hasCursedBones || hasRawNumericMaterial ||
-                               hasEligibleTexture || hasPlayerPalette;
+                               hasEligibleTexture || hasPlayerPalette ||
+                               RandomiseMaterials && CanRandomiseHumanHair(scope, humanContext);
         var hasEligibleMorph = hasMorph && _randomisationCatalog.HasDonors(_profileKey);
         var hasEligibleMaterial = RandomiseMaterials && materialProfiles.Count > 0 &&
             (scope.Scalars.Any(value => materialProfiles.Any(profile =>
@@ -1232,10 +1251,10 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         return warnings;
     }
     public async Task<IReadOnlyList<string>> ImportFaceMaterialDataAsync(
-        MorphFaceMaterialData data, TsePreviewAttachmentImport? attachments)
+        MorphFaceMaterialData data, TsePreviewAttachmentImport? attachments, bool omitUnresolvedTextures = false)
     {
         using var aggregate = _history.BeginAggregate();
-        var warnings = await Material.MergeMaterialDataAsync(data);
+        var warnings = await Material.MergeMaterialDataAsync(data, omitUnresolvedTextures);
         if (attachments is { ApplyHair: true } && CanEditAttachments)
             HairMesh.SetImportedPreview(attachments.Hair);
         if (attachments is { ApplyAccessory: true } && CanEditAttachments)
@@ -1428,7 +1447,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             _scalpMaterialDonors[scalp.Key] = scalp;
             _scalpMaterialSession.Set(scalp.Source);
         }
-        Material.ApplyRandomisation(prepared.Material);
+        Material.ApplyPreparedValues(prepared.Material);
         aggregate.Commit();
     }
 
@@ -1445,7 +1464,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         (MorphFaceGame Game, PlayerHairSex Sex, string? ScopeKey) context,
         EditorRandomisationScope requested,
         IReadOnlyDictionary<string, DecodedTextureAsset?> playerDetails,
-        int seed, bool cursed)
+        int seed, bool cursed, MaterialRandomisationDefaults? materialDefaults = null)
     {
         var allowed = requested.Scalars.Select(value => value.Name)
             .Concat(requested.Vectors.Select(value => value.Name))
@@ -1467,12 +1486,14 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                      string.Equals(Material.ParameterScopeKey(value.Name), context.ScopeKey,
                          StringComparison.OrdinalIgnoreCase) &&
                      Player2DaParameters.ContainsKey(Material.SourceParameterName(value.Name))))
-            current[Material.SourceParameterName(value.Name)] = Player2DaValue.FromScalar(value.Value);
+            current[Material.SourceParameterName(value.Name)] = Player2DaValue.FromScalar(
+                materialDefaults?.Scalars.GetValueOrDefault(value.Name, value.Value) ?? value.Value);
         foreach (var value in Material.Vectors.Where(value =>
                      string.Equals(Material.ParameterScopeKey(value.Name), context.ScopeKey,
                          StringComparison.OrdinalIgnoreCase) &&
                      Player2DaParameters.ContainsKey(Material.SourceParameterName(value.Name))))
-            current[Material.SourceParameterName(value.Name)] = Player2DaValue.FromVector(value.Value);
+            current[Material.SourceParameterName(value.Name)] = Player2DaValue.FromVector(
+                materialDefaults?.Vectors.GetValueOrDefault(value.Name, value.Value) ?? value.Value);
 
         bool HasTexture(string parameter)
         {
@@ -1480,6 +1501,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                 MaterialParameterKind.Texture);
             if (controlName is null) return false;
             if (playerDetails.TryGetValue(controlName, out var selected)) return selected is not null;
+            if (materialDefaults is not null) return materialDefaults.Textures.ContainsKey(controlName);
             return Material.Textures.First(value => value.Name.Equals(controlName,
                     StringComparison.OrdinalIgnoreCase)).SourceName is { } source &&
                    !source.Equals("None", StringComparison.OrdinalIgnoreCase);
@@ -1950,7 +1972,8 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         IReadOnlySet<string> vectorScope,
         IReadOnlySet<string> requestedTextureNames,
         int seed,
-        string? excludedDonorId)
+        string? excludedDonorId,
+        MaterialRandomisationDefaults? materialDefaults)
     {
         var claimedScalars = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var claimedVectors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -1981,15 +2004,18 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
             var currentScalars = Material.Scalars
                 .Where(value => context.Supports(Material, value.Name, MaterialParameterKind.Scalar))
-                .ToDictionary(value => Material.SourceParameterName(value.Name), value => value.Value,
+                .ToDictionary(value => Material.SourceParameterName(value.Name),
+                    value => materialDefaults?.Scalars.GetValueOrDefault(value.Name, value.Value) ?? value.Value,
                     StringComparer.OrdinalIgnoreCase);
             var currentVectors = Material.Vectors
                 .Where(value => context.Supports(Material, value.Name, MaterialParameterKind.Vector))
-                .ToDictionary(value => Material.SourceParameterName(value.Name), value => value.Value,
+                .ToDictionary(value => Material.SourceParameterName(value.Name),
+                    value => materialDefaults?.Vectors.GetValueOrDefault(value.Name, value.Value) ?? value.Value,
                     StringComparer.OrdinalIgnoreCase);
             var currentTextures = Material.Textures
                 .Where(value => context.Supports(Material, value.Name, MaterialParameterKind.Texture))
-                .ToDictionary(value => Material.SourceParameterName(value.Name), value => value.SourceName,
+                .ToDictionary(value => Material.SourceParameterName(value.Name),
+                    value => materialDefaults is null ? value.SourceName : materialDefaults.Textures.GetValueOrDefault(value.Name, "None"),
                     StringComparer.OrdinalIgnoreCase);
             var scalarBounds = Material.Scalars
                 .Where(value => context.Supports(Material, value.Name, MaterialParameterKind.Scalar))
@@ -2151,6 +2177,9 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
 
     private void OnMaterialControlsChanged(object? sender, EventArgs e)
     {
+        // A pending attachment load can replace its controls while a roll awaits
+        // texture decoding. Its prepared values belong to the outgoing surface.
+        _randomisationGeneration++;
         if (_cursedBaseline is { } baseline)
         {
             // Attachment selection can introduce supported numeric controls after the

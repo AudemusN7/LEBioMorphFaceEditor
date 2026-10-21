@@ -18,6 +18,7 @@ public static class CustomMaterialEvidenceTests
         new("custom material evidence tries highest mounted official source first", IndexedEvidencePrefersHighestOfficialSource),
         new("custom material evidence retains duplicate source material refs", RetainsDuplicateSourceMaterialRefs),
         new("custom material shader maps follow explicit and automatic source invalidation", ShaderMapsFollowSourceInvalidation),
+        new("material evidence refreshes MIC values and pixels while retaining per-use texture roles", MaterialValuesAndPixelsFollowSourceChanges),
         new("material evidence preserves custom defaults and empty versus missing compiled support", CustomDefaultsAndCompiledEvidence),
         new("custom material catalogue exposes only proven installed families", CatalogueExposesProvenFamilies),
         new("attachment picker discovers hair and hat meshes while excluding audited suffixes", HirReviewMeshesAreExcluded),
@@ -79,6 +80,66 @@ public static class CustomMaterialEvidenceTests
             }
             finally { File.Delete(path); }
         }
+    }
+
+    private static void MaterialValuesAndPixelsFollowSourceChanges()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        var path = Path.Combine(Path.GetTempPath(), $"MFE-MaterialRefresh-{Guid.NewGuid():N}.pcc");
+        void WriteSource(float opacity, byte blue)
+        {
+            using var package = MEPackageHandler.CreateMemoryEmptyPackage(path, MEGame.LE3);
+            var master = package.CreateExport("HMN_HED_LASH_Unlit_MASTER_MAT", "Material", indexed: false);
+            master.WriteBinary(Material.Create());
+            var expression = package.CreateExport("Opacity", "MaterialExpressionScalarParameter", master, indexed: false);
+            expression.WriteProperty(new NameProperty("HED_Lash_Opac_Scalar", "ParameterName"));
+            expression.WriteProperty(new FloatProperty(0.25f, "DefaultValue"));
+            master.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(expression)], "Expressions"));
+            var pixels = package.CreateExport("Pixels", "Texture2D", indexed: false);
+            pixels.WriteProperty(new EnumProperty(new NameReference("PF_A8R8G8B8"),
+                new NameReference("EPixelFormat"), MEGame.LE3, "Format"));
+            pixels.WriteBinary(new UTexture2D { Mips = [new UTexture2D.Texture2DMipMap([blue, 20, 30, 255], 1, 1)] });
+            var mic = package.CreateExport("Custom_MIC", "MaterialInstanceConstant", indexed: false);
+            mic.WriteProperty(new ObjectProperty(master, "Parent"));
+            mic.WriteProperty(new ArrayProperty<StructProperty>([new StructProperty("ScalarParameterValue", false,
+                new NameProperty("HED_Lash_Opac_Scalar", "ParameterName"), new FloatProperty(opacity, "ParameterValue"))], "ScalarParameterValues"));
+            mic.WriteProperty(new ArrayProperty<StructProperty>([new StructProperty("TextureParameterValue", false,
+                new NameProperty("HED_Lash_Diff", "ParameterName"), new ObjectProperty(pixels, "ParameterValue"))], "TextureParameterValues"));
+            package.Save(path);
+        }
+        try
+        {
+            WriteSource(0.5f, 10);
+            using var reader = new MorphFacePackageReader();
+            var identity = new AssetIdentity(path, "Custom_MIC", 0, "MaterialInstanceConstant");
+            ResolvedHeadMaterial Read() => reader.LoadMaterialEvidence(identity);
+            var first = Read();
+            var original = first.Textures["HED_Lash_Diff"].Texture;
+            TestAssert.True(original.Rgba8.SequenceEqual(new byte[] { 30, 20, 10, 255 }), "The source pixels were decoded incorrectly.");
+            var normal = HumanMaterialProfiles.Describe("HED_Norm", MaterialParameterKind.Texture, HeadMaterialFamily.Skin);
+            var reused = reader.LoadTexture(path, "Pixels", normal);
+            TestAssert.True(ReferenceEquals(original.Rgba8, reused.Rgba8), "Different texture roles decoded the same pixels twice.");
+            TestAssert.Equal(TextureRole.Normal, reused.Role);
+            TestAssert.Equal(TextureColorSpace.Linear, reused.ColorSpace);
+            TestAssert.Equal(original.Role, Read().Textures["HED_Lash_Diff"].Texture.Role);
+
+            WriteSource(0.75f, 40);
+            File.SetLastWriteTimeUtc(path, File.GetLastWriteTimeUtc(path).AddSeconds(2));
+            var refreshed = Read();
+            TestAssert.Equal(0.75f, refreshed.Scalars["HED_Lash_Opac_Scalar"]);
+            TestAssert.Equal((byte)40, refreshed.Textures["HED_Lash_Diff"].Texture.Rgba8[2]);
+            TestAssert.True(original.CacheKey != refreshed.Textures["HED_Lash_Diff"].Texture.CacheKey,
+                "Source changes retained the old renderer texture identity.");
+            TestAssert.Equal((byte)10, original.Rgba8[2]);
+            TestAssert.Equal(0.5f, first.Scalars["HED_Lash_Opac_Scalar"]);
+
+            WriteSource(1f, 70);
+            reader.InvalidatePackage(path);
+            var invalidated = Read();
+            TestAssert.Equal(1f, invalidated.Scalars["HED_Lash_Opac_Scalar"]);
+            TestAssert.Equal((byte)70, invalidated.Textures["HED_Lash_Diff"].Texture.Rgba8[2]);
+        }
+        finally { File.Delete(path); }
     }
 
     private static void ShaderMapsFollowSourceInvalidation()

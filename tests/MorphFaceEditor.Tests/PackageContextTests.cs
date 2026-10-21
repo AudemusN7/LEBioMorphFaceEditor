@@ -132,6 +132,7 @@ public static class PackageContextTests
             var missingGroup = package.CreateImport("Package", "Human", missingRoot);
             var missingParent = package.CreateImport("Material", "MissingParent", missingGroup);
             attachment.WriteProperty(new ObjectProperty(missingParent, "Parent"));
+            package.Save();
 
             using var cache = new PackageCache();
             var materialReader = new MorphFaceMaterialReader(
@@ -1207,6 +1208,15 @@ public static class PackageContextTests
             {
                 var face = package.CreateExport("Face", "BioMorphFace", indexed: false);
                 var hat = package.CreateExport("HMM_HAT_Test_MAT", "MaterialInstanceConstant", indexed: false);
+                using var nativeCache = new PackageCache();
+                var master = new InstalledGameAssetResolver().Resolve(MEGame.LE2,
+                    "BIOG_Humanoid_MASTER_MTR_R.Human.HMF_VSR_MASTER_MAT", "Material", nativeCache)
+                    ?? throw new InvalidDataException("The native LE2 visor master was not found.");
+                var path = PccAssetPathPolicy.FromExport(master).Split('.');
+                IEntry? parent = null;
+                foreach (var segment in path[..^1]) parent = package.CreateImport("Package", segment, parent);
+                var parentMaterial = package.CreateImport("Material", path[^1], parent);
+                hat.WriteProperty(new ObjectProperty(parentMaterial, "Parent"));
                 faceIndex = face.UIndex;
                 hatIndex = hat.UIndex;
                 package.Save();
@@ -1221,6 +1231,8 @@ public static class PackageContextTests
                 MorphFacePackageReader.ToIdentity(reopenedHat)!);
             TestAssert.True(material?.IsPreviewOnlyAttachment == true,
                 "The Hat material was not marked as preview-only during package reload.");
+            TestAssert.True(material!.ContributesFaceControls == false,
+                "The native attachment graph exposed face-authoring controls.");
         }
         finally
         {
@@ -1988,6 +2000,9 @@ public static class PackageContextTests
                 $"Saved hat slot {index} has an unresolved parent graph: {failure}");
         }
         PackageIntegrity.Verify(reopened);
+        // These are independently created face PCCs. Verify their imports against
+        // the same exact Startup inventory used by the writer, not corpus slot roles.
+        PccPackageWorkflow.ConfigureNewFacePackage(reopened);
         var snapshot = PccPackageWorkflow.CaptureDependencyGraph(attachment);
         using var independentlyReopened = MEPackageHandler.OpenMEPackage(packagePath, forceLoadFromDisk: true);
         PccPackageWorkflow.VerifyDependencyGraph(independentlyReopened, snapshot, true);

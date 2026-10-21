@@ -1,4 +1,5 @@
 using MorphFaceEditor.Core.Domain;
+using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.Models;
@@ -79,10 +80,20 @@ public static class HairMeshManualSelectionTests
         var excludedNonBiog = new AttachmentMeshOccurrence(
             "C:\\Custom\\OtherMesh.pcc", "Custom_Hair.Mesh.Custom_MDL", 24, 0,
             TextureCatalogOrigin.Manual, 49);
+        var provenNonBiog = new AttachmentMeshOccurrence(
+            "C:\\Custom\\RuntimeHair.pcc", "Custom_RuntimeHair.Mesh.Custom_MDL", 26, 0,
+            TextureCatalogOrigin.Manual, 50);
         var localAsset = new PackageAssetListItem(new AssetIdentity(
             local.PackagePath, canonical, local.ExportUIndex, "SkeletalMesh"));
         using var editor = new HairMeshEditorViewModel(
             new AssetReferenceEditingSession(localAsset.Identity), [localAsset], "Hair", 0);
+        var availability = new PlayerRuntimeAssetAvailability(MorphFaceGame.LE1,
+            new[] { localAsset.Identity,
+                new AssetIdentity("BIOG_HMF_HIR_PRO.pcc", "BIOG_HMF_HIR_PRO.Hair.HMF_HIR_Other_MDL", 30, "SkeletalMesh"),
+                new AssetIdentity(provenNonBiog.PackagePath, provenNonBiog.InstancedPath, provenNonBiog.ExportUIndex, "SkeletalMesh") }
+                .Select(PlayerRuntimeAssetAvailability.Key)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase));
+        editor.RestrictPlayerReferences(availability);
 
         editor.UpdateRegistryCandidates(
             [
@@ -104,7 +115,8 @@ public static class HairMeshManualSelectionTests
                 {
                     IsEligibleOfficialDefault = true
                 },
-                new AttachmentMeshCandidate(excludedNonBiog.InstancedPath, excludedNonBiog, [excludedNonBiog])
+                new AttachmentMeshCandidate(excludedNonBiog.InstancedPath, excludedNonBiog, [excludedNonBiog]),
+                new AttachmentMeshCandidate(provenNonBiog.InstancedPath, provenNonBiog, [provenNonBiog])
             ],
             isPlayerWorkspace: true);
 
@@ -131,8 +143,10 @@ public static class HairMeshManualSelectionTests
             .Where(option => option.Identity is not null)
             .Select(option => $"{Path.GetFullPath(option.Identity!.PackagePath)}|{option.Identity.UIndex}")
             .Distinct(StringComparer.OrdinalIgnoreCase).Count());
-        TestAssert.True(options.All(option => option.Identity?.InstancedPath.StartsWith("BIOG_", StringComparison.OrdinalIgnoreCase) == true),
-            "The player workspace exposed a non-BIOG mesh candidate or changed the canonical path.");
+        TestAssert.True(options.All(option => option.Identity is { } identity && availability.Allows(identity)),
+            "The player workspace exposed a mesh without proven runtime backing.");
+        TestAssert.True(options.Any(option => option.Identity?.InstancedPath == provenNonBiog.InstancedPath),
+            "A proven runtime mesh was rejected because its path lacks the BIOG prefix.");
         TestAssert.Equal(localAsset.Identity, editor.Selected.Identity);
     }
 

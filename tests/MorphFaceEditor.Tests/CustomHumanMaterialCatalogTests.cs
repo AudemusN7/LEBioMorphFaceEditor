@@ -9,6 +9,7 @@ using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.LegendaryExplorer.TextureRegistry;
 using MorphFaceEditor.Services;
 using MorphFaceEditor.ViewModels;
+using MorphFaceEditor.Infrastructure;
 
 namespace MorphFaceEditor.Tests;
 
@@ -59,6 +60,16 @@ internal static class CustomHumanMaterialCatalogTests
                 var session = new MaterialEditingSession(MorphFaceMaterialOverrides.Empty, workspace.ActiveMaterials);
                 TestAssert.True(session.ScalarNames.Count + session.VectorNames.Count + session.TextureParameters.Count > 0,
                     $"{game} {label} exposes no controls after assignment.");
+                if (game == MorphFaceGame.LE1 && sex == "Female" && role == "Face" && variant == "Player")
+                {
+                    session.ResetToDefaults();
+                    var mask = session.TextureParameters.Single(value =>
+                        session.GetSourceParameterName(value.Name) == "HED_Makeup_Mask").Name;
+                    TestAssert.Equal("BIOG_HMF_HED_PROMorph_R.Masks.HMF_HED_PROCustom_MKup_01",
+                        session.GetPreviewTexture(mask)?.Source.InstancedPath);
+                    TestAssert.True(session.CreateOverrides().Textures.Any(value => value.Name == mask &&
+                        value.TextureReference is not null), "Custom Reset did not retain the usable makeup mask for export.");
+                }
                 // Export metadata retains the stable material identity independently of its label.
                 var document = MeshMaterialFileService.Capture(workspace, game, "HumanMaterial",
                     new MorphFaceMaterialData([], [], []));
@@ -73,7 +84,8 @@ internal static class CustomHumanMaterialCatalogTests
                     "Human Male - Eyes", "Human Male - Lashes",
                     "Human Female - Face (NPC)", "Human Female - Face (Player)",
                     "Human Female - Scalp (NPC)", "Human Female - Scalp (Player)",
-                    "Human Female - Asari Eyes", "Human Female - Asari Lashes" }),
+                    Loc.Text("loc_Services_CustomTemplate_HumanFemaleAsariEyes"),
+                    Loc.Text("loc_Services_CustomTemplate_HumanFemaleAsariLashes") }),
                 $"{game} did not group the human face/scalp choices together.");
             TestAssert.Equal(game == MorphFaceGame.LE3 ? "HMN_HED_PRO_MASTER_HAIR_MAT_CC"
                 : "HMN_HED_PRO_MASTER_HAIR_MAT", hair.Template.MasterMaterialName);

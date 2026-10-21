@@ -15,6 +15,9 @@ internal sealed class GamePackageReferenceResolver(PackageCache packageCache, In
         _installedAssets.GetPackageFiles(export.Game).TryGetValue(Path.GetFileName(export.FileRef.FilePath), out var official) &&
         Path.GetFullPath(export.FileRef.FilePath).Equals(official, StringComparison.OrdinalIgnoreCase);
 
+    internal ExportEntry? ResolveInstalled(MEGame game, string path, string className) =>
+        _installedAssets.Resolve(game, path, className, packageCache);
+
     public ExportEntry? Resolve(IEntry? entry)
     {
         if (entry is null) return null;

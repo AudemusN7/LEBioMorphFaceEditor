@@ -80,9 +80,11 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
     /// the values into the current edit as one logical change. A texture that
     /// cannot be decoded is still retained as an authored reference by the
     /// editing session; callers receive the diagnostic so the rest of the
-    /// material import can continue.
+    /// material import can continue. Initial standalone presets can omit those
+    /// references so their new workspace can pass package verification.
     /// </summary>
-    public async Task<IReadOnlyList<string>> MergeMaterialDataAsync(MorphFaceMaterialData data)
+    public async Task<IReadOnlyList<string>> MergeMaterialDataAsync(MorphFaceMaterialData data,
+        bool omitUnresolvedTextures = false)
     {
         ArgumentNullException.ThrowIfNull(data);
         var decoded = new Dictionary<string, DecodedTextureAsset?>(StringComparer.OrdinalIgnoreCase);
@@ -132,6 +134,9 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
             }
         }
 
+        if (omitUnresolvedTextures)
+            data = data with { Textures = data.Textures.Where(value => value.TextureReference is null ||
+                decoded.ContainsKey(_session.ResolveControlName(value.Name, MaterialParameterKind.Texture))).ToArray() };
         _session.MergeMaterialData(data, decoded);
         return warnings;
     }
@@ -389,10 +394,16 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
     };
     private static string SourceFamilyName(string family) =>
         family.Contains('|') ? family[(family.IndexOf('|') + 1)..] : family;
-    public void ApplyRandomisation(PreparedMaterialRandomisation values)
+    public MaterialRandomisationDefaults? CapturePendingRandomisationDefaults() =>
+        _session.HasCursedRandomisation ? _session.CaptureRandomisationDefaults() : null;
+
+    public void ApplyRandomisation(PreparedMaterialRandomisation values, bool cursed = false) =>
+        ApplyPreparedValues(values, cursed ? MaterialBatchKind.CursedRandomisation : MaterialBatchKind.NormalRandomisation);
+
+    public void ApplyPreparedValues(PreparedMaterialRandomisation values, MaterialBatchKind kind = MaterialBatchKind.Edit)
     {
         ArgumentNullException.ThrowIfNull(values);
-        _session.SetValues(values.Scalars, values.Vectors, values.Textures);
+        _session.SetValues(values.Scalars, values.Vectors, values.Textures, kind);
     }
     public void ResetToDefaults() => _session.ResetToDefaults();
     public PreparedMaterialSurface PrepareAttachmentMaterials(ResolvedHeadMaterialSet materials) =>
@@ -479,4 +490,9 @@ public sealed record PreparedMaterialRandomisation(
     IReadOnlyDictionary<string, System.Numerics.Vector4> Vectors,
     IReadOnlyDictionary<string, DecodedTextureAsset?> Textures,
     int AppliedTextureFamilies,
-    IReadOnlySet<string> FailedTextureFamilySignatures);
+    IReadOnlySet<string> FailedTextureFamilySignatures)
+{
+    public static PreparedMaterialRandomisation Empty { get; } = new(
+        new Dictionary<string, float>(), new Dictionary<string, System.Numerics.Vector4>(),
+        new Dictionary<string, DecodedTextureAsset?>(), 0, new HashSet<string>());
+}

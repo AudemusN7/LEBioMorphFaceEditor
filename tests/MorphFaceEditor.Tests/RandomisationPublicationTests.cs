@@ -26,7 +26,9 @@ public static class RandomisationPublicationTests
         new("normal randomisation does not publish after Reset", () => ResetDuringPendingRoll(cursedMode: false)),
         new("Cursed randomisation does not publish after Reset", () => ResetDuringPendingRoll(cursedMode: true)),
         new("normal older randomisation cannot overwrite a newer roll", () => OlderRollCannotOverwriteNewer(cursedMode: false)),
-        new("Cursed older randomisation cannot overwrite a newer roll", () => OlderRollCannotOverwriteNewer(cursedMode: true))
+        new("Cursed older randomisation cannot overwrite a newer roll", () => OlderRollCannotOverwriteNewer(cursedMode: true)),
+        new("normal randomisation does not publish after attachment controls change", () => AttachmentControlsDuringPendingRoll(cursedMode: false)),
+        new("Cursed randomisation does not publish after attachment controls change", () => AttachmentControlsDuringPendingRoll(cursedMode: true))
     ];
 
     private static void ResetDuringPendingRoll(bool cursedMode) => RunWithDispatcher(async () =>
@@ -85,6 +87,38 @@ public static class RandomisationPublicationTests
         AssertInitialState(fixture.Editor, initialScalar);
         TestAssert.True(!fixture.Editor.UndoCommand.CanExecute(null),
             "The stale older roll left an extra Undo entry after undoing the newer roll.");
+    });
+
+    private static void AttachmentControlsDuringPendingRoll(bool cursedMode) => RunWithDispatcher(async () =>
+    {
+        using var fixture = CreateFixture([OlderSeed], cursedMode);
+        var editor = fixture.Editor;
+        var attachment = new ResolvedHeadMaterial("outgoing-hair",
+            TestFixtures.CreateIdentity("OutgoingHair", "MaterialInstanceConstant"),
+            "BIOG_HMF_HIR_HAIR_MASTER_MAT", HeadMaterialFamily.Hair, HeadMaterialBlendMode.Translucent, false,
+            new Dictionary<string, float> { ["HED_Scalp_Buzzcut_Alpha_Scalar"] = 1f },
+            new Dictionary<string, Vector4>(), new Dictionary<string, MaterialTextureBinding>());
+        editor.Material.ApplyMaterialSurface(editor.Material.PrepareAttachmentMaterials(
+            new ResolvedHeadMaterialSet(new Dictionary<string, ResolvedHeadMaterial> { [attachment.Key] = attachment })));
+        foreach (var texture in editor.Material.Textures)
+            typeof(MaterialTextureEditorViewModel).GetField("_references", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(texture, fixture.Loader);
+        var expectedTextures = DonorPaths(fixture.Catalog, OlderSeed);
+        var pendingRoll = editor.RandomiseAsync();
+        await fixture.Loader.WaitForPendingPathAsync(expectedTextures);
+
+        editor.Material.ApplyMaterialSurface(editor.Material.PrepareAttachmentMaterials(ResolvedHeadMaterialSet.Empty));
+        foreach (var texture in editor.Material.Textures)
+            typeof(MaterialTextureEditorViewModel).GetField("_references", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(texture, fixture.Loader);
+        TestAssert.True(editor.Material.Scalars.All(value => value.Name != "HED_Scalp_Buzzcut_Alpha_Scalar"),
+            "The outgoing attachment control remained in the replacement surface.");
+        await CompleteRequestAsync(fixture.Loader, expectedTextures);
+        await pendingRoll;
+
+        AssertInitialState(editor, 6);
+        TestAssert.True(!editor.UndoCommand.CanExecute(null),
+            "A roll prepared against replaced attachment controls added an Undo item.");
     });
 
     private static Fixture CreateFixture(int[] seeds, bool cursedMode)

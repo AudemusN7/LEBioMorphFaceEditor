@@ -49,6 +49,10 @@ public static class NpcHairRandomisationTests
             NpcHmfTargetedScalpRollAssignsMesh),
         new("NPC hair button rolls a tuple without an accessory randomisation command",
             NpcHairButtonRollsTuple),
+        new("Cursed NPC hair rolls bypass Character compatibility with morph randomisation on or off",
+            CursedCharacterMorphsAllowNpcHairRolls),
+        new("Cursed NPC hair buttons use the hairstyle catalogue without corpus texture variation",
+            CursedHairButtonWithoutCorpusVariation),
         new("NPC HMF mesh lock preserves paired scalp and hair morphs in normal and Cursed rolls",
             LockedHmfMeshPreservesScalpAndMorphs),
         new("NPC Cursed rolls accept newly loaded hair highlights without drifting their baseline",
@@ -239,6 +243,22 @@ public static class NpcHairRandomisationTests
         VerifyNpcHmfTargetedScalpRollAssignsMesh(cursed: true, hairButton: true);
     }
 
+    private static void CursedCharacterMorphsAllowNpcHairRolls()
+    {
+        foreach (var sex in new[] { PlayerHairSex.Male, PlayerHairSex.Female })
+        foreach (var morphsEnabled in new[] { false, true })
+        foreach (var globalRoll in new[] { false, true })
+            VerifyNpcHmfTargetedScalpRollAssignsMesh(cursed: true, hairButton: !globalRoll,
+                morphsEnabled: morphsEnabled, sex: sex, characterMorph: true, globalRoll: globalRoll);
+    }
+
+    private static void CursedHairButtonWithoutCorpusVariation()
+    {
+        foreach (var sex in new[] { PlayerHairSex.Male, PlayerHairSex.Female })
+            VerifyNpcHmfTargetedScalpRollAssignsMesh(cursed: true, hairButton: true,
+                morphsEnabled: false, sex: sex, randomisationCatalog: MorphRandomisationCatalog.Empty);
+    }
+
     private static void LockedHmfMeshPreservesScalpAndMorphs()
     {
         var registry = new TextureCatalogService(new TextureRegistryStore(TextureRegistryPaths.CreateDefault()));
@@ -367,7 +387,9 @@ public static class NpcHairRandomisationTests
     }
 
     private static void VerifyNpcHmfTargetedScalpRollAssignsMesh(bool cursed, bool hairButton = false,
-        bool morphsEnabled = true, PlayerHairSex sex = PlayerHairSex.Female)
+        bool morphsEnabled = true, PlayerHairSex sex = PlayerHairSex.Female,
+        bool characterMorph = false, bool globalRoll = false,
+        MorphRandomisationCatalog? randomisationCatalog = null)
     {
         var registry = new TextureCatalogService(new TextureRegistryStore(
             TextureRegistryPaths.CreateDefault()));
@@ -388,10 +410,12 @@ public static class NpcHairRandomisationTests
         using var editor = CreateNpcEditor(reader, registry, catalog,
             sex == PlayerHairSex.Female ? "le1-human-female" : "le1-human-male",
             sex == PlayerHairSex.Female ? new HumanFemaleFeatureMetadataCatalog() : new HumanMaleFeatureMetadataCatalog(),
-            sex, style!, [hairMorph, "nose_BridgeIn"],
-            materialName: sex == PlayerHairSex.Female ? "BIOG_HMF_HED_PRONPC_MASTER_FACE_MAT" : "BIOG_HMM_HED_PRONPC_MASTER_FACE_MAT");
+            sex, style!, characterMorph ? [hairMorph, "nose_BridgeIn", "Ashley"] : [hairMorph, "nose_BridgeIn"],
+            materialName: sex == PlayerHairSex.Female ? "BIOG_HMF_HED_PRONPC_MASTER_FACE_MAT" : "BIOG_HMM_HED_PRONPC_MASTER_FACE_MAT",
+            randomisationCatalog: randomisationCatalog);
         editor.Features.Single(value => value.Name == hairMorph).Value = 0.35f;
         editor.Features.Single(value => value.Name == "nose_BridgeIn").Value = 0.37f;
+        if (characterMorph) editor.Features.Single(value => value.Name == "Ashley").Value = 0.5f;
         TestAssert.True(editor.CanEditAttachments,
             "The NPC hair test workspace does not permit attachment editing.");
         TestAssert.True(!editor.HairMesh.IsRandomisationLocked,
@@ -405,16 +429,17 @@ public static class NpcHairRandomisationTests
         TestAssert.True(scalpCategory is not null,
             $"The NPC editor did not expose its scalp diffuse. Material textures: " +
             string.Join(", ", editor.Material.Textures.Select(value => value.Name)));
-        TestAssert.True(scalpCategory!.TextureRandomiseCommand is not null,
-            "The NPC scalp texture roll is unavailable.");
-        TestAssert.True(scalpCategory!.TextureRandomiseCommand!.CanExecute(null),
-            "The NPC targeted scalp roll is disabled at the current randomisation settings.");
+        if (!hairButton && !globalRoll)
+            TestAssert.True(scalpCategory!.TextureRandomiseCommand?.CanExecute(null) == true,
+                "The NPC targeted scalp roll is disabled at the current randomisation settings.");
 
         TestAssert.True(editor.OtherMeshes.All(value => !value.HasRandomiseCommand),
             "An accessory row received the hair randomisation command.");
-        var command = hairButton ? editor.HairMesh.RandomiseCommand : scalpCategory.TextureRandomiseCommand;
-        TestAssert.True(command?.CanExecute(null) == true, "The selected hair roll command is disabled.");
-        command!.Execute(null);
+        var command = hairButton ? editor.HairMesh.RandomiseCommand : scalpCategory!.TextureRandomiseCommand;
+        TestAssert.True(globalRoll ? editor.CanRandomise : command?.CanExecute(null) == true,
+            "The selected hair roll command is disabled.");
+        if (globalRoll) editor.RandomiseAsync().GetAwaiter().GetResult();
+        else command!.Execute(null);
 
         var expectedDiffuse = ObjectName(style!.ScalpTextures["HED_Scalp_Diff"]);
         TestAssert.True(SpinWait.SpinUntil(() =>
@@ -431,7 +456,10 @@ public static class NpcHairRandomisationTests
         TestAssert.True(editor.CreateDraft().HairMeshReference?.InstancedPath.Contains(
                 sex == PlayerHairSex.Female ? "Braids01_MDL" : "Mhk_MDL", StringComparison.OrdinalIgnoreCase) == true,
             $"The selected {styleId} mesh was not included in the resulting face draft.");
-        TestAssert.Equal(0.37f, editor.CreateDraft().GetFeatureOffset("nose_BridgeIn"));
+        if (!globalRoll || !morphsEnabled)
+            TestAssert.Equal(0.37f, editor.CreateDraft().GetFeatureOffset("nose_BridgeIn"));
+        if (characterMorph && !morphsEnabled)
+            TestAssert.Equal(0.5f, editor.CreateDraft().GetFeatureOffset("Ashley"));
 
     }
 
@@ -445,7 +473,8 @@ public static class NpcHairRandomisationTests
         PlayerHairStyleOption style,
         IReadOnlyList<string> hairMorphs,
         string? materialName = null, bool playerWorkspace = false,
-        MorphFaceMaterialOverrides? overrides = null)
+        MorphFaceMaterialOverrides? overrides = null,
+        MorphRandomisationCatalog? randomisationCatalog = null)
     {
         var textureNames = style.ScalpTextures.Values.Select(ObjectName)
             .Append("GBL_ARM_ALL_Black")
@@ -503,7 +532,7 @@ public static class NpcHairRandomisationTests
             session, metadata, materials, new StubColorDialog(),
             new PackageReferenceService(reader, registry), sourcePackagePath,
             [], [], null, [], message => throw new InvalidOperationException(message),
-            profileKey, MorphRandomisationCatalog.LoadEmbedded(), () => 107,
+            profileKey, randomisationCatalog ?? MorphRandomisationCatalog.LoadEmbedded(), () => 107,
             registryTextureCandidates: textures, textureCatalogProfile: TextureCatalogProfile.Empty,
             isTextureRegistryAvailable: true,
             playerRandomisationGame: playerWorkspace ? MorphFaceGame.LE1 : null);

@@ -152,7 +152,8 @@ public sealed partial class MainWindowViewModel
             else
             {
                 var imported = await Task.Run(() => FaceMaterialFileService.Read(source.Input, target.PlayerMorph));
-                warnings = await ApplyFaceMaterialsAsync(editor, imported, game, target.PlayerMorph, () => true);
+                warnings = await ApplyFaceMaterialsAsync(editor, imported, game, target.PlayerMorph, () => true,
+                    omitUnresolvedTextures: true);
             }
             if (preparationError is not null) throw new InvalidDataException(preparationError);
             var draft = editor.CreateDraft();
@@ -339,7 +340,8 @@ public sealed partial class MainWindowViewModel
     }
 
     private async Task<IReadOnlyList<string>> ApplyFaceMaterialsAsync(FaceEditorViewModel editor,
-        FaceMaterialFileService.PreparedImport imported, MorphFaceGame game, bool player, Func<bool> isCurrent)
+        FaceMaterialFileService.PreparedImport imported, MorphFaceGame game, bool player, Func<bool> isCurrent,
+        bool omitUnresolvedTextures = false)
     {
         var warnings = imported.Warnings.ToList();
         var attachments = editor.CanEditAttachments
@@ -367,7 +369,7 @@ public sealed partial class MainWindowViewModel
             foreach (var mesh in editor.AttachmentMeshes) mesh.RestrictPlayerReferences(available);
         }
         if (!isCurrent()) return warnings;
-        warnings.AddRange(await editor.ImportFaceMaterialDataAsync(imported.Parameters, attachments));
+        warnings.AddRange(await editor.ImportFaceMaterialDataAsync(imported.Parameters, attachments, omitUnresolvedTextures));
         return warnings;
     }
 

@@ -107,6 +107,7 @@ public static class UiSmokeTests
         new("confirmed CC scalp graph and texture pair undo together", CcScalpGraphAndTexturesUndoTogether),
         new("cursed mode randomises morph bones and materials as one undo step", CursedModeRandomisesOneUndoStep),
         new("normal global morph randomisation removes previous cursed bone offsets", NormalRollRemovesCursedBones),
+        new("normal material rolls clear every Cursed parameter with one reversible reset", NormalRollResetsCursedMaterials),
         new("awaitable randomisation completes the real edit and supports aggregate undo", AwaitableRandomisationCompletes),
         new("awaitable randomisation propagates seed failures without partial edits", AwaitableRandomisationPropagatesFailure),
         new("Cursed material-only rolls leave morphs and bones unchanged", CursedMaterialOnlyLeavesBonesUnchanged),
@@ -955,6 +956,10 @@ public static class UiSmokeTests
                 1, 1, "PF_A8R8G8B8", "TEXTUREGROUP_Character", false, null);
             async Task SelectLevelTexture(MainWindowViewModel target)
             {
+                for (var wait = 0; !target.Editor!.IsMeshDatabaseUnavailable && wait < 1000; wait++)
+                    await Task.Delay(10);
+                TestAssert.True(target.Editor!.IsMeshDatabaseUnavailable,
+                    "The fixture's missing registry did not finish loading before candidate selection.");
                 var references = target.Editor!.CreateDraft().MaterialOverrides.Textures
                     .Where(value => value.TextureReference is not null).Select(value => value.TextureReference!)
                     .Append(new AssetIdentity(level, runtimePath, textureIndex, "Texture2D"))
@@ -967,6 +972,8 @@ public static class UiSmokeTests
                 control.CommitTexture(control.Candidates.Single(value => value.InstancedPath == runtimePath));
                 for (var wait = 0; control.IsBusy && wait < 1000; wait++) await Task.Delay(10);
                 TestAssert.True(!control.IsBusy, "The level texture was not selected.");
+                TestAssert.Equal(runtimePath, target.Editor.CreateDraft().MaterialOverrides.Textures
+                    .Single(value => value.Name == "HED_Diff").TextureReference!.InstancedPath);
             }
             var missingReferences = context.FindAvailablePlayerAssets(game,
                 [new AssetIdentity(level, runtimePath, textureIndex, "Texture2D")]);
@@ -1020,18 +1027,36 @@ public static class UiSmokeTests
                 "None", [], game.ToString(), new MaterialFaceTarget("le1-human-female", true)));
             foreach (var preset in new[] { materials, tse })
             {
+                var missingDialogs = new StubEditorDialogs();
+                using (var missingReader = new MorphFacePackageReader())
+                using (var missingShell = CreateMainWindowViewModel(missingReader, missingDialogs,
+                           textureCatalog: registry, context: context))
+                {
+                    var presetBytes = File.ReadAllBytes(preset);
+                    await missingShell.OpenDroppedFileAsync(preset);
+                    TestAssert.True(missingShell.Editor is not null && !missingShell.HasError,
+                        missingShell.ErrorMessage ?? "A missing texture blocked the standalone material preset.");
+                    TestAssert.True(missingShell.Editor!.CreateDraft().MaterialOverrides.Textures.All(value =>
+                            value.TextureReference?.InstancedPath != runtimePath) &&
+                        missingDialogs.LastInformation?.Contains(runtimePath, StringComparison.Ordinal) == true &&
+                        presetBytes.SequenceEqual(File.ReadAllBytes(preset)),
+                        "The missing initial texture was not omitted with a diagnostic while preserving its preset file.");
+                }
                 using var presetReader = new MorphFacePackageReader();
                 using var presetShell = CreateMainWindowViewModel(presetReader, new StubEditorDialogs(), textureCatalog: registry, context: context);
+                WriteSeekFree(false);
                 await presetShell.OpenDroppedFileAsync(preset);
                 TestAssert.True(presetShell.Editor is not null && !presetShell.HasError, presetShell.ErrorMessage ?? "The preset did not open.");
-                WriteSeekFree(false);
                 await SelectLevelTexture(presetShell);
                 File.Delete(seekfree);
                 presetShell.Editor!.Material.Scalars.First().Value += 0.125f;
                 var before = File.ReadAllBytes(preset);
                 await ((AsyncRelayCommand)presetShell.SaveCommand).ExecuteAsync();
-                TestAssert.True(presetShell.HasError && presetShell.IsDirty && before.SequenceEqual(File.ReadAllBytes(preset)),
-                    "A rejected Player material-preset save changed its file or discarded pending edits.");
+                TestAssert.True(presetShell.HasError,
+                    $"The Player material-preset save accepted a missing seekfree source: {preset}.");
+                TestAssert.True(presetShell.IsDirty, "A rejected Player material-preset save discarded pending edits.");
+                TestAssert.True(before.SequenceEqual(File.ReadAllBytes(preset)),
+                    "A rejected Player material-preset save changed its file.");
                 WriteSeekFree(false);
                 await ((AsyncRelayCommand)presetShell.SaveCommand).ExecuteAsync();
                 TestAssert.True(!presetShell.HasError && !presetShell.IsDirty, presetShell.ErrorMessage ?? "Valid preset save failed.");
@@ -3573,6 +3598,57 @@ public static class UiSmokeTests
             "Set to Defaults did not remove the complete cursed state.");
     }
 
+    private static void NormalRollResetsCursedMaterials()
+    {
+        using var reader = new MorphFacePackageReader();
+        foreach (var custom in new[] { false, true })
+        {
+            using var editor = CreateRandomisationEditor(reader, randomSeedFactory: () => 771,
+                mixedCustomMaterials: custom, includeUnusedMaterialParameters: true);
+            using var clean = CreateRandomisationEditor(reader, randomSeedFactory: () => 771,
+                mixedCustomMaterials: custom, includeUnusedMaterialParameters: true);
+            editor.CursedMode = true;
+            editor.RandomiseMorphs = false;
+            editor.MaterialRandomisationStrength = 100;
+            editor.RandomiseAsync().GetAwaiter().GetResult();
+            var cursedScalars = editor.Material.Scalars.ToDictionary(value => value.Name, value => value.Value);
+            var cursedVectors = editor.Material.Vectors.ToDictionary(value => value.Name, value => value.Value);
+            TestAssert.True(editor.Material.Scalars.Any(value =>
+                    editor.Material.SourceParameterName(value.Name) == "HED_Scalp_Mask_OverlayKill_Scalar" && value.Value != 1),
+                "The Cursed roll did not alter the parameter absent from the normal corpus.");
+            editor.CursedMode = false;
+            AssertValues(editor, cursedScalars, cursedVectors);
+            clean.RandomiseMorphs = false;
+            clean.RandomiseMaterials = true;
+            clean.MaterialRandomisationStrength = editor.MaterialRandomisationStrength = 37;
+            clean.SetToDefaultsCommand.Execute(null);
+            clean.RandomiseAsync().GetAwaiter().GetResult();
+            var expectedScalars = clean.Material.Scalars.ToDictionary(value => value.Name, value => value.Value);
+            var expectedVectors = clean.Material.Vectors.ToDictionary(value => value.Name, value => value.Value);
+
+            editor.RandomiseAsync().GetAwaiter().GetResult();
+            AssertValues(editor, expectedScalars, expectedVectors);
+            editor.UndoCommand.Execute(null);
+            AssertValues(editor, cursedScalars, cursedVectors);
+            editor.RedoCommand.Execute(null);
+            AssertValues(editor, expectedScalars, expectedVectors);
+            editor.UndoCommand.Execute(null);
+            editor.SetToDefaultsCommand.Execute(null);
+            editor.UndoCommand.Execute(null);
+            AssertValues(editor, cursedScalars, cursedVectors);
+            // Undoing Reset must also restore the need to clean up on a later roll.
+            editor.RandomiseAsync().GetAwaiter().GetResult();
+            AssertValues(editor, expectedScalars, expectedVectors);
+        }
+
+        static void AssertValues(FaceEditorViewModel editor,
+            IReadOnlyDictionary<string, float> scalars, IReadOnlyDictionary<string, Vector4> vectors)
+        {
+            foreach (var value in editor.Material.Scalars) TestAssert.Near(scalars[value.Name], value.Value, 0);
+            foreach (var value in editor.Material.Vectors) TestAssert.Equal(vectors[value.Name], value.Value);
+        }
+    }
+
     private static void NormalRollRemovesCursedBones()
     {
         using var reader = new MorphFacePackageReader();
@@ -4015,7 +4091,8 @@ public static class UiSmokeTests
         bool includePlayerHairMorph = false,
         bool includePlayerHairColours = false,
         MorphFaceGame? playerGame = null,
-        bool includeNewHairColours = false)
+        bool includeNewHairColours = false,
+        bool includeUnusedMaterialParameters = false)
     {
         var sourceMesh = TestFixtures.CreateMesh();
         var mesh = sourceMesh with
@@ -4082,6 +4159,19 @@ public static class UiSmokeTests
             new Dictionary<string, float> { ["HED_Norm_Blend"] = 2, ["Emis_Scalar"] = 1 },
             materialVectors,
             materialTextures);
+        if (includeUnusedMaterialParameters)
+            resolvedMaterial = resolvedMaterial with
+            {
+                Scalars = resolvedMaterial.Scalars.Concat(new Dictionary<string, float>
+                {
+                    ["HED_Scalp_Mask_OverlayKill_Scalar"] = 1,
+                    ["HED_Scalp_BuzzCut_Alpha_Scalar"] = 0
+                }).ToDictionary(value => value.Key, value => value.Value),
+                Vectors = resolvedMaterial.Vectors.Concat(new Dictionary<string, Vector4>
+                {
+                    ["HED_Scar_Vector"] = new(0.2f, 0.3f, 0.4f, 0.6f)
+                }).ToDictionary(value => value.Key, value => value.Value)
+            };
         var kroganIdentity = TestFixtures.CreateIdentity("KroganMaterial", "MaterialInstanceConstant");
         var kroganMaterial = new ResolvedHeadMaterial(
             MaterialIdentityKey.Create(kroganIdentity), kroganIdentity, "BIOG_KRO_HED_PROMorph",
@@ -4440,11 +4530,48 @@ public static class UiSmokeTests
     private static void AttachmentPreparationPublication() => RunWithDispatcher(async () =>
     {
         using var reader = new MorphFacePackageReader();
-        using var shell = CreateMainWindowViewModel(reader);
-        await shell.OpenDroppedFileAsync(Path.GetFullPath(Path.Combine("tests", "Global Morphs", "LE2 GlobalMorphs.pcc")));
-        shell.SelectedFace = shell.Faces.First(face => face.ProfileKey == "le2-human-female");
-        await ((AsyncRelayCommand)shell.LoadSelectedFaceCommand).ExecuteAsync();
+        var registry = TestFixtures.CreateMissingTextureCatalogService();
+        var registryGate = (SemaphoreSlim)registry.GetType().GetField("_gate",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(registry)!;
+        using var shell = CreateMainWindowViewModel(reader, textureCatalog: registry);
+        // Keep the real catalogue read pending so this fixture always exercises
+        // the initial refresh ordering, regardless of suite load or disk speed.
+        await registryGate.WaitAsync();
+        try
+        {
+            await shell.OpenDroppedFileAsync(Path.GetFullPath(Path.Combine("tests", "Global Morphs", "LE2 GlobalMorphs.pcc")));
+            shell.SelectedFace = shell.Faces.First(face => face.ProfileKey == "le2-human-female");
+            await ((AsyncRelayCommand)shell.LoadSelectedFaceCommand).ExecuteAsync();
+            TestAssert.True(shell.Editor is { IsMeshDatabaseUnavailable: false },
+                "The fixture did not retain its initial pending database read.");
+        }
+        finally { registryGate.Release(); }
         var editor = shell.Editor ?? throw new Exception(shell.ErrorMessage ?? "Initial face did not load.");
+        var scenePublications = 0;
+        var expectedSceneMesh = "<database ready>";
+        var lastSceneMeshes = "<no scene>";
+        async Task<T> WaitForStageAsync<T>(Task<T> pending, string stage)
+        {
+            try { return await pending.WaitAsync(TimeSpan.FromSeconds(30)); }
+            catch (TimeoutException exception)
+            {
+                throw new TimeoutException($"Attachment {stage} timed out. Scenes={scenePublications}; " +
+                    $"expected={expectedSceneMesh}; last={lastSceneMeshes}; " +
+                    $"selected={editor.HairMesh.Value?.InstancedPath ?? "<none>"}; " +
+                    $"hover={editor.HairMesh.PreviewSelection?.Identity?.InstancedPath ?? "<none>"}; " +
+                    $"databaseUnavailable={editor.IsMeshDatabaseUnavailable}; " +
+                    $"HasError={shell.HasError}; error={shell.ErrorMessage ?? "<none>"}.", exception);
+            }
+        }
+        async Task<bool> WaitForInitialRegistryAsync()
+        {
+            while (!editor.IsMeshDatabaseUnavailable) await Task.Delay(10);
+            // The availability notification precedes attachment candidate refresh.
+            // Resume on a later UI turn, after that callback can finish cancelling previews.
+            await Dispatcher.Yield(DispatcherPriority.Background);
+            return true;
+        }
+        await WaitForStageAsync(WaitForInitialRegistryAsync(), "initial database load");
         var choice = editor.HairMesh.Options.First(option => option.Identity is { } identity &&
             identity != editor.HairMesh.Value && identity.InstancedPath.Contains("_HIR", StringComparison.OrdinalIgnoreCase));
         var colour = new Vector4(0.7f, 0.1f, 0.3f, 1);
@@ -4453,42 +4580,63 @@ public static class UiSmokeTests
         editor.Material.SetNumericValues(new Dictionary<string, float>(), new Dictionary<string, Vector4> { [colourName] = colour });
         var before = editor.CreateDraft();
         var materialState = editor.Material.Materials;
-        var nextScene = new TaskCompletionSource<HeadPreviewScene>();
-        shell.PreviewSceneReady += (scene, _) => nextScene.TrySetResult(scene);
+        var nextScene = new TaskCompletionSource<HeadPreviewScene>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var expectedMesh = reader.LoadDetachedAttachment(choice.Identity!.PackagePath,
+            choice.Identity.InstancedPath).Mesh.Source.InstancedPath;
+        expectedSceneMesh = expectedMesh;
+        var previousMesh = before.HairMeshReference is { } previousHair
+            ? reader.LoadDetachedAttachment(previousHair.PackagePath, previousHair.InstancedPath).Mesh.Source.InstancedPath
+            : null;
+        Func<HeadPreviewScene, bool> acceptsScene = scene => scene.Meshes.Any(mesh =>
+            mesh.IsAttachment && mesh.Name.Equals(expectedMesh, StringComparison.OrdinalIgnoreCase));
+        shell.PreviewSceneReady += (scene, _) =>
+        {
+            scenePublications++;
+            lastSceneMeshes = string.Join(", ", scene.Meshes.Where(mesh => mesh.IsAttachment).Select(mesh => mesh.Name));
+            if (acceptsScene(scene)) nextScene.TrySetResult(scene);
+        };
         editor.HairMesh.Preview(choice);
-        var hovered = await nextScene.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        var hovered = await WaitForStageAsync(nextScene.Task, "hover");
         TestAssert.True(MorphFaceEditorStateComparer.Equals(before, editor.CreateDraft()) &&
                         ReferenceEquals(materialState, editor.Material.Materials),
             "Hover published material controls or authored edits.");
-        var hoverHair = hovered.Meshes.Where(mesh => mesh.IsAttachment).SelectMany(mesh => mesh.Sections)
+        var hoverHair = hovered.Meshes.Where(mesh => mesh.Name.Equals(expectedMesh, StringComparison.OrdinalIgnoreCase))
+            .SelectMany(mesh => mesh.Sections)
             .Select(section => section.Material).First(material => material.Vectors.ContainsKey(colourName));
         TestAssert.Equal(colour, hoverHair.Vectors[colourName]);
         editor.HairMesh.CancelPreview();
 
-        nextScene = new TaskCompletionSource<HeadPreviewScene>();
+        nextScene = new TaskCompletionSource<HeadPreviewScene>(TaskCreationOptions.RunContinuationsAsynchronously);
         editor.HairMesh.Commit(choice);
-        var committed = await nextScene.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        var committed = await WaitForStageAsync(nextScene.Task, "commit");
         TestAssert.True(!shell.HasError, shell.ErrorMessage ?? "Attachment commit failed.");
         TestAssert.Equal(choice.Identity, editor.HairMesh.Value);
-        var committedHair = committed.Meshes.Where(mesh => mesh.IsAttachment).SelectMany(mesh => mesh.Sections)
+        var committedHair = committed.Meshes.Where(mesh => mesh.Name.Equals(expectedMesh, StringComparison.OrdinalIgnoreCase))
+            .SelectMany(mesh => mesh.Sections)
             .Select(section => section.Material).First(material => material.Vectors.ContainsKey(colourName));
         TestAssert.Equal(hoverHair.Key, committedHair.Key);
         TestAssert.Equal(colour, committedHair.Vectors[colourName]);
-        nextScene = new TaskCompletionSource<HeadPreviewScene>();
+        nextScene = new TaskCompletionSource<HeadPreviewScene>(TaskCreationOptions.RunContinuationsAsynchronously);
+        expectedSceneMesh = previousMesh ?? "<requested mesh absent>";
+        acceptsScene = scene => previousMesh is not null
+            ? scene.Meshes.Any(mesh => mesh.IsAttachment && mesh.Name.Equals(previousMesh, StringComparison.OrdinalIgnoreCase))
+            : scene.Meshes.All(mesh => !mesh.Name.Equals(expectedMesh, StringComparison.OrdinalIgnoreCase));
         editor.UndoCommand.Execute(null);
-        await nextScene.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        await WaitForStageAsync(nextScene.Task, "Undo");
         TestAssert.True(MorphFaceEditorStateComparer.Equals(before, editor.CreateDraft()),
             "One Undo failed to restore the attachment while retaining the earlier colour edit.");
 
         // A picker source may disappear after its candidates were enumerated.
-        var failed = new TaskCompletionSource();
-        shell.PropertyChanged += (_, args) => { if (args.PropertyName == nameof(shell.ErrorMessage) && shell.HasError) failed.TrySetResult(); };
-        nextScene = new TaskCompletionSource<HeadPreviewScene>();
+        var failed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        shell.PropertyChanged += (_, args) => { if (args.PropertyName == nameof(shell.ErrorMessage) && shell.HasError) failed.TrySetResult(true); };
+        nextScene = new TaskCompletionSource<HeadPreviewScene>(TaskCreationOptions.RunContinuationsAsynchronously);
+        expectedSceneMesh = "<no publication>";
         materialState = editor.Material.Materials;
+        var beforeFailure = scenePublications;
         editor.HairMesh.Commit(new HairMeshOption("Missing source", choice.Identity! with
             { PackagePath = Path.Combine(Path.GetTempPath(), $"MFE-Missing-{Guid.NewGuid():N}.pcc") }));
-        await failed.Task.WaitAsync(TimeSpan.FromSeconds(30));
-        TestAssert.True(ReferenceEquals(materialState, editor.Material.Materials) && !nextScene.Task.IsCompleted,
+        await WaitForStageAsync(failed.Task, "missing-source error");
+        TestAssert.True(ReferenceEquals(materialState, editor.Material.Materials) && scenePublications == beforeFailure,
             "An attachment preparation failure changed the live materials or scene.");
     });
 

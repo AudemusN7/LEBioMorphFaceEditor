@@ -90,6 +90,30 @@ public sealed class MaterialEditingSession : IUndoableEditSource
     public bool CanUndo => _history.CanUndo;
     public bool CanRedo => _history.CanRedo;
     public int ChangedTextureCount => _textureReferences.Count;
+    public bool HasCursedRandomisation { get; private set; }
+
+    /// <summary>Inputs for a normal roll that will clear a previous Cursed material edit.</summary>
+    public MaterialRandomisationDefaults CaptureRandomisationDefaults()
+    {
+        var textures = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var material in _originalMaterials.Materials.Values)
+        {
+            var defaults = material.DefaultTextures.Count == 0 ? material.Textures : material.DefaultTextures;
+            foreach (var value in defaults)
+                textures.TryAdd(ControlName(material, value.Key, _hasScopedMaterials), value.Value.Texture.Source.InstancedPath);
+        }
+        foreach (var value in DefaultTextureOverrides()) textures[value.Key] = value.Value.Source.InstancedPath;
+        return new(_defaultScalars, _defaultVectors, textures);
+    }
+
+    private Dictionary<string, DecodedTextureAsset> DefaultTextureOverrides()
+    {
+        var values = new Dictionary<string, DecodedTextureAsset>(StringComparer.OrdinalIgnoreCase);
+        foreach (var material in _originalMaterials.Materials.Values.Where(value => value.ContributesFaceControls))
+        foreach (var value in material.DefaultTextureOverrides)
+            values.TryAdd(ControlName(material, value.Key, _hasScopedMaterials), value.Value.Texture);
+        return values;
+    }
 
     public float GetScalar(string name) => _scalars[name];
     public Vector4 GetVector(string name) => _vectors[name];
@@ -462,7 +486,8 @@ public sealed class MaterialEditingSession : IUndoableEditSource
     public void SetValues(
         IReadOnlyDictionary<string, float> scalars,
         IReadOnlyDictionary<string, Vector4> vectors,
-        IReadOnlyDictionary<string, DecodedTextureAsset?> textures)
+        IReadOnlyDictionary<string, DecodedTextureAsset?> textures,
+        MaterialBatchKind kind = MaterialBatchKind.Edit)
     {
         ArgumentNullException.ThrowIfNull(scalars);
         ArgumentNullException.ThrowIfNull(vectors);
@@ -475,6 +500,12 @@ public sealed class MaterialEditingSession : IUndoableEditSource
             throw new ArgumentException("Material batch contains an unknown parameter or non-finite value.");
         }
 
+        // Keep cleanup and the new roll in one semantic edit and one preview publication.
+        // Texture defaults reuse the decoded assets already held by the material surface.
+        var cursed = kind == MaterialBatchKind.CursedRandomisation;
+        var reset = kind == MaterialBatchKind.NormalRandomisation && HasCursedRandomisation;
+        var resetBefore = cursed || reset ? CaptureResetState() : null;
+        if (reset) ResetValuesToDefaults();
         var changedScalars = scalars.Where(value => _scalars[value.Key] != value.Value)
             .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase);
         var changedVectors = vectors.Where(value => _vectors[value.Key] != value.Value)
@@ -494,25 +525,32 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         }
         foreach (var value in changedTextures) _textureReferences[value.Key] = value.Value;
         var after = CaptureBatchState(changedScalars.Keys, changedVectors.Keys, changedTextures.Keys);
-        if (BatchEquals(before, after))
+        var changed = !BatchEquals(before, after);
+        if (!changed && !reset)
         {
             RestoreBatchState(before);
             return;
         }
+        if (cursed && changed) HasCursedRandomisation = true;
         if (!_replaying)
         {
-            CommitHistory(_history.Record(new MaterialSemanticEdit("batch", before, after)));
+            CommitHistory(_history.Record(resetBefore is null
+                ? new MaterialSemanticEdit("batch", before, after)
+                : new MaterialSemanticEdit("defaults", resetBefore, CaptureResetState())));
         }
         Refresh(MaterialChangeKind.Full);
     }
 
-    /// <summary>Clears every authored override and restores inherited material values as one undoable edit.</summary>
+    /// <summary>Restores complete neutral material defaults as one undoable edit.</summary>
     public void ResetToDefaults()
     {
-        if (_originalOverrides.Scalars.Count == 0 && _originalOverrides.Vectors.Count == 0 &&
+        var defaultTextureOverrides = DefaultTextureOverrides();
+        if (!HasCursedRandomisation && _previewTextureReferences.Count == 0 &&
+            _originalOverrides.Scalars.Count == 0 && _originalOverrides.Vectors.Count == 0 &&
             _originalOverrides.Textures.Count == 0 && _editedScalars.Count == 0 &&
             _editedVectors.Count == 0 &&
-            TextureParameters.All(value => _textureReferences.GetValueOrDefault(value.Name) is null) &&
+            TextureParameters.All(value => _textureReferences.GetValueOrDefault(value.Name)?.Source ==
+                defaultTextureOverrides.GetValueOrDefault(value.Name)?.Source) &&
             _defaultScalars.All(value => _scalars.GetValueOrDefault(value.Key) == value.Value) &&
             _defaultVectors.All(value => _vectors.GetValueOrDefault(value.Key) == value.Value))
         {
@@ -520,6 +558,19 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         }
 
         var before = CaptureResetState();
+        ResetValuesToDefaults();
+        var after = CaptureResetState();
+        if (!_replaying)
+        {
+            CommitHistory(_history.Record(new MaterialSemanticEdit("defaults", before, after)));
+        }
+        Refresh(MaterialChangeKind.Full);
+    }
+
+    private void ResetValuesToDefaults()
+    {
+        HasCursedRandomisation = false;
+        _previewTextureReferences.Clear();
         _originalOverrides = new MorphFaceMaterialOverrides(_originalOverrides.Source, [], [], []);
         _scalars.Clear();
         foreach (var value in _defaultScalars) _scalars[value.Key] = value.Value;
@@ -527,14 +578,9 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         foreach (var value in _defaultVectors) _vectors[value.Key] = value.Value;
         _textureReferences.Clear();
         foreach (var parameter in TextureParameters) _textureReferences[parameter.Name] = null;
+        foreach (var value in DefaultTextureOverrides()) _textureReferences[value.Key] = value.Value;
         _editedScalars.Clear();
         _editedVectors.Clear();
-        var after = CaptureResetState();
-        if (!_replaying)
-        {
-            CommitHistory(_history.Record(new MaterialSemanticEdit("defaults", before, after)));
-        }
-        Refresh(MaterialChangeKind.Full);
     }
 
     /// <summary>
@@ -576,6 +622,7 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         ValidateUnique(mappedVectors.Select(value => value.Name), "mapped vector");
         ValidateUnique(mappedTextures.Select(value => value.Name), "mapped texture");
         var before = CaptureResetState();
+        HasCursedRandomisation = preserveUnspecifiedTextures && HasCursedRandomisation;
         _originalOverrides = new MorphFaceMaterialOverrides(
             _originalOverrides.Source,
             mappedScalars,
@@ -970,11 +1017,13 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         new Dictionary<string, Vector4>(_vectors, StringComparer.OrdinalIgnoreCase),
         new Dictionary<string, DecodedTextureAsset?>(_textureReferences, StringComparer.OrdinalIgnoreCase),
         new HashSet<string>(_editedScalars, StringComparer.OrdinalIgnoreCase),
-        new HashSet<string>(_editedVectors, StringComparer.OrdinalIgnoreCase));
+        new HashSet<string>(_editedVectors, StringComparer.OrdinalIgnoreCase),
+        HasCursedRandomisation);
 
     private void RestoreResetState(MaterialResetState state)
     {
         _originalOverrides = state.OriginalOverrides;
+        HasCursedRandomisation = state.HasCursedRandomisation;
         _scalars.Clear();
         foreach (var value in state.Scalars) _scalars[value.Key] = value.Value;
         _vectors.Clear();
@@ -1089,7 +1138,15 @@ internal sealed record MaterialResetState(
     IReadOnlyDictionary<string, Vector4> Vectors,
     IReadOnlyDictionary<string, DecodedTextureAsset?> Textures,
     IReadOnlySet<string> EditedScalars,
-    IReadOnlySet<string> EditedVectors);
+    IReadOnlySet<string> EditedVectors,
+    bool HasCursedRandomisation);
+
+public sealed record MaterialRandomisationDefaults(
+    IReadOnlyDictionary<string, float> Scalars,
+    IReadOnlyDictionary<string, Vector4> Vectors,
+    IReadOnlyDictionary<string, string> Textures);
+
+public enum MaterialBatchKind { Edit, NormalRandomisation, CursedRandomisation }
 
 internal sealed class MaterialEditHistory
 {

@@ -326,7 +326,7 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
             {
                 foreach (var member in family.Value)
                 {
-                    var required = IsRequiredRandomisationTextureMember(family.Key, member.Key);
+                    var required = MaterialTextureFamilyPolicy.IsRequiredMember(family.Key, member.Key);
                     var editor = MaterialParameterControlKey.TryParse(member.Key, out _, out _)
                         ? Textures.FirstOrDefault(value =>
                             value.Name.Equals(member.Key, StringComparison.OrdinalIgnoreCase))
@@ -367,16 +367,6 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
             applicableScalars, applicableVectors, decoded, appliedFamilies, failedTextureFamilySignatures);
     }
 
-    private static bool IsRequiredRandomisationTextureMember(string family, string parameterName) =>
-        SourceFamilyName(family).Equals("human-face", StringComparison.OrdinalIgnoreCase)
-            ? MaterialParameterControlKey.ParameterName(parameterName) is "HED_Diff" or "HED_Norm"
-            : SourceFamilyName(family).Equals("human-scalp", StringComparison.OrdinalIgnoreCase)
-                ? MaterialParameterControlKey.ParameterName(parameterName) is "HED_Scalp_Diff" or "HED_Scalp_Norm"
-                : SourceFamilyName(family).EndsWith("-face", StringComparison.OrdinalIgnoreCase)
-                    ? MaterialParameterControlKey.ParameterName(parameterName).EndsWith("_HED_Diff", StringComparison.OrdinalIgnoreCase) ||
-                      MaterialParameterControlKey.ParameterName(parameterName).EndsWith("_HED_Norm", StringComparison.OrdinalIgnoreCase)
-                : true;
-
     private static string LocalizedScopeLabel(string? scopeKey, string sourceLabel) => scopeKey?.ToLowerInvariant() switch
     {
         "human" => Loc.Text("loc_VM_materialScope_human"),
@@ -388,8 +378,6 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
         "vorcha" => Loc.Text("loc_VM_materialScope_vorcha"),
         _ => sourceLabel
     };
-    private static string SourceFamilyName(string family) =>
-        family.Contains('|') ? family[(family.IndexOf('|') + 1)..] : family;
     public MaterialRandomisationDefaults? CapturePendingRandomisationDefaults() =>
         _session.HasCursedRandomisation ? _session.CaptureRandomisationDefaults() : null;
 
@@ -479,16 +467,4 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
         foreach (var texture in Textures) texture.Dispose();
         _disposed = true;
     }
-}
-
-public sealed record PreparedMaterialRandomisation(
-    IReadOnlyDictionary<string, float> Scalars,
-    IReadOnlyDictionary<string, System.Numerics.Vector4> Vectors,
-    IReadOnlyDictionary<string, DecodedTextureAsset?> Textures,
-    int AppliedTextureFamilies,
-    IReadOnlySet<string> FailedTextureFamilySignatures)
-{
-    public static PreparedMaterialRandomisation Empty { get; } = new(
-        new Dictionary<string, float>(), new Dictionary<string, System.Numerics.Vector4>(),
-        new Dictionary<string, DecodedTextureAsset?>(), 0, new HashSet<string>());
 }

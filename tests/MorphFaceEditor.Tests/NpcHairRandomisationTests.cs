@@ -79,39 +79,56 @@ public static class NpcHairRandomisationTests
 
     private static void NonzeroCharacterSlidersBlockNpcMeshChanges()
     {
-        var maleFeatures = new[]
+        var registry = new TextureCatalogService(new TextureRegistryStore(TextureRegistryPaths.CreateDefault()));
+        var installed = registry.ReadAsync(MorphFaceGame.LE1).GetAwaiter().GetResult();
+        var embedded = MorphRandomisationCatalog.LoadEmbedded();
+        using var reader = new MorphFacePackageReader();
+        var cases = new[]
         {
-            ("Ashley", "facial-structure", "character", 0.35f),
-            ("eastwood", "facial-structure", "character", 0.2f),
-            ("nose_BridgeIn", "nose", "bridge", 0.6f)
+            (PlayerHairSex.Male, CurrentCharacter: 0.35f, ProposedCharacter: 0f, Morphs: false, Block: true),
+            (PlayerHairSex.Male, CurrentCharacter: 0.35f, ProposedCharacter: 0f, Morphs: true, Block: false),
+            (PlayerHairSex.Male, CurrentCharacter: 0f, ProposedCharacter: 0f, Morphs: true, Block: false),
+            (PlayerHairSex.Male, CurrentCharacter: -0.1f, ProposedCharacter: 0f, Morphs: false, Block: true),
+            (PlayerHairSex.Female, CurrentCharacter: 0f, ProposedCharacter: 0f, Morphs: false, Block: false),
+            (PlayerHairSex.Female, CurrentCharacter: 0f, ProposedCharacter: 0.1f, Morphs: true, Block: true)
         };
-
-        TestAssert.True(FaceEditorViewModel.HasNonzeroPlayerExcludedCharacterMorph(
-                maleFeatures, new Dictionary<string, float>(), PlayerHairSex.Male),
-            "A retained nonzero HMM Character morph did not protect the current mesh.");
-        TestAssert.True(!FaceEditorViewModel.HasNonzeroPlayerExcludedCharacterMorph(
-                maleFeatures, new Dictionary<string, float> { ["Ashley"] = 0f }, PlayerHairSex.Male),
-            "A proposed zero value still protected the current mesh.");
-        TestAssert.True(!FaceEditorViewModel.HasNonzeroPlayerExcludedCharacterMorph(
-                maleFeatures, new Dictionary<string, float> { ["Ashley"] = 0f, ["eastwood"] = 0.4f },
-                PlayerHairSex.Male),
-            "The Player-approved HMM Eastwood exception incorrectly blocked a mesh change.");
-        TestAssert.True(FaceEditorViewModel.HasNonzeroPlayerExcludedCharacterMorph(
-                maleFeatures, new Dictionary<string, float> { ["Ashley"] = -0.1f }, PlayerHairSex.Male),
-            "A nonzero negative Character morph did not protect the current mesh.");
-
-        var femaleFeatures = new[]
+        foreach (var (sex, currentCharacter, proposedCharacter, morphs, block) in cases)
         {
-            ("iconic", "facial-structure", "character", 0.5f),
-            ("race_iconic", "facial-structure", "character", 0.6f),
-            ("Ashley", "facial-structure", "character", 0f)
-        };
-        TestAssert.True(!FaceEditorViewModel.HasNonzeroPlayerExcludedCharacterMorph(
-                femaleFeatures, new Dictionary<string, float>(), PlayerHairSex.Female),
-            "Player-approved HMF Iconic sliders incorrectly blocked a mesh change.");
-        TestAssert.True(FaceEditorViewModel.HasNonzeroPlayerExcludedCharacterMorph(
-                femaleFeatures, new Dictionary<string, float> { ["Ashley"] = 0.1f }, PlayerHairSex.Female),
-            "A nonzero Player-excluded HMF Character slider did not protect the current mesh.");
+            var profile = sex == PlayerHairSex.Male ? "le1-human-male" : "le1-human-female";
+            var style = PlayerHairStyleCatalog.Resolve(MorphFaceGame.LE1, sex,
+                installed.Candidates, installed.AttachmentMeshes).Single(value =>
+                value.Id == (sex == PlayerHairSex.Male ? "hmm-mhk" : "hmf-braids"));
+            var character = sex == PlayerHairSex.Male ? "Anderson" : "Ashley";
+            var values = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase) { [character] = proposedCharacter };
+            if (sex == PlayerHairSex.Male) values["eastwood"] = 0.4f;
+            else { values["iconic"] = 0.5f; values["race_iconic"] = 0.6f; }
+            var donor = new MorphRandomisationDonor("fixed", profile,
+                values.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase), values)
+            {
+                MaterialTextureFamilies = new Dictionary<string, IReadOnlyDictionary<string, string>>
+                    { ["human-scalp"] = style.ScalpTextures }
+            };
+            var corpus = new MorphRandomisationCorpus(MorphRandomisationCorpus.CurrentFormatVersion,
+                new Dictionary<MorphRandomisationPoolKey, IReadOnlyList<MorphRandomisationDonor>>
+                    { [MorphRandomisationPoolRouter.Resolve(profile)] = [donor] })
+            {
+                MaterialProfiles = new Dictionary<string, MaterialRandomisationProfile>
+                    { [profile] = embedded.GetMaterialProfile(profile)! }
+            };
+            using var editor = CreateNpcEditor(reader, registry, installed, profile,
+                sex == PlayerHairSex.Male ? new HumanMaleFeatureMetadataCatalog() : new HumanFemaleFeatureMetadataCatalog(),
+                sex, style, values.Keys.ToArray(), randomisationCatalog: new MorphRandomisationCatalog(corpus));
+            foreach (var feature in editor.Features)
+                feature.Value = feature.Name == character ? currentCharacter : values.GetValueOrDefault(feature.Name);
+            editor.RandomiseMorphs = morphs;
+            editor.RandomiseMaterials = true;
+            editor.MorphRandomisationStrength = 0;
+            editor.MaterialRandomisationStrength = 100;
+            editor.RandomiseAsync().GetAwaiter().GetResult();
+            TestAssert.True((editor.HairMesh.Value is null) == block,
+                $"{sex}: retained {currentCharacter}, proposed {proposedCharacter}, Morphs {morphs} did not respect the NPC Character guard.");
+            if (morphs) TestAssert.Near(proposedCharacter, editor.CreateDraft().GetFeatureOffset(character), 0);
+        }
     }
 
     private static void HmmScalpStylesUseHumanTangParameter()
@@ -406,16 +423,17 @@ public static class NpcHairRandomisationTests
         TestAssert.True(style.MeshVariants.Count > 0,
             $"The installed LE1 texture registry did not resolve any {styleId} mesh variants.");
         using var reader = new MorphFacePackageReader();
+        var character = sex == PlayerHairSex.Male ? "Anderson" : "Ashley";
         var hairMorph = sex == PlayerHairSex.Female ? "HAIR_pulledBackSlick" : "Afro";
         using var editor = CreateNpcEditor(reader, registry, catalog,
             sex == PlayerHairSex.Female ? "le1-human-female" : "le1-human-male",
             sex == PlayerHairSex.Female ? new HumanFemaleFeatureMetadataCatalog() : new HumanMaleFeatureMetadataCatalog(),
-            sex, style!, characterMorph ? [hairMorph, "nose_BridgeIn", "Ashley"] : [hairMorph, "nose_BridgeIn"],
+            sex, style!, characterMorph ? [hairMorph, "nose_BridgeIn", character] : [hairMorph, "nose_BridgeIn"],
             materialName: sex == PlayerHairSex.Female ? "BIOG_HMF_HED_PRONPC_MASTER_FACE_MAT" : "BIOG_HMM_HED_PRONPC_MASTER_FACE_MAT",
             randomisationCatalog: randomisationCatalog);
         editor.Features.Single(value => value.Name == hairMorph).Value = 0.35f;
         editor.Features.Single(value => value.Name == "nose_BridgeIn").Value = 0.37f;
-        if (characterMorph) editor.Features.Single(value => value.Name == "Ashley").Value = 0.5f;
+        if (characterMorph) editor.Features.Single(value => value.Name == character).Value = 0.5f;
         TestAssert.True(editor.CanEditAttachments,
             "The NPC hair test workspace does not permit attachment editing.");
         TestAssert.True(!editor.HairMesh.IsRandomisationLocked,
@@ -459,7 +477,7 @@ public static class NpcHairRandomisationTests
         if (!globalRoll || !morphsEnabled)
             TestAssert.Equal(0.37f, editor.CreateDraft().GetFeatureOffset("nose_BridgeIn"));
         if (characterMorph && !morphsEnabled)
-            TestAssert.Equal(0.5f, editor.CreateDraft().GetFeatureOffset("Ashley"));
+            TestAssert.Equal(0.5f, editor.CreateDraft().GetFeatureOffset(character));
 
     }
 

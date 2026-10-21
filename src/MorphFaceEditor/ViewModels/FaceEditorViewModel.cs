@@ -6,6 +6,7 @@ using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.Services;
 using MorphFaceEditor.Core.Randomisation;
 using MorphFaceEditor.Core.Materials;
+using static MorphFaceEditor.Services.EditorRandomisationService;
 
 namespace MorphFaceEditor.ViewModels;
 
@@ -32,6 +33,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     private readonly RelayCommand _hairRandomiseCommand;
     private readonly List<RelayCommand> _subcategoryRandomiseCommands = [];
     private readonly MorphRandomisationCatalog _randomisationCatalog;
+    private readonly EditorRandomisationService _randomisation;
     private readonly string _profileKey;
     private readonly string _logIdentity;
     private readonly string _logGame;
@@ -126,6 +128,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             _randomiseMorphs = false;
         }
         _randomisationCatalog = randomisationCatalog ?? MorphRandomisationCatalog.Empty;
+        _randomisation = new EditorRandomisationService(_randomisationCatalog);
         _randomSeedFactory = randomSeedFactory ?? Random.Shared.Next;
         _reportError = reportError;
         _randomisationInclusionState = randomisationInclusionState ?? new RandomisationInclusionState();
@@ -559,330 +562,53 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             if (requested.InclusionKey is { } key && !_randomisationInclusionState.IsIncluded(key)) return;
             requested = CoordinateHairMorphScope(requested);
             var generation = ++_randomisationGeneration;
-            if (CursedMode)
-            {
-                await RandomiseCursedAsync(requested, includeCursedBones, generation);
-                return;
-            }
-
-            var materialDefaults = RandomiseMaterials ? Material.CapturePendingRandomisationDefaults() : null;
-            var playerContext = GetPlayerRandomisationContext();
-            var humanHairContext = GetHumanScalpContext();
-            var morphScope = RandomiseMorphs
-                ? requested.MorphFeatures.Where(value => value.IsEditable &&
-                    IsPlayerRandomisableMorph(value, playerContext) &&
-                    !IsScalpControlledHairMorph(value, humanHairContext))
-                    .Select(value => value.Name).ToHashSet(StringComparer.OrdinalIgnoreCase)
-                : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (humanHairContext is { } lockedHairContext && HairMesh.IsRandomisationLocked)
-                morphScope.ExceptWith(Features.Where(value =>
-                    IsHumanHairMorph(value, lockedHairContext.Sex)).Select(value => value.Name));
-            var materialProfiles = GetMaterialRandomisationProfiles();
-            var scalarScope = RandomiseMaterials
-                ? requested.Scalars.Select(value => value.Name)
-                    .Where(name => playerContext is { } player &&
-                        string.Equals(Material.ParameterScopeKey(name), player.ScopeKey,
-                            StringComparison.OrdinalIgnoreCase) &&
-                        Player2DaParameters.ContainsKey(Material.SourceParameterName(name)) ||
-                        materialProfiles.Any(value =>
-                        value.Supports(Material, name, MaterialParameterKind.Scalar) &&
-                        value.Profile.Scalars.ContainsKey(Material.SourceParameterName(name))))
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase)
-                : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var vectorScope = RandomiseMaterials
-                ? requested.Vectors.Select(value => value.Name)
-                    .Where(name => playerContext is { } player &&
-                        string.Equals(Material.ParameterScopeKey(name), player.ScopeKey,
-                            StringComparison.OrdinalIgnoreCase) &&
-                        Player2DaParameters.ContainsKey(Material.SourceParameterName(name)) ||
-                        materialProfiles.Any(value =>
-                        value.Supports(Material, name, MaterialParameterKind.Vector) &&
-                        value.Profile.Vectors.ContainsKey(Material.SourceParameterName(name))))
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase)
-                : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var requestedTextureNames = RandomiseMaterials
-                ? requested.Textures.Where(value => !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(value.Name) &&
-                    !IsProtectedPlayerEyeTexture(Material.SourceParameterName(value.Name)))
-                    .Select(value => value.Name).ToHashSet(StringComparer.OrdinalIgnoreCase)
-                : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var npcTextureNames = playerContext is null
-                ? requestedTextureNames
-                : requestedTextureNames.Where(name =>
-                        !IsPlayerExclusiveTexture(Material.SourceParameterName(name)) &&
-                        !Player2DaParameters.ContainsKey(Material.SourceParameterName(name)))
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var hasMaterial = materialDefaults is not null || scalarScope.Count + vectorScope.Count + requestedTextureNames.Count > 0;
-            if (morphScope.Count == 0 && !hasMaterial) return;
-
-            int? morphSeed = morphScope.Count > 0 ? _randomSeedFactory() : null;
-            int? materialSeed = hasMaterial ? NextDistinctSeed(morphSeed) : null;
-            MorphRandomisationDonor? morphDonor = morphSeed is not null
-                ? _randomisationCatalog.SelectDonor(_profileKey, morphSeed.Value, requireMaterial: false)
-                : null;
-            MorphRandomisationProposal? morphProposal = null;
-            if (morphDonor is not null && morphSeed is not null)
-            {
-                morphProposal = _randomisationCatalog.CreateMorphProposal(
-                    morphDonor,
-                    Features.ToDictionary(value => value.Name, value => value.Value, StringComparer.OrdinalIgnoreCase),
-                    Features.Select(value => new MorphRandomisationFeatureBounds(
-                        value.Name, value.Metadata.Minimum, value.Metadata.Maximum)).ToArray(),
-                    morphScope, MorphRandomisationStrength, morphSeed.Value);
-            }
-            var retainNpcHairMesh = playerContext is null && humanHairContext is { } npcHairContext &&
-                HasNonzeroPlayerExcludedCharacterMorph(
-                    morphProposal?.Values ?? new Dictionary<string, float>(), npcHairContext.Sex);
-            var preserveCurrentHairScalp = IsCurrentPairedScalpProtected(
-                humanHairContext, retainNpcHairMesh);
-            if (preserveCurrentHairScalp)
-                npcTextureNames = ExcludeHumanScalpTextures(npcTextureNames);
-
-            PreparedMaterialRandomisation? npcMaterial = null;
-            if (hasMaterial && materialProfiles.Count > 0)
-            {
-                var npcScalarScope = playerContext is null ? scalarScope : scalarScope
-                    .Where(name => !Player2DaParameters.ContainsKey(Material.SourceParameterName(name)))
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
-                var npcVectorScope = playerContext is null ? vectorScope : vectorScope
-                    .Where(name => !Player2DaParameters.ContainsKey(Material.SourceParameterName(name)))
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
-                npcMaterial = await PrepareMaterialRandomisationAsync(
-                    materialProfiles, npcScalarScope, npcVectorScope, npcTextureNames,
-                    materialSeed!.Value, morphDonor?.Id, materialDefaults);
-            }
-            var playerDetails = playerContext is not null && materialSeed is not null
-                ? await PreparePlayerFacialDetailsAsync(playerContext.Value, requestedTextureNames,
-                    materialSeed.Value)
-                : new Dictionary<string, DecodedTextureAsset?>();
-            var playerColours = playerContext is not null && materialSeed is not null
-                ? await PreparePlayer2DaAsync(playerContext.Value, requested, playerDetails,
-                    materialSeed.Value, cursed: false, materialDefaults)
-                : null;
-            var playerFaceScar = playerContext is not null && materialSeed is not null
-                ? await PreparePlayerFaceScarAsync(playerContext.Value, requestedTextureNames,
-                    scalarScope, materialSeed.Value)
-                : null;
-            var playerHair = humanHairContext is not null && materialSeed is not null
-                ? await PrepareHumanHairAsync(humanHairContext.Value, requestedTextureNames,
-                    materialSeed.Value, requested.InclusionKey is not null,
-                    npcHairRules: playerContext is null,
-                    retainCurrentMesh: retainNpcHairMesh)
-                : null;
-            // Reset or a newer roll supersedes this result before it can enter history.
+            if (CursedMode) _cursedBaseline ??= CaptureCursedBaseline();
+            var request = CaptureRandomisationRequest(requested, includeCursedBones);
+            if (!request.Cursed && request.Morphs.Scope.Count == 0 && !request.HasMaterial) return;
+            int? morphSeed = request.Cursed || request.Morphs.Scope.Count > 0 ? _randomSeedFactory() : null;
+            int? materialSeed = request.Cursed ? morphSeed : request.HasMaterial ? NextDistinctSeed(morphSeed) : null;
+            var prepared = await _randomisation.PrepareAsync(request, morphSeed, materialSeed,
+                Material.PrepareRandomisationAsync);
             if (generation != _randomisationGeneration) return;
-            var preparedMaterial = MergePreparedMaterial(npcMaterial, playerDetails,
-                playerHair?.Material, playerFaceScar, playerColours);
-
-            using (var aggregate = _history.BeginAggregate())
+            if (prepared.NoReadableFamily)
             {
-                var proposedMorphs = WithoutDonorHairMorphsWhenScalpRolled(
-                    morphProposal?.Values ?? new Dictionary<string, float>(), playerHair);
-                var morphValues = playerContext is null && playerHair is null
-                    ? WithSelectedScalpHairMorphs(proposedMorphs, preparedMaterial,
-                        materialSeed ?? morphSeed ?? 0)
-                    : WithHumanHairMorphs(proposedMorphs, playerHair,
-                        materialSeed ?? morphSeed ?? 0);
-                morphValues = WithExclusivePlayerIconicMorphs(morphValues, playerContext,
-                    morphSeed ?? materialSeed ?? 0);
-                if (morphValues.Count > 0) _session.SetFeatures(morphValues);
-                if (includeCursedBones && RandomiseMorphs && CanEditBones)
-                {
-                    // Keep the new morph's skeleton and remove only the previous Cursed contribution.
-                    foreach (var bone in _session.FinalSkeleton.ToArray())
-                    {
-                        if (!_cursedBoneOffsets.TryGetValue(bone.BoneName, out var offset)) continue;
-                        var clean = bone.Translation - offset;
-                        _session.SetBoneAxis(bone.BoneName, 0, clean.X);
-                        _session.SetBoneAxis(bone.BoneName, 1, clean.Y);
-                        _session.SetBoneAxis(bone.BoneName, 2, clean.Z);
-                    }
-                }
-                if (preparedMaterial is not null || materialDefaults is not null)
-                    Material.ApplyRandomisation(preparedMaterial ?? PreparedMaterialRandomisation.Empty);
-                if (playerHair is { } hair)
-                {
-                    switch (hair.Style.MeshAction)
-                    {
-                        case PlayerHairMeshAction.Clear:
-                            HairMesh.TrySetRandomisedSelection(null);
-                            break;
-                        case PlayerHairMeshAction.Set:
-                            HairMesh.TrySetRandomisedSelection(hair.Mesh);
-                            break;
-                    }
-                }
-                if (includeCursedBones && RandomiseMorphs && CanEditBones)
-                    _cursedBoneHistory.Set(new Dictionary<string, System.Numerics.Vector3>());
-                aggregate.Commit();
+                var warning = Loc.Text("loc_VM_faceEditor_noReadableTextureFamily");
+                AppLog.Warning(warning);
+                _reportError(warning);
             }
-            LogRandomisation(false, morphSeed, materialSeed);
-        }
-        catch (Exception exception)
-        {
-            AppLog.Error("RAND:FAILED", exception);
-            if (propagateErrors) throw;
-            _reportError(Loc.Format("loc_VM_faceEditor_randomisationFailed", AppLog.FilePath));
-        }
-    }
+            var playerDetails = request.Player is not null && materialSeed is not null
+                ? await PreparePlayerFacialDetailsAsync(request, materialSeed.Value)
+                : new Dictionary<string, DecodedTextureAsset?>();
+            var playerColours = request.Player is not null && materialSeed is not null &&
+                                (!request.Cursed || request.RandomiseMaterials && request.MaterialStrength > 0)
+                ? await PreparePlayer2DaAsync(request, playerDetails, materialSeed.Value)
+                : null;
+            var playerFaceScar = request.Player is not null && request.RandomiseMaterials && materialSeed is not null
+                ? await PreparePlayerFaceScarAsync(request, materialSeed.Value)
+                : null;
+            var playerHair = request.Human is not null && materialSeed is not null
+                ? await PrepareHumanHairAsync(request, materialSeed.Value, prepared.RetainHairMesh)
+                : null;
+            // A changed mesh lock cannot reject only the mesh after accepting its paired scalp/morphs.
+            // Reset, replacement controls or a newer roll also supersede all prepared parts together.
+            if (generation != _randomisationGeneration || request.Hair.Locked != HairMesh.IsRandomisationLocked) return;
+            var material = PreparedMaterialRandomisation.Merge(playerColours, playerFaceScar, playerHair?.Material,
+                playerDetails.Count == 0 ? null : PreparedMaterialRandomisation.Empty with
+                    { Textures = playerDetails, AppliedTextureFamilies = playerDetails.Count },
+                prepared.Material);
+            var proposedMorphs = WithoutDonorHairMorphsWhenScalpRolled(prepared.Morphs, playerHair);
+            var seed = materialSeed ?? morphSeed ?? 0;
+            var morphs = request.Player is null && playerHair is null
+                ? WithSelectedScalpHairMorphs(request, proposedMorphs, material, seed)
+                : WithHumanHairMorphs(request, proposedMorphs, playerHair, seed);
+            morphs = WithExclusivePlayerIconicMorphs(request, morphs, morphSeed ?? materialSeed ?? 0);
 
-    private async Task RandomiseCursedAsync(EditorRandomisationScope requested, bool includeBones,
-        long generation)
-    {
-        _cursedBaseline ??= CaptureCursedBaseline();
-        var seed = _randomSeedFactory();
-        var playerContext = GetPlayerRandomisationContext();
-        var humanHairContext = GetHumanScalpContext();
-        var features = RandomiseMorphs
-            ? requested.MorphFeatures.Where(value => value.IsEditable &&
-                    IsPlayerRandomisableMorph(value, playerContext) &&
-                    !IsScalpControlledHairMorph(value, humanHairContext))
-                .ToDictionary(value => value.Name, value => _cursedBaseline.Features[value.Name], StringComparer.OrdinalIgnoreCase)
-            : new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
-        if (humanHairContext is { } lockedHairContext && HairMesh.IsRandomisationLocked)
-            foreach (var feature in Features.Where(value => IsHumanHairMorph(value, lockedHairContext.Sex)))
-                features.Remove(feature.Name);
-        var scalars = RandomiseMaterials
-            ? requested.Scalars.ToDictionary(value => value.Name,
-                value => _cursedBaseline.Scalars[value.Name], StringComparer.OrdinalIgnoreCase)
-            : new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
-        var vectors = RandomiseMaterials
-            ? requested.Vectors.ToDictionary(value => value.Name,
-                value => _cursedBaseline.Vectors[value.Name], StringComparer.OrdinalIgnoreCase)
-            : new Dictionary<string, System.Numerics.Vector4>(StringComparer.OrdinalIgnoreCase);
-        var featureValues = CursedMorphRandomiser.CreateFeatureValues(
-            features, MorphRandomisationStrength, seed);
-        // Cursed permits incompatible Character morphs and hair; only an explicit
-        // mesh lock protects the current pair here. Normal rolls keep their guard.
-        var preserveCurrentHairScalp = IsCurrentPairedScalpProtected(
-            humanHairContext, forcePreserveMesh: false);
-        var materialValues = CursedMorphRandomiser.CreateExtrasProposal(
-            [], scalars, vectors, MaterialRandomisationStrength, seed,
-            requested.Scalars.Select(value => new MaterialRandomisationScalarBounds(
-                value.Name, value.Minimum, value.Maximum)).ToArray());
-        var cursedTextureFamilies = new Dictionary<string, IReadOnlyDictionary<string, string>>(
-            StringComparer.OrdinalIgnoreCase);
-        var requestedTextureNames = RandomiseMaterials
-            ? requested.Textures.Where(value => !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(value.Name) &&
-                !IsProtectedPlayerEyeTexture(Material.SourceParameterName(value.Name)))
-                .Select(value => value.Name).ToHashSet(StringComparer.OrdinalIgnoreCase)
-            : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        if (requestedTextureNames.Count > 0)
-        {
-            var profileIndex = 0;
-            foreach (var context in GetMaterialRandomisationProfiles())
-            {
-                var requestedNames = requested.Textures
-                    .Where(value => !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(value.Name) &&
-                        context.Supports(Material, value.Name, MaterialParameterKind.Texture))
-                    .Select(value => Material.SourceParameterName(value.Name))
-                    .Where(name => playerContext is null ||
-                        !IsPlayerExclusiveTexture(name) && !Player2DaParameters.ContainsKey(name))
-                    .Where(name => !preserveCurrentHairScalp || !IsHumanScalpTexture(name))
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
-                var availableTextureNames = Material.Textures
-                    .Where(value => context.Supports(Material, value.Name, MaterialParameterKind.Texture))
-                    .Select(value => Material.SourceParameterName(value.Name))
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
-                var selected = _randomisationCatalog.SelectMaterialDonor(
-                    context.Key, unchecked(seed + profileIndex++ * 7919));
-                var donor = _randomisationCatalog.ProjectInstalledMaterialDonors(
-                        context.Key, Material.CanResolveRandomisationTexturePath)
-                    .First(value => value.Id.Equals(selected.Id, StringComparison.OrdinalIgnoreCase));
-                foreach (var family in donor.MaterialTextureFamilies.Where(family =>
-                             IsTextureFamilyInScope(family.Value, requestedNames, availableTextureNames)))
-                {
-                    var scopedMembers = family.Value
-                        .Select(member => new
-                        {
-                            Name = Material.FindControlName(
-                                context.ParameterScopeKey, member.Key, MaterialParameterKind.Texture),
-                            member.Value
-                        })
-                        .Where(member => member.Name is not null)
-                        .ToDictionary(member => member.Name!, member => member.Value,
-                            StringComparer.OrdinalIgnoreCase);
-                    if (scopedMembers.Count > 0)
-                    {
-                        cursedTextureFamilies.TryAdd(
-                            $"{context.ParameterScopeKey}|{family.Key}", scopedMembers);
-                    }
-                }
-            }
-        }
-        var npcCursedScalars = playerContext is null ? materialValues.ScalarValues :
-            materialValues.ScalarValues.Where(value =>
-                    !Player2DaParameters.ContainsKey(Material.SourceParameterName(value.Key)))
-                .ToDictionary(value => value.Key, value => value.Value,
-                    StringComparer.OrdinalIgnoreCase);
-        var npcCursedVectors = playerContext is null ? materialValues.VectorValues :
-            materialValues.VectorValues.Where(value =>
-                    !Player2DaParameters.ContainsKey(Material.SourceParameterName(value.Key)))
-                .ToDictionary(value => value.Key, value => value.Value,
-                    StringComparer.OrdinalIgnoreCase);
-        var npcMaterial = await Material.PrepareRandomisationAsync(
-            npcCursedScalars, npcCursedVectors,
-            cursedTextureFamilies);
-        var playerDetails = playerContext is not null && requestedTextureNames.Count > 0
-            ? await PreparePlayerFacialDetailsAsync(playerContext.Value, requestedTextureNames, seed)
-            : new Dictionary<string, DecodedTextureAsset?>();
-        var playerColours = playerContext is not null && RandomiseMaterials &&
-                            MaterialRandomisationStrength > 0
-            ? await PreparePlayer2DaAsync(playerContext.Value, requested, playerDetails,
-                seed, cursed: true)
-            : null;
-        var requestedScalarNames = RandomiseMaterials
-            ? requested.Scalars.Select(value => value.Name)
-                .ToHashSet(StringComparer.OrdinalIgnoreCase)
-            : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var playerFaceScar = playerContext is not null && RandomiseMaterials
-            ? await PreparePlayerFaceScarAsync(playerContext.Value, requestedTextureNames,
-                requestedScalarNames, seed)
-            : null;
-        var playerHair = humanHairContext is not null && requestedTextureNames.Count > 0
-            ? await PrepareHumanHairAsync(humanHairContext.Value, requestedTextureNames, seed,
-                requested.InclusionKey is not null, npcHairRules: playerContext is null)
-            : null;
-        if (generation != _randomisationGeneration) return;
-        var preparedMaterial = MergePreparedMaterial(npcMaterial, playerDetails,
-            playerHair?.Material, playerFaceScar, playerColours)!;
-        CursedMorphRandomisationExtras? boneValues = null;
-        Dictionary<string, System.Numerics.Vector3>? nextBoneOffsets = null;
-
-        using (var aggregate = _history.BeginAggregate())
-        {
-            var proposedMorphs = WithoutDonorHairMorphsWhenScalpRolled(featureValues, playerHair);
-            var morphValues = playerContext is null && playerHair is null
-                ? WithSelectedScalpHairMorphs(proposedMorphs, preparedMaterial, seed)
-                : WithHumanHairMorphs(proposedMorphs, playerHair, seed);
-            morphValues = WithExclusivePlayerIconicMorphs(morphValues, playerContext, seed);
-            if (morphValues.Count > 0) _session.SetFeatures(morphValues);
-            if (includeBones && RandomiseMorphs && CanEditBones)
-            {
-                var postMorphBones = _session.FinalSkeleton.Select(bone => bone with
-                {
-                    Translation = bone.Translation - _cursedBoneOffsets.GetValueOrDefault(bone.BoneName)
-                }).ToArray();
-                boneValues = CursedMorphRandomiser.CreateExtrasProposal(
-                    postMorphBones, new Dictionary<string, float>(),
-                    new Dictionary<string, System.Numerics.Vector4>(), MorphRandomisationStrength, seed);
-                foreach (var bone in boneValues.BoneValues)
-                {
-                    _session.SetBoneAxis(bone.BoneName, 0, bone.Translation.X);
-                    _session.SetBoneAxis(bone.BoneName, 1, bone.Translation.Y);
-                    _session.SetBoneAxis(bone.BoneName, 2, bone.Translation.Z);
-                }
-                nextBoneOffsets = new Dictionary<string, System.Numerics.Vector3>(
-                    _cursedBoneOffsets, StringComparer.OrdinalIgnoreCase);
-                foreach (var (fuzzed, clean) in boneValues.BoneValues.Zip(postMorphBones))
-                {
-                    var offset = fuzzed.Translation - clean.Translation;
-                    if (offset == System.Numerics.Vector3.Zero) nextBoneOffsets.Remove(fuzzed.BoneName);
-                    else nextBoneOffsets[fuzzed.BoneName] = offset;
-                }
-            }
-            if (preparedMaterial.Scalars.Count + preparedMaterial.Vectors.Count +
-                preparedMaterial.Textures.Count > 0)
-                Material.ApplyRandomisation(preparedMaterial, cursed: true);
+            using var aggregate = _history.BeginAggregate();
+            if (morphs.Count > 0) _session.SetFeatures(morphs);
+            if (request.IncludeBones) ApplyRandomisedBones(request, morphSeed ?? 0);
+            if (request.ResetMaterials || material is not null &&
+                (!request.Cursed || material.Scalars.Count + material.Vectors.Count + material.Textures.Count > 0))
+                Material.ApplyRandomisation(material ?? PreparedMaterialRandomisation.Empty, request.Cursed);
             if (playerHair is { } hair)
             {
                 switch (hair.Style.MeshAction)
@@ -895,15 +621,105 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                         break;
                 }
             }
-            if (nextBoneOffsets is not null) _cursedBoneHistory.Set(nextBoneOffsets);
             aggregate.Commit();
+            AppLog.Information(AppLogMessages.Randomisation(request.Cursed, _logIdentity, _logGame,
+                request.MorphStrength, request.MaterialStrength, morphSeed, materialSeed));
         }
-        LogRandomisation(true, seed, seed);
+        catch (Exception exception)
+        {
+            AppLog.Error("RAND:FAILED", exception);
+            if (propagateErrors) throw;
+            _reportError(Loc.Format("loc_VM_faceEditor_randomisationFailed", AppLog.FilePath));
+        }
     }
 
-    private void LogRandomisation(bool cursed, int? morphSeed, int? materialSeed) =>
-        AppLog.Information(AppLogMessages.Randomisation(cursed, _logIdentity, _logGame,
-            MorphRandomisationStrength, MaterialRandomisationStrength, morphSeed, materialSeed));
+    private EditorRandomisationRequest CaptureRandomisationRequest(EditorRandomisationScope requested, bool includeBones)
+    {
+        var defaults = !CursedMode && RandomiseMaterials ? Material.CapturePendingRandomisationDefaults() : null;
+        var player = GetPlayerRandomisationContext();
+        var human = GetHumanScalpContext();
+        var profiles = RandomiseMaterials ? GetMaterialRandomisationProfiles().Select(context => context with
+        {
+            InstalledDonors = _randomisationCatalog.ProjectInstalledMaterialDonors(
+                context.Key, Material.CanResolveRandomisationTexturePath)
+        }).ToArray() : [];
+        var morphScope = RandomiseMorphs
+            ? requested.MorphFeatures.Where(value => value.IsEditable && IsPlayerRandomisableMorph(value, player) &&
+                !IsScalpControlledHairMorph(value, human) &&
+                (!HairMesh.IsRandomisationLocked || human is not { } hair || !IsHumanHairMorph(value, hair.Sex)))
+                .Select(value => value.Name).ToHashSet(StringComparer.OrdinalIgnoreCase)
+            : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        bool IsNumericInScope(string name, MaterialParameterKind kind) => CursedMode ||
+            player is { } context && string.Equals(Material.ParameterScopeKey(name), context.ScopeKey,
+                StringComparison.OrdinalIgnoreCase) && Player2DaParameters.ContainsKey(Material.SourceParameterName(name)) ||
+            profiles.Any(context => context.Supports(name, kind) && (kind == MaterialParameterKind.Scalar
+                ? context.Profile.Scalars.ContainsKey(Material.SourceParameterName(name))
+                : context.Profile.Vectors.ContainsKey(Material.SourceParameterName(name))));
+        var scalarScope = requested.Scalars.Where(value => RandomiseMaterials && IsNumericInScope(value.Name, MaterialParameterKind.Scalar))
+            .Select(value => value.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var vectorScope = requested.Vectors.Where(value => RandomiseMaterials && IsNumericInScope(value.Name, MaterialParameterKind.Vector))
+            .Select(value => value.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var textureScope = requested.Textures.Where(value => RandomiseMaterials &&
+                !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(value.Name) &&
+                !IsProtectedPlayerEyeTexture(Material.SourceParameterName(value.Name)))
+            .Select(value => value.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var includedGroups = Categories.SelectMany(category => category.SliderGroups)
+            .Where(group => group.Inclusion?.IsIncluded != false).ToArray();
+        var includedMorphs = includedGroups.SelectMany(group => group.MorphFeatures).Select(value => value.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var currentMorphs = Features.ToDictionary(value => value.Name, value => value.Value, StringComparer.OrdinalIgnoreCase);
+        var scalars = Material.Scalars.ToDictionary(value => value.Name,
+            value => defaults?.Scalars.GetValueOrDefault(value.Name, value.Value) ?? value.Value, StringComparer.OrdinalIgnoreCase);
+        var vectors = Material.Vectors.ToDictionary(value => value.Name,
+            value => defaults?.Vectors.GetValueOrDefault(value.Name, value.Value) ?? value.Value, StringComparer.OrdinalIgnoreCase);
+        return new(_profileKey, CursedMode, RandomiseMorphs, RandomiseMaterials,
+            MorphRandomisationStrength, MaterialRandomisationStrength,
+            new(currentMorphs, _cursedBaseline?.Features ?? currentMorphs,
+                Features.Select(value => new MorphRandomisationFeatureBounds(value.Name, value.Metadata.Minimum, value.Metadata.Maximum)).ToArray(),
+                morphScope, Features.Where(value => human is { } context && !IsPlayerRandomisableMorph(value.Name,
+                        value.CategoryKey, value.SubcategoryKey, context.Sex))
+                    .Select(value => value.Name).ToHashSet(StringComparer.OrdinalIgnoreCase)),
+            new(scalars, vectors, _cursedBaseline?.Scalars ?? scalars, _cursedBaseline?.Vectors ?? vectors,
+                Material.Textures.ToDictionary(value => value.Name,
+                    value => defaults is null ? value.SourceName : defaults.Textures.GetValueOrDefault(value.Name, "None"), StringComparer.OrdinalIgnoreCase),
+                Material.Scalars.Select(value => new MaterialRandomisationScalarBounds(value.Name, value.Minimum, value.Maximum)).ToArray(),
+                scalarScope, vectorScope, textureScope,
+                includedGroups.SelectMany(group => group.Scalars).Select(value => value.Name).ToHashSet(StringComparer.OrdinalIgnoreCase), profiles),
+            player, human,
+            new(HairMesh.IsRandomisationLocked, CanEditAttachments, CanEditMorphFeatures,
+                human is { } pair && PlayerHairStyleCatalog.IsCurrentHairMeshPairedStyle(pair.Game, pair.Sex,
+                    _registryAttachmentCandidates, HairMesh.Value), requested.InclusionKey is not null,
+                Features.Where(value => value.IsEditable && includedMorphs.Contains(value.Name) &&
+                    human is { } context && IsHumanHairMorph(value, context.Sex)).Select(value => value.Name).ToArray(),
+                _registryTextureCandidates, _registryAttachmentCandidates),
+            includeBones && RandomiseMorphs && CanEditBones, defaults is not null);
+    }
+
+    private void ApplyRandomisedBones(EditorRandomisationRequest request, int seed)
+    {
+        // Skeleton values depend on the newly applied morph. H owns the contribution history.
+        var clean = _session.FinalSkeleton.Select(bone => bone with
+        {
+            Translation = bone.Translation - _cursedBoneOffsets.GetValueOrDefault(bone.BoneName)
+        }).ToArray();
+        var bones = request.Cursed
+            ? CursedMorphRandomiser.CreateExtrasProposal(clean, new Dictionary<string, float>(),
+                new Dictionary<string, System.Numerics.Vector4>(), request.MorphStrength, seed).BoneValues
+            : clean;
+        var offsets = new Dictionary<string, System.Numerics.Vector3>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (bone, baseline) in bones.Zip(clean))
+        {
+            if (request.Cursed || _cursedBoneOffsets.ContainsKey(bone.BoneName))
+            {
+                _session.SetBoneAxis(bone.BoneName, 0, bone.Translation.X);
+                _session.SetBoneAxis(bone.BoneName, 1, bone.Translation.Y);
+                _session.SetBoneAxis(bone.BoneName, 2, bone.Translation.Z);
+            }
+            var offset = bone.Translation - baseline.Translation;
+            if (offset != System.Numerics.Vector3.Zero) offsets[bone.BoneName] = offset;
+        }
+        _cursedBoneHistory.Set(offsets);
+    }
 
     private int NextDistinctSeed(int? otherSeed)
     {
@@ -911,74 +727,10 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         return otherSeed is not null && seed == otherSeed.Value ? unchecked(seed + 1) : seed;
     }
 
+    // Normal Player rolls preserve alignment-safe eye maps. Cursed deliberately rolls the whole eye family.
     private bool IsProtectedPlayerEyeTexture(string name) =>
-        (_playerRandomisationGame is MorphFaceGame.LE2 or MorphFaceGame.LE3 &&
+        !CursedMode && (_playerRandomisationGame is MorphFaceGame.LE2 or MorphFaceGame.LE3 &&
             name.Contains("EYE", StringComparison.OrdinalIgnoreCase));
-
-    private static bool IsPlayerExclusiveTexture(string name) =>
-        name.Equals("HED_Addn", StringComparison.OrdinalIgnoreCase) ||
-        name.Equals("HED_Brow", StringComparison.OrdinalIgnoreCase) ||
-        name.Equals("HED_Diff", StringComparison.OrdinalIgnoreCase) ||
-        name.Equals("HED_Norm", StringComparison.OrdinalIgnoreCase) ||
-        name.Equals("HED_Scar", StringComparison.OrdinalIgnoreCase) ||
-        name.Equals("HED_Scalp_Diff", StringComparison.OrdinalIgnoreCase) ||
-        name.Equals("HED_Scalp_Norm", StringComparison.OrdinalIgnoreCase) ||
-        name.Equals("HED_Scalp_Spec", StringComparison.OrdinalIgnoreCase) ||
-        name.Equals("HED_Tang", StringComparison.OrdinalIgnoreCase);
-
-    private bool IsCurrentPairedScalpProtected(
-        (MorphFaceGame Game, PlayerHairSex Sex, string? ScopeKey)? humanHairContext,
-        bool forcePreserveMesh)
-    {
-        if (humanHairContext is not { } context ||
-            (!HairMesh.IsRandomisationLocked && !forcePreserveMesh)) return false;
-        return PlayerHairStyleCatalog.IsCurrentHairMeshPairedStyle(
-            context.Game, context.Sex, _registryAttachmentCandidates, HairMesh.Value);
-    }
-
-    private HashSet<string> ExcludeHumanScalpTextures(IEnumerable<string> names) => names
-        .Where(name => !IsHumanScalpTexture(Material.SourceParameterName(name)))
-        .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-    private static bool IsHumanScalpTexture(string parameterName) =>
-        parameterName.Equals("HED_Scalp_Diff", StringComparison.OrdinalIgnoreCase) ||
-        parameterName.Equals("HED_Scalp_Norm", StringComparison.OrdinalIgnoreCase) ||
-        parameterName.Equals("HED_Scalp_Spec", StringComparison.OrdinalIgnoreCase) ||
-        parameterName.Equals("HED_Tang", StringComparison.OrdinalIgnoreCase);
-
-    private static readonly IReadOnlyDictionary<string, Player2DaPalette> Player2DaParameters =
-        new Dictionary<string, Player2DaPalette>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["SkinTone"] = Player2DaPalette.SkinTone,
-            ["EYE_White_Colour_Vector"] = Player2DaPalette.SkinTone,
-            ["HED_Spec_Add_Vector"] = Player2DaPalette.SkinTone,
-            ["HED_Scar_Vector"] = Player2DaPalette.SkinTone,
-            ["HED_Teeth_Vector"] = Player2DaPalette.SkinTone,
-            ["HED_Hair_Colour_Vector"] = Player2DaPalette.HairColour,
-            ["HAIR_Shine_Desaturate_Scalar"] = Player2DaPalette.HairColour,
-            ["HED_Scalp_PhongSpec_Scalar"] = Player2DaPalette.HairColour,
-            ["Highlight1SpecExp_Scalar"] = Player2DaPalette.HairColour,
-            ["Highlight2SpecExp_Scalar"] = Player2DaPalette.HairColour,
-            ["Hair_Spec_Aniso_Exp_Scalar"] = Player2DaPalette.HairColour,
-            ["HAIR_Spec_Contribution_Scalar"] = Player2DaPalette.HairColour,
-            ["HAIR_SPwr_Scalar"] = Player2DaPalette.HairColour,
-            ["HED_Addn_Colour_Vector"] = Player2DaPalette.FacialHairColour,
-            ["blonde"] = Player2DaPalette.FacialHairColour,
-            ["HED_Addn_Colour_02_Scalar"] = Player2DaPalette.FacialHairColour,
-            ["HED_Addn_Blowout_Scalar"] = Player2DaPalette.FacialHairColour,
-            ["EYE_Iris_Colour_Vector"] = Player2DaPalette.IrisColour,
-            ["HED_Blush_Scalar"] = Player2DaPalette.Blush,
-            ["HED_Blush_Vector"] = Player2DaPalette.Blush,
-            ["HED_EyeShadow_Tint_Scalar"] = Player2DaPalette.EyeMakeup,
-            ["HED_EyeShadow_Tint_Vector"] = Player2DaPalette.EyeMakeup,
-            ["HED_Brow_Tint_Scalar"] = Player2DaPalette.EyeMakeup,
-            ["HED_Brow_Tint_Vector"] = Player2DaPalette.EyeMakeup,
-            ["HED_Lash_Diff"] = Player2DaPalette.EyeMakeup,
-            ["HED_Lips_Tint_Scalar"] = Player2DaPalette.Lips,
-            ["HED_Lips_Tint_Vector"] = Player2DaPalette.Lips,
-            ["HED_Addn_SPwr_Lips_Scalar"] = Player2DaPalette.Lips,
-            ["HED_Addn_Spec_Lips_Scalar"] = Player2DaPalette.Lips
-        };
 
     private static bool IsPlayerRandomisableMorph(
         MorphFeatureEditorViewModel feature,
@@ -999,28 +751,6 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
               name.Equals("race_iconic", StringComparison.OrdinalIgnoreCase);
     }
 
-    private bool HasNonzeroPlayerExcludedCharacterMorph(
-        IReadOnlyDictionary<string, float> proposedValues, PlayerHairSex sex) =>
-        HasNonzeroPlayerExcludedCharacterMorph(
-            Features.Select(feature => (feature.Name, feature.CategoryKey, feature.SubcategoryKey, feature.Value)),
-            proposedValues, sex);
-
-    internal static bool HasNonzeroPlayerExcludedCharacterMorph(
-        IEnumerable<(string Name, string CategoryKey, string SubcategoryKey, float CurrentValue)> features,
-        IReadOnlyDictionary<string, float> proposedValues,
-        PlayerHairSex sex) =>
-        features.Any(feature =>
-        {
-            if (!feature.CategoryKey.Equals("facial-structure", StringComparison.OrdinalIgnoreCase) ||
-                !feature.SubcategoryKey.Equals("character", StringComparison.OrdinalIgnoreCase) ||
-                IsPlayerRandomisableMorph(feature.Name, feature.CategoryKey, feature.SubcategoryKey, sex))
-                return false;
-            var value = proposedValues.TryGetValue(feature.Name, out var proposed)
-                ? proposed
-                : feature.CurrentValue;
-            return value != 0f;
-        });
-
     private static IReadOnlyDictionary<string, float> WithoutDonorHairMorphsWhenScalpRolled(
         IReadOnlyDictionary<string, float> proposed,
         (PreparedMaterialRandomisation Material, PlayerHairStyleOption Style,
@@ -1033,17 +763,14 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     }
 
     private IReadOnlyDictionary<string, float> WithExclusivePlayerIconicMorphs(
-        IReadOnlyDictionary<string, float> proposed,
-        (MorphFaceGame Game, PlayerHairSex Sex, string? ScopeKey)? player,
+        EditorRandomisationRequest request, IReadOnlyDictionary<string, float> proposed,
         int seed)
     {
-        if (!RandomiseMorphs || player is not { Sex: PlayerHairSex.Female }) return proposed;
+        if (!request.RandomiseMorphs || request.Player is not { Sex: PlayerHairSex.Female }) return proposed;
         const string iconic = "iconic";
         const string raceIconic = "race_iconic";
-        var currentIconic = Features.FirstOrDefault(value => value.Name.Equals(iconic,
-            StringComparison.OrdinalIgnoreCase))?.Value ?? 0f;
-        var currentRaceIconic = Features.FirstOrDefault(value => value.Name.Equals(raceIconic,
-            StringComparison.OrdinalIgnoreCase))?.Value ?? 0f;
+        var currentIconic = request.Morphs.Current.GetValueOrDefault(iconic);
+        var currentRaceIconic = request.Morphs.Current.GetValueOrDefault(raceIconic);
         return ResolveExclusivePlayerIconicMorphs(proposed, currentIconic, currentRaceIconic, seed);
     }
 
@@ -1147,23 +874,6 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             : feature.CategoryKey.Equals("facial-structure", StringComparison.OrdinalIgnoreCase) &&
               feature.SubcategoryKey.Equals("hair", StringComparison.OrdinalIgnoreCase);
 
-    internal static bool IsTextureFamilyInScope(
-        IReadOnlyDictionary<string, string> family,
-        IReadOnlySet<string> requestedTextureNames,
-        IReadOnlySet<string> availableTextureNames)
-    {
-        var applicableMembers = family.Keys.Where(availableTextureNames.Contains).ToArray();
-        return applicableMembers.Length > 0 && applicableMembers.All(requestedTextureNames.Contains);
-    }
-
-    internal static bool WereAllTextureFamiliesRejected(
-        int eligibleSignatureCount,
-        int excludedSignatureCount,
-        int appliedTextureFamilies) =>
-        eligibleSignatureCount > 0 &&
-        excludedSignatureCount >= eligibleSignatureCount &&
-        appliedTextureFamilies == 0;
-
     private bool CanRandomiseScope(EditorRandomisationScope scope, bool includeCursedBones = false)
     {
         if (scope.InclusionKey is { } key && !_randomisationInclusionState.IsIncluded(key)) return false;
@@ -1196,10 +906,10 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         var hasEligibleMorph = hasMorph && _randomisationCatalog.HasDonors(_profileKey);
         var hasEligibleMaterial = RandomiseMaterials && materialProfiles.Count > 0 &&
             (scope.Scalars.Any(value => materialProfiles.Any(profile =>
-                 profile.Supports(Material, value.Name, MaterialParameterKind.Scalar) &&
+                 profile.Supports(value.Name, MaterialParameterKind.Scalar) &&
                  profile.Profile.Scalars.ContainsKey(Material.SourceParameterName(value.Name)))) ||
              scope.Vectors.Any(value => materialProfiles.Any(profile =>
-                 profile.Supports(Material, value.Name, MaterialParameterKind.Vector) &&
+                 profile.Supports(value.Name, MaterialParameterKind.Vector) &&
                  profile.Profile.Vectors.ContainsKey(Material.SourceParameterName(value.Name)))) ||
              scope.Textures.Any(value => eligibleTextures.Contains(value.Name)));
         return hasEligibleMorph || hasEligibleMaterial || hasPlayerPalette;
@@ -1223,20 +933,6 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         IReadOnlyDictionary<string, float> Scalars,
         IReadOnlyDictionary<string, System.Numerics.Vector4> Vectors);
 
-    private sealed record MaterialProfileContext(
-        string Key,
-        MaterialRandomisationProfile Profile,
-        string? ParameterScopeKey,
-        ResolvedHeadMaterial? Template)
-    {
-        public bool Supports(
-            MaterialEditorViewModel material,
-            string controlName,
-            MaterialParameterKind kind) =>
-            string.Equals(material.ParameterScopeKey(controlName), ParameterScopeKey,
-                StringComparison.OrdinalIgnoreCase) &&
-            (Template is null || Template.Supports(material.SourceParameterName(controlName), kind));
-    }
     public async Task ApplyMaterialDataAsync(MorphFaceEditor.Core.Domain.MorphFaceMaterialData data)
     {
         await Material.ApplyDataAsync(data);
@@ -1302,13 +998,13 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             string.Equals(clean, value.Value, StringComparison.OrdinalIgnoreCase));
     }
 
-    private IReadOnlyList<MaterialProfileContext> GetMaterialRandomisationProfiles()
+    private IReadOnlyList<MaterialRandomisationProfileContext> GetMaterialRandomisationProfiles()
     {
         if (_customMaterialWorkspace is null)
         {
             var profile = _randomisationCatalog.GetMaterialProfile(_materialRandomisationProfileKey);
             return profile is not null && _randomisationCatalog.HasMaterialDonors(_materialRandomisationProfileKey)
-                ? [new MaterialProfileContext(_materialRandomisationProfileKey, profile, null, null)]
+                ? [new MaterialRandomisationProfileContext(_materialRandomisationProfileKey, profile, null, null)]
                 : [];
         }
         return _customMaterialWorkspace.Assignments
@@ -1329,7 +1025,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                 Profile = _randomisationCatalog.GetMaterialProfile(value.Key)
             })
             .Where(value => value.Profile is not null && _randomisationCatalog.HasMaterialDonors(value.Key))
-            .Select(value => new MaterialProfileContext(
+            .Select(value => new MaterialRandomisationProfileContext(
                 value.Key, value.Profile!, value.ScopeKey, value.Template))
             .ToArray();
     }
@@ -1448,14 +1144,11 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     }
 
     private async Task<PreparedMaterialRandomisation?> PreparePlayer2DaAsync(
-        (MorphFaceGame Game, PlayerHairSex Sex, string? ScopeKey) context,
-        EditorRandomisationScope requested,
-        IReadOnlyDictionary<string, DecodedTextureAsset?> playerDetails,
-        int seed, bool cursed, MaterialRandomisationDefaults? materialDefaults = null)
+        EditorRandomisationRequest request, IReadOnlyDictionary<string, DecodedTextureAsset?> playerDetails, int seed)
     {
-        var allowed = requested.Scalars.Select(value => value.Name)
-            .Concat(requested.Vectors.Select(value => value.Name))
-            .Concat(requested.Textures.Select(value => value.Name))
+        var context = request.Player!.Value;
+        var input = request.Material;
+        var allowed = input.ScalarScope.Concat(input.VectorScope).Concat(input.TextureScope)
             .Where(name => string.Equals(Material.ParameterScopeKey(name), context.ScopeKey,
                 StringComparison.OrdinalIgnoreCase))
             .Select(Material.SourceParameterName)
@@ -1469,29 +1162,21 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         if (palettes.Count == 0) return null;
 
         var current = new Dictionary<string, Player2DaValue>(StringComparer.OrdinalIgnoreCase);
-        foreach (var value in Material.Scalars.Where(value =>
-                     string.Equals(Material.ParameterScopeKey(value.Name), context.ScopeKey,
-                         StringComparison.OrdinalIgnoreCase) &&
-                     Player2DaParameters.ContainsKey(Material.SourceParameterName(value.Name))))
-            current[Material.SourceParameterName(value.Name)] = Player2DaValue.FromScalar(
-                materialDefaults?.Scalars.GetValueOrDefault(value.Name, value.Value) ?? value.Value);
-        foreach (var value in Material.Vectors.Where(value =>
-                     string.Equals(Material.ParameterScopeKey(value.Name), context.ScopeKey,
-                         StringComparison.OrdinalIgnoreCase) &&
-                     Player2DaParameters.ContainsKey(Material.SourceParameterName(value.Name))))
-            current[Material.SourceParameterName(value.Name)] = Player2DaValue.FromVector(
-                materialDefaults?.Vectors.GetValueOrDefault(value.Name, value.Value) ?? value.Value);
+        foreach (var (name, value) in input.Scalars.Where(value =>
+                     string.Equals(Material.ParameterScopeKey(value.Key), context.ScopeKey, StringComparison.OrdinalIgnoreCase) &&
+                     Player2DaParameters.ContainsKey(Material.SourceParameterName(value.Key))))
+            current[Material.SourceParameterName(name)] = Player2DaValue.FromScalar(value);
+        foreach (var (name, value) in input.Vectors.Where(value =>
+                     string.Equals(Material.ParameterScopeKey(value.Key), context.ScopeKey, StringComparison.OrdinalIgnoreCase) &&
+                     Player2DaParameters.ContainsKey(Material.SourceParameterName(value.Key))))
+            current[Material.SourceParameterName(name)] = Player2DaValue.FromVector(value);
 
         bool HasTexture(string parameter)
         {
-            var controlName = Material.FindControlName(context.ScopeKey, parameter,
-                MaterialParameterKind.Texture);
-            if (controlName is null) return false;
-            if (playerDetails.TryGetValue(controlName, out var selected)) return selected is not null;
-            if (materialDefaults is not null) return materialDefaults.Textures.ContainsKey(controlName);
-            return Material.Textures.First(value => value.Name.Equals(controlName,
-                    StringComparison.OrdinalIgnoreCase)).SourceName is { } source &&
-                   !source.Equals("None", StringComparison.OrdinalIgnoreCase);
+            var name = input.FindControlName(context.ScopeKey, parameter, MaterialParameterKind.Texture);
+            if (name is null) return false;
+            if (playerDetails.TryGetValue(name, out var selected)) return selected is not null;
+            return !input.Textures[name].Equals("None", StringComparison.OrdinalIgnoreCase);
         }
         var result = Player2DaRandomisationPolicy.Roll(new Player2DaRandomisationRequest(
                 context.Sex == PlayerHairSex.Male ? Player2DaSex.Male : Player2DaSex.Female,
@@ -1510,7 +1195,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                 Player2DaValueKind.Vector => MaterialParameterKind.Vector,
                 _ => MaterialParameterKind.Texture
             };
-            var controlName = Material.FindControlName(context.ScopeKey, parameter, kind);
+            var controlName = input.FindControlName(context.ScopeKey, parameter, kind);
             if (controlName is null) continue;
             switch (value.Kind)
             {
@@ -1523,7 +1208,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                 case Player2DaValueKind.Texture when value.Texture is { } objectName:
                 {
                     var asset = ResolvePlayer2DaTextureAsset(
-                        _registryTextureCandidates, context.Game, objectName);
+                        request.Hair.Textures, context.Game, objectName);
                     if (asset is null) break;
                     var control = Material.Textures.First(value =>
                         value.Name.Equals(controlName, StringComparison.OrdinalIgnoreCase));
@@ -1536,14 +1221,12 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                 }
             }
         }
-        if (cursed && (scalars.Count > 0 || vectors.Count > 0))
+        if (request.Cursed && (scalars.Count > 0 || vectors.Count > 0))
         {
-            var bounds = requested.Scalars.Where(value => scalars.ContainsKey(value.Name))
-                .Select(value => new MaterialRandomisationScalarBounds(
-                    value.Name, value.Minimum, value.Maximum))
+            var bounds = input.ScalarBounds.Where(value => input.ScalarScope.Contains(value.Name) && scalars.ContainsKey(value.Name))
                 .ToArray();
             var variation = CursedMorphRandomiser.CreateExtrasProposal(
-                [], scalars, vectors, MaterialRandomisationStrength,
+                [], scalars, vectors, request.MaterialStrength,
                 unchecked(seed ^ 0x32444143), bounds);
             scalars = new Dictionary<string, float>(variation.ScalarValues,
                 StringComparer.OrdinalIgnoreCase);
@@ -1586,10 +1269,10 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     }
 
     private async Task<IReadOnlyDictionary<string, DecodedTextureAsset?>> PreparePlayerFacialDetailsAsync(
-        (MorphFaceGame Game, PlayerHairSex Sex, string? ScopeKey) context,
-        IReadOnlySet<string> requestedTextureNames,
-        int seed)
+        EditorRandomisationRequest request, int seed)
     {
+        var context = request.Player!.Value;
+        var requestedTextureNames = request.Material.TextureScope;
         var controls = Material.Textures
             .Where(value => requestedTextureNames.Contains(value.Name) &&
                             string.Equals(Material.ParameterScopeKey(value.Name), context.ScopeKey,
@@ -1597,11 +1280,11 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                             Material.SourceParameterName(value.Name) is "HED_Brow" or "HED_Addn")
             .ToArray();
         var current = controls.ToDictionary(value => Material.SourceParameterName(value.Name),
-            value => value.SourceName, StringComparer.OrdinalIgnoreCase);
+            value => request.Material.Textures[value.Name], StringComparer.OrdinalIgnoreCase);
         var profileKey = $"{context.Game.ToString().ToLowerInvariant()}-human-" +
                          (context.Sex == PlayerHairSex.Male ? "male" : "female");
         var proposal = PlayerFacialDetailTexturePolicy.CreateProposal(
-            profileKey, current, _registryTextureCandidates, seed);
+            profileKey, current, request.Hair.Textures, seed);
         var prepared = new Dictionary<string, DecodedTextureAsset?>(StringComparer.OrdinalIgnoreCase);
         foreach (var (parameter, selection) in proposal)
         {
@@ -1620,21 +1303,21 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         return prepared;
     }
 
-    private async Task<PreparedMaterialRandomisation?> PreparePlayerFaceScarAsync(
-        (MorphFaceGame Game, PlayerHairSex Sex, string? ScopeKey) context,
-        IReadOnlySet<string> requestedTextureNames,
-        IReadOnlySet<string> requestedScalarNames,
-        int seed)
+    private async Task<PreparedMaterialRandomisation?> PreparePlayerFaceScarAsync(EditorRandomisationRequest request, int seed)
     {
+        var context = request.Player!.Value;
+        var input = request.Material;
+        var requestedTextureNames = input.TextureScope;
+        var requestedScalarNames = input.ScalarScope;
         var profileKey = $"{context.Game.ToString().ToLowerInvariant()}-human-" +
                          (context.Sex == PlayerHairSex.Male ? "male" : "female");
         var textures = new Dictionary<string, DecodedTextureAsset?>(StringComparer.OrdinalIgnoreCase);
         var scalars = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
         var appliedFamilies = 0;
 
-        var diffuseName = Material.FindControlName(context.ScopeKey, "HED_Diff",
+        var diffuseName = input.FindControlName(context.ScopeKey, "HED_Diff",
             MaterialParameterKind.Texture);
-        var normalName = Material.FindControlName(context.ScopeKey, "HED_Norm",
+        var normalName = input.FindControlName(context.ScopeKey, "HED_Norm",
             MaterialParameterKind.Texture);
         if (diffuseName is not null && normalName is not null &&
             requestedTextureNames.Contains(diffuseName) && requestedTextureNames.Contains(normalName))
@@ -1653,7 +1336,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                                normalControl.CanResolveRandomisationPath(pair.NormalPath))
                 .ToArray();
             var face = PlayerFaceScarTexturePolicy.SelectFaceSet(
-                profileKey, npcPairs, _registryTextureCandidates, seed);
+                profileKey, npcPairs, request.Hair.Textures, seed);
             if (face is not null)
             {
                 try
@@ -1677,24 +1360,20 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             }
         }
 
-        var scarName = Material.FindControlName(context.ScopeKey, "HED_Scar",
+        var scarName = input.FindControlName(context.ScopeKey, "HED_Scar",
             MaterialParameterKind.Texture);
-        var customStrengthName = Material.FindControlName(context.ScopeKey,
+        var customStrengthName = input.FindControlName(context.ScopeKey,
             "HED_Custom_Scar_Scalar", MaterialParameterKind.Scalar);
-        var diffuseStrengthName = Material.FindControlName(context.ScopeKey,
+        var diffuseStrengthName = input.FindControlName(context.ScopeKey,
             "HED_Scar_Diffuse_Scalar", MaterialParameterKind.Scalar);
-        var unlockedScalarNames = Categories.SelectMany(category => category.SliderGroups)
-            .Where(group => group.Inclusion?.IsIncluded != false)
-            .SelectMany(group => group.Scalars)
-            .Select(value => value.Name)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var unlockedScalarNames = input.IncludedScalars;
         var scarStrengthsUnlocked =
             (customStrengthName is null || unlockedScalarNames.Contains(customStrengthName)) &&
             (diffuseStrengthName is null || unlockedScalarNames.Contains(diffuseStrengthName));
         if (scarName is not null && requestedTextureNames.Contains(scarName) && scarStrengthsUnlocked)
         {
             var scar = PlayerFaceScarTexturePolicy.SelectScar(
-                profileKey, _registryTextureCandidates, seed);
+                profileKey, request.Hair.Textures, seed);
             if (scar is not null)
             {
                 var scarResolved = !scar.HasScar;
@@ -1736,16 +1415,16 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
 
     private async Task<(PreparedMaterialRandomisation Material, PlayerHairStyleOption Style,
         MorphFaceEditor.Core.Domain.AssetIdentity? Mesh)?> PrepareHumanHairAsync(
-        (MorphFaceGame Game, PlayerHairSex Sex, string? ScopeKey) context,
-        IReadOnlySet<string> requestedTextureNames,
-        int seed,
-        bool targetedTextureRoll,
-        bool npcHairRules = false,
-        bool retainCurrentMesh = false)
+        EditorRandomisationRequest request, int seed, bool retainCurrentMesh)
     {
-        var diffuseControl = Material.FindControlName(context.ScopeKey, "HED_Scalp_Diff",
+        var context = request.Human!.Value;
+        var input = request.Material;
+        var requestedTextureNames = input.TextureScope;
+        var targetedTextureRoll = request.Hair.TargetedTextureRoll;
+        var npcHairRules = request.Player is null;
+        var diffuseControl = input.FindControlName(context.ScopeKey, "HED_Scalp_Diff",
             MaterialParameterKind.Texture);
-        var normalControl = Material.FindControlName(context.ScopeKey, "HED_Scalp_Norm",
+        var normalControl = input.FindControlName(context.ScopeKey, "HED_Scalp_Norm",
             MaterialParameterKind.Texture);
         if (diffuseControl is null || normalControl is null ||
             !requestedTextureNames.Contains(diffuseControl) ||
@@ -1757,21 +1436,20 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             {
                 "HED_Scalp_Diff", "HED_Scalp_Norm", "HED_Scalp_Spec", "HED_Tang"
             }
-            .Select(name => Material.FindControlName(context.ScopeKey, name,
+            .Select(name => input.FindControlName(context.ScopeKey, name,
                 MaterialParameterKind.Texture))
             .Where(name => name is not null)
             .Select(name => name!)
             .ToArray();
         if (scalpControls.Any(name => !requestedTextureNames.Contains(name))) return null;
 
-        var preserveMesh = HairMesh.IsRandomisationLocked || retainCurrentMesh;
-        if (preserveMesh && PlayerHairStyleCatalog.IsCurrentHairMeshPairedStyle(
-                context.Game, context.Sex, _registryAttachmentCandidates, HairMesh.Value))
+        var preserveMesh = request.Hair.Locked || retainCurrentMesh;
+        if (preserveMesh && request.Hair.CurrentMeshIsPaired)
             return null;
 
         var options = PlayerHairStyleCatalog.Resolve(context.Game, context.Sex,
-            _registryTextureCandidates, _registryAttachmentCandidates,
-            preserveMesh || !CanEditAttachments, preferNativeNpcMeshVariants: npcHairRules)
+            request.Hair.Textures, request.Hair.Meshes,
+            preserveMesh || !request.Hair.CanEditMeshes, preferNativeNpcMeshVariants: npcHairRules)
             .Where(style => !targetedTextureRoll ||
                 style.MeshAction != PlayerHairMeshAction.Set || style.HasDedicatedScalpPair)
             .ToArray();
@@ -1781,7 +1459,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         {
             var style = options[(first + attempt) % options.Length];
             var supportedScalp = style.ScalpTextures
-                .Where(member => Material.FindControlName(context.ScopeKey, member.Key,
+                .Where(member => input.FindControlName(context.ScopeKey, member.Key,
                     MaterialParameterKind.Texture) is not null)
                 .ToDictionary(member => member.Key, member => member.Value,
                     StringComparer.OrdinalIgnoreCase);
@@ -1820,7 +1498,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                 StringComparer.OrdinalIgnoreCase);
             if (!npcHairRules && context.Sex == PlayerHairSex.Male)
             {
-                var scalpMask = Material.FindControlName(context.ScopeKey,
+                var scalpMask = input.FindControlName(context.ScopeKey,
                     "HED_Scalp_Mask_Scalar", MaterialParameterKind.Scalar);
                 if (scalpMask is not null) adjustedScalars[scalpMask] = 1f;
             }
@@ -1832,84 +1510,24 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         return null;
     }
 
-    private static PreparedMaterialRandomisation? MergePreparedMaterial(
-        PreparedMaterialRandomisation? npc,
-        IReadOnlyDictionary<string, DecodedTextureAsset?> playerDetails,
-        PreparedMaterialRandomisation? playerHair,
-        PreparedMaterialRandomisation? playerFaceScar,
-        PreparedMaterialRandomisation? playerColours)
-    {
-        if (npc is null && playerDetails.Count == 0 && playerHair is null &&
-            playerFaceScar is null && playerColours is null)
-            return null;
-        var textures = new Dictionary<string, DecodedTextureAsset?>(StringComparer.OrdinalIgnoreCase);
-        if (npc is not null)
-            foreach (var (name, texture) in npc.Textures) textures[name] = texture;
-        foreach (var (name, texture) in playerDetails) textures[name] = texture;
-        if (playerHair is not null)
-            foreach (var (name, texture) in playerHair.Textures) textures[name] = texture;
-        if (playerFaceScar is not null)
-            foreach (var (name, texture) in playerFaceScar.Textures) textures[name] = texture;
-        if (playerColours is not null)
-            foreach (var (name, texture) in playerColours.Textures) textures[name] = texture;
-        var scalars = new Dictionary<string, float>(npc?.Scalars ??
-            new Dictionary<string, float>(), StringComparer.OrdinalIgnoreCase);
-        if (playerHair is not null)
-            foreach (var (name, value) in playerHair.Scalars) scalars[name] = value;
-        if (playerFaceScar is not null)
-            foreach (var (name, value) in playerFaceScar.Scalars) scalars[name] = value;
-        if (playerColours is not null)
-            foreach (var (name, value) in playerColours.Scalars) scalars[name] = value;
-        var vectors = new Dictionary<string, System.Numerics.Vector4>(npc?.Vectors ??
-            new Dictionary<string, System.Numerics.Vector4>(), StringComparer.OrdinalIgnoreCase);
-        if (playerColours is not null)
-            foreach (var (name, value) in playerColours.Vectors) vectors[name] = value;
-        var failures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        if (npc is not null) failures.UnionWith(npc.FailedTextureFamilySignatures);
-        if (playerHair is not null) failures.UnionWith(playerHair.FailedTextureFamilySignatures);
-        return new PreparedMaterialRandomisation(
-            scalars,
-            vectors,
-            textures,
-            (npc?.AppliedTextureFamilies ?? 0) + playerDetails.Count +
-            (playerHair?.AppliedTextureFamilies ?? 0) +
-            (playerFaceScar?.AppliedTextureFamilies ?? 0) +
-            (playerColours?.AppliedTextureFamilies ?? 0),
-            failures);
-    }
-
     private IReadOnlyDictionary<string, float> WithHumanHairMorphs(
-        IReadOnlyDictionary<string, float> proposed,
+        EditorRandomisationRequest request, IReadOnlyDictionary<string, float> proposed,
         (PreparedMaterialRandomisation Material, PlayerHairStyleOption Style,
             MorphFaceEditor.Core.Domain.AssetIdentity? Mesh)? playerHair,
         int seed)
     {
-        if (!RandomiseMaterials || !CanEditMorphFeatures || HairMesh.IsRandomisationLocked || playerHair is null)
+        if (!request.RandomiseMaterials || !request.Hair.CanEditMorphs || request.Hair.Locked || playerHair is null)
             return proposed;
         var selected = playerHair.Value;
         if (selected.Style.Sex == PlayerHairSex.Female)
         {
             if (selected.Style.MeshAction != PlayerHairMeshAction.Set) return proposed;
-            var includedHair = Categories.SelectMany(category => category.SliderGroups)
-                .Where(group => group.Inclusion?.IsIncluded != false)
-                .SelectMany(group => group.MorphFeatures)
-                .Where(feature => feature.IsEditable &&
-                    feature.CategoryKey.Equals("facial-structure", StringComparison.OrdinalIgnoreCase) &&
-                    feature.SubcategoryKey.Equals("hair", StringComparison.OrdinalIgnoreCase))
-                .Select(feature => feature.Name);
-            return ClearFemaleHairMorphsForMesh(proposed, includedHair);
+            return ClearFemaleHairMorphsForMesh(proposed, request.Hair.IncludedMorphs);
         }
         var diffuse = selected.Material.Textures.FirstOrDefault(value =>
             Material.SourceParameterName(value.Key).Equals("HED_Scalp_Diff", StringComparison.OrdinalIgnoreCase));
         if (diffuse.Value is null) return proposed;
-        var included = Categories.SelectMany(category => category.SliderGroups)
-            .Where(group => group.Inclusion?.IsIncluded != false)
-            .SelectMany(group => group.MorphFeatures)
-            .Select(value => value.Name)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var editable = Features.Where(value => value.IsEditable && included.Contains(value.Name) &&
-                HumanMaleHairScalpPolicy.IsHairMorph(value.Name))
-            .Select(value => value.Name).ToArray();
+        var editable = request.Hair.IncludedMorphs;
         var compatible = selected.Style.HairMorphNames.Where(editable.Contains).ToArray();
         var chosen = compatible.Length == 0 ? null : compatible[
             new Random(unchecked(seed ^ 0x4D4F5250)).Next(compatible.Length)];
@@ -1930,7 +1548,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     }
 
     private IReadOnlySet<string> EligibleMaterialTextureParameters(
-        IReadOnlyList<MaterialProfileContext>? materialProfiles = null)
+        IReadOnlyList<MaterialRandomisationProfileContext>? materialProfiles = null)
     {
         var profiles = materialProfiles ?? GetMaterialRandomisationProfiles();
         // Donor eligibility is shared by every texture control using the same profile.
@@ -1942,7 +1560,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         return Material.Textures
             .Where(texture => !IsProtectedPlayerEyeTexture(Material.SourceParameterName(texture.Name)))
             .Where(texture => profiles.Any(context =>
-                    context.Supports(Material, texture.Name, MaterialParameterKind.Texture) &&
+                    context.Supports(texture.Name, MaterialParameterKind.Texture) &&
                     eligibleParameters[context.Key].Contains(Material.SourceParameterName(texture.Name))) ||
                 player is { } context &&
                 string.Equals(Material.ParameterScopeKey(texture.Name), context.ScopeKey,
@@ -1953,171 +1571,19 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
-    private async Task<PreparedMaterialRandomisation> PrepareMaterialRandomisationAsync(
-        IReadOnlyList<MaterialProfileContext> profiles,
-        IReadOnlySet<string> scalarScope,
-        IReadOnlySet<string> vectorScope,
-        IReadOnlySet<string> requestedTextureNames,
-        int seed,
-        string? excludedDonorId,
-        MaterialRandomisationDefaults? materialDefaults)
-    {
-        var claimedScalars = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var claimedVectors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var claimedTextureFamilies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var resultScalars = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
-        var resultVectors = new Dictionary<string, System.Numerics.Vector4>(StringComparer.OrdinalIgnoreCase);
-        var resultTextures = new Dictionary<string, DecodedTextureAsset?>(StringComparer.OrdinalIgnoreCase);
-        var failures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var appliedFamilies = 0;
-
-        for (var profileIndex = 0; profileIndex < profiles.Count; profileIndex++)
-        {
-            var context = profiles[profileIndex];
-            var profile = context.Profile;
-            var profileScalarControls = scalarScope
-                .Where(name => context.Supports(Material, name, MaterialParameterKind.Scalar))
-                .Where(name => profile.Scalars.ContainsKey(Material.SourceParameterName(name)))
-                .Where(claimedScalars.Add)
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var profileVectorControls = vectorScope
-                .Where(name => context.Supports(Material, name, MaterialParameterKind.Vector))
-                .Where(name => profile.Vectors.ContainsKey(Material.SourceParameterName(name)))
-                .Where(claimedVectors.Add)
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var profileScalars = profileScalarControls.Select(Material.SourceParameterName)
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var profileVectors = profileVectorControls.Select(Material.SourceParameterName)
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var currentScalars = Material.Scalars
-                .Where(value => context.Supports(Material, value.Name, MaterialParameterKind.Scalar))
-                .ToDictionary(value => Material.SourceParameterName(value.Name),
-                    value => materialDefaults?.Scalars.GetValueOrDefault(value.Name, value.Value) ?? value.Value,
-                    StringComparer.OrdinalIgnoreCase);
-            var currentVectors = Material.Vectors
-                .Where(value => context.Supports(Material, value.Name, MaterialParameterKind.Vector))
-                .ToDictionary(value => Material.SourceParameterName(value.Name),
-                    value => materialDefaults?.Vectors.GetValueOrDefault(value.Name, value.Value) ?? value.Value,
-                    StringComparer.OrdinalIgnoreCase);
-            var currentTextures = Material.Textures
-                .Where(value => context.Supports(Material, value.Name, MaterialParameterKind.Texture))
-                .ToDictionary(value => Material.SourceParameterName(value.Name),
-                    value => materialDefaults is null ? value.SourceName : materialDefaults.Textures.GetValueOrDefault(value.Name, "None"),
-                    StringComparer.OrdinalIgnoreCase);
-            var scalarBounds = Material.Scalars
-                .Where(value => context.Supports(Material, value.Name, MaterialParameterKind.Scalar))
-                .Select(value => new MaterialRandomisationScalarBounds(
-                    Material.SourceParameterName(value.Name), value.Minimum, value.Maximum)).ToArray();
-            var requestedProfileTextures = requestedTextureNames
-                .Where(name => context.Supports(Material, name, MaterialParameterKind.Texture))
-                .Select(Material.SourceParameterName).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var availableTextureNames = Material.Textures
-                .Where(value => context.Supports(Material, value.Name, MaterialParameterKind.Texture))
-                .Select(value => Material.SourceParameterName(value.Name))
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var installedDonors = _randomisationCatalog.ProjectInstalledMaterialDonors(
-                context.Key, Material.CanResolveRandomisationTexturePath);
-            var compatibleDonors = excludedDonorId is null
-                ? installedDonors
-                : installedDonors.Where(value =>
-                    !value.Id.Equals(excludedDonorId, StringComparison.OrdinalIgnoreCase)).ToArray();
-            if (compatibleDonors.Count == 0) compatibleDonors = installedDonors;
-            var textureFamilies = compatibleDonors
-                .SelectMany(value => value.MaterialTextureFamilies)
-                .Where(family => IsTextureFamilyInScope(
-                    family.Value, requestedProfileTextures, availableTextureNames))
-                .Select(value => value.Key)
-                .Where(family => claimedTextureFamilies.Add($"{context.ParameterScopeKey}|{family}"))
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            if (profileScalars.Count + profileVectors.Count + textureFamilies.Count == 0) continue;
-
-            var profileSeed = unchecked(seed + profileIndex * 7919);
-            var donor = _randomisationCatalog.SelectMaterialDonor(context.Key, profileSeed, excludedDonorId);
-            var eligibleSignatureCount = compatibleDonors
-                .SelectMany(value => value.MaterialTextureFamilies
-                    .Where(family => textureFamilies.Contains(family.Key))
-                    .Select(family => family.Value))
-                .Select(MaterialRandomiser.TextureFamilySignature)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Count();
-            var excludedSignatures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            PreparedMaterialRandomisation? prepared = null;
-            for (var attempt = 0; attempt <= eligibleSignatureCount; attempt++)
-            {
-                var proposal = MaterialRandomiser.CreateProposal(
-                    donor, compatibleDonors, profile,
-                    currentScalars, currentVectors, scalarBounds,
-                    profileScalars, profileVectors, textureFamilies,
-                    MaterialRandomisationStrength, profileSeed, currentTextures, excludedSignatures);
-                var dependentVectors = MaterialRandomiser.DependentVectorNames(
-                    profile.ProfileKey, proposal.TextureFamilies, currentTextures);
-                prepared = await Material.PrepareRandomisationAsync(
-                    proposal.Scalars.Where(value => profileScalars.Contains(value.Key))
-                        .Select(value => new
-                        {
-                            Name = Material.FindControlName(
-                                context.ParameterScopeKey, value.Key, MaterialParameterKind.Scalar),
-                            value.Value
-                        })
-                        .Where(value => value.Name is not null)
-                        .ToDictionary(value => value.Name!, value => value.Value, StringComparer.OrdinalIgnoreCase),
-                    proposal.Vectors.Where(value => profileVectors.Contains(value.Key) ||
-                                                     dependentVectors.Contains(value.Key))
-                        .Select(value => new
-                        {
-                            Name = Material.FindControlName(
-                                context.ParameterScopeKey, value.Key, MaterialParameterKind.Vector),
-                            value.Value
-                        })
-                        .Where(value => value.Name is not null)
-                        .ToDictionary(value => value.Name!, value => value.Value, StringComparer.OrdinalIgnoreCase),
-                    proposal.TextureFamilies,
-                    context.ParameterScopeKey);
-                if (prepared.FailedTextureFamilySignatures.Count == 0) break;
-                var added = false;
-                foreach (var failure in prepared.FailedTextureFamilySignatures)
-                    added |= excludedSignatures.Add(failure);
-                if (!added) break;
-            }
-            if (prepared is null) continue;
-            foreach (var value in prepared.Scalars) resultScalars.TryAdd(value.Key, value.Value);
-            foreach (var value in prepared.Vectors) resultVectors.TryAdd(value.Key, value.Value);
-            foreach (var value in prepared.Textures) resultTextures.TryAdd(value.Key, value.Value);
-            appliedFamilies += prepared.AppliedTextureFamilies;
-            failures.UnionWith(prepared.FailedTextureFamilySignatures);
-            if (WereAllTextureFamiliesRejected(
-                    eligibleSignatureCount, excludedSignatures.Count, prepared.AppliedTextureFamilies))
-            {
-                var warning = Loc.Text("loc_VM_faceEditor_noReadableTextureFamily");
-                AppLog.Warning(warning);
-                _reportError(warning);
-            }
-        }
-
-        return new PreparedMaterialRandomisation(
-            resultScalars, resultVectors, resultTextures, appliedFamilies, failures);
-    }
-
     private IReadOnlyDictionary<string, float> WithSelectedScalpHairMorphs(
-        IReadOnlyDictionary<string, float> proposed,
+        EditorRandomisationRequest request, IReadOnlyDictionary<string, float> proposed,
         PreparedMaterialRandomisation? preparedMaterial,
         int seed)
     {
-        if (!RandomiseMaterials || !CanEditMorphFeatures || HairMesh.IsRandomisationLocked ||
-            !_profileKey.Contains("human-male", StringComparison.OrdinalIgnoreCase) ||
+        if (!request.RandomiseMaterials || !request.Hair.CanEditMorphs || request.Hair.Locked ||
+            !request.ProfileKey.Contains("human-male", StringComparison.OrdinalIgnoreCase) ||
             preparedMaterial is null) return proposed;
         var selectedScalp = preparedMaterial.Textures.FirstOrDefault(value =>
             Material.SourceParameterName(value.Key).Equals("HED_Scalp_Diff", StringComparison.OrdinalIgnoreCase));
         if (selectedScalp.Value is null) return proposed;
         var selectedPath = selectedScalp.Value.Source.InstancedPath;
-        var includedMorphNames = Categories.SelectMany(category => category.SliderGroups)
-            .Where(group => group.Inclusion?.IsIncluded != false)
-            .SelectMany(group => group.MorphFeatures)
-            .Select(value => value.Name)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var editableHair = Features.Where(value => value.IsEditable &&
-                HumanMaleHairScalpPolicy.IsHairMorph(value.Name) && includedMorphNames.Contains(value.Name))
-            .Select(value => value.Name).ToArray();
+        var editableHair = request.Hair.IncludedMorphs;
         var overrides = HumanMaleHairScalpPolicy.CreateMorphOverrides(selectedPath, editableHair, seed);
         if (overrides is null || overrides.Count == 0) return proposed;
         var result = new Dictionary<string, float>(proposed, StringComparer.OrdinalIgnoreCase);

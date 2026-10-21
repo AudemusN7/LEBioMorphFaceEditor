@@ -5910,14 +5910,14 @@ public static class UiSmokeTests
 
     private static void ExhaustedTextureRandomisationIsReported()
     {
-        TestAssert.True(FaceEditorViewModel.WereAllTextureFamiliesRejected(
+        TestAssert.True(EditorRandomisationService.WereAllTextureFamiliesRejected(
                 eligibleSignatureCount: 2,
                 excludedSignatureCount: 2,
                 appliedTextureFamilies: 0),
             "Exhausting every eligible texture family was silently treated as a complete randomisation.");
-        TestAssert.True(!FaceEditorViewModel.WereAllTextureFamiliesRejected(2, 1, 1),
+        TestAssert.True(!EditorRandomisationService.WereAllTextureFamiliesRejected(2, 1, 1),
             "A successful fallback texture family was incorrectly reported as exhausted.");
-        TestAssert.True(!FaceEditorViewModel.WereAllTextureFamiliesRejected(0, 0, 0),
+        TestAssert.True(!EditorRandomisationService.WereAllTextureFamiliesRejected(0, 0, 0),
             "A numeric-only material randomisation was incorrectly reported as a texture failure.");
     }
 

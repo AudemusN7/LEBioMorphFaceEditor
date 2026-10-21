@@ -57,7 +57,9 @@ public static class Le2PlayerMaterialRonIdentityTests
         TestAssert.True(!editor.Textures.Any(value => editor.SourceParameterName(value.Name).StartsWith(
                 "HED_Face_Alignment_", StringComparison.OrdinalIgnoreCase)),
             "Runtime alignment parameters became visible as editable controls.");
-        var warnings = editor.MergeMaterialDataAsync(imported).GetAwaiter().GetResult();
+        var prepared = editor.PrepareMaterialImportAsync(imported).GetAwaiter().GetResult();
+        editor.MergeMaterialData(prepared.Parameters, prepared.Textures);
+        var warnings = prepared.Warnings;
         TestAssert.Equal(0, warnings.Count);
         var captured = editor.CaptureInterchangeData();
         AssertDonor(captured.Textures.Single(value => value.Name == "HED_Face_Alignment_Emis").TextureReference!,
@@ -80,7 +82,9 @@ public static class Le2PlayerMaterialRonIdentityTests
         };
         var loader = new DonorLoader();
         using var editor = CreateEditor(loader, candidates, []);
-        var warnings = editor.MergeMaterialDataAsync(AlignmentData(null)).GetAwaiter().GetResult();
+        var prepared = editor.PrepareMaterialImportAsync(AlignmentData(null)).GetAwaiter().GetResult();
+        editor.MergeMaterialData(prepared.Parameters, prepared.Textures);
+        var warnings = prepared.Warnings;
         TestAssert.Equal(0, warnings.Count);
         AssertDonor(editor.CaptureInterchangeData().Textures.Single(value =>
             value.Name == "HED_Face_Alignment_Emis").TextureReference!, EmissivePath, 39366, sfxGame);
@@ -104,7 +108,9 @@ public static class Le2PlayerMaterialRonIdentityTests
         };
         var loader = new DonorLoader();
         using var editor = CreateEditor(loader, [], []);
-        var warnings = editor.MergeMaterialDataAsync(data).GetAwaiter().GetResult();
+        var prepared = editor.PrepareMaterialImportAsync(data).GetAwaiter().GetResult();
+        editor.MergeMaterialData(prepared.Parameters, prepared.Textures);
+        var warnings = prepared.Warnings;
         TestAssert.Equal(0, warnings.Count);
         AssertDonor(editor.CaptureInterchangeData().Textures.Single(value =>
             value.Name == "HED_Face_Alignment_Emis").TextureReference!, EmissivePath, 39366, sfxGame);

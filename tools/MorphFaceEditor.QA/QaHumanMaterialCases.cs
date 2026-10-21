@@ -243,7 +243,7 @@ internal static partial class QaCases
         var requested = PerturbEditableValues(before);
         QaContext.Require(requested.Scalars.Count + requested.Vectors.Count > 0,
             "Selected human materials expose no editable numeric controls for the RON/PCC roundtrip.");
-        editor.ApplyMeshMaterialImport(new PreparedMeshMaterialImport(requested,
+        editor.ApplyMaterialImport(new PreparedMaterialImport(requested,
             new Dictionary<string, DecodedTextureAsset?>(), []));
         var edited = editor.Material.CaptureInterchangeData();
         QaContext.Require(MaterialSignature(requested) == MaterialSignature(edited),
@@ -260,7 +260,7 @@ internal static partial class QaCases
         editor.UndoCommand.Execute(null);
         QaContext.Require(MaterialSignature(before) == MaterialSignature(editor.Material.CaptureInterchangeData()),
             "One undo did not restore the Custom materials before the RON edit.");
-        editor.ApplyMeshMaterialImport(prepared);
+        editor.ApplyMaterialImport(prepared);
         QaContext.Require(MaterialSignature(edited) == MaterialSignature(editor.Material.CaptureInterchangeData()),
             "Custom MFE RON did not restore the edited values and texture identities.");
         var afterRon = editor.Material.CaptureInterchangeData();

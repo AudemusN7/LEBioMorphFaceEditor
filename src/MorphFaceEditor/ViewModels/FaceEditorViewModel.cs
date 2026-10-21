@@ -275,9 +275,9 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     public bool CanExportTseMaterials => _customMaterialWorkspace is { } workspace && MeshMaterialInterchange.CanExportTse(workspace);
     public bool CanImportTseMaterials => _customMaterialWorkspace is { } workspace && MeshMaterialInterchange.CanImportTse(workspace);
 
-    public void ApplyMeshMaterialImport(PreparedMeshMaterialImport import)
+    public void ApplyMaterialImport(PreparedMaterialImport import)
     {
-        if (_customMaterialWorkspace is null) throw new InvalidOperationException(Loc.Text("loc_VM_faceEditor_meshWorkspaceRequired"));
+        ArgumentNullException.ThrowIfNull(import);
         using (var aggregate = _history.BeginAggregate())
         {
             Material.MergeMaterialData(import.Parameters, import.Textures);
@@ -1246,22 +1246,9 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     public async Task<IReadOnlyList<string>> MergeMaterialDataAsync(
         MorphFaceEditor.Core.Domain.MorphFaceMaterialData data)
     {
-        var warnings = await Material.MergeMaterialDataAsync(data);
-        RefreshDirtyState();
-        return warnings;
-    }
-    public async Task<IReadOnlyList<string>> ImportFaceMaterialDataAsync(
-        MorphFaceMaterialData data, TsePreviewAttachmentImport? attachments, bool omitUnresolvedTextures = false)
-    {
-        using var aggregate = _history.BeginAggregate();
-        var warnings = await Material.MergeMaterialDataAsync(data, omitUnresolvedTextures);
-        if (attachments is { ApplyHair: true } && CanEditAttachments)
-            HairMesh.SetImportedPreview(attachments.Hair);
-        if (attachments is { ApplyAccessory: true } && CanEditAttachments)
-            OtherMeshes[0].SetImportedPreview(attachments.Accessory);
-        aggregate.Commit();
-        RefreshDirtyState();
-        return warnings;
+        var prepared = await Material.PrepareMaterialImportAsync(data);
+        ApplyMaterialImport(prepared);
+        return prepared.Warnings;
     }
 
     private void OnEvaluationChanged(object? sender, EventArgs e)

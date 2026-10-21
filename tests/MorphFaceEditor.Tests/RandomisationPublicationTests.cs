@@ -28,7 +28,11 @@ public static class RandomisationPublicationTests
         new("normal older randomisation cannot overwrite a newer roll", () => OlderRollCannotOverwriteNewer(cursedMode: false)),
         new("Cursed older randomisation cannot overwrite a newer roll", () => OlderRollCannotOverwriteNewer(cursedMode: true)),
         new("normal randomisation does not publish after attachment controls change", () => AttachmentControlsDuringPendingRoll(cursedMode: false)),
-        new("Cursed randomisation does not publish after attachment controls change", () => AttachmentControlsDuringPendingRoll(cursedMode: true))
+        new("Cursed randomisation does not publish after attachment controls change", () => AttachmentControlsDuringPendingRoll(cursedMode: true)),
+        new("normal pending Player roll keeps its captured settings and palette values", () => PendingRollKeepsCapturedInputs(cursedMode: false)),
+        new("Cursed pending Player roll keeps its captured settings and palette values", () => PendingRollKeepsCapturedInputs(cursedMode: true)),
+        new("normal pending roll cannot publish against a changed hair lock", () => HairLockDuringPendingRoll(cursedMode: false)),
+        new("Cursed pending roll cannot publish against a changed hair lock", () => HairLockDuringPendingRoll(cursedMode: true))
     ];
 
     private static void ResetDuringPendingRoll(bool cursedMode) => RunWithDispatcher(async () =>
@@ -121,7 +125,55 @@ public static class RandomisationPublicationTests
             "A roll prepared against replaced attachment controls added an Undo item.");
     });
 
-    private static Fixture CreateFixture(int[] seeds, bool cursedMode)
+    private static void HairLockDuringPendingRoll(bool cursedMode) => RunWithDispatcher(async () =>
+    {
+        using var fixture = CreateFixture([OlderSeed], cursedMode);
+        var paths = DonorPaths(fixture.Catalog, OlderSeed);
+        var pending = fixture.Editor.RandomiseAsync();
+        await fixture.Loader.WaitForPendingPathAsync(paths);
+        fixture.Editor.HairMesh.IsRandomisationLocked = true;
+        await CompleteRequestAsync(fixture.Loader, paths);
+        await pending;
+        AssertInitialState(fixture.Editor, 6);
+        TestAssert.True(!fixture.Editor.UndoCommand.CanExecute(null), "Changing the hair lock allowed a stale partial roll into history.");
+    });
+
+    private static void PendingRollKeepsCapturedInputs(bool cursedMode) => RunWithDispatcher(async () =>
+    {
+        using var expected = CreateFixture([OlderSeed], cursedMode, playerWorkspace: true);
+        using var changed = CreateFixture([OlderSeed], cursedMode, playerWorkspace: true);
+        foreach (var fixture in new[] { expected, changed })
+        {
+            fixture.Editor.MaterialRandomisationStrength = 37;
+            var paths = DonorPaths(fixture.Catalog, OlderSeed);
+            var pending = fixture.Editor.RandomiseAsync();
+            await fixture.Loader.WaitForPendingPathAsync(paths);
+            if (fixture == changed)
+            {
+                fixture.Editor.CursedMode = !cursedMode;
+                fixture.Editor.RandomiseMaterials = false;
+                fixture.Editor.MaterialRandomisationStrength = 100;
+                fixture.Dialog.Selection = new Vector4(0.7f, 0.6f, 0.5f, 0.25f);
+                fixture.Editor.Material.Vectors.Single(value => value.Name == "SkinTone").EditCommand.Execute(null);
+            }
+            await CompleteRequestAsync(fixture.Loader, paths);
+            await pending;
+        }
+        var expectedColour = expected.Editor.Material.Vectors.Single(value => value.Name == "SkinTone").Value;
+        var actualColour = changed.Editor.Material.Vectors.Single(value => value.Name == "SkinTone").Value;
+        TestAssert.True(expectedColour == actualColour, "A pending roll used settings or colour values changed after it started.");
+        TestAssert.Near(1, actualColour.W, 0);
+        AssertTextures(changed.Editor, DonorPaths(changed.Catalog, OlderSeed));
+        changed.Editor.UndoCommand.Execute(null);
+        TestAssert.True(changed.Dialog.Selection!.Value ==
+            changed.Editor.Material.Vectors.Single(value => value.Name == "SkinTone").Value,
+            "Undo did not retain the colour edit made while the roll was pending.");
+        TestAssert.Equal(0, TexturePaths(changed.Editor).Length);
+        changed.Editor.UndoCommand.Execute(null);
+        TestAssert.True(!changed.Editor.UndoCommand.CanExecute(null), "The pending roll added more than one Undo entry.");
+    });
+
+    private static Fixture CreateFixture(int[] seeds, bool cursedMode, bool playerWorkspace = false)
     {
         var mesh = TestFixtures.CreateMesh();
         var face = new MorphFaceDocument(
@@ -134,10 +186,13 @@ public static class RandomisationPublicationTests
             "probe-material", materialIdentity, "BIOG_HMM_HED_PROMorph", HeadMaterialFamily.Skin,
             HeadMaterialBlendMode.Opaque, false,
             new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase) { ["HED_Norm_Blend"] = 2 },
-            new Dictionary<string, Vector4>(), new Dictionary<string, MaterialTextureBinding>())
+            playerWorkspace ? new Dictionary<string, Vector4> { ["SkinTone"] = new(0.2f, 0.3f, 0.4f, 1) } : [],
+            new Dictionary<string, MaterialTextureBinding>())
         {
             DefaultScalars = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase) { ["HED_Norm_Blend"] = 2 },
+            DefaultVectors = playerWorkspace ? new Dictionary<string, Vector4> { ["SkinTone"] = new(0.2f, 0.3f, 0.4f, 1) } : [],
             SupportedScalars = new HashSet<string>(["HED_Norm_Blend"], StringComparer.OrdinalIgnoreCase),
+            SupportedVectors = playerWorkspace ? new HashSet<string>(["SkinTone"], StringComparer.OrdinalIgnoreCase) : [],
             SupportedTextures = new HashSet<string>(["HED_Diff", "HED_Norm"], StringComparer.OrdinalIgnoreCase)
         };
         var materialSession = new MaterialEditingSession(
@@ -166,12 +221,13 @@ public static class RandomisationPublicationTests
         var references = new PackageReferenceService(reader, TestFixtures.CreateMissingTextureCatalogService());
         var session = new MorphFaceEditingSession(face, mesh, []);
         var seedIndex = 0;
+        var dialog = new NullColorDialog();
         var editor = new FaceEditorViewModel(session, new HumanMaleFeatureMetadataCatalog(), materialSession,
-            new NullColorDialog(), references, "probe.pcc", [],
+            dialog, references, "probe.pcc", [],
             [], null, [], _ => { }, ProfileKey, catalog,
             () => seeds[Math.Min(seedIndex++, seeds.Length - 1)],
             registryTextureCandidates: textureCandidates, textureCatalogProfile: TextureCatalogProfile.Empty,
-            isTextureRegistryAvailable: true);
+            isTextureRegistryAvailable: true, playerRandomisationGame: playerWorkspace ? MorphFaceGame.LE1 : null);
 
         // Replace only the decode boundary; selection, eligibility, command/core execution and history stay real.
         foreach (var texture in editor.Material.Textures)
@@ -188,7 +244,7 @@ public static class RandomisationPublicationTests
             reader.Dispose();
             throw new InvalidOperationException("The editor fixture did not pass the normal Randomise command eligibility check.");
         }
-        return new Fixture(editor, catalog, loader, reader, sourceFile);
+        return new Fixture(editor, catalog, loader, reader, sourceFile, dialog);
     }
 
     private static MorphRandomisationCatalog CreateCatalog()
@@ -303,11 +359,12 @@ public static class RandomisationPublicationTests
     }
 
     private sealed class Fixture(FaceEditorViewModel editor, MorphRandomisationCatalog catalog,
-        ControlledTextureLoader loader, MorphFacePackageReader reader, FileStream sourceFile) : IDisposable
+        ControlledTextureLoader loader, MorphFacePackageReader reader, FileStream sourceFile, NullColorDialog dialog) : IDisposable
     {
         public FaceEditorViewModel Editor { get; } = editor;
         public MorphRandomisationCatalog Catalog { get; } = catalog;
         public ControlledTextureLoader Loader { get; } = loader;
+        public NullColorDialog Dialog { get; } = dialog;
         public void Dispose()
         {
             Editor.Dispose();
@@ -377,7 +434,8 @@ public static class RandomisationPublicationTests
     private sealed class NullColorDialog : IHdrColorDialogService
     {
         public bool ExtendedSliders { get; set; }
-        public Vector4? Edit(string title, Vector4 value, Action<Vector4> livePreview) => null;
+        public Vector4? Selection { get; set; }
+        public Vector4? Edit(string title, Vector4 value, Action<Vector4> livePreview) => Selection;
         public Vector4? EditStandard(string title, Vector4 value, Action<Vector4> livePreview) => null;
     }
 }

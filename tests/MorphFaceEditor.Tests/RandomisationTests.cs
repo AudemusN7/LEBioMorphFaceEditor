@@ -418,9 +418,9 @@ public static class RandomisationTests
         var maskCategoryDisabled = new HashSet<string>(["HED_Diff", "HED_Norm"],
             StringComparer.OrdinalIgnoreCase);
 
-        TestAssert.True(FaceEditorViewModel.IsTextureFamilyInScope(family, allRequested, available),
+        TestAssert.True(MaterialTextureFamilyPolicy.IsInScope(family, allRequested, available),
             "A fully enabled coherent texture family was excluded.");
-        TestAssert.True(!FaceEditorViewModel.IsTextureFamilyInScope(family, maskCategoryDisabled, available),
+        TestAssert.True(!MaterialTextureFamilyPolicy.IsInScope(family, maskCategoryDisabled, available),
             "A coherent texture family crossed into a disabled texture category.");
     }
 

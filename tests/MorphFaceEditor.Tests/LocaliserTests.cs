@@ -635,6 +635,7 @@ internal static class LocaliserTests
         Render(window, "translation-window.png");
         // Discard synthetic screenshot drafts without writing the real source corpus.
         review.Open(FindMaster());
+        Layout(window);
         window.Close();
     }));
 

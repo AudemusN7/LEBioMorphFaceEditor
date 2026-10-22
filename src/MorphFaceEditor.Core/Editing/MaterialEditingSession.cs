@@ -268,9 +268,6 @@ public sealed class MaterialEditingSession : IUndoableEditSource
                 .Select(value => new TextureMaterialOverride(value.Key, value.Value)).ToArray());
     }
 
-    public void ReplaceAttachmentMaterials(ResolvedHeadMaterialSet attachmentMaterials) =>
-        ApplyMaterialSurface(PrepareAttachmentMaterials(attachmentMaterials));
-
     /// <summary>Prepares a candidate for scene construction without changing controls, edits or history.</summary>
     public PreparedMaterialSurface PrepareAttachmentMaterials(ResolvedHeadMaterialSet attachmentMaterials) =>
         PrepareMaterialSurface(_baseMaterials, attachmentMaterials, firstWins: _hasScopedMaterials);
@@ -284,12 +281,6 @@ public sealed class MaterialEditingSession : IUndoableEditSource
 
     private void RebaseMaterialSurface(ResolvedHeadMaterialSet materials, bool firstWins) =>
         ApplyMaterialSurface(PrepareMaterialSurface(materials, _attachmentMaterials, firstWins));
-
-    public void RebaseMaterialSurface(CustomMaterialWorkspace workspace)
-    {
-        ArgumentNullException.ThrowIfNull(workspace);
-        RebaseMaterialSurface(workspace.ActiveMaterials);
-    }
 
     private PreparedMaterialSurface PrepareMaterialSurface(
         ResolvedHeadMaterialSet baseMaterials,

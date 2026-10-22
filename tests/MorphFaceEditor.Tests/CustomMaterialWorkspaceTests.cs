@@ -207,7 +207,7 @@ public static class CustomMaterialWorkspaceTests
         workspace.Assign(1, Option("low", "Low", "head", "head", HeadMaterialFamily.Skin, scalar: 1));
 
         var session = new MaterialEditingSession(MorphFaceMaterialOverrides.Empty, ResolvedHeadMaterialSet.Empty);
-        session.RebaseMaterialSurface(workspace);
+        session.RebaseMaterialSurface(workspace.ActiveMaterials);
         TestAssert.Equal(1f, session.GetScalar(MaterialParameterControlKey.Create("head", "Shared")));
         TestAssert.Equal(1f, session.Materials.Materials.Values.First().Scalars["Shared"]);
         TestAssert.Equal(1, workspace.ActiveMaterials.Materials.Values.First().Source.UIndex * -1 - 1);
@@ -282,15 +282,15 @@ public static class CustomMaterialWorkspaceTests
         var option = Option("skin", "Skin", "head", "head", HeadMaterialFamily.Skin, scalar: 0.2f);
         workspace.Assign(0, option);
         var session = new MaterialEditingSession(MorphFaceMaterialOverrides.Empty, ResolvedHeadMaterialSet.Empty);
-        session.RebaseMaterialSurface(workspace);
+        session.RebaseMaterialSurface(workspace.ActiveMaterials);
         var shared = MaterialParameterControlKey.Create("head", "Shared");
         session.SetScalar(shared, 0.9f);
         workspace.Unassign(0);
-        session.RebaseMaterialSurface(workspace);
+        session.RebaseMaterialSurface(workspace.ActiveMaterials);
         TestAssert.Near(0.9f, session.GetScalar(shared), 0);
         TestAssert.Near(0.9f, session.CreateOverrides().Scalars.Single(value => value.Name == shared).Value, 0);
         workspace.Assign(0, option);
-        session.RebaseMaterialSurface(workspace);
+        session.RebaseMaterialSurface(workspace.ActiveMaterials);
         TestAssert.Near(0.9f, session.Materials.Materials.Values.Single().Scalars["Shared"], 0);
     }
 
@@ -300,17 +300,17 @@ public static class CustomMaterialWorkspaceTests
             new ImportedMeshSection(0, "Skin", 0, 3))).Workspace!;
         workspace.Assign(0, Option("skin", "Skin", "human", "head", HeadMaterialFamily.Skin));
         var session = new MaterialEditingSession(MorphFaceMaterialOverrides.Empty, ResolvedHeadMaterialSet.Empty);
-        session.RebaseMaterialSurface(workspace);
+        session.RebaseMaterialSurface(workspace.ActiveMaterials);
         var hair = Option("hair", "Hair", "human", "hair", HeadMaterialFamily.Hair).Template;
-        session.ReplaceAttachmentMaterials(new ResolvedHeadMaterialSet(
-            new Dictionary<string, ResolvedHeadMaterial> { [hair.Key] = hair }));
+        session.ApplyMaterialSurface(session.PrepareAttachmentMaterials(new ResolvedHeadMaterialSet(
+            new Dictionary<string, ResolvedHeadMaterial> { [hair.Key] = hair })));
 
         workspace.Unassign(0);
-        session.RebaseMaterialSurface(workspace);
+        session.RebaseMaterialSurface(workspace.ActiveMaterials);
         TestAssert.True(session.Materials.Materials.ContainsKey(hair.Key),
             "Unassigning a custom slot discarded preview attachment materials.");
         workspace.Assign(0, Option("skin", "Skin", "human", "head", HeadMaterialFamily.Skin));
-        session.RebaseMaterialSurface(workspace);
+        session.RebaseMaterialSurface(workspace.ActiveMaterials);
         TestAssert.True(session.Materials.Materials.ContainsKey(hair.Key) &&
                         session.Materials.Materials.Count == 2,
             "Reassigning a custom slot did not retain the preview attachment material.");

@@ -19,6 +19,7 @@ public static class CustomMaterialEvidenceTests
         new("custom material evidence retains duplicate source material refs", RetainsDuplicateSourceMaterialRefs),
         new("custom material shader maps follow explicit and automatic source invalidation", ShaderMapsFollowSourceInvalidation),
         new("material evidence refreshes MIC values and pixels while retaining per-use texture roles", MaterialValuesAndPixelsFollowSourceChanges),
+        new("BC7 preview decoding preserves every block mode and authored mip level", Bc7PixelsAndMipsArePreserved),
         new("material evidence preserves custom defaults and empty versus missing compiled support", CustomDefaultsAndCompiledEvidence),
         new("custom material catalogue exposes only proven installed families", CatalogueExposesProvenFamilies),
         new("attachment picker discovers hair and hat meshes while excluding audited suffixes", HirReviewMeshesAreExcluded),
@@ -27,6 +28,55 @@ public static class CustomMaterialEvidenceTests
         new("used null attachment material slots remain invalid", UsedNullAttachmentMaterialSlotsRemainInvalid),
         new("D1 human scar and teeth support follows compiled material evidence", HumanScarAndTeethSupportFollowsEvidence)
     ];
+
+    private static void Bc7PixelsAndMipsArePreserved()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        var random = new Random(4701);
+        var mips = new[] { 32, 16, 8, 4, 2, 1 }.Select(size =>
+        {
+            var bytes = new byte[((size + 3) / 4) * ((size + 3) / 4) * 16];
+            random.NextBytes(bytes);
+            for (var block = 0; block < bytes.Length / 16; block++)
+            {
+                var mode = block % 8;
+                bytes[block * 16] = (byte)((bytes[block * 16] & ~((1 << (mode + 1)) - 1)) | (1 << mode));
+            }
+            return (Size: size, Bytes: bytes);
+        }).ToArray();
+        foreach (var game in new[] { MEGame.LE1, MEGame.LE2, MEGame.LE3 })
+        {
+            var path = Path.Combine(Path.GetTempPath(), $"MFE-Bc7-{Guid.NewGuid():N}.pcc");
+            try
+            {
+                using (var package = MEPackageHandler.CreateMemoryEmptyPackage(path, game))
+                {
+                    var texture = package.CreateExport("Pixels", "Texture2D", indexed: false);
+                    texture.WriteProperty(new EnumProperty(new NameReference("PF_BC7"), new NameReference("EPixelFormat"), game, "Format"));
+                    texture.WriteBinary(new UTexture2D { Mips = mips.Select(mip =>
+                        new UTexture2D.Texture2DMipMap(mip.Bytes, mip.Size, mip.Size)).ToList() });
+                    package.Save(path);
+                }
+                using var reader = new MorphFacePackageReader();
+                var actual = reader.LoadTexture(path, "Pixels", HumanMaterialProfiles.Describe(
+                    "HED_Diff", MaterialParameterKind.Texture, HeadMaterialFamily.Skin));
+                TestAssert.Equal(mips.Length, actual.Mips!.Count);
+                foreach (var (expectedMip, decoded) in mips.Zip(actual.Mips))
+                {
+                    var width = expectedMip.Size;
+                    var height = expectedMip.Size;
+                    var expected = LegendaryExplorerCore.Textures.Image.convertRawToARGB(expectedMip.Bytes,
+                        ref width, ref height, LegendaryExplorerCore.Textures.PixelFormat.BC7);
+                    for (var pixel = 0; pixel < expected.Length; pixel += 4)
+                        (expected[pixel], expected[pixel + 2]) = (expected[pixel + 2], expected[pixel]);
+                    TestAssert.True(decoded.Width == width && decoded.Height == height && decoded.Rgba8.SequenceEqual(expected),
+                        $"{game} BC7 mip {expectedMip.Size} changed decoded pixels or dimensions.");
+                }
+                TestAssert.True(actual.Rgba8.SequenceEqual(actual.Mips[0].Rgba8), "BC7 top mip differs from its authored chain.");
+            }
+            finally { File.Delete(path); }
+        }
+    }
 
     private static void CustomDefaultsAndCompiledEvidence()
     {

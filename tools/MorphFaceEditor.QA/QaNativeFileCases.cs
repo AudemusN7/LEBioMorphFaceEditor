@@ -102,7 +102,8 @@ internal static partial class QaCases
         using var reader = new MorphFacePackageReader();
         var dialogs = new QaDialogs { ImportPath = outputRon, RonExportPath = c.Artifact("career-ui-export.ron") };
         using var vm = FileWorkflow(c, dialogs, reader);
-        await c.Measure("Reopen PCSAV in editor", () => vm.OpenDroppedFileAsync(copy), QaStageKind.Load);
+        // Opening a career constructs the same staged Player workspace as a full RON import.
+        await c.Measure("Reopen PCSAV in editor", () => vm.OpenDroppedFileAsync(copy), QaStageKind.FileTransfer);
         CheckVm(vm);
         var beforeReplacement = PackageFingerprint.Capture(copy);
         await c.Measure("Import full RON into PCSAV", () => Execute(vm.ImportMorphFaceRonCommand), QaStageKind.FileTransfer);

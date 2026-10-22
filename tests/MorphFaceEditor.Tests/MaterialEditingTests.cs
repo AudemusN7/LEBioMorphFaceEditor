@@ -120,8 +120,8 @@ public static class MaterialEditingTests
         shared.SetScalar("HED_TMis_Scalar", 0.5f);
         TestAssert.Near(0.5f, shared.Materials.Materials[kaidan.Key].Scalars["HED_TMis_Scalar"], 0);
         TestAssert.Near(1, shared.Materials.Materials[kaidan.Key].Scalars["HED_Spec_Scalar"], 0);
-        shared.ReplaceAttachmentMaterials(new ResolvedHeadMaterialSet(
-            new Dictionary<string, ResolvedHeadMaterial> { [kaidan.Key] = kaidan }));
+        shared.ApplyMaterialSurface(shared.PrepareAttachmentMaterials(new ResolvedHeadMaterialSet(
+            new Dictionary<string, ResolvedHeadMaterial> { [kaidan.Key] = kaidan })));
         TestAssert.True(!shared.ScalarNames.Contains("HED_Spec_Scalar"), "Replacement exposed a Kaidan-only control.");
     }
 
@@ -594,7 +594,7 @@ public static class MaterialEditingTests
     private static void AttachmentPreparationDoesNotPublish()
     {
         var session = CreateSession();
-        session.ReplaceAttachmentMaterials(HairMaterial("HairMaterialA", 1f, 2f, Vector4.One));
+        session.ApplyMaterialSurface(session.PrepareAttachmentMaterials(HairMaterial("HairMaterialA", 1f, 2f, Vector4.One)));
         session.SetScalar("Hightlight1Intensity", 4f);
         var texture = session.GetSelectedTexture("HED_Diff")!;
         session.PreviewTexture("HED_Diff", texture with { CacheKey = "hover-only" });
@@ -638,8 +638,8 @@ public static class MaterialEditingTests
         TestAssert.True(!session.ScalarNames.Contains("Hightlight1Intensity", StringComparer.OrdinalIgnoreCase),
             "Hair highlight scalar appeared before a supporting attachment was selected.");
 
-        session.ReplaceAttachmentMaterials(HairMaterial(
-            "HairMaterialA", 1f, 2f, new Vector4(0.2f, 0.1f, 0.05f, 1)));
+        session.ApplyMaterialSurface(session.PrepareAttachmentMaterials(HairMaterial(
+            "HairMaterialA", 1f, 2f, new Vector4(0.2f, 0.1f, 0.05f, 1))));
         TestAssert.True(session.ScalarNames.Contains("Hightlight1Intensity", StringComparer.OrdinalIgnoreCase),
             "Selecting a supporting NPC hair attachment did not add its authored highlight scalar.");
         TestAssert.True(session.ScalarNames.Contains("Highlight1SpecExp_Scalar", StringComparer.OrdinalIgnoreCase),
@@ -651,14 +651,14 @@ public static class MaterialEditingTests
         TestAssert.True(!session.CanUndo,
             "Changing the active attachment created an undo entry for authored material values.");
 
-        session.ReplaceAttachmentMaterials(HairMaterial(
-            "HairMaterialB", 3f, 8f, new Vector4(0.4f, 0.3f, 0.2f, 1)));
+        session.ApplyMaterialSurface(session.PrepareAttachmentMaterials(HairMaterial(
+            "HairMaterialB", 3f, 8f, new Vector4(0.4f, 0.3f, 0.2f, 1))));
         TestAssert.Equal(3f, session.GetScalar("Hightlight1Intensity"));
         TestAssert.Equal(8f, session.GetScalar("Hightlight2Intensity"));
         TestAssert.Equal(new Vector4(0.4f, 0.3f, 0.2f, 1), session.GetVector("Highlight1Color"));
 
-        session.ReplaceAttachmentMaterials(new ResolvedHeadMaterialSet(
-            new Dictionary<string, ResolvedHeadMaterial>(StringComparer.OrdinalIgnoreCase)));
+        session.ApplyMaterialSurface(session.PrepareAttachmentMaterials(new ResolvedHeadMaterialSet(
+            new Dictionary<string, ResolvedHeadMaterial>(StringComparer.OrdinalIgnoreCase))));
         TestAssert.True(!session.ScalarNames.Contains("Hightlight1Intensity", StringComparer.OrdinalIgnoreCase) &&
                         !session.VectorNames.Contains("Highlight1Color", StringComparer.OrdinalIgnoreCase),
             "Clearing the hair attachment left unsupported highlight controls visible.");
@@ -712,16 +712,16 @@ public static class MaterialEditingTests
             MorphFaceMaterialOverrides.Empty,
             new ResolvedHeadMaterialSet(baseSession.Materials.Materials.ToDictionary(
                 value => value.Key, value => value.Value)));
-        session.ReplaceAttachmentMaterials(HairMaterial(
-            "HairMaterialA", 1f, 2f, new Vector4(0.2f, 0.1f, 0.05f, 1)));
+        session.ApplyMaterialSurface(session.PrepareAttachmentMaterials(HairMaterial(
+            "HairMaterialA", 1f, 2f, new Vector4(0.2f, 0.1f, 0.05f, 1))));
 
         session.BeginScalarEdit("Hightlight1Intensity");
         session.SetScalar("Hightlight1Intensity", 1.75f);
         session.EndScalarEdit("Hightlight1Intensity");
         TestAssert.True(session.CanUndo, "Editing an attachment highlight did not create semantic history.");
 
-        session.ReplaceAttachmentMaterials(HairMaterial(
-            "HairMaterialB", 3f, 8f, new Vector4(0.4f, 0.3f, 0.2f, 1)));
+        session.ApplyMaterialSurface(session.PrepareAttachmentMaterials(HairMaterial(
+            "HairMaterialB", 3f, 8f, new Vector4(0.4f, 0.3f, 0.2f, 1))));
         TestAssert.Equal(1.75f, session.GetScalar("Hightlight1Intensity"));
         TestAssert.Equal(8f, session.GetScalar("Hightlight2Intensity"));
         TestAssert.True(session.CanUndo,
@@ -798,9 +798,9 @@ public static class MaterialEditingTests
             [second.Key] = second
         });
         var session = new MaterialEditingSession(MorphFaceMaterialOverrides.Empty, ResolvedHeadMaterialSet.Empty);
-        session.ReplaceAttachmentMaterials(new ResolvedHeadMaterialSet(
-            new Dictionary<string, ResolvedHeadMaterial> { [first.Key] = first }));
-        session.ReplaceAttachmentMaterials(materials);
+        session.ApplyMaterialSurface(session.PrepareAttachmentMaterials(new ResolvedHeadMaterialSet(
+            new Dictionary<string, ResolvedHeadMaterial> { [first.Key] = first })));
+        session.ApplyMaterialSurface(session.PrepareAttachmentMaterials(materials));
 
         TestAssert.Equal(0, session.ChangedTextureCount);
         TestAssert.Equal(0, session.CreateOverrides().Textures.Count);

@@ -1,6 +1,9 @@
 using System.Numerics;
 using System.Security.Cryptography;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using BCnEncoder.Decoder;
+using BCnEncoder.Shared;
 using LegendaryExplorerCore.Packages;
 using LegendaryExplorerCore.Packages.CloningImportingAndRelinking;
 using LegendaryExplorerCore.Shaders;
@@ -137,9 +140,6 @@ internal sealed class MorphFaceMaterialReader(
         _materialCacheMisses++;
         return _materialCache[key] = ReadMaterialDefaults(ResolveMaterialSource(identity), identity, key);
     }
-
-    internal IReadOnlySet<string> GetEvidenceDependencies(AssetIdentity source) =>
-        _materialCache[MaterialIdentityKey.Create(source)].Dependencies;
 
     // Attachment and Custom evidence share the same terminal-master capabilities.
     internal ResolvedHeadMaterial ReadFaceAttachmentEvidence(ExportEntry materialExport) =>
@@ -1289,8 +1289,16 @@ internal sealed class MorphFaceMaterialReader(
     {
         var width = mip.width;
         var height = mip.height;
+        var pixels = Texture2DClass.GetTextureData(mip, game);
+        if (sourceFormat == LegendaryExplorerCore.Textures.PixelFormat.BC7)
+        {
+            // BCnEncoder already returns RGBA. The LEC ARGB adapter swaps red/blue,
+            // which our normal path would immediately swap back over every mip.
+            var decoded = new BcDecoder().DecodeRaw(pixels, width, height, CompressionFormat.Bc7);
+            return new DecodedTextureMip(width, height, MemoryMarshal.AsBytes(decoded.AsSpan()).ToArray());
+        }
         var rgba = LecImage.convertRawToARGB(
-            Texture2DClass.GetTextureData(mip, game),
+            pixels,
             ref width,
             ref height,
             sourceFormat);

@@ -427,12 +427,6 @@ public sealed class MorphFacePackageReader : IDisposable
         return usedSections;
     }
 
-    public IReadOnlySet<string> GetMaterialEvidenceDependencies(AssetIdentity source)
-    {
-        ThrowIfDisposed();
-        return _materialReader.GetEvidenceDependencies(source);
-    }
-
     /// <summary>Materialises an exact detached template on selection, through the normal bounded pixel cache.</summary>
     public ResolvedHeadMaterial LoadMaterialEvidence(AssetIdentity source)
     {

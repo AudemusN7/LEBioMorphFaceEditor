@@ -139,24 +139,6 @@ public static class PlayerHairStyleCatalog
     }
 
     /// <summary>
-    /// Compatibility overload for callers that already supply scalp state. Pair protection is
-    /// determined by the selected reviewed mesh; the scalp path and texture inventory do not
-    /// participate because native games can expose equivalent scalp aliases differently.
-    /// </summary>
-    public static bool IsCurrentScalpPairedStyle(
-        MorphFaceGame game,
-        PlayerHairSex sex,
-        IEnumerable<TextureCatalogCandidate> textures,
-        IEnumerable<AttachmentMeshCandidate> meshes,
-        string? currentScalpDiffusePath,
-        AssetIdentity? currentMeshIdentity)
-    {
-        ArgumentNullException.ThrowIfNull(textures);
-        ArgumentNullException.ThrowIfNull(meshes);
-        return IsCurrentHairMeshPairedStyle(game, sex, meshes, currentMeshIdentity);
-    }
-
-    /// <summary>
     /// Returns true when the selected mesh is a reviewed member of a style whose scalp requires
     /// that mesh. Classification uses the exact reviewed mesh variants and canonical instance
     /// path; it does not depend on which native scalp texture alias is currently assigned.

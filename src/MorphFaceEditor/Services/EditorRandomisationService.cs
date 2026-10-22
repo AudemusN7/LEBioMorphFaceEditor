@@ -28,8 +28,8 @@ internal sealed class EditorRandomisationService(MorphRandomisationCatalog catal
                         StringComparer.OrdinalIgnoreCase), request.MorphStrength, seed);
             else
             {
-                donor = catalog.SelectDonor(request.ProfileKey, seed, requireMaterial: false);
-                morphs = catalog.CreateMorphProposal(donor, request.Morphs.Current,
+                donor = catalog.SelectDonor(request.ProfileKey, seed);
+                morphs = MorphRandomiser.CreateProposal(donor, request.Morphs.Current,
                     request.Morphs.Bounds, request.Morphs.Scope, request.MorphStrength, seed).Values;
             }
         }

@@ -21,8 +21,34 @@ public static class CustomMeshTests
         new("detached glTF decoding applies node transforms and derives streams", GltfDecodeAppliesTransforms),
         new("detached GLB decoding retains render sections", GlbDecodeRetainsSections),
         new("detached custom material assignment rebases the preview surface", DetachedMaterialAssignmentRebasesPreview),
+        new("detached mesh preview accepts eight slots and explains nine-slot overflow", DetachedMaterialSlotLimit),
         new("player topology recognition maps reordered vertices and rejects unrelated triangles", PlayerTopologyRecognitionIsStructural)
     ];
+
+    private static void DetachedMaterialSlotLimit()
+    {
+        foreach (var count in new[] { 8, 9 })
+        {
+            var positions = Enumerable.Range(0, count).SelectMany(index => new[]
+                { new Vector3(index, 0, 0), new Vector3(index + 1, 0, 0), new Vector3(index, 1, 0) }).ToArray();
+            var source = new ImportedMeshAsset("slot-limit.psk", positions, null, null, null,
+                Enumerable.Range(0, positions.Length).ToArray(),
+                Enumerable.Range(0, count).Select(index => new ImportedMeshSection(index * 2,
+                    $"Slot {index}", index * 3, 3)).ToArray(), [], null, null,
+                Enumerable.Range(0, positions.Length).ToArray());
+            var result = new DetachedMeshPreviewLoadService(new HeadPreviewSceneFactory())
+                .Load(MorphFaceGame.LE3, source);
+            TestAssert.Equal(count, result.Preview.Scene.Meshes.Single().Sections.Count);
+            TestAssert.True(result.Detached.Source.Positions.SequenceEqual(positions), "Slot overflow changed geometry.");
+            if (count == 8) TestAssert.Equal(8, result.CustomMaterials!.UsedSlots.Count);
+            else
+            {
+                TestAssert.True(result.CustomMaterials is null, "Nine slots enabled material assignment.");
+                TestAssert.True(result.Detached.Warnings.Any(warning => warning.Contains("9 material slots") &&
+                    warning.Contains("up to 8")), "Overflow guidance omitted the actual count or limit.");
+            }
+        }
+    }
 
     private static void DetachedMaterialAssignmentRebasesPreview()
     {

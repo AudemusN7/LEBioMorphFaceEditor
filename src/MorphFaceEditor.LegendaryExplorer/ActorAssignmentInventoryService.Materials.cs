@@ -7,6 +7,21 @@ namespace MorphFaceEditor.LegendaryExplorer;
 
 public sealed partial class ActorAssignmentInventoryService
 {
+    private static IReadOnlySet<int> ReadBodyMics(IMEPackage package,
+        IReadOnlyList<ActorAssignmentComponent> components, GamePackageReferenceResolver resolver, PackageCache cache)
+    {
+        var bodyMics = new HashSet<int>();
+        foreach (var body in components.Where(value => value.IsLocal && value.Role == ActorComponentRole.Body))
+        {
+            var materials = FindProperty<ArrayProperty<ObjectProperty>>(
+                package.GetUExport(body.UIndex), "Materials", resolver, cache);
+            if (materials is null) continue;
+            foreach (var material in materials.Property.Select(value => value.ResolveToEntry(materials.Owner.FileRef)))
+                if (IsWritableMic(material, package)) bodyMics.Add(material!.UIndex);
+        }
+        return bodyMics;
+    }
+
     // Material preflight is intentionally per slot: one unsafe sibling must not hide a valid face MIC.
     private static void InventoryComponentMaterials(
         IMEPackage package,
@@ -16,6 +31,7 @@ public sealed partial class ActorAssignmentInventoryService
         string? headProfileKey,
         bool hasSkinVectors,
         ActorAssignmentAttachmentTarget? attachment,
+        IReadOnlySet<int> bodyMics,
         IEnumerable<ExportEntry> ownedMics,
         GamePackageReferenceResolver resolver,
         PackageCache cache,
@@ -62,9 +78,15 @@ public sealed partial class ActorAssignmentInventoryService
             string? reason = null;
             UserFacingMessage? userReason = null;
             var localMic = IsWritableMic(rawEntry, package);
+            var bodySharedAttachment = localMic && attachment is not null && bodyMics.Contains(rawEntry.UIndex);
             var unparented = localMic && (slot >= 0 || rawEntry.idxLink == componentExport.UIndex) &&
                 (FindProperty<ObjectProperty>((ExportEntry)rawEntry, "Parent", resolver, cache)?.Property.Value ?? 0) == 0;
-            if (!localMic)
+            if (bodySharedAttachment)
+            {
+                reason = "The attachment MIC is shared with Body.";
+                userReason = UserFacingMessage.Create("loc_ActorAssignment_SharedBodyMaterial");
+            }
+            else if (!localMic)
             {
                 reason = rawEntry is ImportEntry || resolved is not null && !ReferenceEquals(resolved.FileRef, package)
                     ? "Imported materials are read-only and are never assignment targets."

@@ -95,7 +95,7 @@ public sealed class CustomMaterialWorkspaceChangedEventArgs(
 /// </summary>
 public sealed class CustomMaterialWorkspace : Editing.IUndoableEditSource
 {
-    public const int MaximumSupportedSlots = 4;
+    public const int MaximumSupportedSlots = 8;
 
     private readonly Dictionary<int, CustomMaterialSlot> _slotsByIndex;
     private readonly Dictionary<int, CustomMaterialAssignmentOption> _assignments = new();
@@ -103,20 +103,20 @@ public sealed class CustomMaterialWorkspace : Editing.IUndoableEditSource
     private readonly Stack<IReadOnlyDictionary<int, CustomMaterialAssignmentOption>> _redo = new();
     private readonly string _workspaceKey;
 
-    public CustomMaterialWorkspace(ImportedMeshAsset source)
+    public static (CustomMaterialWorkspace? Workspace, int UsedSlotCount) Create(ImportedMeshAsset source)
     {
-        Source = source ?? throw new ArgumentNullException(nameof(source));
+        ArgumentNullException.ThrowIfNull(source);
         var slots = source.Sections
             .Where(section => section.IndexCount > 0)
             .GroupBy(section => section.MaterialIndex)
             .Select(group => new CustomMaterialSlot(group.Key, group.ToArray()))
             .ToArray();
-        if (slots.Length > MaximumSupportedSlots)
-        {
-            throw new InvalidDataException(
-                $"A custom material workspace supports at most {MaximumSupportedSlots} used material slots.");
-        }
+        return (slots.Length <= MaximumSupportedSlots ? new(source, slots) : null, slots.Length);
+    }
 
+    private CustomMaterialWorkspace(ImportedMeshAsset source, IReadOnlyList<CustomMaterialSlot> slots)
+    {
+        Source = source;
         // GroupBy preserves first authored occurrence, giving slot enumeration
         // a stable order without rewriting the source section list.
         UsedSlots = slots;
@@ -217,7 +217,7 @@ public sealed class CustomMaterialWorkspace : Editing.IUndoableEditSource
     /// <summary>Validates a complete incoming assignment set before publishing one semantic change.</summary>
     public void ReplaceAssignments(IReadOnlyDictionary<int, CustomMaterialAssignmentOption> assignments)
     {
-        var validation = new CustomMaterialWorkspace(Source);
+        var validation = new CustomMaterialWorkspace(Source, UsedSlots);
         foreach (var value in assignments.OrderBy(value => value.Key)) validation.Assign(value.Key, value.Value);
         if (_assignments.Count == assignments.Count && assignments.All(value =>
                 _assignments.TryGetValue(value.Key, out var current) && current == value.Value)) return;

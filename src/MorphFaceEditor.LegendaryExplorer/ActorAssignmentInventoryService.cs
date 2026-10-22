@@ -154,8 +154,9 @@ public sealed partial class ActorAssignmentInventoryService
         var morphReason = MorphIneligibilityReason(
             targetKind, game, selectedProfileKey, headMeshPath, headProfileKey, morphTarget);
 
+        var bodyMics = ReadBodyMics(package, components, resolver, cache);
         var attachmentPlan = HeadProfileIdentity.IsGeometryCompatible(selectedProfileKey, headProfileKey)
-            ? ReadAttachmentTargets(package, actor, selectedFace, components, morphTarget,
+            ? ReadAttachmentTargets(package, actor, selectedFace, components, bodyMics, morphTarget,
                 knownHairMeshes, knownOtherMeshes, resolver, cache, referrers, ownedMics)
             : (Targets: (IReadOnlyList<ActorAssignmentAttachmentTarget>)[], Warnings: (IReadOnlyList<UserFacingMessage>)[]);
         attachmentPlan = (attachmentPlan.Targets.Select(target => target with
@@ -176,7 +177,7 @@ public sealed partial class ActorAssignmentInventoryService
             InventoryComponentMaterials(
                 package, component, gamePrefix, selectedProfileKey, headProfileKey, hasSkinVectors,
                 attachmentPlan.Targets.FirstOrDefault(target => component.IsLocal && target.ComponentUIndex == component.UIndex),
-                component.IsLocal ? ownedMics.Value[component.UIndex] : [],
+                bodyMics, component.IsLocal ? ownedMics.Value[component.UIndex] : [],
                 resolver, cache, eligibleMaterials, skippedMaterials, warnings);
         }
         eligibleMaterials = eligibleMaterials

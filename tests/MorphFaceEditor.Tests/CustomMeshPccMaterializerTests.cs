@@ -3,6 +3,7 @@ using LegendaryExplorerCore.Packages;
 using LegendaryExplorerCore.Packages.CloningImportingAndRelinking;
 using LegendaryExplorerCore.Unreal;
 using LegendaryExplorerCore.Unreal.Classes;
+using LegendaryExplorerCore.Unreal.BinaryConverters;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.LegendaryExplorer;
@@ -16,6 +17,7 @@ public static class CustomMeshPccMaterializerTests
     public static IReadOnlyList<TestCase> All { get; } =
     [
         new("C4 PCC export rejects Unreal SelectionColor parameters", SelectionColorIsNotSerializable),
+        new("custom PCC preserves all eight assigned material slots across games", EightSlotsSurvivePccSave),
         new("D1 shared PCC workflow preserves cycles and detects a lost saved edge", SharedWorkflowPreservesCyclesAndDetectsLostEdge),
         new("D1 every assignable material catalogue option exports through the corpus workflow", EveryAssignableMaterialExports),
         new("D1 every assignable material shares a package in both slot orders", EveryAssignableMaterialSharesPackage),
@@ -30,6 +32,42 @@ public static class CustomMeshPccMaterializerTests
         new("D1 LE3 Batarian PCC preserves physical-material and effects closure", Le3BatarianPccPreservesPhysicalMaterial),
         new("D1 racial PCC export reopens with complete graphs across games", RacialPccExportSucceedsAcrossGames)
     ];
+
+    private static void EightSlotsSurvivePccSave()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        var store = new TextureRegistryStore(TextureRegistryPaths.CreateDefault());
+        using var reader = new MorphFacePackageReader();
+        foreach (var game in new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 })
+        {
+            var option = new CustomMaterialTemplateCatalogService(reader, store).Load(game).Options
+                .First(value => value.Family == HeadMaterialFamily.Skin &&
+                    value.Id.Contains("human-female", StringComparison.OrdinalIgnoreCase));
+            var source = CreateSlotMesh("eight-slots.gltf", 8);
+            var workspace = CustomMaterialWorkspace.Create(source).Workspace!;
+            foreach (var slot in workspace.UsedSlots) workspace.Assign(slot, option);
+            var output = Path.Combine(Path.GetTempPath(), $"MFE-EightSlots-{game}-{Guid.NewGuid():N}.pcc");
+            try
+            {
+                var saved = new CustomMeshPccMaterializer().Save(new(source, workspace,
+                    new MorphFaceMaterialData([], [], []), game, output, "EightSlots",
+                    new ImportedSkeletalMeshPackageWriter(), store.Read(game).Candidates));
+                using var package = MEPackageHandler.OpenMEPackage(output, forceLoadFromDisk: true);
+                PackageIntegrity.Verify(package);
+                var mesh = package.FindExport(saved.MeshPath).GetBinaryData<SkeletalMesh>();
+                TestAssert.Equal(1, saved.Materials.Count); // Shared assignments reuse one native MIC.
+                TestAssert.Equal(8, mesh.Materials.Length);
+                foreach (var material in mesh.Materials)
+                    TestAssert.Equal(saved.Materials.Single().MaterialPath, package.GetUExport(material).InstancedFullPath);
+                TestAssert.True(mesh.LODModels[0].Sections.Select(section => (int)section.MaterialIndex)
+                    .Order().SequenceEqual(Enumerable.Range(0, 8)), "Saved mesh lost an assigned section.");
+            }
+            finally
+            {
+                if (File.Exists(output)) File.Delete(output);
+            }
+        }
+    }
 
     private static void SelectionColorIsNotSerializable()
     {
@@ -138,7 +176,7 @@ public static class CustomMeshPccMaterializerTests
             [],
             [new TextureMaterialOverride("HED_Lash_Diff", textureIdentity)]);
         var source = CreateTriangleMesh("c4-le1-hmf-lash.gltf");
-        var workspace = new CustomMaterialWorkspace(source);
+        var workspace = CustomMaterialWorkspace.Create(source).Workspace!;
         workspace.Assign(0, option);
         var output = Path.Combine(Path.GetTempPath(), $"MFE-C4-LE1-Lash-{Guid.NewGuid():N}.pcc");
         try
@@ -219,7 +257,7 @@ public static class CustomMeshPccMaterializerTests
             var materialData = new MorphFaceMaterialData(
                 [], [], [new TextureMaterialOverride("HED_Lash_Diff", textureIdentity)]);
             var source = CreateTriangleMesh("c4-explicit-lash.gltf");
-            var workspace = new CustomMaterialWorkspace(source);
+            var workspace = CustomMaterialWorkspace.Create(source).Workspace!;
             workspace.Assign(0, option);
 
             _ = new CustomMeshPccMaterializer().Save(new CustomMeshPccSaveRequest(
@@ -277,7 +315,7 @@ public static class CustomMeshPccMaterializerTests
             foreach (var option in options)
             {
                 var source = CreateTriangleMesh($"d1-corpus-{game}-{SanitizeFileName(option.Id)}.gltf");
-                var workspace = new CustomMaterialWorkspace(source);
+                var workspace = CustomMaterialWorkspace.Create(source).Workspace!;
                 workspace.Assign(0, option);
                 var liveData = new MorphFaceEditor.Core.Editing.MaterialEditingSession(
                     MorphFaceMaterialOverrides.Empty,
@@ -353,7 +391,7 @@ public static class CustomMeshPccMaterializerTests
         CustomMaterialAssignmentOption lead,
         IReadOnlyList<CustomMaterialAssignmentOption> options)
     {
-        var probe = new CustomMaterialWorkspace(CreateSlotMesh("d1-compatibility-probe.gltf", 4));
+        var probe = CustomMaterialWorkspace.Create(CreateSlotMesh("d1-compatibility-probe.gltf", 4)).Workspace!;
         var selected = new List<CustomMaterialAssignmentOption> { lead };
         probe.Assign(0, lead);
         var candidates = options
@@ -387,7 +425,7 @@ public static class CustomMeshPccMaterializerTests
         string caseName)
     {
         var source = CreateSlotMesh($"d1-shared-{game}-{SanitizeFileName(caseName)}.gltf", options.Count);
-        var workspace = new CustomMaterialWorkspace(source);
+        var workspace = CustomMaterialWorkspace.Create(source).Workspace!;
         for (var index = 0; index < options.Count; index++)
         {
             workspace.Assign(index, options[index]);
@@ -450,7 +488,7 @@ public static class CustomMeshPccMaterializerTests
         var lashes = options.First(value => value.Family == HeadMaterialFamily.Lashes);
         var eyes = options.First(value => value.Family == HeadMaterialFamily.Eyes);
         var source = CreateThreeSlotMesh("d1-le2-combined-human.gltf");
-        var workspace = new CustomMaterialWorkspace(source);
+        var workspace = CustomMaterialWorkspace.Create(source).Workspace!;
         // Put lashes first: real meshes do not guarantee a face-first slot
         // order, and the corpus role must not depend on which MIC is imported first.
         workspace.Assign(0, lashes);
@@ -556,7 +594,7 @@ public static class CustomMeshPccMaterializerTests
             [0, 1, 2],
             [new ImportedMeshSection(0, "Face", 0, 3)],
             [], null, null, [0, 1, 2]);
-        var workspace = new CustomMaterialWorkspace(source);
+        var workspace = CustomMaterialWorkspace.Create(source).Workspace!;
         workspace.Assign(0, option);
         var output = Path.Combine(Path.GetTempPath(), $"MFE-C4-LE2-Human-{Guid.NewGuid():N}.pcc");
 
@@ -690,7 +728,7 @@ public static class CustomMeshPccMaterializerTests
                 value.Template.SupportedTextures.Count > 0);
         var parameter = option.Template.SupportedTextures.OrderBy(value => value, StringComparer.OrdinalIgnoreCase).First();
         var source = CreateTriangleMesh("d1-non-corpus-texture.gltf");
-        var workspace = new CustomMaterialWorkspace(source);
+        var workspace = CustomMaterialWorkspace.Create(source).Workspace!;
         workspace.Assign(0, option);
         var materialData = new MorphFaceMaterialData(
             [],
@@ -869,7 +907,7 @@ public static class CustomMeshPccMaterializerTests
         }
 
         var source = CreateTriangleMesh("c4-material-oracle-fixture.gltf");
-        var workspace = new CustomMaterialWorkspace(source);
+        var workspace = CustomMaterialWorkspace.Create(source).Workspace!;
         workspace.Assign(0, option);
         var output = Path.Combine(Path.GetTempPath(), $"MFE-C4-Material-{Guid.NewGuid():N}.pcc");
         try

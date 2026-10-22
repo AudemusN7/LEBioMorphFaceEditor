@@ -55,7 +55,7 @@ internal static class CustomHumanMaterialCatalogTests
                     TestAssert.Equal(game == MorphFaceGame.LE3 && variant == "Player"
                         ? HumanMaterialPreviewModel.CcScalp : HumanMaterialPreviewModel.Default, option.Template.PreviewModel);
 
-                var workspace = new CustomMaterialWorkspace(CreateMesh());
+                var workspace = CustomMaterialWorkspace.Create(CreateMesh()).Workspace!;
                 workspace.Assign(0, option);
                 var session = new MaterialEditingSession(MorphFaceMaterialOverrides.Empty, workspace.ActiveMaterials);
                 TestAssert.True(session.ScalarNames.Count + session.VectorNames.Count + session.TextureParameters.Count > 0,
@@ -100,7 +100,7 @@ internal static class CustomHumanMaterialCatalogTests
 
             foreach (var option in new[] { hair, advanced, james }.OfType<CustomMaterialAssignmentOption>())
             {
-                var workspace = new CustomMaterialWorkspace(CreateMesh());
+                var workspace = CustomMaterialWorkspace.Create(CreateMesh()).Workspace!;
                 workspace.Assign(0, option);
                 var session = new MaterialEditingSession(MorphFaceMaterialOverrides.Empty, workspace.ActiveMaterials);
                 TestAssert.True(session.TextureParameters.Count > 0, $"{game} {option.Label} lost its texture controls.");
@@ -154,7 +154,7 @@ internal static class CustomHumanMaterialCatalogTests
         using var reader = new MorphFacePackageReader();
         var options = new CustomMaterialTemplateCatalogService(reader).Load(MorphFaceGame.LE3).Options;
         var source = CreateMesh(twoSlots: true);
-        var workspace = new CustomMaterialWorkspace(source);
+        var workspace = CustomMaterialWorkspace.Create(source).Workspace!;
         workspace.Assign(0, options.Single(value => value.Label == "James Vega Hair"));
         workspace.Assign(1, options.Single(value => value.Label == "Human Female - Scalp (Player)"));
         var data = new MorphFaceMaterialData(

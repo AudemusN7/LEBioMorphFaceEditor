@@ -715,6 +715,12 @@ public sealed partial class MainWindowViewModel
         OnPropertyChanged(nameof(PackageDisplayName));
         OnDirtyStateChanged();
         RaiseFaceContextCanExecuteChanged();
+        if (result.CustomMaterials is null)
+        {
+            _dialogs.ShowInformation(
+                Loc.Text("loc_Shell_DialogTitle_MeshImportedWithWarnings"),
+                string.Join("\n\n", result.Detached.Warnings));
+        }
     }
 
     private async Task ImportMorphIntoPackageAsync(string sourcePath)

@@ -12,7 +12,7 @@ public sealed class MorphRandomisationCatalog
     public MorphRandomisationCatalog(MorphRandomisationCorpus corpus)
     {
         ArgumentNullException.ThrowIfNull(corpus);
-        Corpus = WithHumanHairColours(corpus);
+        Corpus = corpus;
     }
 
     public static MorphRandomisationCatalog Empty { get; } = new(
@@ -21,50 +21,6 @@ public sealed class MorphRandomisationCatalog
             new Dictionary<MorphRandomisationPoolKey, IReadOnlyList<MorphRandomisationDonor>>()));
 
     public MorphRandomisationCorpus Corpus { get; }
-
-    // The supported hair graphs express the same three colours under different names.
-    // Project the existing population at runtime; retain native evidence when it exists.
-    private static readonly string[][] HairColourNames =
-    [
-        ["HED_Hair_Colour_Vector", "Hair_Color"],
-        ["Highlight1Color", "Highlight1Colour_Vector", "HED_Aniso_Colour01_Vector", "Aniso_Color_1"],
-        ["Highlight2Color", "Highlight2Colour_Vector", "HED_Aniso_Colour02_Vector", "Aniso_Color_2"]
-    ];
-
-    private static MorphRandomisationCorpus WithHumanHairColours(MorphRandomisationCorpus corpus)
-    {
-        static bool IsHuman(string profile) =>
-            profile.EndsWith("-human-male", StringComparison.OrdinalIgnoreCase) ||
-            profile.EndsWith("-human-female", StringComparison.OrdinalIgnoreCase);
-
-        static IReadOnlyDictionary<string, T> Project<T>(IReadOnlyDictionary<string, T> source,
-            Func<string, T, T> rename)
-        {
-            var result = new Dictionary<string, T>(source, StringComparer.OrdinalIgnoreCase);
-            foreach (var aliases in HairColourNames)
-            {
-                var origin = aliases.FirstOrDefault(source.ContainsKey);
-                if (origin is null) continue;
-                foreach (var alias in aliases)
-                    result.TryAdd(alias, rename(alias, source[origin]));
-            }
-            return result;
-        }
-
-        return corpus with
-        {
-            MaterialProfiles = corpus.MaterialProfiles.ToDictionary(entry => entry.Key,
-                entry => IsHuman(entry.Key)
-                    ? entry.Value with { Vectors = Project(entry.Value.Vectors,
-                        (name, statistics) => statistics with { Name = name }) }
-                    : entry.Value, StringComparer.OrdinalIgnoreCase),
-            Pools = corpus.Pools.ToDictionary(entry => entry.Key,
-                entry => (IReadOnlyList<MorphRandomisationDonor>)entry.Value.Select(donor =>
-                    IsHuman(donor.SourceProfileKey)
-                        ? donor with { MaterialVectors = Project(donor.MaterialVectors, (_, value) => value) }
-                        : donor).ToArray())
-        };
-    }
 
     public static MorphRandomisationCatalog LoadEmbedded()
     {
@@ -93,15 +49,11 @@ public sealed class MorphRandomisationCatalog
 
     public MorphRandomisationDonor SelectDonor(
         string profileKey,
-        int randomSeed,
-        bool requireMaterial)
+        int randomSeed)
     {
         var pool = MorphRandomisationPoolRouter.Resolve(profileKey);
         return MorphRandomiser.SelectDonor(Corpus, pool, randomSeed,
-            requireMaterial
-                ? donor => IsCompatibleMaterialDonorProfile(profileKey, donor.SourceProfileKey) &&
-                           donor.HasMaterialEvidence
-                : donor => donor.AvailableFeatures.Count > 0);
+            donor => donor.AvailableFeatures.Count > 0);
     }
 
     public MorphRandomisationDonor SelectMaterialDonor(
@@ -227,28 +179,4 @@ public sealed class MorphRandomisationCatalog
             .SelectMany(value => value.Keys)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-    public MorphRandomisationProposal CreateProposal(
-        string profileKey,
-        IReadOnlyDictionary<string, float> currentValues,
-        IReadOnlyList<MorphRandomisationFeatureBounds> bounds,
-        IReadOnlySet<string> scope,
-        int strengthPercent,
-        int randomSeed) =>
-        MorphRandomiser.CreateProposal(
-            Corpus,
-            MorphRandomisationPoolRouter.Resolve(profileKey),
-            currentValues,
-            bounds,
-            scope,
-            strengthPercent,
-            randomSeed);
-
-    public MorphRandomisationProposal CreateMorphProposal(
-        MorphRandomisationDonor donor,
-        IReadOnlyDictionary<string, float> currentValues,
-        IReadOnlyList<MorphRandomisationFeatureBounds> bounds,
-        IReadOnlySet<string> scope,
-        int strengthPercent,
-        int randomSeed) => MorphRandomiser.CreateProposal(
-        donor, currentValues, bounds, scope, strengthPercent, randomSeed);
 }

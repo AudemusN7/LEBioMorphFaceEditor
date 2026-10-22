@@ -15,9 +15,64 @@ public static class ActorAssignmentTransactionTests
         new("LE1 placed morph assignment leaves the shared spawn type untouched", LeavesSharedLe1TypeUntouched),
         new("actor material assignment converts BMO arrays and protects non-target MICs", ConvertsAndProtectsMaterials),
         new("actor material assignment surgically updates body MIC skin vectors across all games", UpdatesBodySkinVectors),
+        new("actor attachments preserve shared Body MICs with and without face overrides", SharedBodyAttachmentMaterial),
         new("actor material assignment adds only skin vectors present on the source", AddsOnlyPresentBodySkinVectors),
         new("actor material assignment preserves target categories missing from the BMO", PreservesMissingMaterialCategories)
     ];
+
+    private static void SharedBodyAttachmentMaterial()
+    {
+        foreach (var game in new[] { MEGame.LE1, MEGame.LE2, MEGame.LE3 })
+        foreach (var hasOverrides in new[] { false, true })
+        WithPackage(game, (path, package) =>
+        {
+            var (face, _, actor, _, body) = CreateBodyAssignmentFixture(package,
+                SourceVector("SkinTone", 0.1f, 0.2f, 0.3f, 0.4f), SourceVector("HeadOnly", 1, 1, 1, 1));
+            if (!hasOverrides) face.WriteProperty(new ObjectProperty(0, "m_oMaterialOverrides"));
+            var shared = CreateMic(package, "SharedBodyMaterial", "BodyParent");
+            shared.WriteProperty(new ArrayProperty<StructProperty>([MicVector("GearTint", 0.9f)], "VectorParameterValues"));
+            shared.WriteProperty(new BoolProperty(true, "bTwoSided"));
+            body.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(shared)], "Materials"));
+            var hair = CreateHeadComponent(package, "HMM_HIR_Custom_MDL", "HairSMC");
+            var hairParent = CreateMic(package, "HairMaterial", "HMN_HED_PRO_MASTER_HAIR_MAT");
+            var hairMesh = package.GetUExport(hair.GetProperty<ObjectProperty>("SkeletalMesh")!.Value);
+            var binary = SkeletalMesh.Create();
+            binary.Materials = [hairParent.UIndex];
+            hairMesh.WriteBinary(binary);
+            face.WriteProperty(new ObjectProperty(hairMesh, "m_oHairMesh"));
+            hair.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(shared)], "Materials"));
+            actor.WriteProperty(new ObjectProperty(hair, game == MEGame.LE3 ? "HairMesh" : "m_oHairMesh"));
+            var before = shared.GetProperties();
+            before.RemoveNamedProperty("VectorParameterValues");
+            package.Save();
+            var profile = game.ToString().ToLowerInvariant() + "-human-male";
+            var service = new ActorAssignmentService(new ActorAssignmentInventoryService((_, _) => null));
+            service.AssignMaterials(path, face.UIndex.ToString(), profile, actor.UIndex);
+            int activeMaterial;
+            int exportCount;
+            using (var reopened = MEPackageHandler.OpenMEPackage(path, forceLoadFromDisk: true))
+            {
+                var after = reopened.GetUExport(shared.UIndex).GetProperties();
+                var vectors = after.GetProp<ArrayProperty<StructProperty>>("VectorParameterValues")!;
+                TestAssert.Equal(hasOverrides ? 2 : 1, vectors.Count);
+                TestAssert.True(vectors.All(value => value.GetProp<NameProperty>("ParameterName")!.Value.Name != "HeadOnly"),
+                    "Full head parameters were applied to a shared Body MIC.");
+                after.RemoveNamedProperty("VectorParameterValues");
+                TestAssert.True(before.Equivalent(after), "Attachment assignment changed the Body MIC's parent or properties.");
+                activeMaterial = reopened.GetUExport(hair.UIndex).GetProperty<ArrayProperty<ObjectProperty>>("Materials")!.Single().Value;
+                TestAssert.True(activeMaterial != shared.UIndex, "The hair attachment retained the shared Body MIC.");
+                if (hasOverrides)
+                    TestAssert.Equal(hairParent.UIndex, reopened.GetUExport(activeMaterial).GetProperty<ObjectProperty>("Parent")!.Value);
+                else TestAssert.Equal(hairParent.UIndex, activeMaterial);
+                exportCount = reopened.ExportCount;
+            }
+            service.AssignMaterials(path, face.UIndex.ToString(), profile, actor.UIndex);
+            using var repeated = MEPackageHandler.OpenMEPackage(path, forceLoadFromDisk: true);
+            TestAssert.Equal(exportCount, repeated.ExportCount);
+            TestAssert.Equal(activeMaterial, repeated.GetUExport(hair.UIndex)
+                .GetProperty<ArrayProperty<ObjectProperty>>("Materials")!.Single().Value);
+        });
+    }
 
     private static readonly (MEGame Game, string ActorClass)[] PlacedActorCases =
         [

@@ -24,7 +24,7 @@ public static class Player2DaRandomisationPolicyTests
         TestAssert.Equal(34, Player2DaRandomisationPolicy.GetRowCount(Player2DaPalette.EyeMakeup));
         TestAssert.Equal(32, Player2DaRandomisationPolicy.GetRowCount(Player2DaPalette.Lips));
 
-        var request = new Player2DaRandomisationRequest(Player2DaSex.Male,
+        var request = new Player2DaRandomisationRequest(
             new HashSet<Player2DaPalette> { Player2DaPalette.SkinTone, Player2DaPalette.HairColour, Player2DaPalette.FacialHairColour, Player2DaPalette.IrisColour },
             new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
@@ -40,7 +40,7 @@ public static class Player2DaRandomisationPolicyTests
         TestAssert.True(result.Values.ContainsKey("SkinTone") && result.Values.ContainsKey("HED_Hair_Colour_Vector"),
             "Skin and linked hair rows should be returned for integration.");
 
-        var lockedSkin = new Player2DaRandomisationRequest(Player2DaSex.Male,
+        var lockedSkin = new Player2DaRandomisationRequest(
             new HashSet<Player2DaPalette> { Player2DaPalette.HairColour },
             new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "HED_Hair_Colour_Vector" },
             new Dictionary<string, Player2DaValue>
@@ -53,7 +53,7 @@ public static class Player2DaRandomisationPolicyTests
 
     private static void SrgbAndAllowedParameters()
     {
-        var request = new Player2DaRandomisationRequest(Player2DaSex.Female,
+        var request = new Player2DaRandomisationRequest(
             new HashSet<Player2DaPalette> { Player2DaPalette.SkinTone },
             new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "SkinTone" },
             new Dictionary<string, Player2DaValue>
@@ -74,7 +74,7 @@ public static class Player2DaRandomisationPolicyTests
 
     private static void FullHairAndFacialHairPalettes()
     {
-        var request = new Player2DaRandomisationRequest(Player2DaSex.Male,
+        var request = new Player2DaRandomisationRequest(
             new HashSet<Player2DaPalette> { Player2DaPalette.SkinTone, Player2DaPalette.HairColour, Player2DaPalette.FacialHairColour },
             new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "SkinTone", "HED_Hair_Colour_Vector", "HED_Addn_Colour_Vector", "blonde" },
             new Dictionary<string, Player2DaValue>
@@ -95,7 +95,7 @@ public static class Player2DaRandomisationPolicyTests
 
     private static void EyeMakeupKeepsWeightedLashRow()
     {
-        var request = new Player2DaRandomisationRequest(Player2DaSex.Female,
+        var request = new Player2DaRandomisationRequest(
             new HashSet<Player2DaPalette> { Player2DaPalette.EyeMakeup },
             new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
@@ -124,7 +124,7 @@ public static class Player2DaRandomisationPolicyTests
             "HED_Hair_Colour_Vector", "HED_Addn_Colour_Vector"
         };
         var current = new Dictionary<string, Player2DaValue>();
-        var baseRequest = new Player2DaRandomisationRequest(Player2DaSex.Male, palettes, allowed, current, CurrentSkinRow: 14);
+        var baseRequest = new Player2DaRandomisationRequest( palettes, allowed, current, CurrentSkinRow: 14);
 
         var browOnly = Player2DaRandomisationPolicy.Roll(
             baseRequest with { HasBrowTexture = true, HasBeardTexture = false }, new FixedRandom(0));

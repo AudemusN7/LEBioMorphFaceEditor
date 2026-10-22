@@ -56,6 +56,7 @@ public static class UiSmokeTests
         new("unrecognised mesh import publishes a detached preview workspace", UnrecognisedMeshPublishesDetachedWorkspace),
         new("custom mesh import ignores the selected PCC morph topology", () => UnrecognisedMeshPublishesDetachedWorkspace(openPcc: true)),
         new("glTF and GLB drops publish detached mesh workspaces", GltfAndGlbDropsPublishDetachedWorkspaces),
+        new("custom mesh import shows nine-slot overflow while accepting eight slots", CustomMeshSlotOverflowShowsWarning),
         new("morph import asks for its source game with an open PCC", ImportAsksForSourceGameWithOpenPcc),
         new("NPC RON donor choices include supported game-local archetypes", NpcRonArchetypesAreGameLocal),
         new("NPC RON resolver accepts static ALN donors and rejects player donors", RonResolverAcceptsStaticAlnDonor),
@@ -1334,7 +1335,47 @@ public static class UiSmokeTests
         }
     }
 
-    private static byte[] CreateMinimalTriangleGltf(bool binary)
+    private static void CustomMeshSlotOverflowShowsWarning()
+    {
+        var sourcePath = Path.Combine(Path.GetTempPath(), $"MFE-UiSlotLimit-{Guid.NewGuid():N}.gltf");
+        try
+        {
+            foreach (var game in new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 })
+            foreach (var count in new[] { 8, 9 })
+            {
+                File.WriteAllBytes(sourcePath, CreateMinimalTriangleGltf(binary: false, materialSlotCount: count));
+                using var reader = new MorphFacePackageReader();
+                var dialogs = new StubEditorDialogs
+                {
+                    StandaloneGameChoiceResult = game,
+                    StandaloneNameChoiceResult = "SlotLimitFixture"
+                };
+                using var shell = CreateMainWindowViewModel(reader, dialogs);
+                HeadPreviewScene? scene = null;
+                shell.PreviewSceneReady += (value, _) => scene = value;
+
+                RunWithDispatcher(() => shell.OpenDroppedFileAsync(sourcePath));
+
+                TestAssert.True(shell.ErrorMessage is null && shell.IsDetachedMeshWorkspace,
+                    $"{game} {count}-slot import failed: {shell.ErrorMessage}");
+                TestAssert.Equal(count, scene!.Meshes.Single().Sections.Count);
+                TestAssert.Equal(count == 8 ? 8 : 0, shell.Editor!.CustomMaterialSlots.Count);
+                if (count == 8)
+                    TestAssert.True(dialogs.LastInformation is null, "Eight supported slots showed an overflow warning.");
+                else
+                    TestAssert.True(dialogs.LastInformation?.Contains("9 material slots") == true &&
+                                    dialogs.LastInformation.Contains("up to 8") &&
+                                    dialogs.LastInformation.Contains("previewable"),
+                        $"{game} nine-slot import did not display the count, limit and preview-only guidance.");
+            }
+        }
+        finally
+        {
+            if (File.Exists(sourcePath)) File.Delete(sourcePath);
+        }
+    }
+
+    private static byte[] CreateMinimalTriangleGltf(bool binary, int materialSlotCount = 1)
     {
         var buffer = new byte[42];
         var positions = new[]
@@ -1351,7 +1392,11 @@ public static class UiSmokeTests
         var uri = binary
             ? string.Empty
             : $",\"uri\":\"data:application/octet-stream;base64,{Convert.ToBase64String(buffer)}\"";
-        var json = $"{{\"asset\":{{\"version\":\"2.0\"}},\"scene\":0,\"scenes\":[{{\"nodes\":[0]}}],\"nodes\":[{{\"mesh\":0}}],\"meshes\":[{{\"primitives\":[{{\"attributes\":{{\"POSITION\":0}},\"indices\":1}}]}}],\"buffers\":[{{\"byteLength\":42{uri}}}],\"bufferViews\":[{{\"buffer\":0,\"byteOffset\":0,\"byteLength\":36}},{{\"buffer\":0,\"byteOffset\":36,\"byteLength\":6}}],\"accessors\":[{{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\",\"min\":[0,0,0],\"max\":[1,1,0]}},{{\"bufferView\":1,\"componentType\":5123,\"count\":3,\"type\":\"SCALAR\"}}]}}";
+        var primitives = string.Join(",", Enumerable.Range(0, materialSlotCount).Select(index =>
+            $"{{\"attributes\":{{\"POSITION\":0}},\"indices\":1,\"material\":{index}}}"));
+        var materials = string.Join(",", Enumerable.Range(0, materialSlotCount).Select(index =>
+            $"{{\"name\":\"Slot {index}\"}}"));
+        var json = $"{{\"asset\":{{\"version\":\"2.0\"}},\"scene\":0,\"scenes\":[{{\"nodes\":[0]}}],\"nodes\":[{{\"mesh\":0}}],\"meshes\":[{{\"primitives\":[{primitives}]}}],\"materials\":[{materials}],\"buffers\":[{{\"byteLength\":42{uri}}}],\"bufferViews\":[{{\"buffer\":0,\"byteOffset\":0,\"byteLength\":36}},{{\"buffer\":0,\"byteOffset\":36,\"byteLength\":6}}],\"accessors\":[{{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\",\"min\":[0,0,0],\"max\":[1,1,0]}},{{\"bufferView\":1,\"componentType\":5123,\"count\":3,\"type\":\"SCALAR\"}}]}}";
         if (!binary) return Encoding.UTF8.GetBytes(json);
 
         var jsonBytes = Encoding.UTF8.GetBytes(json);
@@ -3293,7 +3338,6 @@ public static class UiSmokeTests
     {
         const int seed = 781;
         var paletteRequest = new Player2DaRandomisationRequest(
-            Player2DaSex.Male,
             new HashSet<Player2DaPalette> { Player2DaPalette.SkinTone },
             new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "SkinTone" },
             new Dictionary<string, Player2DaValue>(StringComparer.OrdinalIgnoreCase)
@@ -4221,7 +4265,7 @@ public static class UiSmokeTests
                 [0, 1, 2],
                 [new ImportedMeshSection(0, "Human", 0, 3), new ImportedMeshSection(1, "Krogan", 0, 3)],
                 [], null, null, [0, 1, 2]);
-            customWorkspace = new CustomMaterialWorkspace(source);
+            customWorkspace = CustomMaterialWorkspace.Create(source).Workspace!;
             customOptions =
             [
                 new CustomMaterialAssignmentOption(
@@ -4267,7 +4311,11 @@ public static class UiSmokeTests
                 {
                     ["HED_Hair_Colour_Vector"] = new(0.2f),
                     ["HED_Aniso_Colour01_Vector"] = new(0.3f),
-                    ["HED_Aniso_Colour02_Vector"] = new(0.4f)
+                    ["HED_Aniso_Colour02_Vector"] = new(0.4f),
+                    // UI fixtures consume generated data; the compiler supplies these aliases.
+                    ["Hair_Color"] = new(0.2f),
+                    ["Aniso_Color_1"] = new(0.3f),
+                    ["Aniso_Color_2"] = new(0.4f)
                 }).ToDictionary(value => value.Key, value => value.Value)
             };
         var secondDonor = new MorphRandomisationDonor(
@@ -4333,7 +4381,8 @@ public static class UiSmokeTests
             profiles["le1-human-male"] = profiles["le1-human-male"] with
             {
                 Vectors = profiles["le1-human-male"].Vectors.Concat(
-                    new[] { "HED_Hair_Colour_Vector", "HED_Aniso_Colour01_Vector", "HED_Aniso_Colour02_Vector" }
+                    new[] { "HED_Hair_Colour_Vector", "HED_Aniso_Colour01_Vector", "HED_Aniso_Colour02_Vector",
+                        "Hair_Color", "Aniso_Color_1", "Aniso_Color_2" }
                         .Select(name => new KeyValuePair<string, MaterialVectorStatistics>(name,
                             new(name, MaterialVectorRandomisationKind.PerceptualColour, Vector4.Zero, Vector4.One, []))))
                     .ToDictionary(value => value.Key, value => value.Value)

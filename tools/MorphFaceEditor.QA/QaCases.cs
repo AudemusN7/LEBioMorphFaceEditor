@@ -85,8 +85,17 @@ internal static partial class QaCases
             attachmentMeshes: registry.AttachmentMeshes);
         using var imported = await c.Measure("standalone Player RON import", () => Task.Run(() =>
             new StandalonePlayerMorphImportService().ImportPlayerRon(game, ron, "QaPlayer", assets)), QaStageKind.FileTransfer);
-        QaContext.Require(!imported.CanCommit, "Standalone Player workspace unexpectedly permits source commit.");
+        QaContext.Require(!imported.CanCommit && !imported.Workspace.CanCommit,
+            "Standalone Player workspace unexpectedly permits source commit.");
+        QaContext.Require(imported.Game == game, "Standalone import opened the wrong Player game.");
         QaContext.Require(imported.Sex == c.Face.PlayerSex, "Standalone import detected the wrong Player sex.");
+        RequireHead(TseHeadMorphRon.Read(ron),
+            ReadPackageHead(imported.Workspace.WorkingPath, imported.ImportedFacePath), "Standalone Player RON import");
+        var readback = c.Artifact("player-import-readback.ron");
+        await c.Measure("Standalone Player RON readback", () => Task.Run(() =>
+            new MorphFacePackageContextService().ExportRon(imported.Workspace.WorkingPath,
+                imported.ImportedFacePath, readback, Provenance(c.Face))), QaStageKind.FileTransfer);
+        RequireHead(TseHeadMorphRon.Read(ron), TseHeadMorphRon.Read(readback), "Standalone Player RON readback");
         var preview = await c.Load(imported.Workspace.WorkingPath, imported.ImportedFacePath, MorphFaceGeometryMode.RelativeBake);
         using var scope = await c.Editor(preview, imported.Workspace.WorkingPath, player: true);
         c.Current.Evidence["route"] = "Standalone Player RON / RelativeBake";

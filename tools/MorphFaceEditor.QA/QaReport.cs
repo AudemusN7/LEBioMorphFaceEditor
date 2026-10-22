@@ -108,7 +108,17 @@ internal sealed class QaReport(string directory, int seed, string[] planned, str
         {
             html.Append("<article><h2>Needs attention</h2>");
             foreach (var result in attention)
+            {
                 html.Append($"<p class='{H(result.Status)}'><a class='{H(result.Status)}' href='#{H(result.Id)}'>{H(Label(result.Status))}: {H(QaDisplay.Case(result.Id))}</a></p>");
+                var slow = result.Stages.Where(stage => stage.ExceededLimit).ToArray();
+                if (slow.Length > 0)
+                {
+                    html.Append("<ul class='warning'>");
+                    foreach (var stage in slow)
+                        html.Append($"<li>{H(stage.Name)} — {stage.DurationMs:F1} ms / {stage.LimitMs:F0} ms</li>");
+                    html.Append("</ul>");
+                }
+            }
             html.Append("</article>");
         }
 

@@ -7,7 +7,7 @@
     <RootNamespace>MorphFaceEditor.QA</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="../../tests/MorphFaceEditor.TestData/ConversionMatrix.cs" Link="Fixtures/ConversionMatrix.cs" />
+    <InternalsVisibleTo Include="MorphFaceEditor.Tests" />
     <ProjectReference Include="../../src/MorphFaceEditor/MorphFaceEditor.csproj" />
     <Reference Include="LegendaryExplorerCore">
       <HintPath>../../lib/LegendaryExplorerCore/LegendaryExplorerCore.dll</HintPath>

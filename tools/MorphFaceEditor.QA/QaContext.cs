@@ -399,6 +399,8 @@ internal sealed class QaContext : IDisposable
         var output = Artifact(filename);
         var result = await Measure($"Save PCC · {Path.GetFileName(filename)}", () => Task.Run(() =>
             new MorphFacePackageWriter().SaveMorphToPackage(draft, logicalSource, output, true)), QaStageKind.FileTransfer);
+        Require(string.Equals(result.FaceInstancedPath, draft.Source.InstancedPath, StringComparison.OrdinalIgnoreCase),
+            $"PCC export changed the face identity from '{draft.Source.InstancedPath}' to '{result.FaceInstancedPath}'.");
         var warnings = QaWarningDiagnostics.InspectSavedPackage(output, result.Warnings);
         if (warnings.Length > 0) Current.Evidence["saveWarningVerification/" + filename] = warnings;
         AddWarningReviews("PCC export", output, warnings, result.FaceInstancedPath, logicalSource);

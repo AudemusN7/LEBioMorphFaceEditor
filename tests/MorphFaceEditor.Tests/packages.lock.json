@@ -36,10 +36,10 @@
       "morphfaceeditor": {
         "type": "Project",
         "dependencies": {
-          "MorphFaceEditor.Core": "[1.0.0, )",
-          "MorphFaceEditor.LegendaryExplorer": "[1.0.0, )",
-          "MorphFaceEditor.Localisation": "[1.0.0, )",
-          "MorphFaceEditor.Rendering": "[1.0.0, )"
+          "MorphFaceEditor.Core": "[0.10.0.34, )",
+          "MorphFaceEditor.LegendaryExplorer": "[0.10.0.34, )",
+          "MorphFaceEditor.Localisation": "[0.10.0.34, )",
+          "MorphFaceEditor.Rendering": "[0.10.0.34, )"
         }
       },
       "morphfaceeditor.core": {
@@ -48,8 +48,8 @@
       "morphfaceeditor.datacompiler": {
         "type": "Project",
         "dependencies": {
-          "MorphFaceEditor": "[0.1.0-alpha.1, )",
-          "MorphFaceEditor.LegendaryExplorer": "[1.0.0, )"
+          "MorphFaceEditor": "[0.10.0.34, )",
+          "MorphFaceEditor.LegendaryExplorer": "[0.10.0.34, )"
         }
       },
       "morphfaceeditor.legendaryexplorer": {
@@ -59,7 +59,7 @@
           "BCnEncoder.Net.ImageSharp": "[1.1.2, )",
           "CommunityToolkit.Diagnostics": "[8.4.0, )",
           "Microsoft.IO.RecyclableMemoryStream": "[3.0.1, )",
-          "MorphFaceEditor.Core": "[1.0.0, )",
+          "MorphFaceEditor.Core": "[0.10.0.34, )",
           "Newtonsoft.Json": "[13.0.4, )",
           "Serilog": "[4.3.0, )",
           "SharpDX.D3DCompiler": "[4.2.0, )",
@@ -73,13 +73,19 @@
       "morphfaceeditor.localiser": {
         "type": "Project",
         "dependencies": {
-          "MorphFaceEditor.Localisation": "[1.0.0, )"
+          "MorphFaceEditor.Localisation": "[0.10.0.34, )"
+        }
+      },
+      "morphfaceeditor.qa": {
+        "type": "Project",
+        "dependencies": {
+          "MorphFaceEditor": "[0.10.0.34, )"
         }
       },
       "morphfaceeditor.rendering": {
         "type": "Project",
         "dependencies": {
-          "MorphFaceEditor.Core": "[1.0.0, )",
+          "MorphFaceEditor.Core": "[0.10.0.34, )",
           "SharpDX": "[4.2.0, )",
           "SharpDX.D3DCompiler": "[4.2.0, )",
           "SharpDX.DXGI": "[4.2.0, )",

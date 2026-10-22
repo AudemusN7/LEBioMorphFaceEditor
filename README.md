@@ -10,20 +10,22 @@ dotnet build MorphFaceEditor.slnx -c Release
 
 # Fast default suite; opt into affected integration areas.
 dotnet run --project tests/MorphFaceEditor.Tests -c Release
-dotnet run --project tests/MorphFaceEditor.Tests -c Release -- --suite ui
-dotnet run --project tests/MorphFaceEditor.Tests -c Release -- --suite rendering
-dotnet run --project tests/MorphFaceEditor.Tests -c Release -- --suite materials
-dotnet run --project tests/MorphFaceEditor.Tests -c Release -- --suite package
-dotnet run --project tests/MorphFaceEditor.Tests -c Release -- --suite tooling
-dotnet run --project tests/MorphFaceEditor.Tests -c Release -- --suite all
+dotnet run --project tests/MorphFaceEditor.Tests -c Release --no-build -- --list
+dotnet run --project tests/MorphFaceEditor.Tests -c Release --no-build -- --suite ui UiWorkspaceTests
+dotnet run --project tests/MorphFaceEditor.Tests -c Release --no-build -- --suite all
 ```
+
+See [regression test ownership and suites](tests/MorphFaceEditor.Tests/README.md) for focused checks and the [QA harness](tools/MorphFaceEditor.QA/README.md) for broad workflow matrices. Generic PCC inspection uses LECCLI.
 
 Mesh exports include a versioned `.mfe.json` sidecar. Keep it beside the mesh for a lossless round trip; mesh-only import cannot reconstruct metadata-only controls, bone edits or unique lower-LOD branches.
 
 The application embeds canonical compressed morph targets and the randomisation donor corpus. Runtime editing never depends on the GlobalMorphs packages. Data regeneration remains available through `tools/MorphFaceEditor.DataCompiler`.
 
-Debug command for decompressing MFTR. Path is optional
-`dotnet run --project tools/MorphFaceEditor.Research -c Release -- unpack-mftr "C:\path\to\LE1.mftr"`
+Developer commands and data ownership are documented in [DataCompiler](tools/MorphFaceEditor.DataCompiler/README.md). For example, unpack an MFTR to JSON beside the input, or pass an optional JSON output path:
+
+```powershell
+dotnet run --project tools/MorphFaceEditor.DataCompiler -c Release -- unpack-mftr "C:\path\to\LE1.mftr"
+```
 
 ## Logging
 

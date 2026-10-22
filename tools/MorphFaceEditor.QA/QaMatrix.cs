@@ -1,12 +1,11 @@
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.LegendaryExplorer;
-using MorphFaceEditor.TestData;
 using System.Text.Json.Serialization;
 
 namespace MorphFaceEditor.QA;
 
-internal sealed record QaFaceSpec(MorphFaceGame Game, string Family, string? FacePath,
+internal sealed record QaFaceSpec(MorphFaceGame Game, string Family, string? FacePath = null,
     StandalonePlayerSex? PlayerSex = null)
 {
     public bool IsPlayer => PlayerSex is not null;
@@ -34,20 +33,20 @@ internal sealed record QaFaceSpec(MorphFaceGame Game, string Family, string? Fac
 
 internal static partial class QaCases
 {
-    internal static QaFaceSpec DefaultFace { get; } = new(MorphFaceGame.LE2, "SAL", "SAL.BioFace_male_extra2");
+    internal static QaFaceSpec DefaultFace { get; } = new(MorphFaceGame.LE2, "SAL");
     internal static QaFaceSpec MeshFace { get; } = new(MorphFaceGame.LE2, "HMM", "HMM.BioFace_Security2");
     internal static IReadOnlyList<QaFaceSpec> Archetypes { get; } = BuildArchetypes();
 
     private static IReadOnlyList<QaFaceSpec> BuildArchetypes()
     {
-        var result = ConversionMatrix.Sources.GroupBy(source => (source.SourceGame, source.Family))
-            .Select(group => group.First()).Select(source => new QaFaceSpec(source.SourceGame, source.Family, source.FacePath)).ToList();
+        var result = new List<QaFaceSpec>();
         foreach (var game in new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 })
         {
-            result.Add(new(game, "TUF", null));
-            result.Add(new(game, "BAF", null));
-            result.Add(new(game, "HMM", null, StandalonePlayerSex.Male));
-            result.Add(new(game, "HMF", null, StandalonePlayerSex.Female));
+            foreach (var family in new[] { "HMM", "HMF", "ASA", "SAL", "TUR", "KRO", "BAT", "ALN", "TUF", "BAF" })
+                if (family != "ALN" || game != MorphFaceGame.LE1)
+                    result.Add(new(game, family));
+            result.Add(new(game, "HMM", PlayerSex: StandalonePlayerSex.Male));
+            result.Add(new(game, "HMF", PlayerSex: StandalonePlayerSex.Female));
         }
         return result.OrderBy(face => face.Game).ThenBy(face => face.Id).ToArray();
     }
@@ -74,25 +73,12 @@ internal static partial class QaCases
                     "load" => Load, "material-ron" => MaterialRon, "clipboard" => Clipboard,
                     "undo-redo" => UndoRedo, _ => Benchmark
                 });
-        foreach (var source in ConversionMatrix.Sources)
-            foreach (var target in ConversionMatrix.TargetGames(source.SourceGame, source.Family))
-            {
-                var face = new QaFaceSpec(source.SourceGame, source.Family, source.FacePath);
-                var id = $"conversion/{source.SourceGame}-to-{target}/{source.FacePath}";
-                cases.Add(new(id, $"Corpus conversion {source.SourceGame} → {target} / {source.Family}", async c =>
-                {
-                    c.Face = face;
-                    c.PreparedPlayer = null;
-                    c.Current.Evidence["archetype"] = face;
-                    await c.WarmGame(face.Game);
-                    await Conversion(c, target);
-                }, "conversion"));
-            }
-        if (cases.Count(item => item.Group == "conversion") != ConversionMatrix.ExpectedCount)
-            throw new InvalidOperationException("Shared conversion matrix no longer contains 68 directions.");
-        foreach (var face in Archetypes.Where(face => face.Family == "BAF"))
-            foreach (var target in new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 }.Where(game => game != face.Game))
-                Add("conversion", $"BAF conversion {face.Game} → {target}", face,
+        // Source() samples by family, so repeated fixed-donor labels tested the same
+        // route several times without actually selecting those named donors.
+        foreach (var face in Archetypes.Where(face => !face.IsPlayer && face.Family != "TUF"))
+            foreach (var target in new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 }
+                         .Where(game => game != face.Game && (face.Family != "ALN" || game != MorphFaceGame.LE1)))
+                Add("conversion", $"{face.Family} conversion {face.Game} → {target}", face,
                     c => Conversion(c, target), target.ToString().ToLowerInvariant());
         foreach (var face in Archetypes.Where(face => !face.IsPlayer))
             Add("npc-randomisation", "Dedicated 100-roll production stress, export/reopen/render", face, NpcRandomisation);

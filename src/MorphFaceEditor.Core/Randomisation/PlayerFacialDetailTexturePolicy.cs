@@ -27,7 +27,7 @@ public static class PlayerFacialDetailTexturePolicy
         ArgumentNullException.ThrowIfNull(currentTextureParameters);
         ArgumentNullException.ThrowIfNull(installedCandidates);
 
-        if (!TryResolveProfile(profileKey, out var game, out var isHumanMale))
+        if (!HeadProfileIdentity.TryParseHumanProfile(profileKey, out var game, out var isHumanMale))
         {
             return EmptyProposal;
         }
@@ -107,30 +107,6 @@ public static class PlayerFacialDetailTexturePolicy
     private static bool HasCategory(string instancedPath, string category) =>
         instancedPath.Split('.', StringSplitOptions.RemoveEmptyEntries)
             .Any(segment => segment.Equals(category, StringComparison.OrdinalIgnoreCase));
-
-    private static bool TryResolveProfile(
-        string profileKey,
-        out MorphFaceGame game,
-        out bool isHumanMale)
-    {
-        var parts = profileKey.Split('-', StringSplitOptions.RemoveEmptyEntries);
-        game = parts.Length > 0
-            ? parts[0].ToUpperInvariant() switch
-            {
-                "LE1" => MorphFaceGame.LE1,
-                "LE2" => MorphFaceGame.LE2,
-                "LE3" => MorphFaceGame.LE3,
-                _ => (MorphFaceGame)(-1)
-            }
-            : (MorphFaceGame)(-1);
-        isHumanMale = parts.Length == 3 && parts[1].Equals("human", StringComparison.OrdinalIgnoreCase) &&
-                      parts[2].Equals("male", StringComparison.OrdinalIgnoreCase);
-        var isHumanFemale = parts.Length == 3 &&
-                            parts[1].Equals("human", StringComparison.OrdinalIgnoreCase) &&
-                            parts[2].Equals("female", StringComparison.OrdinalIgnoreCase);
-        var supportedGame = game is MorphFaceGame.LE1 or MorphFaceGame.LE2 or MorphFaceGame.LE3;
-        return supportedGame && (isHumanMale || isHumanFemale);
-    }
 
     private static IReadOnlyDictionary<string, PlayerFacialDetailTextureSelection> EmptyProposal { get; } =
         new Dictionary<string, PlayerFacialDetailTextureSelection>(StringComparer.OrdinalIgnoreCase);

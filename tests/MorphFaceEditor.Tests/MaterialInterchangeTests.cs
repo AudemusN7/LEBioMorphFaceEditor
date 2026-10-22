@@ -15,6 +15,7 @@ public static class MaterialInterchangeTests
     public static IReadOnlyList<TestCase> All { get; } =
     [
         new("MFE material import retains assignments and applies scoped values with one undo", MfeRoundTrip),
+        new("MFE material files preserve eight sparse slots and reject a ninth", EightSlotMaterialFile),
         new("C3 TSE material import preserves alien values and export qualifies attachments", TsePolicy),
         new("C3 material import rejects malformed and incompatible files before editing", RejectsInvalidFiles),
         new("C3 texture import resolves exact registry paths without name substitution", ResolvesExactTexturePaths),
@@ -23,6 +24,21 @@ public static class MaterialInterchangeTests
         new("D3 face material export wraps unscoped values and writes safe metadata", FaceMaterialExport),
         new("D3 face material import separates tagged heads from untagged TSE", FaceMaterialImport)
     ];
+
+    private static void EightSlotMaterialFile()
+    {
+        var slots = Enumerable.Range(0, 8).Select(index => new MeshMaterialSlotData(index * 2,
+            $"Slot {index}", "skin", "Skin", "human", HeadMaterialFamily.Skin)).ToArray();
+        var document = new MeshMaterialDocument("LE3", "eight-slots", slots,
+            new Dictionary<string, MorphFaceMaterialData> { ["human"] = new([new("Shared", 0.25f)], [], []) });
+        var loaded = MaterialRonCodec.ReadMfe(MaterialRonCodec.WriteMfe(document));
+        TestAssert.True(loaded.Slots.SequenceEqual(slots), "Eight-slot RON changed slot indices or assignments.");
+        TestAssert.Equal(0.25f, loaded.Parameters["human"].Scalars.Single().Value);
+        Reject(() => MaterialRonCodec.ReadMfe(MaterialRonCodec.WriteMfe(document with
+            { Slots = [.. slots, slots[0] with { Index = 16 }] })));
+        Reject(() => MaterialRonCodec.ReadMfe(MaterialRonCodec.WriteMfe(document with
+            { Slots = [.. slots.Take(7), slots[0]] })));
+    }
 
     private static void MfeRoundTrip()
     {

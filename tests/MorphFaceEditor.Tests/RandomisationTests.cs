@@ -30,7 +30,7 @@ public static class RandomisationTests
         new("LE1 Batarian specular power stays between 0.4 and 0.7", Le1BatarianSpecularPowerIsBounded),
         new("material colours interpolate perceptually while selectors stay discrete", MaterialVectorsRespectSemantics),
         new("LE3 HMF highlight colours share one complete donor and interpolation", Le3FemaleHighlightsStayPaired),
-        new("new human hair colours reuse corpus colours under native names", HumanHairColoursReuseCorpus),
+        new("embedded human hair colours support native graph names", EmbeddedHumanHairColours),
         new("missing selected hair highlights fall back to compatible corpus colours", MissingSelectedHairHighlightsUseCompatibleDonors),
         new("material safety policy constrains or excludes hazardous numeric parameters", MaterialSafetyPolicyProtectsNumericParameters),
         new("material texture selection balances variants and rejects unsafe families", MaterialTextureSelectionIsCurated),
@@ -243,7 +243,7 @@ public static class RandomisationTests
                 .All(path => path.Contains("TUF_HED_PRO_Add", StringComparison.OrdinalIgnoreCase)),
             "Female Turian complexion donors did not retain their TUF-equivalent texture paths.");
         TestAssert.True(Enumerable.Range(0, 64).All(seed =>
-                catalog.SelectDonor("le3-turian", seed, requireMaterial: false).AvailableFeatures.Count > 0),
+                catalog.SelectDonor("le3-turian", seed).AvailableFeatures.Count > 0),
             "TUF material-only donors leaked into male Turian morph randomisation.");
         TestAssert.True(vorchaLe2.Contains("TUR_HED_Diff") && vorchaLe2.Contains("ALN_HED_Diff"),
             "The embedded LE2 Vorcha pool omitted face or eye textures.");
@@ -427,6 +427,8 @@ public static class RandomisationTests
     public static IReadOnlyList<TestCase> Tooling { get; } =
     [
         new("randomisation bundle round-trips deterministically", BundleRoundTripsDeterministically),
+        new("compiler projects human hair colours after donor statistics", HumanHairColoursReuseCorpus),
+        new("compiler retains native hair aliases and their observed statistics", CompilationPreservesNativeHairAliases),
         new("corpus compilation distinguishes unavailable zero and nonzero features", CompilationPreservesFeatureStates),
         new("corpus compilation reports and excludes empty and reviewed donors", CompilationReportsExclusions),
         new("corpus audit keeps same-path faces from separate packages distinct", CompilationReportsOverlappingPackages),
@@ -484,7 +486,7 @@ public static class RandomisationTests
         var bounds = Bounds("Eyes", "Nose", "Jaw");
 
         var result = MorphRandomiser.CreateProposal(
-            corpus, MorphRandomisationPoolKey.HumanMaleLe12, current, bounds,
+            corpus.Pools[MorphRandomisationPoolKey.HumanMaleLe12].Single(), current, bounds,
             new HashSet<string>(current.Keys, StringComparer.OrdinalIgnoreCase), 0, 17);
 
         TestAssert.Equal("LE2.HMM.Seed", result.DonorId);
@@ -505,9 +507,9 @@ public static class RandomisationTests
         var scope = new HashSet<string>(["Target"], StringComparer.OrdinalIgnoreCase);
 
         var full = MorphRandomiser.CreateProposal(
-            corpus, MorphRandomisationPoolKey.HumanMaleLe12, current, bounds, scope, 100, 91);
+            corpus.Pools[MorphRandomisationPoolKey.HumanMaleLe12].Single(), current, bounds, scope, 100, 91);
         var half = MorphRandomiser.CreateProposal(
-            corpus, MorphRandomisationPoolKey.HumanMaleLe12, current, bounds, scope, 50, 91);
+            corpus.Pools[MorphRandomisationPoolKey.HumanMaleLe12].Single(), current, bounds, scope, 50, 91);
 
         TestAssert.True(full.Values["Target"] is >= 0 and <= 1,
             "Full-strength value escaped its normal metadata range.");
@@ -524,8 +526,7 @@ public static class RandomisationTests
         var current = Values(("Bridge", 0.1f), ("Eyes", 0.2f));
 
         var result = MorphRandomiser.CreateProposal(
-            Corpus(donor, MorphRandomisationPoolKey.Turian), MorphRandomisationPoolKey.Turian,
-            current, Bounds("Bridge", "Eyes"),
+            donor, current, Bounds("Bridge", "Eyes"),
             new HashSet<string>(["Bridge"], StringComparer.OrdinalIgnoreCase), 0, 3);
 
         TestAssert.Near(0.6f, result.Values["Bridge"], 0);
@@ -542,9 +543,9 @@ public static class RandomisationTests
         var scope = new HashSet<string>(["Target"], StringComparer.OrdinalIgnoreCase);
 
         AssertThrows<ArgumentOutOfRangeException>(() => MorphRandomiser.CreateProposal(
-            corpus, MorphRandomisationPoolKey.HumanMaleLe12, current, Bounds("Target"), scope, 101, 1));
+            corpus.Pools[MorphRandomisationPoolKey.HumanMaleLe12].Single(), current, Bounds("Target"), scope, 101, 1));
         AssertThrows<ArgumentException>(() => MorphRandomiser.CreateProposal(
-            corpus, MorphRandomisationPoolKey.HumanMaleLe12, current,
+            corpus.Pools[MorphRandomisationPoolKey.HumanMaleLe12].Single(), current,
             [new MorphRandomisationFeatureBounds("Target", 2, 1)], scope, 50, 1));
     }
 
@@ -820,14 +821,13 @@ public static class RandomisationTests
                 MaterialVectors = originals.Select((name, index) => (name, value: new Vector4(0.2f + index * 0.1f)))
                     .ToDictionary(item => item.name, item => item.value)
             };
-            var profile = PolicyProfile(key, [], originals.Select(name => new MaterialVectorStatistics(
-                name, MaterialVectorRandomisationKind.PerceptualColour, Vector4.Zero, Vector4.One, [])).ToArray());
-            var corpus = new MorphRandomisationCorpus(MorphRandomisationCorpus.CurrentFormatVersion,
-                new Dictionary<MorphRandomisationPoolKey, IReadOnlyList<MorphRandomisationDonor>>
-                    { [MorphRandomisationPoolRouter.Resolve(key)] = [donor] })
+            var raw = RawFace(Enum.Parse<MorphFaceGame>(key.Split('-')[0], true), "Human.Hair", ("A", 0.5f)) with
             {
-                MaterialProfiles = new Dictionary<string, MaterialRandomisationProfile> { [key] = profile }
+                MaterialVectors = donor.MaterialVectors
             };
+            var definition = Definition(key, raw.Game, new HashSet<string>(["A"])) with
+                { PoolKey = MorphRandomisationPoolRouter.Resolve(key) };
+            var corpus = RandomisationCorpusCompiler.Compile([raw], [definition], []).Corpus;
             var catalog = new MorphRandomisationCatalog(corpus);
             var projected = catalog.CompatibleMaterialDonors(key).Single();
             var projectedProfile = catalog.GetMaterialProfile(key)!;
@@ -839,10 +839,36 @@ public static class RandomisationTests
                 TestAssert.Equal(donor.MaterialVectors[originals[index]], result.Vectors[names[index]]);
                 TestAssert.Equal(names[index], projectedProfile.Vectors[names[index]].Name);
             }
-            TestAssert.True(!donor.MaterialVectors.ContainsKey("Hair_Color") && !profile.Vectors.ContainsKey("Hair_Color"),
-                "Runtime aliases mutated the original corpus evidence.");
+            TestAssert.True(!raw.MaterialVectors.ContainsKey("Hair_Color"),
+                "Generated aliases mutated the original corpus evidence.");
             TestAssert.Equal(3, result.Vectors.Count);
         }
+    }
+
+    private static void CompilationPreservesNativeHairAliases()
+    {
+        var raw = RawFace(MorphFaceGame.LE1, "Human.Hair", ("A", 0.5f)) with
+        {
+            MaterialVectors = new Dictionary<string, Vector4>
+                { ["HED_Hair_Colour_Vector"] = Vector4.One, ["Hair_Color"] = Vector4.UnitX }
+        };
+        var other = raw with { FacePath = "Human.Other", MaterialVectors =
+            new Dictionary<string, Vector4> { ["HED_Hair_Colour_Vector"] = Vector4.One } };
+        var definition = Definition("le1-human-male", MorphFaceGame.LE1, new HashSet<string>(["A"]));
+        var corpus = RandomisationCorpusCompiler.Compile([raw, other], [definition], []).Corpus;
+        var donors = corpus.Pools[MorphRandomisationPoolKey.HumanMaleLe12];
+        TestAssert.Equal(2, donors.Count);
+        TestAssert.Equal(Vector4.UnitX, donors.Single(value => value.Id.EndsWith(":Human.Hair")).MaterialVectors["Hair_Color"]);
+        TestAssert.Equal(Vector4.One, donors.Single(value => value.Id.EndsWith(":Human.Other")).MaterialVectors["Hair_Color"]);
+        var statistics = corpus.MaterialProfiles[definition.ProfileKey].Vectors["Hair_Color"];
+        TestAssert.Equal(Vector4.UnitX, statistics.Minimum);
+        TestAssert.Equal(Vector4.UnitX, statistics.Maximum);
+        TestAssert.Equal(Vector4.One, raw.MaterialVectors["HED_Hair_Colour_Vector"]);
+    }
+
+    private static void EmbeddedHumanHairColours()
+    {
+        var names = new[] { "Hair_Color", "Aniso_Color_1", "Aniso_Color_2" };
         var embedded = MorphRandomisationCatalog.LoadEmbedded();
         foreach (var key in new[] { "le1-human-male", "le1-human-female", "le2-human-male",
                      "le2-human-female", "le3-human-male", "le3-human-female" })
@@ -1014,7 +1040,7 @@ public static class RandomisationTests
         TestAssert.True(catalog.HasMaterialDonors("le1-batarian"),
             "LE1 Batarian did not find the compatible pooled material donor.");
         TestAssert.Equal("le2-batarian", catalog.GetMaterialProfile("le1-batarian")?.ProfileKey);
-        TestAssert.Equal(donor.Id, catalog.SelectDonor("le1-batarian", 1, requireMaterial: true).Id);
+        TestAssert.Equal(donor.Id, catalog.SelectMaterialDonor("le1-batarian", 1).Id);
     }
 
     private static void MaterialDonorsUseApprovedCrossGamePools()

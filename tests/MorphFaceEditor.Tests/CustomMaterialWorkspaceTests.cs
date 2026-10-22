@@ -11,7 +11,7 @@ public static class CustomMaterialWorkspaceTests
     public static IReadOnlyList<TestCase> All { get; } =
     [
         new("custom workspace enumerates used slots and shared sections", EnumeratesUsedSlots),
-        new("custom workspace enforces the four-slot boundary", EnforcesMaximumSlots),
+        new("custom workspace supports eight sparse used slots and reports overflow", EnforcesMaximumSlots),
         new("custom workspace rejects unknown assignment options", RejectsUnknown),
         new("custom workspace enforces role-specific material compatibility", EnforcesRoleSpecificCompatibility),
         new("custom material assignment undo is one semantic action", AssignmentUndoRedo),
@@ -30,7 +30,7 @@ public static class CustomMaterialWorkspaceTests
             new ImportedMeshSection(0, "Unused", 3, 0),
             new ImportedMeshSection(1, "Skin", 3, 3),
             new ImportedMeshSection(3, "Eyes B", 6, 3));
-        var workspace = new CustomMaterialWorkspace(source);
+        var workspace = CustomMaterialWorkspace.Create(source).Workspace!;
 
         TestAssert.Equal(2, workspace.UsedSlots.Count);
         TestAssert.Equal(3, workspace.UsedSlots[0].MaterialIndex);
@@ -45,23 +45,29 @@ public static class CustomMaterialWorkspaceTests
 
     private static void EnforcesMaximumSlots()
     {
-        var sections = Enumerable.Range(0, CustomMaterialWorkspace.MaximumSupportedSlots + 1)
-            .Select(index => new ImportedMeshSection(index, $"Slot {index}", index * 3, 3)).ToArray();
-        try
-        {
-            _ = new CustomMaterialWorkspace(CreateSource(sections));
-            throw new InvalidOperationException("A five-slot custom workspace was accepted.");
-        }
-        catch (InvalidDataException)
-        {
-            // The imported source remains owned by the caller and is unchanged.
-        }
+        var sections = Enumerable.Range(0, 8)
+            .Select(index => new ImportedMeshSection(index * 2, $"Slot {index}", index * 3, 3)).ToArray();
+        var source = CreateSource([.. sections, new(0, "Shared", 24, 3), new(99, "Unused", 27, 0)]);
+        var accepted = CustomMaterialWorkspace.Create(source);
+        TestAssert.Equal(8, accepted.UsedSlotCount);
+        var workspace = accepted.Workspace ?? throw new InvalidOperationException("Eight used slots were rejected.");
+        foreach (var slot in workspace.UsedSlots)
+            workspace.Assign(slot, Option($"slot-{slot.MaterialIndex}", "Skin", "human", "head",
+                HeadMaterialFamily.Skin));
+        TestAssert.Equal(8, workspace.Assignments.Count);
+        TestAssert.True(ReferenceEquals(source, workspace.Source), "Creation replaced the caller's source.");
+
+        var overflowSource = CreateSource([.. sections, new(16, "Ninth", 24, 3)]);
+        var rejected = CustomMaterialWorkspace.Create(overflowSource);
+        TestAssert.Equal(9, rejected.UsedSlotCount);
+        TestAssert.True(rejected.Workspace is null, "Nine used slots were accepted.");
+        TestAssert.Equal(9, overflowSource.Sections.Count);
     }
 
     private static void RejectsUnknown()
     {
-        var workspace = new CustomMaterialWorkspace(CreateSource(
-            new ImportedMeshSection(0, "Face", 0, 3)));
+        var workspace = CustomMaterialWorkspace.Create(CreateSource(
+            new ImportedMeshSection(0, "Face", 0, 3))).Workspace!;
         try
         {
             workspace.Assign(0, Option("unknown", "Unknown", "appearance", "head", HeadMaterialFamily.Unknown));
@@ -75,9 +81,9 @@ public static class CustomMaterialWorkspaceTests
 
     private static void EnforcesRoleSpecificCompatibility()
     {
-        var workspace = new CustomMaterialWorkspace(CreateSource(
+        var workspace = CustomMaterialWorkspace.Create(CreateSource(
             new ImportedMeshSection(0, "First", 0, 3),
-            new ImportedMeshSection(1, "Second", 3, 3)));
+            new ImportedMeshSection(1, "Second", 3, 3))).Workspace!;
 
         AssertPairRejected(workspace,
             Option("hmm-eyes", "HMM Eyes", "human-male", "eyes", HeadMaterialFamily.Eyes),
@@ -150,8 +156,8 @@ public static class CustomMaterialWorkspaceTests
 
     private static void AssignmentUndoRedo()
     {
-        var workspace = new CustomMaterialWorkspace(CreateSource(
-            new ImportedMeshSection(0, "Face", 0, 3)));
+        var workspace = CustomMaterialWorkspace.Create(CreateSource(
+            new ImportedMeshSection(0, "Face", 0, 3))).Workspace!;
         var commits = 0;
         workspace.EditCommitted += (_, _) => commits++;
         workspace.Assign(0, Option("skin", "Skin", "human", "head", HeadMaterialFamily.Skin));
@@ -173,7 +179,7 @@ public static class CustomMaterialWorkspaceTests
         var source = template.Source;
         var option = new CustomMaterialAssignmentOption("skin", "Skin", "human", "head",
             HeadMaterialFamily.Skin, template).WithDeferredTemplate(source, () => { loads++; return template; });
-        var workspace = new CustomMaterialWorkspace(CreateSource(new ImportedMeshSection(0, "Face", 0, 3)));
+        var workspace = CustomMaterialWorkspace.Create(CreateSource(new ImportedMeshSection(0, "Face", 0, 3))).Workspace!;
         using var slotEditor = new CustomMaterialSlotEditorViewModel(
             workspace, workspace.UsedSlots[0], [option], _ => throw new Exception("Unexpected assignment failure."));
         TestAssert.Equal(source, option.TemplateSource);
@@ -194,9 +200,9 @@ public static class CustomMaterialWorkspaceTests
 
     private static void LowestSlotWinsDefaults()
     {
-        var workspace = new CustomMaterialWorkspace(CreateSource(
+        var workspace = CustomMaterialWorkspace.Create(CreateSource(
             new ImportedMeshSection(5, "High", 0, 3),
-            new ImportedMeshSection(1, "Low", 3, 3)));
+            new ImportedMeshSection(1, "Low", 3, 3))).Workspace!;
         workspace.Assign(5, Option("high", "High", "head", "head", HeadMaterialFamily.Skin, scalar: 5));
         workspace.Assign(1, Option("low", "Low", "head", "head", HeadMaterialFamily.Skin, scalar: 1));
 
@@ -212,9 +218,9 @@ public static class CustomMaterialWorkspaceTests
         var sourceOverride = new MorphFaceMaterialOverrides(
             null,
             [new ScalarMaterialOverride("LegacyUnsupported", 0.75f)], [], []);
-        var workspace = new CustomMaterialWorkspace(CreateSource(
+        var workspace = CustomMaterialWorkspace.Create(CreateSource(
             new ImportedMeshSection(0, "Skin", 0, 3),
-            new ImportedMeshSection(1, "Eyes", 3, 3)));
+            new ImportedMeshSection(1, "Eyes", 3, 3))).Workspace!;
         workspace.Assign(0, Option("skin", "Skin", "head", "head", HeadMaterialFamily.Skin, scalar: 0.2f, unique: true));
         workspace.Assign(1, Option("eyes", "Eyes", "head", "eye", HeadMaterialFamily.Eyes, scalar: 0.4f));
         var session = new MaterialEditingSession(sourceOverride, ResolvedHeadMaterialSet.Empty);
@@ -238,9 +244,9 @@ public static class CustomMaterialWorkspaceTests
 
     private static void RacialScopesRemainIndependent()
     {
-        var workspace = new CustomMaterialWorkspace(CreateSource(
+        var workspace = CustomMaterialWorkspace.Create(CreateSource(
             new ImportedMeshSection(0, "Human", 0, 3),
-            new ImportedMeshSection(1, "Krogan", 3, 3)));
+            new ImportedMeshSection(1, "Krogan", 3, 3))).Workspace!;
         workspace.Assign(0, Option("human", "Human", "human-male", "head", HeadMaterialFamily.Skin, 0.2f));
         workspace.Assign(1, Option("krogan", "Krogan", "krogan", "head", HeadMaterialFamily.KroganSkin, 0.7f));
         var session = new MaterialEditingSession(MorphFaceMaterialOverrides.Empty, workspace.ActiveMaterials);
@@ -271,8 +277,8 @@ public static class CustomMaterialWorkspaceTests
 
     private static void RebasePreservesHiddenEdit()
     {
-        var workspace = new CustomMaterialWorkspace(CreateSource(
-            new ImportedMeshSection(0, "Skin", 0, 3)));
+        var workspace = CustomMaterialWorkspace.Create(CreateSource(
+            new ImportedMeshSection(0, "Skin", 0, 3))).Workspace!;
         var option = Option("skin", "Skin", "head", "head", HeadMaterialFamily.Skin, scalar: 0.2f);
         workspace.Assign(0, option);
         var session = new MaterialEditingSession(MorphFaceMaterialOverrides.Empty, ResolvedHeadMaterialSet.Empty);
@@ -290,8 +296,8 @@ public static class CustomMaterialWorkspaceTests
 
     private static void RebaseRetainsAttachments()
     {
-        var workspace = new CustomMaterialWorkspace(CreateSource(
-            new ImportedMeshSection(0, "Skin", 0, 3)));
+        var workspace = CustomMaterialWorkspace.Create(CreateSource(
+            new ImportedMeshSection(0, "Skin", 0, 3))).Workspace!;
         workspace.Assign(0, Option("skin", "Skin", "human", "head", HeadMaterialFamily.Skin));
         var session = new MaterialEditingSession(MorphFaceMaterialOverrides.Empty, ResolvedHeadMaterialSet.Empty);
         session.RebaseMaterialSurface(workspace);

@@ -29,54 +29,6 @@ public static class MorphRandomiser
     }
 
     public static MorphRandomisationProposal CreateProposal(
-        MorphRandomisationCorpus corpus,
-        MorphRandomisationPoolKey poolKey,
-        IReadOnlyDictionary<string, float> currentValues,
-        IReadOnlyList<MorphRandomisationFeatureBounds> featureBounds,
-        IReadOnlySet<string> scope,
-        int strengthPercent,
-        int randomSeed)
-    {
-        ArgumentNullException.ThrowIfNull(corpus);
-        ArgumentNullException.ThrowIfNull(currentValues);
-        ArgumentNullException.ThrowIfNull(featureBounds);
-        ArgumentNullException.ThrowIfNull(scope);
-        if (strengthPercent is < 0 or > 100)
-        {
-            throw new ArgumentOutOfRangeException(nameof(strengthPercent));
-        }
-        var boundsByName = new Dictionary<string, MorphRandomisationFeatureBounds>(
-            StringComparer.OrdinalIgnoreCase);
-        foreach (var bounds in featureBounds)
-        {
-            ArgumentException.ThrowIfNullOrWhiteSpace(bounds.Name);
-            if (!float.IsFinite(bounds.Minimum) || !float.IsFinite(bounds.Maximum) ||
-                bounds.Minimum > bounds.Maximum)
-            {
-                throw new ArgumentException(
-                    $"Feature '{bounds.Name}' has invalid randomisation bounds.", nameof(featureBounds));
-            }
-            if (!boundsByName.TryAdd(bounds.Name, bounds))
-            {
-                throw new ArgumentException(
-                    $"Feature bounds contain duplicate name '{bounds.Name}'.", nameof(featureBounds));
-            }
-        }
-
-        foreach (var (name, value) in currentValues)
-        {
-            ArgumentException.ThrowIfNullOrWhiteSpace(name);
-            if (!float.IsFinite(value))
-            {
-                throw new ArgumentException($"Current feature '{name}' is not finite.", nameof(currentValues));
-            }
-        }
-
-        var donor = SelectDonor(corpus, poolKey, randomSeed);
-        return CreateProposal(donor, currentValues, featureBounds, scope, strengthPercent, randomSeed);
-    }
-
-    public static MorphRandomisationProposal CreateProposal(
         MorphRandomisationDonor donor,
         IReadOnlyDictionary<string, float> currentValues,
         IReadOnlyList<MorphRandomisationFeatureBounds> featureBounds,
@@ -172,6 +124,9 @@ public static class MorphRandomiser
             }
             return (int)(NextUnitDouble() * count);
         }
+
+        public float NextFloat(float minimum, float maximum) =>
+            minimum + ((maximum - minimum) * (float)NextUnitDouble());
 
         public double NextUnitDouble() => (NextUInt64() >> 11) * (1d / 9007199254740992d);
 

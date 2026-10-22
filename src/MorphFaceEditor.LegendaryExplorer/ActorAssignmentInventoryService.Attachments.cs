@@ -11,7 +11,7 @@ public sealed partial class ActorAssignmentInventoryService
 {
     private static (IReadOnlyList<ActorAssignmentAttachmentTarget> Targets, IReadOnlyList<UserFacingMessage> Warnings)
         ReadAttachmentTargets(IMEPackage package, ExportEntry actor, ExportEntry face,
-            IReadOnlyList<ActorAssignmentComponent> components, ActorAssignmentMorphTarget? morphTarget,
+            IReadOnlyList<ActorAssignmentComponent> components, IReadOnlySet<int> bodyMics, ActorAssignmentMorphTarget? morphTarget,
             IReadOnlyList<IEntry> knownHairMeshes, IReadOnlyList<IEntry> knownOtherMeshes,
             GamePackageReferenceResolver resolver, PackageCache cache,
             Lazy<ILookup<int, ActorAssignmentReference>> referrers,
@@ -76,7 +76,8 @@ public sealed partial class ActorAssignmentInventoryService
 
         var clearing = assignments.Where(value => value.Mesh is null).Select(value => value.Component.UIndex).ToHashSet();
         return (assignments.Select(value => DescribeAttachment(
-            package, actor, value.Role, value.Component, value.Mesh, resolver, cache, clearing, referrers, ownedMics.Value)).ToArray(), warnings);
+            package, actor, value.Role, value.Component, value.Mesh, resolver, cache, clearing, bodyMics,
+            referrers, ownedMics.Value)).ToArray(), warnings);
 
         bool IsEmpty(ExportEntry component)
         {
@@ -90,7 +91,7 @@ public sealed partial class ActorAssignmentInventoryService
 
     private static ActorAssignmentAttachmentTarget DescribeAttachment(IMEPackage package, ExportEntry actor, ActorComponentRole role,
         ExportEntry component, IEntry? source, GamePackageReferenceResolver resolver, PackageCache cache,
-        IReadOnlySet<int> clearing, Lazy<ILookup<int, ActorAssignmentReference>> referrers,
+        IReadOnlySet<int> clearing, IReadOnlySet<int> bodyMics, Lazy<ILookup<int, ActorAssignmentReference>> referrers,
         ILookup<int, ExportEntry> ownedMics)
     {
         var current = FindProperty<ObjectProperty>(component, "SkeletalMesh", resolver, cache);
@@ -103,7 +104,8 @@ public sealed partial class ActorAssignmentInventoryService
             var material = materials is null ? null : mesh!.FileRef.GetEntry(materials[slot]);
             var raw = overrides is not null && slot < overrides.Property.Count
                 ? overrides.Property[slot].ResolveToEntry(overrides.Owner.FileRef) : null;
-            var mic = IsWritableMic(raw, package) ? (ExportEntry)raw! : null;
+            // Reparenting an attachment must never change a MIC also used by Body.
+            var mic = IsWritableMic(raw, package) && !bodyMics.Contains(raw!.UIndex) ? (ExportEntry)raw : null;
             var parent = mic is null ? null : FindProperty<ObjectProperty>(mic, "Parent", resolver, cache);
             return new ActorAssignmentAttachmentSlot(slot, raw?.InstancedFullPath, mic?.UIndex ?? 0,
                 parent?.Property.ResolveToEntry(parent.Owner.FileRef)?.InstancedFullPath,

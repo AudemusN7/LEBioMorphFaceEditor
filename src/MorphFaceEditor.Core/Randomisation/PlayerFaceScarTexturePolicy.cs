@@ -27,7 +27,7 @@ public static class PlayerFaceScarTexturePolicy
         ArgumentNullException.ThrowIfNull(npcFaceSets);
         ArgumentNullException.ThrowIfNull(installedCandidates);
 
-        if (!TryResolveProfile(profileKey, out var game, out var isHumanMale)) return [];
+        if (!HeadProfileIdentity.TryParseHumanProfile(profileKey, out var game, out var isHumanMale)) return [];
 
         var playerSets = ResolvePlayerFaceSets(game, isHumanMale, installedCandidates);
         return npcFaceSets
@@ -71,7 +71,7 @@ public static class PlayerFaceScarTexturePolicy
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(profileKey);
         ArgumentNullException.ThrowIfNull(installedCandidates);
-        if (!scarParameterSupported || !TryResolveProfile(profileKey, out var game, out var isHumanMale))
+        if (!scarParameterSupported || !HeadProfileIdentity.TryParseHumanProfile(profileKey, out var game, out var isHumanMale))
             return null;
         if (!isHumanMale && game != MorphFaceGame.LE1) return null;
 
@@ -205,30 +205,6 @@ public static class PlayerFaceScarTexturePolicy
 
     private static string FacePairKey(PlayerFaceTextureSet value) =>
         $"{value.DiffusePath}\n{value.NormalPath}";
-
-    private static bool TryResolveProfile(
-        string profileKey,
-        out MorphFaceGame game,
-        out bool isHumanMale)
-    {
-        var parts = profileKey.Split('-', StringSplitOptions.RemoveEmptyEntries);
-        game = parts.Length > 0
-            ? parts[0].ToUpperInvariant() switch
-            {
-                "LE1" => MorphFaceGame.LE1,
-                "LE2" => MorphFaceGame.LE2,
-                "LE3" => MorphFaceGame.LE3,
-                _ => (MorphFaceGame)(-1)
-            }
-            : (MorphFaceGame)(-1);
-        isHumanMale = parts.Length == 3 && parts[1].Equals("human", StringComparison.OrdinalIgnoreCase) &&
-                      parts[2].Equals("male", StringComparison.OrdinalIgnoreCase);
-        var isHumanFemale = parts.Length == 3 &&
-                            parts[1].Equals("human", StringComparison.OrdinalIgnoreCase) &&
-                            parts[2].Equals("female", StringComparison.OrdinalIgnoreCase);
-        return game is MorphFaceGame.LE1 or MorphFaceGame.LE2 or MorphFaceGame.LE3 &&
-               (isHumanMale || isHumanFemale);
-    }
 
     private sealed record FaceTextureComponent(
         string? Component,

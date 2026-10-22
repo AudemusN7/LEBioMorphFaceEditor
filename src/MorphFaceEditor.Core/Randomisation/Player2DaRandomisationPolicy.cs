@@ -3,8 +3,6 @@ using System.Numerics;
 
 namespace MorphFaceEditor.Core.Randomisation;
 
-public enum Player2DaSex { Male, Female }
-
 public enum Player2DaPalette
 {
     SkinTone,
@@ -26,7 +24,6 @@ public sealed record Player2DaValue(Player2DaValueKind Kind, Vector4 Vector, flo
 }
 
 public sealed record Player2DaRandomisationRequest(
-    Player2DaSex Sex,
     IReadOnlySet<Player2DaPalette> Palettes,
     IReadOnlySet<string> AllowedParameters,
     IReadOnlyDictionary<string, Player2DaValue> CurrentValues,
@@ -45,7 +42,7 @@ public sealed record Player2DaRandomisationResult(
 /// </summary>
 public static class Player2DaRandomisationPolicy
 {
-    private sealed record Row(int Key, int Weight, string[] Fields, IReadOnlyDictionary<string, (double Min, double Max)> Ranges);
+    private sealed record Row(int Key, int Weight, string[] Fields, (double Min, double Max)? IrisRange);
 
     private const string SkinData = """
 1|53,43,33|192,184,169|150,151,148|85,73,57|237,189,125|6,6|6,6|10,12
@@ -301,7 +298,7 @@ public static class Player2DaRandomisationPolicy
 
         if (request.Palettes.Contains(Player2DaPalette.IrisColour))
         {
-            var range = GetRange(skin, "iris");
+            var range = skin?.IrisRange;
             var rows = Constrain(ParseIris(), range);
             if (rows.Count > 0)
             {
@@ -377,25 +374,15 @@ public static class Player2DaRandomisationPolicy
         PutScalar(output, request, "HED_Addn_Blowout_Scalar", ParseFloat(row.Fields[3]));
     }
 
-    private static List<Row> ParseSkin() => Parse(SkinData, 9, fields => new Dictionary<string, (double, double)>
-    {
-        ["hair"] = ParseRange(fields[5]), ["facial"] = ParseRange(fields[6]), ["iris"] = ParseRange(fields[7])
-    });
-    private static List<Row> ParseHair() => Parse(HairData, 10, fields => new Dictionary<string, (double, double)> { ["brow"] = ParseRange(fields[7]) });
-    private static List<Row> ParseFacialHair() => Parse(FacialHairData, 5, _ => new Dictionary<string, (double, double)>());
-    private static List<Row> ParseIris() => Parse(IrisData, 2, _ => new Dictionary<string, (double, double)>());
-    private static List<Row> ParseBlush() => Parse(BlushData, 4, _ => new Dictionary<string, (double, double)>());
-    private static List<Row> ParseEye() => Parse(EyeData, 7, _ => new Dictionary<string, (double, double)>());
-    private static List<Row> ParseLips() => Parse(LipsData, 6, _ => new Dictionary<string, (double, double)>());
+    private static List<Row> ParseSkin() => Parse(SkinData, 9, fields => ParseRange(fields[7]));
+    private static List<Row> ParseHair() => Parse(HairData, 10);
+    private static List<Row> ParseFacialHair() => Parse(FacialHairData, 5);
+    private static List<Row> ParseIris() => Parse(IrisData, 2);
+    private static List<Row> ParseBlush() => Parse(BlushData, 4);
+    private static List<Row> ParseEye() => Parse(EyeData, 7);
+    private static List<Row> ParseLips() => Parse(LipsData, 6);
 
-    private static Row? FindCurrentHairRow(IReadOnlyDictionary<string, Player2DaValue> currentValues)
-    {
-        if (!currentValues.TryGetValue("HED_Hair_Colour_Vector", out var current) || current.Kind != Player2DaValueKind.Vector)
-            return null;
-        return ParseHair().FirstOrDefault(row => VectorMatches(current.Vector, Rgb(row.Fields[0])));
-    }
-
-    private static List<Row> Parse(string data, int fieldCount, Func<string[], IReadOnlyDictionary<string, (double, double)>> ranges)
+    private static List<Row> Parse(string data, int fieldCount, Func<string[], (double, double)>? irisRange = null)
     {
         var result = new List<Row>();
         foreach (var line in data.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
@@ -405,7 +392,7 @@ public static class Player2DaRandomisationPolicy
             var key = int.Parse(parts[0], CultureInfo.InvariantCulture);
             var fields = parts[1..];
             var weight = fields.Length > 0 && int.TryParse(fields[^1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedWeight) ? parsedWeight : 1;
-            result.Add(new Row(key, weight, fields, ranges(fields)));
+            result.Add(new Row(key, weight, fields, irisRange?.Invoke(fields)));
         }
         return result;
     }
@@ -415,16 +402,6 @@ public static class Player2DaRandomisationPolicy
         if (range is null || range.Value is (-1, -1)) return rows;
         if (range.Value.Max < 1 || range.Value.Max < range.Value.Min) return [];
         return rows.Where(row => row.Key >= range.Value.Min && row.Key <= range.Value.Max).ToList();
-    }
-
-    private static (double Min, double Max)? GetRange(Row? row, string name) =>
-        row is not null && row.Ranges.TryGetValue(name, out var range) ? range : null;
-
-    private static (double Min, double Max)? IntersectRanges((double Min, double Max)? left, (double Min, double Max)? right)
-    {
-        if (left is null || left.Value == (-1, -1)) return right;
-        if (right is null || right.Value == (-1, -1)) return left;
-        return (Math.Max(left.Value.Min, right.Value.Min), Math.Min(left.Value.Max, right.Value.Max));
     }
 
     private static Row Pick(IReadOnlyList<Row> rows, Random random) => rows.Count == 0

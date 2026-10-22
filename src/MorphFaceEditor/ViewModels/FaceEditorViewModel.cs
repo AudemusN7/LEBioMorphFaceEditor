@@ -1058,13 +1058,8 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         var player = GetPlayerRandomisationContext();
         if (player is not null) return player;
         if (_customMaterialWorkspace is not null) return null;
-        if (!Enum.TryParse<MorphFaceGame>(
-                _profileKey.Split('-')[0], true, out var game)) return null;
-        if (game is not (MorphFaceGame.LE1 or MorphFaceGame.LE2 or MorphFaceGame.LE3)) return null;
-        if (_profileKey.EndsWith("-human-male", StringComparison.OrdinalIgnoreCase))
-            return (game, PlayerHairSex.Male, null);
-        return _profileKey.EndsWith("-human-female", StringComparison.OrdinalIgnoreCase)
-            ? (game, PlayerHairSex.Female, null)
+        return HeadProfileIdentity.TryParseHumanProfile(_profileKey, out var game, out var isMale)
+            ? (game, isMale ? PlayerHairSex.Male : PlayerHairSex.Female, null)
             : null;
     }
 
@@ -1179,7 +1174,6 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             return !input.Textures[name].Equals("None", StringComparison.OrdinalIgnoreCase);
         }
         var result = Player2DaRandomisationPolicy.Roll(new Player2DaRandomisationRequest(
-                context.Sex == PlayerHairSex.Male ? Player2DaSex.Male : Player2DaSex.Female,
                 palettes, allowed, current,
                 HasBrowTexture: HasTexture("HED_Brow"),
                 HasBeardTexture: context.Sex == PlayerHairSex.Male && HasTexture("HED_Addn")),

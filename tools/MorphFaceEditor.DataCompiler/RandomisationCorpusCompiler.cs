@@ -301,14 +301,58 @@ public static class RandomisationCorpusCompiler
             .ThenBy(value => value.Kind)
             .ThenBy(value => value.ParameterName, StringComparer.OrdinalIgnoreCase).ToArray();
         var materialProfiles = BuildMaterialProfiles(stablePools);
-        var corpus = new MorphRandomisationCorpus(MorphRandomisationCorpus.CurrentFormatVersion, stablePools)
+        var corpus = WithHumanHairColours(new MorphRandomisationCorpus(MorphRandomisationCorpus.CurrentFormatVersion, stablePools)
         {
             MaterialProfiles = materialProfiles
-        };
+        });
         return new RandomisationCompilation(
             corpus, stableFaces, stableRows, stableMaterialRows,
             BuildMarkdown(rawFaces, stableFaces, stableRows, stableMaterialRows, stablePools, materialProfiles),
             BuildCsv(stableRows, stableMaterialRows));
+    }
+
+    // The supported hair graphs express the same three colours under different names.
+    // Expand only after donor deduplication and statistics; retain native evidence when it exists.
+    private static readonly string[][] HairColourNames =
+    [
+        ["HED_Hair_Colour_Vector", "Hair_Color"],
+        ["Highlight1Color", "Highlight1Colour_Vector", "HED_Aniso_Colour01_Vector", "Aniso_Color_1"],
+        ["Highlight2Color", "Highlight2Colour_Vector", "HED_Aniso_Colour02_Vector", "Aniso_Color_2"]
+    ];
+
+    private static MorphRandomisationCorpus WithHumanHairColours(MorphRandomisationCorpus corpus)
+    {
+        static bool IsHuman(string profile) =>
+            profile.EndsWith("-human-male", StringComparison.OrdinalIgnoreCase) ||
+            profile.EndsWith("-human-female", StringComparison.OrdinalIgnoreCase);
+
+        static IReadOnlyDictionary<string, T> Project<T>(IReadOnlyDictionary<string, T> source,
+            Func<string, T, T> rename)
+        {
+            var result = new Dictionary<string, T>(source, StringComparer.OrdinalIgnoreCase);
+            foreach (var aliases in HairColourNames)
+            {
+                var origin = aliases.FirstOrDefault(source.ContainsKey);
+                if (origin is null) continue;
+                foreach (var alias in aliases)
+                    result.TryAdd(alias, rename(alias, source[origin]));
+            }
+            return result;
+        }
+
+        return corpus with
+        {
+            MaterialProfiles = corpus.MaterialProfiles.ToDictionary(entry => entry.Key,
+                entry => IsHuman(entry.Key)
+                    ? entry.Value with { Vectors = Project(entry.Value.Vectors,
+                        (name, statistics) => statistics with { Name = name }) }
+                    : entry.Value, StringComparer.OrdinalIgnoreCase),
+            Pools = corpus.Pools.ToDictionary(entry => entry.Key,
+                entry => (IReadOnlyList<MorphRandomisationDonor>)entry.Value.Select(donor =>
+                    IsHuman(donor.SourceProfileKey)
+                        ? donor with { MaterialVectors = Project(donor.MaterialVectors, (_, value) => value) }
+                        : donor).ToArray())
+        };
     }
 
     private static MorphFaceGame SourceGame(RawMorphRandomisationFace face)
@@ -458,6 +502,8 @@ public static class RandomisationCorpusCompiler
                 text.AppendLine($"| {profile.ProfileKey} | {value.Name} | {count} | {Format(value.Minimum)} | {Format(value.P10)} | {Format(value.P90)} | {Format(value.Maximum)} |");
             }
         }
+        text.AppendLine();
+        text.AppendLine("Human hair-colour aliases are projected after donor deduplication and statistics; audit rows retain native parameter names.");
         text.AppendLine();
         text.AppendLine("## Material vector classifications");
         text.AppendLine();

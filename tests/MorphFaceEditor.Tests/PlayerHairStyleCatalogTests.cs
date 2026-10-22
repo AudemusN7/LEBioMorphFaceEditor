@@ -212,45 +212,34 @@ public static class PlayerHairStyleCatalogTests
             .Concat(ScalpTexture(MorphFaceGame.LE1, "HMM_HIR_Mhk_Scalp_Norm"))
             .Concat(ScalpTexture(MorphFaceGame.LE1, "HMM_HIR_Mhk_Scalp_Mask"))
             .ToArray();
-        var mhkPath = textures.Single(value => value.ObjectName == "HMM_HIR_Mhk_Scalp_Diff").InstancedPath;
         var mhk = Mesh("HMM_HIR_Mhk_MDL", TextureCatalogOrigin.BaseGame);
         var mhkMeshIdentity = PlayerHairStyleCatalog.Resolve(MorphFaceGame.LE1, PlayerHairSex.Male,
             textures, [mhk]).Single(value => value.Id == "hmm-mhk").MeshVariants.Single();
-        TestAssert.True(PlayerHairStyleCatalog.IsCurrentScalpPairedStyle(
-                MorphFaceGame.LE1, PlayerHairSex.Male, textures, [mhk], mhkPath, mhkMeshIdentity),
+        TestAssert.True(PlayerHairStyleCatalog.IsCurrentHairMeshPairedStyle(
+                MorphFaceGame.LE1, PlayerHairSex.Male, [mhk], mhkMeshIdentity),
             "Mhk scalp must be considered paired when the matching reviewed mesh is selected.");
-        TestAssert.True(PlayerHairStyleCatalog.IsCurrentScalpPairedStyle(
-                MorphFaceGame.LE1, PlayerHairSex.Male, textures, [mhk], mhkPath,
+        TestAssert.True(PlayerHairStyleCatalog.IsCurrentHairMeshPairedStyle(
+                MorphFaceGame.LE1, PlayerHairSex.Male, [mhk],
                 mhkMeshIdentity with { PackagePath = "patched-copy.pcc", UIndex = 99 }),
             "A copied or patched instance of the reviewed paired mesh was not recognized by its canonical path.");
-        TestAssert.True(!PlayerHairStyleCatalog.IsCurrentScalpPairedStyle(
-                MorphFaceGame.LE1, PlayerHairSex.Male, textures, [mhk], mhkPath, null),
+        TestAssert.True(!PlayerHairStyleCatalog.IsCurrentHairMeshPairedStyle(
+                MorphFaceGame.LE1, PlayerHairSex.Male, [mhk], null),
             "Mhk scalp alone must not be lock-protected when no mesh is selected.");
-        TestAssert.True(!PlayerHairStyleCatalog.IsCurrentScalpPairedStyle(
-                MorphFaceGame.LE1, PlayerHairSex.Male, textures, [mhk], mhkPath,
+        TestAssert.True(!PlayerHairStyleCatalog.IsCurrentHairMeshPairedStyle(
+                MorphFaceGame.LE1, PlayerHairSex.Male, [mhk],
                 new AssetIdentity("other.pcc", "Other.Mohawk.HMM_HIR_Mhk_MDL", 7, "SkeletalMesh")),
             "A same-named mesh from another package must not be treated as the installed paired attachment.");
-        TestAssert.True(PlayerHairStyleCatalog.IsCurrentScalpPairedStyle(
-                MorphFaceGame.LE1, PlayerHairSex.Male, textures, [mhk],
-                "BIOG_HMM_HIR_PRO_R.CrewCut.HMM_HIR_Cru_Diff", mhkMeshIdentity),
-            "A reviewed paired mesh must protect its scalp despite a different native diffuse path.");
-        TestAssert.True(PlayerHairStyleCatalog.IsCurrentScalpPairedStyle(
-                MorphFaceGame.LE1, PlayerHairSex.Male, textures, [mhk],
-                "DLC_MOD_ThirdParty.Hair.HMM_HIR_Mhk_Scalp_Diff", mhkMeshIdentity),
-            "Paired-mesh protection must not depend on the current diffuse resolving in the core texture registry.");
-
         var sarTextures = ScalpFamily(MorphFaceGame.LE1, "HMM", "Sar")
             .Concat(ScalpTexture(MorphFaceGame.LE1, "HMM_HIR_Sar_Tang"))
             .ToArray();
         var ssk01 = Mesh("HMM_HIR_Ssk_01_MDL", TextureCatalogOrigin.BaseGame);
-        var sarPath = sarTextures.Single(value => value.ObjectName == "HMM_HIR_Sar_Diff").InstancedPath;
         var ssk01Identity = PlayerHairStyleCatalog.Resolve(MorphFaceGame.LE1, PlayerHairSex.Male,
             sarTextures, [ssk01]).Single(value => value.Id == "hmm-sar-ssk").MeshVariants.Single();
-        TestAssert.True(PlayerHairStyleCatalog.IsCurrentScalpPairedStyle(
-                MorphFaceGame.LE1, PlayerHairSex.Male, sarTextures, [ssk01], sarPath, ssk01Identity),
+        TestAssert.True(PlayerHairStyleCatalog.IsCurrentHairMeshPairedStyle(
+                MorphFaceGame.LE1, PlayerHairSex.Male, [ssk01], ssk01Identity),
             "Sar is paired under the Ssk slot only when an Ssk mesh is selected.");
-        TestAssert.True(!PlayerHairStyleCatalog.IsCurrentScalpPairedStyle(
-                MorphFaceGame.LE1, PlayerHairSex.Male, sarTextures, [ssk01], sarPath, null),
+        TestAssert.True(!PlayerHairStyleCatalog.IsCurrentHairMeshPairedStyle(
+                MorphFaceGame.LE1, PlayerHairSex.Male, [ssk01], null),
             "The same Sar scalp is independent while no Ssk mesh is selected.");
     }
 

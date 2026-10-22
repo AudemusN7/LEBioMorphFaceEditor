@@ -1,4 +1,3 @@
-using System.IO;
 using MorphFaceEditor.Core.Deformation;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Editing;
@@ -42,21 +41,20 @@ public sealed class DetachedMeshPreviewLoadService
     {
         var detached = _detachedMeshes.Create(imported);
         var warnings = detached.Warnings.ToList();
-        CustomMaterialWorkspace? customMaterials = null;
+        var (customMaterials, usedSlotCount) = CustomMaterialWorkspace.Create(detached.Source);
         CustomMaterialTemplateCatalogResult materialCatalog = CustomMaterialTemplateCatalogResult.Empty;
-        try
+        if (customMaterials is not null)
         {
-            customMaterials = new CustomMaterialWorkspace(detached.Source);
             materialCatalog = _materialCatalog?.Load(game) ?? CustomMaterialTemplateCatalogResult.Empty;
             warnings.AddRange(materialCatalog.Warnings);
             detached = detached with { Mesh = BindPreviewMaterialSlots(detached.Mesh, customMaterials) };
         }
-        catch (InvalidDataException exception) when (
-            exception.Message.Contains("at most", StringComparison.OrdinalIgnoreCase))
+        else
         {
             warnings.Add(Loc.Format(
                 "loc_Services_DetachedMeshPreviewLoad_MaterialSlotsUnassigned",
-                exception.Message));
+                Loc.Format("loc_Services_DetachedMeshPreviewLoad_MaterialSlotLimit",
+                    usedSlotCount, CustomMaterialWorkspace.MaximumSupportedSlots)));
         }
         detached = detached with { Warnings = warnings.Distinct(StringComparer.Ordinal).ToArray() };
         var loaded = new LoadedMorphFace(

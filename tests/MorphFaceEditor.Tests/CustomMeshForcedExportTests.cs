@@ -31,7 +31,7 @@ public static class CustomMeshForcedExportTests
             .FirstOrDefault()
             ?? throw new InvalidOperationException("The LE1 Custom mesh material catalogue has no assignable options.");
         var source = CreateTriangleMesh();
-        var workspace = new CustomMaterialWorkspace(source);
+        var workspace = CustomMaterialWorkspace.Create(source).Workspace!;
         workspace.Assign(0, option);
         var meshWriter = new FlagPreservingMeshWriter();
         var output = Path.Combine(Path.GetTempPath(), $"MFE-CustomForcedExport-{Guid.NewGuid():N}.pcc");

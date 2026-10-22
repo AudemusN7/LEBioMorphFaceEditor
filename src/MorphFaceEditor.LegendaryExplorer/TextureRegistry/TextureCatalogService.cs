@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
 
@@ -21,7 +20,6 @@ public sealed class TextureCatalogService(TextureRegistryStore store)
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly object _cacheLock = new();
     private readonly Dictionary<MorphFaceGame, CachedCatalog> _cache = [];
-    private static readonly ConditionalWeakTable<TextureRegistrySnapshot, TextureRegistrySnapshot> Projections = new();
 
     public async Task<TextureCatalogReadResult> ReadAsync(
         MorphFaceGame game, CancellationToken cancellationToken = default)
@@ -55,7 +53,7 @@ public sealed class TextureCatalogService(TextureRegistryStore store)
         var stored = _store.ReadWithStatus(game);
         var status = stored.Status;
         if (stored.Snapshot is not { } snapshot) return new(status, [], []);
-        snapshot = IncludeIndexedAttachmentMeshes(snapshot);
+        var officialPackages = TextureRegistryIndex.For(snapshot).OfficialPackages;
         foreach (var sidecar in new[] { _store.ReadModsWithStatus(game), _store.ReadManualWithStatus(game) })
         {
             if (sidecar.Status.State == TextureRegistryState.Ready && sidecar.Snapshot is { } additional)
@@ -64,7 +62,7 @@ public sealed class TextureCatalogService(TextureRegistryStore store)
                 status = status with { ErrorMessage = string.Join(" ", new[] { status.ErrorMessage,
                     $"Asset sidecar is {sidecar.Status.State}: {sidecar.Status.ErrorMessage}" }.Where(value => value is not null)) };
         }
-        snapshot = Projections.GetValue(snapshot, ProjectOfficialDefaultEligibility);
+        snapshot = ProjectOfficialDefaultEligibility(snapshot, officialPackages);
         return new(status, snapshot.Candidates, snapshot.MorphFaceTemplates)
         { AttachmentMeshes = snapshot.AttachmentMeshes, OfficialPackagePaths = snapshot.OfficialPackagePaths };
     }
@@ -77,10 +75,9 @@ public sealed class TextureCatalogService(TextureRegistryStore store)
     private RegistryFingerprint GetFingerprint(MorphFaceGame game) => new(
         _store.GetFileFingerprint(game), _store.GetModsFileFingerprint(game), _store.GetManualFileFingerprint(game));
 
-    private static TextureRegistrySnapshot ProjectOfficialDefaultEligibility(TextureRegistrySnapshot snapshot)
+    private static TextureRegistrySnapshot ProjectOfficialDefaultEligibility(
+        TextureRegistrySnapshot snapshot, IReadOnlySet<string> officialPackages)
     {
-        var officialPackages = snapshot.OfficialPackagePaths.Select(Path.GetFullPath)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         return snapshot with
         {
             Candidates = snapshot.Candidates.Select(candidate => candidate with
@@ -96,37 +93,6 @@ public sealed class TextureCatalogService(TextureRegistryStore store)
                     (candidate.EffectiveOccurrence.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc) &&
                     officialPackages.Contains(Path.GetFullPath(candidate.EffectiveOccurrence.PackagePath))
             }).ToArray()
-        };
-    }
-
-    private static TextureRegistrySnapshot IncludeIndexedAttachmentMeshes(TextureRegistrySnapshot snapshot)
-    {
-        var officialPackages = snapshot.OfficialPackagePaths.Select(Path.GetFullPath)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var known = snapshot.AttachmentMeshes.Select(candidate => candidate.CanonicalPath)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var additions = snapshot.Assets.Where(asset =>
-                asset.ClassName.Equals("SkeletalMesh", StringComparison.OrdinalIgnoreCase) &&
-                (asset.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc) &&
-                officialPackages.Contains(Path.GetFullPath(asset.PackagePath)) &&
-                (asset.InstancedPath.Split('.').Last().Contains("HAT", StringComparison.OrdinalIgnoreCase) ||
-                 AttachmentMeshNamePolicy.IsCcHairMesh(asset.InstancedPath)) &&
-                AttachmentMeshNamePolicy.IsInstalledHeadAttachment(asset.InstancedPath) &&
-                !known.Contains(asset.InstancedPath))
-            .GroupBy(asset => asset.InstancedPath, StringComparer.OrdinalIgnoreCase)
-            .Select(group => group.OrderByDescending(asset => asset.MountPriority)
-                .ThenBy(asset => asset.PackagePath, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(asset => asset.ExportUIndex).First())
-            .Select(asset =>
-            {
-                var occurrence = new AttachmentMeshOccurrence(asset.PackagePath, asset.InstancedPath,
-                    asset.ExportUIndex, asset.MountPriority, asset.Origin);
-                return new AttachmentMeshCandidate(asset.InstancedPath, occurrence, [occurrence]);
-            }).ToArray();
-        return additions.Length == 0 ? snapshot : snapshot with
-        {
-            AttachmentMeshes = snapshot.AttachmentMeshes.Concat(additions)
-                .OrderBy(candidate => candidate.CanonicalPath, StringComparer.OrdinalIgnoreCase).ToArray()
         };
     }
 

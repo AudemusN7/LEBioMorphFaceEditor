@@ -441,9 +441,13 @@ public sealed class MorphFacePackageReader : IDisposable
 
     public ResolvedHeadMaterial LoadLe3CcScalpMaterial(bool female)
     {
+        ThrowIfDisposed();
+        LegendaryExplorerCoreRuntime.Initialize();
         var path = Le3CcScalpMaterialPolicy.CanonicalDonorPath(female);
-        var source = InstalledGameAssetResolver.ResolveInstalledReferences(
-            MorphFaceGame.LE3, [path], "MaterialInstanceConstant").GetValueOrDefault(path);
+        var resolved = new InstalledGameAssetResolver().Resolve(
+            MEGame.LE3, path, "MaterialInstanceConstant", _packageCache);
+        var source = resolved is null ? null : new AssetIdentity(
+            resolved.FileRef.FilePath, path, resolved.UIndex, resolved.ClassName);
         if (source is null)
         {
             var seedPath = StandalonePlayerMorphImportService.ResolveInstalledSeed(MorphFaceGame.LE3);

@@ -72,7 +72,7 @@ internal static class HeadHairTextureOwnershipTests
             var sourcePath = Path.Combine(directory, "Source.pcc");
             const string rootPath = "BIOG_MFE_HairOwnership";
             var scalpNames = new[] { "HED_Scalp_Diff", "HED_Scalp_Norm", "HED_Scalp_Spec", "HED_Tang" };
-            var hairNames = new[] { "HAIR_Diff", "hair_addn_diff", "HAIR_Norm", "HAIR_CustomMask", "__PROShort01_Diffuse" };
+            var hairNames = new[] { "HAIR_Diff", "hair_addn_diff", "HAIR_Norm", "HAIR_CustomMask", "__PROShort01_Diffuse", "Diffuseuse" };
             MorphFaceDocument draft;
             using (var source = MEPackageHandler.CreateMemoryEmptyPackage(sourcePath, MEGame.LE1))
             {
@@ -101,6 +101,17 @@ internal static class HeadHairTextureOwnershipTests
                 face.WriteProperty(new ObjectProperty(mesh, "m_oBaseHead"));
                 face.WriteBinary(new BioMorphFace { LODs = [[Vector3.Zero]] });
                 source.Save(sourcePath);
+                var context = new MorphFacePackageContextService();
+                var captured = context.CaptureHead(sourcePath, face.InstancedFullPath);
+                TestAssert.True(captured.MaterialData.Textures.Select(value => value.Name)
+                        .ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(scalpNames),
+                    "Capturing a head promoted mesh-owned hair maps from its BMO.");
+                var ronPath = Path.Combine(directory, "Head.ron");
+                context.ExportRon(sourcePath, face.InstancedFullPath, ronPath);
+                TestAssert.True(TseHeadMorphRon.Read(ronPath).MaterialData.Textures.Select(value => value.Name)
+                        .ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(scalpNames),
+                    "The editor head export promoted mesh-owned hair maps into RON.");
+                File.Delete(ronPath);
                 // The reader must ignore stale BMO hair maps before resolving the live materials.
                 using var cache = new PackageCache();
                 var read = new MorphFaceMaterialReader(cache, new GamePackageReferenceResolver(cache))

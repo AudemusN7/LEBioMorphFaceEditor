@@ -14,14 +14,18 @@ internal static class ExternalSkeletalMeshMaterializer
     internal static ExportEntry Materialize(
         IMEPackage destination,
         AssetIdentity identity,
-        ICollection<string>? warnings = null)
+        ICollection<string>? warnings = null,
+        PackageCache? sourceCache = null,
+        InstalledGameAssetResolver? installedAssets = null)
         => Materialize(
             destination,
             identity.PackagePath,
             identity.InstancedPath,
             "SkeletalMesh",
             identity.UIndex,
-            warnings);
+            warnings,
+            sourceCache,
+            installedAssets);
 
     internal static ExportEntry Materialize(
         IMEPackage destination,
@@ -29,19 +33,23 @@ internal static class ExternalSkeletalMeshMaterializer
         string instancedPath,
         string className,
         int sourceUIndex = 0,
-        ICollection<string>? warnings = null)
+        ICollection<string>? warnings = null,
+        PackageCache? sourceCache = null,
+        InstalledGameAssetResolver? installedAssets = null)
     {
         ArgumentNullException.ThrowIfNull(destination);
         ArgumentException.ThrowIfNullOrWhiteSpace(donorPackagePath);
         ArgumentException.ThrowIfNullOrWhiteSpace(instancedPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(className);
 
-        using var cache = new PackageCache();
+        using var ownedCache = sourceCache is null ? new PackageCache { CacheMaxSize = 64 } : null;
+        var cache = sourceCache ?? ownedCache!;
         LegendaryExplorerCoreRuntime.Initialize();
-        var installed = new InstalledGameAssetResolver().Resolve(destination.Game,
+        var resolver = installedAssets ?? new InstalledGameAssetResolver();
+        var installed = resolver.Resolve(destination.Game,
             new AssetIdentity(donorPackagePath, instancedPath, sourceUIndex, className), cache);
         if (installed is not null)
-            return MaterializeResolved(destination, installed, warnings);
+            return MaterializeResolved(destination, installed, warnings, cache, resolver);
         if (destination.FindExport(instancedPath, className) is { } existing)
             return existing;
         if (!File.Exists(donorPackagePath))
@@ -51,20 +59,24 @@ internal static class ExternalSkeletalMeshMaterializer
                 donorPackagePath);
         }
 
-        using var source = MEPackageHandler.OpenMEPackage(donorPackagePath, forceLoadFromDisk: true);
+        var source = PackageSourceCache.GetPackage(cache, donorPackagePath)
+            ?? throw new FileNotFoundException(
+                $"The selected asset's donor package no longer exists: {donorPackagePath}", donorPackagePath);
         if (source.Game != destination.Game)
         {
             throw new InvalidDataException(
                 $"{className} '{instancedPath}' is from {source.Game}, but the destination is {destination.Game}.");
         }
         var sourceExport = ResolveSourceExport(source, instancedPath, className, sourceUIndex);
-        return MaterializeResolved(destination, sourceExport, warnings);
+        return MaterializeResolved(destination, sourceExport, warnings, cache, resolver);
     }
 
     internal static ExportEntry MaterializeResolved(
         IMEPackage destination,
         ExportEntry sourceExport,
-        ICollection<string>? warnings)
+        ICollection<string>? warnings,
+        PackageCache? sourceCache = null,
+        InstalledGameAssetResolver? installedAssets = null)
     {
         var instancedPath = PccAssetPathPolicy.FromExport(sourceExport);
         var className = sourceExport.ClassName;
@@ -75,7 +87,9 @@ internal static class ExternalSkeletalMeshMaterializer
             textureCatalog: null,
             warnings: warnings,
             applyCorpusMaterialPolicy: true,
-            targetPathOverride: instancedPath);
+            targetPathOverride: instancedPath,
+            installedAssets: installedAssets,
+            sourceCache: sourceCache);
         if (
             !materialized.ClassName.Equals(className, StringComparison.OrdinalIgnoreCase))
         {

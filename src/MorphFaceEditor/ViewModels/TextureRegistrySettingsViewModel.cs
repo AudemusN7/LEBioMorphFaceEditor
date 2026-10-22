@@ -16,6 +16,8 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
     private CancellationTokenSource? _buildCancellation;
     private bool _isBuilding;
     private bool _isRebuildingAll;
+    private bool _isRebuildingMods;
+    private int _statusGeneration;
     private int _packagesProcessed;
     private int _totalPackages;
     private string _progressLabel = Loc.Text("loc_VM_textureRegistry_preparingBuild");
@@ -47,6 +49,7 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
         {
             if (!SetProperty(ref _isBuilding, value)) return;
             OnPropertyChanged(nameof(ActionLabel));
+            OnPropertyChanged(nameof(ModsActionLabel));
             OnPropertyChanged(nameof(RebuildAllActionLabel));
             OnPropertyChanged(nameof(IsRebuildAllActionVisible));
             OnPropertyChanged(nameof(CanClose));
@@ -54,6 +57,7 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
     }
 
     public string ActionLabel => IsBuilding ? Loc.Text("loc_VM_textureRegistry_cancel") : Loc.Text("loc_VM_textureRegistry_rebuild");
+    public string ModsActionLabel => IsBuilding ? Loc.Text("loc_VM_textureRegistry_cancel") : Loc.Text("loc_VM_textureRegistry_rescanMods");
     public string RebuildAllActionLabel => IsBuilding ? Loc.Text("loc_VM_textureRegistry_cancel") : Loc.Text("loc_VM_textureRegistry_rebuildAll");
     public bool IsRebuildAllActionVisible => !IsBuilding || _isRebuildingAll;
     public bool CanClose => !IsBuilding;
@@ -64,15 +68,18 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
 
     public async Task RefreshAsync(CancellationToken cancellationToken = default)
     {
+        if (IsBuilding) return;
+        var generation = _statusGeneration;
         var statuses = await Task.WhenAll(Rows.Select(row =>
             Task.Run(() => (Registry: _store.GetStatus(row.Game),
                 Custom: _store.GetCustomStatus(row.Game)), cancellationToken)));
         cancellationToken.ThrowIfCancellationRequested();
+        if (generation != _statusGeneration) return;
         foreach (var status in statuses)
         {
             var row = Rows.Single(row => row.Game == status.Registry.Game);
             row.Update(status.Registry);
-            row.UpdateManual(status.Custom);
+            row.UpdateCustom(status.Custom);
         }
     }
 
@@ -86,18 +93,25 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
         IReadOnlyList<MorphFaceEditor.Core.Materials.ManualRegistryAsset> selections)
     {
         if (IsBuilding) throw new InvalidOperationException(Loc.Text("loc_VM_textureRegistry_waitForBuild"));
+        _statusGeneration++;
         var status = await Task.Run(() =>
         {
             _manualAssets.Append(game, selections);
             return _store.GetCustomStatus(game);
         });
-        Rows.Single(row => row.Game == game).UpdateManual(status);
+        Rows.Single(row => row.Game == game).UpdateCustom(status);
         _catalogInvalidator?.Invoke(game);
         DatabaseChanged?.Invoke(game);
     }
 
-    public async Task RebuildAsync(MorphFaceGame game, CancellationToken cancellationToken = default,
-        bool keepManualAssets = true)
+    public Task RebuildAsync(MorphFaceGame game, CancellationToken cancellationToken = default,
+        bool keepManualAssets = true) => RebuildGameAsync(game, modsOnly: false, keepManualAssets, cancellationToken);
+
+    public Task RebuildModsAsync(MorphFaceGame game, CancellationToken cancellationToken = default) =>
+        RebuildGameAsync(game, modsOnly: true, keepManualAssets: true, cancellationToken);
+
+    private async Task RebuildGameAsync(MorphFaceGame game, bool modsOnly, bool keepManualAssets,
+        CancellationToken cancellationToken)
     {
         if (IsBuilding)
         {
@@ -105,36 +119,59 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
             return;
         }
 
-        BeginBuild(cancellationToken, rebuildingAll: false, activeGame: game);
         var row = Rows.Single(value => value.Game == game);
-        var previous = row.Status;
-        row.Update(previous with { State = TextureRegistryState.Building, ErrorMessage = null });
+        var previous = modsOnly ? row.CustomStatus ?? _store.GetCustomStatus(game) : row.Status;
+        BeginBuild(cancellationToken, rebuildingAll: false, activeGame: game, modsOnly);
+        UpdateActiveStatus(previous with { State = TextureRegistryState.Building, ErrorMessage = null });
         try
         {
-            var status = await _builder.RebuildAsync(game, CreateProgress(), _buildCancellation!.Token);
-            if (status.State == TextureRegistryState.Ready)
+            var status = modsOnly
+                ? await _builder.RebuildModsAsync(game, CreateProgress(), _buildCancellation!.Token)
+                : await _builder.RebuildAsync(game, CreateProgress(), _buildCancellation!.Token);
+            if (!modsOnly && status.State == TextureRegistryState.Ready)
                 status = await FinishManualRebuildAsync(game, status, keepManualAssets,
                     _buildCancellation.Token);
-            row.Update(status);
-            row.UpdateManual(_store.GetCustomStatus(game));
-            _catalogInvalidator?.Invoke(game);
+            row.Update(modsOnly ? _store.GetStatus(game) : status);
+            row.UpdateCustom(modsOnly && status.State != TextureRegistryState.Ready
+                ? status : _store.GetCustomStatus(game));
+            if (!modsOnly || status.State == TextureRegistryState.Ready)
+                _catalogInvalidator?.Invoke(game);
             if (status.State == TextureRegistryState.Ready)
                 DatabaseChanged?.Invoke(game);
         }
         catch (OperationCanceledException)
         {
-            row.Update(previous with { State = TextureRegistryState.Cancelled, ErrorMessage = null });
+            UpdateActiveStatus(previous with { State = TextureRegistryState.Cancelled, ErrorMessage = null });
         }
         catch (Exception exception)
         {
-            AppLog.Error($"REGISTRY:BUILD-FAILED {game}", exception);
-            row.Update(previous with { State = TextureRegistryState.Failed, ErrorMessage = exception.Message });
+            AppLog.Error($"REGISTRY:BUILD-FAILED {game} MODE:{(modsOnly ? "MODS" : "FULL")}", exception);
+            UpdateActiveStatus(previous with
+            {
+                State = TextureRegistryState.Failed,
+                ErrorMessage = modsOnly ? LocalizedModsBuildError(exception) : exception.Message
+            });
         }
         finally
         {
             EndBuild();
         }
+
+        void UpdateActiveStatus(TextureRegistryStatus status)
+        {
+            if (modsOnly) row.UpdateCustom(status);
+            else row.Update(status);
+        }
     }
+
+    private static string LocalizedModsBuildError(Exception exception) => exception switch
+    {
+        TextureRegistryBuildException { Reason: TextureRegistryBuildFailure.OfficialDatabaseRequired } =>
+            Loc.Text("loc_VM_textureRegistry_officialDatabaseRequired"),
+        TextureRegistryBuildException { Reason: TextureRegistryBuildFailure.OfficialDatabaseChanged } =>
+            Loc.Text("loc_VM_textureRegistry_officialDatabaseChanged"),
+        _ => Loc.Text("loc_VM_textureRegistry_modRescanFailed")
+    };
 
     public async Task RebuildAllAsync(CancellationToken cancellationToken = default,
         bool keepManualAssets = true)
@@ -159,7 +196,7 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
                         status = await FinishManualRebuildAsync(row.Game, status, keepManualAssets,
                             _buildCancellation.Token);
                     row.Update(status);
-                    row.UpdateManual(_store.GetCustomStatus(row.Game));
+                    row.UpdateCustom(_store.GetCustomStatus(row.Game));
                     _catalogInvalidator?.Invoke(row.Game);
                     if (status.State == TextureRegistryState.Ready)
                         DatabaseChanged?.Invoke(row.Game);
@@ -194,6 +231,7 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
             _store.DeleteManual(game);
             return status;
         }
+        if (_store.GetManualStatus(game).State == TextureRegistryState.Outdated) return status;
         var failures = await Task.Run(() => _manualAssets.Revalidate(game, cancellationToken),
             cancellationToken);
         if (failures.Count == 0) return status;
@@ -233,10 +271,13 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
         }
     }
 
-    private void BeginBuild(CancellationToken cancellationToken, bool rebuildingAll, MorphFaceGame? activeGame)
+    private void BeginBuild(CancellationToken cancellationToken, bool rebuildingAll, MorphFaceGame? activeGame,
+        bool modsOnly = false)
     {
+        _statusGeneration++;
         _buildCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _isRebuildingAll = rebuildingAll;
+        _isRebuildingMods = modsOnly;
         PackagesProcessed = TotalPackages = 0;
         ProgressLabel = Loc.Text("loc_VM_textureRegistry_preparingBuild");
         SetBuildActionVisibility(activeGame, building: true);
@@ -249,6 +290,7 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
         _buildCancellation?.Dispose();
         _buildCancellation = null;
         _isRebuildingAll = false;
+        _isRebuildingMods = false;
         SetBuildActionVisibility(activeGame: null, building: false);
         IsBuilding = false;
     }
@@ -256,7 +298,8 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
     private void SetBuildActionVisibility(MorphFaceGame? activeGame, bool building)
     {
         foreach (var row in Rows)
-            row.SetBuildActionVisible(!building || row.Game == activeGame, building);
+            row.SetBuildActionsVisible(!building || row.Game == activeGame && !_isRebuildingMods,
+                !building || row.Game == activeGame && _isRebuildingMods, building);
     }
 
     private IProgress<TextureRegistryBuildProgress> CreateProgress() =>
@@ -271,8 +314,9 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
 public sealed class TextureRegistrySettingsRowViewModel : ObservableObject
 {
     private TextureRegistryStatus _status;
-    private TextureRegistryStatus? _manualStatus;
+    private TextureRegistryStatus? _customStatus;
     private bool _isBuildActionVisible = true;
+    private bool _isRescanModsActionVisible = true;
     private bool _isBuildInProgress;
 
     public TextureRegistrySettingsRowViewModel(MorphFaceGame game, TextureRegistryStatus status)
@@ -284,16 +328,33 @@ public sealed class TextureRegistrySettingsRowViewModel : ObservableObject
     public MorphFaceGame Game { get; }
     public string GameLabel => Game.ToString();
     public TextureRegistryStatus Status => _status;
+    public TextureRegistryStatus? CustomStatus => _customStatus;
     public bool CanAddCustomAsset => _status.State == TextureRegistryState.Ready && !_isBuildInProgress;
     public bool IsAddCustomAssetVisible => !_isBuildInProgress;
-    public string ManualStatusLabel => _manualStatus?.State switch
+    public bool CanRescanMods => _status.State == TextureRegistryState.Ready &&
+                                 (!_isBuildInProgress || IsRescanModsActionVisible);
+    public string CustomStatusLabel => _customStatus?.State switch
     {
+        TextureRegistryState.Ready or TextureRegistryState.Missing when _customStatus.IsStale =>
+            Loc.Text("loc_VM_textureRegistry_customAssetsStale"),
         TextureRegistryState.Ready => Loc.Text("loc_VM_textureRegistry_customAssetsAvailable"),
         TextureRegistryState.Missing => Loc.Text("loc_VM_textureRegistry_noCustomAssets"),
         null => Loc.Text("loc_VM_textureRegistry_checkingCustomAssets"),
-        _ => Loc.Format("loc_VM_textureRegistry_customDatabaseStatus", LocalizedStatus(_manualStatus.State), LocalizedError(_manualStatus))
+        _ => Loc.Format("loc_VM_textureRegistry_customDatabaseStatus", LocalizedStatus(_customStatus.State), LocalizedError(_customStatus))
     };
-    public string? WarningLabel => LocalizedError(_status) ?? LocalizedError(_manualStatus);
+    public string CustomStatusBrushKey => _customStatus?.State switch
+    {
+        TextureRegistryState.Ready => _customStatus.IsStale ? "StatusPending" : "StatusReady",
+        TextureRegistryState.Missing => _customStatus.IsStale ? "StatusPending" : "SecondaryText",
+        TextureRegistryState.Failed => "StatusFailed",
+        _ => "StatusPending"
+    };
+    public string WarningLabel => LocalizedError(_status) ?? LocalizedError(_customStatus) ?? string.Empty;
+    public string RefreshGuidanceLabel => string.Join(Environment.NewLine, new[]
+    {
+        _status.IsStale ? Loc.Text("loc_VM_textureRegistry_refreshOfficialSuggestion") : null,
+        _customStatus?.IsStale == true ? Loc.Text("loc_VM_textureRegistry_refreshCustomSuggestion") : null
+    }.Where(value => !string.IsNullOrEmpty(value)));
 
     private static string? LocalizedError(TextureRegistryStatus? status) =>
         status?.UnsupportedSchemaVersion is { } version
@@ -306,9 +367,15 @@ public sealed class TextureRegistrySettingsRowViewModel : ObservableObject
         get => _isBuildActionVisible;
         private set => SetProperty(ref _isBuildActionVisible, value);
     }
+    public bool IsRescanModsActionVisible
+    {
+        get => _isRescanModsActionVisible;
+        private set => SetProperty(ref _isRescanModsActionVisible, value);
+    }
     public string StatusLabel => _status.State switch
     {
         TextureRegistryState.Checking => Loc.Text("loc_VM_textureRegistry_statusChecking"),
+        TextureRegistryState.Ready when _status.IsStale => Loc.Text("loc_VM_textureRegistry_statusStale"),
         TextureRegistryState.Ready => Loc.Text("loc_VM_textureRegistry_statusReady"),
         TextureRegistryState.Building => Loc.Text("loc_VM_textureRegistry_statusBuilding"),
         TextureRegistryState.Outdated => Loc.Text("loc_VM_textureRegistry_statusOutdated"),
@@ -318,7 +385,7 @@ public sealed class TextureRegistrySettingsRowViewModel : ObservableObject
     };
     public string StatusBrushKey => _status.State switch
     {
-        TextureRegistryState.Ready => "StatusReady",
+        TextureRegistryState.Ready => _status.IsStale ? "StatusPending" : "StatusReady",
         TextureRegistryState.Checking or TextureRegistryState.Building or
             TextureRegistryState.Outdated or TextureRegistryState.Cancelled => "StatusPending",
         _ => "StatusFailed"
@@ -346,21 +413,28 @@ public sealed class TextureRegistrySettingsRowViewModel : ObservableObject
         OnPropertyChanged(nameof(StatusBrushKey));
         OnPropertyChanged(nameof(LastBuiltLabel));
         OnPropertyChanged(nameof(CanAddCustomAsset));
+        OnPropertyChanged(nameof(CanRescanMods));
         OnPropertyChanged(nameof(WarningLabel));
+        OnPropertyChanged(nameof(RefreshGuidanceLabel));
     }
 
-    public void UpdateManual(TextureRegistryStatus status)
+    public void UpdateCustom(TextureRegistryStatus status)
     {
-        _manualStatus = status;
-        OnPropertyChanged(nameof(ManualStatusLabel));
+        _customStatus = status;
+        OnPropertyChanged(nameof(CustomStatus));
+        OnPropertyChanged(nameof(CustomStatusLabel));
+        OnPropertyChanged(nameof(CustomStatusBrushKey));
         OnPropertyChanged(nameof(WarningLabel));
+        OnPropertyChanged(nameof(RefreshGuidanceLabel));
     }
 
-    public void SetBuildActionVisible(bool visible, bool building)
+    public void SetBuildActionsVisible(bool rebuildVisible, bool modsVisible, bool building)
     {
         _isBuildInProgress = building;
-        IsBuildActionVisible = visible;
+        IsBuildActionVisible = rebuildVisible;
+        IsRescanModsActionVisible = modsVisible;
         OnPropertyChanged(nameof(CanAddCustomAsset));
+        OnPropertyChanged(nameof(CanRescanMods));
         OnPropertyChanged(nameof(IsAddCustomAssetVisible));
     }
 }

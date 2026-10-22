@@ -13,8 +13,29 @@ internal static class MaterialInstanceSourcePolicy
         entry.ClassName.Equals("MaterialInstanceTimeVarying", StringComparison.OrdinalIgnoreCase);
 
     internal static bool OverridesOfficialInstance(
-        ExportEntry source, InstalledGameAssetResolver officialAssets, PackageCache cache) =>
-        OverridesOfficialInstance(source, officialAssets, cache, new HashSet<ExportEntry>());
+        ExportEntry source, InstalledGameAssetResolver officialAssets, PackageCache cache)
+    {
+        if (!IsInstance(source)) return false;
+        using var comparisons = new InstanceComparisonCache(cache) { CacheMaxSize = 64 };
+        return OverridesOfficialInstance(source, officialAssets, comparisons, new HashSet<ExportEntry>());
+    }
+
+    // Equality needs complete instance properties and reference identities, not
+    // the surrounding PCC's mesh/texture data. Keep these partial readers out of
+    // the caller's materialisation cache and alive through parent/diagnostic checks.
+    private sealed class InstanceComparisonCache(PackageCache sourceCache) : PackageCache
+    {
+        public override IMEPackage GetCachedPackage(string packagePath, bool openIfNotInCache = true,
+            Func<string, IMEPackage>? openPackageMethod = null)
+        {
+            PackageSourceCache.Verify(sourceCache, packagePath);
+            // Borrow without inserting: disposing this cache must not release
+            // a full reader still owned by the save/export operation.
+            return sourceCache.GetCachedPackage(packagePath, openIfNotInCache: false)
+                ?? base.GetCachedPackage(packagePath, openIfNotInCache,
+                    static path => MEPackageHandler.UnsafePartialLoad(path, IsInstance));
+        }
+    }
 
     private static bool OverridesOfficialInstance(
         ExportEntry source, InstalledGameAssetResolver officialAssets, PackageCache cache,

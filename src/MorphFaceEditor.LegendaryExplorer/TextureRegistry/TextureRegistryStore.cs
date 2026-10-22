@@ -23,10 +23,21 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
     private static readonly Dictionary<string, LinkedListNode<CachedRead>> ReadCache = new(StringComparer.OrdinalIgnoreCase);
     private static readonly LinkedList<CachedRead> ReadCacheLru = new();
 
-    public TextureRegistryStatus GetStatus(MorphFaceGame game) => ReadWithStatus(game).Status;
+    public TextureRegistryStatus GetStatus(MorphFaceGame game)
+    {
+        var result = ReadWithStatus(game);
+        return WithFreshness(result.Status, result.Snapshot);
+    }
+    public TextureRegistryStatus GetModsStatus(MorphFaceGame game)
+    {
+        var result = ReadModsWithStatus(game);
+        return WithFreshness(result.Status, result.Snapshot);
+    }
+
     public TextureRegistryStatus GetManualStatus(MorphFaceGame game)
     {
-        var status = ReadManualWithStatus(game).Status;
+        var result = ReadManualWithStatus(game);
+        var status = WithFreshness(result.Status, result.Snapshot);
         return status.State == TextureRegistryState.Ready && status.ErrorMessage is not null
             ? status with { ErrorMessage = $"{status.ErrorMessage} {GetManualReportPath(game)}" }
             : status;
@@ -38,16 +49,40 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
         var manual = ReadManualWithStatus(game);
         var mods = ReadModsWithStatus(game);
         var manualStatus = GetManualStatus(game);
-        foreach (var status in new[] { manualStatus, mods.Status })
+        var modsStatus = WithFreshness(mods.Status, mods.Snapshot);
+        var isStale = manualStatus.IsStale || modsStatus.IsStale;
+        foreach (var status in new[] { manualStatus, modsStatus })
             if (status.State is not (TextureRegistryState.Ready or TextureRegistryState.Missing))
-                return status;
+                return status with { IsStale = isStale };
 
         foreach (var sidecar in new[] { manual, mods })
             if (sidecar.Snapshot is { } snapshot &&
                 snapshot.Candidates.Count + snapshot.AttachmentMeshes.Count + snapshot.ManualAssets.Count > 0)
-                return sidecar == manual ? manualStatus : sidecar.Status;
+                return (sidecar == manual ? manualStatus : modsStatus) with { IsStale = isStale };
 
-        return manualStatus with { State = TextureRegistryState.Missing };
+        return manualStatus with { State = TextureRegistryState.Missing, IsStale = isStale };
+    }
+
+    private static TextureRegistryStatus WithFreshness(
+        TextureRegistryStatus status, TextureRegistrySnapshot? snapshot) =>
+        snapshot is null ? status : status with { IsStale = IsSnapshotStale(snapshot) };
+
+    private static bool IsSnapshotStale(TextureRegistrySnapshot snapshot)
+    {
+        if (snapshot.MountedPackagePaths.Count == 0 && snapshot.MountedPackages.Count == 0) return false;
+        var fingerprints = snapshot.MountedPackages.GroupBy(
+                value => Path.GetFullPath(value.PackagePath), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+        var representedPaths = snapshot.MountedPackagePaths.Count > 0
+            ? snapshot.MountedPackagePaths
+            : snapshot.MountedPackages.Select(value => value.PackagePath).ToArray();
+        foreach (var path in representedPaths)
+        {
+            var fullPath = Path.GetFullPath(path);
+            if (!File.Exists(fullPath) || !fingerprints.TryGetValue(fullPath, out var fingerprint) ||
+                !fingerprint.IsCurrent()) return true;
+        }
+        return false;
     }
 
     internal TextureRegistryReadResult ReadWithStatus(MorphFaceGame game) =>
@@ -128,7 +163,7 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
                 }
             }
 
-            var snapshot = CompactRuntimeAssetIndex(ReadFile(path, game));
+            var snapshot = ReadFile(path, game);
             var missing = snapshot.ManualAssets.Count(asset => asset.IsMissing);
             return new TextureRegistryReadResult(
                 new TextureRegistryStatus(game, TextureRegistryState.Ready, path,
@@ -146,26 +181,6 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
                     null, exception.Message),
                 null);
         }
-    }
-
-    private static TextureRegistrySnapshot CompactRuntimeAssetIndex(TextureRegistrySnapshot snapshot)
-    {
-        var officialPackages = snapshot.OfficialPackagePaths.Select(Path.GetFullPath)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var official = snapshot.Assets.Where(asset =>
-                (asset.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc) &&
-                officialPackages.Contains(Path.GetFullPath(asset.PackagePath)))
-            .GroupBy(asset => $"{asset.ClassName}|{asset.InstancedPath}", StringComparer.OrdinalIgnoreCase)
-            .Select(group => group.OrderByDescending(asset => asset.MountPriority)
-                .ThenBy(asset => asset.PackagePath, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(asset => asset.ExportUIndex).First());
-        var retainedOther = snapshot.Assets.Where(asset =>
-            asset.Origin is not (TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc));
-        var assets = official.Concat(retainedOther)
-            .DistinctBy(asset => $"{asset.ClassName}|{asset.InstancedPath}|{asset.PackagePath}|{asset.ExportUIndex}",
-                StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        return assets.Length == snapshot.Assets.Count ? snapshot : snapshot with { Assets = assets };
     }
 
     public TextureRegistrySnapshot Read(MorphFaceGame game) => ReadFile(paths.GetPath(game), game);
@@ -295,6 +310,15 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
         }
     }
 
+    internal void WriteModsAtomic(
+        TextureRegistrySnapshot mods,
+        CancellationToken cancellationToken = default,
+        Action? beforeVerification = null)
+    {
+        ArgumentNullException.ThrowIfNull(mods);
+        WriteAtomic(mods, paths.GetModsPath(mods.Game), cancellationToken, beforeVerification);
+    }
+
     public void WriteAtomic(
         TextureRegistrySnapshot snapshot,
         CancellationToken cancellationToken = default) =>
@@ -328,18 +352,7 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
             WriteTemporary(snapshot, temporaryPath);
 
             beforeVerification?.Invoke();
-            var verified = ReadFile(temporaryPath, game);
-            if (verified.SchemaVersion != snapshot.SchemaVersion ||
-                verified.Game != snapshot.Game ||
-                verified.InstalledPackageCount != snapshot.InstalledPackageCount ||
-                verified.Candidates.Count != snapshot.Candidates.Count ||
-                verified.Assets.Count != snapshot.Assets.Count ||
-                verified.AttachmentMeshes.Count != snapshot.AttachmentMeshes.Count ||
-                verified.ManualAssets.Count != snapshot.ManualAssets.Count ||
-                verified.MorphFaceTemplates.Count != snapshot.MorphFaceTemplates.Count)
-            {
-                throw new InvalidDataException("The written texture registry failed verification.");
-            }
+            VerifyTemporary(snapshot, temporaryPath, game);
 
             cancellationToken.ThrowIfCancellationRequested();
             File.Move(temporaryPath, targetPath, overwrite: true);

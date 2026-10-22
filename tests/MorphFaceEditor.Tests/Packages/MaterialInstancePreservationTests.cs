@@ -51,22 +51,69 @@ internal static class MaterialInstancePreservationTests
         official.Save(official.FilePath);
         var authoredData = mic.Data.ToArray();
         var officialData = stock.Data.ToArray();
-        using var cache = new PackageCache();
+        var authoredFile = File.ReadAllBytes(authored.FilePath);
+        var originalOfficialFile = File.ReadAllBytes(official.FilePath);
+        using var cache = new PackageCache { CacheMaxSize = 8 };
         TestAssert.True(!MaterialInstanceSourcePolicy.OverridesOfficialInstance(mic, resolver, cache),
             "Reference indices or cache GUIDs made an unchanged stock MIC look edited.");
         TestAssert.True(mic.Data.SequenceEqual(authoredData) && stock.Data.SequenceEqual(officialData),
             "Donor comparison changed the original MIC data.");
-        using var destination = MEPackageHandler.CreateMemoryEmptyPackage("MFE-UnchangedMic.pcc", MEGame.LE1);
-        _ = PccPackageWorkflow.ImportDependencyGraph(destination,
-            authored.FindExport(MeshPath, "SkeletalMesh")!, null, null,
-            targetPathOverride: MeshPath, installedAssets: resolver);
-        TestAssert.True(destination.FindExport(MicPath, "MaterialInstanceConstant") is not null,
-            "An unchanged stock instance unnecessarily received a new export name.");
+        using (var destination = MEPackageHandler.CreateMemoryEmptyPackage(outputPath, MEGame.LE1))
+        {
+            _ = PccPackageWorkflow.ImportDependencyGraph(destination,
+                authored.FindExport(MeshPath, "SkeletalMesh")!, null, null,
+                targetPathOverride: MeshPath, installedAssets: resolver, sourceCache: cache);
+            TestAssert.True(destination.FindExport(MicPath, "MaterialInstanceConstant") is not null,
+                "An unchanged stock instance unnecessarily received a new export name.");
+            destination.Save(outputPath);
+        }
+        TestAssert.True(originalOfficialFile.SequenceEqual(File.ReadAllBytes(official.FilePath)) &&
+                        authoredFile.SequenceEqual(File.ReadAllBytes(authored.FilePath)),
+            "The first graph import changed a donor file.");
         var scalars = mic.GetProperty<ArrayProperty<StructProperty>>("ScalarParameterValues")!;
         scalars[0].GetProp<FloatProperty>("ParameterValue")!.Value = 0.75f;
         mic.WriteProperty(scalars);
         TestAssert.True(MaterialInstanceSourcePolicy.OverridesOfficialInstance(mic, resolver, cache),
             "Ignoring parameter GUIDs also hid a real scalar parameter edit.");
+        scalars[0].GetProp<FloatProperty>("ParameterValue")!.Value = 0.25f;
+        mic.WriteProperty(scalars);
+
+        var previousStamp = File.GetLastWriteTimeUtc(official.FilePath);
+        using (var changedOfficial = MEPackageHandler.OpenMEPackage(official.FilePath, forceLoadFromDisk: true))
+        {
+            var changedMic = changedOfficial.FindExport(MicPath, "MaterialInstanceConstant")!;
+            var changedScalars = changedMic.GetProperty<ArrayProperty<StructProperty>>("ScalarParameterValues")!;
+            changedScalars[0].GetProp<FloatProperty>("ParameterValue")!.Value = 0.5f;
+            changedMic.WriteProperty(changedScalars);
+            changedOfficial.Save(official.FilePath);
+        }
+        File.SetLastWriteTimeUtc(official.FilePath, previousStamp.AddSeconds(2));
+        var changedOfficialFile = File.ReadAllBytes(official.FilePath);
+        var secondPath = Path.Combine(Path.GetDirectoryName(outputPath)!, "ChangedOfficialOutput.pcc");
+        using (var second = MEPackageHandler.CreateMemoryEmptyPackage(secondPath, MEGame.LE1))
+        {
+            var mesh = PccPackageWorkflow.ImportDependencyGraph(second,
+                authored.FindExport(MeshPath, "SkeletalMesh")!, null, null,
+                targetPathOverride: MeshPath, installedAssets: resolver, sourceCache: cache);
+            var copiedMic = second.GetUExport(mesh.GetBinaryData<SkeletalMesh>().Materials.Single());
+            TestAssert.Equal(MicPath + "_MFE", copiedMic.InstancedFullPath);
+            TestAssert.Equal(0.25f, ParameterScalar(copiedMic));
+            second.Save(secondPath);
+        }
+        using var firstOutput = MEPackageHandler.OpenMEPackage(outputPath, forceLoadFromDisk: true);
+        using var secondOutput = MEPackageHandler.OpenMEPackage(secondPath, forceLoadFromDisk: true);
+        PackageIntegrity.Verify(firstOutput);
+        PackageIntegrity.Verify(secondOutput);
+        var firstMic = firstOutput.FindExport(MicPath, "MaterialInstanceConstant")!;
+        var secondMesh = secondOutput.FindExport(MeshPath, "SkeletalMesh")!;
+        var secondMic = secondOutput.GetUExport(secondMesh.GetBinaryData<SkeletalMesh>().Materials.Single());
+        TestAssert.Equal(0.25f, ParameterScalar(firstMic));
+        TestAssert.Equal(MicPath + "_MFE", secondMic.InstancedFullPath);
+        TestAssert.Equal(0.25f, ParameterScalar(secondMic));
+        TestAssert.True(changedOfficialFile.SequenceEqual(File.ReadAllBytes(official.FilePath)) &&
+                        authoredFile.SequenceEqual(File.ReadAllBytes(authored.FilePath)) &&
+                        mic.Data.SequenceEqual(authoredData),
+            "Importing after a stock MIC change wrote a donor or changed the authored MIC.");
     });
 
     private static void WriteDynamicParameters(ExportEntry mic, int guidValue)
@@ -98,6 +145,9 @@ internal static class MaterialInstancePreservationTests
 
     private static void RoundTrip(bool preserveStructure) => WithDonors((official, authored, resolver, output) =>
     {
+        using var cache = new PackageCache { CacheMaxSize = 8 };
+        var officialFile = File.ReadAllBytes(official.FilePath);
+        var authoredFile = File.ReadAllBytes(authored.FilePath);
         using (var destination = MEPackageHandler.CreateMemoryEmptyPackage(output, MEGame.LE1))
         {
             // A pre-existing name must survive; only the new MIC leaf is renamed.
@@ -107,9 +157,10 @@ internal static class MaterialInstancePreservationTests
             occupied.WriteProperty(new FloatProperty(99f, "MFE_CustomScalar"));
             var sourceMesh = authored.FindExport(MeshPath, "SkeletalMesh")!;
             var mesh = preserveStructure
-                ? PccPackageWorkflow.ImportRootPreservingStructure(destination, sourceMesh, installedAssets: resolver)
+                ? PccPackageWorkflow.ImportRootPreservingStructure(destination, sourceMesh,
+                    installedAssets: resolver, sourceCache: cache)
                 : PccPackageWorkflow.ImportDependencyGraph(destination, sourceMesh, null, null,
-                    targetPathOverride: MeshPath, installedAssets: resolver);
+                    targetPathOverride: MeshPath, installedAssets: resolver, sourceCache: cache);
             var copiedMic = destination.GetUExport(mesh.GetBinaryData<SkeletalMesh>().Materials.Single());
             TestAssert.Equal(MicPath + "_MFE2", copiedMic.InstancedFullPath);
             TestAssert.Equal(0.75f, Scalar(copiedMic));
@@ -127,15 +178,26 @@ internal static class MaterialInstancePreservationTests
         TestAssert.True(reopened.FindExport(MicPath, "MaterialInstanceConstant") is null,
             "The authored edited instance was also copied at the stock name.");
         TestAssert.Equal(TexturePath, savedMic.GetProperty<ObjectProperty>("MFE_CustomTexture")!.ResolveToEntry(reopened)!.InstancedFullPath);
-        using var second = MEPackageHandler.CreateMemoryEmptyPackage("MFE-MicSecondExport.pcc", MEGame.LE1);
-        var secondMesh = PccPackageWorkflow.ImportDependencyGraph(second, savedMesh, null, null,
-            targetPathOverride: MeshPath, installedAssets: resolver);
+        using var second = MEPackageHandler.CreateMemoryEmptyPackage(
+            Path.Combine(Path.GetDirectoryName(output)!, "SecondOutput.pcc"), MEGame.LE1);
+        var secondMesh = preserveStructure
+            ? PccPackageWorkflow.ImportRootPreservingStructure(second, savedMesh,
+                installedAssets: resolver, sourceCache: cache)
+            : PccPackageWorkflow.ImportDependencyGraph(second, savedMesh, null, null,
+                targetPathOverride: MeshPath, installedAssets: resolver, sourceCache: cache);
         var secondMic = second.GetUExport(secondMesh.GetBinaryData<SkeletalMesh>().Materials.Single());
         TestAssert.Equal(MicPath + "_MFE2", secondMic.InstancedFullPath);
         TestAssert.Equal(0.75f, Scalar(secondMic));
+        TestAssert.Equal(BasePath, secondMic.GetProperty<ObjectProperty>("Parent")!.ResolveToEntry(second)!.InstancedFullPath);
+        TestAssert.Equal(TexturePath, secondMic.GetProperty<ObjectProperty>("MFE_CustomTexture")!.ResolveToEntry(second)!.InstancedFullPath);
+        TestAssert.True(officialFile.SequenceEqual(File.ReadAllBytes(official.FilePath)) &&
+                        authoredFile.SequenceEqual(File.ReadAllBytes(authored.FilePath)),
+            "Independent graph imports changed the caller's donor files.");
     });
 
     private static float Scalar(ExportEntry mic) => mic.GetProperty<FloatProperty>("MFE_CustomScalar")!.Value;
+    private static float ParameterScalar(ExportEntry mic) => mic.GetProperty<ArrayProperty<StructProperty>>(
+        "ScalarParameterValues")!.Single().GetProp<FloatProperty>("ParameterValue")!.Value;
 
     private static void OfficialVariantsKeepDonor() => WithDonors((official, authored, _, output) =>
     {
@@ -168,7 +230,11 @@ internal static class MaterialInstancePreservationTests
                     package.FindExport(path, "MaterialInstanceConstant")!.UIndex, 0, TextureCatalogOrigin.BaseGame))).ToArray(),
             OfficialPackagePaths = [official.FilePath, variant.FilePath]
         };
-        var resolver = new InstalledGameAssetResolver(_ => new Dictionary<string, string>(), _ => snapshot);
+        var store = new TextureRegistryStore(new TextureRegistryPaths(
+            Path.Combine(Path.GetDirectoryName(output)!, "registries")));
+        store.WriteAtomic(snapshot with { MountedPackagePaths = snapshot.OfficialPackagePaths });
+        var persisted = store.ReadForLookup(MorphFaceGame.LE1);
+        var resolver = new InstalledGameAssetResolver(_ => new Dictionary<string, string>(), _ => persisted);
         using var cache = new PackageCache();
         var records = new List<MaterialInstanceComparisonDiagnostic>();
         using (MaterialInstanceSourcePolicy.ObserveComparisons(records.Add))

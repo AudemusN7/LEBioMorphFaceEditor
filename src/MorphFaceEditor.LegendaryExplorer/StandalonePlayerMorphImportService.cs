@@ -199,14 +199,20 @@ public sealed class StandalonePlayerMorphImportService
             : profile.FemaleTemplate;
     }
 
-    public static string ResolveInstalledSeed(MorphFaceGame game)
+    public static string ResolveInstalledSeed(MorphFaceGame game) => ResolveInstalledSeed(game, null);
+
+    internal static string ResolveInstalledSeed(
+        MorphFaceGame game, IReadOnlyDictionary<string, string>? packageFiles)
     {
         if (!Profiles.TryGetValue(game, out var profile))
         {
             throw new InvalidDataException($"Standalone player import does not support '{game}'.");
         }
 
-        return ResolveInstalledSeed(game, profile.Seed);
+        LegendaryExplorerCoreRuntime.Initialize();
+        return (packageFiles ?? InstalledGameAssetResolver.GetOfficialPackages(game))
+            .TryGetValue(profile.Seed, out var path)
+            ? path : throw new FileNotFoundException($"The official {game} package '{profile.Seed}' was not found.", profile.Seed);
     }
 
     private static void ValidateAssetCatalog(
@@ -220,9 +226,4 @@ public sealed class StandalonePlayerMorphImportService
         }
     }
 
-    private static string ResolveInstalledSeed(MorphFaceGame game, string fileName)
-    {
-        LegendaryExplorerCoreRuntime.Initialize();
-        return InstalledGameAssetResolver.ResolvePackage(game, fileName);
-    }
 }

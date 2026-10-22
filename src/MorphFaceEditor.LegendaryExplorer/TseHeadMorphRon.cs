@@ -98,8 +98,7 @@ public static class TseHeadMorphRon
         WriteScalarMap(builder, "scalar_parameters", morph.MaterialData.Scalars,
             value => value.Name, value => value.Value);
         WriteColourMap(builder, "vector_parameters", morph.MaterialData.Vectors);
-        WriteStringMap(builder, "texture_parameters", morph.MaterialData.Textures
-                .Where(value => !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(value.Name)).ToArray(),
+        WriteStringMap(builder, "texture_parameters", morph.MaterialData.Textures,
             value => value.Name,
             value => value.TextureReference?.InstancedPath ?? "None");
         builder.AppendLine(")");

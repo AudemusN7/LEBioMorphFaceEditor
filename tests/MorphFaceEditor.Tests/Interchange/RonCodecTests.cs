@@ -16,7 +16,7 @@ internal static class RonCodecTests
     [
         new("RON provenance metadata round-trips and rejects partial headers", ProvenanceMetadata),
         new("RON shared syntax retains distinct head and material schemas", SharedSyntaxSchemas),
-        new("RON export omits attachment-only Diffuseuse", RonOmitsAttachmentTexture),
+        new("RON raw head payload preserves native hair texture values and explicit null rows", RonPreservesNativeTextures),
         new("RON texture catalogue canonicalises occurrence package paths", CanonicalTextureCataloguePaths)
     ];
 
@@ -128,22 +128,27 @@ internal static class RonCodecTests
         finally { if (File.Exists(path)) File.Delete(path); }
     }
 
-    private static void RonOmitsAttachmentTexture()
+    private static void RonPreservesNativeTextures()
     {
         var temporaryPath = Path.Combine(Path.GetTempPath(), $"MFE-RonAttachment-{Guid.NewGuid():N}.ron");
         try
         {
             var source = new HeadMorphPayload("None", [], new MorphFaceMorphData([], [], [[Vector3.Zero]]),
                 new MorphFaceMaterialData([], [],
-                    [new TextureMaterialOverride("Diffuseuse", null),
-                     new TextureMaterialOverride("HED_Diff", null)]));
+                    [new TextureMaterialOverride("HAIR_Diff", TestFixtures.CreateIdentity("BIOG_Test.NativeHair_Diff", "Texture2D")),
+                     new TextureMaterialOverride("HAIR_Norm", null),
+                     new TextureMaterialOverride("HAIR_Mask", null),
+                     new TextureMaterialOverride("HAIR_Tang", null),
+                     new TextureMaterialOverride("HAIR_SpecShift", null),
+                     new TextureMaterialOverride("HAIR_SpecShift2", null),
+                     new TextureMaterialOverride("Diffuseuse", null),
+                     new TextureMaterialOverride("HED_Scalp_Diff", TestFixtures.CreateIdentity("BIOG_Test.Scalp_Diff", "Texture2D"))]));
             TseHeadMorphRon.Write(temporaryPath, source);
             var roundTrip = TseHeadMorphRon.Read(temporaryPath);
-            TestAssert.True(roundTrip.MaterialData.Textures.All(value =>
-                    !value.Name.Equals("Diffuseuse", StringComparison.OrdinalIgnoreCase)),
-                "Attachment Diffuseuse leaked into a full head RON export.");
-            TestAssert.True(roundTrip.MaterialData.Textures.Any(value => value.Name == "HED_Diff"),
-                "The head texture was removed with the attachment texture.");
+            TestAssert.Equal(source.MaterialData.Textures.Count, roundTrip.MaterialData.Textures.Count);
+            TestAssert.True(source.MaterialData.Textures.Select(value => (value.Name, value.TextureReference?.InstancedPath))
+                    .SequenceEqual(roundTrip.MaterialData.Textures.Select(value => (value.Name, value.TextureReference?.InstancedPath))),
+                "Serializing a native head removed or changed an authored texture row, including explicit nulls.");
         }
         finally
         {

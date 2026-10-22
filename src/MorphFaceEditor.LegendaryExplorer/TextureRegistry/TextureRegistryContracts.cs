@@ -13,6 +13,18 @@ public enum TextureRegistryState
     Failed
 }
 
+public enum TextureRegistryBuildFailure
+{
+    OfficialDatabaseRequired,
+    OfficialDatabaseChanged
+}
+
+public sealed class TextureRegistryBuildException(
+    TextureRegistryBuildFailure reason, string message) : IOException(message)
+{
+    public TextureRegistryBuildFailure Reason { get; } = reason;
+}
+
 /// <summary>Detached registry metadata suitable for the settings window.</summary>
 public sealed record TextureRegistryStatus(
     MorphFaceGame Game,
@@ -25,4 +37,5 @@ public sealed record TextureRegistryStatus(
 {
     public int? UnsupportedSchemaVersion { get; init; }
     public bool IsDevelopmentSchema { get; init; }
+    public bool IsStale { get; init; }
 }

@@ -1213,16 +1213,16 @@ public sealed class MorphFacePackageContextService
             throw new UnresolvedRonAttachmentException(
                 $"RON SkeletalMesh '{instancedPath}' is not present in the standalone seed and does not have exactly one exact installed-game donor candidate.");
         }
-        using (var cache = new PackageCache { CacheMaxSize = 8 })
+        using var cache = new PackageCache { CacheMaxSize = 64 };
+        var installedAssets = new InstalledGameAssetResolver();
+        var donor = PackageSourceCache.GetPackage(cache, candidates[0].PackagePath);
+        var source = donor?.GetEntry(candidates[0].UIndex) ?? donor?.FindEntry(instancedPath, "SkeletalMesh");
+        var mesh = new GamePackageReferenceResolver(cache, installedAssets).Resolve(source);
+        if (mesh is not null && !MorphFaceAttachmentTransferEngine.HasSupportedMaterials(
+                mesh.FileRef, mesh, out var unsupported, cache, installedAssets))
         {
-            var donor = cache.GetCachedPackage(candidates[0].PackagePath);
-            var source = donor?.GetEntry(candidates[0].UIndex) ?? donor?.FindEntry(instancedPath, "SkeletalMesh");
-            var mesh = new GamePackageReferenceResolver(cache).Resolve(source);
-            if (mesh is not null && !MorphFaceAttachmentTransferEngine.HasSupportedMaterials(mesh.FileRef, mesh, out var unsupported))
-            {
-                warnings.Add($"RON attachment '{instancedPath}' was omitted because {unsupported} is outside MFE's supported canonical materials.");
-                return null;
-            }
+            warnings.Add($"RON attachment '{instancedPath}' was omitted because {unsupported} is outside MFE's supported canonical materials.");
+            return null;
         }
         if (existingImport is not null)
         {
@@ -1230,7 +1230,8 @@ public sealed class MorphFacePackageContextService
                 $"RON SkeletalMesh '{instancedPath}' has an import placeholder in the destination; " +
                 "its exact donor cannot be materialised without replacing an import ancestry.");
         }
-        return ExternalSkeletalMeshMaterializer.Materialize(package, candidates[0]);
+        return ExternalSkeletalMeshMaterializer.Materialize(
+            package, candidates[0], warnings, cache, installedAssets);
     }
 
     private static void WriteRonMeshReferences(

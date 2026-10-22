@@ -28,9 +28,11 @@ public static class PackageAssetInspector
     {
         LegendaryExplorerCoreRuntime.Initialize();
         var fullPath = RequireFile(packagePath);
-
-        using var package = MEPackageHandler.OpenMEPackage(fullPath, forceLoadFromDisk: true);
-        return Inventory(package, classNames);
+        var classes = classNames?.ToArray();
+        var needsMeshes = classes?.Contains("SkeletalMesh", StringComparer.OrdinalIgnoreCase) == true;
+        using var package = MEPackageHandler.UnsafePartialLoad(fullPath,
+            export => needsMeshes && NeedsMeshData(export));
+        return Inventory(package, classes);
     }
 
     /// <summary>Reads both workspace catalogues from one fresh PCC; retains no open package or cache.</summary>
@@ -38,7 +40,9 @@ public static class PackageAssetInspector
     {
         LegendaryExplorerCoreRuntime.Initialize();
         var fullPath = RequireFile(packagePath);
-        using var package = MEPackageHandler.OpenMEPackage(fullPath, forceLoadFromDisk: true);
+        using var package = MEPackageHandler.UnsafePartialLoad(fullPath,
+            export => NeedsMeshData(export) || !export.IsDefaultObject &&
+                export.ClassName.Equals("BioMorphFace", StringComparison.OrdinalIgnoreCase));
         var faces = MorphFaceReferenceInspector.Inspect(package, out var game);
         return new(game, faces, Inventory(package, ["Texture2D", "SkeletalMesh"]));
     }
@@ -87,6 +91,9 @@ public static class PackageAssetInspector
         }
     }
 
+    private static bool NeedsMeshData(ExportEntry export) => !export.IsDefaultObject &&
+        export.ClassName.Equals("SkeletalMesh", StringComparison.OrdinalIgnoreCase);
+
     public static AssetDiscoveryResult Discover(
         string rootPath,
         IReadOnlyCollection<string> classNames,
@@ -122,7 +129,7 @@ public static class PackageAssetInspector
             progress?.Invoke(index + 1, packagePaths.Length, path);
             try
             {
-                using var package = MEPackageHandler.OpenMEPackage(path, forceLoadFromDisk: true);
+                using var package = MEPackageHandler.UnsafePartialLoad(path, _ => false);
                 var entries = package.Exports
                     .Where(export => classSet.Contains(export.ClassName) && !export.IsDefaultObject)
                     .Select(export => new PackageEntrySummary(

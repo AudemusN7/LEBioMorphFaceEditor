@@ -17,7 +17,9 @@ internal static class ScalpMaterialGraphMaterializer
         ExportEntry face,
         AssetIdentity baseHeadIdentity,
         ScalpMaterialSelection selection,
-        ICollection<string> warnings)
+        ICollection<string> warnings,
+        PackageCache cache,
+        InstalledGameAssetResolver installedAssets)
     {
         ArgumentNullException.ThrowIfNull(package);
         ArgumentNullException.ThrowIfNull(face);
@@ -27,7 +29,6 @@ internal static class ScalpMaterialGraphMaterializer
         if (package.Game != MEGame.LE3)
             throw new InvalidDataException("CC scalp material selection is supported only in LE3 packages.");
 
-        using var cache = new PackageCache();
         var donor = InstalledGameAssetResolver.RequireExact(
             cache,
             selection.DonorMaterial.PackagePath,
@@ -42,13 +43,13 @@ internal static class ScalpMaterialGraphMaterializer
         var donorPath = PccAssetPathPolicy.FromExport(donor);
         if (!Le3CcScalpMaterialPolicy.IsCanonicalDonorPath(donorPath))
             throw UserFacingMessage.CreateError("loc_Shell_Error_CcScalp_DonorUnsupported", $"'{donorPath}' is not one of the reviewed LE3 Player CC scalp material instances.", donorPath);
-        EnsureCanonicalCcScalpGraph(donor, cache);
+        EnsureCanonicalCcScalpGraph(donor, cache, installedAssets);
 
         var currentHead = face.GetProperty<ObjectProperty>("m_oBaseHead")?.ResolveToEntry(package);
         var baseHead = currentHead is ExportEntry localHead &&
                        localHead.ClassName.Equals("SkeletalMesh", StringComparison.OrdinalIgnoreCase)
             ? localHead
-            : ResolveBaseHeadDonor(baseHeadIdentity, package.Game, cache);
+            : ResolveBaseHeadDonor(baseHeadIdentity, package.Game, cache, installedAssets);
 
         if (!baseHead.ClassName.Equals("SkeletalMesh", StringComparison.OrdinalIgnoreCase))
             throw UserFacingMessage.CreateError("loc_Shell_Error_CcScalp_HeadNotMesh", $"Base head '{baseHead.InstancedFullPath}' is not a SkeletalMesh.", baseHead.InstancedFullPath);
@@ -95,7 +96,9 @@ internal static class ScalpMaterialGraphMaterializer
                 textureCatalog: null,
                 warnings: warnings,
                 applyCorpusMaterialPolicy: false,
-                targetPathOverride: clonePath);
+                targetPathOverride: clonePath,
+                installedAssets: installedAssets,
+                sourceCache: cache);
         if (clone.Parent is null || !clone.Parent.InstancedFullPath.Equals(parent.InstancedFullPath,
                 StringComparison.OrdinalIgnoreCase))
             throw UserFacingMessage.CreateError("loc_Shell_Error_CcScalp_CloneAncestry", "The face-owned scalp head clone did not retain the native parent ancestry.");
@@ -110,7 +113,9 @@ internal static class ScalpMaterialGraphMaterializer
             textureCatalog: null,
             warnings: warnings,
             applyCorpusMaterialPolicy: false,
-            targetPathOverride: targetPath);
+            targetPathOverride: targetPath,
+            installedAssets: installedAssets,
+            sourceCache: cache);
         if (!materializedDonor.ClassName.Equals(selection.DonorMaterial.ClassName, StringComparison.OrdinalIgnoreCase) ||
             !PccAssetPathPolicy.FromExport(materializedDonor).Equals(targetPath, StringComparison.OrdinalIgnoreCase))
             throw UserFacingMessage.CreateError("loc_Shell_Error_CcScalp_DonorIdentityChanged", $"The selected CC scalp donor changed identity while materialising: '{materializedDonor.InstancedFullPath}'.", materializedDonor.InstancedFullPath);
@@ -123,9 +128,10 @@ internal static class ScalpMaterialGraphMaterializer
         return clone;
     }
 
-    internal static void EnsureCanonicalCcScalpGraph(ExportEntry donor, PackageCache cache)
+    internal static void EnsureCanonicalCcScalpGraph(ExportEntry donor, PackageCache cache,
+        InstalledGameAssetResolver? installedAssets = null)
     {
-        var resolver = new GamePackageReferenceResolver(cache);
+        var resolver = new GamePackageReferenceResolver(cache, installedAssets);
         var master = SupportedMaterialGraphPolicy.ResolveSupportedMaster(donor.Game, donor, resolver, out var unsupported)
             ?? throw UserFacingMessage.CreateError("loc_Shell_Error_CcScalp_UnsupportedGraph", $"Selected CC scalp material '{donor.InstancedFullPath}' has an unsupported graph: {unsupported}.", donor.InstancedFullPath);
         if (MorphFacePackageReader.DescribeMaterialMaster(donor.Game, master)?.PreviewModel !=
@@ -155,9 +161,10 @@ internal static class ScalpMaterialGraphMaterializer
     private static ExportEntry ResolveBaseHeadDonor(
         AssetIdentity identity,
         MEGame game,
-        PackageCache cache)
+        PackageCache cache,
+        InstalledGameAssetResolver installedAssets)
     {
-        var installed = new InstalledGameAssetResolver().Resolve(game, identity, cache);
+        var installed = installedAssets.Resolve(game, identity, cache);
         if (installed is not null) return installed;
         if (identity.IsImport)
             throw UserFacingMessage.CreateError("loc_Shell_Error_CcScalp_ImportedHeadMissing", $"The imported base head '{identity.InstancedPath}' has no exact official donor to clone.", identity.InstancedPath);

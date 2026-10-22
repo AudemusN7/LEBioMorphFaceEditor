@@ -92,7 +92,8 @@ internal static class PccPackageWorkflow
         IReadOnlyList<IEntry>? requiredExportReferences = null,
         string? targetPathOverride = null,
         InstalledGameAssetResolver? installedAssets = null,
-        IReadOnlyList<ExportEntry>? authoredMaterialDonors = null)
+        IReadOnlyList<ExportEntry>? authoredMaterialDonors = null,
+        PackageCache? sourceCache = null)
     {
         ArgumentNullException.ThrowIfNull(destination);
         ArgumentNullException.ThrowIfNull(source);
@@ -101,6 +102,8 @@ internal static class PccPackageWorkflow
             throw new InvalidDataException(
                 $"Cannot import {source.ClassName} '{source.InstancedFullPath}' from {source.Game} into {destination.Game}.");
         }
+        using var ownedCache = sourceCache is null ? new PackageCache { CacheMaxSize = 64 } : null;
+        var cache = sourceCache ?? ownedCache!;
         var preexistingExports = destination.Exports.ToHashSet();
         using var session = new GraphImportSession(
             destination,
@@ -109,7 +112,8 @@ internal static class PccPackageWorkflow
             applyCorpusMaterialPolicy,
             requiredExportReferences ?? [],
             installedAssets,
-            authoredMaterialDonors ?? []);
+            authoredMaterialDonors ?? [],
+            cache);
         var imported = session.ImportRoot(source, destinationParent, targetPathOverride);
         NormalizeNewSupportedAssets(destination, preexistingExports);
         return imported;
@@ -243,7 +247,8 @@ internal static class PccPackageWorkflow
         bool checkImportsWhenExportingToPackage = true,
         IReadOnlyList<ExportEntry>? explicitTextureDonors = null,
         InstalledGameAssetResolver? installedAssets = null,
-        ExportEntry? replacementRoot = null)
+        ExportEntry? replacementRoot = null,
+        PackageCache? sourceCache = null)
     {
         ArgumentNullException.ThrowIfNull(destination);
         ArgumentNullException.ThrowIfNull(source);
@@ -257,8 +262,10 @@ internal static class PccPackageWorkflow
             sourceOverride = MorphOverride(source);
             replacementOverride = MorphOverride(replacementRoot);
         }
-        using var preparationCache = new PackageCache();
-        using var preparedMesh = CanonicalAttachmentMaterialPolicy.PrepareMesh(source, preparationCache, installedAssets);
+        using var ownedCache = sourceCache is null ? new PackageCache { CacheMaxSize = 64 } : null;
+        var cache = sourceCache ?? ownedCache!;
+        installedAssets ??= new InstalledGameAssetResolver();
+        using var preparedMesh = CanonicalAttachmentMaterialPolicy.PrepareMesh(source, cache, installedAssets);
         source = preparedMesh?.Mesh ?? source;
         var preexistingExports = destination.Exports.ToHashSet();
         var relinker = new RelinkerOptionsPackage
@@ -272,8 +279,8 @@ internal static class PccPackageWorkflow
                 !NewFaceStartupAssets.TryGetValue(destination, out _)
         };
         var plannedMappings = new Dictionary<IEntry, IEntry>();
-        PrestageExplicitTextureDonors(destination, source, explicitTextureDonors ?? [], plannedMappings);
-        PreseedOfficialSupportedReferences(destination, source, plannedMappings, installedAssets);
+        PrestageExplicitTextureDonors(destination, source, explicitTextureDonors ?? [], plannedMappings, cache, installedAssets);
+        PreseedOfficialSupportedReferences(destination, source, plannedMappings, cache, installedAssets);
         relinker.CustomRelinkUIndex = (
             IMEPackage importingPackage,
             ExportEntry relinkingExport,
@@ -347,7 +354,9 @@ internal static class PccPackageWorkflow
         IMEPackage destination,
         ExportEntry source,
         IReadOnlyList<ExportEntry> donors,
-        IDictionary<IEntry, IEntry> plannedMappings)
+        IDictionary<IEntry, IEntry> plannedMappings,
+        PackageCache cache,
+        InstalledGameAssetResolver installedAssets)
     {
         if (donors.Count == 0) return;
         var uniqueDonors = donors.GroupBy(PccAssetPathPolicy.FromExport, StringComparer.OrdinalIgnoreCase)
@@ -401,7 +410,9 @@ internal static class PccPackageWorkflow
                 destinationParent: null,
                 textureCatalog: null,
                 applyCorpusMaterialPolicy: true,
-                targetPathOverride: path);
+                targetPathOverride: path,
+                installedAssets: installedAssets,
+                sourceCache: cache);
             if (!embedded.InstancedFullPath.Equals(path, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException($"Explicit Texture2D donor '{path}' was staged as '{embedded.InstancedFullPath}'.");
             if (matchingSources.Length == 1) plannedMappings[matchingSources[0]] = embedded;
@@ -409,11 +420,12 @@ internal static class PccPackageWorkflow
     }
 
     internal static IReadOnlyList<ExportEntry> ResolveExplicitTextureDonors(
-        IEnumerable<AssetIdentity?> identities, MEGame game, PackageCache cache)
+        IEnumerable<AssetIdentity?> identities, MEGame game, PackageCache cache,
+        InstalledGameAssetResolver? installedAssets = null)
     {
         var selected = identities.Where(identity => identity is { IsImport: false, IsExplicitTextureDonor: true }).ToArray();
         if (selected.Length == 0) return [];
-        var officialPaths = InstalledGameAssetResolver.GetOfficialPackageFiles(game).Values
+        var officialPaths = (installedAssets ?? new InstalledGameAssetResolver()).GetPackageFiles(game).Values
             .Select(Path.GetFullPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
         return selected
             .Where(identity => !officialPaths.Contains(Path.GetFullPath(identity!.PackagePath)))
@@ -447,22 +459,25 @@ internal static class PccPackageWorkflow
     internal static void StageExplicitTextureDonors(
         IMEPackage destination,
         ExportEntry sourceRoot,
-        IReadOnlyList<ExportEntry> donors)
+        IReadOnlyList<ExportEntry> donors,
+        PackageCache? sourceCache = null,
+        InstalledGameAssetResolver? installedAssets = null)
     {
         ArgumentNullException.ThrowIfNull(destination);
         ArgumentNullException.ThrowIfNull(sourceRoot);
         ArgumentNullException.ThrowIfNull(donors);
-        PrestageExplicitTextureDonors(destination, sourceRoot, donors, new Dictionary<IEntry, IEntry>());
+        using var ownedCache = sourceCache is null ? new PackageCache { CacheMaxSize = 64 } : null;
+        PrestageExplicitTextureDonors(destination, sourceRoot, donors, new Dictionary<IEntry, IEntry>(),
+            sourceCache ?? ownedCache!, installedAssets ?? new InstalledGameAssetResolver());
     }
 
     private static void PreseedOfficialSupportedReferences(
         IMEPackage destination,
         ExportEntry source,
         IDictionary<IEntry, IEntry> plannedMappings,
-        InstalledGameAssetResolver? installedAssets)
+        PackageCache cache,
+        InstalledGameAssetResolver resolver)
     {
-        using var cache = new PackageCache { CacheMaxSize = 64 };
-        var resolver = installedAssets ?? new InstalledGameAssetResolver();
         var references = new GamePackageReferenceResolver(cache, resolver);
         var pending = new Queue<ExportEntry>();
         var visited = new HashSet<int>();
@@ -492,7 +507,7 @@ internal static class PccPackageWorkflow
                 {
                     var renamed = ImportDependencyGraph(destination, (ExportEntry)reference, destinationParent: null,
                         textureCatalog: null, applyCorpusMaterialPolicy: true,
-                        targetPathOverride: nativePath, installedAssets: resolver);
+                        targetPathOverride: nativePath, installedAssets: resolver, sourceCache: cache);
                     plannedMappings[reference] = renamed;
                     continue;
                 }
@@ -500,7 +515,7 @@ internal static class PccPackageWorkflow
                 {
                     if (expected == MaterialOracleEntryKind.Import)
                     {
-                        plannedMappings[reference] = EnsureImport(destination, nativePath, reference.ClassName, reference, resolver);
+                        plannedMappings[reference] = EnsureImport(destination, nativePath, reference.ClassName, reference, resolver, cache);
                         continue;
                     }
                     if (reference is ImportEntry && expected == MaterialOracleEntryKind.Unknown)
@@ -509,7 +524,7 @@ internal static class PccPackageWorkflow
                         // it does not change the source package's import role.
                         // Preserve unknown-role imports instead of embedding the
                         // resolved official export as a side effect of preseed.
-                        plannedMappings[reference] = EnsureImport(destination, nativePath, reference.ClassName, reference, resolver);
+                        plannedMappings[reference] = EnsureImport(destination, nativePath, reference.ClassName, reference, resolver, cache);
                         continue;
                     }
                     var selected = resolver.Resolve(reference, cache);
@@ -532,7 +547,8 @@ internal static class PccPackageWorkflow
                             applyCorpusMaterialPolicy: true,
                             targetPathOverride: path,
                             installedAssets: resolver,
-                            authoredMaterialDonors: AuthoredMeshMaterials(reference));
+                            authoredMaterialDonors: AuthoredMeshMaterials(reference),
+                            sourceCache: cache);
                         plannedMappings[reference] = embedded;
                         continue; // The staged official graph supplies its own dependencies.
                     }
@@ -741,7 +757,7 @@ internal static class PccPackageWorkflow
         private readonly IReadOnlySet<string> _requiredExportIdentities;
         private readonly IReadOnlySet<CorpusRoleIssue> _baselineCorpusRoleIssues;
         private readonly IReadOnlySet<ExportEntry> _preexistingExports;
-        private readonly PackageCache _cache = new() { CacheMaxSize = 64 };
+        private readonly PackageCache _cache;
         private readonly GamePackageReferenceResolver _resolver;
         private readonly InstalledGameAssetResolver _officialAssets;
         private readonly RelinkerOptionsPackage _relinker;
@@ -758,7 +774,8 @@ internal static class PccPackageWorkflow
             bool applyCorpusMaterialPolicy,
             IReadOnlyList<IEntry> requiredExportReferences,
             InstalledGameAssetResolver? installedAssets,
-            IReadOnlyList<ExportEntry> authoredMaterialDonors)
+            IReadOnlyList<ExportEntry> authoredMaterialDonors,
+            PackageCache cache)
         {
             _destination = destination;
             _catalog = catalog;
@@ -771,6 +788,7 @@ internal static class PccPackageWorkflow
                 ? CaptureCorpusRoleIssues(destination)
                 : new HashSet<CorpusRoleIssue>(CorpusRoleIssueComparer.Instance);
             _preexistingExports = destination.Exports.ToHashSet();
+            _cache = cache;
             _officialAssets = installedAssets ?? new InstalledGameAssetResolver();
             foreach (var material in authoredMaterialDonors)
                 _authoredMaterials.TryAdd(CanonicalPath(material), material);
@@ -880,7 +898,7 @@ internal static class PccPackageWorkflow
             if (expected == MaterialOracleEntryKind.Import ||
                 reference is ImportEntry && expected == MaterialOracleEntryKind.Unknown)
             {
-                var imported = EnsureImport(_destination, targetPath, reference.ClassName, reference, _officialAssets);
+                var imported = EnsureImport(_destination, targetPath, reference.ClassName, reference, _officialAssets, _cache);
                 _relinker.CrossPackageMap[reference] = imported;
                 return imported;
             }
@@ -927,7 +945,7 @@ internal static class PccPackageWorkflow
             var expected = ExpectedKind("Texture2D", targetPath);
             if (expected == MaterialOracleEntryKind.Import)
             {
-                var imported = EnsureImport(_destination, targetPath, "Texture2D", reference, _officialAssets);
+                var imported = EnsureImport(_destination, targetPath, "Texture2D", reference, _officialAssets, _cache);
                 _relinker.CrossPackageMap[reference] = imported;
                 return imported;
             }
@@ -935,7 +953,7 @@ internal static class PccPackageWorkflow
             ExportEntry? source = resolved;
             if (selection is not null)
             {
-                var donor = _cache.GetCachedPackage(selection.Occurrence.PackagePath)
+                var donor = PackageSourceCache.GetPackage(_cache, selection.Occurrence.PackagePath)
                             ?? throw new FileNotFoundException(
                                 $"The installed texture donor package is missing: {selection.Occurrence.PackagePath}",
                                 selection.Occurrence.PackagePath);
@@ -949,7 +967,7 @@ internal static class PccPackageWorkflow
                 {
                     throw MissingExportDependency("Texture2D", targetPath);
                 }
-                var imported = EnsureImport(_destination, targetPath, "Texture2D", reference, _officialAssets);
+                var imported = EnsureImport(_destination, targetPath, "Texture2D", reference, _officialAssets, _cache);
                 _relinker.CrossPackageMap[reference] = imported;
                 _warnings?.Add(
                     $"Preserved unresolved stock Texture2D import '{targetPath}' while constructing the PCC.");
@@ -990,7 +1008,7 @@ internal static class PccPackageWorkflow
             var expected = ExpectedKind(source.ClassName, targetPath);
             if (!forceExport && expected == MaterialOracleEntryKind.Import)
             {
-                var imported = EnsureImport(_destination, targetPath, source.ClassName, source, _officialAssets);
+                var imported = EnsureImport(_destination, targetPath, source.ClassName, source, _officialAssets, _cache);
                 _relinker.CrossPackageMap[source] = imported;
                 return imported;
             }
@@ -1121,7 +1139,6 @@ internal static class PccPackageWorkflow
         public void Dispose()
         {
             foreach (var prepared in _preparedMeshes) prepared.Dispose();
-            _cache.Dispose();
         }
     }
 
@@ -1250,7 +1267,7 @@ internal static class PccPackageWorkflow
     }
 
     private static IEntry EnsureImport(IMEPackage destination, string path, string className,
-        IEntry? source = null, InstalledGameAssetResolver? installedAssets = null)
+        IEntry? source = null, InstalledGameAssetResolver? installedAssets = null, PackageCache? sourceCache = null)
     {
         if (PackageIntegrity.FindExactEntry(destination, path, className) is { } existing)
         {
@@ -1298,11 +1315,12 @@ internal static class PccPackageWorkflow
             {
                 if (sourceAncestor is not null && ExpectedKind(destination, ancestorClass, ancestorPath) == MaterialOracleEntryKind.Export)
                 {
-                    using var cache = new PackageCache();
+                    using var ownedCache = sourceCache is null ? new PackageCache { CacheMaxSize = 64 } : null;
+                    var cache = sourceCache ?? ownedCache!;
                     parent = ImportDependencyGraph(destination,
                         RequireExportDependency(destination, sourceAncestor,
                             new GamePackageReferenceResolver(cache, installedAssets), "asset outer"),
-                        null, null, targetPathOverride: ancestorPath, installedAssets: installedAssets);
+                        null, null, targetPathOverride: ancestorPath, installedAssets: installedAssets, sourceCache: cache);
                 }
                 else parent = destination.CreateImport(ancestorClass, NameReference.FromInstancedString(segment), parent);
                 continue;

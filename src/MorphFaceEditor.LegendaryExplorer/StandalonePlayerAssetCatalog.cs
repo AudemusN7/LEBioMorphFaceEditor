@@ -30,19 +30,42 @@ public sealed record StandalonePlayerAssetCatalog(
     {
         ArgumentNullException.ThrowIfNull(requestedPaths);
         LegendaryExplorerCoreRuntime.Initialize();
-        var loadedFiles = InstalledGameAssetResolver.GetOfficialPackageFiles(ToMeGame(game));
-        var installed = InstalledGameAssetResolver.ResolveInstalledReferences(game, requestedPaths, "SkeletalMesh");
+        var installedAssets = new InstalledGameAssetResolver();
+        using var packageCache = new CatalogHeaderCache { CacheMaxSize = 8 };
+        var loadedFiles = installedAssets.GetPackageFiles(ToMeGame(game));
+        var referenceResolver = new GamePackageReferenceResolver(packageCache, installedAssets);
         string? fallbackPackage = null;
-        try { fallbackPackage = StandalonePlayerMorphImportService.ResolveInstalledSeed(game); }
-        catch (Exception) { /* The seek-free package may still resolve without a player seed. */ }
+        IMEPackage? seedPackage = null;
+        var attemptedSeedLookup = false;
         return requestedPaths
             .Where(path => !string.IsNullOrWhiteSpace(path) && !path.Equals("None", StringComparison.OrdinalIgnoreCase))
             .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Select(path => (Path: path, Identity:
-                installed.GetValueOrDefault(path) ?? FindInstalledExport(loadedFiles, path, "SkeletalMesh", packageLocalPath: true) ??
-                FindPackageExport(fallbackPackage, path, "SkeletalMesh")))
+            .Select(path =>
+            {
+                var indexed = referenceResolver.ResolveInstalled(ToMeGame(game), path, "SkeletalMesh");
+                var identity = indexed is not null
+                    ? Identity(indexed, path)
+                    : FindInstalledExport(loadedFiles, path, "SkeletalMesh", packageCache) is { } exact
+                        ? Identity(exact, exact.InstancedFullPath)
+                        : FindPackageExport(SeedPackage(), path, "SkeletalMesh");
+                return (Path: path, Identity: identity);
+            })
             .Where(value => value.Identity is not null)
             .ToDictionary(value => value.Path, value => value.Identity!, StringComparer.OrdinalIgnoreCase);
+
+        IMEPackage? SeedPackage()
+        {
+            if (seedPackage is not null) return seedPackage;
+            if (!attemptedSeedLookup)
+            {
+                attemptedSeedLookup = true;
+                try { fallbackPackage = StandalonePlayerMorphImportService.ResolveInstalledSeed(game, loadedFiles); }
+                catch (Exception) { /* The seek-free package may still resolve without a player seed. */ }
+            }
+            return string.IsNullOrWhiteSpace(fallbackPackage)
+                ? null
+                : seedPackage = PackageSourceCache.GetPackage(packageCache, fallbackPackage);
+        }
     }
 
     /// <summary>
@@ -81,24 +104,25 @@ public sealed record StandalonePlayerAssetCatalog(
                            !path.Equals("None", StringComparison.OrdinalIgnoreCase))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        var loadedFiles = InstalledGameAssetResolver.GetOfficialPackageFiles(ToMeGame(game));
-        using var packageCache = new PackageCache { CacheMaxSize = 8 };
+        var installedAssets = new InstalledGameAssetResolver();
+        var loadedFiles = installedAssets.GetPackageFiles(ToMeGame(game));
+        using var packageCache = new CatalogHeaderCache { CacheMaxSize = 8 };
         var officialPaths = loadedFiles.Values.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var referencePath = referencePackagePath is null
-            ? StandalonePlayerMorphImportService.ResolveInstalledSeed(game)
-            : Path.GetFullPath(referencePackagePath);
         IMEPackage? referencePackage = null;
-        IMEPackage ReferencePackage() => referencePackage ??= packageCache.GetCachedPackage(referencePath)
-            ?? throw new InvalidDataException($"Could not open installed RON reference package '{referencePath}'.");
-        var referenceResolver = new GamePackageReferenceResolver(packageCache);
+        string? resolvedReferencePath = referencePackagePath is null ? null : Path.GetFullPath(referencePackagePath);
+        IMEPackage ReferencePackage()
+        {
+            resolvedReferencePath ??= StandalonePlayerMorphImportService.ResolveInstalledSeed(game, loadedFiles);
+            return referencePackage ??= PackageSourceCache.GetPackage(packageCache, resolvedReferencePath)
+                ?? throw new InvalidDataException($"Could not open installed RON reference package '{resolvedReferencePath}'.");
+        }
+        var referenceResolver = new GamePackageReferenceResolver(packageCache, installedAssets);
         var textureAssets = new List<AssetIdentity>();
-        var installedTextures = InstalledGameAssetResolver.ResolveInstalledReferences(game, requestedTextures, "Texture2D");
-        var installedMeshes = InstalledGameAssetResolver.ResolveInstalledReferences(game, requestedMeshes, "SkeletalMesh");
         foreach (var requestedPath in requestedTextures)
         {
-            if (installedTextures.TryGetValue(requestedPath, out var installedTexture))
+            if (referenceResolver.ResolveInstalled(ToMeGame(game), requestedPath, "Texture2D") is { } installedTexture)
             {
-                textureAssets.Add(installedTexture);
+                textureAssets.Add(Identity(installedTexture, requestedPath));
                 continue;
             }
             var registryMatches = textures
@@ -118,8 +142,13 @@ public sealed record StandalonePlayerAssetCatalog(
                 continue;
             }
 
-            if ((FindInstalledExport(loadedFiles, requestedPath, "Texture2D") ??
-                 FindReferencedExport(ReferencePackage(), referenceResolver, requestedPath, "Texture2D")) is { } texture)
+            if (FindInstalledExport(loadedFiles, requestedPath, "Texture2D", packageCache) is { } namedTexture)
+            {
+                textureAssets.Add(Identity(namedTexture, requestedPath));
+                continue;
+            }
+
+            if (FindReferencedExport(ReferencePackage(), referenceResolver, requestedPath, "Texture2D") is { } texture)
             {
                 textureAssets.Add(texture);
             }
@@ -128,9 +157,9 @@ public sealed record StandalonePlayerAssetCatalog(
         var meshes = new List<AssetIdentity>();
         foreach (var requestedPath in requestedMeshes)
         {
-            if (installedMeshes.TryGetValue(requestedPath, out var installedMesh))
+            if (referenceResolver.ResolveInstalled(ToMeGame(game), requestedPath, "SkeletalMesh") is { } installedMesh)
             {
-                meshes.Add(installedMesh);
+                meshes.Add(Identity(installedMesh, requestedPath));
                 continue;
             }
             if (attachmentMeshes is not null &&
@@ -139,8 +168,12 @@ public sealed record StandalonePlayerAssetCatalog(
                 meshes.Add(indexedMesh);
                 continue;
             }
-            if ((FindInstalledExport(loadedFiles, requestedPath, "SkeletalMesh") ??
-                 FindReferencedExport(ReferencePackage(), referenceResolver, requestedPath, "SkeletalMesh")) is { } mesh)
+            if (FindInstalledExport(loadedFiles, requestedPath, "SkeletalMesh", packageCache) is { } namedMesh)
+            {
+                meshes.Add(Identity(namedMesh, requestedPath));
+                continue;
+            }
+            if (FindReferencedExport(ReferencePackage(), referenceResolver, requestedPath, "SkeletalMesh") is { } mesh)
             {
                 meshes.Add(mesh);
             }
@@ -169,52 +202,40 @@ public sealed record StandalonePlayerAssetCatalog(
             resolved.ClassName);
     }
 
-    private static AssetIdentity? FindInstalledExport(
+    private static ExportEntry? FindInstalledExport(
         IReadOnlyDictionary<string, string> loadedFiles,
         string requestedPath,
         string className,
-        bool packageLocalPath = false)
+        PackageCache packageCache)
     {
         var rootPackage = requestedPath.Split('.')[0] + ".pcc";
-        if (!loadedFiles.TryGetValue(rootPackage, out var packagePath))
-        {
-            packagePath = loadedFiles
-                .FirstOrDefault(pair => pair.Key.Equals(rootPackage, StringComparison.OrdinalIgnoreCase))
-                .Value;
-        }
-        if (string.IsNullOrWhiteSpace(packagePath) || !File.Exists(packagePath))
-        {
+        if (!loadedFiles.TryGetValue(rootPackage, out var packagePath) ||
+            PackageSourceCache.GetPackage(packageCache, packagePath) is not { } package)
             return null;
-        }
 
-        using var package = MEPackageHandler.OpenMEPackage(packagePath, forceLoadFromDisk: true);
         var matches = package.Exports
             .Where(export => export.ClassName.Equals(className, StringComparison.OrdinalIgnoreCase) &&
                              (export.InstancedFullPath.Equals(requestedPath, StringComparison.OrdinalIgnoreCase) ||
                               CanonicalPath(package, export).Equals(requestedPath, StringComparison.OrdinalIgnoreCase)))
             .Take(2)
             .ToArray();
-        return matches.Length == 1
-            ? new AssetIdentity(
-                Path.GetFullPath(packagePath),
-                packageLocalPath ? matches[0].InstancedFullPath : requestedPath,
-                matches[0].UIndex,
-                matches[0].ClassName)
-            : null;
+        return matches.Length == 1 ? matches[0] : null;
     }
 
-    private static AssetIdentity? FindPackageExport(string? packagePath, string requestedPath, string className)
+    private static AssetIdentity? FindPackageExport(IMEPackage? package, string requestedPath, string className)
     {
-        if (string.IsNullOrWhiteSpace(packagePath) || !File.Exists(packagePath)) return null;
-        using var package = MEPackageHandler.OpenMEPackage(packagePath, forceLoadFromDisk: true);
+        if (package is null) return null;
         var matches = package.Exports.Where(export => export.ClassName.Equals(className, StringComparison.OrdinalIgnoreCase) &&
                                                        export.InstancedFullPath.Equals(requestedPath, StringComparison.OrdinalIgnoreCase))
             .Take(2).ToArray();
         return matches.Length == 1
-            ? new AssetIdentity(Path.GetFullPath(packagePath), matches[0].InstancedFullPath,
+            ? new AssetIdentity(Path.GetFullPath(package.FilePath), matches[0].InstancedFullPath,
                 matches[0].UIndex, matches[0].ClassName)
             : null;
     }
+
+    private static AssetIdentity Identity(ExportEntry export, string requestedPath) => new(
+        Path.GetFullPath(export.FileRef.FilePath), requestedPath, export.UIndex, export.ClassName);
 
     internal static bool MatchesRequestedTexturePath(
         TextureCatalogCandidate candidate,
@@ -249,4 +270,15 @@ public sealed record StandalonePlayerAssetCatalog(
         _ => throw new ArgumentOutOfRangeException(nameof(game), game,
             "Standalone player imports support only Legendary Edition games.")
     };
+
+    // Catalogue results contain detached identities only. Their lookup needs
+    // package tables, never texture/mesh payloads; keep these readers private so
+    // no partial package can enter the later materialisation operation.
+    private sealed class CatalogHeaderCache : PackageCache
+    {
+        public override IMEPackage GetCachedPackage(string packagePath, bool openIfNotInCache = true,
+            Func<string, IMEPackage>? openPackageMethod = null) =>
+            base.GetCachedPackage(packagePath, openIfNotInCache,
+                static path => MEPackageHandler.UnsafePartialLoad(path, _ => false));
+    }
 }

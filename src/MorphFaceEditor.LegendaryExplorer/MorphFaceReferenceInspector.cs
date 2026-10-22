@@ -26,7 +26,8 @@ public static class MorphFaceReferenceInspector
             throw new FileNotFoundException("Package file was not found.", fullPath);
         }
 
-        using var package = MEPackageHandler.OpenMEPackage(fullPath, forceLoadFromDisk: true);
+        using var package = MEPackageHandler.UnsafePartialLoad(fullPath, export => !export.IsDefaultObject &&
+            export.ClassName.Equals("BioMorphFace", StringComparison.OrdinalIgnoreCase));
         return Inspect(package, out game);
     }
 

@@ -1,6 +1,5 @@
 using LegendaryExplorerCore.Packages;
 using LegendaryExplorerCore.Packages.CloningImportingAndRelinking;
-using System.Runtime.CompilerServices;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.LegendaryExplorer.TextureRegistry;
@@ -13,8 +12,6 @@ public sealed class InstalledGameAssetResolver
     private readonly Func<MEGame, IReadOnlyDictionary<string, string>> _officialFiles;
     private readonly Func<MEGame, TextureRegistrySnapshot?> _snapshot;
     private readonly Dictionary<MEGame, IReadOnlyDictionary<string, string>> _packageFiles = [];
-    private static readonly ConditionalWeakTable<TextureRegistrySnapshot, Dictionary<string, IReadOnlyList<InstalledAssetOccurrence>>> AssetIndices = new();
-    private static readonly ConditionalWeakTable<TextureRegistrySnapshot, HashSet<string>> ModPackages = new();
 
     internal InstalledGameAssetResolver(
         Func<MEGame, IReadOnlyDictionary<string, string>>? loadedFiles = null,
@@ -43,32 +40,14 @@ public sealed class InstalledGameAssetResolver
     internal bool CanUseLocalAsset(ExportEntry entry)
     {
         if (entry.Game is not (MEGame.LE1 or MEGame.LE2 or MEGame.LE3)) return true;
-        if (!IsOfficialPackage(entry.FileRef.FilePath, entry.Game))
-            return ResolveIndexedOfficialOccurrences(entry.Game, entry.InstancedFullPath, entry.ClassName).Count == 0;
-        if (_snapshot(entry.Game) is not { } snapshot) return true;
-        var mods = ModPackages.GetValue(snapshot, static value => value.Assets
-            .Where(asset => asset.Origin == TextureCatalogOrigin.Mod)
-            .Select(asset => Path.GetFullPath(asset.PackagePath)).ToHashSet(StringComparer.OrdinalIgnoreCase));
-        return !mods.Contains(Path.GetFullPath(entry.FileRef.FilePath)) ||
+        return IsOfficialPackage(entry.FileRef.FilePath, entry.Game) ||
             ResolveIndexedOfficialOccurrences(entry.Game, entry.InstancedFullPath, entry.ClassName).Count == 0;
     }
 
     private IReadOnlyList<InstalledAssetOccurrence> ResolveIndexedOfficialOccurrences(MEGame game, string path, string className)
     {
-        if (_snapshot(game) is not { } snapshot) return [];
-        var index = AssetIndices.GetValue(snapshot, static value =>
-        {
-            var packages = value.OfficialPackagePaths.ToHashSet(StringComparer.OrdinalIgnoreCase);
-            return value.Assets.Where(asset =>
-                    (asset.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc) &&
-                    packages.Contains(Path.GetFullPath(asset.PackagePath)))
-                .GroupBy(asset => Key(asset.ClassName, asset.InstancedPath), StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(group => group.Key, group => (IReadOnlyList<InstalledAssetOccurrence>)group
-                    .OrderByDescending(asset => asset.MountPriority)
-                    .ThenBy(asset => asset.PackagePath, StringComparer.OrdinalIgnoreCase)
-                    .ThenBy(asset => asset.ExportUIndex).ToArray(), StringComparer.OrdinalIgnoreCase);
-        });
-        return index.GetValueOrDefault(Key(className, path), []);
+        return _snapshot(game) is { } snapshot
+            ? TextureRegistryIndex.For(snapshot).OfficialOccurrences(path, className) : [];
     }
 
     internal ExportEntry? Resolve(MEGame game, AssetIdentity identity, PackageCache cache)
@@ -102,9 +81,7 @@ public sealed class InstalledGameAssetResolver
     }
 
     /// <summary>
-    /// Returns every indexed official occurrence of one canonical asset identity,
-    /// in donor precedence order, followed by bounded exact-package checks for
-    /// reviewed MIC provenance packages.
+    /// Returns the complete indexed official MIC variant set in donor precedence order.
     /// </summary>
     internal IEnumerable<ExportEntry> ResolveOfficialVariants(
         MEGame game, string path, string className, PackageCache cache)
@@ -112,74 +89,18 @@ public sealed class InstalledGameAssetResolver
         if (game is not (MEGame.LE1 or MEGame.LE2 or MEGame.LE3) ||
             !InstalledAssetOccurrence.IsSupportedClass(className)) yield break;
 
-        var resolvedOccurrences = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // Missing/outdated databases retain the exact named-package lookup used
+        // elsewhere. Complete variant comparison requires a current database.
+        if (_snapshot(game) is null)
+        {
+            if (Resolve(game, path, className, cache) is { } named) yield return named;
+            yield break;
+        }
         foreach (var occurrence in ResolveIndexedOfficialOccurrences(game, path, className))
         {
             var export = TryExact(cache, occurrence.PackagePath, path, className, occurrence.ExportUIndex);
-            if (export is null) continue;
-            var occurrenceKey = $"{export.FileRef.FilePath}|{export.UIndex}";
-            if (!resolvedOccurrences.Add(occurrenceKey)) continue;
-            yield return export;
+            if (export is not null) yield return export;
         }
-
-        // The texture registry keeps only one MIC occurrence per canonical
-        // identity. Also check reviewed provenance locations that can contain
-        // legitimate cooked eye variants, without opening other game
-        // packages or allowing mod-sidecar replacements.
-        var packageNames = new List<string>
-        {
-            path.Split('.')[0] + ".pcc",
-            "BIOG_MORPH_FACE.pcc"
-        };
-        if (game == MEGame.LE2 && path.Equals(
-                "BIOG_ASA_HED_PROMorph_R.ASA_HED_EYE_MAT_1a", StringComparison.OrdinalIgnoreCase))
-        {
-            // This reviewed basegame scene export supplies the ASA Effects-parent
-            // variant absent from the usual source/template provenance checks.
-            packageNames.Add("BioD_BchLmL_102BeachFight.pcc");
-        }
-        else if (game == MEGame.LE3 && path.Equals(
-                     "BIOG_ASA_HED_PROMorph_R.PROBase.ASA_HED_PROBase_EYE_MAT_1a",
-                     StringComparison.OrdinalIgnoreCase))
-        {
-            // This reviewed basegame scene export supplies LE3's ASA
-            // Effects-parent variant with its complete parameter set.
-            packageNames.Add("BioP_Cat002.pcc");
-        }
-        packageNames = packageNames.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        var snapshot = _snapshot(game);
-        foreach (var packageName in packageNames)
-        {
-            if (snapshot is not null)
-            {
-                foreach (var packagePath in snapshot.OfficialPackagePaths
-                             .Where(candidate => Path.GetFileName(candidate).Equals(
-                                 packageName, StringComparison.OrdinalIgnoreCase))
-                             .Distinct(StringComparer.OrdinalIgnoreCase)
-                             .OrderBy(candidate => candidate, StringComparer.OrdinalIgnoreCase)
-                             .ThenBy(candidate => candidate, StringComparer.Ordinal))
-                    if (TryGetOfficialPackageVariant(packagePath, path, className, cache,
-                            resolvedOccurrences) is { } export)
-                        yield return export;
-            }
-            else
-            {
-                if (GetPackageFiles(game).TryGetValue(packageName, out var packagePath) &&
-                    TryGetOfficialPackageVariant(packagePath, path, className, cache,
-                        resolvedOccurrences) is { } export)
-                    yield return export;
-            }
-        }
-    }
-
-    private static ExportEntry? TryGetOfficialPackageVariant(
-        string packagePath, string path, string className, PackageCache cache,
-        HashSet<string> resolvedOccurrences)
-    {
-        var export = TryExact(cache, packagePath, path, className);
-        if (export is null) return null;
-        var occurrenceKey = $"{export.FileRef.FilePath}|{export.UIndex}";
-        return resolvedOccurrences.Add(occurrenceKey) ? export : null;
     }
 
     internal IReadOnlyDictionary<string, string> GetPackageFiles(MEGame game)
@@ -215,11 +136,9 @@ public sealed class InstalledGameAssetResolver
         if (game is not (MEGame.LE1 or MEGame.LE2 or MEGame.LE3))
             return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         LegendaryExplorerCoreRuntime.Initialize();
-        return TextureRegistryBuilder.GetPhysicalPackagePaths(ToMorphGame(game))
-            .Where(path => IsOfficialPackage(path, game)).GroupBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(group => group.Key!, group => group
-                .OrderByDescending(path => LecTextureRegistryPackageScanner.GetMountPriority(path, game))
-                .ThenBy(path => path, StringComparer.OrdinalIgnoreCase).First(), StringComparer.OrdinalIgnoreCase);
+        return TextureRegistryBuilder.SelectOfficialFilenameWinners(
+                TextureRegistryBuilder.GetOfficialPhysicalPackagePaths(ToMorphGame(game)), ToMorphGame(game))
+            .ToDictionary(path => Path.GetFileName(path), path => path, StringComparer.OrdinalIgnoreCase);
     }
 
     internal static bool IsOfficialPackage(string path, MEGame game)
@@ -235,40 +154,15 @@ public sealed class InstalledGameAssetResolver
     public static IReadOnlyDictionary<string, string> GetOfficialPackages(MorphFaceGame game) =>
         GetOfficialPackageFiles(LecTextureRegistryPackageScanner.ToMeGame(game));
 
-    public static IReadOnlyDictionary<string, AssetIdentity> ResolveInstalledReferences(
-        MorphFaceGame game, IEnumerable<string> paths, string className)
-    {
-        LegendaryExplorerCoreRuntime.Initialize();
-        using var cache = new PackageCache { CacheMaxSize = 8 };
-        var resolver = new InstalledGameAssetResolver();
-        var result = new Dictionary<string, AssetIdentity>(StringComparer.OrdinalIgnoreCase);
-        foreach (var path in paths.Where(path => !string.IsNullOrWhiteSpace(path) &&
-                     !path.Equals("None", StringComparison.OrdinalIgnoreCase)).Distinct(StringComparer.OrdinalIgnoreCase))
-            if (resolver.Resolve(LecTextureRegistryPackageScanner.ToMeGame(game), path, className, cache) is { } export)
-                result[path] = new(export.FileRef.FilePath, path, export.UIndex, className);
-        return result;
-    }
-
     private static readonly TextureRegistryStore Store = new(TextureRegistryPaths.CreateDefault());
-    private static readonly object Sync = new();
-    private static readonly Dictionary<MEGame, ((string Path, long Length, DateTime LastWriteTimeUtc)? Fingerprint, TextureRegistrySnapshot? Snapshot)> Snapshots = [];
     private static TextureRegistrySnapshot? ReadSnapshot(MEGame game)
     {
         if (game is not (MEGame.LE1 or MEGame.LE2 or MEGame.LE3)) return null;
-        var mfeGame = ToMorphGame(game);
-        var fingerprint = Store.GetFileFingerprint(mfeGame);
-        lock (Sync)
-        {
-            if (Snapshots.TryGetValue(game, out var cached) && cached.Fingerprint == fingerprint) return cached.Snapshot;
-            var snapshot = Store.ReadWithStatus(mfeGame).Snapshot;
-            Snapshots[game] = (fingerprint, snapshot);
-            return snapshot;
-        }
+        return Store.ReadWithStatus(ToMorphGame(game)).Snapshot;
     }
     private static MorphFaceGame ToMorphGame(MEGame game) => game switch
     {
         MEGame.LE1 => MorphFaceGame.LE1, MEGame.LE2 => MorphFaceGame.LE2,
         MEGame.LE3 => MorphFaceGame.LE3, _ => MorphFaceGame.Unsupported
     };
-    private static string Key(string className, string path) => $"{className}|{path}";
 }

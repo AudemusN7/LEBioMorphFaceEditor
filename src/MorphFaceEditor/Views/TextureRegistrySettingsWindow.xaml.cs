@@ -11,13 +11,32 @@ namespace MorphFaceEditor.Views;
 public partial class TextureRegistrySettingsWindow : Window
 {
     private bool _addingAssets;
+    private bool _hasLoaded;
+    private bool _refreshingStatus;
     public TextureRegistrySettingsWindow(TextureRegistrySettingsViewModel viewModel)
     {
         InitializeComponent();
         DarkTitleBar.Apply(this);
         DataContext = viewModel;
         Closing += OnClosing;
-        Loaded += async (_, _) => await viewModel.RefreshAsync();
+        Loaded += async (_, _) =>
+        {
+            _hasLoaded = true;
+            await RefreshStatusAsync();
+        };
+        Activated += async (_, _) =>
+        {
+            if (_hasLoaded) await RefreshStatusAsync();
+        };
+    }
+
+    private async Task RefreshStatusAsync()
+    {
+        if (_refreshingStatus || _addingAssets ||
+            DataContext is not TextureRegistrySettingsViewModel { IsBuilding: false } settings) return;
+        _refreshingStatus = true;
+        try { await settings.RefreshAsync(); }
+        finally { _refreshingStatus = false; }
     }
 
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
@@ -40,6 +59,14 @@ public partial class TextureRegistrySettingsWindow : Window
             if (keep is not null)
                 await settings.RebuildAsync(row.Game, keepManualAssets: keep.Value);
         }
+    }
+
+    private async void OnRescanModsClick(object sender, RoutedEventArgs e)
+    {
+        if (_addingAssets) return;
+        if (sender is FrameworkElement { DataContext: TextureRegistrySettingsRowViewModel row } &&
+            DataContext is TextureRegistrySettingsViewModel settings && row.CanRescanMods)
+            await settings.RebuildModsAsync(row.Game);
     }
 
     private async void OnRebuildAllClick(object sender, RoutedEventArgs e)

@@ -48,11 +48,6 @@ public sealed class MorphFacePackageWriter
         ValidateMorphPackageDestination(draft, sourcePath, logicalSourcePath, destination, createNewPackage);
         var destinationFingerprint = createNewPackage ? null : PackageFingerprint.Capture(destination);
         IReadOnlySet<string>? destinationIntegrityBaseline = null;
-        if (!createNewPackage)
-        {
-            using var existingDestination = MEPackageHandler.OpenMEPackage(destination, forceLoadFromDisk: true);
-            destinationIntegrityBaseline = PackageIntegrity.CaptureIssues(existingDestination);
-        }
 
         Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
         using (var save = new FileSaveTransaction(destination, destinationFingerprint))
@@ -66,10 +61,12 @@ public sealed class MorphFacePackageWriter
             using (var sourceStream = new MemoryStream(sourceBytes, writable: false))
             using (var sourcePackage = MEPackageHandler.OpenMEPackageFromStream(sourceStream, logicalSourcePath))
             {
+                using var sourceCache = new PackageCache { CacheMaxSize = 64 };
+                var installedAssets = new InstalledGameAssetResolver();
                 EnsureSupportedGame(sourcePackage);
                 var sourceFace = FindExport(sourcePackage, draft.Source.InstancedPath, "BioMorphFace");
                 VerifyUnchangedNonFiniteValues(draft, sourceFace);
-                draft = FilterSupportedAttachments(draft, sourcePackage.Game, warnings);
+                draft = FilterSupportedAttachments(draft, warnings, sourceCache, installedAssets);
                 if (draft.ScalpMaterialSelection is not null)
                 {
                     // Materialize the selected graph on the source package's
@@ -77,13 +74,12 @@ public sealed class MorphFacePackageWriter
                     // the original head graph out of a new PCC, where it would
                     // otherwise be imported first and then left orphaned after
                     // replacing the face's head reference.
-                    draft = ApplyScalpMaterialSelection(sourcePackage, sourceFace, draft, warnings);
-                    WriteFace(sourcePackage, sourceFace, draft, warnings);
+                    draft = ApplyScalpMaterialSelection(sourcePackage, sourceFace, draft, warnings, sourceCache, installedAssets);
+                    WriteFace(sourcePackage, sourceFace, draft, warnings, sourceCache, installedAssets);
                 }
-                using var explicitTextureCache = new PackageCache { CacheMaxSize = 8 };
                 var requestedTextures = draft.MaterialOverrides.Textures;
                 draft = draft with { MaterialOverrides = PccPackageWorkflow.OmitUnavailableSelectedTextures(
-                    draft.MaterialOverrides, explicitTextureCache, warnings) };
+                    draft.MaterialOverrides, sourceCache, warnings) };
                 var omittedNames = requestedTextures.Except(draft.MaterialOverrides.Textures)
                     .Select(value => value.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
                 if (omittedNames.Count > 0)
@@ -114,6 +110,7 @@ public sealed class MorphFacePackageWriter
                 using var destinationPackage = createNewPackage
                     ? MEPackageHandler.CreateMemoryEmptyPackage(destination, sourcePackage.Game)
                     : MEPackageHandler.OpenMEPackage(destination, forceLoadFromDisk: true);
+                if (!createNewPackage) destinationIntegrityBaseline = PackageIntegrity.CaptureIssues(destinationPackage);
                 // The stage never reaches disk or AppData. Only its completed
                 // root graph is cloned into the actual destination candidate.
                 using var stagingStream = createNewPackage ? null : destinationPackage.SaveToStream(compress: false);
@@ -121,7 +118,8 @@ public sealed class MorphFacePackageWriter
                 using var stagingPackage = stagingStream is null
                     ? MEPackageHandler.CreateMemoryEmptyPackage(destination, sourcePackage.Game)
                     : MEPackageHandler.OpenMEPackageFromStream(stagingStream, destination);
-                if (createNewPackage) PccPackageWorkflow.ConfigureNewFacePackage(stagingPackage);
+                if (createNewPackage) PccPackageWorkflow.ConfigureNewFacePackage(stagingPackage,
+                    installedAssets.GetPackageFiles(sourcePackage.Game).Values);
                 EnsureSupportedGame(destinationPackage);
                 if (destinationPackage.Game != sourcePackage.Game)
                 {
@@ -137,14 +135,16 @@ public sealed class MorphFacePackageWriter
                         $"The destination already contains an entry named '{destinationFacePath}'.");
                 }
 
-                var explicitTextureDonors = ResolveExplicitTextureDonors(draft, sourcePackage.Game, explicitTextureCache);
+                var explicitTextureDonors = ResolveExplicitTextureDonors(draft, sourcePackage.Game, sourceCache, installedAssets);
                 var portedFace = PccPackageWorkflow.ImportRootPreservingStructure(
                     stagingPackage,
                     sourceFace,
                     warnings,
                     explicitTextureDonors: explicitTextureDonors,
+                    installedAssets: installedAssets,
                     replacementRoot: existingFace is null ? null
-                        : stagingPackage.FindExport(existingFace.InstancedFullPath, "BioMorphFace"));
+                        : stagingPackage.FindExport(existingFace.InstancedFullPath, "BioMorphFace"),
+                    sourceCache: sourceCache);
                 if (destinationObjectName is not null)
                 {
                     portedFace.ObjectName = new NameReference(destinationObjectName);
@@ -170,7 +170,7 @@ public sealed class MorphFacePackageWriter
                             importedHead.ClassName)
                     };
                 }
-                WriteFace(stagingPackage, portedFace, draft, warnings);
+                WriteFace(stagingPackage, portedFace, draft, warnings, sourceCache, installedAssets);
                 var materialOverride = ResolveMaterialOverride(portedFace);
                 WriteMaterialOverride(stagingPackage, materialOverride, draft.MaterialOverrides, warnings);
                 portedFace = PccPackageWorkflow.CloneCompletedRoot(destinationPackage, portedFace, warnings, existingFace);
@@ -209,11 +209,6 @@ public sealed class MorphFacePackageWriter
         var packagePath = Path.GetFullPath(draft.Source.PackagePath);
         ValidateDraft(draft, packagePath);
         IReadOnlySet<string> integrityBaseline;
-        using (var original = MEPackageHandler.OpenMEPackage(packagePath, forceLoadFromDisk: true))
-        {
-            integrityBaseline = PackageIntegrity.CaptureIssues(original);
-            VerifyUnchangedNonFiniteValues(draft, FindExport(original, draft.Source.InstancedPath, "BioMorphFace"));
-        }
         using (var save = new FileSaveTransaction(packagePath, draft.SourceFingerprint))
         {
             var temporaryPath = save.CandidatePath;
@@ -223,19 +218,22 @@ public sealed class MorphFacePackageWriter
             PccDependencyGraphSnapshot? dependencyGraph = null;
             using (var package = MEPackageHandler.OpenMEPackage(temporaryPath, forceLoadFromDisk: true))
             {
+                using var sourceCache = new PackageCache { CacheMaxSize = 64 };
+                var installedAssets = new InstalledGameAssetResolver();
                 EnsureSupportedGame(package);
                 var face = FindExport(package, draft.Source.InstancedPath, "BioMorphFace");
-                draft = FilterSupportedAttachments(draft, package.Game, warnings);
-                using var explicitTextureCache = new PackageCache { CacheMaxSize = 8 };
+                integrityBaseline = PackageIntegrity.CaptureIssues(package);
+                VerifyUnchangedNonFiniteValues(draft, face);
+                draft = FilterSupportedAttachments(draft, warnings, sourceCache, installedAssets);
                 draft = draft with { MaterialOverrides = PccPackageWorkflow.OmitUnavailableSelectedTextures(
-                    draft.MaterialOverrides, explicitTextureCache, warnings) };
-                var explicitDonors = ResolveExplicitTextureDonors(draft, package.Game, explicitTextureCache)
+                    draft.MaterialOverrides, sourceCache, warnings) };
+                var explicitDonors = ResolveExplicitTextureDonors(draft, package.Game, sourceCache, installedAssets)
                     .Where(donor => !Path.GetFullPath(donor.FileRef.FilePath).Equals(packagePath, StringComparison.OrdinalIgnoreCase) ||
                         package.FindExport(PccAssetPathPolicy.FromExport(donor), "Texture2D")?.UIndex != donor.UIndex)
                     .ToArray();
-                PccPackageWorkflow.StageExplicitTextureDonors(package, face, explicitDonors);
-                draft = ApplyScalpMaterialSelection(package, face, draft, warnings);
-                WriteFace(package, face, draft, warnings);
+                PccPackageWorkflow.StageExplicitTextureDonors(package, face, explicitDonors, sourceCache, installedAssets);
+                draft = ApplyScalpMaterialSelection(package, face, draft, warnings, sourceCache, installedAssets);
+                WriteFace(package, face, draft, warnings, sourceCache, installedAssets);
                 var materialOverride = ResolveMaterialOverride(face);
                 WriteMaterialOverride(package, materialOverride, draft.MaterialOverrides, warnings);
                 overridePath = materialOverride.InstancedFullPath;
@@ -262,13 +260,15 @@ public sealed class MorphFacePackageWriter
         IMEPackage package,
         ExportEntry face,
         MorphFaceDocument draft,
-        ICollection<string> warnings)
+        ICollection<string> warnings,
+        PackageCache sourceCache,
+        InstalledGameAssetResolver installedAssets)
     {
         var properties = face.GetProperties();
         properties.AddOrReplaceProp(new ObjectProperty(
             ResolveDraftEntry(package, draft.BaseHeadReference, "SkeletalMesh", required: true),
             "m_oBaseHead"));
-        WriteAttachmentReferences(package, properties, draft, warnings);
+        WriteAttachmentReferences(package, properties, draft, warnings, sourceCache, installedAssets);
 
         WriteMorphData(face, new MorphFaceMorphData(
             draft.MorphFeatures, draft.FinalSkeleton, draft.BakedLods), properties);
@@ -278,7 +278,9 @@ public sealed class MorphFacePackageWriter
         IMEPackage package,
         ExportEntry face,
         MorphFaceDocument draft,
-        ICollection<string> warnings)
+        ICollection<string> warnings,
+        PackageCache sourceCache,
+        InstalledGameAssetResolver installedAssets)
     {
         if (draft.ScalpMaterialSelection is not { } selection) return draft;
         if (package.Game != MEGame.LE3)
@@ -288,7 +290,7 @@ public sealed class MorphFacePackageWriter
         var clone = ScalpMaterialGraphMaterializer.Apply(
             package, face, draft.BaseHeadReference ?? throw new InvalidDataException(
                 "A base-head reference is required to save the selected CC scalp material graph."),
-            selection, warnings);
+            selection, warnings, sourceCache, installedAssets);
         return draft with
         {
             BaseHeadReference = new AssetIdentity(
@@ -373,15 +375,14 @@ public sealed class MorphFacePackageWriter
     }
 
     private static IReadOnlyList<ExportEntry> ResolveExplicitTextureDonors(
-        MorphFaceDocument draft, MEGame game, PackageCache cache) =>
+        MorphFaceDocument draft, MEGame game, PackageCache cache, InstalledGameAssetResolver installedAssets) =>
         PccPackageWorkflow.ResolveExplicitTextureDonors(
-            draft.MaterialOverrides.Textures.Select(value => value.TextureReference), game, cache);
+            draft.MaterialOverrides.Textures.Select(value => value.TextureReference), game, cache, installedAssets);
 
     private static MorphFaceDocument FilterSupportedAttachments(
-        MorphFaceDocument draft, MEGame game, ICollection<string> warnings)
+        MorphFaceDocument draft, ICollection<string> warnings, PackageCache cache, InstalledGameAssetResolver installedAssets)
     {
-        using var cache = new PackageCache { CacheMaxSize = 8 };
-        var resolver = new GamePackageReferenceResolver(cache);
+        var resolver = new GamePackageReferenceResolver(cache, installedAssets);
         AssetIdentity? Filter(AssetIdentity? identity)
         {
             if (identity is null) return null;
@@ -401,14 +402,14 @@ public sealed class MorphFacePackageWriter
             IEntry? entry = InstalledGameAssetResolver.TryExact(cache, identity.PackagePath,
                 identity.InstancedPath, "SkeletalMesh", identity.UIndex);
             if (entry is null && identity.IsImport)
-                entry = cache.GetCachedPackage(identity.PackagePath)?.FindEntry(identity.InstancedPath, "SkeletalMesh");
+                entry = PackageSourceCache.GetPackage(cache, identity.PackagePath)?.FindEntry(identity.InstancedPath, "SkeletalMesh");
             var mesh = resolver.Resolve(entry);
             if (mesh is null)
             {
                 warnings.Add($"Optional attachment '{identity.InstancedPath}' was omitted because its mesh could not be found.");
                 return null;
             }
-            if (MorphFaceAttachmentTransferEngine.HasSupportedMaterials(mesh.FileRef, mesh, out var unsupported))
+            if (MorphFaceAttachmentTransferEngine.HasSupportedMaterials(mesh.FileRef, mesh, out var unsupported, cache, installedAssets))
                 return identity;
             warnings.Add($"Optional attachment '{identity.InstancedPath}' was omitted because {unsupported} is outside MFE's supported canonical materials.");
             return null;
@@ -424,7 +425,9 @@ public sealed class MorphFacePackageWriter
         IMEPackage package,
         PropertyCollection properties,
         MorphFaceDocument draft,
-        ICollection<string> warnings)
+        ICollection<string> warnings,
+        PackageCache sourceCache,
+        InstalledGameAssetResolver installedAssets)
     {
         if (draft.HairMeshReference is null)
         {
@@ -433,14 +436,14 @@ public sealed class MorphFacePackageWriter
         else
         {
             properties.AddOrReplaceProp(new ObjectProperty(
-                ResolveAttachmentDraftEntry(package, draft.HairMeshReference, warnings),
+                ResolveAttachmentDraftEntry(package, draft.HairMeshReference, warnings, sourceCache, installedAssets),
                 "m_oHairMesh"));
         }
 
         var otherMeshes = draft.OtherMeshReferences
             .Where(reference => reference is not null)
             .Select(reference => new ObjectProperty(
-                ResolveAttachmentDraftEntry(package, reference, warnings)))
+                ResolveAttachmentDraftEntry(package, reference, warnings, sourceCache, installedAssets)))
             .ToArray();
         if (otherMeshes.Length == 0)
         {
@@ -526,7 +529,9 @@ public sealed class MorphFacePackageWriter
     private static IEntry ResolveAttachmentDraftEntry(
         IMEPackage package,
         AssetIdentity? identity,
-        ICollection<string> warnings)
+        ICollection<string> warnings,
+        PackageCache sourceCache,
+        InstalledGameAssetResolver installedAssets)
     {
         if (identity is null)
         {
@@ -548,7 +553,7 @@ public sealed class MorphFacePackageWriter
             throw new InvalidDataException(
                 $"Referenced imported SkeletalMesh '{identity.InstancedPath}' was not preserved in the destination PCC.");
         }
-        return ExternalSkeletalMeshMaterializer.Materialize(package, identity, warnings);
+        return ExternalSkeletalMeshMaterializer.Materialize(package, identity, warnings, sourceCache, installedAssets);
     }
 
     private static ExportEntry FindExport(IMEPackage package, string path, string expectedClass)

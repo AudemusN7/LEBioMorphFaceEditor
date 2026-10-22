@@ -116,13 +116,15 @@ internal static class MorphFaceAttachmentTransferEngine
     {
         if (donors.ResolveOfficial(destination.Game, canonicalPath, "SkeletalMesh") is { } installed)
         {
-            if (!HasSupportedMaterials(installed.FileRef, installed, out var unsupported))
+            if (!HasSupportedMaterials(installed.FileRef, installed, out var unsupported,
+                    donors.Cache, donors.InstalledAssets))
             {
                 warnings.Add(
                     $"Optional attachment '{canonicalPath}' was omitted because it requires unsupported material '{unsupported}'.");
                 return null;
             }
-            return ExternalSkeletalMeshMaterializer.MaterializeResolved(destination, installed, warnings);
+            return ExternalSkeletalMeshMaterializer.MaterializeResolved(
+                destination, installed, warnings, donors.Cache, donors.InstalledAssets);
         }
 
         var existingMatches = FindExactExports(destination, canonicalPath);
@@ -133,7 +135,8 @@ internal static class MorphFaceAttachmentTransferEngine
         }
         if (existingMatches.SingleOrDefault() is { } existing)
         {
-            if (!HasSupportedMaterials(destination, existing, out var unsupported))
+            if (!HasSupportedMaterials(destination, existing, out var unsupported,
+                    donors.Cache, donors.InstalledAssets))
             {
                 warnings.Add(
                     $"Optional attachment '{canonicalPath}' was omitted because it requires unsupported material '{unsupported}'.");
@@ -158,13 +161,15 @@ internal static class MorphFaceAttachmentTransferEngine
                 }
                 if (templateMatches.SingleOrDefault() is { } templateExport)
                 {
-                    if (!HasSupportedMaterials(template, templateExport, out var unsupported))
+                    if (!HasSupportedMaterials(template, templateExport, out var unsupported,
+                            donors.Cache, donors.InstalledAssets))
                     {
                         warnings.Add(
                             $"Optional attachment '{canonicalPath}' was omitted because it requires unsupported material '{unsupported}'.");
                         return null;
                     }
-                    return ExternalSkeletalMeshMaterializer.MaterializeResolved(destination, templateExport, warnings);
+                    return ExternalSkeletalMeshMaterializer.MaterializeResolved(
+                        destination, templateExport, warnings, donors.Cache, donors.InstalledAssets);
                 }
             }
         }
@@ -182,7 +187,12 @@ internal static class MorphFaceAttachmentTransferEngine
             .Take(2)
             .ToArray();
 
-    internal static bool HasSupportedMaterials(IMEPackage package, ExportEntry mesh, out string unsupported)
+    internal static bool HasSupportedMaterials(
+        IMEPackage package,
+        ExportEntry mesh,
+        out string unsupported,
+        PackageCache? sourceCache = null,
+        InstalledGameAssetResolver? installedAssets = null)
     {
         var materialIndexes = mesh.GetBinaryData<SkeletalMesh>().Materials;
         if (materialIndexes is null || materialIndexes.Length == 0)
@@ -191,8 +201,9 @@ internal static class MorphFaceAttachmentTransferEngine
             return true;
         }
 
-        using var cache = new PackageCache { CacheMaxSize = 8 };
-        var referenceResolver = new GamePackageReferenceResolver(cache);
+        using var ownedCache = sourceCache is null ? new PackageCache { CacheMaxSize = 8 } : null;
+        var cache = sourceCache ?? ownedCache!;
+        var referenceResolver = new GamePackageReferenceResolver(cache, installedAssets);
         foreach (var materialIndex in materialIndexes)
         {
             if (materialIndex == 0)
@@ -201,7 +212,7 @@ internal static class MorphFaceAttachmentTransferEngine
             }
             var materialReference = package.GetEntry(materialIndex);
             var material = materialReference is null ? null :
-                CanonicalAttachmentMaterialPolicy.ResolveReplacement(mesh, materialReference, cache)
+                CanonicalAttachmentMaterialPolicy.ResolveReplacement(mesh, materialReference, cache, installedAssets)
                 ?? referenceResolver.Resolve(materialReference);
             if (material is null)
             {
@@ -228,10 +239,13 @@ internal static class MorphFaceAttachmentTransferEngine
 
     private sealed class DonorPackages : IDisposable
     {
-        private readonly PackageCache _cache = new() { CacheMaxSize = 8 };
+        private readonly PackageCache _cache = new() { CacheMaxSize = 64 };
         private readonly InstalledGameAssetResolver _installedAssets = new();
 
-        internal IMEPackage Open(string path) => _cache.GetCachedPackage(Path.GetFullPath(path))!;
+        internal PackageCache Cache => _cache;
+        internal InstalledGameAssetResolver InstalledAssets => _installedAssets;
+
+        internal IMEPackage Open(string path) => PackageSourceCache.GetPackage(_cache, path)!;
 
         internal ExportEntry? ResolveOfficial(MEGame game, string path, string className) =>
             _installedAssets.Resolve(game, path, className, _cache);

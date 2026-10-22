@@ -85,6 +85,16 @@ internal sealed class GamePackageReferenceResolver(PackageCache packageCache, In
         }
         try
         {
+            // LEC's contextual fallback reads the cache directly. Check its
+            // bounded candidate files before reusing readers from earlier imports.
+            var mounted = LegendaryExplorerCore.GameFilesystem.MELoadedFiles.GetFilesLoadedInGame(
+                import.Game, forceUseCached: true);
+            var directory = Path.GetDirectoryName(import.FileRef.FilePath);
+            foreach (var name in EntryImporter.GetPossibleImportFiles(import))
+            {
+                if (mounted.TryGetValue(name, out var path)) PackageSourceCache.Verify(packageCache, path);
+                if (directory is not null) PackageSourceCache.Verify(packageCache, Path.Combine(directory, name));
+            }
             if (EntryImporter.ResolveImport(import, packageCache) is { } resolved)
                 return _installedAssets.Resolve(resolved, packageCache) ?? resolved;
         }

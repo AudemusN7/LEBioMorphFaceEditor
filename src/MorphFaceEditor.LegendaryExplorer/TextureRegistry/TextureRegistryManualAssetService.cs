@@ -229,14 +229,20 @@ public sealed class TextureRegistryManualAssetService(TextureRegistryStore store
         }
 
         failures = errors;
+        var manualAssets = retained.Concat(baseSnapshot.ManualAssets)
+            .DistinctBy(Key, StringComparer.OrdinalIgnoreCase).ToArray();
+        var sourcePaths = manualAssets.Select(asset => Path.GetFullPath(asset.PackagePath))
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         return baseSnapshot with
         {
             Candidates = textures.Values.OrderBy(value => value.InstancedPath,
                 StringComparer.OrdinalIgnoreCase).ToArray(),
             AttachmentMeshes = meshes.Values.OrderBy(value => value.CanonicalPath,
                 StringComparer.OrdinalIgnoreCase).ToArray(),
-            ManualAssets = retained.Concat(baseSnapshot.ManualAssets)
-                .DistinctBy(Key, StringComparer.OrdinalIgnoreCase).ToArray()
+            ManualAssets = manualAssets,
+            MountedPackagePaths = sourcePaths,
+            MountedPackages = sourcePaths.Where(File.Exists)
+                .Select(MountedPackageFingerprint.Read).ToArray()
         };
 
         void RetainMissing(ManualRegistryAsset selected, string reason)

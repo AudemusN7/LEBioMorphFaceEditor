@@ -20,7 +20,12 @@ public static class TextureRegistryStoreTests
         new("texture registry scanner: persisted donors follow highest official mount and keep only mod additions", RealScannerPreservesOfficialDonors),
         new("texture registry builder: mod additions merge from sidecar without stock replacements", ModAdditionsMergeFromSidecar),
         new("texture registry builder: filename winner without the asset excludes shadowed official defaults", BuilderExcludesShadowedOfficialDefault),
+        new("texture registry resolver: official discovery filters mod roots and rechecks changed mounts", OfficialDiscoveryFiltersModsAndRechecksMounts),
         new("texture registry builder: cancelled rebuild preserves active file", CancelledBuildPreservesActiveFile),
+        new("texture registry builder: keeps filename-winning official MIC variants after lookup read", OfficialMicVariantsSurviveLookupRead),
+        new("texture registry builder: mod-only rebuild scans only mods and preserves other files", ModsOnlyRebuildIsScoped),
+        new("texture registry builder: mod-only prerequisite and changed-index failures are typed and atomic", ModsOnlyFailuresAreTyped),
+        new("texture registry status: detects stale represented sources without disabling catalogues", StaleSourcesAreReportedSeparately),
         new("texture registry runtime: changed or removed package leaves catalogue available", ChangedPackageInvalidatesCachedCatalogue),
         new("custom assets: missing PCC remains recorded with a relink report", MissingManualPccProducesRelinkReport),
         new("custom assets: selected export appends to sidecar", SelectedExportAppendsToSidecar),
@@ -75,11 +80,214 @@ public static class TextureRegistryStoreTests
         File.WriteAllBytes(path, [1, 2]);
         var cached = service.ReadAsync(MorphFaceGame.LE1).GetAwaiter().GetResult();
         TestAssert.True(cached.IsAvailable, "A changed source package invalidated the whole catalogue.");
+        TestAssert.True(fixture.Store.GetStatus(MorphFaceGame.LE1).IsStale,
+            "A changed represented source package was not reported as stale.");
         TestAssert.True(ReferenceEquals(first, cached), "A source package change rebuilt the parsed catalogue.");
         File.Delete(path);
         var fresh = new TextureCatalogService(fixture.Store).ReadAsync(MorphFaceGame.LE1).GetAwaiter().GetResult();
         TestAssert.True(fresh.IsAvailable, "A missing asset package invalidated unrelated catalogue entries.");
         TestAssert.Equal(first.Candidates.Count, fresh.Candidates.Count);
+    }
+
+    private static void OfficialMicVariantsSurviveLookupRead()
+    {
+        using var fixture = RegistryFixture.Create();
+        var root = Path.Combine(Path.GetDirectoryName(fixture.Paths.GetPath(MorphFaceGame.LE3))!, "Game", "BioGame", "CookedPCConsole");
+        var firstPackage = Path.Combine(root, "BIOG_One.pcc");
+        var secondPackage = Path.Combine(root, "BioD_Two.pcc");
+        Directory.CreateDirectory(root);
+        File.WriteAllBytes(firstPackage, [1]);
+        File.WriteAllBytes(secondPackage, [2]);
+        const string micPath = "BIOG_HMF_HED_PROMorph_R.PROBase.HMF_HED_PROBase_EYE_MAT_1a";
+        var scanner = new FakePackageScanner(assets: new Dictionary<string, IReadOnlyList<InstalledAssetOccurrence>>
+        {
+            [firstPackage] = [new(micPath, "MaterialInstanceConstant", firstPackage, 17, 0, TextureCatalogOrigin.BaseGame)],
+            [secondPackage] = [new(micPath, "MaterialInstanceConstant", secondPackage, 31, 0, TextureCatalogOrigin.BaseGame)]
+        });
+        fixture.CreateBuilder(scanner, _ => [firstPackage, secondPackage])
+            .RebuildAsync(MorphFaceGame.LE3).GetAwaiter().GetResult();
+
+        var reopened = fixture.Store.ReadForLookup(MorphFaceGame.LE3);
+        var locations = reopened.Assets
+            .Where(value => value.InstancedPath.Equals(micPath, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(value => value.PackagePath, StringComparer.OrdinalIgnoreCase).ToArray();
+        TestAssert.Equal(2, locations.Length);
+        TestAssert.True(locations.Select(value => value.ExportUIndex).Order().SequenceEqual([17, 31]),
+            "Lookup compaction removed one of the official MIC exports.");
+        TestAssert.True(locations.All(value => reopened.OfficialPackagePaths.Contains(
+                value.PackagePath, StringComparer.OrdinalIgnoreCase)),
+            "A retained official MIC variant was outside the filename-winner packages.");
+    }
+
+    private static void OfficialDiscoveryFiltersModsAndRechecksMounts()
+    {
+        using var fixture = RegistryFixture.Create();
+        var bioGame = Path.Combine(Path.GetDirectoryName(fixture.Paths.GetPath(MorphFaceGame.LE3))!, "Game", "BioGame");
+        var cooked = Path.Combine(bioGame, "CookedPCConsole");
+        var lowerDlc = Path.Combine(bioGame, "DLC", "DLC_CON_PRO1");
+        var higherDlc = Path.Combine(bioGame, "DLC", "DLC_METR_Patch01");
+        var modDlc = Path.Combine(bioGame, "DLC", "DLC_MOD_Discovery");
+        var disabledDlc = Path.Combine(bioGame, "DLC", "DLC_MOD_Disabled");
+        foreach (var directory in new[] { cooked, lowerDlc, higherDlc, modDlc, disabledDlc })
+            Directory.CreateDirectory(Path.Combine(directory, "CookedPCConsole"));
+
+        var basePackage = Path.Combine(cooked, "BIOG_Shared.pcc");
+        var lowerPackage = Path.Combine(lowerDlc, "CookedPCConsole", "BIOG_Shared.pcc");
+        var higherPackage = Path.Combine(higherDlc, "CookedPCConsole", "BIOG_Shared.pcc");
+        var modPackage = Path.Combine(modDlc, "CookedPCConsole", "BIOG_Shared.pcc");
+        var disabledPackage = Path.Combine(disabledDlc, "CookedPCConsole", "BIOG_Disabled.pcc");
+        foreach (var path in new[] { basePackage, lowerPackage, higherPackage, modPackage, disabledPackage })
+            File.WriteAllBytes(path, [1]);
+        WriteLe3Mount(lowerDlc, 2000);
+        WriteLe3Mount(higherDlc, 4000);
+
+        var enabledDlc = new[] { lowerDlc, higherDlc, modDlc };
+        var allEnabledPaths = TextureRegistryBuilder.GetPhysicalPackagePaths(
+            MorphFaceGame.LE3, cooked, enabledDlc);
+        var officialPaths = TextureRegistryBuilder.GetOfficialPhysicalPackagePaths(
+            MorphFaceGame.LE3, cooked, enabledDlc);
+        TestAssert.True(allEnabledPaths.Contains(modPackage, StringComparer.OrdinalIgnoreCase),
+            "The full physical-path seam stopped including enabled mods.");
+        TestAssert.True(!allEnabledPaths.Contains(disabledPackage, StringComparer.OrdinalIgnoreCase),
+            "Physical discovery included a DLC absent from the enabled-folder input.");
+        TestAssert.True(!officialPaths.Contains(modPackage, StringComparer.OrdinalIgnoreCase),
+            "Official-only discovery descended into an enabled mod root.");
+        TestAssert.Equal(3, officialPaths.Count);
+        var allPathWinners = TextureRegistryBuilder.SelectOfficialFilenameWinners(allEnabledPaths, MorphFaceGame.LE3);
+        var filteredWinners = TextureRegistryBuilder.SelectOfficialFilenameWinners(officialPaths, MorphFaceGame.LE3);
+        TestAssert.True(allPathWinners.SequenceEqual(filteredWinners, StringComparer.OrdinalIgnoreCase),
+            "Filtering DLC roots changed the official filename-winner sequence.");
+        TestAssert.Equal(Path.GetFullPath(higherPackage), filteredWinners.Single());
+
+        // A new discovery operation must observe changed native mount data.
+        WriteLe3Mount(higherDlc, 1000);
+        var nextOperationWinners = TextureRegistryBuilder.SelectOfficialFilenameWinners(
+            TextureRegistryBuilder.GetOfficialPhysicalPackagePaths(MorphFaceGame.LE3, cooked, enabledDlc),
+            MorphFaceGame.LE3);
+        TestAssert.Equal(Path.GetFullPath(lowerPackage), nextOperationWinners.Single());
+    }
+
+    private static void ModsOnlyRebuildIsScoped()
+    {
+        using var fixture = RegistryFixture.Create();
+        var bioGame = Path.Combine(Path.GetDirectoryName(fixture.Paths.GetPath(MorphFaceGame.LE3))!, "Game", "BioGame");
+        var baseCooked = Path.Combine(bioGame, "CookedPCConsole");
+        var winnerCooked = Path.Combine(bioGame, "DLC", "DLC_METR_Patch01", "CookedPCConsole");
+        var modCooked = Path.Combine(bioGame, "DLC", "DLC_MOD_Test", "CookedPCConsole");
+        foreach (var directory in new[] { baseCooked, winnerCooked, modCooked }) Directory.CreateDirectory(directory);
+        var shadowed = Path.Combine(baseCooked, "BIOG_Shadowed.pcc");
+        var winner = Path.Combine(winnerCooked, "BIOG_Shadowed.pcc");
+        var mod = Path.Combine(modCooked, "BIOG_Shadowed.pcc");
+        foreach (var (path, value) in new[] { (shadowed, (byte)1), (winner, (byte)2), (mod, (byte)3) })
+            File.WriteAllBytes(path, [value]);
+        WriteLe3Mount(Path.Combine(bioGame, "DLC", "DLC_METR_Patch01"), 4000);
+        const string stockPath = "BIOG_Shadowed.Hair.Stock_MDL";
+        const string newPath = "BIOG_Shadowed.Hair.New_MDL";
+        var scanner = new FakePackageScanner(assets: new Dictionary<string, IReadOnlyList<InstalledAssetOccurrence>>
+        {
+            [shadowed] = [new(stockPath, "SkeletalMesh", shadowed, 10, 0, TextureCatalogOrigin.BaseGame)],
+            [mod] = [new(stockPath, "SkeletalMesh", mod, 20, 9000, TextureCatalogOrigin.Mod),
+                new(newPath, "SkeletalMesh", mod, 21, 9000, TextureCatalogOrigin.Mod)]
+        });
+        var builder = fixture.CreateBuilder(scanner, _ => [shadowed, winner, mod]);
+        builder.RebuildAsync(MorphFaceGame.LE3).GetAwaiter().GetResult();
+        var officialBefore = File.ReadAllBytes(fixture.Paths.GetPath(MorphFaceGame.LE3));
+        fixture.Store.WriteManualAtomic(Snapshot(MorphFaceGame.LE3));
+        var manualBefore = File.ReadAllBytes(fixture.Paths.GetManualPath(MorphFaceGame.LE3));
+        var modsBefore = File.ReadAllBytes(fixture.Paths.GetModsPath(MorphFaceGame.LE3));
+        scanner.ScannedPaths.Clear();
+
+        var status = builder.RebuildModsAsync(MorphFaceGame.LE3).GetAwaiter().GetResult();
+
+        TestAssert.Equal(1, scanner.ScannedPaths.Count);
+        TestAssert.Equal(Path.GetFullPath(mod), Path.GetFullPath(scanner.ScannedPaths.Single()));
+        TestAssert.True(officialBefore.SequenceEqual(File.ReadAllBytes(fixture.Paths.GetPath(MorphFaceGame.LE3))),
+            "A mod-only rebuild changed the installed registry.");
+        TestAssert.True(manualBefore.SequenceEqual(File.ReadAllBytes(fixture.Paths.GetManualPath(MorphFaceGame.LE3))),
+            "A mod-only rebuild changed the manual registry.");
+        TestAssert.True(!modsBefore.SequenceEqual(File.ReadAllBytes(fixture.Paths.GetModsPath(MorphFaceGame.LE3))),
+            "A mod-only rebuild did not publish its new sidecar.");
+        TestAssert.Equal(TextureRegistryState.Ready, status.State);
+        var modAssets = fixture.Store.ReadMods(MorphFaceGame.LE3).Assets;
+        TestAssert.True(modAssets.All(value => !value.InstancedPath.Equals(stockPath, StringComparison.OrdinalIgnoreCase)),
+            "A mod replacement was retained even though its official identity exists in a shadowed package.");
+        TestAssert.True(modAssets.Any(value => value.InstancedPath.Equals(newPath, StringComparison.OrdinalIgnoreCase)),
+            "A mod-only addition was lost during the scoped rebuild.");
+    }
+
+    private static void ModsOnlyFailuresAreTyped()
+    {
+        using var fixture = RegistryFixture.Create();
+        var missingScanner = new FakePackageScanner();
+        try
+        {
+            fixture.CreateBuilder(missingScanner, _ => []).RebuildModsAsync(MorphFaceGame.LE1)
+                .GetAwaiter().GetResult();
+            throw new Exception("A mod-only rebuild proceeded without an installed database.");
+        }
+        catch (TextureRegistryBuildException exception)
+        {
+            TestAssert.Equal(TextureRegistryBuildFailure.OfficialDatabaseRequired, exception.Reason);
+        }
+        TestAssert.Equal(0, missingScanner.ScannedPaths.Count);
+
+        fixture.CreateBuilder(new FakePackageScanner(), _ => []).RebuildAsync(MorphFaceGame.LE1)
+            .GetAwaiter().GetResult();
+        var modsPath = fixture.Paths.GetModsPath(MorphFaceGame.LE1);
+        var modsBefore = File.ReadAllBytes(modsPath);
+        var bioGame = Path.Combine(Path.GetDirectoryName(fixture.Paths.GetPath(MorphFaceGame.LE1))!, "Game", "BioGame");
+        var modPackage = Path.Combine(bioGame, "DLC", "DLC_MOD_Race", "CookedPCConsole", "BIOG_Mod.pcc");
+        Directory.CreateDirectory(Path.GetDirectoryName(modPackage)!);
+        File.WriteAllBytes(modPackage, [7]);
+        var racingScanner = new FakePackageScanner(onScan: () =>
+            File.WriteAllBytes(fixture.Paths.GetPath(MorphFaceGame.LE1), [0]));
+        try
+        {
+            fixture.CreateBuilder(racingScanner, _ => [modPackage])
+                .RebuildModsAsync(MorphFaceGame.LE1).GetAwaiter().GetResult();
+            throw new Exception("A mod-only rebuild published after the installed index changed.");
+        }
+        catch (TextureRegistryBuildException exception)
+        {
+            TestAssert.Equal(TextureRegistryBuildFailure.OfficialDatabaseChanged, exception.Reason);
+        }
+        TestAssert.True(modsBefore.SequenceEqual(File.ReadAllBytes(modsPath)),
+            "A rejected mod-only race changed the active mod database.");
+    }
+
+    private static void StaleSourcesAreReportedSeparately()
+    {
+        using var fixture = RegistryFixture.Create();
+        var root = Path.GetDirectoryName(fixture.Paths.GetPath(MorphFaceGame.LE1))!;
+        var baseSource = Path.Combine(root, "base.pcc");
+        var modSource = Path.Combine(root, "mod.pcc");
+        var manualSource = Path.Combine(root, "manual.pcc");
+        foreach (var path in new[] { baseSource, modSource, manualSource }) File.WriteAllBytes(path, [1]);
+        fixture.Store.WriteAtomic(Snapshot(MorphFaceGame.LE1) with
+        {
+            MountedPackagePaths = [baseSource], MountedPackages = [MountedPackageFingerprint.Read(baseSource)]
+        });
+        fixture.Store.WriteManualAtomic(Snapshot(MorphFaceGame.LE1) with
+        {
+            MountedPackagePaths = [manualSource], MountedPackages = [MountedPackageFingerprint.Read(manualSource)]
+        });
+        fixture.Store.WriteModsAtomic(Snapshot(MorphFaceGame.LE1) with
+        {
+            MountedPackagePaths = [modSource], MountedPackages = [MountedPackageFingerprint.Read(modSource)]
+        });
+        TestAssert.True(!fixture.Store.GetStatus(MorphFaceGame.LE1).IsStale &&
+                        !fixture.Store.GetCustomStatus(MorphFaceGame.LE1).IsStale,
+            "Unchanged represented sources were marked stale.");
+        File.WriteAllBytes(baseSource, [1, 2]);
+        TestAssert.True(fixture.Store.GetStatus(MorphFaceGame.LE1).IsStale,
+            "A changed base source was not marked stale.");
+        TestAssert.True(!fixture.Store.GetCustomStatus(MorphFaceGame.LE1).IsStale,
+            "A stale base source contaminated the sidecar freshness status.");
+        File.WriteAllBytes(manualSource, [1, 2]);
+        TestAssert.True(fixture.Store.GetCustomStatus(MorphFaceGame.LE1).IsStale,
+            "A changed manual sidecar source was not included in custom freshness.");
+        var catalog = new TextureCatalogService(fixture.Store).ReadAsync(MorphFaceGame.LE1).GetAwaiter().GetResult();
+        TestAssert.True(catalog.IsAvailable, "Stale source diagnostics disabled the parsed picker catalogue.");
     }
 
     private static void MissingManualPccProducesRelinkReport()
@@ -567,12 +775,16 @@ public static class TextureRegistryStoreTests
     private sealed class FakePackageScanner(
         IReadOnlyDictionary<string, IReadOnlyList<TextureRegistryScannedTexture>>? results = null,
         Action? onScan = null,
-        IReadOnlyDictionary<string, IReadOnlyList<AttachmentMeshOccurrence>>? meshes = null) : ITextureRegistryPackageScanner
+        IReadOnlyDictionary<string, IReadOnlyList<AttachmentMeshOccurrence>>? meshes = null,
+        IReadOnlyDictionary<string, IReadOnlyList<InstalledAssetOccurrence>>? assets = null) : ITextureRegistryPackageScanner
     {
         private readonly IReadOnlyDictionary<string, IReadOnlyList<TextureRegistryScannedTexture>> _results =
             results ?? new Dictionary<string, IReadOnlyList<TextureRegistryScannedTexture>>();
         private readonly IReadOnlyDictionary<string, IReadOnlyList<AttachmentMeshOccurrence>> _meshes =
             meshes ?? new Dictionary<string, IReadOnlyList<AttachmentMeshOccurrence>>();
+        private readonly IReadOnlyDictionary<string, IReadOnlyList<InstalledAssetOccurrence>> _assets =
+            assets ?? new Dictionary<string, IReadOnlyList<InstalledAssetOccurrence>>();
+        public List<string> ScannedPaths { get; } = [];
 
         public TextureRegistryPackageScan Scan(
             MorphFaceGame game,
@@ -580,10 +792,12 @@ public static class TextureRegistryStoreTests
             CancellationToken cancellationToken)
         {
             onScan?.Invoke();
+            ScannedPaths.Add(packagePath);
             return new TextureRegistryPackageScan(
                 _results.GetValueOrDefault(packagePath) ?? [], [])
             {
-                AttachmentMeshes = _meshes.GetValueOrDefault(packagePath) ?? []
+                AttachmentMeshes = _meshes.GetValueOrDefault(packagePath) ?? [],
+                Assets = _assets.GetValueOrDefault(packagePath) ?? []
             };
         }
     }

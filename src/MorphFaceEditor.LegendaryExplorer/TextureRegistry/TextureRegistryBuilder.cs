@@ -29,6 +29,11 @@ public interface ITextureRegistryBuilder
         IProgress<TextureRegistryBuildProgress>? progress = null,
         CancellationToken cancellationToken = default);
 
+    Task<TextureRegistryStatus> RebuildModsAsync(
+        MorphFaceGame game,
+        IProgress<TextureRegistryBuildProgress>? progress = null,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<TextureRegistryStatus>> RebuildAllAsync(
         IProgress<TextureRegistryBuildProgress>? progress = null,
         CancellationToken cancellationToken = default);
@@ -62,6 +67,12 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
         CancellationToken cancellationToken = default) =>
         Task.Run(() => Rebuild(game, progress, cancellationToken), cancellationToken);
 
+    public Task<TextureRegistryStatus> RebuildModsAsync(
+        MorphFaceGame game,
+        IProgress<TextureRegistryBuildProgress>? progress = null,
+        CancellationToken cancellationToken = default) =>
+        Task.Run(() => Rebuild(game, progress, cancellationToken, modsOnly: true), cancellationToken);
+
     public async Task<IReadOnlyList<TextureRegistryStatus>> RebuildAllAsync(
         IProgress<TextureRegistryBuildProgress>? progress = null,
         CancellationToken cancellationToken = default)
@@ -78,11 +89,21 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
     private TextureRegistryStatus Rebuild(
         MorphFaceGame game,
         IProgress<TextureRegistryBuildProgress>? progress,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool modsOnly = false)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var files = MergeScanPaths(_physicalPackagePaths(game));
-        var officialPackagePaths = SelectOfficialFilenameWinners(files, game);
+        var allFiles = MergeScanPaths(_physicalPackagePaths(game));
+        var files = modsOnly
+            ? allFiles.Where(path => LecTextureRegistryPackageScanner.GetOrigin(
+                path, LecTextureRegistryPackageScanner.ToMeGame(game)) == TextureCatalogOrigin.Mod).ToArray()
+            : allFiles;
+        var officialFingerprint = modsOnly ? _store.GetFileFingerprint(game) : null;
+        var officialSnapshot = modsOnly ? _store.ReadWithStatus(game).Snapshot : null;
+        if (modsOnly && officialSnapshot is null)
+            throw new TextureRegistryBuildException(TextureRegistryBuildFailure.OfficialDatabaseRequired,
+                $"Build the {game} installed database before rebuilding its mod database.");
+        var officialPackagePaths = modsOnly ? [] : SelectOfficialFilenameWinners(files, game);
         var officialPaths = officialPackagePaths.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var fingerprints = files.Where(File.Exists).Select(MountedPackageFingerprint.Read).ToArray();
         var occurrencesByPath = new Dictionary<string, List<TextureCatalogOccurrence>>(
@@ -194,7 +215,40 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
         cancellationToken.ThrowIfCancellationRequested();
         progress?.Report(new TextureRegistryBuildProgress(
             game, TextureRegistryBuildPhase.WritingRegistry, files.Count, files.Count, null, candidates.Length));
-        var officialIdentities = snapshot.Assets
+        var officialIdentities = GetOfficialIdentities(modsOnly ? officialSnapshot! : snapshot);
+        var installed = FilterSnapshot(snapshot, value => value.Origin is
+            TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc,
+            officialIdentities, includeModOnly: false);
+        var mods = FilterSnapshot(snapshot, value => value.Origin == TextureCatalogOrigin.Mod,
+            officialIdentities, includeModOnly: true);
+
+        Action verifySources = () =>
+        {
+            if (fingerprints.Any(source => !source.IsCurrent()) ||
+                !(modsOnly
+                    ? MergeScanPaths(_physicalPackagePaths(game).Where(path => LecTextureRegistryPackageScanner.GetOrigin(
+                        path, LecTextureRegistryPackageScanner.ToMeGame(game)) == TextureCatalogOrigin.Mod))
+                    : MergeScanPaths(_physicalPackagePaths(game))).SequenceEqual(files, StringComparer.OrdinalIgnoreCase))
+                throw new InvalidDataException("An installed package changed during the registry scan. Rebuild after package changes finish.");
+            if (modsOnly && officialFingerprint != _store.GetFileFingerprint(game))
+                throw new TextureRegistryBuildException(TextureRegistryBuildFailure.OfficialDatabaseChanged,
+                    "The installed registry changed during the mod scan. Rebuild the mod database again.");
+            progress?.Report(new TextureRegistryBuildProgress(
+                game, TextureRegistryBuildPhase.VerifyingRegistry,
+                files.Count, files.Count, null, candidates.Length));
+        };
+        if (modsOnly)
+            _store.WriteModsAtomic(mods, cancellationToken, verifySources);
+        else
+            _store.WriteInstalledAndModsAtomic(installed, mods, cancellationToken, verifySources);
+        progress?.Report(new TextureRegistryBuildProgress(
+            game, TextureRegistryBuildPhase.Ready, files.Count, files.Count, null, candidates.Length));
+        return modsOnly ? _store.GetModsStatus(game) : _store.GetStatus(game);
+    }
+
+    private static HashSet<string> GetOfficialIdentities(TextureRegistrySnapshot snapshot)
+    {
+        return snapshot.Assets
             .Where(value => value.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc)
             .Select(value => AssetIdentity(value.InstancedPath, value.ClassName))
             .Concat(snapshot.Candidates.Where(candidate => candidate.Occurrences.Any(value =>
@@ -204,24 +258,6 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
                 .Where(value => value.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc)
                 .Select(value => AssetIdentity(value.InstancedPath, "SkeletalMesh")))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var installed = FilterSnapshot(snapshot, value => value.Origin is
-            TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc,
-            officialIdentities, includeModOnly: false);
-        var mods = FilterSnapshot(snapshot, value => value.Origin == TextureCatalogOrigin.Mod,
-            officialIdentities, includeModOnly: true);
-
-        _store.WriteInstalledAndModsAtomic(installed, mods, cancellationToken, () =>
-        {
-            if (fingerprints.Any(source => !source.IsCurrent()) ||
-                !MergeScanPaths(_physicalPackagePaths(game)).SequenceEqual(files, StringComparer.OrdinalIgnoreCase))
-                throw new InvalidDataException("An installed package changed during the registry scan. Rebuild after package changes finish.");
-            progress?.Report(new TextureRegistryBuildProgress(
-                game, TextureRegistryBuildPhase.VerifyingRegistry,
-                files.Count, files.Count, null, candidates.Length));
-        });
-        progress?.Report(new TextureRegistryBuildProgress(
-            game, TextureRegistryBuildPhase.Ready, files.Count, files.Count, null, candidates.Length));
-        return _store.GetStatus(game);
     }
 
     private static TextureRegistrySnapshot FilterSnapshot(
@@ -260,15 +296,22 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
           .Where(candidate => !includeModOnly || !officialIdentities.Contains(AssetIdentity(candidate.EffectiveOccurrence.InstancedPath, "SkeletalMesh")))
           .ToArray();
 
-        var assets = source.Assets.Where(asset => includeModOnly
+        var assetGroups = source.Assets.Where(asset => includeModOnly
                 ? asset.Origin == TextureCatalogOrigin.Mod && !officialIdentities.Contains(AssetIdentity(asset.InstancedPath, asset.ClassName))
-                : (asset.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc) &&
-                  source.OfficialPackagePaths.Contains(Path.GetFullPath(asset.PackagePath), StringComparer.OrdinalIgnoreCase))
-            .GroupBy(asset => AssetIdentity(asset.InstancedPath, asset.ClassName), StringComparer.OrdinalIgnoreCase)
-            .Select(group => group.OrderByDescending(asset => asset.MountPriority)
+                : asset.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc)
+            .GroupBy(asset => AssetIdentity(asset.InstancedPath, asset.ClassName), StringComparer.OrdinalIgnoreCase);
+        var officialPackages = source.OfficialPackagePaths.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var assets = assetGroups.SelectMany(group =>
+        {
+            var ordered = group.OrderByDescending(asset => asset.MountPriority)
                 .ThenBy(asset => asset.PackagePath, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(asset => asset.ExportUIndex).First())
-            .ToArray();
+                .ThenBy(asset => asset.ExportUIndex).ToArray();
+            if (includeModOnly) return ordered.Take(1);
+            var winningLocations = ordered.Where(asset => officialPackages.Contains(
+                Path.GetFullPath(asset.PackagePath))).ToArray();
+            var retained = winningLocations.Length == 0 ? ordered.Take(1) : winningLocations;
+            return IsMaterialInstanceClass(group.First().ClassName) ? retained : retained.Take(1);
+        }).ToArray();
         var game = source.Game switch
         {
             MorphFaceGame.LE1 => MEGame.LE1,
@@ -294,6 +337,10 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
         };
     }
 
+    private static bool IsMaterialInstanceClass(string className) =>
+        className.Equals("MaterialInstanceConstant", StringComparison.OrdinalIgnoreCase) ||
+        className.Equals("MaterialInstanceTimeVarying", StringComparison.OrdinalIgnoreCase);
+
     private static string AssetIdentity(string path, string className) => $"{className}|{path}";
 
     private static TextureCatalogOccurrence ChooseTextureOccurrence(IReadOnlyList<TextureCatalogOccurrence> occurrences) =>
@@ -315,6 +362,27 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
         MorphFaceGame game,
         string cookedPath,
         IEnumerable<string>? enabledDlcDirectories = null)
+        => GetPhysicalPackagePaths(game, cookedPath, enabledDlcDirectories, officialOnly: false);
+
+    /// <summary>Enumerates official roots only, avoiding recursive discovery beneath enabled mod DLC roots.</summary>
+    internal static IReadOnlyList<string> GetOfficialPhysicalPackagePaths(MorphFaceGame game)
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        var cookedPath = LegendaryExplorerCoreRuntime.GetCookedPath(game);
+        return string.IsNullOrWhiteSpace(cookedPath) ? [] : GetOfficialPhysicalPackagePaths(game, cookedPath);
+    }
+
+    internal static IReadOnlyList<string> GetOfficialPhysicalPackagePaths(
+        MorphFaceGame game,
+        string cookedPath,
+        IEnumerable<string>? enabledDlcDirectories = null) =>
+        GetPhysicalPackagePaths(game, cookedPath, enabledDlcDirectories, officialOnly: true);
+
+    private static IReadOnlyList<string> GetPhysicalPackagePaths(
+        MorphFaceGame game,
+        string cookedPath,
+        IEnumerable<string>? enabledDlcDirectories,
+        bool officialOnly)
     {
         if (string.IsNullOrWhiteSpace(cookedPath) || !Directory.Exists(cookedPath)) return [];
         var meGame = LecTextureRegistryPackageScanner.ToMeGame(game);
@@ -322,18 +390,25 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
         var roots = new List<string> { cookedPath };
         if (gameRoot is not null)
         {
-            roots.AddRange((enabledDlcDirectories ?? MELoadedDLC.GetEnabledDLCFolders(meGame, gameRoot))
+            var dlcDirectories = enabledDlcDirectories ?? MELoadedDLC.GetEnabledDLCFolders(meGame, gameRoot);
+            if (officialOnly)
+                dlcDirectories = dlcDirectories.Where(dlc => MELoadedDLC.IsOfficialDLC(dlc, meGame));
+            roots.AddRange(dlcDirectories
                 .Select(dlc => Path.Combine(dlc, "CookedPCConsole")));
         }
-        return roots.Where(Directory.Exists)
+        var paths = roots.Where(Directory.Exists)
             .SelectMany(path => Directory.EnumerateFiles(path, "*.pcc", SearchOption.AllDirectories))
             .Where(path => !(meGame == MEGame.LE3 && path.EndsWith(
                 Path.Combine("DLC_METR_Patch01", "CookedPCConsole", "Startup.pcc"), StringComparison.OrdinalIgnoreCase)))
             .Select(Path.GetFullPath)
             .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(path => IsOfficialPath(path, meGame) ? 0 : 1)
-            .ThenBy(path => Path.GetFileName(path), StringComparer.OrdinalIgnoreCase)
-            .ThenBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return (officialOnly
+                ? paths.OrderBy(path => Path.GetFileName(path), StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(path => path, StringComparer.OrdinalIgnoreCase)
+                : paths.OrderBy(path => IsOfficialPath(path, meGame) ? 0 : 1)
+                    .ThenBy(path => Path.GetFileName(path), StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(path => path, StringComparer.OrdinalIgnoreCase))
             .ToArray();
     }
 
@@ -342,10 +417,33 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
     {
         ArgumentNullException.ThrowIfNull(packagePaths);
         var meGame = LecTextureRegistryPackageScanner.ToMeGame(game);
-        return packagePaths.Where(path => IsOfficialPath(path, meGame))
-            .GroupBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
-            .Select(group => group.OrderByDescending(path => LecTextureRegistryPackageScanner.GetMountPriority(path, meGame))
-                .ThenBy(path => Path.GetFullPath(path), StringComparer.OrdinalIgnoreCase).First())
+        var mountPriorities = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        (TextureCatalogOrigin Origin, int MountPriority) GetLocationForDirectory(string path)
+        {
+            var dlcDirectory = LecTextureRegistryPackageScanner.FindDlcDirectory(path);
+            if (dlcDirectory is null) return (TextureCatalogOrigin.BaseGame, 0);
+            // Resolve one real package path per source directory through the
+            // established origin API; mount priority is shared by its DLC.
+            var origin = LecTextureRegistryPackageScanner.GetOrigin(path, meGame);
+            if (origin != TextureCatalogOrigin.OfficialDlc) return (origin, 0);
+            if (!mountPriorities.TryGetValue(dlcDirectory, out var mountPriority))
+                mountPriorities.Add(dlcDirectory, mountPriority =
+                    LecTextureRegistryPackageScanner.GetMountPriority(path, meGame));
+            return (origin, mountPriority);
+        }
+
+        var files = packagePaths.Select(path => (Path: path,
+            SourceDirectory: Path.GetDirectoryName(Path.GetFullPath(path))!)).ToArray();
+        var locationsBySourceDirectory = files
+            .GroupBy(value => value.SourceDirectory, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => GetLocationForDirectory(group.First().Path),
+                StringComparer.OrdinalIgnoreCase);
+        return files.Select(value => (value.Path,
+                Location: locationsBySourceDirectory[value.SourceDirectory]))
+            .Where(value => value.Location.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc)
+            .GroupBy(value => Path.GetFileName(value.Path), StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.OrderByDescending(value => value.Location.MountPriority)
+                .ThenBy(value => Path.GetFullPath(value.Path), StringComparer.OrdinalIgnoreCase).First().Path)
             .Select(Path.GetFullPath)
             .OrderBy(path => Path.GetFileName(path), StringComparer.OrdinalIgnoreCase)
             .ToArray();

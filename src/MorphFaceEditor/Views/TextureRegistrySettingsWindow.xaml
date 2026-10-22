@@ -1,7 +1,8 @@
 <Window x:Class="MorphFaceEditor.Views.TextureRegistrySettingsWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="{DynamicResource loc_View_TextureRegistrySettingsWindow_MeshTextureDatabases}" Width="660" Height="560" MinHeight="500" Background="{DynamicResource WindowBackground}" Foreground="{DynamicResource PrimaryText}" WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
     <Grid Margin="18"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
       <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="{DynamicResource loc_View_TextureRegistrySettingsWindow_INSTALLEDMESHTEXTUREDATABASES}" Foreground="{DynamicResource Accent}" FontWeight="SemiBold"/><TextBlock Text="{DynamicResource loc_View_TextureRegistrySettingsWindow_ScanEachInstalledGameForRelevantHeadTexturesAndAttachme}" Foreground="{DynamicResource SecondaryText}" TextWrapping="Wrap" Margin="0,6,12,10"/></StackPanel><Button Grid.Column="1" Content="{Binding RebuildAllActionLabel}" Click="OnRebuildAllClick" VerticalAlignment="Top" Padding="10,3" Visibility="{Binding IsRebuildAllActionVisible, Converter={StaticResource BooleanToVisibilityConverter}}"/><StackPanel Grid.Row="1" Grid.ColumnSpan="2" Visibility="{Binding IsBuilding, Converter={StaticResource BooleanToVisibilityConverter}}" Margin="0,0,0,14"><ProgressBar Height="8" Maximum="100" Value="{Binding ProgressPercent, Mode=OneWay}"/><TextBlock Text="{Binding ProgressLabel}" Foreground="{DynamicResource SecondaryText}" FontSize="10" Margin="0,5,0,0"/></StackPanel></Grid>
-      <ItemsControl Grid.Row="1" ItemsSource="{Binding Rows}">
+      <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+      <ItemsControl ItemsSource="{Binding Rows}">
         <ItemsControl.ItemTemplate>
           <DataTemplate>
             <Border Background="{DynamicResource PanelBackground}" BorderBrush="{DynamicResource BorderBrush}"
@@ -26,23 +27,41 @@
                   </StackPanel>
                   <TextBlock Text="{Binding LastBuiltLabel, StringFormat={StaticResource loc_View_TextureRegistrySettingsWindow_LastBuiltFormat}}"
                              Foreground="{DynamicResource SecondaryText}" Margin="0,3,0,0"/>
-                  <TextBlock Text="{Binding ManualStatusLabel}" Foreground="{DynamicResource SecondaryText}"
-                             FontSize="10" Margin="0,3,0,0"/>
+                  <TextBlock Text="{Binding CustomStatusLabel}" FontSize="10" Margin="0,3,0,0">
+                    <TextBlock.Style>
+                      <Style TargetType="TextBlock">
+                        <Setter Property="Foreground" Value="{DynamicResource SecondaryText}"/>
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding CustomStatusBrushKey}" Value="StatusReady"><Setter Property="Foreground" Value="{DynamicResource StatusReady}"/></DataTrigger>
+                          <DataTrigger Binding="{Binding CustomStatusBrushKey}" Value="StatusPending"><Setter Property="Foreground" Value="{DynamicResource StatusPending}"/></DataTrigger>
+                          <DataTrigger Binding="{Binding CustomStatusBrushKey}" Value="StatusFailed"><Setter Property="Foreground" Value="{DynamicResource StatusFailed}"/></DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </TextBlock.Style>
+                  </TextBlock>
+                  <TextBlock Text="{Binding RefreshGuidanceLabel}" Foreground="{DynamicResource StatusPending}"
+                             FontSize="10" TextWrapping="Wrap" Margin="0,3,0,0"/>
                   <TextBlock Text="{Binding WarningLabel}" Foreground="{DynamicResource WarningText}"
                              FontSize="10" TextWrapping="Wrap" Margin="0,3,0,0"/>
                 </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0,0,0">
                   <Button Content="{DynamicResource loc_View_TextureRegistrySettingsWindow_AddCustomAsset}" Click="OnAddCustomAssetClick" Padding="10,3"
-                          Margin="0,0,8,0" IsEnabled="{Binding CanAddCustomAsset}"
+                          Margin="0,0,0,6" IsEnabled="{Binding CanAddCustomAsset}"
                           Visibility="{Binding IsAddCustomAssetVisible, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                  <StackPanel Orientation="Horizontal">
+                  <Button Content="{Binding DataContext.ModsActionLabel, RelativeSource={RelativeSource AncestorType=Window}}"
+                          Click="OnRescanModsClick" Padding="10,3" Margin="0,0,8,0" IsEnabled="{Binding CanRescanMods}"
+                          Visibility="{Binding IsRescanModsActionVisible, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                   <Button Content="{Binding DataContext.ActionLabel, RelativeSource={RelativeSource AncestorType=Window}}"
                           Click="OnRebuildClick" Padding="10,3"
                           Visibility="{Binding IsBuildActionVisible, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                  </StackPanel>
                 </StackPanel>
               </Grid>
             </Border>
           </DataTemplate>
         </ItemsControl.ItemTemplate>
       </ItemsControl>
+      </ScrollViewer>
     </Grid>
 </Window>

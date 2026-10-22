@@ -286,6 +286,16 @@ internal static class InstalledAssetResolutionTests
                 package.Save(path);
             }
             using var reopened = MEPackageHandler.OpenMEPackage(path, forceLoadFromDisk: true);
+            var mesh = reopened.Exports.Single(entry => entry.ClassName == "SkeletalMesh");
+            var texture = reopened.Exports.Single(entry => entry.ClassName == "Texture2D");
+            var meshIdentity = new AssetIdentity(path, mesh.InstancedFullPath, mesh.UIndex, mesh.ClassName);
+            var textureIdentity = new AssetIdentity(path, texture.InstancedFullPath, texture.UIndex, texture.ClassName);
+            var catalog = StandalonePlayerAssetCatalog.ForHead(MorphFaceGame.LE1,
+                new HeadMorphPayload(meshIdentity.InstancedPath, [], new MorphFaceMorphData([], [], []),
+                    new MorphFaceMaterialData([], [], [new TextureMaterialOverride("HED_Diff", textureIdentity)])),
+                [], referencePackagePath: path);
+            TestAssert.Equal(meshIdentity, catalog.SkeletalMeshes.Single());
+            TestAssert.Equal(textureIdentity, catalog.Textures.Single());
             foreach (var export in reopened.Exports.Where(entry => entry.ClassName is "Texture2D" or "SkeletalMesh"))
             {
                 TestAssert.True(export.IsForcedExport, "ForcedExport did not survive save/reopen.");
@@ -305,10 +315,30 @@ internal static class InstalledAssetResolutionTests
         {
             using var donor = MEPackageHandler.OpenMEPackage(
                 InstalledGameAssetResolver.ResolvePackage(game, fileName), forceLoadFromDisk: true);
+            var inventory = PackageAssetInspector.InventoryWorkspace(donor.FilePath);
+            var references = MorphFaceReferenceInspector.Inspect(donor, out var referenceGame);
+            TestAssert.Equal(referenceGame, inventory.Game);
+            TestAssert.True(references.Select(FaceReferences).SequenceEqual(inventory.Faces.Select(FaceReferences)),
+                "Selective workspace inventory changed a face or attachment identity.");
+            using var sourceCache = new PackageCache { CacheMaxSize = 8 };
+            var resolver = new InstalledGameAssetResolver();
             foreach (var className in new[] { "SkeletalMesh", "Texture2D" })
             {
                 var asset = donor.Exports.First(entry => entry.ClassName == className && !entry.IsDefaultObject);
                 var canonical = PccAssetPathPolicy.FromExport(asset);
+                var summary = inventory.Assets.Entries.Single(value => value.UIndex == asset.UIndex);
+                TestAssert.Equal(asset.InstancedFullPath, summary.InstancedPath);
+                TestAssert.Equal(className == "SkeletalMesh"
+                    ? asset.GetBinaryData<SkeletalMesh>().RefSkeleton.Length : (int?)null, summary.BoneCount);
+                var resolved = resolver.Resolve(donor.Game, canonical, className, sourceCache)!;
+                var expected = new AssetIdentity(resolved.FileRef.FilePath, canonical, resolved.UIndex, className);
+                var catalogued = className == "SkeletalMesh"
+                    ? StandalonePlayerAssetCatalog.ResolveInstalledSkeletalMeshes(game, [canonical])[canonical]
+                    : StandalonePlayerAssetCatalog.ForHead(game,
+                        new HeadMorphPayload("None", [], new MorphFaceMorphData([], [], []),
+                            new MorphFaceMaterialData([], [], [new TextureMaterialOverride("HED_Diff", expected)])),
+                        []).Textures.Single();
+                TestAssert.Equal(expected, catalogued);
                 var output = Path.Combine(Path.GetTempPath(), $"MFE-RealSeekfree-{Guid.NewGuid():N}.pcc");
                 try
                 {
@@ -335,6 +365,9 @@ internal static class InstalledAssetResolutionTests
                 finally { if (File.Exists(output)) File.Delete(output); }
             }
         }
+
+        static string FaceReferences(MorphFaceMeshReferences face) =>
+            $"{face.Game}|{face.FaceUIndex}|{face.FacePath}|{face.BaseHeadPath}|{face.HairMeshPath}|{string.Join('|', face.OtherMeshPaths)}";
     }
 
     private sealed record Donor(string Path, IMEPackage Package, ExportEntry Asset) : IDisposable

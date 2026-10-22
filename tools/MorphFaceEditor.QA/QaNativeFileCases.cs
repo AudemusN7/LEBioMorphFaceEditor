@@ -1,8 +1,11 @@
 using MorphFaceEditor.Core.Domain;
+using MorphFaceEditor.Core.Deformation;
 using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.Services;
+using LegendaryExplorerCore.Packages;
+using LegendaryExplorerCore.Unreal.BinaryConverters;
 
 namespace MorphFaceEditor.QA;
 
@@ -161,30 +164,99 @@ internal static partial class QaCases
         var input = Path.Combine(c.Root, "fixtures", "RON_Test", fixtureName + ".ron");
         c.TrackInput(input);
         QaContext.Require(TseHeadMorphRon.ReadProvenance(input) is null, "TSE fixture unexpectedly has MFE provenance.");
+        var original = TseHeadMorphRon.Read(input);
+        var seed = StandalonePlayerMorphImportService.ResolveInstalledSeed(c.Face.Game);
+        c.TrackInput(seed);
+        var registry = await c.Textures.ReadAsync(c.Face.Game);
+        if (!registry.IsAvailable) throw new QaPrerequisiteException("TSE RON journey requires a Ready asset database.");
+        var assets = await c.Measure("Resolve external TSE source donors", () => Task.Run(() =>
+            StandalonePlayerAssetCatalog.ForRon(c.Face.Game, input, registry.Candidates,
+                referencePackagePath: seed, attachmentMeshes: registry.AttachmentMeshes)));
+        foreach (var donor in assets.Textures.Concat(assets.SkeletalMeshes)
+                     .Select(value => value.PackagePath).Distinct(StringComparer.OrdinalIgnoreCase))
+            c.TrackInput(donor);
+        c.Current.Evidence["tseFixture"] = input;
+        c.Current.Evidence["tseSourceDonors"] = new { Seed = seed, assets.Textures, assets.SkeletalMeshes };
         using var reader = new MorphFacePackageReader();
         var dialogs = new QaDialogs { ImportGame = c.Face.Game, RonExportPath = c.Artifact("tse-readback.ron") };
         using var vm = FileWorkflow(c, dialogs, reader);
         await c.Measure("Open external TSE RON", () => vm.OpenDroppedFileAsync(input), QaStageKind.FileTransfer);
+        c.Current.Evidence["importMessages"] = dialogs.Messages;
         CheckVm(vm);
         QaContext.Require(vm.Editor is not null, "TSE RON did not create an editor.");
+        QaContext.Require(!vm.CanCommitFace, "TSE RON exposed a commit-capable installed package workspace.");
         var imported = vm.Editor!.CreateDraft();
-        var original = TseHeadMorphRon.Read(input);
         var raw = ReadPackageHead(imported.Source.PackagePath, vm.SelectedFace!.InstancedPath);
         var differences = QaHeadPayload.GeometryDifferences(original.MorphData, raw.MorphData);
         QaContext.Require(differences.Count == 0, "TSE authored payload changed: " + string.Join("; ", differences));
+        QaContext.Require(string.Equals(string.IsNullOrWhiteSpace(original.HairMesh) ? "None" : original.HairMesh,
+                raw.HairMesh, StringComparison.OrdinalIgnoreCase) &&
+            original.AccessoryMeshes.SequenceEqual(raw.AccessoryMeshes, StringComparer.OrdinalIgnoreCase),
+            "TSE import changed the original hair or accessory identities.");
+        QaContext.Require(vm.Editor.CanEditMorphFeatures && vm.Editor.CanEditBones,
+            "TSE canonical Player fixture lost its safe morph or bone controls.");
+        QaContext.Require(vm.Editor.Evaluation.Geometry.Positions.SequenceEqual(original.MorphData.BakedLods[0]),
+            "Opening the TSE fixture changed its authored LOD0 bake.");
+        foreach (var (authoredName, targetName) in new[]
+                 { ("Jaw_Width", "jaw_wide"), ("mouthShape_thick", "mouthShape_fatLips") }
+                 .Where(alias => original.MorphData.MorphFeatures.Any(feature =>
+                     feature.Name.Equals(alias.Item1, StringComparison.OrdinalIgnoreCase))))
+        {
+            var resolved = vm.Editor.Evaluation.Resolution.Features.Single(feature =>
+                feature.Feature.Name.Equals(authoredName, StringComparison.OrdinalIgnoreCase));
+            QaContext.Require(resolved.Kind == MorphFeatureResolutionKind.AliasTarget &&
+                string.Equals(resolved.Target?.Source.InstancedPath.Split('.').Last(), targetName,
+                    StringComparison.OrdinalIgnoreCase),
+                $"TSE creator feature '{authoredName}' did not resolve to canonical target '{targetName}'.");
+        }
+        var materials = new MorphFacePackageContextService().CaptureMaterialData(
+            imported.Source.PackagePath, vm.SelectedFace!.InstancedPath);
+        const string malformedScalp = "BIOG_HMM_HIR_PRO_R.PROCustomFade02.HMM_HIR_PROCustomFade01_Mask";
+        if (fixtureName.Equals("LE1-2_Customizable_Sheploo", StringComparison.OrdinalIgnoreCase))
+        {
+            QaContext.Require(original.MaterialData.Textures.Any(value =>
+                    string.Equals(value.TextureReference?.InstancedPath, malformedScalp, StringComparison.OrdinalIgnoreCase)),
+                "The Sheploo fixture no longer contains its known malformed scalp reference.");
+            QaContext.Require(materials.Textures.All(value =>
+                    !string.Equals(value.TextureReference?.InstancedPath, malformedScalp, StringComparison.OrdinalIgnoreCase)) &&
+                dialogs.Messages.Any(message => message.Contains(malformedScalp, StringComparison.OrdinalIgnoreCase)),
+                "TSE Sheploo import did not omit and name its malformed scalp reference.");
+        }
+        var expectedMaterials = original.MaterialData with { Textures = original.MaterialData.Textures.Where(value =>
+            !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(value.Name) &&
+            !string.Equals(value.TextureReference?.InstancedPath, malformedScalp, StringComparison.OrdinalIgnoreCase)).ToArray() };
+        var importedMaterials = materials with { Textures = materials.Textures.Where(value =>
+            !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(value.Name)).ToArray() };
+        QaContext.Require(MaterialSignature(expectedMaterials) == MaterialSignature(importedMaterials),
+            "TSE import changed the original BMO material payload: " +
+            string.Join("; ", MaterialDifferences(expectedMaterials, importedMaterials)));
+        if (fixtureName.Contains("ashleyhair", StringComparison.OrdinalIgnoreCase))
+        {
+            QaContext.Require(original.MaterialData.Textures.Any(value =>
+                    value.Name.Equals("HAIR_Mask", StringComparison.OrdinalIgnoreCase) && value.TextureReference is null) &&
+                dialogs.Messages.All(message => !message.Contains("HAIR_Mask", StringComparison.OrdinalIgnoreCase)),
+                "TSE Ashley hair import treated its empty HAIR_Mask sentinel as a malformed texture.");
+            if (c.Face.Game == MorphFaceGame.LE2)
+            {
+                using var package = MEPackageHandler.OpenMEPackage(imported.Source.PackagePath, forceLoadFromDisk: true);
+                var hair = package.FindExport(CanonicalAttachmentMaterialPolicy.AshleyMeshPath, "SkeletalMesh")
+                    ?? throw new InvalidDataException("TSE Ashley import lost its canonical hair mesh.");
+                var slots = hair.GetBinaryData<SkeletalMesh>().Materials;
+                QaContext.Require(slots.Length == 1 && package.GetEntry(slots[0]) is { ClassName: "MaterialInstanceConstant" } mic &&
+                    mic.InstancedFullPath.Equals(CanonicalAttachmentMaterialPolicy.AshleyMaterialPath, StringComparison.OrdinalIgnoreCase),
+                    "TSE LE2 Ashley hair did not retain its single canonical material instance.");
+            }
+        }
         await c.Measure("Export imported TSE head", () => Execute(vm.ExportMorphRonCommand), QaStageKind.FileTransfer);
         CheckVm(vm);
         var exported = TseHeadMorphRon.Read(dialogs.RonExportPath);
         VerifyPlayerOutput(c, exported);
-        RequireHead(raw with { MaterialData = raw.MaterialData with { Textures = raw.MaterialData.Textures
-            .Where(value => !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(value.Name)).ToArray() } }, exported, "TSE import/export");
+        RequireHead(raw, exported, "TSE import/export");
         var saved = await c.Save(imported, vm.Editor!.CreateDraft().Source.PackagePath, "tse-roundtrip.pcc");
         var reopened = await c.Load(saved.PackagePath, saved.FaceInstancedPath, MorphFaceGeometryMode.RelativeBake);
         AssertGeometry(imported, reopened.Loaded.Document);
         AssertMaterials(imported, reopened.Loaded.Document);
         await c.Render(reopened.Scene, "tse-reopened.png");
-        c.Current.Evidence["tseFixture"] = input;
-        c.Current.Evidence["importMessages"] = dialogs.Messages;
     }
 
     private static async Task MissingRonAssets(QaContext c, string kind)

@@ -1,96 +1,72 @@
-using MorphFaceEditor.Core.Services;
 using MorphFaceEditor.Tests;
 
 if (args.Length >= 3 && args[0].Equals("--d4-interrupted-save-worker", StringComparison.OrdinalIgnoreCase))
-{
     return PackageIntegrityTests.RunInterruptedSaveWorker(args[1], args[2]);
-}
 
-// Suites keep routine feature work local. The expensive/full path is always explicit.
-var suites = new Dictionary<string, IReadOnlyList<TestCase>>(StringComparer.OrdinalIgnoreCase)
+var list = false;
+string? suiteName = null;
+var filters = new List<string>();
+for (var index = 0; index < args.Length; index++)
 {
-    ["core"] = DeformationTests.All.Concat(EditingTests.All).Concat(DetachedMeshPreviewTests.All)
-        .Concat(CustomMaterialWorkspaceTests.All).Concat(RandomisationTests.Runtime)
-        .Concat(PlayerFacialDetailTexturePolicyTests.All)
-        .Concat(PlayerHairStyleCatalogTests.All)
-        .Concat(PlayerFaceScarTexturePolicyTests.All)
-        .Concat(Player2DaRandomisationPolicyTests.All).ToArray(),
-    ["materials"] = MaterialTests.All,
-    ["rendering"] = RenderingTests.All.Concat(AmbientOcclusionRenderingTests.All)
-        .Concat(EnvironmentLightingTests.All).Concat(EnvironmentRenderingTests.All)
-        .Concat(HumanHeadShadowTests.All).Concat(NativeHairPreviewTests.All)
-        .Concat(NativeAttachmentPreviewTests.All)
-        .Concat(VisorLensPreviewRendererTests.All)
-        .Concat(NativeKaidanAndCcHairPreviewTests.All).ToArray(),
-    ["ui"] = UiSmokeTests.All.Concat(AutomationCommandTests.All).Concat(NpcHairRandomisationTests.All)
-        .Concat(VisorLensAnimationLifecycleTests.All)
-        .Concat(RandomisationPublicationTests.All)
-        .Concat(ApplicationSettingsTests.All)
-        .Concat(LoggingTests.All)
-        .Concat(LocalisationTests.All)
-        .Concat(TextureRegistrySettingsTests.All)
-        .Concat(HairMeshManualSelectionTests.All)
-        .Concat(PlayerWorkspaceReferencePolicyTests.All)
-        .Concat(MorphTargetCatalogTests.All).Concat(MorphFaceCatalogTests.All)
-        .Concat(CustomMeshTests.All).Concat(MaterialInterchangeTests.All)
-        .Concat(Le2PlayerMaterialRonIdentityTests.All).ToArray(),
-    ["package"] = PackageContextTests.All.Concat(PackageValueVerificationTests.All).Concat(FemaleBatarianTests.All).Concat(PackageIntegrityTests.All).Concat(CompletedPccCloneTests.All).Concat(CcScalpGraphSaveTests.All).Concat(ActorAssignmentInventoryTests.All)
-        .Concat(ActorAssignmentTransactionTests.All).Concat(CustomMaterialEvidenceTests.All)
-        .Concat(ShaderMapOnlyReaderTests.All)
-        .Concat(RonStressTests.All).Concat(InstalledAssetResolutionTests.All)
-        .Concat(TextureTransferDonorPolicyTests.All)
-        .Concat(SupportedMaterialGraphPolicyTests.All)
-        .Concat(MaterialInstancePreservationTests.All).Concat(Le2LocalizedEyeOverrideImportRoleTests.All)
-        .Concat(HeadHairTextureOwnershipTests.All).Concat(NativeHairMaterialSupportTests.All)
-        .Concat(AttachmentMaterialPreviewTests.All)
-        .Concat(NativeAttachmentMaterialReaderTests.All)
-        .Concat(NativeDetachedCapMaterialTests.All)
-        .Concat(NativeVisorLensTests.All)
-        .Concat(CustomHumanMaterialCatalogTests.All)
-        .Concat(MorphFaceInterchangeExportTests.All).Concat(PcsavHeadMorphTests.All).Concat(PlayerRuntimeAssetTests.All).ToArray(),
-    ["c4"] = ImportedSkeletalMeshWriterTests.All
-        .Concat(CustomMeshPccMaterializerTests.All)
-        .Concat(CustomMeshForcedExportTests.All)
-        .Concat(GltfInverseMorphTests.All)
-        .Concat(PccTextureDependencyResolverTests.All)
-        .ToArray(),
-    ["tooling"] = LocaliserTests.All.Concat(RandomisationTests.Tooling).Concat(QaUtilityTests.All)
-        .Concat(QaNpcEyeGraphCheckTests.All).Concat(QaTextureIdentityTests.All).ToArray()
-};
-
-if (args.Contains("--list", StringComparer.OrdinalIgnoreCase))
-{
-    foreach (var (suiteKey, cases) in suites)
+    switch (args[index].ToLowerInvariant())
     {
-        Console.WriteLine($"{suiteKey} ({cases.Count})");
-        foreach (var test in cases)
-        {
-            Console.WriteLine($"  {test.Name}");
-        }
+        case "--help":
+            Console.WriteLine("MFE tests: [--suite <name|all>] [--list] [name-or-class filters...]");
+            Console.WriteLine("Suites: " + string.Join(", ", TestCatalog.Suites.Keys));
+            Console.WriteLine("Default: core. --list without a suite lists everything. Filters match names or classes (OR).");
+            return 0;
+        case "--list": list = true; break;
+        case "--suite":
+            if (suiteName is not null || ++index >= args.Length || args[index].StartsWith("--", StringComparison.Ordinal))
+            {
+                Console.Error.WriteLine("Specify --suite once, followed by a suite name. Use --help for usage.");
+                return 2;
+            }
+            suiteName = args[index];
+            break;
+        default:
+            if (args[index].StartsWith("--", StringComparison.Ordinal))
+            {
+                Console.Error.WriteLine($"Unknown option '{args[index]}'. Use --help for usage.");
+                return 2;
+            }
+            filters.Add(args[index]);
+            break;
     }
-    return 0;
 }
 
-var suiteArgument = Array.FindIndex(args, value => value.Equals("--suite", StringComparison.OrdinalIgnoreCase));
-var suiteName = suiteArgument >= 0 && suiteArgument + 1 < args.Length ? args[suiteArgument + 1] : "core";
-IReadOnlyList<TestCase> selected = suiteName.Equals("all", StringComparison.OrdinalIgnoreCase)
-    ? suites.Values.SelectMany(value => value).ToArray()
-    : suites.TryGetValue(suiteName, out var selectedSuite)
-        ? selectedSuite
-        : throw new ArgumentException($"Unknown suite '{suiteName}'. Use --list for valid suites.");
-
-// Remaining positional arguments are optional name filters within the selected suite.
-var filters = args.Where((value, index) =>
-    !value.StartsWith("--", StringComparison.Ordinal) &&
-    !(suiteArgument >= 0 && index == suiteArgument + 1)).ToArray();
-var tests = selected.Where(test => filters.Length == 0 || filters.Any(filter =>
-    test.Name.Contains(filter, StringComparison.OrdinalIgnoreCase))).ToArray();
-
+suiteName ??= list ? "all" : "core";
+if (!suiteName.Equals("all", StringComparison.OrdinalIgnoreCase) && !TestCatalog.Suites.ContainsKey(suiteName))
+{
+    Console.Error.WriteLine($"Unknown suite '{suiteName}'. Use --help for valid suites.");
+    return 2;
+}
+var selected = TestCatalog.Suites.Where(suite => suiteName.Equals("all", StringComparison.OrdinalIgnoreCase) ||
+    suite.Key.Equals(suiteName, StringComparison.OrdinalIgnoreCase));
+var groups = selected.Select(suite => (Name: suite.Key, Cases: suite.Value.Where(test => filters.Count == 0 ||
+    filters.Any(filter => test.Name.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+        test.Owner.Contains(filter, StringComparison.OrdinalIgnoreCase))).ToArray())).ToArray();
+var tests = groups.SelectMany(group => group.Cases).ToArray();
 if (tests.Length == 0)
 {
     Console.Error.WriteLine($"No tests matched suite '{suiteName}'.");
     return 2;
 }
+if (list)
+{
+    foreach (var group in groups.Where(group => group.Cases.Length > 0))
+    {
+        Console.WriteLine($"{group.Name} ({group.Cases.Length})");
+        foreach (var test in group.Cases) Console.WriteLine($"  {test.Owner}: {test.Name}");
+    }
+    return 0;
+}
+
+// Run repository-relative fixtures from the checkout even when the executable
+// was invoked elsewhere; never copy the game corpus into build outputs.
+var root = new DirectoryInfo(AppContext.BaseDirectory);
+while (root is not null && !File.Exists(Path.Combine(root.FullName, "MorphFaceEditor.slnx"))) root = root.Parent;
+if (root is not null) Directory.SetCurrentDirectory(root.FullName);
 
 var failures = new List<string>();
 var skipped = 0;
@@ -136,7 +112,7 @@ foreach (var test in tests)
     }
     catch (Exception exception)
     {
-        failures.Add($"FAIL {test.Name}: {exception.Message}");
+        failures.Add($"FAIL {test.Name}: {exception}");
         WriteResult(failures[^1], ConsoleColor.Red, standardError: true);
     }
 }

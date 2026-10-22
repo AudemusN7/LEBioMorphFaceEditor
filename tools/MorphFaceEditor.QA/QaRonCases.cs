@@ -6,6 +6,7 @@ using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.Services;
 using MorphFaceEditor.ViewModels;
 using LegendaryExplorerCore.Packages;
+using LegendaryExplorerCore.Unreal;
 
 namespace MorphFaceEditor.QA;
 
@@ -167,6 +168,12 @@ internal static partial class QaCases
     private static async Task CrossGameRon(QaContext c, MorphFaceGame target)
     {
         var source = c.Source();
+        var targetCatalog = await c.Textures.ReadAsync(target);
+        if (!targetCatalog.IsAvailable) throw new QaPrerequisiteException("Cross-game RON requires a Ready target asset database.");
+        var nativeDonor = !c.Face.IsPlayer && (c.Face.Family is "ASA" or "HMF" or "HMM")
+            ? new RonNpcDonorResolver(c.Profiles).Resolve(target, c.Face.Family,
+                targetCatalog.MorphFaceTemplates, targetCatalog.OfficialPackagePaths) : null;
+        if (nativeDonor is not null) c.TrackInput(nativeDonor.PackagePath);
         var ron = c.Artifact("cross-game.ron");
         await c.Measure("Export cross-game full RON", () => Task.Run(() =>
             new MorphFacePackageContextService().ExportRon(source.PackagePath, source.FacePath, ron, Provenance(c.Face))), QaStageKind.FileTransfer);
@@ -183,7 +190,31 @@ internal static partial class QaCases
         var differences = QaHeadPayload.GeometryDifferences(original.MorphData, raw.MorphData);
         QaContext.Require(differences.Count == 0,
             "Cross-game RON lost authored morph data: " + string.Join("; ", differences));
+        if (nativeDonor is not null)
+        {
+            QaContext.Require(raw.MaterialData.Scalars.Count == original.MaterialData.Scalars.Count &&
+                raw.MaterialData.Vectors.Count == original.MaterialData.Vectors.Count,
+                "Cross-game RON import changed the number of scalar or vector overrides.");
+            // The file workflow exposes localized warnings, rather than its structured save result.
+            var skippedTextures = original.MaterialData.Textures.Where(value => value.TextureReference is { } texture &&
+                dialogs.Messages.Any(message => message.Contains(Loc.Format("loc_RonImport_TextureSkipped",
+                    value.Name, texture.InstancedPath), StringComparison.Ordinal)))
+                .Select(value => value.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            QaContext.Require(raw.MaterialData.Textures.Count == original.MaterialData.Textures.Count(value =>
+                    !skippedTextures.Contains(value.Name)),
+                "Cross-game RON import changed its texture override count without reporting each skipped parameter.");
+            c.Current.Evidence["skippedTextureParameters"] = skippedTextures.Order(StringComparer.OrdinalIgnoreCase).ToArray();
+        }
         var saved = await c.Save(imported, vm.Editor!.CreateDraft().Source.PackagePath, "cross-game.pcc");
+        if (nativeDonor is not null)
+        {
+            using var package = MEPackageHandler.OpenMEPackage(saved.PackagePath, forceLoadFromDisk: true);
+            var head = package.FindExport(saved.FaceInstancedPath, "BioMorphFace")
+                ?.GetProperty<ObjectProperty>("m_oBaseHead")?.ResolveToEntry(package);
+            QaContext.Require(head is ExportEntry && head.InstancedFullPath.Equals(
+                    nativeDonor.BaseHeadPath, StringComparison.OrdinalIgnoreCase),
+                "Cross-game NPC export did not contain its exact native donor base head as a local export.");
+        }
         var reopened = await c.Load(saved.PackagePath, saved.FaceInstancedPath, MorphFaceGeometryMode.RelativeBake);
         QaContext.Require(reopened.Loaded.Game == target, "Cross-game RON opened in the source game.");
         AssertGeometry(imported, reopened.Loaded.Document);

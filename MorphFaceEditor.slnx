@@ -43,8 +43,5 @@
     <Project Path="tools/MorphFaceEditor.DataCompiler/MorphFaceEditor.DataCompiler.csproj">
       <Platform Solution="*|x64" Project="x64" />
     </Project>
-    <Project Path="tools/MorphFaceEditor.Research/MorphFaceEditor.Research.csproj">
-      <Platform Solution="*|x64" Project="x64" />
-    </Project>
   </Folder>
 </Solution>

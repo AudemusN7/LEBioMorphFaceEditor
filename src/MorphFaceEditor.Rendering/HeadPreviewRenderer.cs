@@ -57,6 +57,7 @@ public sealed class HeadPreviewRenderer : IDisposable
     private readonly SampleDescription _sampleDescription;
     private readonly HeadPreviewSceneState _sceneState;
     private readonly List<MeshBuffers> _meshes = [];
+    private readonly Dictionary<HeadPreviewMaterial, HeadPreviewPreparedMaterial> _materials = new(ReferenceEqualityComparer.Instance);
     private readonly HeadPreviewTextureCache _textureCache;
     private int _width;
     private int _height;
@@ -252,6 +253,7 @@ public sealed class HeadPreviewRenderer : IDisposable
         {
             _meshes.Add(CreateMeshBuffers(mesh));
         }
+        PrepareMaterials();
         // Keep reusable textures from the previous scene only while the
         // bounded LRU has room; active resources are protected from eviction.
         _textureCache.SetActiveKeys(GetActiveTextureKeys());
@@ -262,6 +264,7 @@ public sealed class HeadPreviewRenderer : IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         _sceneState.UpdateMaterials(materials);
+        PrepareMaterials();
         _textureCache.SetActiveKeys(GetActiveTextureKeys());
         _textureCache.PruneInactive();
     }
@@ -343,7 +346,6 @@ public sealed class HeadPreviewRenderer : IDisposable
 
         var frameAnimationTime = animationTimeSeconds ?? (float)_animationClock.Elapsed.TotalSeconds;
         var stopwatch = Stopwatch.StartNew();
-        var world = Matrix.Identity;
         var view = camera.CreateViewMatrix();
         var projection = camera.CreateProjectionMatrix(_width / (float)_height);
         var cameraPosition = camera.Position;
@@ -351,8 +353,7 @@ public sealed class HeadPreviewRenderer : IDisposable
         var environment = options.Environment ?? HeadPreviewLightingPresets.GetEnvironment(options.LightingPreset);
         var scene = new SceneConstants
         {
-            WorldViewProjection = world * view * projection,
-            World = world,
+            WorldViewProjection = view * projection,
             View = view,
             CameraPosition = new Vector4(cameraPosition.X, cameraPosition.Y, cameraPosition.Z, 1),
             KeyLightDirection = ToDirection(lighting.Key, camera),
@@ -366,11 +367,7 @@ public sealed class HeadPreviewRenderer : IDisposable
                 lighting.AmbientColor.Y * lighting.AmbientIntensity,
                 lighting.AmbientColor.Z * lighting.AmbientIntensity,
                 0),
-            LightingParameters = new Vector4(
-                1,
-                lighting.KeyAngularRadius,
-                lighting.AmbientFresnel,
-                options.RenderMode == HeadPreviewRenderMode.Unlit ? 1 : 0),
+            RenderParameters = new Vector4(options.RenderMode == HeadPreviewRenderMode.Unlit ? 1 : 0, 0, 0, 0),
             // Preset room bounce shares the camera-relative direct-light rig.
             // An explicit authored environment retains its world-space contract.
             EnvironmentSh0 = new Vector4(ToDx(environment.Coefficient0), options.Environment is null ? 1 : 0),
@@ -394,9 +391,11 @@ public sealed class HeadPreviewRenderer : IDisposable
             .ToArray();
         var shadowDrawCalls = 0;
         var shadowsEnabled = options.RenderMode == HeadPreviewRenderMode.Shaded && options.ShadowsEnabled;
+        var ambientOcclusionEnabled = options.AmbientOcclusionEnabled && options.PostProcessingEnabled &&
+                                      options.RenderMode != HeadPreviewRenderMode.Unlit;
         if (shadowsEnabled)
         {
-            shadowDrawCalls = RenderShadowMap(draws, ref scene, camera, lighting, options, frameAnimationTime);
+            shadowDrawCalls = RenderShadowMap(draws, ref scene, camera, lighting, options);
         }
         else
         {
@@ -413,7 +412,17 @@ public sealed class HeadPreviewRenderer : IDisposable
             DrawSection(draw.Mesh, draw.Section, draw.Material, options.RenderMode, options.Wireframe, frameAnimationTime);
             drawCalls++;
         }
-        CaptureAmbientOcclusionInputs();
+        var postProcessSettings = options.PostProcessSettings ?? HeadPreviewPostProcessProfiles.Get(options.LightingPreset);
+        var postProcess = PreparePostProcess(lighting, camera, options.BackgroundColor,
+            postProcessSettings, options.PostProcessingEnabled);
+        if (ambientOcclusionEnabled)
+        {
+            RenderAmbientOcclusionVisibility(ref postProcess);
+            // Preserve the opaque receiver plane while the remaining scene draws add colour.
+            _context.OutputMerger.SetTargets(_targets.Depth.DepthView,
+                _targets.Color.Target, _targets.Normal.Target, _targets.AmbientDiffuse.Target);
+            BindGeometryPipeline(options);
+        }
         var translucentDraws = draws
             .Where(draw => IsTranslucent(draw.Material, options.RenderMode))
             .ToArray();
@@ -466,31 +475,8 @@ public sealed class HeadPreviewRenderer : IDisposable
             DrawSection(draw.Mesh, draw.Section, draw.Material, options.RenderMode, options.Wireframe, frameAnimationTime);
             drawCalls++;
         }
-        if (options.RenderMode != HeadPreviewRenderMode.Diagnostic)
-        {
-            // bUseLitTranslucencyPostRenderDepthPass writes depth after colour
-            // for every non-zero 8-bit alpha texel in BioWare's shader.
-            foreach (var draw in hairDraws)
-            {
-                DrawSection(
-                    draw.Mesh, draw.Section, draw.Material, options.RenderMode, options.Wireframe,
-                    frameAnimationTime,
-                    depthThreshold: 1f / 255f);
-                drawCalls++;
-            }
-        }
-
         _context.PixelShader.SetShaderResources(0, new ShaderResourceView?[10]);
-        ApplyPostProcess(
-            lighting,
-            camera,
-            options.AmbientOcclusionEnabled && options.PostProcessingEnabled && options.RenderMode != HeadPreviewRenderMode.Unlit,
-            options.RenderMode,
-            options.BackgroundColor,
-            options.PostProcessMode,
-            options.PostProcessSettings ?? HeadPreviewPostProcessProfiles.Get(options.LightingPreset),
-            options.PostProcessingEnabled,
-            options.AmbientOcclusionSettings);
+        ApplyPostProcess(ref postProcess, ambientOcclusionEnabled, postProcessSettings);
 
         var pixels = ReadTexture(destination);
         stopwatch.Stop();
@@ -505,10 +491,8 @@ public sealed class HeadPreviewRenderer : IDisposable
         ref SceneConstants scene,
         HeadOrbitCamera camera,
         HeadPreviewLightingRig lighting,
-        HeadPreviewOptions options,
-        float animationTimeSeconds)
+        HeadPreviewOptions options)
     {
-        EnsureShadowMapSize(ResolveShadowMapSize(options.ShadowMapResolution));
         var casters = draws.Where(IsShadowCaster).ToArray();
         if (casters.Length == 0)
         {
@@ -531,7 +515,7 @@ public sealed class HeadPreviewRenderer : IDisposable
         // Refit from the visible caster geometry each frame. Keeping the old
         // maximum here makes an undone morph or hidden attachment permanently
         // enlarge the map and change its depth precision.
-        _shadowRadius = Math.Max(radius * Math.Clamp(options.ShadowBoundsScale, 1, 2), 0.01f);
+        _shadowRadius = Math.Max(radius * 1.15f, 0.01f);
         radius = _shadowRadius;
         var texelSize = (2 * radius) / _shadowMap.Width;
         var forward = System.Numerics.Vector3.Normalize(-lightDirection);
@@ -550,6 +534,7 @@ public sealed class HeadPreviewRenderer : IDisposable
         var view = Matrix.LookAtRH(ToDx(eye), ToDx(center), ToDx(up));
         var projection = Matrix.OrthoOffCenterRH(-radius, radius, -radius, radius, 0.01f, radius * 5f);
         var lightViewProjection = view * projection;
+        var cameraViewProjection = scene.WorldViewProjection;
         scene.WorldViewProjection = lightViewProjection;
         _context.UpdateSubresource(ref scene, _sceneBuffer);
         SetShadowConstants(lightViewProjection, enabled: false, options);
@@ -577,12 +562,11 @@ public sealed class HeadPreviewRenderer : IDisposable
 
         foreach (var draw in casters)
         {
-            DrawShadowSection(draw.Mesh, draw.Section, draw.Material, animationTimeSeconds);
+            DrawShadowSection(draw.Mesh, draw.Section, draw.Material);
         }
 
         _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
-        scene.WorldViewProjection = Matrix.Identity * camera.CreateViewMatrix() * camera.CreateProjectionMatrix(_width / (float)_height);
-        _context.UpdateSubresource(ref scene, _sceneBuffer);
+        scene.WorldViewProjection = cameraViewProjection;
         SetShadowConstants(lightViewProjection, enabled: true, options);
         return casters.Length;
     }
@@ -590,8 +574,7 @@ public sealed class HeadPreviewRenderer : IDisposable
     private void DrawShadowSection(
         MeshBuffers mesh,
         HeadPreviewSection section,
-        HeadPreviewMaterial definition,
-        float animationTimeSeconds)
+        HeadPreviewMaterial definition)
     {
         _context.InputAssembler.SetVertexBuffers(0, new VertexBufferBinding(mesh.VertexBuffer, Marshal.SizeOf<GpuVertex>(), 0));
         _context.InputAssembler.SetIndexBuffer(mesh.IndexBuffer, Format.R32_UInt, 0);
@@ -600,14 +583,9 @@ public sealed class HeadPreviewRenderer : IDisposable
             SkinningParameters = new Vector4(mesh.ApplySkinning && SkinningPaletteCount > 0 ? 1 : 0, SkinningPaletteCount, 0, 0)
         };
         _context.UpdateSubresource(ref meshConstants, _meshBuffer);
-        var bindings = HeadPreviewMaterialBindings.Create(definition);
-        var material = HeadPreviewMaterialConstants.Create(definition, HeadPreviewRenderMode.Shaded, bindings);
-        if (definition.PreviewModel == HumanMaterialPreviewModel.VisorLens)
-        {
-            material.SecondaryColor = new Vector4(0, PeriodicPhase(animationTimeSeconds * 0.2f), 0, 0);
-            material.TertiaryColor = new Vector4(0, PeriodicPhase(animationTimeSeconds * -0.01f), 0, 0);
-            material.QuaternaryColor = new Vector4(0, PeriodicPhase(animationTimeSeconds * -0.05f), 0, 0);
-        }
+        var prepared = _materials[definition];
+        var bindings = prepared.Bindings;
+        var material = prepared.GetConstants(HeadPreviewRenderMode.Shaded);
         _context.UpdateSubresource(ref material, _materialBuffer);
         BindMaterial(definition, bindings, HeadPreviewRenderMode.Shaded);
         // BindMaterial selects camera-view blend/depth states; the shadow pass
@@ -690,15 +668,13 @@ public sealed class HeadPreviewRenderer : IDisposable
             ShadowParameters = new Vector4(
                 enabled ? 1 : 0,
                 1f / _shadowMap.Width,
-                Math.Clamp(options.ShadowDepthBias, 0, 0.01f),
-                Math.Clamp(options.ShadowNormalBias, 0, 0.1f) * Math.Max(_shadowRadius, 0.01f)),
+                0.0035f,
+                0.075f * Math.Max(_shadowRadius, 0.01f)),
             ShadowFilterParameters = new Vector4(
-                Math.Clamp(options.ShadowSoftnessWorld
-                    ?? HeadPreviewLightingPresets.Get(options.LightingPreset).ShadowSoftnessWorld,
+                Math.Clamp(HeadPreviewLightingPresets.Get(options.LightingPreset).ShadowSoftnessWorld,
                     0, Math.Max(_shadowRadius * 2, 0.01f))
                     / (2 * Math.Max(_shadowRadius, 0.01f)),
-                Math.Clamp(options.ShadowReceiverPlaneBiasWorld, 0, 0.5f)
-                    / Math.Max(_shadowRadius * 5 - 0.01f, 0.01f),
+                0.15f / Math.Max(_shadowRadius * 5 - 0.01f, 0.01f),
                 0,
                 0)
         };
@@ -730,8 +706,9 @@ public sealed class HeadPreviewRenderer : IDisposable
                 0)
         };
         _context.UpdateSubresource(ref meshConstants, _meshBuffer);
-        var bindings = HeadPreviewMaterialBindings.Create(definition);
-        var material = HeadPreviewMaterialConstants.Create(definition, renderMode, bindings);
+        var prepared = _materials[definition];
+        var bindings = prepared.Bindings;
+        var material = prepared.GetConstants(renderMode);
         if (definition.PreviewModel == HumanMaterialPreviewModel.VisorLens)
         {
             material.SecondaryColor = new Vector4(0, PeriodicPhase(animationTimeSeconds * 0.2f), 0, 0);
@@ -758,17 +735,6 @@ public sealed class HeadPreviewRenderer : IDisposable
 
     private static float PeriodicPhase(float value) => value - MathF.Floor(value);
 
-    private void CaptureAmbientOcclusionInputs()
-    {
-        // UE3 evaluates screen-space AO from the opaque scene before lit
-        // translucency. Snapshotting here keeps hair/lash cards out of both the
-        // occluder depth and smooth-normal buffers while preserving opaque hats.
-        _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
-        _context.CopyResource(_targets.Depth.Texture, _targets.AoDepth.Texture);
-        _context.CopyResource(_targets.Normal.Texture, _targets.AoNormal.Texture);
-        _context.OutputMerger.SetTargets(_targets.Depth.DepthView, _targets.Color.Target, _targets.Normal.Target, _targets.AmbientDiffuse.Target);
-    }
-
     private void ConfigurePipeline(HeadPreviewOptions options)
     {
         var background = options.BackgroundColor ?? new System.Numerics.Vector3(0.035f, 0.043f, 0.055f);
@@ -777,9 +743,6 @@ public sealed class HeadPreviewRenderer : IDisposable
             ToHdrFloat(SrgbToLinear(background.Y)),
             ToHdrFloat(SrgbToLinear(background.Z)));
         _context.OutputMerger.SetTargets(_targets.Depth.DepthView, _targets.Color.Target, _targets.Normal.Target, _targets.AmbientDiffuse.Target, _targets.OpaquePlane.Target);
-        _context.OutputMerger.SetDepthStencilState(_depthState);
-        _context.Rasterizer.SetViewport(0, 0, _width, _height);
-        _context.Rasterizer.State = options.Wireframe ? _wireframeRasterizer : _solidRasterizer;
         _context.ClearRenderTargetView(_targets.Color.Target, new Color4(
             linearBackground.X,
             linearBackground.Y,
@@ -789,6 +752,14 @@ public sealed class HeadPreviewRenderer : IDisposable
         _context.ClearRenderTargetView(_targets.OpaquePlane.Target, new Color4(0.5f, 0.5f, 1, 1));
         _context.ClearRenderTargetView(_targets.AmbientDiffuse.Target, new Color4(0, 0, 0, 0));
         _context.ClearDepthStencilView(_targets.Depth.DepthView, DepthStencilClearFlags.Depth, 1, 0);
+        BindGeometryPipeline(options);
+    }
+
+    private void BindGeometryPipeline(HeadPreviewOptions options)
+    {
+        _context.OutputMerger.SetDepthStencilState(_depthState);
+        _context.Rasterizer.SetViewport(0, 0, _width, _height);
+        _context.Rasterizer.State = options.Wireframe ? _wireframeRasterizer : _solidRasterizer;
         _context.InputAssembler.InputLayout = _inputLayout;
         _context.InputAssembler.PrimitiveTopology = PrimitiveTopology.TriangleList;
         _context.VertexShader.Set(_vertexShader);
@@ -894,16 +865,63 @@ public sealed class HeadPreviewRenderer : IDisposable
         return new BlendState(_device, description);
     }
 
-    private void ApplyPostProcess(
+    private PostProcessConstants PreparePostProcess(
         HeadPreviewLightingRig lighting,
         HeadOrbitCamera camera,
-        bool ambientOcclusionEnabled,
-        HeadPreviewRenderMode renderMode,
         System.Numerics.Vector3? backgroundColor,
-        HeadPreviewPostProcessMode postProcessMode = HeadPreviewPostProcessMode.Neutral,
-        HeadPreviewPostProcessSettings? postProcessSettings = null,
-        bool postProcessingEnabled = true,
-        HeadPreviewAmbientOcclusionSettings? ambientOcclusionSettings = null)
+        HeadPreviewPostProcessSettings settings,
+        bool postProcessingEnabled)
+    {
+        var background = backgroundColor ?? new System.Numerics.Vector3(0.035f, 0.043f, 0.055f);
+        var constants = new PostProcessConstants
+        {
+            InverseProjection = Matrix.Invert(camera.CreateProjectionMatrix(_width / (float)_height)),
+            PixelSizeAndSamples = new Vector4(
+                1f / _width,
+                1f / _height,
+                _sampleDescription.Count,
+                0),
+            DepthParameters = new Vector4(
+                0,
+                HeadPreviewAmbientOcclusionSettings.AngularBias,
+                0,
+                0),
+            BloomParameters = new Vector4(
+                lighting.BloomThreshold,
+                lighting.BloomIntensity,
+                settings.BloomScreenBlendThreshold,
+                0),
+            DisplayParameters = new Vector4(
+                lighting.Exposure,
+                postProcessingEnabled ? 1 : 0,
+                0,
+                settings.ToneCurveStrength),
+            DisplayBackground = new Vector4(
+                ToHdrFloat(SrgbToLinear(background.X)),
+                ToHdrFloat(SrgbToLinear(background.Y)),
+                ToHdrFloat(SrgbToLinear(background.Z)),
+                0),
+            BloomTint = new Vector4(ToDx(settings.BloomTint), 0),
+            BloomPassParameters = Vector4.Zero,
+            AoRadiusParameters = new Vector4(
+                HeadPreviewAmbientOcclusionSettings.ContactRadiusWorld,
+                HeadPreviewAmbientOcclusionSettings.CavityRadiusWorld,
+                HeadPreviewAmbientOcclusionSettings.ContactStrength,
+                HeadPreviewAmbientOcclusionSettings.CavityStrength),
+            AoFilterParameters = new Vector4(
+                0, 0,
+                HeadPreviewAmbientOcclusionSettings.FilterDepthSigmaWorld,
+                0),
+            AoParameters = new Vector4(HeadPreviewAmbientOcclusionSettings.PowerExponent, 0, 0, 0)
+        };
+        _context.UpdateSubresource(ref constants, _postProcessBuffer);
+        return constants;
+    }
+
+    private void ApplyPostProcess(
+        ref PostProcessConstants constants,
+        bool ambientOcclusionEnabled,
+        HeadPreviewPostProcessSettings settings)
     {
         _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
         if (_sampleDescription.Count > 1)
@@ -916,71 +934,21 @@ public sealed class HeadPreviewRenderer : IDisposable
             _context.CopyResource(_targets.Color.Texture, _targets.Resolved.Texture);
             _context.CopyResource(_targets.AmbientDiffuse.Texture, _targets.ResolvedAmbient.Texture);
         }
-        var background = backgroundColor ?? new System.Numerics.Vector3(0.035f, 0.043f, 0.055f);
-        var settings = postProcessSettings ?? HeadPreviewPostProcessProfiles.Get(HeadPreviewLightingPreset.Studio);
-        var ao = ambientOcclusionSettings ?? HeadPreviewAmbientOcclusionSettings.Default;
-        var gameInspired = postProcessMode == HeadPreviewPostProcessMode.GameInspired;
-        if (gameInspired && postProcessingEnabled)
-            UpdateGradingLut(settings);
-        var constants = new PostProcessConstants
-        {
-            InverseProjection = Matrix.Invert(camera.CreateProjectionMatrix(_width / (float)_height)),
-            PixelSizeAndSamples = new Vector4(
-                1f / _width,
-                1f / _height,
-                _sampleDescription.Count,
-                0),
-            DepthParameters = new Vector4(
-                0,
-                ClampFinite(ao.AngularBias, HeadPreviewAmbientOcclusionSettings.Default.AngularBias, 0, 0.9f),
-                ambientOcclusionEnabled && postProcessingEnabled ? 1 : 0,
-                0),
-            BloomParameters = new Vector4(
-                lighting.BloomThreshold,
-                lighting.BloomIntensity,
-                settings.BloomScreenBlendThreshold,
-                0),
-            DisplayParameters = new Vector4(
-                lighting.Exposure,
-                postProcessingEnabled ? 1 : 0,
-                gameInspired ? 1 : 0,
-                settings.ToneCurveStrength),
-            DisplayBackground = new Vector4(
-                ToHdrFloat(SrgbToLinear(background.X)),
-                ToHdrFloat(SrgbToLinear(background.Y)),
-                ToHdrFloat(SrgbToLinear(background.Z)),
-                0),
-            BloomTint = new Vector4(ToDx(settings.BloomTint), 0),
-            BloomPassParameters = Vector4.Zero,
-            AoRadiusParameters = new Vector4(
-                ClampFinite(ao.ContactRadiusWorld, HeadPreviewAmbientOcclusionSettings.Default.ContactRadiusWorld, 0.01f, 10),
-                ClampFinite(ao.CavityRadiusWorld, HeadPreviewAmbientOcclusionSettings.Default.CavityRadiusWorld, 0.01f, 15),
-                ClampFinite(ao.ContactStrength, HeadPreviewAmbientOcclusionSettings.Default.ContactStrength, 0, 4),
-                ClampFinite(ao.CavityStrength, HeadPreviewAmbientOcclusionSettings.Default.CavityStrength, 0, 4)),
-            AoFilterParameters = new Vector4(
-                0, 0,
-                ClampFinite(ao.FilterDepthSigmaWorld, 0.16f, 0.001f, 10),
-                ClampFinite(ao.FilterNormalPower, 0, 0, 32)),
-            AoParameters = new Vector4(
-                ClampFinite(ao.PowerExponent, HeadPreviewAmbientOcclusionSettings.Default.PowerExponent, 0.25f, 8),
-                0,
-                ao.FilteringEnabled ? 1 : 0,
-                0)
-        };
-        _context.UpdateSubresource(ref constants, _postProcessBuffer);
+        var postProcessingEnabled = constants.DisplayParameters.Y > 0.5f;
+        if (postProcessingEnabled) UpdateGradingLut(settings);
 
         // AO modifies only the isolated ambient-diffuse contribution, in linear
         // HDR. Both bloom and display conversion consume this same composition.
-        var sceneColor = constants.DepthParameters.Z > 0
-            ? RenderAmbientOcclusion(ref constants)
+        var sceneColor = ambientOcclusionEnabled && postProcessingEnabled
+            ? ComposeAmbientOcclusion()
             : _targets.Resolved.ShaderView;
-        if (gameInspired && postProcessingEnabled && lighting.BloomIntensity > 0)
+        if (postProcessingEnabled && constants.BloomParameters.Y > 0)
             RenderBloom(ref constants, settings.BloomRadius1080, sceneColor);
 
         PreparePostPass(_targets.Post.Target, _postPixelShader, _width, _height);
         _context.PixelShader.SetShaderResources(10, sceneColor);
         _context.PixelShader.SetShaderResources(18, _targets.ResolvedAmbient.ShaderView,
-            gameInspired && postProcessingEnabled && lighting.BloomIntensity > 0 ? _targets.Bloom.ShaderView : null,
+            postProcessingEnabled && constants.BloomParameters.Y > 0 ? _targets.Bloom.ShaderView : null,
             _gradingLut?.ShaderView);
         _context.Draw(3, 0);
         _context.PixelShader.SetShaderResources(10, new ShaderResourceView?[] { null });
@@ -1003,15 +971,16 @@ public sealed class HeadPreviewRenderer : IDisposable
         _context.PixelShader.SetSampler(1, _postSampler);
     }
 
-    private ShaderResourceView RenderAmbientOcclusion(ref PostProcessConstants constants)
+    private void RenderAmbientOcclusionVisibility(ref PostProcessConstants constants)
     {
+        // Consume opaque depth and material normals before translucency changes them.
         PreparePostPass(_targets.AoSurface.Target, _aoSurfaceShader, _width, _height);
         _context.OutputMerger.SetTargets((DepthStencilView?)null, _targets.AoSurface.Target, _targets.AoReceiverPlane.Target);
         _context.PixelShader.SetShaderResources(11,
-            _sampleDescription.Count > 1 ? _targets.AoDepth.ShaderView : null,
-            _sampleDescription.Count > 1 ? null : _targets.AoDepth.ShaderView,
-            _sampleDescription.Count > 1 ? _targets.AoNormal.ShaderView : null,
-            _sampleDescription.Count > 1 ? null : _targets.AoNormal.ShaderView);
+            _sampleDescription.Count > 1 ? _targets.Depth.ShaderView : null,
+            _sampleDescription.Count > 1 ? null : _targets.Depth.ShaderView,
+            _sampleDescription.Count > 1 ? _targets.Normal.ShaderView : null,
+            _sampleDescription.Count > 1 ? null : _targets.Normal.ShaderView);
         _context.PixelShader.SetShaderResources(23,
             _sampleDescription.Count > 1 ? _targets.OpaquePlane.ShaderView : null,
             _sampleDescription.Count > 1 ? null : _targets.OpaquePlane.ShaderView);
@@ -1024,32 +993,34 @@ public sealed class HeadPreviewRenderer : IDisposable
         _context.PixelShader.SetShaderResources(21, _targets.AoSurface.ShaderView);
         _context.PixelShader.SetShaderResources(25, _targets.AoReceiverPlane.ShaderView);
         _context.PixelShader.SetShaderResources(11,
-            _sampleDescription.Count > 1 ? _targets.AoDepth.ShaderView : null);
+            _sampleDescription.Count > 1 ? _targets.Depth.ShaderView : null);
         _context.Draw(3, 0);
         _context.PixelShader.SetShaderResources(11, new ShaderResourceView?[] { null });
         _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
 
-        if (constants.AoParameters.Z > 0)
-        {
-            constants.AoFilterParameters.X = 1;
-            constants.AoFilterParameters.Y = 0;
-            _context.UpdateSubresource(ref constants, _postProcessBuffer);
-            PreparePostPass(_targets.AoScratch.Target, _aoBlurShader, _width, _height);
-            _context.PixelShader.SetShaderResources(22, _targets.AoVisibility.ShaderView);
-            _context.Draw(3, 0);
-            _context.PixelShader.SetShaderResources(22, new ShaderResourceView?[] { null });
-            _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
+        constants.AoFilterParameters.X = 1;
+        constants.AoFilterParameters.Y = 0;
+        _context.UpdateSubresource(ref constants, _postProcessBuffer);
+        PreparePostPass(_targets.AoScratch.Target, _aoBlurShader, _width, _height);
+        _context.PixelShader.SetShaderResources(22, _targets.AoVisibility.ShaderView);
+        _context.Draw(3, 0);
+        _context.PixelShader.SetShaderResources(22, new ShaderResourceView?[] { null });
+        _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
 
-            constants.AoFilterParameters.X = 0;
-            constants.AoFilterParameters.Y = 1;
-            _context.UpdateSubresource(ref constants, _postProcessBuffer);
-            PreparePostPass(_targets.AoVisibility.Target, _aoBlurShader, _width, _height);
-            _context.PixelShader.SetShaderResources(22, _targets.AoScratch.ShaderView);
-            _context.Draw(3, 0);
-            _context.PixelShader.SetShaderResources(22, new ShaderResourceView?[] { null });
-            _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
+        constants.AoFilterParameters.X = 0;
+        constants.AoFilterParameters.Y = 1;
+        _context.UpdateSubresource(ref constants, _postProcessBuffer);
+        PreparePostPass(_targets.AoVisibility.Target, _aoBlurShader, _width, _height);
+        _context.PixelShader.SetShaderResources(22, _targets.AoScratch.ShaderView);
+        _context.Draw(3, 0);
+        _context.PixelShader.SetShaderResources(22, new ShaderResourceView?[] { null });
+        _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
+        _context.PixelShader.SetShaderResources(21, new ShaderResourceView?[2]);
+        _context.PixelShader.SetShaderResources(25, new ShaderResourceView?[] { null });
+    }
 
-        }
+    private ShaderResourceView ComposeAmbientOcclusion()
+    {
         PreparePostPass(_targets.AoComposited.Target, _applyAmbientOcclusionShader, _width, _height);
         _context.PixelShader.SetShaderResources(10, _targets.Resolved.ShaderView);
         _context.PixelShader.SetShaderResources(18, _targets.ResolvedAmbient.ShaderView);
@@ -1057,8 +1028,7 @@ public sealed class HeadPreviewRenderer : IDisposable
         _context.Draw(3, 0);
         _context.PixelShader.SetShaderResources(10, new ShaderResourceView?[] { null });
         _context.PixelShader.SetShaderResources(18, new ShaderResourceView?[] { null });
-        _context.PixelShader.SetShaderResources(21, new ShaderResourceView?[2]);
-        _context.PixelShader.SetShaderResources(25, new ShaderResourceView?[] { null });
+        _context.PixelShader.SetShaderResources(22, new ShaderResourceView?[] { null });
         _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
         return _targets.AoComposited.ShaderView;
     }
@@ -1074,11 +1044,10 @@ public sealed class HeadPreviewRenderer : IDisposable
         _context.PixelShader.SetShaderResources(10, new ShaderResourceView?[] { null });
         _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
 
-        // The five bilinear taps form a separable nine-tap Gaussian. Scale its
-        // nominal sigma (~1.4 texels) to a radius measured at 1080p, not pixels
-        // tied to the current viewport. Bloom stays in linear HDR throughout.
-        var stepPixels = radius1080 * _height / (1080f * 1.4f);
-        constants.BloomPassParameters = new Vector4(stepPixels / _width, 0, 0, 0);
+        // Express Gaussian width in the actual reduced target's texels, while
+        // retaining its screen-space size across viewport sizes and odd dimensions.
+        var sigmaPixels = radius1080 * _height / 1080f;
+        constants.BloomPassParameters = new Vector4(1f / width, 0, sigmaPixels * width / _width, 0);
         _context.UpdateSubresource(ref constants, _postProcessBuffer);
         PreparePostPass(_targets.BloomScratch.Target, _bloomBlurShader, width, height);
         _context.PixelShader.SetShaderResources(19, _targets.Bloom.ShaderView);
@@ -1086,7 +1055,7 @@ public sealed class HeadPreviewRenderer : IDisposable
         _context.PixelShader.SetShaderResources(19, new ShaderResourceView?[] { null });
         _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
 
-        constants.BloomPassParameters = new Vector4(0, stepPixels / _height, 0, 0);
+        constants.BloomPassParameters = new Vector4(0, 1f / height, sigmaPixels * height / _height, 0);
         _context.UpdateSubresource(ref constants, _postProcessBuffer);
         PreparePostPass(_targets.Bloom.Target, _bloomBlurShader, width, height);
         _context.PixelShader.SetShaderResources(19, _targets.BloomScratch.ShaderView);
@@ -1107,9 +1076,6 @@ public sealed class HeadPreviewRenderer : IDisposable
         _gradingSettings = settings;
     }
 
-    private static float ClampFinite(float value, float fallback, float minimum, float maximum) =>
-        float.IsFinite(value) ? Math.Clamp(value, minimum, maximum) : fallback;
-
     private static float SrgbToLinear(float value)
     {
         var channel = Math.Clamp(value, 0, 1);
@@ -1120,25 +1086,8 @@ public sealed class HeadPreviewRenderer : IDisposable
 
     private static float ToHdrFloat(float value) => (float)(System.Half)value;
 
-    private static int ResolveShadowMapSize(int requestedSize) => requestedSize is 512 or 1024 or 2048
-        ? requestedSize
-        : DefaultShadowMapSize;
-
     private void EnsureRenderTargets() =>
         _targets ??= new HeadPreviewRenderTargets(_device, _width, _height, _sampleDescription);
-
-    private void EnsureShadowMapSize(int size)
-    {
-        if (_shadowMap.Width == size) return;
-        // A shadow map is small and independent of the viewport allocation.
-        // Complete its replacement before releasing the currently usable map.
-        var replacement = HeadPreviewSurface.Depth(_device, size, size,
-            BindFlags.DepthStencil | BindFlags.ShaderResource, new SampleDescription(1, 0));
-        _context.PixelShader.SetShaderResources(17, new ShaderResourceView?[] { null });
-        _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
-        _shadowMap.Dispose();
-        _shadowMap = replacement;
-    }
 
     private byte[] ReadTexture(byte[]? destination)
     {
@@ -1289,11 +1238,24 @@ public sealed class HeadPreviewRenderer : IDisposable
 
     private void DisposeMeshes()
     {
+        _materials.Clear();
         foreach (var mesh in _meshes)
         {
             mesh.Dispose();
         }
         _meshes.Clear();
+    }
+
+    private void PrepareMaterials()
+    {
+        _materials.Clear();
+        foreach (var mesh in _meshes)
+        foreach (var section in mesh.Sections)
+        {
+            var definition = section.Material;
+            if (!_materials.ContainsKey(definition))
+                _materials.Add(definition, new HeadPreviewPreparedMaterial(definition));
+        }
     }
 
     private HashSet<string> GetActiveTextureKeys()
@@ -1384,7 +1346,6 @@ public sealed class HeadPreviewRenderer : IDisposable
     private struct SceneConstants
     {
         public Matrix WorldViewProjection;
-        public Matrix World;
         public Matrix View;
         public Vector4 CameraPosition;
         public Vector4 KeyLightDirection;
@@ -1394,7 +1355,7 @@ public sealed class HeadPreviewRenderer : IDisposable
         public Vector4 RimLightDirection;
         public Vector4 RimLightColor;
         public Vector4 AmbientColor;
-        public Vector4 LightingParameters;
+        public Vector4 RenderParameters;
         public Vector4 EnvironmentSh0;
         public Vector4 EnvironmentSh1;
         public Vector4 EnvironmentSh2;

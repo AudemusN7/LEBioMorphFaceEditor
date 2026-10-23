@@ -27,13 +27,12 @@ internal readonly partial record struct HeadPreviewMaterialBindings
 internal partial struct HeadPreviewMaterialConstants
 {
     private static HeadPreviewMaterialConstants CreateAttachmentConstants(
-        HeadPreviewMaterial material, bool diagnostic, HeadPreviewMaterialBindings bindings) => new()
+        HeadPreviewMaterial material, HeadPreviewMaterialBindings bindings) => new()
     {
-        BaseColor = diagnostic ? new Vector4(DiagnosticColor(material.Family), 1)
-            : material.PreviewModel == HumanMaterialPreviewModel.VisorLens
-                ? Vector4.Zero // Native SelectionColor is zero in the standalone preview.
-                : GetVector(material, material.PreviewModel == HumanMaterialPreviewModel.Visor ? "VSR_Colour_01" : "HMN_HAT_Tint1_Vector",
-                    material.PreviewModel == HumanMaterialPreviewModel.Visor ? new Vector4(0, 0, 0, 1) : Vector4.One),
+        BaseColor = material.PreviewModel == HumanMaterialPreviewModel.VisorLens
+            ? Vector4.Zero // Native SelectionColor is zero in the standalone preview.
+            : GetVector(material, material.PreviewModel == HumanMaterialPreviewModel.Visor ? "VSR_Colour_01" : "HMN_HAT_Tint1_Vector",
+                material.PreviewModel == HumanMaterialPreviewModel.Visor ? new Vector4(0, 0, 0, 1) : Vector4.One),
         SecondaryColor = material.PreviewModel == HumanMaterialPreviewModel.VisorLens
             ? Vector4.Zero // The renderer supplies the scanline phase each frame.
             : GetVector(material, material.PreviewModel == HumanMaterialPreviewModel.Visor ? "VSR_Colour_02" : "HMN_HAT_Tint2_Vector",
@@ -47,7 +46,7 @@ internal partial struct HeadPreviewMaterialConstants
             : GetVector(material, "Phong_Spec_Color", Vector4.Zero),
         EyeEmissiveColor = GetVector(material, "Emissive_color", Vector4.Zero),
         ScatterColor = GetVector(material, "SkinLightScattering", Vector4.Zero),
-        SurfaceParameters = new Vector4(0.48f, diagnostic ? 1 : 0, 0,
+        SurfaceParameters = new Vector4(0, 0, 0,
             material.BlendMode == HeadMaterialBlendMode.Masked ? 0.3333f : 0),
         TextureFlags0 = new Vector4(bindings.Diffuse is null ? 0 : 1,
             bindings.Normal is null ? 0 : 1, bindings.Mask is null ? 0 : 1, bindings.Detail is null ? 0 : 1),

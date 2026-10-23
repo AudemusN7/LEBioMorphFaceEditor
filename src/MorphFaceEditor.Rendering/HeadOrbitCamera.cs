@@ -15,7 +15,7 @@ public sealed class HeadOrbitCamera
     public float Distance { get; private set; } = 4;
     public float MinimumDistance { get; private set; } = 0.5f;
     public float MaximumDistance { get; private set; } = 20;
-    public float VerticalFieldOfViewDegrees { get; set; } = 35;
+    public float VerticalFieldOfViewDegrees => 35;
 
     public Vector3 Position
     {

@@ -50,8 +50,6 @@ public sealed record HeadPreviewLightingRig(
     float Exposure,
     Vector3 GroundColor,
     Vector3 HorizonColor,
-    float KeyAngularRadius,
-    float AmbientFresnel,
     float BloomThreshold,
     float BloomIntensity)
 {
@@ -94,8 +92,6 @@ public static class HeadPreviewLightingPresets
         1.00f,
         new Vector3(0.20f, 0.18f, 0.16f),
         new Vector3(0.42f, 0.46f, 0.52f),
-        0.055f,
-        0.09f,
         1.10f,
         0.045f)
     {
@@ -115,8 +111,6 @@ public static class HeadPreviewLightingPresets
         1.02f,
         new Vector3(0.16f, 0.10f, 0.08f),
         new Vector3(0.28f, 0.38f, 0.58f),
-        0.035f,
-        0.055f,
         1.15f,
         0.055f)
     {
@@ -135,8 +129,6 @@ public static class HeadPreviewLightingPresets
         1.00f,
         new Vector3(0.25f, 0.09f, 0.035f),
         new Vector3(0.72f, 0.30f, 0.12f),
-        0.07f,
-        0.08f,
         1.00f,
         0.065f)
     {
@@ -156,8 +148,6 @@ public static class HeadPreviewLightingPresets
         0.78f,
         new Vector3(0.025f, 0.035f, 0.09f),
         new Vector3(0.10f, 0.25f, 0.55f),
-        0.045f,
-        0.12f,
         0.85f,
         0.05f)
     {
@@ -177,8 +167,6 @@ public static class HeadPreviewLightingPresets
         1.00f,
         new Vector3(0.025f, 0.025f, 0.045f),
         new Vector3(0.08f, 0.12f, 0.18f),
-        0.045f,
-        0.09f,
         1.05f,
         0.065f)
     {

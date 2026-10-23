@@ -61,7 +61,7 @@ public static class AmbientOcclusionRenderingTests
             TestAssert.True(contact is >= 0 and <= 1 && cavity is >= 0 and <= 1,
                 $"AO visibility was outside [0, 1] at covered HMF pixel {pixel}.");
             var combinedVisibility = MathF.Pow(contact * cavity,
-                HeadPreviewAmbientOcclusionSettings.Default.PowerExponent);
+                HeadPreviewAmbientOcclusionSettings.PowerExponent);
             var hasAmbient = false;
             for (var channel = 0; channel < 3; channel++)
             {
@@ -90,6 +90,23 @@ public static class AmbientOcclusionRenderingTests
             $"The LE2 HMF fixture exposed too few covered pixels with ambient diffuse ({checkedPixels}).");
         TestAssert.True(attenuatedPixels > 0,
             "The covered HMF pixels had no AO attenuation to apply to their ambient diffuse contribution.");
+
+        var opaqueOnly = scene with
+        {
+            Meshes = scene.Meshes.Select(mesh => mesh with
+            {
+                Sections = mesh.Sections.Where(section => section.Material.BlendMode is not
+                    (HeadMaterialBlendMode.Translucent or HeadMaterialBlendMode.Additive)).ToArray()
+            }).ToArray()
+        };
+        TestAssert.True(opaqueOnly.Meshes.Sum(mesh => mesh.Sections.Count) < scene.Meshes.Sum(mesh => mesh.Sections.Count),
+            "The HMF fixture has no translucent surfaces to exclude from AO inputs.");
+        renderer.SetScene(opaqueOnly);
+        renderer.Render(camera, new HeadPreviewOptions());
+        var opaqueSurface = ReadFloatTexture(renderer, "AoSurface", Format.R32G32B32A32_Float);
+        var opaqueVisibility = ReadFloatTexture(renderer, "AoVisibility", Format.R16G16_Float);
+        TestAssert.True(surface.Values.SequenceEqual(opaqueSurface.Values) && visibility.Values.SequenceEqual(opaqueVisibility.Values),
+            "Hair/lash transparency changed the opaque AO surface or visibility.");
     }
 
     private static void HmfAoSurfaceNormalTracksNormalMapAtEdges()

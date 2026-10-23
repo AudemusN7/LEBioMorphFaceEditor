@@ -15,7 +15,8 @@ public static class HdrRenderingTests
     [
         new("HDR scene values survive above one and the brighter exposure stays brighter", HdrValuesSurviveAndExposureOrderingIsStable),
         new("game-inspired HDR bloom respects the receiver and excludes selected background", GameInspiredBloomRespectsBackgroundAndReceiver),
-        new("game-inspired postprocess remains stable across mode switches and small resizes", GameInspiredPostProcessSurvivesModeSwitchAndResize),
+        new("compact emissive bloom forms a smooth halo without displaced copies", CompactBloomHasSmoothSpatialFalloff),
+        new("postprocess remains stable across enable toggles and small resizes", PostProcessSurvivesToggleAndResize),
         new("translucent colour blends in linear light", TranslucencyBlendsInLinearLight),
         new("unlit bypass returns raw sRGB while enabled postprocessing preserves HDR", UnlitPostProcessingCanBeBypassed)
     ];
@@ -101,14 +102,12 @@ public static class HdrRenderingTests
             BackgroundColor: Vector3.Zero,
             AmbientOcclusionEnabled: false,
             ShadowsEnabled: false,
-            PostProcessMode: HeadPreviewPostProcessMode.GameInspired,
             PostProcessSettings: receiverOn)).BgraPixels;
         var sceneHdr = ReadFloatTarget(renderer, "Resolved");
         var withoutReceiver = renderer.Render(camera, new HeadPreviewOptions(
             BackgroundColor: Vector3.Zero,
             AmbientOcclusionEnabled: false,
             ShadowsEnabled: false,
-            PostProcessMode: HeadPreviewPostProcessMode.GameInspired,
             PostProcessSettings: receiverOff)).BgraPixels;
 
         var haloPixels = 0;
@@ -136,14 +135,128 @@ public static class HdrRenderingTests
             BackgroundColor: Vector3.One,
             AmbientOcclusionEnabled: false,
             ShadowsEnabled: false,
-            PostProcessMode: HeadPreviewPostProcessMode.GameInspired,
             PostProcessSettings: receiverOn));
         var bloom = ReadFloatTarget(renderer, "Bloom");
         TestAssert.True(bloom.Where((_, index) => index % 4 != 3).All(value => value < 0.001f),
             "The bright selected background was extracted as a bloom source.");
     }
 
-    private static void GameInspiredPostProcessSurvivesModeSwitchAndResize()
+    private static void CompactBloomHasSmoothSpatialFalloff()
+    {
+        const int size = 512;
+        const float sourceDepth = 0.4f;
+        using var renderer = new HeadPreviewRenderer(size, size);
+        var bounds = new HeadPreviewBounds(new Vector3(-1, -1, -0.05f), new Vector3(1, 1, sourceDepth));
+        var camera = CreateCamera(bounds);
+        var worldPerPixel = 2 * (camera.Position.Z - sourceDepth) *
+            MathF.Tan(camera.VerticalFieldOfViewDegrees * MathF.PI / 360) / size;
+        // A small eye highlight must bloom smoothly with the production Studio
+        // settings, even when its source covers only four render pixels.
+        var halfWidth = worldPerPixel * 2;
+        var emitter = HumanMaterialTestFixtures.CreateEyeMaterial(
+            "compact-emitter", [24, 24, 24, 255], [0, 0, 0, 255], Vector4.Zero, 0) with
+        {
+            Scalars = new Dictionary<string, float> { ["Emis_Scalar"] = 24 },
+            Vectors = new Dictionary<string, Vector4> { ["Emis_Color"] = Vector4.One },
+            SupportedScalars = new HashSet<string>(["Emis_Scalar"], StringComparer.OrdinalIgnoreCase),
+            SupportedVectors = new HashSet<string>(["Emis_Color"], StringComparer.OrdinalIgnoreCase),
+            SupportedTextures = new HashSet<string>(["EYE_Lens_Norm"], StringComparer.OrdinalIgnoreCase)
+        };
+        var source = CreateQuad("compact-emitter", -halfWidth, -halfWidth, halfWidth, halfWidth, sourceDepth, emitter);
+        renderer.SetScene(new HeadPreviewScene("Compact eye bloom",
+        [
+            CreateQuad("dim-receiver", -0.82f, -0.82f, 0.82f, 0.82f, 0,
+                CreateSkinMaterial("dim-receiver", new Vector4(0.12f, 0.12f, 0.12f, 1), [255, 255, 255, 255])),
+            source
+        ], bounds));
+        var options = new HeadPreviewOptions(BackgroundColor: Vector3.Zero,
+            AmbientOcclusionEnabled: false, ShadowsEnabled: false);
+        renderer.Render(camera, options, animationTimeSeconds: 0);
+        var halo = ReadFloatTexture(renderer, "Bloom", SharpDX.DXGI.Format.R16G16B16A16_Float);
+        var center = (halo.Width - 1) * 0.5f;
+        var peak = Sample(halo, center, center);
+        TestAssert.True(peak > 0.01f, "The compact emissive fixture did not produce a measurable bloom halo.");
+
+        var maximumRise = 0f;
+        var diagonal = MathF.Sqrt(0.5f);
+        foreach (var direction in new[] { Vector2.UnitX, -Vector2.UnitX, Vector2.UnitY, -Vector2.UnitY,
+                     new Vector2(diagonal, diagonal), new Vector2(-diagonal, diagonal),
+                     new Vector2(diagonal, -diagonal), new Vector2(-diagonal, -diagonal) })
+        {
+            var previous = peak;
+            for (var radius = 1; radius <= 16; radius++)
+            {
+                var current = Sample(halo, center + direction.X * radius, center + direction.Y * radius);
+                maximumRise = Math.Max(maximumRise, current - previous);
+                previous = current;
+            }
+        }
+        // Equal distances should have similar brightness in every direction.
+        var axis = Sample(halo, center + 4, center);
+        var diagonalValue = Sample(halo, center + 4 * diagonal, center + 4 * diagonal);
+        var isotropyDifference = Math.Abs(axis - diagonalValue) / peak;
+        var maximumShiftDifference = 0d;
+        var energy = Enumerable.Range(0, halo.Width * halo.Height).Sum(pixel => (double)halo.Values[pixel * 4]);
+        foreach (var renderPixelShift in new[] { 0.5f, 1f })
+        {
+            renderer.UpdateDeformation(new HeadPreviewDeformationUpdate(source.Name,
+                source.Vertices.Select(vertex => vertex with
+                {
+                    Position = vertex.Position + new Vector3(worldPerPixel * renderPixelShift, 0, 0)
+                }).ToArray(), []));
+            renderer.Render(camera, options, animationTimeSeconds: 0);
+            var shifted = ReadFloatTexture(renderer, "Bloom", SharpDX.DXGI.Format.R16G16B16A16_Float);
+            // Remove the expected translation before measuring changes in the
+            // halo itself, as a slowly moving bright eye must not sprout copies.
+            var difference = 0d;
+            for (var y = 0; y < halo.Height; y++)
+            for (var x = 0; x < halo.Width; x++)
+                difference += Math.Abs(Sample(shifted, x + renderPixelShift * halo.Width / size, y) - halo.Values[(y * halo.Width + x) * 4]);
+            maximumShiftDifference = Math.Max(maximumShiftDifference, difference / energy);
+        }
+
+        TestAssert.True(maximumRise / peak < 0.025f,
+            $"A compact bright eye produced secondary bloom lobes instead of a smooth outward falloff " +
+            $"(largest outward rise {maximumRise / peak:P1}; axis/diagonal difference {isotropyDifference:P1}; subpixel shift difference {maximumShiftDifference:P1}).");
+        TestAssert.True(isotropyDifference < 0.08f,
+            $"A compact bright eye produced a directional bloom pattern ({isotropyDifference:P1} of the central halo).");
+        TestAssert.True(maximumShiftDifference < 0.12,
+            $"Moving the bright eye by half or one render pixel changed its compensated bloom halo by {maximumShiftDifference:P1}.");
+
+        // A normalized blur may spread a highlight, but must not brighten or
+        // darken a constant HDR field, including where sampling clamps at edges.
+        var extent = worldPerPixel * size;
+        renderer.SetScene(new HeadPreviewScene("Constant emissive field",
+            [CreateQuad("flat-emitter", -extent, -extent, extent, extent, sourceDepth, emitter)], bounds));
+        renderer.Render(camera, options with { RenderMode = HeadPreviewRenderMode.Unlit }, animationTimeSeconds: 0);
+        var flatHdr = ReadFloatTarget(renderer, "Resolved");
+        var flatBloom = ReadFloatTarget(renderer, "Bloom");
+        var studio = HeadPreviewLightingPresets.Get(HeadPreviewLightingPreset.Studio);
+        TestAssert.True(flatHdr.All(float.IsFinite) && flatBloom.All(float.IsFinite),
+            "A constant emissive field produced a non-finite HDR or bloom value.");
+        TestAssert.True(flatHdr.Take(3).Max() > studio.BloomThreshold + 2,
+            "The constant field did not fully pass the bloom extraction threshold.");
+        var maximumRelativeError = Enumerable.Range(0, flatBloom.Length).Where(index => index % 4 != 3)
+            .Max(index => Math.Abs(flatBloom[index] - flatHdr[index % 4] * studio.Exposure) /
+                          Math.Max(flatHdr[index % 4] * studio.Exposure, 0.001f));
+        TestAssert.True(maximumRelativeError < 0.003f,
+            $"Bloom changed a constant HDR field by {maximumRelativeError:P2}, beyond half-float rounding tolerance.");
+
+        static float Sample(FloatTarget target, float x, float y)
+        {
+            x = Math.Clamp(x, 0, target.Width - 1);
+            y = Math.Clamp(y, 0, target.Height - 1);
+            var left = (int)x;
+            var top = (int)y;
+            var right = Math.Min(left + 1, target.Width - 1);
+            var bottom = Math.Min(top + 1, target.Height - 1);
+            var upper = float.Lerp(target.Values[(top * target.Width + left) * 4], target.Values[(top * target.Width + right) * 4], x - left);
+            var lower = float.Lerp(target.Values[(bottom * target.Width + left) * 4], target.Values[(bottom * target.Width + right) * 4], x - left);
+            return float.Lerp(upper, lower, y - top);
+        }
+    }
+
+    private static void PostProcessSurvivesToggleAndResize()
     {
         using var renderer = new HeadPreviewRenderer(32, 24);
         var material = CreateSkinMaterial("resize-post-skin", new Vector4(0.3f, 0.25f, 0.2f, 1), [255, 255, 255, 255]);
@@ -154,7 +267,6 @@ public static class HdrRenderingTests
         var options = new HeadPreviewOptions(
             AmbientOcclusionEnabled: false,
             ShadowsEnabled: false,
-            PostProcessMode: HeadPreviewPostProcessMode.GameInspired,
             PostProcessSettings: settings);
 
         var first = renderer.Render(camera, options);
@@ -175,12 +287,12 @@ public static class HdrRenderingTests
                         ReferenceEquals(bloomShaderView, GetSurfaceResource<ShaderResourceView>(renderer, "Bloom", "ShaderView")),
             "Unchanged frames or same-size resizes recreated the grading LUT, viewport images or bloom views.");
 
-        renderer.Render(camera, options with { PostProcessMode = HeadPreviewPostProcessMode.Neutral });
-        var afterModeSwitch = renderer.Render(camera, options);
-        TestAssert.True(first.BgraPixels.SequenceEqual(afterModeSwitch.BgraPixels),
-            "Switching through Neutral changed the next identical GameInspired frame.");
+        renderer.Render(camera, options with { PostProcessingEnabled = false });
+        var afterToggle = renderer.Render(camera, options);
+        TestAssert.True(first.BgraPixels.SequenceEqual(afterToggle.BgraPixels),
+            "Disabling and re-enabling postprocessing changed the next identical frame.");
         TestAssert.True(ReferenceEquals(gradingTexture, GetTexture(renderer, "GradingLut")),
-            "Switching modes recreated the cached grading LUT.");
+            "Toggling postprocessing recreated the cached grading LUT.");
 
         renderer.Resize(7, 5);
         TestAssert.True(resolvedTexture.IsDisposed && bloomTexture.IsDisposed &&
@@ -299,10 +411,16 @@ public static class HdrRenderingTests
         HeadPreviewLightingRig rig,
         HeadOrbitCamera camera)
     {
+        var settings = HeadPreviewPostProcessProfiles.Get(HeadPreviewLightingPreset.Studio);
+        var prepare = typeof(HeadPreviewRenderer).GetMethod(
+            "PreparePostProcess", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Renderer post-process preparation method was not found.");
+        var constants = prepare.Invoke(renderer, [rig, camera, null, settings, true])
+            ?? throw new InvalidOperationException("Renderer post-process preparation returned no constants.");
         var method = typeof(HeadPreviewRenderer).GetMethod(
             "ApplyPostProcess", BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new InvalidOperationException("Renderer post-process method was not found.");
-        method.Invoke(renderer, [rig, camera, false, HeadPreviewRenderMode.Shaded, null, HeadPreviewPostProcessMode.Neutral, null, true, null]);
+        method.Invoke(renderer, [constants, false, settings]);
     }
 
     private static byte[] ReadDisplayPixels(HeadPreviewRenderer renderer)

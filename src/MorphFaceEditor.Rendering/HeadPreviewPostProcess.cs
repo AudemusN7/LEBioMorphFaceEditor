@@ -3,16 +3,6 @@ using System.Numerics;
 namespace MorphFaceEditor.Rendering;
 
 /// <summary>
-/// Selects whether the preview uses the plain reference view or an authored,
-/// game-informed presentation grade.
-/// </summary>
-public enum HeadPreviewPostProcessMode
-{
-    Neutral,
-    GameInspired
-}
-
-/// <summary>
 /// Settings for the preview's spatially uniform grading and bloom receiver.
 /// These are preview approximations; they are not copied from a particular level.
 /// </summary>
@@ -104,6 +94,7 @@ public sealed record HeadPreviewPostProcessSettings
     public Vector3 Overlay { get; }
     public float Desaturation { get; }
     public float BloomScreenBlendThreshold { get; }
+    /// <summary>Gaussian standard deviation in viewport pixels at a height of 1080.</summary>
     public float BloomRadius1080 { get; }
     public Vector3 BloomTint { get; }
     /// <summary>Blend toward the game response from the accepted neutral tone curve.</summary>

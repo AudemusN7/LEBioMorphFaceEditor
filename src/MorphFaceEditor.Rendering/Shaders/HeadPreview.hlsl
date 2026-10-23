@@ -1,7 +1,6 @@
 cbuffer SceneConstants : register(b0)
 {
     row_major float4x4 WorldViewProjection;
-    row_major float4x4 World;
     row_major float4x4 View;
     float4 CameraPosition;
     float4 KeyLightDirection;
@@ -11,7 +10,7 @@ cbuffer SceneConstants : register(b0)
     float4 RimLightDirection;
     float4 RimLightColor;
     float4 AmbientColor;
-    float4 LightingParameters;
+    float4 RenderParameters;
     float4 EnvironmentSh0;
     float4 EnvironmentSh1;
     float4 EnvironmentSh2;
@@ -265,9 +264,9 @@ VertexOutput VSMain(VertexInput input)
         }
     }
     output.Position = mul(localPosition, WorldViewProjection);
-    output.WorldPosition = mul(localPosition, World).xyz;
-    output.Normal = normalize(mul(float4(localNormal, 0), World).xyz);
-    output.Tangent = float4(normalize(mul(float4(localTangent, 0), World).xyz), input.Tangent.w);
+    output.WorldPosition = localPosition.xyz;
+    output.Normal = normalize(localNormal);
+    output.Tangent = float4(normalize(localTangent), input.Tangent.w);
     output.TexCoord = input.TexCoord;
     return output;
 }
@@ -1245,7 +1244,7 @@ float4 AttachmentPreview(VertexOutput input, bool isFrontFace, out float4 aoNorm
         float3 color = BaseColor.rgb * (environment
             + KeyLightColor.rgb * saturate(dot(geometricNormal, key))
             + FillLightColor.rgb * saturate(dot(geometricNormal, fill))
-            + RimLightColor.rgb * saturate(dot(geometricNormal, rim))) * LightingParameters.x;
+            + RimLightColor.rgb * saturate(dot(geometricNormal, rim)));
         ambientDiffuseTarget = float4(BaseColor.rgb * environment, 1);
         return float4(color, 1);
     }
@@ -1343,7 +1342,7 @@ float4 AttachmentPreview(VertexOutput input, bool isFrontFace, out float4 aoNorm
         ambientAlbedo = albedo;
         emissive = specMap.a * GeneralParameters.w * EyeEmissiveColor.rgb;
     }
-    if (LightingParameters.w > 0.5)
+    if (RenderParameters.x > 0.5)
     {
         ambientDiffuseTarget.a = alpha;
         return float4(albedo + emissive, alpha);
@@ -2231,9 +2230,8 @@ float4 PSMain(
         }
         if (SurfaceParameters.x < 0)
         {
-            // Hair depth-only pass. The renderer supplies 1.0 for UE3's lit
-            // translucency ScreenDoor prepass and 1/255 for its post-render
-            // depth pass; shadow alpha testing is a separate preview pass.
+            // Hair depth-only pass: only fully opaque texels occlude rear cards.
+            // Shadow alpha testing is a separate preview pass.
             clip(alpha + SurfaceParameters.x);
             return 0;
         }
@@ -2366,7 +2364,7 @@ float4 PSMain(
 
     float3 ambientLighting = ambientDiffuseAlbedo * environmentLighting
         + (albedo - ambientDiffuseAlbedo) * AmbientColor.rgb;
-    float3 lit = (ambientLighting + albedo * directDiffuseLighting + specularLighting + subsurfaceLighting) * LightingParameters.x
+    float3 lit = (ambientLighting + albedo * directDiffuseLighting + specularLighting + subsurfaceLighting)
         + eyeBaseReflection;
     float3 ambientDiffuse = ambientDiffuseAlbedo * environmentLighting;
 
@@ -2380,7 +2378,7 @@ float4 PSMain(
             + LegacyScalpDirectLight(normal, geometricNormal, tangent, bitangent, view, fillLight,
                 diffuseSample, maskSample.rgb, teeth, materialUv) * FillLightColor.rgb
             + LegacyScalpDirectLight(normal, geometricNormal, tangent, bitangent, view, rimLight,
-                diffuseSample, maskSample.rgb, teeth, materialUv) * RimLightColor.rgb) * LightingParameters.x;
+                diffuseSample, maskSample.rgb, teeth, materialUv) * RimLightColor.rgb);
     }
 
     if (family == 5 && IsHumanHairPreview() && diagnostic < 0.5)
@@ -2391,7 +2389,7 @@ float4 PSMain(
         // The native base pass supplies the same stack response with a
         // view/normal half-vector, scaled by the engine ambient colour.
         lit += EvaluateHumanHairStack(hairStack, tangent, normalize(view + geometricNormal))
-            * AmbientColor.rgb * LightingParameters.x;
+            * AmbientColor.rgb;
     }
 
     if (family == 14 && diagnostic < 0.5)
@@ -2429,10 +2427,10 @@ float4 PSMain(
             geometricNormal, fibreTangent, view, fillLight, diffuseSample.rgb, specularColour);
         maskedHairLighting += RimLightColor.rgb * EvaluateMaskedHairLight(
             geometricNormal, fibreTangent, view, rimLight, diffuseSample.rgb, specularColour);
-        lit = maskedHairLighting * LightingParameters.x;
+        lit = maskedHairLighting;
     }
 
-    if (LightingParameters.w > 0.5)
+    if (RenderParameters.x > 0.5)
     {
         // UE3 unlit materials retain their authored diffuse/base result while
         // bypassing the scene's directional, environment, and specular lighting.
@@ -2470,7 +2468,7 @@ float4 PSMain(
     if (diagnostic > 0.5)
     {
         lit = BaseColor.rgb * (environmentLighting + KeyLightColor.rgb * keyDiffuse
-            + FillLightColor.rgb * fillDiffuse + RimLightColor.rgb * rimDiffuse) * LightingParameters.x;
+            + FillLightColor.rgb * fillDiffuse + RimLightColor.rgb * rimDiffuse);
         alpha = 1;
         ambientDiffuse = BaseColor.rgb * environmentLighting;
     }
@@ -2484,7 +2482,7 @@ void PSShadow(VertexOutput input, bool isFrontFace : SV_IsFrontFace)
     // alien faces and PROShort01's 0.15 red clip. The compiler discards the
     // unused lighting result. Translucent cards retain their authored opacity
     // map with a 0.333 preview cutoff, independently of their camera-view
-    // depth pre/post passes (continuous transparency needs a binary depth test).
+    // depth prepass (continuous transparency needs a binary depth test).
     float4 unusedNormal;
     float4 unusedAmbient;
     float4 unusedPlane;
@@ -2714,7 +2712,7 @@ float2 PSAmbientOcclusion(PostVertexOutput input) : SV_TARGET
 {
     int2 pixel = int2(input.Position.xy);
     float4 centerSurface = LoadAoSurface(pixel);
-    if (centerSurface.a >= 0.99999 || DepthParameters.z < 0.5)
+    if (centerSurface.a >= 0.99999)
         return float2(1, 1);
 
     float3 centerUncertainty;
@@ -2736,9 +2734,7 @@ float2 PSAoBlur(PostVertexOutput input) : SV_TARGET
     if (centerSurface.a >= 0.99999) return float2(1, 1);
 
     float3 centerPosition = ReconstructViewPosition(pixel, centerSurface.a);
-    float3 centerNormal = DecodeAoNormal(centerSurface.rgb);
     float sigma = max(AoFilterParameters.z, 1e-5);
-    float normalExponent = max(AoFilterParameters.w, 0);
     float2 result = 0;
     float totalWeight = 0;
     [unroll]
@@ -2749,16 +2745,13 @@ float2 PSAoBlur(PostVertexOutput input) : SV_TARGET
         float4 tapSurface = LoadAoSurface(tapPixel);
         if (tapSurface.a >= 0.99999) continue;
 
-        float3 tapNormal = DecodeAoNormal(tapSurface.rgb);
         float3 tapPosition = ReconstructViewPosition(tapPixel, tapSurface.a);
         // Native HBAO blur uses view-depth separation. Reusing shading tangent
         // planes here would reintroduce the normal/triangle mismatch in filtering.
         float depthDistance = tapPosition.z - centerPosition.z;
         float depthWeight = exp(-0.5 * (depthDistance / sigma) * (depthDistance / sigma));
-        float normalWeight = normalExponent > 0
-            ? pow(saturate(dot(centerNormal, tapNormal)), normalExponent) : 1;
         float spatialWeight = tapIndex == 0 ? 6 : (abs(tapIndex) == 1 ? 4 : 1);
-        float weight = spatialWeight * depthWeight * normalWeight;
+        float weight = spatialWeight * depthWeight;
         // Accumulate differences so a constant visibility field stays exact,
         // including fully unoccluded input at zero strength.
         result += (LoadAoVisibility(tapPixel) - centerVisibility) * weight;
@@ -2783,35 +2776,6 @@ bool IsDisplayBackground(float2 uv, float3 color)
     // require the clear colour as well before treating a pixel as background.
     return SceneAmbientDiffuseTexture.SampleLevel(PostSampler, uv, 0).a <= 0.000001
         && all(abs(color - DisplayBackground.rgb) < 0.000001);
-}
-
-float3 BloomHighlight(float2 uv)
-{
-    float3 scene = SceneColorTexture.SampleLevel(PostSampler, uv, 0).rgb;
-    if (IsDisplayBackground(uv, scene)) return 0;
-    return max(scene - BloomParameters.x, 0);
-}
-
-float3 EvaluateBloom(float2 uv)
-{
-    float2 texel = PixelSizeAndSamples.xy;
-    float3 bloom = 0;
-    float totalWeight = 0;
-    [unroll]
-    for (int distance = 1; distance <= 4; ++distance)
-    {
-        float weight = 5 - distance;
-        float2 offset = texel * distance * 1.5;
-        // Extract highlights before filtering, in scene-linear HDR. A bright
-        // texel can contribute even when its neighbouring pixels are dark.
-        bloom += BloomHighlight(uv + float2(offset.x, 0)) * weight;
-        bloom += BloomHighlight(uv - float2(offset.x, 0)) * weight;
-        bloom += BloomHighlight(uv + float2(0, offset.y)) * weight;
-        bloom += BloomHighlight(uv - float2(0, offset.y)) * weight;
-        totalWeight += weight * 4;
-    }
-    bloom /= max(totalWeight, 1);
-    return bloom * BloomParameters.y;
 }
 
 float4 PSBloomExtract(PostVertexOutput input) : SV_TARGET
@@ -2842,14 +2806,35 @@ float4 PSBloomExtract(PostVertexOutput input) : SV_TARGET
 
 float4 PSBloomBlur(PostVertexOutput input) : SV_TARGET
 {
-    // Five bilinear fetches approximate a normalized nine-tap Gaussian.
-    float2 step = BloomPassParameters.xy;
-    float3 bloom = PostBloomTexture.SampleLevel(PostSampler, input.TexCoord, 0).rgb * 0.227027;
-    bloom += PostBloomTexture.SampleLevel(PostSampler, input.TexCoord + step * 1.384615, 0).rgb * 0.316216;
-    bloom += PostBloomTexture.SampleLevel(PostSampler, input.TexCoord - step * 1.384615, 0).rgb * 0.316216;
-    bloom += PostBloomTexture.SampleLevel(PostSampler, input.TexCoord + step * 3.230769, 0).rgb * 0.070270;
-    bloom += PostBloomTexture.SampleLevel(PostSampler, input.TexCoord - step * 3.230769, 0).rgb * 0.070270;
-    return float4(bloom, 1);
+    float2 texel = BloomPassParameters.xy;
+    float sigma = max(BloomPassParameters.z, 0.5);
+    int support = (int)ceil(3 * sigma);
+    // Visit every texel in the Gaussian support. Spreading a fixed sparse
+    // kernel apart instead creates separate copies of small bright sources.
+    // Adjacent weights share one bilinear fetch; their weighted position
+    // reconstructs both texels without leaving gaps as the radius increases.
+    float ratio = exp(-0.5 / (sigma * sigma));
+    float ratioStep = ratio * ratio;
+    float weight = 1;
+    float totalWeight = 1;
+    float3 bloom = PostBloomTexture.SampleLevel(PostSampler, input.TexCoord, 0).rgb;
+    [loop]
+    for (int distance = 1; distance <= support; distance += 2)
+    {
+        // Incremental Gaussian coefficients avoid exponentials in the loop.
+        weight *= ratio;
+        ratio *= ratioStep;
+        float firstWeight = weight;
+        weight *= ratio;
+        ratio *= ratioStep;
+        float secondWeight = distance < support ? weight : 0;
+        float pairWeight = firstWeight + secondWeight;
+        float2 offset = texel * (distance + secondWeight / pairWeight);
+        bloom += PostBloomTexture.SampleLevel(PostSampler, input.TexCoord + offset, 0).rgb * pairWeight;
+        bloom += PostBloomTexture.SampleLevel(PostSampler, input.TexCoord - offset, 0).rgb * pairWeight;
+        totalWeight += 2 * pairWeight;
+    }
+    return float4(bloom / totalWeight, 1);
 }
 
 float3 LookupPreviewGrade(float3 color)
@@ -2923,35 +2908,22 @@ float3 MapDisplayHighlights(float3 color)
         color.b <= 0.8 ? color.b : highlight.b);
 }
 
-float4 ComposePostProcess(PostVertexOutput input)
+float4 PSPostProcess(PostVertexOutput input) : SV_TARGET
 {
     float4 scene = SceneColorTexture.SampleLevel(PostSampler, input.TexCoord, 0);
     float3 color = scene.rgb;
     if (DisplayParameters.y > 0.5)
     {
         bool background = IsDisplayBackground(input.TexCoord, scene.rgb);
-        if (DisplayParameters.z > 0.5)
-        {
-            float3 bloom = PostBloomTexture.SampleLevel(PostSampler, input.TexCoord, 0).rgb;
-            if (!background)
-                return float4(saturate(ComposeGamePresentation(color, bloom)), scene.a);
-            // Grade/tone mapping must not recolour the selected backdrop. Bloom
-            // can still spread across silhouettes in linear display space.
-            color = scene.rgb + bloom * BloomParameters.y * BloomTint.rgb;
-            return float4(saturate(EncodeDisplaySrgb(color)), scene.a);
-        }
-        float3 bloom = EvaluateBloom(input.TexCoord);
-        // Keep the user's background colour stable; additive materials are
-        // identified by their HDR colour, so alpha=0 emission still transforms.
-        if (!background || any(bloom > 0))
-            color = MapDisplayHighlights(max(color + bloom, 0) * DisplayParameters.x);
+        float3 bloom = PostBloomTexture.SampleLevel(PostSampler, input.TexCoord, 0).rgb;
+        if (!background)
+            return float4(saturate(ComposeGamePresentation(color, bloom)), scene.a);
+        // Grade/tone mapping must not recolour the selected backdrop. Bloom
+        // can still spread across silhouettes in linear display space.
+        color = scene.rgb + bloom * BloomParameters.y * BloomTint.rgb;
+        return float4(saturate(EncodeDisplaySrgb(color)), scene.a);
     }
     // B8G8R8A8_UNorm and WPF Bgra32 consume encoded bytes without another
     // sRGB conversion. This is the sole display encoding in the pipeline.
     return float4(saturate(EncodeDisplaySrgb(color)), scene.a);
-}
-
-float4 PSPostProcess(PostVertexOutput input) : SV_TARGET
-{
-    return ComposePostProcess(input);
 }

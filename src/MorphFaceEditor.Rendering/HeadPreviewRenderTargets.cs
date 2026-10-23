@@ -113,7 +113,7 @@ internal sealed class HeadPreviewSurface : IDisposable
 /// <summary>The fixed set of preview surfaces that share one viewport size.</summary>
 internal sealed class HeadPreviewRenderTargets : IDisposable
 {
-    private readonly List<HeadPreviewSurface> _surfaces = new(18);
+    private readonly List<HeadPreviewSurface> _surfaces = new(16);
 
     public HeadPreviewRenderTargets(Device device, int width, int height, SampleDescription samples)
     {
@@ -134,12 +134,10 @@ internal sealed class HeadPreviewRenderTargets : IDisposable
             AoScratch = Add(HeadPreviewSurface.Color(device, width, height, Format.R16G16_Float, sampledTarget, singleSample));
             AoComposited = Add(HeadPreviewSurface.Color(device, width, height, Format.R16G16B16A16_Float, sampledTarget, singleSample));
             Color = Add(HeadPreviewSurface.Color(device, width, height, Format.R16G16B16A16_Float, BindFlags.RenderTarget, samples));
-            Normal = Add(HeadPreviewSurface.Color(device, width, height, Format.R16G16B16A16_Float, BindFlags.RenderTarget, samples));
+            Normal = Add(HeadPreviewSurface.Color(device, width, height, Format.R16G16B16A16_Float, sampledTarget, samples));
             OpaquePlane = Add(HeadPreviewSurface.Color(device, width, height, Format.R16G16B16A16_Float, sampledTarget, samples));
             AmbientDiffuse = Add(HeadPreviewSurface.Color(device, width, height, Format.R16G16B16A16_Float, BindFlags.RenderTarget, samples));
-            AoNormal = Add(HeadPreviewSurface.Color(device, width, height, Format.R16G16B16A16_Float, BindFlags.ShaderResource, samples));
-            Depth = Add(HeadPreviewSurface.Depth(device, width, height, BindFlags.DepthStencil, samples));
-            AoDepth = Add(HeadPreviewSurface.Depth(device, width, height, BindFlags.ShaderResource, samples));
+            Depth = Add(HeadPreviewSurface.Depth(device, width, height, BindFlags.DepthStencil | BindFlags.ShaderResource, samples));
             Resolved = Add(HeadPreviewSurface.Color(device, width, height, Format.R16G16B16A16_Float, BindFlags.ShaderResource, singleSample));
             ResolvedAmbient = Add(HeadPreviewSurface.Color(device, width, height, Format.R16G16B16A16_Float, BindFlags.ShaderResource, singleSample));
             Post = Add(HeadPreviewSurface.Color(device, width, height, Format.B8G8R8A8_UNorm, BindFlags.RenderTarget, singleSample));
@@ -158,9 +156,7 @@ internal sealed class HeadPreviewRenderTargets : IDisposable
     public HeadPreviewSurface Normal { get; }
     public HeadPreviewSurface OpaquePlane { get; }
     public HeadPreviewSurface AmbientDiffuse { get; }
-    public HeadPreviewSurface AoNormal { get; }
     public HeadPreviewSurface Depth { get; }
-    public HeadPreviewSurface AoDepth { get; }
     public HeadPreviewSurface Resolved { get; }
     public HeadPreviewSurface ResolvedAmbient { get; }
     public HeadPreviewSurface AoSurface { get; }

@@ -4,6 +4,7 @@ using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Models;
 using MorphFaceEditor.ViewModels;
 using MorphFaceEditor.Core.Materials;
+using MorphFaceEditor.Core.Randomisation;
 using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.Services;
 using MorphFaceEditor.Infrastructure;
@@ -19,11 +20,190 @@ internal static class UiPickerTests
     internal static IReadOnlyList<TestCase> All { get; } =
     [
         new("attachment hover and commit preserve edits without publishing failed loads", AttachmentPreparationPublication),
+        new("matching scalp maps suppress repeated hair-pair prompts and preserve manual donors", MatchingHairPairIsIdempotent),
+        new("CC-only Mohawk pairing keeps pending edits chronological, clears Hair and respects its lock", CcOnlyMohawkPairsAndLocks),
+        new("manual hair choices reject stale pairing and decline keeps only the mesh", ManualHairChoiceRejectsStalePairing),
         new("mesh picker preserves manual sources and requires proven Player runtime backing", RegistryDeduplicatesAutomaticOccurrences),
         new("physical texture donors remain distinct and explicit choices survive collapsing", TexturePickerDeduplicatesPhysicalExports),
         new("texture hover cache is bounded and reused by an undoable commit", TexturePickerBoundsPreviewCacheAndPreservesHistory),
         new("late texture decode cannot replace a newer preview or revive a disposed picker", TexturePickerRejectsStalePreviewCacheResults)
     ];
+
+    private static void CcOnlyMohawkPairsAndLocks()
+    {
+        using var fixture = UiRandomisationTests.CreateHairScalpFixture(ccMohawk: true);
+        var editor = fixture.Editor;
+        var before = editor.CreateDraft();
+        var choice = editor.HairMesh.Options.Single(value => value.Identity == fixture.Style.MeshVariants.Single());
+        ManualAttachmentSelectionEventArgs? request = null;
+        editor.HairMesh.ManualSelectionRequested += (_, args) => request = args;
+        editor.HairMesh.Commit(choice);
+        editor.HairMesh.CancelPreview(); // Closing the picker must retain the pending choice.
+        TestAssert.True(request is not null && !editor.IsDirty && !editor.UndoCommand.CanExecute(null) &&
+                        editor.HairMesh.PreviewSelection == choice &&
+                        before.MorphFeatures.Any(value => HumanMaleHairScalpPolicy.IsHairMorph(value.Name) && value.Offset != 0) &&
+                        MorphFaceEditorStateComparer.Equals(before, editor.CreateDraft()),
+            "The pending picker choice authored data or disappeared when the popup closed.");
+        editor.Material.Scalars.Single(value => value.Name == "HED_Norm_Blend").Value = 3;
+        var beforeAcceptance = editor.CreateDraft();
+        var prepared = editor.PrepareManualHairScalpPairAsync(choice.Identity!).GetAwaiter().GetResult()
+            ?? throw new Exception("The CC-only LE3 Mohawk did not request its required scalp pair.");
+        TestAssert.True(prepared.StyleId == "hmm-mhk" &&
+                        MorphFaceEditorStateComparer.Equals(beforeAcceptance, editor.CreateDraft()),
+            "Preparing the CC-only Mohawk authored a partial choice or selected another scalp style.");
+        editor.CommitManualHairSelection(choice, request!.Generation, prepared);
+        var accepted = editor.CreateDraft();
+        TestAssert.True(accepted.HairMeshReference == choice.Identity &&
+                        accepted.MorphFeatures.Where(value => HumanMaleHairScalpPolicy.IsHairMorph(value.Name))
+                            .All(value => value.Offset == 0),
+            "Accepting the CC Mohawk failed to retain its exact mesh and clear conflicting Hair morphs.");
+        editor.UndoCommand.Execute(null);
+        TestAssert.True(MorphFaceEditorStateComparer.Equals(beforeAcceptance, editor.CreateDraft()),
+            "One Undo failed to restore the pre-acceptance head with its intervening scalar edit.");
+        editor.UndoCommand.Execute(null);
+        TestAssert.True(MorphFaceEditorStateComparer.Equals(before, editor.CreateDraft()) && !editor.IsDirty,
+            "The pending pairing absorbed the earlier scalar edit.");
+        editor.RedoCommand.Execute(null);
+        editor.RedoCommand.Execute(null);
+        TestAssert.True(MorphFaceEditorStateComparer.Equals(accepted, editor.CreateDraft()),
+            "One Redo failed to restore the complete CC Mohawk pairing.");
+
+        editor.HairMesh.IsRandomisationLocked = true;
+        editor.RandomiseMorphs = false;
+        editor.RandomiseMaterials = true;
+        editor.MaterialRandomisationStrength = 100;
+        var scalarBeforeRoll = editor.Material.Scalars.Single(value => value.Name == "HED_Norm_Blend").Value;
+        editor.RandomiseAsync().GetAwaiter().GetResult();
+        var rolled = editor.CreateDraft();
+        TestAssert.True(editor.Material.Scalars.Single(value => value.Name == "HED_Norm_Blend").Value != scalarBeforeRoll,
+            "The locked-hair validation did not perform its available material roll.");
+        TestAssert.True(rolled.HairMeshReference == choice.Identity &&
+                        accepted.MaterialOverrides.Textures.SequenceEqual(rolled.MaterialOverrides.Textures),
+            "The global roll replaced the locked CC Mohawk's matched scalp with the available Sar scalp.");
+        editor.CursedMode = true;
+        editor.RandomiseMorphs = false;
+        editor.RandomiseAsync().GetAwaiter().GetResult();
+        TestAssert.True(fixture.Material.HasCursedRandomisation, "The setup did not create Cursed material state.");
+        editor.CursedMode = false;
+        editor.RandomiseAsync().GetAwaiter().GetResult();
+        TestAssert.True(accepted.MaterialOverrides.Textures.SequenceEqual(editor.CreateDraft().MaterialOverrides.Textures),
+            "Normal cleanup reset the locked authored scalp pair to its unrelated material defaults.");
+    }
+
+    private static void MatchingHairPairIsIdempotent()
+    {
+        using var fixture = UiRandomisationTests.CreateHairScalpFixture(inheritedPair: true);
+        var editor = fixture.Editor;
+        var secondMesh = fixture.Style.MeshVariants[1];
+        TestAssert.True(editor.PrepareManualHairScalpPairAsync(secondMesh).GetAwaiter().GetResult() is null,
+            "Switching Ssk mesh variants requested a scalp change despite the already-matching inherited maps.");
+        var wrongClass = fixture.Style.ScalpTextures.ToDictionary(value => value.Key,
+            value => (AssetIdentity?)new AssetIdentity("other-package.pcc", value.Value, 7, "TextureCube"),
+            StringComparer.OrdinalIgnoreCase);
+        TestAssert.True(!PlayerHairStyleCatalog.MatchesScalpTextures(fixture.Style, wrongClass),
+            "A same-path asset of another class was treated as the matching scalp texture.");
+
+        foreach (var (name, path) in fixture.Style.ScalpTextures)
+        {
+            var texture = CreateTestTexture("manual-donor.pcc", path, name);
+            fixture.Material.SetTextureReference(name,
+                texture with { Source = texture.Source with { UIndex = 987, IsExplicitTextureDonor = true } });
+        }
+        var authored = editor.CreateDraft();
+        TestAssert.True(editor.PrepareManualHairScalpPairAsync(secondMesh).GetAwaiter().GetResult() is null &&
+                        MorphFaceEditorStateComparer.Equals(authored, editor.CreateDraft()),
+            "Canonical matching replaced or re-prompted for the deliberate physical texture donors.");
+        var normal = fixture.Material.GetSelectedTexture("HED_Scalp_Norm")!;
+        fixture.Material.SetTextureReference("HED_Scalp_Norm",
+            normal with { Source = normal.Source with { InstancedPath = "Unrelated.Hair.HMM_HIR_Sar_Norm" } });
+        fixture.Material.PreviewTexture("HED_Scalp_Norm", normal);
+        TestAssert.True(editor.PrepareManualHairScalpPairAsync(secondMesh).GetAwaiter().GetResult() is not null,
+            "A matching hover hid the committed unrelated same-named normal map.");
+    }
+
+    private static void ManualHairChoiceRejectsStalePairing() => RunWithDispatcher(async () =>
+    {
+        using var reader = new MorphFacePackageReader();
+        using var editor = CreateRandomisationEditor(reader);
+        var original = editor.CreateDraft();
+        var first = new HairMeshOption("A", TestFixtures.CreateIdentity("Hair.A", "SkeletalMesh"));
+        var second = new HairMeshOption("B", TestFixtures.CreateIdentity("Hair.B", "SkeletalMesh"));
+        var requests = new List<ManualAttachmentSelectionEventArgs>();
+        editor.HairMesh.ManualSelectionRequested += (_, args) => requests.Add(args);
+        editor.HairMesh.Commit(first);
+        editor.HairMesh.Commit(second);
+        editor.HairMesh.Commit(first);
+        TestAssert.Equal(3, requests.Count);
+        editor.CommitManualHairSelection(first, requests[0].Generation, null);
+        TestAssert.True(MorphFaceEditorStateComparer.Equals(original, editor.CreateDraft()) &&
+                        !editor.UndoCommand.CanExecute(null),
+            "An older A result was accepted after the picker moved A to B to A.");
+
+        editor.CommitManualHairSelection(first, requests[2].Generation, null);
+        var declined = editor.CreateDraft();
+        TestAssert.True(declined.HairMeshReference == first.Identity &&
+                        MorphFaceEditorStateComparer.Equals(original,
+                            declined with { HairMeshReference = original.HairMeshReference }),
+            "Declining the paired change failed to retain only the chosen mesh.");
+        editor.UndoCommand.Execute(null);
+        TestAssert.True(MorphFaceEditorStateComparer.Equals(original, editor.CreateDraft()) && !editor.IsDirty,
+            "Declining the pair added extra history or retained dirty state after Undo.");
+        editor.RedoCommand.Execute(null);
+        TestAssert.True(MorphFaceEditorStateComparer.Equals(declined, editor.CreateDraft()),
+            "Redo failed to restore the declined-pair mesh choice.");
+
+        editor.HairMesh.Commit(second);
+        var importedPending = requests[^1];
+        editor.HairMesh.SetImportedPreview(first.Identity);
+        editor.CommitManualHairSelection(second, importedPending.Generation, null);
+        TestAssert.True(MorphFaceEditorStateComparer.Equals(declined, editor.CreateDraft()) &&
+                        editor.HairMesh.PreviewSelection is null,
+            "A same-reference import left the earlier picker choice eligible to commit.");
+        editor.HairMesh.Commit(second);
+        var randomisedPending = requests[^1];
+        editor.HairMesh.TrySetRandomisedSelection(first.Identity);
+        editor.CommitManualHairSelection(second, randomisedPending.Generation, null);
+        TestAssert.True(MorphFaceEditorStateComparer.Equals(declined, editor.CreateDraft()),
+            "A same-reference randomisation left the earlier picker choice eligible to commit.");
+
+        editor.HairMesh.Commit(second);
+        var pending = requests[^1];
+        editor.Dispose();
+        TestAssert.True(!editor.HairMesh.CommitManualSelection(second, pending.Generation),
+            "A disposed picker accepted an outstanding manual choice.");
+
+        using var fixture = UiRandomisationTests.CreateHairScalpFixture(ccMohawk: true);
+        using var shellReader = new MorphFacePackageReader();
+        using var shell = CreateMainWindowViewModel(shellReader);
+        await shell.OpenDroppedFileAsync(Path.GetFullPath(Path.Combine("tests", "Global Morphs", "LE3 GlobalMorphs.pcc")));
+        shell.SelectedFace = shell.Faces.First(face => face.ProfileKey == "le3-human-male");
+        await ((AsyncRelayCommand)shell.LoadSelectedFaceCommand).ExecuteAsync();
+        TestAssert.True(shell.Editor is not null, shell.ErrorMessage ?? "The real clipboard target did not load.");
+        const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        var clipboard = new MorphFaceEditor.QA.QaClipboard();
+        typeof(MainWindowViewModel).GetField("_clipboard", flags)!.SetValue(shell, clipboard);
+        // Keep real workspace/selection/command gates; replace only the loaded editor's decode boundary.
+        typeof(MainWindowViewModel).GetMethod("SetEditor", flags)!.Invoke(shell, [fixture.Editor, null]);
+        var delayed = new ControlledTextureLoader();
+        typeof(MaterialTextureEditorViewModel).GetField("_references", flags)!.SetValue(
+            fixture.Editor.Material.Textures.Single(value => value.Name == "HED_Scalp_Diff"), delayed);
+        var mesh = fixture.Editor.HairMesh.Options.Single(value => value.Identity == fixture.Style.MeshVariants.Single());
+        fixture.Editor.HairMesh.Commit(mesh);
+        TestAssert.True(fixture.Editor.HairMesh.PreviewSelection == mesh && fixture.Editor.HairMesh.Value is null,
+            "The scalp preparation did not retain its pending mesh choice.");
+        clipboard.Set(MorphFaceClipboardPayload.Material(shell.SelectedFace!.ProfileKey, "ClipboardSource",
+            new([new ScalarMaterialOverride("HED_Norm_Blend", 7)], [], [])));
+        TestAssert.True(shell.PasteMaterialDataCommand.CanExecute(null), "The real Paste Materials command was disabled.");
+        await ((AsyncRelayCommand)shell.PasteMaterialDataCommand).ExecuteAsync();
+        TestAssert.True(!shell.HasError && fixture.Material.GetScalar("HED_Norm_Blend") == 7,
+            shell.ErrorMessage ?? "The clipboard command did not apply the material payload.");
+        delayed.Complete(fixture.Style.ScalpTextures["HED_Scalp_Diff"]);
+        await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
+        TestAssert.True(fixture.Editor.HairMesh.Value is null && fixture.Editor.HairMesh.PreviewSelection is null,
+            $"The pre-paste scalp result survived Paste Materials. Authored={fixture.Editor.HairMesh.Value?.InstancedPath ?? "None"}; " +
+            $"pending={fixture.Editor.HairMesh.PreviewSelection?.Identity?.InstancedPath ?? "None"}; " +
+            $"pasted scalar={fixture.Material.GetScalar("HED_Norm_Blend")}.");
+    });
 
     private static void AttachmentPreparationPublication() => RunWithDispatcher(async () =>
     {
@@ -75,7 +255,7 @@ internal static class UiPickerTests
         var colour = new Vector4(0.7f, 0.1f, 0.3f, 1);
         const string colourName = "HED_Hair_Colour_Vector";
         TestAssert.True(editor.Material.Vectors.Any(value => value.Name == colourName), "Fixture has no shared hair colour.");
-        editor.Material.SetNumericValues(new Dictionary<string, float>(), new Dictionary<string, Vector4> { [colourName] = colour });
+        await editor.MergeMaterialDataAsync(new([], [new(colourName, colour)], []));
         var before = editor.CreateDraft();
         var materialState = editor.Material.Materials;
         var nextScene = new TaskCompletionSource<HeadPreviewScene>(TaskCreationOptions.RunContinuationsAsynchronously);

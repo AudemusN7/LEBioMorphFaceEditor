@@ -18,7 +18,7 @@ public sealed class PcsavException(PcsavError reason, Exception? inner = null)
 /// Only HeadMorph is decoded for editing. Every other uncompressed byte is retained.
 /// Reference: KarlitosVII/trilogy-save-editor src/unreal and src/save_data.
 /// </summary>
-public sealed class PcsavHeadMorphWorkspace : IUndoableEditSource
+public sealed class PcsavHeadMorphWorkspace
 {
     private const uint Le1Magic = 0x9E2A83C1;
     private const int MaximumFileSize = 64 * 1024 * 1024;
@@ -33,26 +33,17 @@ public sealed class PcsavHeadMorphWorkspace : IUndoableEditSource
     private HeadMorphPayload? _importedHead;
     private HeadMorphPayload? _savedImportedHead;
     private HeadMorphPayload? _savedEditingBaseline;
-    private readonly Stack<(ImportState Before, ImportState After)> _undoImports = new(), _redoImports = new();
     private sealed record ImportState(HeadMorphPayload? Head, HeadMorphPayload? Baseline);
-    public event EventHandler? EditCommitted;
+    public EditorHistory History { get; set; } = new();
     public event EventHandler? ImportStateChanged;
     public bool HasPendingHeadImport => !ReferenceEquals(_importedHead, _savedImportedHead);
-    public bool CanUndo => _undoImports.Count > 0;
-    public bool CanRedo => _redoImports.Count > 0;
-    public void ClearRedo() => _redoImports.Clear();
-    public void Undo()
+    public bool CanUndo => History.CanUndo;
+    public bool CanRedo => History.CanRedo;
+    public void Undo() => History.Undo();
+    public void Redo() => History.Redo();
+    private void RestoreImportState(ImportState state)
     {
-        var edit = _undoImports.Pop();
-        _redoImports.Push(edit);
-        (_importedHead, _editingBaseline) = (edit.Before.Head, edit.Before.Baseline);
-        ImportStateChanged?.Invoke(this, EventArgs.Empty);
-    }
-    public void Redo()
-    {
-        var edit = _redoImports.Pop();
-        _undoImports.Push(edit);
-        (_importedHead, _editingBaseline) = (edit.After.Head, edit.After.Baseline);
+        (_importedHead, _editingBaseline) = (state.Head, state.Baseline);
         ImportStateChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -155,8 +146,6 @@ public sealed class PcsavHeadMorphWorkspace : IUndoableEditSource
     public void DiscardHeadImport()
     {
         (_importedHead, _editingBaseline) = (_savedImportedHead, _savedEditingBaseline);
-        _undoImports.Clear();
-        _redoImports.Clear();
         ImportStateChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -170,14 +159,7 @@ public sealed class PcsavHeadMorphWorkspace : IUndoableEditSource
         SetEditingBaseline(draft);
         if (recordHistory)
         {
-            _undoImports.Push((before, new(_importedHead, _editingBaseline)));
-            _redoImports.Clear();
-            EditCommitted?.Invoke(this, EventArgs.Empty);
-        }
-        else
-        {
-            _undoImports.Clear();
-            _redoImports.Clear();
+            History.Record(this, before, new ImportState(_importedHead, _editingBaseline), RestoreImportState);
         }
         ImportStateChanged?.Invoke(this, EventArgs.Empty);
     }

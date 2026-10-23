@@ -10,10 +10,57 @@ public static class PlayerHairStyleCatalogTests
 {
     public static IReadOnlyList<TestCase> All { get; } =
     [
-        new("paired scalp lock classification follows reviewed mesh across games and sexes", PairedMeshClassificationIsGameAndSexScoped),
+        new("manual LE3 CC scalp pairs retain the automatic mesh pool", ManualCcPairsKeepAutomaticPool),
         new("Player official DLC hair styles also require runtime backing", OfficialDlcIsEligibleAndModsAreNot),
         new("locked Player hair mesh retains independent scalp styles only", MeshLockKeepsIndependentScalps),
     ];
+
+    private static void ManualCcPairsKeepAutomaticPool()
+    {
+        var cases = new[]
+        {
+            (PlayerHairSex.Male, "Mhk", "HMM_HIR_Mhk_MDL", "HMM_HIR_Mhk_MDL_CC", "hmm-mhk"),
+            (PlayerHairSex.Female, "Mhk", "HMF_HIR_Mhk_MDL", "HMF_HIR_Mhk_MDL_CC", "hmf-mhk"),
+            (PlayerHairSex.Male, "Sar", "HMM_HIR_Ssk_01_MDL", "HMM_HIR_Ssk_01_MDL_CC", "hmm-sar-ssk"),
+            (PlayerHairSex.Male, "Sar", "HMM_HIR_Ssk_02_MDL", "HMM_HIR_Ssk_02_MDL_CC", "hmm-sar-ssk")
+        };
+        foreach (var (sex, stem, baseName, ccName, id) in cases)
+        {
+            var prefix = sex == PlayerHairSex.Male ? "HMM" : "HMF";
+            var textures = ScalpFamily(MorphFaceGame.LE3, prefix, stem);
+            var native = Mesh(baseName, TextureCatalogOrigin.BaseGame, prefix);
+            var cc = Mesh(ccName, TextureCatalogOrigin.BaseGame, prefix);
+            var before = PlayerHairStyleCatalog.Resolve(MorphFaceGame.LE3, sex, textures, [native]);
+            foreach (var ccOnly in new[] { false, true })
+            {
+                var meshes = ccOnly ? new[] { cc } : new[] { native, cc };
+                var automatic = PlayerHairStyleCatalog.Resolve(MorphFaceGame.LE3, sex, textures, meshes);
+                if (ccOnly)
+                    TestAssert.True(automatic.All(value => value.Id != id),
+                        $"The manual-only {ccName} added an automatic hairstyle outcome.");
+                else
+                {
+                    TestAssert.True(before.Select(value => value.Id).SequenceEqual(automatic.Select(value => value.Id)),
+                        $"Adding {ccName} changed the automatic style pool or its weighting.");
+                    TestAssert.True(before.Single(value => value.Id == id).MeshVariants.SequenceEqual(
+                            automatic.Single(value => value.Id == id).MeshVariants),
+                        $"Adding {ccName} changed automatic mesh selection.");
+                }
+                var manual = PlayerHairStyleCatalog.Resolve(MorphFaceGame.LE3, sex, textures, meshes,
+                    includeManualPairedVariants: true).Single(value => value.Id == id);
+                var copied = new AssetIdentity("copied-package.pcc", cc.CanonicalPath, 987, "SkeletalMesh");
+                TestAssert.True(PlayerHairStyleCatalog.MatchesDedicatedScalpPair(manual, copied),
+                    $"The {(ccOnly ? "CC-only" : "combined")} catalogue did not pair the canonical {ccName} selection.");
+                TestAssert.True(!PlayerHairStyleCatalog.MatchesDedicatedScalpPair(manual,
+                        copied with { InstancedPath = $"Unrelated.Hair.{ccName}" }),
+                    $"An unrelated same-named {ccName} was treated as the reviewed pair.");
+            }
+            foreach (var game in new[] { MorphFaceGame.LE1, MorphFaceGame.LE2 })
+                TestAssert.True(PlayerHairStyleCatalog.Resolve(game, sex, ScalpFamily(game, prefix, stem), [cc],
+                        includeManualPairedVariants: true).All(value => value.Id != id),
+                    $"The LE3-only {ccName} introduced a manual pair in {game}.");
+        }
+    }
 
     private static void OfficialDlcIsEligibleAndModsAreNot()
     {
@@ -25,6 +72,9 @@ public static class PlayerHairStyleCatalogTests
         TestAssert.True(options.Any(value => value.Id == "hmf-ftl-long-hair" &&
                                             value.MeshAction == PlayerHairMeshAction.Set),
             "The broader NPC/PCC catalogue lost a reviewed official style.");
+        var meshOnly = options.Single(value => value.Id == "hmf-ftl-long-hair");
+        TestAssert.True(!PlayerHairStyleCatalog.MatchesDedicatedScalpPair(meshOnly, meshOnly.MeshVariants.Single()),
+            "A mesh-only style using the shared Cru scalp was incorrectly classified as a dedicated pair.");
         TestAssert.True(!options.Any(value => value.Id == "hmf-jack"),
             "A mod-only occurrence must not introduce a style into the core pool.");
         var unavailable = new PlayerRuntimeAssetAvailability(MorphFaceGame.LE3,
@@ -34,58 +84,6 @@ public static class PlayerHairStyleCatalogTests
         TestAssert.True(!playerOptions.Any(value => value.Id == "hmf-ftl-long-hair"),
             "Official origin alone admitted level-only FTL hair into the Player pool.");
 
-    }
-
-    private static void PairedMeshClassificationIsGameAndSexScoped()
-    {
-        var cases = new[]
-        {
-            (PlayerHairSex.Male, "Mhk", "hmm-mhk"),
-            (PlayerHairSex.Female, "PROCustomBraids01", "hmf-braids")
-        };
-
-        foreach (var game in new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 })
-        foreach (var (sex, stem, id) in cases)
-        {
-            var prefix = sex == PlayerHairSex.Male ? "HMM" : "HMF";
-            var meshName = $"{prefix}_HIR_{stem}_MDL";
-            var candidate = Mesh(meshName, TextureCatalogOrigin.BaseGame, prefix);
-            var selected = new AssetIdentity(candidate.EffectiveOccurrence.PackagePath,
-                TextureCatalogPicker.CanonicalPath(candidate.EffectiveOccurrence.InstancedPath,
-                    candidate.EffectiveOccurrence.PackagePath),
-                candidate.EffectiveOccurrence.ExportUIndex, "SkeletalMesh");
-
-            // Copies and package overrides preserve the canonical reviewed instance path while
-            // changing package/export identity. Lock classification must follow that path.
-            var copiedIdentity = selected with { PackagePath = "copied-package.pcc", UIndex = 987 };
-            TestAssert.True(PlayerHairStyleCatalog.IsCurrentHairMeshPairedStyle(
-                    game, sex, [candidate], copiedIdentity),
-                $"{game} {sex} did not classify the copied {id} mesh as scalp-paired.");
-
-            var foreignMesh = new AssetIdentity("other.pcc", $"Unrelated.Hair.{prefix}_HIR_{stem}_MDL",
-                987, "SkeletalMesh");
-            TestAssert.True(!PlayerHairStyleCatalog.IsCurrentHairMeshPairedStyle(
-                    game, sex, [candidate], foreignMesh),
-                $"{game} {sex} treated an unrelated same-named {id} mesh as the reviewed pair.");
-        }
-
-        var hmmCruMesh = Mesh("HMM_HIR_Fsk_MDL", TextureCatalogOrigin.BaseGame);
-        var hmfCruMesh = Mesh("HMF_HIR_Afr_MDL", TextureCatalogOrigin.BaseGame, "HMF");
-        foreach (var (sex, candidate) in new[]
-                 {
-                     (PlayerHairSex.Male, hmmCruMesh),
-                     (PlayerHairSex.Female, hmfCruMesh)
-                 })
-        {
-            var package = candidate.EffectiveOccurrence.PackagePath;
-            var selected = new AssetIdentity(package,
-                TextureCatalogPicker.CanonicalPath(candidate.EffectiveOccurrence.InstancedPath, package),
-                candidate.EffectiveOccurrence.ExportUIndex, "SkeletalMesh");
-            var copied = selected with { PackagePath = "copied-package.pcc", UIndex = 987 };
-            TestAssert.True(!PlayerHairStyleCatalog.IsCurrentHairMeshPairedStyle(
-                    MorphFaceGame.LE1, sex, [candidate], copied),
-                $"The {sex} Cru-paired mesh was incorrectly classified as requiring its scalp.");
-        }
     }
 
     private static void MeshLockKeepsIndependentScalps()
@@ -106,6 +104,7 @@ public static class PlayerHairStyleCatalogTests
     private static TextureCatalogCandidate[] ScalpFamily(MorphFaceGame game, string sex, string stem)
     {
         var prefix = $"{sex}_HIR_{stem}";
+        if (stem == "Mhk") prefix += "_Scalp";
         var names = new[] { $"{prefix}_Diff", $"{prefix}_Norm", $"{prefix}_Mask", "GBL_ARM_ALL_Norm" };
         if (sex == "HMM" && stem == "Cru") names = names.Append("HMM_HED_PROBase_Scalp_Norm_Stack").ToArray();
         names = names.Append("GBL_ARM_ALL_Black").ToArray();

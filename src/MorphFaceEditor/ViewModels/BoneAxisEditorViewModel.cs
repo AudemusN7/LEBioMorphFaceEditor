@@ -8,9 +8,10 @@ public sealed class BoneAxisEditorViewModel : ObservableObject, IContinuousEditV
     private readonly MorphFaceEditingSession _session;
     private float _value;
     private bool _extendedSliders;
-    private float _defaultMinimum;
-    private float _defaultMaximum;
-    private float _extendedExtent;
+    private readonly float _baselineMinimum;
+    private readonly float _baselineMaximum;
+    private float _minimum;
+    private float _maximum;
     private bool _isAvailable = true;
 
     public BoneAxisEditorViewModel(MorphFaceEditingSession session, string boneName, int axis)
@@ -19,16 +20,16 @@ public sealed class BoneAxisEditorViewModel : ObservableObject, IContinuousEditV
         BoneName = boneName;
         Axis = axis;
         _value = session.GetBoneAxis(boneName, axis);
-        _defaultMinimum = _value - 2;
-        _defaultMaximum = _value + 2;
-        _extendedExtent = Math.Max(2, Math.Abs(_value) + 2);
+        _minimum = _baselineMinimum = _value - 2;
+        _maximum = _baselineMaximum = _value + 2;
     }
 
     public string BoneName { get; }
     public int Axis { get; }
     public string AxisName => Axis switch { 0 => "X", 1 => "Y", _ => "Z" };
-    public float Minimum => _extendedSliders ? -_extendedExtent : _defaultMinimum;
-    public float Maximum => _extendedSliders ? _extendedExtent : _defaultMaximum;
+    public float Minimum => _extendedSliders ? -RangeExtent : _minimum;
+    public float Maximum => _extendedSliders ? RangeExtent : _maximum;
+    private float RangeExtent => Math.Max(Math.Abs(_minimum), Math.Abs(_maximum));
     public float Step => 0.01f;
     public bool IsAvailable
     {
@@ -41,11 +42,12 @@ public sealed class BoneAxisEditorViewModel : ObservableObject, IContinuousEditV
         get => _value;
         set
         {
-            EnsureRangesInclude(value);
+            UpdateRanges(value, expandOnly: true);
             if (SetProperty(ref _value, value))
             {
                 _session.SetBoneAxis(BoneName, Axis, value);
             }
+            UpdateRanges(_value);
         }
     }
 
@@ -66,8 +68,10 @@ public sealed class BoneAxisEditorViewModel : ObservableObject, IContinuousEditV
             return;
         }
         IsAvailable = true;
-        EnsureRangesInclude(value);
+        // Restore the value before shrinking its bound Slider's range.
+        UpdateRanges(value, expandOnly: true);
         SetProperty(ref _value, value, nameof(Value));
+        UpdateRanges(value);
     }
 
     public void SetExtendedSliders(bool enabled)
@@ -81,27 +85,16 @@ public sealed class BoneAxisEditorViewModel : ObservableObject, IContinuousEditV
         OnPropertyChanged(nameof(Maximum));
     }
 
-    private void EnsureRangesInclude(float value)
+    private void UpdateRanges(float value, bool expandOnly = false)
     {
-        var changed = false;
-        if (value < _defaultMinimum)
+        var minimum = Math.Min(_baselineMinimum, value);
+        var maximum = Math.Max(_baselineMaximum, value);
+        if (expandOnly)
+            (minimum, maximum) = (Math.Min(_minimum, minimum), Math.Max(_maximum, maximum));
+        if (_minimum != minimum || _maximum != maximum)
         {
-            _defaultMinimum = value;
-            changed = true;
-        }
-        if (value > _defaultMaximum)
-        {
-            _defaultMaximum = value;
-            changed = true;
-        }
-        var extent = Math.Abs(value);
-        if (extent > _extendedExtent)
-        {
-            _extendedExtent = extent;
-            changed = true;
-        }
-        if (changed)
-        {
+            _minimum = minimum;
+            _maximum = maximum;
             OnPropertyChanged(nameof(Minimum));
             OnPropertyChanged(nameof(Maximum));
         }

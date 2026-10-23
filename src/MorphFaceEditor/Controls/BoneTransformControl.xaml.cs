@@ -2,7 +2,6 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Threading;
 using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.ViewModels;
 
@@ -10,17 +9,13 @@ namespace MorphFaceEditor.Controls;
 
 public partial class BoneTransformControl : UserControl
 {
-    private readonly DispatcherTimer _wheelCommitTimer;
+    private readonly ContinuousEditGesture _gesture = new();
+    private readonly object _wheelGesture = new();
     private BoneTransformEditorViewModel? _model;
-    private bool _isDragging;
-    private bool _isDepthDragging;
-    private bool _isWheelEditing;
 
     public BoneTransformControl()
     {
         InitializeComponent();
-        _wheelCommitTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(450) };
-        _wheelCommitTimer.Tick += OnWheelCommitTimer;
         DataContextChanged += OnDataContextChanged;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
@@ -28,6 +23,7 @@ public partial class BoneTransformControl : UserControl
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
+        CompleteInteraction();
         DetachModel();
         AttachModel(e.NewValue as BoneTransformEditorViewModel);
         RenderValues();
@@ -69,9 +65,7 @@ public partial class BoneTransformControl : UserControl
         {
             return;
         }
-        EndWheelEdit();
-        _isDragging = true;
-        _model.BeginPuckEdit();
+        _gesture.Begin(Pad, _model.BeginPuckEdit, _model.EndPuckEdit);
         Pad.CaptureMouse();
         ApplyPadPosition(e.GetPosition(PuckCanvas));
         e.Handled = true;
@@ -79,7 +73,7 @@ public partial class BoneTransformControl : UserControl
 
     private void OnPadMouseMove(object sender, MouseEventArgs e)
     {
-        if (_isDragging)
+        if (_gesture.IsActiveFor(Pad))
         {
             ApplyPadPosition(e.GetPosition(PuckCanvas));
             e.Handled = true;
@@ -88,17 +82,15 @@ public partial class BoneTransformControl : UserControl
 
     private void OnPadMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
-        if (!_isDragging)
+        if (!_gesture.IsActiveFor(Pad))
         {
             return;
         }
         ApplyPadPosition(e.GetPosition(PuckCanvas));
         Pad.ReleaseMouseCapture();
-        EndDrag();
+        _gesture.Complete(Pad);
         e.Handled = true;
     }
-
-    private void OnPadLostMouseCapture(object sender, MouseEventArgs e) => EndDrag();
 
     private void OnPadMouseWheel(object sender, MouseWheelEventArgs e)
     {
@@ -106,9 +98,13 @@ public partial class BoneTransformControl : UserControl
         {
             return;
         }
-        if (!_isDragging && !_isWheelEditing)
+        var dragging = _gesture.IsActiveFor(Pad);
+        if (!dragging && !_gesture.IsActiveFor(_wheelGesture))
         {
-            _isWheelEditing = true;
+            _gesture.Begin(Pad, _model.BeginPuckEdit, _model.EndPuckEdit, _wheelGesture);
+        }
+        else if (!dragging)
+        {
             _model.BeginPuckEdit();
         }
         var increment = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)
@@ -116,10 +112,9 @@ public partial class BoneTransformControl : UserControl
             : Keyboard.Modifiers.HasFlag(ModifierKeys.Control) ? 1f : 0.1f;
         var adjusted = NumericWheelValue.Adjust(_model.X.Value, increment, Math.Sign(e.Delta));
         _model.X.Value = Math.Clamp(adjusted, _model.X.Minimum, _model.X.Maximum);
-        if (!_isDragging)
+        if (!dragging)
         {
-            _wheelCommitTimer.Stop();
-            _wheelCommitTimer.Start();
+            _gesture.RestartWheelTimeout();
         }
         e.Handled = true;
     }
@@ -130,10 +125,7 @@ public partial class BoneTransformControl : UserControl
         {
             return;
         }
-        EndWheelEdit();
-        EndDrag();
-        _isDepthDragging = true;
-        _model.BeginPuckEdit();
+        _gesture.Begin(DepthTrack, _model.BeginPuckEdit, _model.EndPuckEdit);
         DepthTrack.CaptureMouse();
         ApplyDepthPosition(e.GetPosition(DepthTrack));
         e.Handled = true;
@@ -141,7 +133,7 @@ public partial class BoneTransformControl : UserControl
 
     private void OnDepthMouseMove(object sender, MouseEventArgs e)
     {
-        if (_isDepthDragging)
+        if (_gesture.IsActiveFor(DepthTrack))
         {
             ApplyDepthPosition(e.GetPosition(DepthTrack));
             e.Handled = true;
@@ -150,17 +142,15 @@ public partial class BoneTransformControl : UserControl
 
     private void OnDepthMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
-        if (!_isDepthDragging)
+        if (!_gesture.IsActiveFor(DepthTrack))
         {
             return;
         }
         ApplyDepthPosition(e.GetPosition(DepthTrack));
         DepthTrack.ReleaseMouseCapture();
-        EndDepthDrag();
+        _gesture.Complete(DepthTrack);
         e.Handled = true;
     }
-
-    private void OnDepthLostMouseCapture(object sender, MouseEventArgs e) => EndDepthDrag();
 
     private void ApplyDepthPosition(Point point)
     {
@@ -211,40 +201,13 @@ public partial class BoneTransformControl : UserControl
 
     private void OnControlSizeChanged(object sender, SizeChangedEventArgs e) => RenderValues();
 
-    private void EndDrag()
-    {
-        if (!_isDragging)
-        {
-            return;
-        }
-        _isDragging = false;
-        _model?.EndPuckEdit();
-    }
-
-    private void EndDepthDrag()
-    {
-        if (!_isDepthDragging)
-        {
-            return;
-        }
-        _isDepthDragging = false;
-        _model?.EndPuckEdit();
-    }
-
-    private void OnWheelCommitTimer(object? sender, EventArgs e) => EndWheelEdit();
-
-    private void EndWheelEdit()
-    {
-        _wheelCommitTimer.Stop();
-        if (!_isWheelEditing)
-        {
-            return;
-        }
-        _isWheelEditing = false;
-        _model?.EndPuckEdit();
-    }
-
     private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        CompleteInteraction();
+        DetachModel();
+    }
+
+    private void CompleteInteraction()
     {
         if (Pad.IsMouseCaptured)
         {
@@ -254,10 +217,7 @@ public partial class BoneTransformControl : UserControl
         {
             DepthTrack.ReleaseMouseCapture();
         }
-        EndDrag();
-        EndDepthDrag();
-        EndWheelEdit();
-        DetachModel();
+        _gesture.Complete();
     }
 
     private void DetachModel()

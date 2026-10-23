@@ -950,7 +950,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             {
                 attachment.SelectionChanged -= OnAttachmentMeshChanged;
                 attachment.PreviewChanged -= OnAttachmentMeshPreviewChanged;
-                attachment.ManualSelectionCommitted -= OnManualAttachmentMeshSelectionCommitted;
+                attachment.ManualSelectionRequested -= OnManualAttachmentMeshSelectionRequested;
             }
             Editor.Dispose();
         }
@@ -1006,7 +1006,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             {
                 attachment.SelectionChanged += OnAttachmentMeshChanged;
                 attachment.PreviewChanged += OnAttachmentMeshPreviewChanged;
-                attachment.ManualSelectionCommitted += OnManualAttachmentMeshSelectionCommitted;
+                attachment.ManualSelectionRequested += OnManualAttachmentMeshSelectionRequested;
             }
         }
         OnDirtyStateChanged();
@@ -1017,37 +1017,47 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private void OnEditorDirtyStateChanged(object? sender, EventArgs e) => OnDirtyStateChanged();
 
-    private async void OnManualAttachmentMeshSelectionCommitted(object? sender, EventArgs e)
+    private async void OnManualAttachmentMeshSelectionRequested(object? sender, ManualAttachmentSelectionEventArgs e)
     {
-        if (sender is not HairMeshEditorViewModel { SlotIndex: 0, Value: { } mesh } changedSlot ||
-            Editor is not { } editor)
+        if (sender is not HairMeshEditorViewModel changedSlot || Editor is not { } editor)
         {
             return;
         }
+        if (changedSlot.SlotIndex != 0 || e.Selection.Identity is not { } mesh)
+        {
+            changedSlot.CommitManualSelection(e.Selection, e.Generation);
+            return;
+        }
+
+        bool IsCurrent() => Editor == editor && changedSlot.IsManualSelectionCurrent(e.Selection, e.Generation);
+        var committing = false;
 
         try
         {
             var prepared = await editor.PrepareManualHairScalpPairAsync(mesh);
-            if (prepared is null || Editor != editor || changedSlot.Value != mesh)
-            {
-                return;
-            }
+            if (!IsCurrent()) return;
 
-            if (prepared.RequiresCcScalpMaterial)
+            if (prepared?.RequiresCcScalpMaterial == true)
                 prepared = prepared with
                 {
                     ScalpMaterial = await _referenceService.LoadLe3CcScalpMaterialAsync(prepared.FemaleScalp)
                 };
 
-            if (Editor == editor && changedSlot.Value == mesh &&
-                _dialogs.ConfirmHairScalpTextureSwitch(mesh.InstancedPath, prepared.RequiresCcScalpMaterial) &&
-                Editor == editor && changedSlot.Value == mesh)
+            if (!IsCurrent()) return;
+            if (prepared is not null &&
+                !_dialogs.ConfirmHairScalpTextureSwitch(mesh.InstancedPath, prepared.RequiresCcScalpMaterial))
+                prepared = null;
+            if (IsCurrent())
             {
-                editor.ApplyManualHairScalpPair(prepared);
+                committing = true;
+                editor.CommitManualHairSelection(e.Selection, e.Generation, prepared);
             }
         }
         catch (Exception exception)
         {
+            if (Editor != editor || !committing && !IsCurrent()) return;
+            // The original workflow retained the chosen mesh when paired preparation failed.
+            if (!committing) editor.CommitManualHairSelection(e.Selection, e.Generation, null);
             AppLog.Error($"HAIR:SCALP-PREPARE-FAILED {mesh.InstancedPath}", exception);
             SetEditorError(Loc.Format("loc_Shell_Error_MatchingScalpTexturesCouldNotPrepare", exception.Message));
         }

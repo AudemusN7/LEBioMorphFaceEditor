@@ -7,6 +7,11 @@ using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.Services;
 using MorphFaceEditor.Infrastructure;
+using MorphFaceEditor.Controls;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Data;
+using System.Windows.Input;
 
 using static MorphFaceEditor.Tests.UiTestFixtures;
 
@@ -16,41 +21,228 @@ internal static class UiEditorTests
 {
     internal static IReadOnlyList<TestCase> All { get; } =
     [
-        new("slider and bone puck gestures retain order after stale pointer completion", ControlGesturesKeepSemanticHistory),
+        new("continuous controls complete captured edits on rebind capture focus and unload", ContinuousControlLifetimesKeepCapturedEdits),
+        new("bone pointer and wheel gestures retain captured edits through rebind unload and timeout", BoneControlLifetimesKeepHistory),
+        new("bound slider ranges preserve Cursed imported and replayed authored values", AuthoredValuesKeepCurrentSliderRanges),
         new("morph controls disable when the selected LOD has no target geometry", MorphControlsDisableForTargetlessLod),
         new("Fix Morph undo restores baked preview and survives a failing preview callback", FixMorphUndoRestoresBakedPreview),
         new("bone controls tolerate bones removed by zeroed morphs", BoneControlsTolerateRemovedMorphBones)
     ];
 
-    private static void ControlGesturesKeepSemanticHistory()
+    private static void AuthoredValuesKeepCurrentSliderRanges() => WpfTestDispatcher.Invoke(() => RunWithDispatcher(async () =>
     {
         using var reader = new MorphFacePackageReader();
-        using var editor = CreateRandomisationEditor(reader);
-        var original = editor.CreateDraft();
-        var feature = editor.Features.Single(value => value.Name == "nose_BridgeIn");
-        var bone = editor.BoneTransforms.Single(value => value.BoneName == "root");
-        feature.BeginEdit();
-        feature.Value = 0.25f;
-        feature.Value = 0.5f;
-        TestAssert.True(!editor.UndoCommand.CanExecute(null), "A slider drag committed before release.");
+        foreach (var extended in new[] { false, true })
+        {
+            using var editor = CreateRandomisationEditor(reader, randomSeedFactory: () => 771);
+            using var clean = CreateRandomisationEditor(reader, randomSeedFactory: () => 771);
+            editor.SetExtendedSliders(extended);
+            clean.SetExtendedSliders(extended);
+            var sliders = BindEditorSliders(editor);
+            var original = editor.CreateDraft();
+            editor.CursedMode = true;
+            editor.MorphRandomisationStrength = editor.MaterialRandomisationStrength = 100;
+            await editor.RandomiseAsync();
+            var cursed = editor.CreateDraft();
+            TestAssert.True(sliders.Any(value => value.Control.Value < value.Minimum || value.Control.Value > value.Maximum),
+                "The Cursed fixture did not exercise expanded slider ranges.");
+            AssertSliderRanges(sliders, extended);
+            editor.UndoCommand.Execute(null);
+            TestAssert.True(MorphFaceEditorStateComparer.Equals(original, editor.CreateDraft()),
+                "Shrinking Undo ranges clamped the restored authored state.");
+            AssertSliderRanges(sliders, extended);
+            editor.RedoCommand.Execute(null);
+            TestAssert.True(MorphFaceEditorStateComparer.Equals(cursed, editor.CreateDraft()),
+                "Expanding Redo ranges clamped a restored Cursed value.");
+            AssertSliderRanges(sliders, extended);
 
-        bone.BeginPuckEdit();
-        bone.X.Value = 0.25f;
-        bone.Y.Value = -0.5f;
-        bone.Z.Value = 0.75f;
-        feature.EndEdit(); // A virtualized slider's old pointer-up arrives during the puck drag.
-        bone.X.Value = 0.4f;
-        bone.EndPuckEdit();
-        bone.EndPuckEdit();
+            editor.CursedMode = false;
+            clean.RandomiseMaterials = true;
+            clean.MorphRandomisationStrength = clean.MaterialRandomisationStrength = 100;
+            await clean.RandomiseAsync();
+            await editor.RandomiseAsync();
+            foreach (var scalar in clean.Material.Scalars)
+                TestAssert.Equal(scalar.Value, editor.Material.Scalars.Single(value => value.Name == scalar.Name).Value);
+            AssertSliderRanges(sliders, extended);
+            editor.UndoCommand.Execute(null);
+            editor.ApplyMorphData(new(
+                original.MorphFeatures.Select(value => value with { Offset = value.Name == "nose_BridgeIn" ? 25 : -30 }).ToArray(),
+                original.FinalSkeleton.Select(value => value.BoneName == "root"
+                    ? value with { Translation = new Vector3(-50, 100, -75) } : value).ToArray(),
+                original.BakedLods));
+            await editor.ApplyMaterialDataAsync(new([new("HED_Norm_Blend", -125), new("Emis_Scalar", 75)], [], []));
+            var imported = editor.CreateDraft();
+            TestAssert.Equal(25f, editor.Features.Single(value => value.Name == "nose_BridgeIn").Value);
+            TestAssert.Equal(-125f, editor.Material.Scalars.Single(value => value.Name == "HED_Norm_Blend").Value);
+            TestAssert.Equal(100f, editor.Bones.Single(value => value.BoneName == "root" && value.Axis == 1).Value);
+            AssertSliderRanges(sliders, extended);
+            editor.UndoCommand.Execute(null);
+            editor.UndoCommand.Execute(null);
+            TestAssert.True(MorphFaceEditorStateComparer.Equals(cursed, editor.CreateDraft()),
+                "Undoing imported outliers clamped the restored values.");
+            AssertSliderRanges(sliders, extended);
+            editor.RedoCommand.Execute(null);
+            editor.RedoCommand.Execute(null);
+            TestAssert.True(MorphFaceEditorStateComparer.Equals(imported, editor.CreateDraft()),
+                "Redoing imported outliers clamped the imported values.");
+            editor.SetExtendedSliders(!extended);
+            AssertSliderRanges(sliders, !extended);
+            editor.SetToDefaultsCommand.Execute(null);
+            TestAssert.True(MorphFaceEditorStateComparer.Equals(original, editor.CreateDraft()),
+                "Shrinking default ranges changed the default authored state.");
+            AssertSliderRanges(sliders, !extended);
+            editor.UndoCommand.Execute(null);
+            TestAssert.True(MorphFaceEditorStateComparer.Equals(imported, editor.CreateDraft()),
+                "Undo Defaults lost the imported authored state.");
+            AssertSliderRanges(sliders, !extended);
+            editor.RedoCommand.Execute(null);
+            TestAssert.True(MorphFaceEditorStateComparer.Equals(original, editor.CreateDraft()),
+                "Redo Defaults failed to restore the complete default state.");
+            AssertSliderRanges(sliders, !extended);
+        }
+    }));
 
-        editor.UndoCommand.Execute(null);
-        TestAssert.Equal(0.5f, feature.Value);
-        TestAssert.Equal(Vector3.Zero, new Vector3(bone.X.Value, bone.Y.Value, bone.Z.Value));
-        editor.UndoCommand.Execute(null);
-        TestAssert.True(MorphFaceEditorStateComparer.Equals(original, editor.CreateDraft()) &&
-                        !editor.UndoCommand.CanExecute(null),
-            "Stale completion split a gesture or lost the preceding edit.");
+    private static IReadOnlyList<(IContinuousEditViewModel Control, Slider Slider, float Minimum, float Maximum)>
+        BindEditorSliders(FaceEditorViewModel editor)
+    {
+        return editor.Features.Select(value => ((IContinuousEditViewModel)value, value.Metadata.Minimum, value.Metadata.Maximum))
+            .Concat(editor.Material.Scalars.Select(value => ((IContinuousEditViewModel)value, value.RandomisationMinimum, value.RandomisationMaximum)))
+            .Concat(editor.Bones.Select(value => ((IContinuousEditViewModel)value, value.Value - 2, value.Value + 2)))
+            .Select(value =>
+            {
+                var slider = new Slider { DataContext = value.Item1 };
+                slider.SetBinding(Slider.MinimumProperty, new Binding("Minimum"));
+                slider.SetBinding(Slider.MaximumProperty, new Binding("Maximum"));
+                slider.SetBinding(Slider.ValueProperty, new Binding("Value") { Mode = BindingMode.TwoWay });
+                return (value.Item1, slider, value.Item2, value.Item3);
+            }).ToArray();
     }
+
+    private static void AssertSliderRanges(
+        IReadOnlyList<(IContinuousEditViewModel Control, Slider Slider, float Minimum, float Maximum)> sliders, bool extended)
+    {
+        foreach (var (control, slider, baselineMinimum, baselineMaximum) in sliders)
+        {
+            var minimum = Math.Min(baselineMinimum, control.Value);
+            var maximum = Math.Max(baselineMaximum, control.Value);
+            if (extended)
+            {
+                var extent = Math.Max(Math.Abs(minimum), Math.Abs(maximum));
+                (minimum, maximum) = (-extent, extent);
+            }
+            TestAssert.Near(minimum, (float)slider.Minimum, 0);
+            TestAssert.Near(maximum, (float)slider.Maximum, 0);
+            TestAssert.Near(control.Value, (float)slider.Value, 0);
+        }
+    }
+
+    private static void ContinuousControlLifetimesKeepCapturedEdits() => WpfTestDispatcher.Invoke(() =>
+    {
+        using var reader = new MorphFacePackageReader();
+        using var editor = CreateEditor(reader);
+        var original = editor.CreateDraft();
+        var feature = editor.Features.Single(value => value.Name == "Target");
+        var slider = new Slider { DataContext = feature };
+        slider.SetBinding(Slider.ValueProperty, new Binding(nameof(feature.Value)) { Mode = BindingMode.TwoWay });
+        var textBox = new TextBox();
+        using var gesture = new ContinuousEditGesture();
+        void Begin(FrameworkElement source) => gesture.Begin(source, feature.BeginEdit, feature.EndEdit);
+
+        Begin(slider);
+        slider.Value = 0.25;
+        slider.DataContext = new object();
+        TestAssert.True(editor.UndoCommand.CanExecute(null), "Rebinding did not complete the initiating edit.");
+
+        Begin(textBox);
+        feature.Value = 0.4f;
+        slider.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, Environment.TickCount)
+            { RoutedEvent = Mouse.LostMouseCaptureEvent });
+        feature.Value = 0.5f;
+        textBox.RaiseEvent(new KeyboardFocusChangedEventArgs(
+            Keyboard.PrimaryDevice, Environment.TickCount, textBox, slider)
+            { RoutedEvent = Keyboard.LostKeyboardFocusEvent });
+        feature.Value = 0.6f;
+
+        Begin(slider);
+        feature.Value = 0.75f;
+        slider.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, Environment.TickCount)
+            { RoutedEvent = Mouse.LostMouseCaptureEvent });
+        gesture.Complete(slider);
+        feature.Value = 0.8f;
+
+        Begin(textBox);
+        feature.Value = 1f;
+        textBox.RaiseEvent(new RoutedEventArgs(FrameworkElement.UnloadedEvent));
+        gesture.Complete();
+        feature.Value = 0.9f;
+        foreach (var expected in new[] { 1f, 0.8f, 0.75f, 0.6f, 0.5f, 0.25f, 0f })
+        {
+            editor.UndoCommand.Execute(null);
+            TestAssert.Equal(expected, feature.Value);
+        }
+        TestAssert.True(!editor.UndoCommand.CanExecute(null) &&
+                        MorphFaceEditorStateComparer.Equals(original, editor.CreateDraft()),
+            "Control lifecycle completion split, lost or duplicated an authored action.");
+    });
+
+    private static void BoneControlLifetimesKeepHistory() => WpfTestDispatcher.Invoke(() => RunWithDispatcher(async () =>
+    {
+        using var reader = new MorphFacePackageReader();
+        using var first = CreateEditor(reader);
+        using var second = CreateEditor(reader);
+        var originalFirst = first.CreateDraft();
+        var originalSecond = second.CreateDraft();
+        var firstBone = first.BoneTransforms.Single(value => value.BoneName == "root");
+        var secondBone = second.BoneTransforms.Single(value => value.BoneName == "root");
+        var textBox = new TextBox { DataContext = firstBone.X };
+        textBox.SetBinding(TextBox.TextProperty, new Binding(nameof(BoneAxisEditorViewModel.Value))
+            { Mode = BindingMode.TwoWay, UpdateSourceTrigger = UpdateSourceTrigger.LostFocus });
+        textBox.Text = "0.125";
+        textBox.GetBindingExpression(TextBox.TextProperty)!.UpdateSource(); // Enter uses this same binding commit.
+        TestAssert.Equal(0.125f, firstBone.X.Value);
+        TestAssert.True(first.IsDirty, "A committed bone text edit left the clean editor unmarked.");
+        first.UndoCommand.Execute(null);
+        TestAssert.True(!first.IsDirty && MorphFaceEditorStateComparer.Equals(originalFirst, first.CreateDraft()),
+            "Undoing the bone text edit failed to restore clean authored state.");
+        var control = new BoneTransformControl { DataContext = firstBone };
+        var pad = (Border)control.FindName("Pad");
+        void Pointer(RoutedEvent routedEvent) => pad.RaiseEvent(
+            new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left) { RoutedEvent = routedEvent });
+        void Wheel() => pad.RaiseEvent(new MouseWheelEventArgs(Mouse.PrimaryDevice, Environment.TickCount, 120)
+            { RoutedEvent = Mouse.PreviewMouseWheelEvent });
+
+        Pointer(UIElement.MouseLeftButtonDownEvent);
+        firstBone.X.Value = 0.25f;
+        firstBone.Y.Value = -0.5f;
+        firstBone.Z.Value = 0.75f;
+        TestAssert.True(!first.UndoCommand.CanExecute(null), "The puck gesture committed before its lifecycle ended.");
+        control.DataContext = secondBone;
+        TestAssert.True(first.UndoCommand.CanExecute(null), "Rebinding did not complete the original bone gesture.");
+        first.UndoCommand.Execute(null);
+        TestAssert.True(!first.UndoCommand.CanExecute(null) &&
+                        MorphFaceEditorStateComparer.Equals(originalFirst, first.CreateDraft()),
+            "Rebinding lost the original bone gesture or split its axes.");
+
+        Pointer(UIElement.MouseLeftButtonUpEvent);
+        TestAssert.True(!second.UndoCommand.CanExecute(null), "A stale pointer release edited the replacement bone.");
+        Wheel();
+        control.RaiseEvent(new RoutedEventArgs(FrameworkElement.UnloadedEvent));
+        TestAssert.True(second.UndoCommand.CanExecute(null), "Unloading did not complete the replacement bone gesture.");
+        second.UndoCommand.Execute(null);
+        TestAssert.True(MorphFaceEditorStateComparer.Equals(originalSecond, second.CreateDraft()),
+            "Unloading did not complete the replacement bone gesture.");
+
+        control.RaiseEvent(new RoutedEventArgs(FrameworkElement.LoadedEvent));
+        Wheel();
+        Wheel();
+        await Task.Delay(550);
+        TestAssert.True(second.UndoCommand.CanExecute(null), "The bone wheel idle timer did not complete its edit.");
+        second.UndoCommand.Execute(null);
+        TestAssert.True(!second.UndoCommand.CanExecute(null) &&
+                        MorphFaceEditorStateComparer.Equals(originalSecond, second.CreateDraft()),
+            "Wheel timeout did not retain one complete authored action.");
+        control.RaiseEvent(new RoutedEventArgs(FrameworkElement.UnloadedEvent));
+    }));
 
     private static void MorphControlsDisableForTargetlessLod()
     {

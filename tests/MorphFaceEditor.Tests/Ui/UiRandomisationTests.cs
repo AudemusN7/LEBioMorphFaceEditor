@@ -20,8 +20,125 @@ internal static class UiRandomisationTests
         new("awaitable randomisation propagates seed failures without partial edits", AwaitableRandomisationPropagatesFailure),
         new("failed Cursed randomisation rolls back its partial edit", FailedCursedRandomisationRollsBack),
         new("manual scalp preparation keeps its required pair when an optional map fails", ManualHairScalpPromptKeepsRequiredPairWhenOptionalMapFails),
+        new("a hair mesh lock permits deliberately unpaired scalp maps to roll", HairLockAllowsUnpairedScalpRoll),
         new("exhausted texture randomisation retains numeric values", ExhaustedTextureRandomisationIsReported)
     ];
+
+    private static void HairLockAllowsUnpairedScalpRoll()
+    {
+        using var fixture = CreateHairScalpFixture();
+        var editor = fixture.Editor;
+        var before = editor.CreateDraft();
+        editor.HairMesh.IsRandomisationLocked = true;
+        editor.RandomiseMorphs = false;
+        editor.RandomiseMaterials = true;
+        editor.MaterialRandomisationStrength = 100;
+        editor.RandomiseAsync().GetAwaiter().GetResult();
+        TestAssert.Equal(before.HairMeshReference, editor.CreateDraft().HairMeshReference);
+        TestAssert.True(PlayerHairStyleCatalog.MatchesScalpTextures(fixture.Style,
+                fixture.Style.ScalpTextures.Keys.ToDictionary(name => name,
+                    name => fixture.Material.GetTextureReference(name), StringComparer.OrdinalIgnoreCase)),
+            "The mesh lock suppressed scalp randomisation despite deliberately unpaired maps.");
+    }
+
+    internal static HairScalpFixture CreateHairScalpFixture(bool inheritedPair = false, bool ccMohawk = false)
+    {
+        var sourceFile = new FileStream(Path.GetTempFileName(), FileMode.Open, FileAccess.ReadWrite,
+            FileShare.ReadWrite | FileShare.Delete, 4096, FileOptions.DeleteOnClose);
+        var reader = new MorphFacePackageReader();
+        var mesh = TestFixtures.CreateMesh();
+        var game = ccMohawk ? MorphFaceGame.LE3 : MorphFaceGame.LE1;
+        var textureGroup = ccMohawk ? "Hair_Mohawk" : "Hair_Sarge";
+        var names = ccMohawk
+            ? new[] { "HMM_HIR_Mhk_Scalp_Diff", "HMM_HIR_Mhk_Scalp_Norm", "HMM_HIR_Mhk_Scalp_Mask", "GBL_ARM_ALL_Norm",
+                "HMM_HIR_Sar_Diff", "HMM_HIR_Sar_Norm", "HMM_HIR_Sar_Mask", "HMM_HIR_Sar_Tang" }
+            : new[] { "HMM_HIR_Sar_Diff", "HMM_HIR_Sar_Norm", "HMM_HIR_Sar_Mask", "HMM_HIR_Sar_Tang" };
+        var candidates = names.Select((name, index) =>
+        {
+            var occurrence = new TextureCatalogOccurrence(sourceFile.Name, 20 + index, 0,
+                TextureCatalogOrigin.BaseGame, 1, 1, "PF_B8G8R8A8", "Character", false, null);
+            var group = name.StartsWith("HMM_HIR_Sar_", StringComparison.Ordinal) ? "Hair_Sarge" : textureGroup;
+            return new TextureCatalogCandidate(game, $"BIOG_HMM_HIR_PRO_R.{group}.{name}",
+                occurrence, [occurrence]) { IsEligibleOfficialDefault = true };
+        }).ToArray();
+        var meshNames = ccMohawk ? new[] { "HMM_HIR_Mhk_MDL_CC" } : new[] { "HMM_HIR_Ssk_01_MDL", "HMM_HIR_Ssk_02_MDL" };
+        var meshes = meshNames.Select((name, index) =>
+        {
+            var path = $"BIOG_HMM_HIR_PRO_R.{(ccMohawk ? "Hair_Mohawk" : "Hair_SargeSpike")}.{name}";
+            var occurrence = new AttachmentMeshOccurrence(sourceFile.Name, path, 40 + index, 0,
+                TextureCatalogOrigin.BaseGame, 1);
+            return new AttachmentMeshCandidate(path, occurrence, [occurrence]) { IsEligibleOfficialDefault = true };
+        }).ToArray();
+        var style = PlayerHairStyleCatalog.Resolve(game, PlayerHairSex.Male, candidates, meshes,
+                includeManualPairedVariants: ccMohawk)
+            .Single(value => value.Id == (ccMohawk ? "hmm-mhk" : "hmm-sar-ssk"));
+        var defaultTextures = style.ScalpTextures.Keys.ToDictionary(name => name,
+            name => new MaterialTextureBinding(name, CreateTestTexture(sourceFile.Name,
+                inheritedPair ? style.ScalpTextures[name] : $"Custom.Default.{name}", name)),
+            StringComparer.OrdinalIgnoreCase);
+        var materialIdentity = TestFixtures.CreateIdentity("Scalp", "MaterialInstanceConstant");
+        var resolved = new ResolvedHeadMaterial(MaterialIdentityKey.Create(materialIdentity), materialIdentity,
+            "HMM_HED_PRO_MASTER_SCALP_MAT", HeadMaterialFamily.Scalp, HeadMaterialBlendMode.Opaque, false,
+            new Dictionary<string, float> { ["HED_Norm_Blend"] = 2 }, new Dictionary<string, Vector4>(), defaultTextures)
+        {
+            DefaultScalars = new Dictionary<string, float> { ["HED_Norm_Blend"] = 2 },
+            DefaultTextures = defaultTextures,
+            SupportedTextures = style.ScalpTextures.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase)
+        };
+        var material = new MaterialEditingSession(MorphFaceMaterialOverrides.Empty,
+            new ResolvedHeadMaterialSet(new Dictionary<string, ResolvedHeadMaterial> { [resolved.Key] = resolved }));
+        var features = new[] { "Afro", "flatTop" };
+        var initialHair = ccMohawk ? null : style.MeshVariants[0];
+        var document = new MorphFaceDocument(TestFixtures.CreateIdentity("Face", "BioMorphFace"),
+            new PackageFingerprint(1, DateTime.UnixEpoch, new string('0', 64)), mesh.Source, initialHair,
+            features.Select(name => new MorphFeatureValue(name, 0.5f)).ToArray(),
+            [new BoneTranslation("root", Vector3.Zero)], MorphFaceMaterialOverrides.Empty, [mesh.Positions.ToArray()], []);
+        var session = new MorphFaceEditingSession(document, mesh, features.Select(name => new MorphTargetAsset(
+            TestFixtures.CreateIdentity($"Set.{name}", "MorphTarget"), [new MorphTargetLod(0, 3, [])], [])).ToArray());
+        var profileKey = ccMohawk ? "le3-human-male" : "le1-human-male";
+        var donorScalp = ccMohawk
+            ? PlayerHairStyleCatalog.Resolve(game, PlayerHairSex.Male, candidates, meshes, meshLocked: true)
+                .Single(value => value.Id == "hmm-sar").ScalpTextures
+            : style.ScalpTextures;
+        var donor = new MorphRandomisationDonor("paired-scalp", profileKey, new HashSet<string>(), new Dictionary<string, float>())
+        {
+            MaterialScalars = new Dictionary<string, float> { ["HED_Norm_Blend"] = 4 },
+            MaterialTextureFamilies = new Dictionary<string, IReadOnlyDictionary<string, string>>
+                { ["human-scalp"] = donorScalp }
+        };
+        var corpus = new MorphRandomisationCorpus(MorphRandomisationCorpus.CurrentFormatVersion,
+            new Dictionary<MorphRandomisationPoolKey, IReadOnlyList<MorphRandomisationDonor>>
+                { [ccMohawk ? MorphRandomisationPoolKey.HumanMaleLe3 : MorphRandomisationPoolKey.HumanMaleLe12] = [donor] })
+        {
+            MaterialProfiles = new Dictionary<string, MaterialRandomisationProfile>
+            {
+                [profileKey] = new(profileKey,
+                    new Dictionary<string, MaterialScalarStatistics> { ["HED_Norm_Blend"] = new("HED_Norm_Blend", 1, 6, 2, 5) },
+                    new Dictionary<string, MaterialVectorStatistics>(), new HashSet<string> { "human-scalp" })
+            }
+        };
+        var editor = new FaceEditorViewModel(session, new HumanMaleFeatureMetadataCatalog(), material,
+            new StubColorDialog(), new PackageReferenceService(reader, TestFixtures.CreateMissingTextureCatalogService()),
+            "working.pcc", [], meshes.Select(value => new MorphFaceEditor.Models.PackageAssetListItem(
+                new AssetIdentity(value.EffectiveOccurrence.PackagePath, value.CanonicalPath,
+                    value.EffectiveOccurrence.ExportUIndex, "SkeletalMesh"))).ToArray(), initialHair, [],
+            message => throw new Exception(message), profileKey, new MorphRandomisationCatalog(corpus), () => 771,
+            registryTextureCandidates: candidates, textureCatalogProfile: TextureCatalogProfile.Empty, isTextureRegistryAvailable: true);
+        editor.UpdateRegistryAttachmentMeshes(meshes, isPlayerWorkspace: false);
+        foreach (var texture in editor.Material.Textures)
+            typeof(MaterialTextureEditorViewModel).GetField("_references", System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.NonPublic)!.SetValue(texture, new ImmediateTextureLoader());
+        return new HairScalpFixture(editor, material, style, reader, sourceFile);
+    }
+
+    internal sealed class HairScalpFixture(FaceEditorViewModel editor, MaterialEditingSession material,
+        PlayerHairStyleOption style, MorphFacePackageReader reader, FileStream sourceFile) : IDisposable
+    {
+        public FaceEditorViewModel Editor { get; } = editor;
+        public MaterialEditingSession Material { get; } = material;
+        public PlayerHairStyleOption Style { get; } = style;
+        public void Dispose() { Editor.Dispose(); reader.Dispose(); sourceFile.Dispose(); }
+    }
 
     private static void NormalRollClearsCursedState()
     {
@@ -33,6 +150,13 @@ internal static class UiRandomisationTests
         editor.CursedMode = true;
         editor.RandomisationStrength = 100;
         editor.RandomiseAsync().GetAwaiter().GetResult();
+        var rolled = editor.CreateDraft();
+        var manualBone = editor.Bones.First(value => value.IsAvailable);
+        manualBone.Value += 0.125f;
+        editor.UndoCommand.Execute(null);
+        TestAssert.True(MorphFaceEditorStateComparer.Equals(rolled, editor.CreateDraft()),
+            "Undoing a manual bone edit changed the preceding Cursed roll.");
+        editor.RedoCommand.Execute(null);
         var cursed = editor.CreateDraft();
         TestAssert.True(editor.Material.Scalars.Single(value => value.Name == "HED_Scalp_Mask_OverlayKill_Scalar").Value != 1,
             "The Cursed setup did not affect a parameter absent from the normal corpus.");
@@ -44,6 +168,7 @@ internal static class UiRandomisationTests
         clean.RandomiseMaterials = true;
         clean.MaterialRandomisationStrength = editor.MaterialRandomisationStrength = 37;
         clean.SetToDefaultsCommand.Execute(null);
+        clean.Bones.Single(value => value.BoneName == manualBone.BoneName && value.Axis == manualBone.Axis).Value += 0.125f;
         clean.RandomiseAsync().GetAwaiter().GetResult();
         editor.RandomiseAsync().GetAwaiter().GetResult();
         var normal = editor.CreateDraft();
@@ -59,6 +184,9 @@ internal static class UiRandomisationTests
         TestAssert.True(MorphFaceEditorStateComparer.Equals(cursed, editor.CreateDraft()), "Undo did not restore the complete Cursed state.");
         editor.RedoCommand.Execute(null);
         TestAssert.True(MorphFaceEditorStateComparer.Equals(normal, editor.CreateDraft()), "Redo did not restore the normal state.");
+        editor.RandomiseAsync().GetAwaiter().GetResult();
+        TestAssert.True(MorphFaceEditorStateComparer.Equals(normal, editor.CreateDraft()),
+            "Replaying normal history left a Cursed contribution for a later roll to subtract twice.");
     }
 
     private static void AwaitableRandomisationPropagatesFailure()

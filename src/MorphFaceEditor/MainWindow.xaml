@@ -81,7 +81,6 @@
                                  Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=LostFocus, StringFormat={}{0:G6}}"
                                  PreviewKeyDown="OnNumericValueKeyDown"
                                  GotKeyboardFocus="OnNumericValueGotFocus"
-                                 LostKeyboardFocus="OnNumericValueLostFocus"
                                  PreviewMouseWheel="OnNumericValueMouseWheel"
                                  ToolTip="{DynamicResource loc_View_MainWindow_TypeAnyFiniteValueOrUseTheMouseWheel01Ctrl1Shift10Enabl}" />
                     </Grid>
@@ -115,7 +114,6 @@
                                  Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=LostFocus, StringFormat={}{0:G6}}"
                                  PreviewKeyDown="OnNumericValueKeyDown"
                                  GotKeyboardFocus="OnNumericValueGotFocus"
-                                 LostKeyboardFocus="OnNumericValueLostFocus"
                                  PreviewMouseWheel="OnNumericValueMouseWheel"
                                  ToolTip="{DynamicResource loc_View_MainWindow_TypeAnyFiniteValueOrUseTheMouseWheel01Ctrl1Shift10Enabl_2}" />
                     </Grid>
@@ -910,21 +908,21 @@
                                                                 <TextBox DataContext="{Binding X}" Padding="18,3,4,3" FontSize="10"
                                                                          Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=LostFocus, StringFormat={}{0:G6}}"
                                                                          PreviewKeyDown="OnNumericValueKeyDown" GotKeyboardFocus="OnNumericValueGotFocus"
-                                                                         LostKeyboardFocus="OnNumericValueLostFocus" PreviewMouseWheel="OnNumericValueMouseWheel" />
+                                                                         PreviewMouseWheel="OnNumericValueMouseWheel" />
                                                                 <TextBlock Text="{DynamicResource loc_View_MainWindow_X}" Foreground="{DynamicResource Accent}" FontSize="10" Margin="5,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False" />
                                                             </Grid>
                                                             <Grid Grid.Column="2">
                                                                 <TextBox DataContext="{Binding Y}" Padding="18,3,4,3" FontSize="10"
                                                                          Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=LostFocus, StringFormat={}{0:G6}}"
                                                                          PreviewKeyDown="OnNumericValueKeyDown" GotKeyboardFocus="OnNumericValueGotFocus"
-                                                                         LostKeyboardFocus="OnNumericValueLostFocus" PreviewMouseWheel="OnNumericValueMouseWheel" />
+                                                                         PreviewMouseWheel="OnNumericValueMouseWheel" />
                                                                 <TextBlock Text="{DynamicResource loc_View_MainWindow_Y}" Foreground="{DynamicResource Accent}" FontSize="10" Margin="5,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False" />
                                                             </Grid>
                                                             <Grid Grid.Column="4">
                                                                 <TextBox DataContext="{Binding Z}" Padding="18,3,4,3" FontSize="10"
                                                                          Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=LostFocus, StringFormat={}{0:G6}}"
                                                                          PreviewKeyDown="OnNumericValueKeyDown" GotKeyboardFocus="OnNumericValueGotFocus"
-                                                                         LostKeyboardFocus="OnNumericValueLostFocus" PreviewMouseWheel="OnNumericValueMouseWheel" />
+                                                                         PreviewMouseWheel="OnNumericValueMouseWheel" />
                                                                 <TextBlock Text="{DynamicResource loc_View_MainWindow_Z}" Foreground="{DynamicResource Accent}" FontSize="10" Margin="5,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False" />
                                                             </Grid>
                                                         </Grid>

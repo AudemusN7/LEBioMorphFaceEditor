@@ -283,24 +283,11 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
         }
     }
     public ResolvedHeadMaterialSet Materials => _session.Materials;
+    public AssetIdentity? GetEffectiveTextureReference(string name) =>
+        _session.GetTextureReference(name) ?? _session.GetDefaultTexture(name)?.Source;
     public void ReplaceScalpMaterial(string targetKey, ResolvedHeadMaterial material) =>
         _session.ReplaceScalpMaterial(targetKey, material);
     public MorphFaceMaterialOverrides CreateOverrides() => _session.CreateOverrides();
-    public void SetNumericValues(
-        IReadOnlyDictionary<string, float> scalars,
-        IReadOnlyDictionary<string, System.Numerics.Vector4> vectors)
-    {
-        ArgumentNullException.ThrowIfNull(scalars);
-        ArgumentNullException.ThrowIfNull(vectors);
-        foreach (var (name, value) in scalars)
-        {
-            _session.SetScalar(name, value);
-        }
-        foreach (var (name, value) in vectors)
-        {
-            _session.SetVector(name, value);
-        }
-    }
     public async Task<PreparedMaterialRandomisation> PrepareRandomisationAsync(
         IReadOnlyDictionary<string, float> scalars,
         IReadOnlyDictionary<string, System.Numerics.Vector4> vectors,
@@ -381,19 +368,28 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
     public MaterialRandomisationDefaults? CapturePendingRandomisationDefaults() =>
         _session.HasCursedRandomisation ? _session.CaptureRandomisationDefaults() : null;
 
-    public void ApplyRandomisation(PreparedMaterialRandomisation values, bool cursed = false) =>
-        ApplyPreparedValues(values, cursed ? MaterialBatchKind.CursedRandomisation : MaterialBatchKind.NormalRandomisation);
+    public void ApplyRandomisation(PreparedMaterialRandomisation values, bool cursed = false,
+        IReadOnlySet<string>? preservedTextureNames = null) =>
+        ApplyPreparedValues(values, cursed ? MaterialBatchKind.CursedRandomisation : MaterialBatchKind.NormalRandomisation,
+            preservedTextureNames);
 
-    public void ApplyPreparedValues(PreparedMaterialRandomisation values, MaterialBatchKind kind = MaterialBatchKind.Edit)
+    public void ApplyPreparedValues(PreparedMaterialRandomisation values, MaterialBatchKind kind = MaterialBatchKind.Edit,
+        IReadOnlySet<string>? preservedTextureNames = null)
     {
         ArgumentNullException.ThrowIfNull(values);
-        _session.SetValues(values.Scalars, values.Vectors, values.Textures, kind);
+        _session.SetValues(values.Scalars, values.Vectors, values.Textures, kind, preservedTextureNames);
     }
     public void ResetToDefaults() => _session.ResetToDefaults();
     public PreparedMaterialSurface PrepareAttachmentMaterials(ResolvedHeadMaterialSet materials) =>
         _session.PrepareAttachmentMaterials(materials);
     public void ApplyMaterialSurface(PreparedMaterialSurface surface) => _session.ApplyMaterialSurface(surface);
     public async Task ApplyDataAsync(MorphFaceMaterialData data)
+        => ApplyMaterialData(data, await PrepareMaterialDataAsync(data));
+
+    public void ApplyMaterialData(MorphFaceMaterialData data,
+        IReadOnlyDictionary<string, DecodedTextureAsset?> textures) => _session.ApplyMaterialData(data, textures);
+
+    public async Task<IReadOnlyDictionary<string, DecodedTextureAsset?>> PrepareMaterialDataAsync(MorphFaceMaterialData data)
     {
         ArgumentNullException.ThrowIfNull(data);
         var decoded = new Dictionary<string, DecodedTextureAsset?>(StringComparer.OrdinalIgnoreCase);
@@ -411,7 +407,7 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
                 decoded[controlName] = await editor.ResolveReferenceAsync(reference);
             }
         }
-        _session.ApplyMaterialData(data, decoded);
+        return decoded;
     }
     public void SetExtendedSliders(bool enabled)
     {

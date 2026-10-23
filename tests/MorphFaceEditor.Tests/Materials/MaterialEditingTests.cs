@@ -16,6 +16,8 @@ public static class MaterialEditingTests
     [
         new("material history tolerates redundant and reordered pointer completion", MaterialHistoryToleratesPointerCompletion),
         new("material randomisation batch is atomic and reversible", MaterialRandomisationBatchIsAtomic),
+        new("material vector preview applies once and cancellation preserves inheritance", VectorPreviewPreservesAuthoredOwnership),
+        new("cancelled imports and normal cleanup preserve complete protected material state", CleanupAndCancellationPreserveMaterialState),
         new("LE2 and LE3 inherited eye emissive defaults stay disabled until authored", InheritedEyeEmissiveDefaultsToZero),
         new("transient texture preview stays outside authored state and history", TransientTexturePreviewStaysOutsideAuthoredState),
         new("None restores the rendered material default after replacement", NoneRestoresRenderedDefault),
@@ -58,7 +60,7 @@ public static class MaterialEditingTests
             "randomised");
         var commits = 0;
         var refreshes = 0;
-        session.EditCommitted += (_, _) => commits++;
+        session.History.HistoryChanged += (_, _) => commits++;
         session.MaterialsChanged += (_, args) =>
         {
             if (args.Kind == MaterialChangeKind.Full) refreshes++;
@@ -99,6 +101,141 @@ public static class MaterialEditingTests
         catch (ArgumentException)
         {
             TestAssert.Near(0.2f, session.GetScalar("HED_Norm_Blend"), 1e-6f);
+        }
+    }
+
+    private static void VectorPreviewPreservesAuthoredOwnership()
+    {
+        var source = CreateSession();
+        var session = new MaterialEditingSession(MorphFaceMaterialOverrides.Empty, source.BaseMaterials);
+        var before = session.GetVector("SkinTone");
+        var after = new Vector4(0.2f, 0.4f, 0.6f, 1);
+        session.SetScalar("HED_Norm_Blend", 0.25f);
+        session.Undo();
+        session.PreviewVector("SkinTone", after);
+        session.CompleteVectorPreview("SkinTone", before, after, apply: false);
+        TestAssert.Equal(before, session.GetVector("SkinTone"));
+        TestAssert.True(!session.CanUndo && session.CreateOverrides().Vectors.Count == 0,
+            "Cancelling a vector dialog authored its transient preview.");
+        TestAssert.True(session.CanRedo, "Cancelling a vector dialog discarded the previous redo branch.");
+        session.Redo();
+        TestAssert.Equal(0.25f, session.GetScalar("HED_Norm_Blend"));
+        session.Undo();
+
+        session.PreviewVector("SkinTone", after);
+        session.CompleteVectorPreview("SkinTone", before, after, apply: true);
+        TestAssert.Equal(after, session.CreateOverrides().Vectors.Single().Value);
+        session.Undo();
+        TestAssert.Equal(before, session.GetVector("SkinTone"));
+        TestAssert.True(!session.CanUndo && session.CreateOverrides().Vectors.Count == 0,
+            "Undo retained a vector override that was originally inherited.");
+        session.Redo();
+        TestAssert.Equal(after, session.CreateOverrides().Vectors.Single().Value);
+    }
+
+    private static void AssertOverridesEqual(MorphFaceMaterialOverrides expected, MorphFaceMaterialOverrides actual)
+    {
+        TestAssert.True(expected.Scalars.SequenceEqual(actual.Scalars) &&
+                        expected.Vectors.SequenceEqual(actual.Vectors) &&
+                        expected.Textures.SequenceEqual(actual.Textures),
+            "Material history did not restore the complete authored override payload.");
+    }
+
+    private static void CleanupAndCancellationPreserveMaterialState()
+    {
+        var source = CreateSession();
+        var material = source.BaseMaterials.Materials.Values.Single();
+        var seed = material.Textures["HED_Diff"].Texture;
+        DecodedTextureAsset Texture(string name) => seed with
+        {
+            Source = TestFixtures.CreateIdentity(name, "Texture2D"), CacheKey = name
+        };
+        var maps = new Dictionary<string, MaterialTextureBinding>(material.Textures, StringComparer.OrdinalIgnoreCase);
+        foreach (var name in new[] { "HED_Scalp_Diff", "HED_Scalp_Norm", "HED_Scalp_Spec", "HED_Tang" })
+            maps[name] = new(name, Texture($"Native_{name}"));
+        var defaults = new Dictionary<string, MaterialTextureBinding>(maps, StringComparer.OrdinalIgnoreCase)
+        {
+            ["HED_Scalp_Diff"] = new("HED_Scalp_Diff", Texture("DefaultScalpDiffuse")),
+            ["HED_Scalp_Spec"] = new("HED_Scalp_Spec", Texture("DefaultScalpSpec"))
+        };
+        var original = source.CreateOverrides();
+        var unknown = TestFixtures.CreateIdentity("UnresolvedScalp", "Texture2D");
+        var session = new MaterialEditingSession(original with
+        {
+            Scalars = original.Scalars.Append(new ScalarMaterialOverride("UnknownScalar", 7)).ToArray(),
+            Vectors = original.Vectors.Append(new VectorMaterialOverride("UnknownVector", Vector4.UnitX)).ToArray(),
+            Textures = original.Textures.Concat(new[]
+            {
+                new TextureMaterialOverride("HED_Scalp_Diff", maps["HED_Scalp_Diff"].Texture.Source),
+                new TextureMaterialOverride("HED_Scalp_Norm", maps["HED_Scalp_Norm"].Texture.Source),
+                new TextureMaterialOverride("HED_Scalp_Spec", maps["HED_Scalp_Spec"].Texture.Source),
+                new TextureMaterialOverride("UnknownTexture", unknown)
+            }).ToArray()
+        }, new ResolvedHeadMaterialSet(new Dictionary<string, ResolvedHeadMaterial>
+        {
+            [material.Key] = material with { Textures = maps, DefaultTextures = defaults }
+        }));
+        session.SetTextureReference("HED_Scalp_Norm", Texture("EditedScalpNormal"));
+        session.SetTextureReference("HED_Scalp_Spec", null);
+        session.SetValues(new Dictionary<string, float> { ["HED_Norm_Blend"] = 9 },
+            new Dictionary<string, Vector4> { ["SkinTone"] = new(8, 7, 6, 1) },
+            new Dictionary<string, DecodedTextureAsset?> { ["HED_Diff"] = Texture("CursedFaceDiffuse") },
+            MaterialBatchKind.CursedRandomisation);
+        var cursed = session.CreateOverrides();
+        var protectedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            { "HED_Scalp_Diff", "HED_Scalp_Norm", "HED_Scalp_Spec", "HED_Tang", "UnknownTexture" };
+        var references = protectedNames.ToDictionary(name => name, session.GetTextureReference);
+        var previews = protectedNames.ToDictionary(name => name, name => session.GetPreviewTexture(name)?.Source);
+
+        using (session.History.BeginAggregate())
+        {
+            session.ApplyMaterialData(new MorphFaceMaterialData(
+                [new ScalarMaterialOverride("Imported:Scalar", 0.8f)],
+                [new VectorMaterialOverride("Imported:Vector", Vector4.Zero)],
+                [new TextureMaterialOverride("Imported:Texture", unknown)]),
+                new Dictionary<string, DecodedTextureAsset?>());
+            TestAssert.Equal(unknown,
+                session.CreateOverrides().Textures.Single(value => value.Name == "Imported:Texture").TextureReference);
+            session.SetScalar("Imported:Scalar", 0.6f);
+            session.SetVector("Imported:Vector", Vector4.One);
+            session.ResetToDefaults();
+        }
+        AssertOverridesEqual(cursed, session.CreateOverrides());
+        AssertProtectedMaps();
+        TestAssert.True(session.HasCursedRandomisation, "Cancelling an import lost the prior Cursed state.");
+
+        session.SetValues(new Dictionary<string, float> { ["HED_Norm_Blend"] = 0.2f },
+            new Dictionary<string, Vector4>(),
+            new Dictionary<string, DecodedTextureAsset?> { ["HED_Scalp_Diff"] = Texture("IgnoredProtectedDiffuse") },
+            MaterialBatchKind.NormalRandomisation, protectedNames);
+        var normal = session.CreateOverrides();
+        AssertProtectedMaps();
+        TestAssert.True(!session.HasCursedRandomisation && session.GetScalar("HED_Norm_Blend") == 0.2f &&
+                        session.GetVector("SkinTone") == Vector4.One &&
+                        normal.Scalars.All(value => value.Name != "UnknownScalar") &&
+                        normal.Vectors.All(value => value.Name != "UnknownVector") &&
+                        normal.Textures.All(value => value.Name != "HED_Diff") &&
+                        session.GetPreviewTexture("HED_Diff")?.Source == seed.Source,
+            "Protecting the scalp prevented unrelated Cursed material cleanup.");
+        TestAssert.True(cursed.Textures.Where(value => protectedNames.Contains(value.Name))
+                .SequenceEqual(normal.Textures.Where(value => protectedNames.Contains(value.Name))),
+            "Normal cleanup changed the protected authored texture rows.");
+        TestAssert.Equal(3, session.ChangedTextureCount);
+
+        session.Undo();
+        AssertOverridesEqual(cursed, session.CreateOverrides());
+        AssertProtectedMaps();
+        TestAssert.True(session.HasCursedRandomisation, "Undo cleanup did not restore Cursed state.");
+        session.Redo();
+        AssertOverridesEqual(normal, session.CreateOverrides());
+        AssertProtectedMaps();
+        TestAssert.True(!session.HasCursedRandomisation, "Redo cleanup retained Cursed state.");
+
+        void AssertProtectedMaps()
+        {
+            TestAssert.True(protectedNames.All(name => session.GetTextureReference(name) == references[name] &&
+                                session.GetPreviewTexture(name)?.Source == previews[name]),
+                "Normal cleanup changed a protected native, edited, inherited or unresolved scalp binding.");
         }
     }
 
@@ -183,7 +320,7 @@ public static class MaterialEditingTests
             TextureRole.Diffuse, TextureColorSpace.Srgb, TextureAlphaPolicy.Ignore, false, "preview");
         var commits = 0;
         var historyChanges = 0;
-        session.EditCommitted += (_, _) => commits++;
+        session.History.HistoryChanged += (_, _) => commits++;
         session.HistoryChanged += (_, _) => historyChanges++;
 
         session.PreviewTexture("HED_Diff", replacement);

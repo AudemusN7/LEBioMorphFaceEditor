@@ -93,14 +93,12 @@ public sealed class CustomMaterialWorkspaceChangedEventArgs(
 /// modifying the imported source asset. Assignment options are deliberately
 /// evidence-backed inputs from the package/profile layer.
 /// </summary>
-public sealed class CustomMaterialWorkspace : Editing.IUndoableEditSource
+public sealed class CustomMaterialWorkspace
 {
     public const int MaximumSupportedSlots = 8;
 
     private readonly Dictionary<int, CustomMaterialSlot> _slotsByIndex;
     private readonly Dictionary<int, CustomMaterialAssignmentOption> _assignments = new();
-    private readonly Stack<IReadOnlyDictionary<int, CustomMaterialAssignmentOption>> _undo = new();
-    private readonly Stack<IReadOnlyDictionary<int, CustomMaterialAssignmentOption>> _redo = new();
     private readonly string _workspaceKey;
 
     public static (CustomMaterialWorkspace? Workspace, int UsedSlotCount) Create(ImportedMeshAsset source)
@@ -143,12 +141,12 @@ public sealed class CustomMaterialWorkspace : Editing.IUndoableEditSource
         .Distinct(StringComparer.OrdinalIgnoreCase)
         .ToArray();
     public ResolvedHeadMaterialSet ActiveMaterials { get; private set; }
-    public bool CanUndo => _undo.Count > 0;
-    public bool CanRedo => _redo.Count > 0;
+    public Editing.EditorHistory History { get; set; } = new();
+    public bool CanUndo => History.CanUndo;
+    public bool CanRedo => History.CanRedo;
 
     public event EventHandler<CustomMaterialWorkspaceChangedEventArgs>? ActiveMaterialsChanged;
     public event EventHandler? HistoryChanged;
-    public event EventHandler? EditCommitted;
 
     public bool TryGetSlot(int materialIndex, out CustomMaterialSlot? slot) =>
         _slotsByIndex.TryGetValue(materialIndex, out slot);
@@ -214,14 +212,8 @@ public sealed class CustomMaterialWorkspace : Editing.IUndoableEditSource
         Commit(before);
     }
 
-    public void Undo() => Replay(_undo, _redo);
-    public void Redo() => Replay(_redo, _undo);
-
-    public void ClearRedo()
-    {
-        _redo.Clear();
-        HistoryChanged?.Invoke(this, EventArgs.Empty);
-    }
+    public void Undo() => History.Undo();
+    public void Redo() => History.Redo();
 
     private void ValidateOption(CustomMaterialAssignmentOption option)
     {
@@ -298,23 +290,13 @@ public sealed class CustomMaterialWorkspace : Editing.IUndoableEditSource
 
     private void Commit(IReadOnlyDictionary<int, CustomMaterialAssignmentOption> before)
     {
-        _undo.Push(before);
-        _redo.Clear();
-        EditCommitted?.Invoke(this, EventArgs.Empty);
+        History.Record(this, before, Snapshot(), Restore);
         RebuildActiveMaterials();
         HistoryChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    private void Replay(
-        Stack<IReadOnlyDictionary<int, CustomMaterialAssignmentOption>> from,
-        Stack<IReadOnlyDictionary<int, CustomMaterialAssignmentOption>> to)
+    private void Restore(IReadOnlyDictionary<int, CustomMaterialAssignmentOption> target)
     {
-        if (from.Count == 0)
-        {
-            return;
-        }
-        var target = from.Pop();
-        to.Push(Snapshot());
         _assignments.Clear();
         foreach (var value in target) _assignments[value.Key] = value.Value;
         RebuildActiveMaterials();

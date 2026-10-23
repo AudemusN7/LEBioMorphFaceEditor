@@ -81,10 +81,14 @@ internal static partial class QaCases
                 StringComparison.OrdinalIgnoreCase))
             ?? throw new InvalidDataException($"The selected {family} ShortAfro mesh is absent from the editor picker.");
 
-            // Selecting the mesh is its own user action. The subsequent texture confirmation
-            // must record the scalp graph and paired maps as one undoable edit.
-            editor.HairMesh.Selected = meshOption;
             var beforeSwitch = editor.CreateDraft();
+            var dirtyBeforeSwitch = editor.IsDirty;
+            long selectionGeneration = -1;
+            editor.HairMesh.ManualSelectionRequested += (_, args) => selectionGeneration = args.Generation;
+            editor.HairMesh.Commit(meshOption);
+            QaContext.Require(selectionGeneration >= 0 &&
+                              MorphFaceEditorStateComparer.Equals(beforeSwitch, editor.CreateDraft()),
+                $"The {family} picker authored its mesh before the paired choice was accepted.");
             var prepared = await editor.PrepareManualHairScalpPairAsync(mesh)
                 ?? throw new InvalidDataException($"The editor did not prepare the {family} ShortAfro scalp pair.");
             QaContext.Require(prepared.RequiresCcScalpMaterial && prepared.FemaleScalp == female,
@@ -100,8 +104,10 @@ internal static partial class QaCases
                     StringComparison.OrdinalIgnoreCase),
                 $"The {family} ShortAfro workflow selected the wrong CC scalp donor.");
 
-            editor.ApplyManualHairScalpPair(prepared);
+            editor.CommitManualHairSelection(meshOption, selectionGeneration, prepared);
             var selected = editor.CreateDraft();
+            QaContext.Require(editor.IsDirty,
+                $"The accepted {family} ShortAfro action did not mark the head dirty.");
             QaContext.Require(selected.ScalpMaterialSelection is { } selection &&
                               selection.TargetMaterial.InstancedPath.Equals(scalpTarget.Source.InstancedPath,
                                   StringComparison.OrdinalIgnoreCase) &&
@@ -119,11 +125,14 @@ internal static partial class QaCases
                 $"The {family} ShortAfro action did not apply both required scalp maps.");
 
             editor.UndoCommand.Execute(null);
-            QaContext.Require(MorphFaceEditorStateComparer.Equals(beforeSwitch, editor.CreateDraft()),
-                $"One undo did not restore the {family} pre-switch graph and texture state.");
+            QaContext.Require(MorphFaceEditorStateComparer.Equals(beforeSwitch, editor.CreateDraft()) &&
+                              editor.IsDirty == dirtyBeforeSwitch,
+                $"One undo did not restore the {family} pre-picker hair, graph, textures and dirty state.");
             editor.RedoCommand.Execute(null);
-            QaContext.Require(MorphFaceEditorStateComparer.Equals(selected, editor.CreateDraft()),
-                $"One redo did not restore the {family} selected graph and texture state.");
+            QaContext.Require(MorphFaceEditorStateComparer.Equals(selected, editor.CreateDraft()) && editor.IsDirty,
+                $"One redo did not restore the {family} selected hair, graph, textures and dirty state.");
+            QaContext.Require(await editor.PrepareManualHairScalpPairAsync(mesh) is null,
+                $"The accepted {family} ShortAfro maps and scalp graph requested the same pairing again.");
 
             var existingCopy = c.Artifact($"{family.ToLowerInvariant()}-cc-scalp-existing.pcc");
             File.Copy(packagePath, existingCopy);

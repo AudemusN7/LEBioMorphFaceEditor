@@ -37,7 +37,7 @@ public enum MorphFaceGeometryMode
     BaseMeshOnly
 }
 
-public sealed class MorphFaceEditingSession : IUndoableEditSource
+public sealed class MorphFaceEditingSession
 {
     /// <summary>
     /// Maximum per-vertex drift treated as visually insignificant when deciding
@@ -66,9 +66,8 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
     private readonly IReadOnlyList<BoneTranslation> _defaultFinalSkeleton;
     private IReadOnlyList<BoneTranslation> _templateBones;
     private HashSet<string>? _pastedBoneNames;
-    private readonly SemanticEditHistory _history = new();
-    private ActiveBoneTranslationEdit? _activeBoneTranslationEdit;
-    private bool _replayingHistory;
+    private readonly Dictionary<string, Vector3> _cursedBoneOffsets = new(StringComparer.OrdinalIgnoreCase);
+    private string? _boneTranslationGesture;
 
     public MorphFaceEditingSession(
         MorphFaceDocument document,
@@ -172,8 +171,8 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
     }
 
     public event EventHandler? EvaluationChanged;
-    public event EventHandler? HistoryChanged;
-    public event EventHandler? EditCommitted;
+    public EditorHistory History { get; set; } = new();
+    public IReadOnlyDictionary<string, Vector3> CursedBoneOffsets => _cursedBoneOffsets;
 
     public MorphFaceEvaluation Evaluation { get; private set; }
     public MorphFaceGeometryMode GeometryMode { get; }
@@ -241,8 +240,8 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
         }
     }
     public bool UsesBaseVariantCorrection => _positionCorrections.Count > 0;
-    public bool CanUndo => _history.CanUndo;
-    public bool CanRedo => _history.CanRedo;
+    public bool CanUndo => History.CanUndo;
+    public bool CanRedo => History.CanRedo;
     public IReadOnlyList<MorphFeatureValue> Features => _featureOrder
         .Select(name => new MorphFeatureValue(name, _features[name]))
         .ToArray();
@@ -420,13 +419,14 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
             throw;
         }
 
-        if (!_replayingHistory &&
-            _history.Record(new SemanticMorphRepairEdit(beforeLods, CloneLods(repairedLods))))
-        {
-            EditCommitted?.Invoke(this, EventArgs.Empty);
-        }
+        History.Record((this, "repair"), new MorphRepairState(beforeLods, beforePendingRepair),
+            new MorphRepairState(CloneLods(repairedLods), true), state =>
+            {
+                _document = _document with { BakedLods = CloneLods(state.BakedLods) };
+                HasPendingRepair = state.Pending;
+                Refresh(includeOracle: true);
+            });
         EvaluationChanged?.Invoke(this, EventArgs.Empty);
-        HistoryChanged?.Invoke(this, EventArgs.Empty);
     }
 
     public float GetBoneAxis(string boneName, int axis)
@@ -454,37 +454,29 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
         return true;
     }
 
-    public void BeginFeatureEdit(string name) => BeginEdit(FeatureKey(name), GetFeature(name));
-    public void EndFeatureEdit(string name) => EndEdit(FeatureKey(name), GetFeature(name));
+    public void BeginFeatureEdit(string name) => History.BeginGesture(FeatureKey(name));
+    public void EndFeatureEdit(string name) => History.EndGesture(FeatureKey(name));
     public void BeginBoneEdit(string boneName, int axis)
     {
         EnsureBoneEditable();
-        EndActiveBoneTranslationEdit();
-        BeginEdit(BoneKey(boneName, axis), GetBoneAxis(boneName, axis));
+        _boneTranslationGesture = null;
+        History.BeginGesture(BoneKey(boneName, axis));
     }
-    public void EndBoneEdit(string boneName, int axis) => EndEdit(BoneKey(boneName, axis), GetBoneAxis(boneName, axis));
+    public void EndBoneEdit(string boneName, int axis) => History.EndGesture(BoneKey(boneName, axis));
 
     public void BeginBoneTranslationEdit(string boneName)
     {
         EnsureBoneEditable();
         ArgumentException.ThrowIfNullOrWhiteSpace(boneName);
-        if (_activeBoneTranslationEdit is { } active &&
-            string.Equals(active.BoneName, boneName, StringComparison.OrdinalIgnoreCase))
-        {
-            return;
-        }
-        EndActiveBoneTranslationEdit();
-        _activeBoneTranslationEdit = new ActiveBoneTranslationEdit(boneName, GetBoneTranslation(boneName));
+        _boneTranslationGesture = boneName;
+        History.BeginGesture(BoneTranslationKey(boneName));
     }
 
     public void EndBoneTranslationEdit(string boneName)
     {
-        if (_activeBoneTranslationEdit is not { } active ||
-            !string.Equals(active.BoneName, boneName, StringComparison.OrdinalIgnoreCase))
-        {
-            return;
-        }
-        EndActiveBoneTranslationEdit();
+        if (string.Equals(_boneTranslationGesture, boneName, StringComparison.OrdinalIgnoreCase))
+            _boneTranslationGesture = null;
+        History.EndGesture(BoneTranslationKey(boneName));
     }
 
     public void SetFeature(string name, float value)
@@ -500,25 +492,21 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
             return;
         }
         _features[name] = value;
-        if (!_replayingHistory)
+        History.Record(FeatureKey(name), before, value, restored =>
         {
-            if (_history.Record(FeatureKey(name), before, value))
-            {
-                EditCommitted?.Invoke(this, EventArgs.Empty);
-            }
-        }
+            _features[name] = restored;
+            Refresh();
+        });
         Refresh();
     }
 
-    /// <summary>
-    /// Applies a complete logical randomisation as one validated mutation, evaluation and history entry.
-    /// </summary>
     /// <summary>Import compatible feature data, retaining unknown authored names as inert metadata.</summary>
     public void ImportFeatures(IReadOnlyDictionary<string, float> values)
     {
         EnsureMorphEditable();
         if (values.Any(v => string.IsNullOrWhiteSpace(v.Key) || !float.IsFinite(v.Value)))
             throw new ArgumentException("Imported feature names must be non-empty and values finite.", nameof(values));
+        var before = CaptureAuthoringState();
         var extra = values.Keys.Where(name => !_features.ContainsKey(name)).ToArray();
         if (extra.Length > 0)
         {
@@ -527,7 +515,9 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
             foreach (var name in extra) _features.Add(name, 0);
         }
         _originalFeatureNames.UnionWith(values.Keys);
-        SetFeatures(values);
+        foreach (var value in values) _features[value.Key] = value.Value;
+        RecordAuthoringState(before);
+        Refresh();
     }
 
     public void SetFeatures(IReadOnlyDictionary<string, float> values)
@@ -568,10 +558,11 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
         {
             _features[name] = value;
         }
-        if (!_replayingHistory && _history.Record(new SemanticFeatureBatchEdit(before, after)))
+        History.Record((this, "features"), before, after, restored =>
         {
-            EditCommitted?.Invoke(this, EventArgs.Empty);
-        }
+            foreach (var value in restored) _features[value.Key] = value.Value;
+            Refresh();
+        });
         Refresh();
     }
 
@@ -587,6 +578,7 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
         {
             return;
         }
+        var beforeState = CaptureBoneValue(boneName);
         var overrideValue = _boneOverrides.GetValueOrDefault(boneName);
         var delta = value - before;
         overrideValue = axis switch
@@ -598,15 +590,9 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
         };
         _boneOverrides[boneName] = overrideValue;
         _pastedBoneNames?.Add(boneName);
-        if (!_replayingHistory &&
-            (_activeBoneTranslationEdit is null ||
-             !string.Equals(_activeBoneTranslationEdit.BoneName, boneName, StringComparison.OrdinalIgnoreCase)))
-        {
-            if (_history.Record(BoneKey(boneName, axis), before, value))
-            {
-                EditCommitted?.Invoke(this, EventArgs.Empty);
-            }
-        }
+        var key = string.Equals(_boneTranslationGesture, boneName, StringComparison.OrdinalIgnoreCase)
+            ? BoneTranslationKey(boneName) : BoneKey(boneName, axis);
+        History.Record(key, beforeState, CaptureBoneValue(boneName), restored => RestoreBoneValue(boneName, restored));
         Refresh();
     }
 
@@ -619,7 +605,7 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
     {
         EnsureBoneEditable();
         ArgumentException.ThrowIfNullOrWhiteSpace(boneName);
-        EndActiveBoneTranslationEdit();
+        History.CommitGesture();
 
         var before = GetBoneTranslation(boneName);
         var original = _defaultFinalSkeleton.FirstOrDefault(candidate =>
@@ -629,15 +615,13 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
             return;
         }
 
+        var beforeState = CaptureBoneValue(boneName);
         var overrideValue = _boneOverrides.GetValueOrDefault(boneName);
         var delta = original.Translation - before;
         _boneOverrides[boneName] = overrideValue + delta;
         _pastedBoneNames?.Add(boneName);
-        if (!_replayingHistory &&
-            _history.Record(new SemanticBoneTranslationEdit(boneName, before, original.Translation)))
-        {
-            EditCommitted?.Invoke(this, EventArgs.Empty);
-        }
+        History.Record(BoneTranslationKey(boneName), beforeState, CaptureBoneValue(boneName),
+            restored => RestoreBoneValue(boneName, restored));
         Refresh();
     }
 
@@ -648,66 +632,90 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
         {
             EnsureBoneEditable();
             var beforeBones = CaptureAuthoringState();
-            var afterBones = new MorphFaceAuthoringState(
-                new Dictionary<string, float>(_features, StringComparer.OrdinalIgnoreCase),
-                _defaultTemplateBones.ToArray(),
-                new Dictionary<string, Vector3>(_defaultBoneOverrides, StringComparer.OrdinalIgnoreCase),
-                null);
+            var afterBones = beforeBones with
+            {
+                TemplateBones = _defaultTemplateBones.ToArray(),
+                BoneOverrides = new Dictionary<string, Vector3>(_defaultBoneOverrides, StringComparer.OrdinalIgnoreCase),
+                PastedBoneNames = null,
+                CursedBoneOffsets = new Dictionary<string, Vector3>(StringComparer.OrdinalIgnoreCase)
+            };
             if (AuthoringStatesEqual(beforeBones, afterBones))
             {
                 return;
             }
 
             RestoreAuthoringState(afterBones);
-            if (!_replayingHistory && _history.Record(new SemanticMorphStateEdit(beforeBones, afterBones)))
-            {
-                EditCommitted?.Invoke(this, EventArgs.Empty);
-            }
+            RecordAuthoringState(beforeBones);
             Refresh();
             return;
         }
 
         EnsureMorphEditable();
         var before = CaptureAuthoringState();
-        var after = new MorphFaceAuthoringState(
-            _featureOrder.ToDictionary(name => name, _ => 0f, StringComparer.OrdinalIgnoreCase),
-            _defaultTemplateBones.ToArray(),
-            new Dictionary<string, Vector3>(_defaultBoneOverrides, StringComparer.OrdinalIgnoreCase),
-            null);
+        var after = before with
+        {
+            Features = _featureOrder.ToDictionary(name => name, _ => 0f, StringComparer.OrdinalIgnoreCase),
+            TemplateBones = _defaultTemplateBones.ToArray(),
+            BoneOverrides = new Dictionary<string, Vector3>(_defaultBoneOverrides, StringComparer.OrdinalIgnoreCase),
+            PastedBoneNames = null,
+            CursedBoneOffsets = new Dictionary<string, Vector3>(StringComparer.OrdinalIgnoreCase)
+        };
         if (AuthoringStatesEqual(before, after))
         {
             return;
         }
 
         RestoreAuthoringState(after);
-        if (!_replayingHistory && _history.Record(new SemanticMorphStateEdit(before, after)))
-        {
-            EditCommitted?.Invoke(this, EventArgs.Empty);
-        }
+        RecordAuthoringState(before);
         Refresh();
     }
 
     /// <summary>
-    /// Replaces the complete live geometry-authoring state without flushing it
-    /// to the package workspace. The owning view model treats this like a
-    /// multi-control edit and supplies the normal dirty/abandon workflow.
+    /// Replaces the complete live geometry-authoring state as one undoable edit,
+    /// without flushing it to the package workspace.
     /// </summary>
     public void ApplyMorphData(MorphFaceMorphData data)
     {
-        ApplyMorphDataValues(data);
-        Refresh();
+        var before = CaptureAuthoringState();
+        var previousEvaluation = Evaluation;
+        var previousDraft = CreateDraft(null, [], _document.MaterialOverrides);
+        try
+        {
+            ApplyMorphDataValues(data);
+            Evaluation = Evaluate(includeOracle: false);
+            if (previousDraft.MorphFeatures.SequenceEqual(data.MorphFeatures) &&
+                previousDraft.FinalSkeleton.SequenceEqual(data.FinalSkeleton) ||
+                MorphFaceEditorStateComparer.Equals(previousDraft, CreateDraft(null, [], _document.MaterialOverrides)))
+            {
+                // An equivalent paste must not rewrite the bone representation or discard redo.
+                RestoreAuthoringState(before);
+                Evaluation = previousEvaluation;
+                return;
+            }
+            _cursedBoneOffsets.Clear();
+        }
+        catch
+        {
+            RestoreAuthoringState(before);
+            Evaluation = previousEvaluation;
+            throw;
+        }
+        if (GeometryMode != MorphFaceGeometryMode.MorphEvaluated) UpdateCapabilities();
+        RecordAuthoringState(before);
+        EvaluationChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>Use the normal edit path only when its complete output reproduces the imported bake.</summary>
-    public bool TryImportMatchingMorphData(MorphFaceMorphData data)
+    /// <summary>Prepares an exact editable import without changing authored state or history.</summary>
+    public Action? PrepareMatchingMorphImport(MorphFaceMorphData data)
     {
-        if (!CanEditMorphFeatures) return false;
+        if (!CanEditMorphFeatures) return null;
         var before = CaptureAuthoringState();
         var previousEvaluation = Evaluation;
         MorphFaceAuthoringState after;
         try
         {
             ApplyMorphDataValues(data);
+            _cursedBoneOffsets.Clear();
             Evaluation = Evaluate(includeOracle: false);
             var draft = CreateDraft(null, [], _document.MaterialOverrides);
             if (GeometryMode == MorphFaceGeometryMode.RelativeBake && !IsEditableByRelativeBake(Evaluation) ||
@@ -719,22 +727,33 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
                 draft.FinalSkeleton.Count != data.FinalSkeleton.Count ||
                 draft.FinalSkeleton.Zip(data.FinalSkeleton).Any(pair => pair.First.BoneName != pair.Second.BoneName ||
                     !(Vector3.Distance(pair.First.Translation, pair.Second.Translation) <= OracleVerificationTolerance)))
-                return false;
+                return null;
             after = CaptureAuthoringState();
         }
         catch (Exception exception) when (exception is InvalidOperationException or InvalidDataException)
         {
-            return false;
+            return null;
         }
         finally
         {
             RestoreAuthoringState(before);
             Evaluation = previousEvaluation;
         }
-        RestoreAuthoringState(after);
-        if (_history.Record(new SemanticMorphStateEdit(before, after)))
-            EditCommitted?.Invoke(this, EventArgs.Empty);
-        Refresh();
+        return () =>
+        {
+            var currentBefore = CaptureAuthoringState();
+            RestoreAuthoringState(after);
+            RecordAuthoringState(currentBefore);
+            Refresh();
+        };
+    }
+
+    /// <summary>Use the normal edit path only when its complete output reproduces the imported bake.</summary>
+    public bool TryImportMatchingMorphData(MorphFaceMorphData data)
+    {
+        var apply = PrepareMatchingMorphImport(data);
+        if (apply is null) return false;
+        apply();
         return true;
     }
 
@@ -853,18 +872,8 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
         Refresh();
     }
 
-    public void Undo()
-    {
-        EndActiveBoneTranslationEdit();
-        Replay(_history.PopUndo(), useAfter: false);
-    }
-
-    public void Redo()
-    {
-        EndActiveBoneTranslationEdit();
-        Replay(_history.PopRedo(), useAfter: true);
-    }
-    public void ClearRedo() => _history.ClearRedo();
+    public void Undo() => History.Undo();
+    public void Redo() => History.Redo();
 
     private MorphTargetResolution Resolve() => new MorphFeatureTargetResolver().Resolve(
         Features, _targets, _metadataOnlyFeatures, _profileName, _aliases);
@@ -1211,7 +1220,6 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
             UpdateCapabilities();
         }
         EvaluationChanged?.Invoke(this, EventArgs.Empty);
-        HistoryChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void UpdateCapabilities()
@@ -1226,76 +1234,6 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
             MorphFaceGeometryMode.RelativeBake => _geometryEditBlockReason is null && _hasValidBoneRig,
             _ => false
         };
-    }
-
-    private void EndEdit(string key, float value)
-    {
-        if (_history.End(key, value))
-        {
-            EditCommitted?.Invoke(this, EventArgs.Empty);
-        }
-        HistoryChanged?.Invoke(this, EventArgs.Empty);
-    }
-
-    private void BeginEdit(string key, float value)
-    {
-        if (_history.Begin(key, value))
-        {
-            EditCommitted?.Invoke(this, EventArgs.Empty);
-        }
-        HistoryChanged?.Invoke(this, EventArgs.Empty);
-    }
-
-    private void Replay(SemanticEdit edit, bool useAfter)
-    {
-        _replayingHistory = true;
-        try
-        {
-            if (edit is SemanticFeatureBatchEdit batch)
-            {
-                SetFeatures(useAfter ? batch.After : batch.Before);
-            }
-            else if (edit is SemanticMorphStateEdit stateEdit)
-            {
-                RestoreAuthoringState(useAfter ? stateEdit.After : stateEdit.Before);
-                Refresh();
-            }
-            else if (edit is SemanticMorphRepairEdit repairEdit)
-            {
-                _document = _document with
-                {
-                    BakedLods = CloneLods(useAfter ? repairEdit.AfterBakedLods : repairEdit.BeforeBakedLods)
-                };
-                HasPendingRepair = useAfter;
-                Refresh(includeOracle: true);
-            }
-            else if (edit is SemanticBoneTranslationEdit boneEdit)
-            {
-                var value = useAfter ? boneEdit.After : boneEdit.Before;
-                SetBoneAxis(boneEdit.BoneName, 0, value.X);
-                SetBoneAxis(boneEdit.BoneName, 1, value.Y);
-                SetBoneAxis(boneEdit.BoneName, 2, value.Z);
-            }
-            else if (edit is SemanticValueEdit valueEdit)
-            {
-                var value = useAfter ? valueEdit.After : valueEdit.Before;
-                if (valueEdit.Key.StartsWith("feature:", StringComparison.Ordinal))
-                {
-                    SetFeature(valueEdit.Key[8..], value);
-                }
-                else
-                {
-                    var parts = valueEdit.Key.Split(':');
-                    SetBoneAxis(parts[1],
-                        int.Parse(parts[2], System.Globalization.CultureInfo.InvariantCulture), value);
-                }
-            }
-        }
-        finally
-        {
-            _replayingHistory = false;
-            HistoryChanged?.Invoke(this, EventArgs.Empty);
-        }
     }
 
     private void EnsureMorphEditable()
@@ -1321,20 +1259,65 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
         GetBoneAxis(boneName, 1),
         GetBoneAxis(boneName, 2));
 
-    private void EndActiveBoneTranslationEdit()
+    private BoneValueState CaptureBoneValue(string boneName) => new(
+        _boneOverrides.TryGetValue(boneName, out var value) ? value : null,
+        _pastedBoneNames?.Contains(boneName) == true);
+
+    private void RestoreBoneValue(string boneName, BoneValueState state)
     {
-        if (_activeBoneTranslationEdit is not { } active)
+        if (state.Override is { } value) _boneOverrides[boneName] = value;
+        else _boneOverrides.Remove(boneName);
+        if (_pastedBoneNames is not null)
         {
-            return;
+            if (state.Pasted) _pastedBoneNames.Add(boneName);
+            else _pastedBoneNames.Remove(boneName);
         }
-        _activeBoneTranslationEdit = null;
-        var after = GetBoneTranslation(active.BoneName);
-        if (!_replayingHistory &&
-            _history.Record(new SemanticBoneTranslationEdit(active.BoneName, active.Before, after)))
+        Refresh();
+    }
+
+    private void RecordAuthoringState(MorphFaceAuthoringState before)
+    {
+        var after = CaptureAuthoringState();
+        if (AuthoringStatesEqual(before, after)) return;
+        History.Record((this, "authoring"), before, after, restored =>
         {
-            EditCommitted?.Invoke(this, EventArgs.Empty);
+            RestoreAuthoringState(restored);
+            Refresh();
+        });
+    }
+
+    public void SetRandomisedBones(IReadOnlyList<BoneTranslation> bones,
+        IReadOnlyDictionary<string, Vector3> contributions)
+    {
+        EnsureBoneEditable();
+        if (bones.Any(bone => string.IsNullOrWhiteSpace(bone.BoneName) || !IsFinite(bone.Translation)) ||
+            bones.Select(bone => bone.BoneName).Distinct(StringComparer.OrdinalIgnoreCase).Count() != bones.Count ||
+            contributions.Any(value => string.IsNullOrWhiteSpace(value.Key) || !IsFinite(value.Value)))
+            throw new ArgumentException("Randomised bones require unique names and finite values.");
+        var current = Evaluation.FinalSkeleton.ToDictionary(bone => bone.BoneName,
+            bone => bone.Translation, StringComparer.OrdinalIgnoreCase);
+        if (bones.Any(bone => !current.ContainsKey(bone.BoneName)))
+            throw new ArgumentException("Randomised bones must belong to the evaluated skeleton.", nameof(bones));
+        var before = CaptureAuthoringState();
+        foreach (var bone in bones)
+        {
+            var delta = bone.Translation - current[bone.BoneName];
+            if (delta == Vector3.Zero) continue;
+            _boneOverrides[bone.BoneName] = _boneOverrides.GetValueOrDefault(bone.BoneName) + delta;
+            _pastedBoneNames?.Add(bone.BoneName);
         }
-        HistoryChanged?.Invoke(this, EventArgs.Empty);
+        _cursedBoneOffsets.Clear();
+        foreach (var value in contributions) _cursedBoneOffsets.Add(value.Key, value.Value);
+        RecordAuthoringState(before);
+        Refresh();
+    }
+
+    public void ClearCursedBoneOffsets()
+    {
+        if (_cursedBoneOffsets.Count == 0) return;
+        var before = CaptureAuthoringState();
+        _cursedBoneOffsets.Clear();
+        RecordAuthoringState(before);
     }
 
     private MorphFaceAuthoringState CaptureAuthoringState() => new(
@@ -1343,7 +1326,10 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
         new Dictionary<string, Vector3>(_boneOverrides, StringComparer.OrdinalIgnoreCase),
         _pastedBoneNames is null
             ? null
-            : new HashSet<string>(_pastedBoneNames, StringComparer.OrdinalIgnoreCase));
+            : new HashSet<string>(_pastedBoneNames, StringComparer.OrdinalIgnoreCase),
+        new Dictionary<string, Vector3>(_cursedBoneOffsets, StringComparer.OrdinalIgnoreCase),
+        _originalFeatureNames.ToHashSet(StringComparer.OrdinalIgnoreCase),
+        _metadataOnlyFeatures.ToHashSet(StringComparer.OrdinalIgnoreCase), _featureOrder.ToArray());
 
     private void RestoreAuthoringState(MorphFaceAuthoringState state)
     {
@@ -1355,12 +1341,23 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
         _pastedBoneNames = state.PastedBoneNames is null
             ? null
             : new HashSet<string>(state.PastedBoneNames, StringComparer.OrdinalIgnoreCase);
+        _cursedBoneOffsets.Clear();
+        foreach (var value in state.CursedBoneOffsets) _cursedBoneOffsets[value.Key] = value.Value;
+        _originalFeatureNames.Clear();
+        _originalFeatureNames.UnionWith(state.OriginalFeatureNames);
+        _metadataOnlyFeatures = state.MetadataOnlyFeatures;
+        _featureOrder = state.FeatureOrder;
     }
 
     private static bool AuthoringStatesEqual(MorphFaceAuthoringState left, MorphFaceAuthoringState right) =>
         left.Features.Count == right.Features.Count &&
         left.Features.All(value => right.Features.TryGetValue(value.Key, out var other) && other == value.Value) &&
         left.TemplateBones.SequenceEqual(right.TemplateBones) &&
+        left.CursedBoneOffsets.Count == right.CursedBoneOffsets.Count && left.CursedBoneOffsets.All(value =>
+            right.CursedBoneOffsets.TryGetValue(value.Key, out var other) && other == value.Value) &&
+        left.OriginalFeatureNames.SetEquals(right.OriginalFeatureNames) &&
+        left.MetadataOnlyFeatures.SetEquals(right.MetadataOnlyFeatures) &&
+        left.FeatureOrder.SequenceEqual(right.FeatureOrder) &&
         left.BoneOverrides.Count == right.BoneOverrides.Count &&
         left.BoneOverrides.All(value =>
             right.BoneOverrides.TryGetValue(value.Key, out var other) && other == value.Value) &&
@@ -1368,10 +1365,12 @@ public sealed class MorphFaceEditingSession : IUndoableEditSource
             ? right.PastedBoneNames is null
             : right.PastedBoneNames is not null && left.PastedBoneNames.SetEquals(right.PastedBoneNames));
 
-    private static string FeatureKey(string name) => $"feature:{name}";
-    private static string BoneKey(string name, int axis) => $"bone:{name}:{axis}";
+    private object FeatureKey(string name) => (this, "feature", name);
+    private object BoneKey(string name, int axis) => (this, "bone", name, axis);
+    private object BoneTranslationKey(string name) => (this, "bone-translation", name);
 
-    private sealed record ActiveBoneTranslationEdit(string BoneName, Vector3 Before);
+    private sealed record BoneValueState(Vector3? Override, bool Pasted);
+    private sealed record MorphRepairState(IReadOnlyList<Vector3[]> BakedLods, bool Pending);
 
     private static string GetObjectName(string instancedPath)
     {
@@ -1387,4 +1386,8 @@ internal sealed record MorphFaceAuthoringState(
     IReadOnlyDictionary<string, float> Features,
     IReadOnlyList<BoneTranslation> TemplateBones,
     IReadOnlyDictionary<string, Vector3> BoneOverrides,
-    IReadOnlySet<string>? PastedBoneNames);
+    IReadOnlySet<string>? PastedBoneNames,
+    IReadOnlyDictionary<string, Vector3> CursedBoneOffsets,
+    IReadOnlySet<string> OriginalFeatureNames,
+    IReadOnlySet<string> MetadataOnlyFeatures,
+    IReadOnlyList<string> FeatureOrder);

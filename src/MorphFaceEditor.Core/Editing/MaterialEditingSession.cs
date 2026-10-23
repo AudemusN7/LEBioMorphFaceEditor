@@ -5,7 +5,7 @@ using MorphFaceEditor.Core.Materials;
 namespace MorphFaceEditor.Core.Editing;
 
 /// <summary>Tracks authored material deltas, inherited effective values and semantic undo/redo state.</summary>
-public sealed class MaterialEditingSession : IUndoableEditSource
+public sealed class MaterialEditingSession
 {
     private MorphFaceMaterialOverrides _originalOverrides;
     private ResolvedHeadMaterialSet _baseMaterials;
@@ -19,8 +19,6 @@ public sealed class MaterialEditingSession : IUndoableEditSource
     private readonly Dictionary<string, DecodedTextureAsset?> _previewTextureReferences = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _editedScalars = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _editedVectors = new(StringComparer.OrdinalIgnoreCase);
-    private readonly MaterialEditHistory _history = new();
-    private bool _replaying;
     private bool _hasScopedMaterials;
 
     public MaterialEditingSession(
@@ -61,7 +59,8 @@ public sealed class MaterialEditingSession : IUndoableEditSource
 
     public event EventHandler<MaterialChangedEventArgs>? MaterialsChanged;
     public event EventHandler? HistoryChanged;
-    public event EventHandler? EditCommitted;
+
+    public EditorHistory History { get; set; } = new();
 
     public IReadOnlyList<string> ScalarNames => _scalars.Keys
         .Where(name => _originalMaterials.Materials.Values.Any(material =>
@@ -87,8 +86,8 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         };
         RebaseMaterialSurface(new ResolvedHeadMaterialSet(materials), firstWins: _hasScopedMaterials);
     }
-    public bool CanUndo => _history.CanUndo;
-    public bool CanRedo => _history.CanRedo;
+    public bool CanUndo => History.CanUndo;
+    public bool CanRedo => History.CanRedo;
     public int ChangedTextureCount => _textureReferences.Count;
     public bool HasCursedRandomisation { get; private set; }
 
@@ -347,14 +346,12 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         return values;
     }
 
-    public void BeginScalarEdit(string name) => _history.Begin(
-        ScalarKey(name), new MaterialNumericState(GetScalar(name), _editedScalars.Contains(name)));
-    public void EndScalarEdit(string name) => EndNumericEdit(
-        ScalarKey(name), new MaterialNumericState(GetScalar(name), _editedScalars.Contains(name)));
-    public void BeginVectorEdit(string name, int component) => _history.Begin(
-        VectorKey(name, component), new MaterialNumericState(GetVectorComponent(name, component), _editedVectors.Contains(name)));
-    public void EndVectorEdit(string name, int component) => EndNumericEdit(
-        VectorKey(name, component), new MaterialNumericState(GetVectorComponent(name, component), _editedVectors.Contains(name)));
+    public void BeginScalarEdit(string name) => History.BeginGesture(ScalarKey(name));
+    public void EndScalarEdit(string name)
+    {
+        History.EndGesture(ScalarKey(name));
+        HistoryChanged?.Invoke(this, EventArgs.Empty);
+    }
 
     public void SetScalar(string name, float value)
     {
@@ -367,44 +364,9 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         var wasEdited = _editedScalars.Contains(name);
         _scalars[name] = value;
         _editedScalars.Add(name);
-        if (!_replaying)
-        {
-            CommitHistory(_history.Record(new MaterialSemanticEdit(
-                ScalarKey(name),
-                new MaterialNumericState(before, wasEdited),
-                new MaterialNumericState(value, true))));
-        }
+        History.Record(ScalarKey(name), new MaterialNumericState(before, wasEdited),
+            new MaterialNumericState(value, true), state => RestoreScalar(name, state));
         Refresh(MaterialChangeKind.Scalar, name);
-    }
-
-    public void SetVectorComponent(string name, int component, float value)
-    {
-        ValidateFinite(value);
-        var before = GetVectorComponent(name, component);
-        if (before == value)
-        {
-            return;
-        }
-        var vector = GetVector(name);
-        vector = component switch
-        {
-            0 => vector with { X = value },
-            1 => vector with { Y = value },
-            2 => vector with { Z = value },
-            3 => vector with { W = value },
-            _ => throw new ArgumentOutOfRangeException(nameof(component))
-        };
-        var wasEdited = _editedVectors.Contains(name);
-        _vectors[name] = vector;
-        _editedVectors.Add(name);
-        if (!_replaying)
-        {
-            CommitHistory(_history.Record(new MaterialSemanticEdit(
-                VectorKey(name, component),
-                new MaterialNumericState(before, wasEdited),
-                new MaterialNumericState(value, true))));
-        }
-        Refresh(MaterialChangeKind.Vector, name);
     }
 
     public void SetVector(string name, Vector4 value)
@@ -421,13 +383,8 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         var wasEdited = _editedVectors.Contains(name);
         _vectors[name] = value;
         _editedVectors.Add(name);
-        if (!_replaying)
-        {
-            CommitHistory(_history.Record(new MaterialSemanticEdit(
-                VectorValueKey(name),
-                new MaterialVectorState(before, wasEdited),
-                new MaterialVectorState(value, true))));
-        }
+        History.Record(VectorKey(name), new MaterialVectorState(before, wasEdited),
+            new MaterialVectorState(value, true), state => RestoreVector(name, state));
         Refresh(MaterialChangeKind.Vector, name);
     }
 
@@ -448,10 +405,8 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         {
             var wasEdited = _editedVectors.Contains(name);
             _editedVectors.Add(name);
-            CommitHistory(_history.Record(new MaterialSemanticEdit(
-                VectorValueKey(name),
-                new MaterialVectorState(before, wasEdited),
-                new MaterialVectorState(after, true))));
+            History.Record(VectorKey(name), new MaterialVectorState(before, wasEdited),
+                new MaterialVectorState(after, true), state => RestoreVector(name, state));
         }
         Refresh(MaterialChangeKind.Vector, name);
     }
@@ -466,10 +421,8 @@ public sealed class MaterialEditingSession : IUndoableEditSource
             return;
         }
         _textureReferences[name] = texture;
-        if (!_replaying)
-        {
-            CommitHistory(_history.Record(new MaterialSemanticEdit(TextureKey(name), before, new MaterialTextureState(texture, true))));
-        }
+        History.Record(TextureKey(name), before, new MaterialTextureState(texture, true),
+            state => RestoreTexture(name, state));
         Refresh(MaterialChangeKind.Texture, name);
     }
 
@@ -478,7 +431,8 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         IReadOnlyDictionary<string, float> scalars,
         IReadOnlyDictionary<string, Vector4> vectors,
         IReadOnlyDictionary<string, DecodedTextureAsset?> textures,
-        MaterialBatchKind kind = MaterialBatchKind.Edit)
+        MaterialBatchKind kind = MaterialBatchKind.Edit,
+        IReadOnlySet<string>? preservedTextureNames = null)
     {
         ArgumentNullException.ThrowIfNull(scalars);
         ArgumentNullException.ThrowIfNull(vectors);
@@ -496,12 +450,19 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         var cursed = kind == MaterialBatchKind.CursedRandomisation;
         var reset = kind == MaterialBatchKind.NormalRandomisation && HasCursedRandomisation;
         var resetBefore = cursed || reset ? CaptureResetState() : null;
-        if (reset) ResetValuesToDefaults();
+        var preservedTextures = preservedTextureNames?.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (reset)
+        {
+            ResetValuesToDefaults();
+            if (preservedTextures is { Count: > 0 }) RestorePreservedTextures(resetBefore!, preservedTextures);
+        }
         var changedScalars = scalars.Where(value => _scalars[value.Key] != value.Value)
             .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase);
         var changedVectors = vectors.Where(value => _vectors[value.Key] != value.Value)
             .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase);
-        var changedTextures = textures.Where(value => GetSelectedTexture(value.Key)?.Source != value.Value?.Source)
+        var changedTextures = textures.Where(value =>
+                (!reset || preservedTextures?.Contains(value.Key) != true) &&
+                GetSelectedTexture(value.Key)?.Source != value.Value?.Source)
             .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase);
         var before = CaptureBatchState(changedScalars.Keys, changedVectors.Keys, changedTextures.Keys);
         foreach (var value in changedScalars)
@@ -523,12 +484,10 @@ public sealed class MaterialEditingSession : IUndoableEditSource
             return;
         }
         if (cursed && changed) HasCursedRandomisation = true;
-        if (!_replaying)
-        {
-            CommitHistory(_history.Record(resetBefore is null
-                ? new MaterialSemanticEdit("batch", before, after)
-                : new MaterialSemanticEdit("defaults", resetBefore, CaptureResetState())));
-        }
+        if (resetBefore is null)
+            History.Record((this, "batch"), before, after, RestoreBatchEdit);
+        else
+            RecordResetEdit(resetBefore);
         Refresh(MaterialChangeKind.Full);
     }
 
@@ -550,11 +509,7 @@ public sealed class MaterialEditingSession : IUndoableEditSource
 
         var before = CaptureResetState();
         ResetValuesToDefaults();
-        var after = CaptureResetState();
-        if (!_replaying)
-        {
-            CommitHistory(_history.Record(new MaterialSemanticEdit("defaults", before, after)));
-        }
+        RecordResetEdit(before);
         Refresh(MaterialChangeKind.Full);
     }
 
@@ -572,6 +527,22 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         foreach (var value in DefaultTextureOverrides()) _textureReferences[value.Key] = value.Value;
         _editedScalars.Clear();
         _editedVectors.Clear();
+    }
+
+    private void RestorePreservedTextures(MaterialResetState state, IReadOnlySet<string> names)
+    {
+        _originalOverrides = _originalOverrides with
+        {
+            Textures = state.OriginalOverrides.Textures.Where(value => names.Contains(value.Name)).ToArray()
+        };
+        foreach (var name in names)
+        {
+            // Reset keeps the same material surface. Removing its new explicit
+            // default restores an originally inherited/native effective binding;
+            // retaining an explicit null keeps that choice inherited as well.
+            if (state.Textures.TryGetValue(name, out var texture)) _textureReferences[name] = texture;
+            else _textureReferences.Remove(name);
+        }
     }
 
     /// <summary>
@@ -661,7 +632,7 @@ public sealed class MaterialEditingSession : IUndoableEditSource
                 _textureReferences.Remove(value.Name);
             }
         }
-        if (!_replaying) CommitHistory(_history.Record(new MaterialSemanticEdit("defaults", before, CaptureResetState())));
+        RecordResetEdit(before);
         Refresh(MaterialChangeKind.Full);
     }
 
@@ -693,15 +664,14 @@ public sealed class MaterialEditingSession : IUndoableEditSource
     public void Undo()
     {
         _previewTextureReferences.Clear();
-        Replay(_history.PopUndo(), useAfter: false);
+        History.Undo();
     }
 
     public void Redo()
     {
         _previewTextureReferences.Clear();
-        Replay(_history.PopRedo(), useAfter: true);
+        History.Redo();
     }
-    public void ClearRedo() => _history.ClearRedo();
 
     private void Refresh(MaterialChangeKind kind, string? parameterName = null)
     {
@@ -921,57 +891,48 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         return string.Equals(controlScope, materialScope, StringComparison.OrdinalIgnoreCase);
     }
 
-    private void Replay(MaterialSemanticEdit edit, bool useAfter)
+    private void RestoreScalar(string name, MaterialNumericState state)
     {
-        var value = useAfter ? edit.After : edit.Before;
-        _replaying = true;
-        try
-        {
-            var parts = edit.Key.Split(':');
-            switch (parts[0])
-            {
-                case "batch":
-                    RestoreBatchState((MaterialBatchState)value!);
-                    Refresh(MaterialChangeKind.Full);
-                    break;
-                case "defaults":
-                    RestoreResetState((MaterialResetState)value!);
-                    Refresh(MaterialChangeKind.Full);
-                    break;
-                case "scalar":
-                    var scalar = (MaterialNumericState)value!;
-                    SetScalar(parts[1], scalar.Value);
-                    SetEdited(_editedScalars, parts[1], scalar.Edited);
-                    break;
-                case "vector":
-                    var component = (MaterialNumericState)value!;
-                    SetVectorComponent(parts[1], int.Parse(parts[2], System.Globalization.CultureInfo.InvariantCulture), component.Value);
-                    SetEdited(_editedVectors, parts[1], component.Edited);
-                    break;
-                case "vector4":
-                    var vector = (MaterialVectorState)value!;
-                    SetVector(parts[1], vector.Value);
-                    SetEdited(_editedVectors, parts[1], vector.Edited);
-                    break;
-                case "texture":
-                    var texture = (MaterialTextureState)value!;
-                    if (texture.Explicit) _textureReferences[parts[1]] = texture.Value;
-                    else _textureReferences.Remove(parts[1]);
-                    Refresh(MaterialChangeKind.Texture, parts[1]);
-                    break;
-            }
-        }
-        finally
-        {
-            _replaying = false;
-            HistoryChanged?.Invoke(this, EventArgs.Empty);
-        }
+        _previewTextureReferences.Clear();
+        _scalars[name] = state.Value;
+        SetEdited(_editedScalars, name, state.Edited);
+        Refresh(MaterialChangeKind.Scalar, name);
     }
 
-    private void EndNumericEdit(string key, MaterialNumericState value)
+    private void RestoreVector(string name, MaterialVectorState state)
     {
-        CommitHistory(_history.End(key, value));
-        HistoryChanged?.Invoke(this, EventArgs.Empty);
+        _previewTextureReferences.Clear();
+        _vectors[name] = state.Value;
+        SetEdited(_editedVectors, name, state.Edited);
+        Refresh(MaterialChangeKind.Vector, name);
+    }
+
+    private void RestoreTexture(string name, MaterialTextureState state)
+    {
+        _previewTextureReferences.Clear();
+        if (state.Explicit) _textureReferences[name] = state.Value;
+        else _textureReferences.Remove(name);
+        Refresh(MaterialChangeKind.Texture, name);
+    }
+
+    private void RestoreBatchEdit(MaterialBatchState state)
+    {
+        _previewTextureReferences.Clear();
+        RestoreBatchState(state);
+        Refresh(MaterialChangeKind.Full);
+    }
+
+    private void RestoreResetEdit(MaterialResetState state)
+    {
+        _previewTextureReferences.Clear();
+        RestoreResetState(state);
+        Refresh(MaterialChangeKind.Full);
+    }
+
+    private void RecordResetEdit(MaterialResetState before)
+    {
+        var after = CaptureResetState();
+        if (!ResetEquals(before, after)) History.Record((this, "defaults"), before, after, RestoreResetEdit);
     }
 
     private static void SetEdited(HashSet<string> edited, string name, bool value)
@@ -1054,22 +1015,24 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         first.Textures.All(value => second.Textures.TryGetValue(value.Key, out var other) &&
             other.Explicit == value.Value.Explicit && other.Value?.Source == value.Value.Value?.Source);
 
+    private static bool ResetEquals(MaterialResetState first, MaterialResetState second) =>
+        first.HasCursedRandomisation == second.HasCursedRandomisation &&
+        first.OriginalOverrides.Source == second.OriginalOverrides.Source &&
+        first.OriginalOverrides.Scalars.SequenceEqual(second.OriginalOverrides.Scalars) &&
+        first.OriginalOverrides.Vectors.SequenceEqual(second.OriginalOverrides.Vectors) &&
+        first.OriginalOverrides.Textures.SequenceEqual(second.OriginalOverrides.Textures) &&
+        DictionaryEquals(first.Scalars, second.Scalars) && DictionaryEquals(first.Vectors, second.Vectors) &&
+        first.Textures.Count == second.Textures.Count && first.Textures.All(value =>
+            second.Textures.TryGetValue(value.Key, out var other) && value.Value?.Source == other?.Source) &&
+        first.EditedScalars.SetEquals(second.EditedScalars) && first.EditedVectors.SetEquals(second.EditedVectors);
+
+    private static bool DictionaryEquals<T>(IReadOnlyDictionary<string, T> first, IReadOnlyDictionary<string, T> second) =>
+        first.Count == second.Count && first.All(value => second.TryGetValue(value.Key, out var other) &&
+            EqualityComparer<T>.Default.Equals(value.Value, other));
+
     private static bool IsFinite(Vector4 value) =>
         float.IsFinite(value.X) && float.IsFinite(value.Y) &&
         float.IsFinite(value.Z) && float.IsFinite(value.W);
-
-    private float GetVectorComponent(string name, int component)
-    {
-        var vector = GetVector(name);
-        return component switch
-        {
-            0 => vector.X,
-            1 => vector.Y,
-            2 => vector.Z,
-            3 => vector.W,
-            _ => throw new ArgumentOutOfRangeException(nameof(component))
-        };
-    }
 
     private static void ValidateFinite(float value)
     {
@@ -1089,18 +1052,9 @@ public sealed class MaterialEditingSession : IUndoableEditSource
         }
     }
 
-    private static string ScalarKey(string name) => $"scalar:{name}";
-    private static string VectorKey(string name, int component) => $"vector:{name}:{component}";
-    private static string VectorValueKey(string name) => $"vector4:{name}";
-    private static string TextureKey(string name) => $"texture:{name}";
-
-    private void CommitHistory(bool committed)
-    {
-        if (committed)
-        {
-            EditCommitted?.Invoke(this, EventArgs.Empty);
-        }
-    }
+    private object ScalarKey(string name) => (this, MaterialParameterKind.Scalar, name);
+    private object VectorKey(string name) => (this, MaterialParameterKind.Vector, name);
+    private object TextureKey(string name) => (this, MaterialParameterKind.Texture, name);
 }
 
 /// <summary>A derived material candidate; preparation does not alter the editing session.</summary>
@@ -1115,7 +1069,6 @@ public sealed record PreparedMaterialSurface(
     IReadOnlyList<TextureMaterialOverride> TextureParameters,
     ResolvedHeadMaterialSet Materials);
 
-internal sealed record MaterialSemanticEdit(string Key, object? Before, object? After);
 internal sealed record MaterialNumericState(float Value, bool Edited);
 internal sealed record MaterialVectorState(Vector4 Value, bool Edited);
 internal sealed record MaterialTextureState(DecodedTextureAsset? Value, bool Explicit);
@@ -1138,100 +1091,3 @@ public sealed record MaterialRandomisationDefaults(
     IReadOnlyDictionary<string, string> Textures);
 
 public enum MaterialBatchKind { Edit, NormalRandomisation, CursedRandomisation }
-
-internal sealed class MaterialEditHistory
-{
-    private readonly Stack<MaterialSemanticEdit> _undo = new();
-    private readonly Stack<MaterialSemanticEdit> _redo = new();
-    private string? _activeKey;
-    private object? _activeBefore;
-    private object? _activeAfter;
-
-    public bool CanUndo => _undo.Count > 0;
-    public bool CanRedo => _redo.Count > 0;
-
-    public void Begin(string key, object currentValue)
-    {
-        if (string.Equals(_activeKey, key, StringComparison.Ordinal))
-        {
-            return;
-        }
-        CommitActive();
-        _activeKey = key;
-        _activeBefore = currentValue;
-        _activeAfter = currentValue;
-    }
-
-    public bool End(string key, object currentValue)
-    {
-        if (_activeKey is null || !string.Equals(_activeKey, key, StringComparison.Ordinal))
-        {
-            return false;
-        }
-        _activeAfter = currentValue;
-        return CommitActive();
-    }
-
-    public bool Record(MaterialSemanticEdit edit)
-    {
-        if (_activeKey is null)
-        {
-            return Push(edit);
-        }
-        else if (string.Equals(_activeKey, edit.Key, StringComparison.Ordinal))
-        {
-            _activeAfter = edit.After;
-            return false;
-        }
-        else
-        {
-            var committed = CommitActive();
-            return Push(edit) || committed;
-        }
-    }
-
-    public MaterialSemanticEdit PopUndo()
-    {
-        EnsureIdle();
-        var edit = _undo.Pop();
-        _redo.Push(edit);
-        return edit;
-    }
-
-    public MaterialSemanticEdit PopRedo()
-    {
-        EnsureIdle();
-        var edit = _redo.Pop();
-        _undo.Push(edit);
-        return edit;
-    }
-
-    public void ClearRedo() => _redo.Clear();
-
-    private bool Push(MaterialSemanticEdit edit)
-    {
-        if (Equals(edit.Before, edit.After))
-        {
-            return false;
-        }
-        _undo.Push(edit);
-        _redo.Clear();
-        return true;
-    }
-
-    private void EnsureIdle()
-    {
-        _ = CommitActive();
-    }
-
-    private bool CommitActive()
-    {
-        if (_activeKey is null)
-        {
-            return false;
-        }
-        var edit = new MaterialSemanticEdit(_activeKey, _activeBefore, _activeAfter);
-        _activeKey = null;
-        return Push(edit);
-    }
-}

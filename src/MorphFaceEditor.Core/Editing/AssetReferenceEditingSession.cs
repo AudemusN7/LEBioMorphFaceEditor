@@ -2,18 +2,14 @@ using MorphFaceEditor.Core.Domain;
 
 namespace MorphFaceEditor.Core.Editing;
 
-public sealed class AssetReferenceEditingSession(AssetIdentity? initial) : IUndoableEditSource
+public sealed class AssetReferenceEditingSession(AssetIdentity? initial)
 {
-    private readonly Stack<(AssetIdentity? Before, AssetIdentity? After)> _undo = new();
-    private readonly Stack<(AssetIdentity? Before, AssetIdentity? After)> _redo = new();
-    private bool _replaying;
-
     public event EventHandler? ValueChanged;
-    public event EventHandler? EditCommitted;
 
+    public EditorHistory History { get; set; } = new();
     public AssetIdentity? Value { get; private set; } = initial;
-    public bool CanUndo => _undo.Count > 0;
-    public bool CanRedo => _redo.Count > 0;
+    public bool CanUndo => History.CanUndo;
+    public bool CanRedo => History.CanRedo;
 
     public void Set(AssetIdentity? value)
     {
@@ -23,42 +19,17 @@ public sealed class AssetReferenceEditingSession(AssetIdentity? initial) : IUndo
         }
         var before = Value;
         Value = value;
-        if (!_replaying)
-        {
-            _undo.Push((before, value));
-            _redo.Clear();
-            EditCommitted?.Invoke(this, EventArgs.Empty);
-        }
+        History.Record(this, before, value, Restore);
         ValueChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    public void Undo()
-    {
-        var edit = _undo.Pop();
-        _redo.Push(edit);
-        Replay(edit.Before);
-    }
+    public void Undo() => History.Undo();
+    public void Redo() => History.Redo();
 
-    public void Redo()
+    private void Restore(AssetIdentity? value)
     {
-        var edit = _redo.Pop();
-        _undo.Push(edit);
-        Replay(edit.After);
-    }
-
-    public void ClearRedo() => _redo.Clear();
-
-    private void Replay(AssetIdentity? value)
-    {
-        _replaying = true;
-        try
-        {
-            Set(value);
-        }
-        finally
-        {
-            _replaying = false;
-        }
+        Value = value;
+        ValueChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private static bool SameReference(AssetIdentity? left, AssetIdentity? right) =>

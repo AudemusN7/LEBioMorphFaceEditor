@@ -9,7 +9,6 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Threading;
 using System.IO;
 using MorphFaceEditor.Views;
 
@@ -21,8 +20,7 @@ public partial class MainWindow : Window
     private readonly MainWindowViewModel _viewModel;
     private readonly HeadPreviewHostController _previewHost;
     private readonly OrbitInputController _orbitInput;
-    private readonly DispatcherTimer _numericWheelCommitTimer;
-    private IContinuousEditViewModel? _numericWheelEdit;
+    private readonly ContinuousEditGesture _numericEdit = new();
     private bool _closeConfirmed;
     private GridLength _paneDragStartWidth;
     private readonly ApplicationPreferencesStore? _preferencesStore;
@@ -46,11 +44,6 @@ public partial class MainWindow : Window
             new KeyGesture(Key.Enter)));
         _previewHost = new HeadPreviewHostController(this, PreviewHost, PreviewImage);
         _orbitInput = new OrbitInputController(PreviewHost, _previewHost.Camera, () => _previewHost.RequestRender());
-        _numericWheelCommitTimer = new DispatcherTimer
-        {
-            Interval = TimeSpan.FromMilliseconds(450)
-        };
-        _numericWheelCommitTimer.Tick += OnNumericWheelCommitTimer;
         _viewModel.PreviewSceneReady += OnPreviewSceneReady;
         _viewModel.PreviewCleared += OnPreviewCleared;
         _viewModel.PreviewDeformationReady += OnPreviewDeformationReady;
@@ -164,7 +157,7 @@ public partial class MainWindow : Window
     private void OnSettingsClick(object sender, RoutedEventArgs e)
     {
         if (_viewModel.IsBusy) return;
-        EndNumericWheelEdit();
+        EndNumericEdit();
         var settings = new SettingsWindow(_viewModel) { Owner = this };
         _ = settings.ShowDialog();
         if (!settings.ClearDataRequested) return;
@@ -305,19 +298,15 @@ public partial class MainWindow : Window
 
     private void OnEditorSliderStarted(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
-        EndNumericWheelEdit();
-        if (sender is FrameworkElement { DataContext: IContinuousEditViewModel edit })
+        if (sender is FrameworkElement { DataContext: IContinuousEditViewModel edit } control)
         {
-            edit.BeginEdit();
+            _numericEdit.Begin(control, edit.BeginEdit, edit.EndEdit);
         }
     }
 
     private void OnEditorSliderCompleted(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
-        if (sender is FrameworkElement { DataContext: IContinuousEditViewModel edit })
-        {
-            edit.EndEdit();
-        }
+        _numericEdit.Complete(sender);
     }
 
     private void OnTextureCandidateMouseEnter(object sender, System.Windows.Input.MouseEventArgs e)
@@ -344,14 +333,14 @@ public partial class MainWindow : Window
         }
         if (e.Key == Key.Enter)
         {
-            EndNumericWheelEdit();
+            EndNumericEdit();
             textBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
             Keyboard.ClearFocus();
             e.Handled = true;
         }
         else if (e.Key == Key.Escape)
         {
-            EndNumericWheelEdit();
+            EndNumericEdit();
             textBox.GetBindingExpression(TextBox.TextProperty)?.UpdateTarget();
             Keyboard.ClearFocus();
             e.Handled = true;
@@ -368,16 +357,19 @@ public partial class MainWindow : Window
 
     private void OnNumericValueMouseWheel(object sender, MouseWheelEventArgs e)
     {
-        if (sender is not TextBox { DataContext: IContinuousEditViewModel edit } ||
+        if (sender is not TextBox { DataContext: IContinuousEditViewModel edit } control ||
             e.Delta == 0)
         {
             return;
         }
 
-        if (!ReferenceEquals(_numericWheelEdit, edit))
+        if (!_numericEdit.IsActiveFor(control))
         {
-            EndNumericWheelEdit();
-            _numericWheelEdit = edit;
+            _numericEdit.Begin(control, edit.BeginEdit, edit.EndEdit);
+        }
+        else
+        {
+            // Another editor surface may have completed the earlier burst's history group.
             edit.BeginEdit();
         }
 
@@ -386,29 +378,11 @@ public partial class MainWindow : Window
             : Keyboard.Modifiers.HasFlag(ModifierKeys.Control) ? 1f : 0.1f;
         var direction = Math.Sign(e.Delta);
         edit.Value = NumericWheelValue.Adjust(edit.Value, increment, direction);
-        _numericWheelCommitTimer.Stop();
-        _numericWheelCommitTimer.Start();
+        _numericEdit.RestartWheelTimeout();
         e.Handled = true;
     }
 
-    private void OnNumericValueLostFocus(object sender, KeyboardFocusChangedEventArgs e)
-    {
-        if (sender is FrameworkElement { DataContext: IContinuousEditViewModel edit } &&
-            ReferenceEquals(_numericWheelEdit, edit))
-        {
-            EndNumericWheelEdit();
-        }
-    }
-
-    private void OnNumericWheelCommitTimer(object? sender, EventArgs e) => EndNumericWheelEdit();
-
-    private void EndNumericWheelEdit()
-    {
-        _numericWheelCommitTimer.Stop();
-        var edit = _numericWheelEdit;
-        _numericWheelEdit = null;
-        edit?.EndEdit();
-    }
+    private void EndNumericEdit() => _numericEdit.Complete();
 
     private async void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
@@ -428,8 +402,7 @@ public partial class MainWindow : Window
     private void OnClosed(object? sender, EventArgs e)
     {
         SavePaneWidths();
-        EndNumericWheelEdit();
-        _numericWheelCommitTimer.Tick -= OnNumericWheelCommitTimer;
+        _numericEdit.Dispose();
         Closing -= OnClosing;
         Closed -= OnClosed;
         LayoutUpdated -= OnPaneLayoutUpdated;

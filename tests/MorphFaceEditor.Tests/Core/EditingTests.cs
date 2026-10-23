@@ -11,6 +11,8 @@ public static class EditingTests
     public static IReadOnlyList<TestCase> All { get; } =
     [
         new("mixed morph material and bone history round-trips in semantic order", MixedMorphMaterialBoneHistoryRoundTrips),
+        new("cancelled composite retains redo and restores values after a failing preview callback", CancelledCompositeRetainsRedo),
+        new("morph paste replaces the redo branch with one complete undoable action", MorphPasteReplacesRedoWithOneAction),
         new("dirty comparison tracks authored state and ignores derived LODs", DirtyComparisonTracksAuthoredState),
         new("full import oracle checks lower LODs without changing rejected edits", FullImportOracleChecksEveryLod),
         new("Fix Morph rejects unsafe repair candidates", FixMorphRejectsUnsafeCandidates),
@@ -50,6 +52,57 @@ public static class EditingTests
             "The matching geometry import was not undoable.");
     }
 
+    private static void MorphPasteReplacesRedoWithOneAction()
+    {
+        var (mesh, document, target) = CreateRelativeBakeFixture();
+        var session = CreateRelativeSession(mesh, document, target);
+        var contribution = new Vector3(2, 2, 4);
+        session.SetRandomisedBones([new BoneTranslation("root", new Vector3(2, 3, 4))],
+            new Dictionary<string, Vector3> { ["root"] = contribution });
+        var before = session.CreateDraft(null, MorphFaceMaterialOverrides.Empty);
+        var beforeGeometry = session.CaptureGeometryEdits();
+
+        session.SetFeature("Target", 1f);
+        var copiedDraft = session.CreateDraft(null, MorphFaceMaterialOverrides.Empty);
+        var copied = new MorphFaceMorphData(copiedDraft.MorphFeatures, copiedDraft.FinalSkeleton, copiedDraft.BakedLods);
+        session.Undo();
+        AssertDraft(before, "Undo did not restore the pre-copy state.");
+        TestAssert.True(session.CanRedo, "The setup did not retain the copied edit as a redo branch.");
+
+        try
+        {
+            session.ApplyMorphData(copied with { FinalSkeleton = [new BoneTranslation("UnknownBone", Vector3.Zero)] });
+            throw new Exception("The invalid paste was accepted.");
+        }
+        catch (InvalidOperationException) { }
+        AssertDraft(before, "A rejected paste changed authored data.");
+        TestAssert.True(session.CanRedo && session.GeometryEditsMatch(beforeGeometry) &&
+                        session.CursedBoneOffsets["root"] == contribution,
+            "A rejected paste changed redo or hidden bone state.");
+
+        session.ApplyMorphData(copied);
+        AssertDraft(copiedDraft, "Paste did not restore the copied features, final skeleton and baked LODs.");
+        TestAssert.True(session.CanUndo && !session.CanRedo && session.CursedBoneOffsets.Count == 0,
+            "Paste did not replace the redo branch or retained obsolete Cursed contributions.");
+        var pastedGeometry = session.CaptureGeometryEdits();
+        session.ApplyMorphData(copied);
+        session.Undo();
+        AssertDraft(before, "One Undo did not remove the paste, or an unchanged paste added an extra action.");
+        TestAssert.True(session.GeometryEditsMatch(beforeGeometry) && session.CursedBoneOffsets["root"] == contribution,
+            "Undo lost the original template, pasted-bone names or Cursed contributions.");
+        session.Redo();
+        AssertDraft(copiedDraft, "Redo did not restore the complete pasted state.");
+        TestAssert.True(session.GeometryEditsMatch(pastedGeometry) && session.CursedBoneOffsets.Count == 0,
+            "Redo lost the pasted bone representation or restored obsolete contributions.");
+        void AssertDraft(MorphFaceDocument expected, string message)
+        {
+            var actual = session.CreateDraft(null, MorphFaceMaterialOverrides.Empty);
+            TestAssert.True(MorphFaceEditorStateComparer.Equals(expected, actual) &&
+                            expected.BakedLods.Count == actual.BakedLods.Count &&
+                            expected.BakedLods.Zip(actual.BakedLods).All(lod => lod.First.SequenceEqual(lod.Second)), message);
+        }
+    }
+
     private static void RelativeBakeDoesNotAccumulate()
     {
         var (mesh, document, target) = CreateRelativeBakeFixture();
@@ -79,6 +132,16 @@ public static class EditingTests
         session.ImportFeatures(new Dictionary<string, float> { ["Target"] = 0.5f });
         TestAssert.True(session.GeometryEditsMatch(authored), "Feature import changed independent bone/geometry edits.");
         TestAssert.True(baseline.SequenceEqual(session.Evaluation.FinalSkeleton), "Restored features did not restore evaluated bones.");
+        var beforeMetadata = session.CreateDraft(null, MorphFaceMaterialOverrides.Empty);
+        session.ImportFeatures(new Dictionary<string, float> { ["UnknownAuthoredMetadata"] = 0f });
+        session.Undo();
+        TestAssert.True(MorphFaceEditorStateComparer.Equals(beforeMetadata,
+                session.CreateDraft(null, MorphFaceMaterialOverrides.Empty)),
+            "Undo retained the explicit-zero metadata introduced by the import.");
+        session.Redo();
+        TestAssert.True(session.CreateDraft(null, MorphFaceMaterialOverrides.Empty).MorphFeatures.Any(value =>
+                value.Name == "UnknownAuthoredMetadata" && value.Offset == 0),
+            "Redo lost imported explicit-zero metadata.");
     }
 
     private static void RelativeBakePreservesUnprovenLowerLod()
@@ -545,32 +608,23 @@ public static class EditingTests
     {
         var (mesh, document, target) = CreateRelativeBakeFixture();
         var morph = CreateRelativeSession(mesh, document, target);
-        var materialIdentity = TestFixtures.CreateIdentity("Face.Material", "MaterialInstanceConstant");
-        var material = new ResolvedHeadMaterial(
-            MaterialIdentityKey.Create(materialIdentity),
-            materialIdentity,
-            "HMF_HED_PRO_MASTER_FACE_MAT",
-            HeadMaterialFamily.Skin,
-            HeadMaterialBlendMode.Opaque,
-            false,
-            new Dictionary<string, float> { ["HED_Norm_Blend"] = 0.25f },
-            new Dictionary<string, Vector4>(),
-            new Dictionary<string, MaterialTextureBinding>());
-        var materials = new MaterialEditingSession(
-            MorphFaceMaterialOverrides.Empty,
-            new ResolvedHeadMaterialSet(new Dictionary<string, ResolvedHeadMaterial>
-            {
-                [material.Key] = material
-            }));
-
-        using var history = new EditorUndoCoordinator(morph, materials);
+        var materials = MaterialTestFixtures.CreateSession();
+        var history = new EditorHistory();
+        morph.History = materials.History = history;
         var historyChanges = 0;
         history.HistoryChanged += (_, _) => historyChanges++;
 
+        morph.BeginFeatureEdit("Target");
         morph.SetFeature("Target", 1f);
+        materials.BeginScalarEdit("HED_Norm_Blend");
+        materials.SetScalar("HED_Norm_Blend", 0.6f);
+        morph.EndFeatureEdit("Target"); // Old release must not end the newer material gesture.
         materials.SetScalar("HED_Norm_Blend", 0.75f);
+        materials.EndScalarEdit("HED_Norm_Blend");
         morph.BeginBoneTranslationEdit("root");
         morph.SetBoneAxis("root", 0, 3f);
+        morph.SetBoneAxis("root", 1, 4f);
+        morph.SetBoneAxis("root", 2, 5f);
         morph.EndBoneTranslationEdit("root");
         TestAssert.True(historyChanges == 3,
             "The three semantic actions did not produce one history step each.");
@@ -578,16 +632,17 @@ public static class EditingTests
         history.Undo();
         TestAssert.Near(new Vector3(0, 2, 0), morph.FinalSkeleton.Single().Translation, 0.000001f);
         history.Undo();
-        TestAssert.Near(0.25f, materials.GetScalar("HED_Norm_Blend"), 0.000001f);
+        TestAssert.Near(0.5f, materials.GetScalar("HED_Norm_Blend"), 0.000001f);
         history.Undo();
         TestAssert.Near(0.5f, morph.GetFeature("Target"), 0.000001f);
+        TestAssert.True(!history.CanUndo, "A stale completion or bone axis split a semantic action.");
 
         history.Redo();
         TestAssert.Near(1f, morph.GetFeature("Target"), 0.000001f);
         history.Redo();
         TestAssert.Near(0.75f, materials.GetScalar("HED_Norm_Blend"), 0.000001f);
         history.Redo();
-        TestAssert.Near(new Vector3(3, 2, 0), morph.FinalSkeleton.Single().Translation, 0.000001f);
+        TestAssert.Near(new Vector3(3, 4, 5), morph.FinalSkeleton.Single().Translation, 0.000001f);
 
         // A draft is the semantic save payload. Reopen fresh sessions from it to
         // prove the final mixed state is persisted independently of undo stacks.
@@ -597,14 +652,47 @@ public static class EditingTests
             mesh,
             [target],
             geometryMode: MorphFaceGeometryMode.RelativeBake);
-        var reopenedMaterials = new MaterialEditingSession(draft.MaterialOverrides,
-            new ResolvedHeadMaterialSet(new Dictionary<string, ResolvedHeadMaterial>
-            {
-                [material.Key] = material
-            }));
+        var reopenedMaterials = new MaterialEditingSession(draft.MaterialOverrides, materials.BaseMaterials);
         TestAssert.Near(1f, reopenedMorph.GetFeature("Target"), 0.000001f);
-        TestAssert.Near(new Vector3(3, 2, 0), reopenedMorph.FinalSkeleton.Single().Translation, 0.000001f);
+        TestAssert.Near(new Vector3(3, 4, 5), reopenedMorph.FinalSkeleton.Single().Translation, 0.000001f);
         TestAssert.Near(0.75f, reopenedMaterials.GetScalar("HED_Norm_Blend"), 0.000001f);
+    }
+
+    private static void CancelledCompositeRetainsRedo()
+    {
+        var (mesh, document, target) = CreateRelativeBakeFixture();
+        var morph = CreateRelativeSession(mesh, document, target);
+        var materials = MaterialTestFixtures.CreateSession();
+        var history = new EditorHistory();
+        morph.History = materials.History = history;
+        morph.SetFeature("Target", 1f);
+        materials.SetScalar("HED_Norm_Blend", 0.75f);
+        history.Undo();
+        var before = morph.CreateDraft(null, materials.CreateOverrides());
+
+        var callbackFailure = new InvalidOperationException("rollback preview failure");
+        EventHandler throwingPreview = (_, _) => throw callbackFailure;
+        Exception? observedFailure = null;
+        try
+        {
+            using (history.BeginAggregate())
+            {
+                morph.SetFeature("Target", 2f);
+                materials.SetScalar("HED_Norm_Blend", 0.4f);
+                morph.SetRandomisedBones([new BoneTranslation("root", new Vector3(4, 5, 6))],
+                    new Dictionary<string, Vector3> { ["root"] = new(1, 2, 3) });
+                morph.EvaluationChanged += throwingPreview;
+            }
+        }
+        catch (InvalidOperationException exception) { observedFailure = exception; }
+        finally { morph.EvaluationChanged -= throwingPreview; }
+        TestAssert.True(ReferenceEquals(callbackFailure, observedFailure) && history.CanRedo && morph.CursedBoneOffsets.Count == 0 &&
+                        MorphFaceEditorStateComparer.Equals(before, morph.CreateDraft(null, materials.CreateOverrides())),
+            "Cancelling the composite lost the preceding redo or retained partial authored state.");
+        using (var empty = history.BeginAggregate()) empty.Commit();
+        history.Redo();
+        TestAssert.Near(0.75f, materials.GetScalar("HED_Norm_Blend"), 0.000001f);
+        TestAssert.Near(1f, morph.GetFeature("Target"), 0.000001f);
     }
 
     private static void DirtyComparisonTracksAuthoredState()

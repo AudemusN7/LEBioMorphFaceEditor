@@ -62,6 +62,7 @@ public static class PlayerHairStyleCatalog
     /// Returns resolvable styles in stable catalogue order. Every returned element is one pool
     /// entry; mesh variants inside an entry do not add weight. A mesh lock removes outcomes that
     /// require changing the attachment, while retaining independently selectable scalp styles.
+    /// Manual pair checks can include the native LE3 CC variants without adding automatic outcomes.
     /// </summary>
     public static IReadOnlyList<PlayerHairStyleOption> Resolve(
         MorphFaceGame game,
@@ -69,7 +70,8 @@ public static class PlayerHairStyleCatalog
         IEnumerable<TextureCatalogCandidate> textures,
         IEnumerable<AttachmentMeshCandidate> meshes,
         bool meshLocked = false,
-        bool preferNativeNpcMeshVariants = false)
+        bool preferNativeNpcMeshVariants = false,
+        bool includeManualPairedVariants = false)
     {
         ArgumentNullException.ThrowIfNull(textures);
         ArgumentNullException.ThrowIfNull(meshes);
@@ -97,9 +99,24 @@ public static class PlayerHairStyleCatalog
                 if (scalp is null) continue;
             }
 
+            var meshNames = MeshNamesForResolution(definition, sex, preferNativeNpcMeshVariants);
+            if (includeManualPairedVariants && game == MorphFaceGame.LE3)
+            {
+                // These native CC variants share the reviewed scalp, but remain
+                // deliberate picker choices rather than additional automatic outcomes.
+                string[] ccVariants = definition.Id switch
+                {
+                    "hmm-mhk" => ["HMM_HIR_Mhk_MDL_CC"],
+                    "hmf-mhk" => ["HMF_HIR_Mhk_MDL_CC"],
+                    "hmm-sar-ssk" => ["HMM_HIR_Ssk_01_MDL_CC", "HMM_HIR_Ssk_02_MDL_CC"],
+                    _ => []
+                };
+                if (ccVariants.Length > 0)
+                    meshNames = [meshNames.SelectMany(group => group).Concat(ccVariants).ToArray()];
+            }
             var meshVariants = definition.MeshNames.Count == 0
                 ? Array.Empty<AssetIdentity>()
-                : ResolveMeshes(gameMeshes, MeshNamesForResolution(definition, sex, preferNativeNpcMeshVariants));
+                : ResolveMeshes(gameMeshes, meshNames);
             if (definition.MeshNames.Count > 0 && meshVariants.Length == 0) continue;
 
             result.Add(new PlayerHairStyleOption(
@@ -139,39 +156,6 @@ public static class PlayerHairStyleCatalog
     }
 
     /// <summary>
-    /// Returns true when the selected mesh is a reviewed member of a style whose scalp requires
-    /// that mesh. Classification uses the exact reviewed mesh variants and canonical instance
-    /// path; it does not depend on which native scalp texture alias is currently assigned.
-    /// </summary>
-    public static bool IsCurrentHairMeshPairedStyle(
-        MorphFaceGame game,
-        PlayerHairSex sex,
-        IEnumerable<AttachmentMeshCandidate> meshes,
-        AssetIdentity? currentMeshIdentity)
-    {
-        ArgumentNullException.ThrowIfNull(meshes);
-        if (!Enum.IsDefined(game)) throw new ArgumentOutOfRangeException(nameof(game));
-        if (!Enum.IsDefined(sex)) throw new ArgumentOutOfRangeException(nameof(sex));
-        if (currentMeshIdentity is null ||
-            !currentMeshIdentity.ClassName.Equals("SkeletalMesh", StringComparison.OrdinalIgnoreCase)) return false;
-
-        var gameMeshes = meshes.ToArray();
-        var definitions = sex == PlayerHairSex.Male ? HmmStyles : HmfStyles;
-        foreach (var definition in definitions)
-        {
-            if (!definition.Games.Contains(game) || definition.Scalp is null || definition.MeshNames.Count == 0 ||
-                definition.Scalp.Stem.Equals("Cru", StringComparison.OrdinalIgnoreCase))
-                continue;
-            var pairedMeshes = ResolveMeshes(gameMeshes, definition.MeshNames);
-            if (pairedMeshes.Any(mesh => CanonicalMeshPath(mesh)
-                    .Equals(CanonicalMeshPath(currentMeshIdentity), StringComparison.OrdinalIgnoreCase)))
-                return true;
-        }
-
-        return false;
-    }
-
-    /// <summary>
     /// Identifies a manually selected mesh as one of the reviewed paired styles. Match its
     /// canonical instance path because an installed override can live in a different package
     /// and export slot than the built-in donor occurrence. This is prompt classification only;
@@ -192,8 +176,25 @@ public static class PlayerHairStyleCatalog
                 .Equals(selectedPath, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static string CanonicalMeshPath(AssetIdentity identity) =>
-        TextureCatalogPicker.CanonicalPath(identity.InstancedPath, identity.PackagePath);
+    /// <summary>Checks committed effective scalp references against a resolved style's native identities.</summary>
+    public static bool MatchesScalpTextures(
+        PlayerHairStyleOption style,
+        IReadOnlyDictionary<string, AssetIdentity?> current)
+    {
+        ArgumentNullException.ThrowIfNull(style);
+        ArgumentNullException.ThrowIfNull(current);
+        if (!current.ContainsKey(ScalpDiffuseParameter) || !current.ContainsKey(ScalpNormalParameter) ||
+            !style.ScalpTextures.ContainsKey(ScalpDiffuseParameter) || !style.ScalpTextures.ContainsKey(ScalpNormalParameter))
+            return false;
+
+        // Missing optional controls have no authored value to compare. A supported
+        // control with another reference (or None) does need the paired change.
+        return style.ScalpTextures.All(member =>
+            !current.TryGetValue(member.Key, out var reference) ||
+            reference is not null && reference.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase) &&
+            TextureCatalogPicker.CanonicalPath(reference.InstancedPath, reference.PackagePath)
+                .Equals(member.Value, StringComparison.OrdinalIgnoreCase));
+    }
 
     private static readonly IReadOnlyDictionary<string, string> EmptyScalp =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

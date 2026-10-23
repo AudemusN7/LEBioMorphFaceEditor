@@ -16,9 +16,8 @@ public sealed class MorphFeatureEditorViewModel : ObservableObject, IContinuousE
     private bool _lodHasMorphGeometry = true;
     private bool _targetWorksAtLod = true;
     private bool _extendedSliders;
-    private float _defaultMinimum;
-    private float _defaultMaximum;
-    private float _extendedExtent;
+    private float _minimum;
+    private float _maximum;
     private long _lastPreviewLogTick;
 
     public MorphFeatureEditorViewModel(
@@ -35,9 +34,8 @@ public sealed class MorphFeatureEditorViewModel : ObservableObject, IContinuousE
         _profileAllowsEditing = metadata.IsEditable;
         _sessionCanEdit = sessionCanEdit;
         _value = session.GetFeature(metadata.Name);
-        _defaultMinimum = Math.Min(metadata.Minimum, _value);
-        _defaultMaximum = Math.Max(metadata.Maximum, _value);
-        _extendedExtent = Math.Max(Math.Abs(_defaultMinimum), Math.Abs(_defaultMaximum));
+        _minimum = Math.Min(metadata.Minimum, _value);
+        _maximum = Math.Max(metadata.Maximum, _value);
         _isEditable = _profileAllowsEditing && _sessionCanEdit;
     }
 
@@ -48,8 +46,9 @@ public sealed class MorphFeatureEditorViewModel : ObservableObject, IContinuousE
     public string SubcategoryKey => Metadata.SubcategoryKey;
     public bool IsVisible => Metadata.IsVisible;
     public int SortOrder => Metadata.SortOrder;
-    public float Minimum => _extendedSliders ? -_extendedExtent : _defaultMinimum;
-    public float Maximum => _extendedSliders ? _extendedExtent : _defaultMaximum;
+    public float Minimum => _extendedSliders ? -RangeExtent : _minimum;
+    public float Maximum => _extendedSliders ? RangeExtent : _maximum;
+    private float RangeExtent => Math.Max(Math.Abs(_minimum), Math.Abs(_maximum));
     public float Step => Metadata.Step;
     public bool IsEditable
     {
@@ -63,7 +62,7 @@ public sealed class MorphFeatureEditorViewModel : ObservableObject, IContinuousE
         get => _value;
         set
         {
-            EnsureRangesInclude(value);
+            UpdateRanges(value, expandOnly: true);
             if (SetProperty(ref _value, value))
             {
                 try
@@ -83,6 +82,7 @@ public sealed class MorphFeatureEditorViewModel : ObservableObject, IContinuousE
                     _reportError(Loc.Format("loc_VM_morphFeature_changeFailed", Name, AppLog.FilePath));
                 }
             }
+            UpdateRanges(_value);
         }
     }
 
@@ -101,8 +101,10 @@ public sealed class MorphFeatureEditorViewModel : ObservableObject, IContinuousE
     public void Refresh()
     {
         var value = _session.GetFeature(Name);
-        EnsureRangesInclude(value);
+        // Expand before Value, then shrink: a bound Slider must never clamp replayed authored data.
+        UpdateRanges(value, expandOnly: true);
         SetProperty(ref _value, value, nameof(Value));
+        UpdateRanges(value);
     }
 
     public void SetExtendedSliders(bool enabled)
@@ -116,27 +118,16 @@ public sealed class MorphFeatureEditorViewModel : ObservableObject, IContinuousE
         OnPropertyChanged(nameof(Maximum));
     }
 
-    private void EnsureRangesInclude(float value)
+    private void UpdateRanges(float value, bool expandOnly = false)
     {
-        var changed = false;
-        if (value < _defaultMinimum)
+        var minimum = Math.Min(Metadata.Minimum, value);
+        var maximum = Math.Max(Metadata.Maximum, value);
+        if (expandOnly)
+            (minimum, maximum) = (Math.Min(_minimum, minimum), Math.Max(_maximum, maximum));
+        if (_minimum != minimum || _maximum != maximum)
         {
-            _defaultMinimum = value;
-            changed = true;
-        }
-        if (value > _defaultMaximum)
-        {
-            _defaultMaximum = value;
-            changed = true;
-        }
-        var extent = Math.Abs(value);
-        if (extent > _extendedExtent)
-        {
-            _extendedExtent = extent;
-            changed = true;
-        }
-        if (changed)
-        {
+            _minimum = minimum;
+            _maximum = maximum;
             OnPropertyChanged(nameof(Minimum));
             OnPropertyChanged(nameof(Maximum));
         }

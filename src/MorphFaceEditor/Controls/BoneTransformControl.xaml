@@ -19,7 +19,6 @@
                     MouseLeftButtonDown="OnPadMouseLeftButtonDown"
                     MouseMove="OnPadMouseMove"
                     MouseLeftButtonUp="OnPadMouseLeftButtonUp"
-                    LostMouseCapture="OnPadLostMouseCapture"
                     PreviewMouseWheel="OnPadMouseWheel">
                 <Grid Margin="1" ClipToBounds="True">
                     <Rectangle Width="1" HorizontalAlignment="Center" Fill="{DynamicResource BoneGridLine}" />
@@ -54,8 +53,7 @@
                   Cursor="SizeWE"
                   MouseLeftButtonDown="OnDepthMouseLeftButtonDown"
                   MouseMove="OnDepthMouseMove"
-                  MouseLeftButtonUp="OnDepthMouseLeftButtonUp"
-                  LostMouseCapture="OnDepthLostMouseCapture">
+                  MouseLeftButtonUp="OnDepthMouseLeftButtonUp">
                 <Rectangle Height="2" Fill="{DynamicResource BoneRail}" VerticalAlignment="Center" />
                 <Rectangle Width="1" Height="10" Fill="{DynamicResource MutedText}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                 <Canvas x:Name="DepthCanvas" IsHitTestVisible="False">

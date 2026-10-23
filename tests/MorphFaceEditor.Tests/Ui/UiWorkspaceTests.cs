@@ -1,4 +1,5 @@
 using MorphFaceEditor.Core.Domain;
+using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Core.Services;
 using MorphFaceEditor.ViewModels;
 using MorphFaceEditor.Core.Materials;
@@ -19,6 +20,7 @@ internal static class UiWorkspaceTests
     [
         new("failed replacement retains the live workspace and releases its candidate", FailedReplacementKeepsLiveWorkspace),
         new("RON save failure preserves edits and Save As adopts its successful copy", SourceFileSaveRoundTrip),
+        new("partial RON saves retain unrelated edits and chronological dirty state", PartialRonSaveRetainsHistory),
         new("PCC Save As retains staged faces on failure and adopts the successful copy", PccSaveAsAdoptsSuccessfulCopy),
         new("additional Player imports and face switches retain both edited drafts", AdditionalPlayerImportsRetainStagedEdits),
         new("cancelled or failed career deletion retains source and pending edits", CareerDeletionPreservesStateOnFailure)
@@ -175,6 +177,60 @@ internal static class UiWorkspaceTests
             if (File.Exists(second)) File.Delete(second);
             if (File.Exists(copy)) File.Delete(copy);
         }
+    });
+
+    private static void PartialRonSaveRetainsHistory() => RunWithDispatcher(async () =>
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"MFE-PartialSave-{Guid.NewGuid():N}.ron");
+        try
+        {
+            var game = MorphFaceGame.LE2;
+            var head = new MorphFacePackageContextService().CapturePlayerDefaultHead(game, StandalonePlayerSex.Female);
+            foreach (var featuresOnly in new[] { true, false })
+            {
+                if (featuresOnly)
+                    TseHeadMorphRon.WriteMorphFeatures(path, head.MorphData, new(RonExportProducer.MFE, game, "HMF", true));
+                else
+                    File.WriteAllText(path, MaterialRonCodec.WriteMfe(FaceMaterialFileService.Capture(game,
+                        "PartialSave", head.MaterialData) with { DefaultFace = new("le2-human-female", true) }));
+                using var reader = new MorphFacePackageReader();
+                using var shell = CreateMainWindowViewModel(reader, new StubEditorDialogs());
+                await shell.OpenDroppedFileAsync(path);
+                var editor = shell.Editor ?? throw new Exception(shell.ErrorMessage ?? "Partial RON did not open.");
+                var initial = editor.CreateDraft();
+                var feature = editor.Features.First(value => value.IsEditable);
+                var scalar = editor.Material.Scalars.First();
+                var bone = editor.Bones.First(value => value.IsAvailable);
+                feature.Value += 0.025f;
+                scalar.Value += 0.125f;
+                bone.Value += 0.01f;
+                var edited = editor.CreateDraft();
+
+                await ((AsyncRelayCommand)shell.SaveCommand).ExecuteAsync();
+                TestAssert.True(!shell.HasError && shell.IsDirty, shell.ErrorMessage ?? "Partial save cleared unrelated edits.");
+                if (featuresOnly)
+                    TestAssert.Near(feature.Value, TseHeadMorphRon.ReadDocument(path).Head.MorphData.MorphFeatures
+                        .Single(value => value.Name == feature.Name).Offset, 0);
+                else
+                    TestAssert.Near(scalar.Value, FaceMaterialFileService.Read(File.ReadAllText(path), true).Parameters.Scalars
+                        .Single(value => value.Name == scalar.Name).Value, 0);
+
+                editor.UndoCommand.Execute(null); // Bone was never saved by either file.
+                TestAssert.True(shell.IsDirty, "Undoing the bone edit hid another unsaved domain.");
+                editor.UndoCommand.Execute(null);
+                TestAssert.True(shell.IsDirty != featuresOnly,
+                    "Dirty tracking did not compare the remaining edits with the partial-save baseline.");
+                editor.UndoCommand.Execute(null);
+                TestAssert.True(MorphFaceEditorStateComparer.Equals(initial, editor.CreateDraft()) && shell.IsDirty,
+                    "Undoing a saved value did not make the source dirty again.");
+                editor.RedoCommand.Execute(null);
+                editor.RedoCommand.Execute(null);
+                editor.RedoCommand.Execute(null);
+                TestAssert.True(MorphFaceEditorStateComparer.Equals(edited, editor.CreateDraft()) && shell.IsDirty,
+                    "Partial save disturbed cross-domain redo or its dirty state.");
+            }
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
     });
 
     private static void PccSaveAsAdoptsSuccessfulCopy() => RunWithDispatcher(async () =>

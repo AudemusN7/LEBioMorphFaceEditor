@@ -14,6 +14,12 @@ public sealed record HairMeshOption(string DisplayName, AssetIdentity? Identity,
     public override string ToString() => DisplayName;
 }
 
+public sealed class ManualAttachmentSelectionEventArgs(HairMeshOption selection, long generation) : EventArgs
+{
+    public HairMeshOption Selection { get; } = selection;
+    public long Generation { get; } = generation;
+}
+
 public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
 {
     private readonly AssetReferenceEditingSession _session;
@@ -23,6 +29,9 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
     private PlayerRuntimeAssetAvailability? _playerReferences;
     private string _searchText = string.Empty;
     private HairMeshOption? _previewSelection;
+    private HairMeshOption? _pendingManualSelection;
+    private long _manualSelectionGeneration;
+    private bool _disposed;
     private bool _isRandomisationLocked;
     private ICommand? _randomiseCommand;
 
@@ -53,8 +62,8 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
 
     public event EventHandler? SelectionChanged;
     public event EventHandler? PreviewChanged;
-    /// <summary>Raised only after a user commits a mesh through the picker control.</summary>
-    public event EventHandler? ManualSelectionCommitted;
+    /// <summary>Lets the shell prepare an optional paired change before authoring the picker choice.</summary>
+    public event EventHandler<ManualAttachmentSelectionEventArgs>? ManualSelectionRequested;
 
     public string Label { get; }
     public string HoverText => SlotIndex == 0 ? "m_oHairMesh" : "m_oOtherMeshes";
@@ -65,7 +74,7 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
     public IReadOnlyList<HairMeshOption> Options => _options;
     public IReadOnlyList<HairMeshOption> Candidates { get; private set; }
     /// <summary>Candidate currently shown as a transient preview, without changing the authored reference.</summary>
-    public HairMeshOption? PreviewSelection => _previewSelection;
+    public HairMeshOption? PreviewSelection => _previewSelection ?? _pendingManualSelection;
     public string SearchText
     {
         get => _searchText;
@@ -80,29 +89,65 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
     }
     public HairMeshOption Selected
     {
-        get => _selected;
+        get => _pendingManualSelection ?? _selected;
         set
         {
             // Filtering can temporarily remove the current item from the ListBox;
             // WPF then attempts to write a null SelectedItem back through the
             // binding. Keep the authored selection until the user picks a candidate.
-            if (value is null || !CanSelect(value.Identity))
+            if (_disposed || value is null || !CanSelect(value.Identity) || Same(value.Identity, Selected.Identity))
             {
                 return;
             }
-            CancelPreview();
-            if (SetProperty(ref _selected, value))
+            var generation = ++_manualSelectionGeneration;
+            var hadPreview = PreviewSelection is not null;
+            _previewSelection = null;
+            _pendingManualSelection = null;
+            if (Same(value.Identity, _session.Value) || ManualSelectionRequested is null)
             {
-                var previous = _session.Value;
+                OnPropertyChanged(nameof(Selected));
+                OnPropertyChanged(nameof(PreviewSelection));
+                if (hadPreview) PreviewChanged?.Invoke(this, EventArgs.Empty);
                 _session.Set(value.Identity);
-                if (!Same(previous, _session.Value))
-                {
-                    ManualSelectionCommitted?.Invoke(this, EventArgs.Empty);
-                }
+                return;
             }
+            _pendingManualSelection = value;
+            OnPropertyChanged(nameof(Selected));
+            OnPropertyChanged(nameof(PreviewSelection));
+            ManualSelectionRequested.Invoke(this, new ManualAttachmentSelectionEventArgs(value, generation));
+            // Plain choices finish synchronously. Only a still-pending paired choice
+            // needs its own preview while the shell prepares textures or the graph.
+            if (IsManualSelectionCurrent(value, generation)) PreviewChanged?.Invoke(this, EventArgs.Empty);
         }
     }
     public AssetIdentity? Value => _session.Value;
+
+    public bool IsManualSelectionCurrent(HairMeshOption selection, long generation) =>
+        !_disposed && generation == _manualSelectionGeneration && ReferenceEquals(selection, _pendingManualSelection);
+
+    /// <summary>Supersedes a prepared picker request without authoring its transient choice.</summary>
+    public void CancelPendingManualSelection()
+    {
+        if (_pendingManualSelection is null) return;
+        _manualSelectionGeneration++;
+        _pendingManualSelection = null;
+        _previewSelection = null;
+        OnPropertyChanged(nameof(Selected));
+        OnPropertyChanged(nameof(PreviewSelection));
+        PreviewChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Publishes an already prepared picker choice without starting a second request.</summary>
+    public bool CommitManualSelection(HairMeshOption selection, long generation)
+    {
+        if (!IsManualSelectionCurrent(selection, generation)) return false;
+        _pendingManualSelection = null;
+        _previewSelection = null;
+        _session.Set(selection.Identity);
+        OnPropertyChanged(nameof(Selected));
+        OnPropertyChanged(nameof(PreviewSelection));
+        return true;
+    }
 
     /// <summary>Sets the hair-specific randomisation command supplied by the owning face editor.</summary>
     public void SetRandomiseCommand(ICommand command)
@@ -123,6 +168,7 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
 
     public void RestrictPlayerReferences(PlayerRuntimeAssetAvailability available)
     {
+        CancelPendingManualSelection();
         _playerReferences = available;
         _options = _options.Where(option => CanSelect(option.Identity)).ToArray();
         _selected = Find(_session.Value);
@@ -138,6 +184,7 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
         bool isPlayerWorkspace)
     {
         ArgumentNullException.ThrowIfNull(candidates);
+        CancelPendingManualSelection();
         CancelPreview();
         var options = _localOptions.Where(option => CanSelect(option.Identity)).ToList();
         var physicalOccurrences = options.Where(option => option.Identity is not null)
@@ -209,6 +256,7 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
 
     public void SetImportedPreview(AssetIdentity? value)
     {
+        CancelPendingManualSelection();
         if (!CanSelect(value)) return;
         if (value is not null && !_options.Any(option => SameCanonicalMesh(option.Identity, value)))
         {
@@ -223,6 +271,7 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
     public bool TrySetRandomisedSelection(AssetIdentity? value)
     {
         if (IsRandomisationLocked || !CanSelect(value)) return false;
+        CancelPendingManualSelection();
         if (value is not null && !_options.Any(option => SameCanonicalMesh(option.Identity, value)))
         {
             _options = [.. _options, new HairMeshOption(value.InstancedPath, value,
@@ -239,7 +288,7 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
     public void Preview(HairMeshOption candidate)
     {
         ArgumentNullException.ThrowIfNull(candidate);
-        if (Same(candidate.Identity, _selected.Identity))
+        if (Same(candidate.Identity, Selected.Identity))
         {
             CancelPreview();
             return;
@@ -331,10 +380,20 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
 
     private void OnValueChanged(object? sender, EventArgs e)
     {
+        _manualSelectionGeneration++;
+        _pendingManualSelection = null;
         CancelPreview();
         SetProperty(ref _selected, Find(_session.Value), nameof(Selected));
+        OnPropertyChanged(nameof(Selected));
+        OnPropertyChanged(nameof(PreviewSelection));
         SelectionChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    public void Dispose() => _session.ValueChanged -= OnValueChanged;
+    public void Dispose()
+    {
+        _disposed = true;
+        _manualSelectionGeneration++;
+        _pendingManualSelection = null;
+        _session.ValueChanged -= OnValueChanged;
+    }
 }

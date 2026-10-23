@@ -21,6 +21,7 @@ public static class RenderingTests
         new("LE tangent basis uses TangentZ handedness", TangentBasisUsesTangentZHandedness),
         new("unlit mode bypasses lighting and ambient occlusion", UnlitModeBypassesLightingAndAmbientOcclusion),
         new("renderer releases face resources and draws again after clear", RendererReleasesFaceResourcesAfterClear),
+        new("mapped readback preserves pixels and releases mapping after writer failure", MappedReadbackPreservesPixelsAfterWriterFailure),
         new("scene factory maps non-contiguous LOD IDs to baked ordinals", SceneFactoryMapsNonContiguousLodIds),
         new("scene factory falls back to base geometry for an unmatched baked LOD", SceneFactoryHandlesUnmatchedBakedLod),
         new("custom mesh sections use the mesh material-slot order", CustomMeshUsesAuthoredMaterialOrder),
@@ -28,7 +29,7 @@ public static class RenderingTests
         new("detached attachments retain their native bind placement", DetachedAttachmentsRetainNativeBindPlacement),
         new("fixed-bake preview skins preserved imported geometry", FixedBakePreviewSkinsPreservedGeometry),
         new("deferred and live scene updates match a fresh full render", SceneUpdatesMatchFreshRendering),
-        new("scene publication settles with a second viewport frame", ScenePublicationSettlesWithSecondFrame),
+        new("scene publication presents current pixels without a settling render", ScenePublicationPresentsCurrentPixels),
         new("viewport publishes new sizes during window and pane resizing", ViewportPublishesDuringResize),
         new("renderer rejects work after deterministic disposal", RendererRejectsWorkAfterDisposal),
         .. ShadowRenderingTests.All,
@@ -407,6 +408,45 @@ public static class RenderingTests
         TestAssert.Equal(1, renderer.DeviceCreationCount);
     }
 
+    private static void MappedReadbackPreservesPixelsAfterWriterFailure()
+    {
+        const int width = 65, height = 49, rowBytes = width * 4;
+        using var renderer = new HeadPreviewRenderer(width, height);
+        var scene = CreateTriangleScene();
+        renderer.SetScene(scene);
+        var camera = new HeadOrbitCamera();
+        camera.Fit(scene.Bounds);
+        var options = new HeadPreviewOptions(HeadPreviewRenderMode.Unlit, PostProcessingEnabled: false);
+        var destination = new byte[width * height * 4];
+        var frame = renderer.Render(camera, options, destination, animationTimeSeconds: 0);
+        TestAssert.True(ReferenceEquals(destination, frame.BgraPixels), "Packed rendering replaced its destination.");
+        var expected = destination.ToArray();
+        var actual = new byte[destination.Length];
+        Action<IntPtr, int, int> copyRows = (pointer, byteCount, stride) =>
+        {
+            TestAssert.True(stride >= rowBytes, "Mapped source stride is shorter than a pixel row.");
+            TestAssert.Equal(checked((height - 1) * stride + rowBytes), byteCount);
+            for (var row = 0; row < height; row++)
+                System.Runtime.InteropServices.Marshal.Copy(IntPtr.Add(pointer, row * stride), actual, row * rowBytes, rowBytes);
+        };
+        var info = renderer.RenderInto(camera, options, copyRows, animationTimeSeconds: 0);
+        TestAssert.Equal(width, info.Width);
+        TestAssert.Equal(height, info.Height);
+        TestAssert.True(info.GetType() == typeof(HeadPreviewFrameInfo), "Mapped publication returned a pixel-bearing frame.");
+        TestAssert.True(expected.SequenceEqual(actual), "Stride-aware mapped pixels differ from packed rendering.");
+        var failure = new InvalidOperationException("Intentional pixel writer failure.");
+        var propagated = false;
+        try { renderer.RenderInto(camera, options, (_, _, _) => throw failure, animationTimeSeconds: 0); }
+        catch (InvalidOperationException exception) when (ReferenceEquals(exception, failure)) { propagated = true; }
+        TestAssert.True(propagated, "Mapped publication did not propagate the original writer exception.");
+        frame = renderer.Render(camera, options, destination, animationTimeSeconds: 0);
+        TestAssert.True(ReferenceEquals(destination, frame.BgraPixels) && expected.SequenceEqual(destination),
+            "Packed rendering failed to recover after a writer exception.");
+        Array.Clear(actual);
+        renderer.RenderInto(camera, options, copyRows, animationTimeSeconds: 0);
+        TestAssert.True(expected.SequenceEqual(actual), "Mapped rendering failed to recover after a writer exception.");
+    }
+
     private static void SceneUpdatesMatchFreshRendering()
     {
         var initial = CreateScene(0);
@@ -456,9 +496,9 @@ public static class RenderingTests
         {
             [attachmentMaterial.Key] = attachmentMaterial with { PreviewModel = HumanMaterialPreviewModel.VisorLens }
         });
-        TestAssert.True(state.HasAnimatedMaterials, "A live lens material did not update scene animation scheduling.");
+        TestAssert.True(state.HasAnimatedMaterials(showAttachment: true), "A live lens material did not update scene animation scheduling.");
         renderer.UpdateMaterials(Materials(live));
-        TestAssert.True(!state.HasAnimatedMaterials, "Replacing a lens left the scene requesting animation.");
+        TestAssert.True(!state.HasAnimatedMaterials(showAttachment: true), "Replacing a lens left the scene requesting animation.");
 
         byte[] AssertMatchesFresh(HeadPreviewScene scene)
         {
@@ -504,7 +544,7 @@ public static class RenderingTests
             };
     }
 
-    private static void ScenePublicationSettlesWithSecondFrame()
+    private static void ScenePublicationPresentsCurrentPixels()
     {
         Exception? failure = null;
         var thread = new Thread(() =>
@@ -525,6 +565,14 @@ public static class RenderingTests
                     Content = host
                 };
                 using var controller = new HeadPreviewHostController(window, host, image);
+                byte[]? firstPublishedPixels = null;
+                controller.FramePresented += _ =>
+                {
+                    if (firstPublishedPixels is not null) return;
+                    var first = (System.Windows.Media.Imaging.WriteableBitmap)image.Source;
+                    firstPublishedPixels = new byte[first.PixelWidth * first.PixelHeight * 4];
+                    first.CopyPixels(firstPublishedPixels, first.PixelWidth * 4, 0);
+                };
                 var scene = CreateTriangleScene();
                 var material = scene.Meshes[0].Sections[0].Material with
                 {
@@ -554,26 +602,25 @@ public static class RenderingTests
                 TestAssert.Equal(0L, controller.Diagnostics.FramesRendered);
                 window.Show();
                 controller.RequestRender(allowInactive: true);
-                for (var index = 0; index < 8 && controller.Diagnostics.FramesRendered < 2; index++)
+                for (var index = 0; index < 8 && controller.Diagnostics.FramesRendered < 1; index++)
                 {
                     PumpDispatcher();
                 }
 
                 // First visibility/activation can request another lifecycle frame.
-                // The already-visible scene replacements below still require exactly two.
-                TestAssert.True(controller.Diagnostics.FramesRendered >= 2,
-                    "The deferred scene publication did not receive its settling frame.");
+                // Already-visible replacements below require only one render.
+                TestAssert.True(controller.Diagnostics.FramesRendered >= 1,
+                    "The deferred scene publication was not presented.");
                 TestAssert.True(image.Source is System.Windows.Media.Imaging.WriteableBitmap,
-                    "The settled frame was not presented to the WPF image.");
+                    "The completed frame was not presented to the WPF image.");
                 var bitmap = (System.Windows.Media.Imaging.WriteableBitmap)image.Source;
                 var displayedPixels = new byte[bitmap.PixelWidth * bitmap.PixelHeight * 4];
                 bitmap.CopyPixels(displayedPixels, bitmap.PixelWidth * 4, 0);
                 using (var fresh = new HeadPreviewRenderer(bitmap.PixelWidth, bitmap.PixelHeight))
                 {
                     fresh.SetScene(deferredScene);
-                    fresh.Render(controller.Camera, new HeadPreviewOptions());
                     var expected = fresh.Render(controller.Camera, new HeadPreviewOptions()).BgraPixels;
-                    TestAssert.True(expected.SequenceEqual(displayedPixels),
+                    TestAssert.True(expected.SequenceEqual(firstPublishedPixels!) && expected.SequenceEqual(displayedPixels),
                         "The first published WPF scene lost geometry or material updates made before renderer creation.");
                 }
                 TestAssert.Near(DxMathUtil.DegreesToRadians(32), controller.Camera.Yaw, 1e-6f);
@@ -609,11 +656,18 @@ public static class RenderingTests
                         TestAssert.Equal(target, controller.Camera.Target);
                         TestAssert.Near(distance, controller.Camera.Distance, 1e-6f);
                     }
-                    TestAssert.Equal(frameCount + 2, controller.Diagnostics.FramesRendered);
+                    TestAssert.Equal(frameCount + 1, controller.Diagnostics.FramesRendered);
                     TestAssert.Equal(1, controller.Diagnostics.RendererCreations);
                     TestAssert.Equal(0, controller.Diagnostics.RendererDisposals);
                     TestAssert.Equal(0, controller.Diagnostics.ResizeOperations);
                 }
+                // A pending request must keep one queue slot across clear/reload.
+                var beforeQueuedReload = controller.Diagnostics.FramesRendered;
+                controller.RequestRender(allowInactive: true);
+                controller.ClearScene();
+                controller.SetScene(scene);
+                PumpDispatcher();
+                TestAssert.Equal(beforeQueuedReload + 1, controller.Diagnostics.FramesRendered);
                 window.Close();
                 TestAssert.Equal(1, controller.Diagnostics.RendererDisposals);
             }
@@ -717,7 +771,7 @@ public static class RenderingTests
                         lastSizeChange = now;
                         sizeChanges++;
                     }
-                    void OnFrame(HeadPreviewFrame frame)
+                    void OnFrame(HeadPreviewFrameInfo frame)
                     {
                         var size = (frame.Width, frame.Height);
                         if (size != startingSize) sizesDuringResize.Add(size);

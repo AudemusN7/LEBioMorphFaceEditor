@@ -648,7 +648,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private static byte ToColorByte(float value) =>
         (byte)Math.Round(Math.Clamp(value, 0, 1) * byte.MaxValue);
 
-    public void SetFrameStatus(HeadPreviewFrame frame) =>
+    public void SetFrameStatus(HeadPreviewFrameInfo frame) =>
         Status = Loc.Format("loc_Shell_Status_PreviewStats", frame.DeviceKind, frame.Width, frame.Height, frame.DrawCalls, frame.RenderTime.TotalMilliseconds);
 
     public void SetPreviewError(string message)

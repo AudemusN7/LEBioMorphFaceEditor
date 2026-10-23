@@ -415,7 +415,9 @@ public static class HdrRenderingTests
         var prepare = typeof(HeadPreviewRenderer).GetMethod(
             "PreparePostProcess", BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new InvalidOperationException("Renderer post-process preparation method was not found.");
-        var constants = prepare.Invoke(renderer, [rig, camera, null, settings, true])
+        var projection = typeof(HeadOrbitCamera).GetMethod(
+            "CreateProjectionMatrix", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(camera, [1f]);
+        var constants = prepare.Invoke(renderer, [rig, projection, null, settings, true])
             ?? throw new InvalidOperationException("Renderer post-process preparation returned no constants.");
         var method = typeof(HeadPreviewRenderer).GetMethod(
             "ApplyPostProcess", BindingFlags.Instance | BindingFlags.NonPublic)
@@ -428,7 +430,7 @@ public static class HdrRenderingTests
         var method = typeof(HeadPreviewRenderer).GetMethod(
             "ReadTexture", BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new InvalidOperationException("Renderer display readback method was not found.");
-        return (byte[]?)method.Invoke(renderer, [null])
+        return (byte[]?)method.Invoke(renderer, [null, null])
             ?? throw new InvalidOperationException("Renderer display readback returned no pixels.");
     }
 

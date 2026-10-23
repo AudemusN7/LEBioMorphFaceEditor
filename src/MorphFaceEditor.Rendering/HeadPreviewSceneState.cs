@@ -14,7 +14,8 @@ public sealed class HeadPreviewSceneState
     private IReadOnlyList<Mesh> _meshes = [];
 
     public bool IsLoaded { get; private set; }
-    public bool HasAnimatedMaterials => _meshes.Any(mesh => mesh.Sections.Any(section =>
+    public bool HasAnimatedMaterials(bool showAttachment) => _meshes.Any(mesh =>
+        (showAttachment || !mesh.IsAttachment) && mesh.Sections.Any(section =>
         section.Material.PreviewModel == HumanMaterialPreviewModel.VisorLens));
 
     internal IReadOnlyList<Mesh> Meshes => _meshes;

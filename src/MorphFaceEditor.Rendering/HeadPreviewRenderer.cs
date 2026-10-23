@@ -307,12 +307,12 @@ public sealed class HeadPreviewRenderer : IDisposable
         }
     }
 
-    public void Resize(int width, int height)
+    public bool Resize(int width, int height)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
-        if (_targets is not null && _width == width && _height == height) return;
+        if (_targets is not null && _width == width && _height == height) return false;
         _context.ClearState();
         // Release first: retaining both full viewport groups would double the
         // already substantial target allocation during a high-DPI resize.
@@ -322,6 +322,7 @@ public sealed class HeadPreviewRenderer : IDisposable
         _targets = replacement;
         _width = width;
         _height = height;
+        return true;
     }
 
     public HeadPreviewFrame Render(
@@ -329,6 +330,29 @@ public sealed class HeadPreviewRenderer : IDisposable
         HeadPreviewOptions options,
         byte[]? destination = null,
         float? animationTimeSeconds = null)
+        => (HeadPreviewFrame)RenderCore(camera, options, destination, null, animationTimeSeconds);
+
+    /// <summary>
+    /// Renders and synchronously publishes mapped BGRA pixels. The writer receives the source
+    /// pointer, valid buffer byte count and row stride; it must consume them during the call
+    /// and must not retain the pointer or re-enter this renderer. RenderTime includes the writer.
+    /// </summary>
+    public HeadPreviewFrameInfo RenderInto(
+        HeadOrbitCamera camera,
+        HeadPreviewOptions options,
+        Action<IntPtr, int, int> writePixels,
+        float? animationTimeSeconds = null)
+    {
+        ArgumentNullException.ThrowIfNull(writePixels);
+        return RenderCore(camera, options, null, writePixels, animationTimeSeconds);
+    }
+
+    private HeadPreviewFrameInfo RenderCore(
+        HeadOrbitCamera camera,
+        HeadPreviewOptions options,
+        byte[]? destination,
+        Action<IntPtr, int, int>? writePixels,
+        float? animationTimeSeconds)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(camera);
@@ -413,7 +437,7 @@ public sealed class HeadPreviewRenderer : IDisposable
             drawCalls++;
         }
         var postProcessSettings = options.PostProcessSettings ?? HeadPreviewPostProcessProfiles.Get(options.LightingPreset);
-        var postProcess = PreparePostProcess(lighting, camera, options.BackgroundColor,
+        var postProcess = PreparePostProcess(lighting, projection, options.BackgroundColor,
             postProcessSettings, options.PostProcessingEnabled);
         if (ambientOcclusionEnabled)
         {
@@ -478,8 +502,15 @@ public sealed class HeadPreviewRenderer : IDisposable
         _context.PixelShader.SetShaderResources(0, new ShaderResourceView?[10]);
         ApplyPostProcess(ref postProcess, ambientOcclusionEnabled, postProcessSettings);
 
-        var pixels = ReadTexture(destination);
+        var pixels = ReadTexture(destination, writePixels);
         stopwatch.Stop();
+        if (pixels is null)
+        {
+            return new HeadPreviewFrameInfo(_width, _height, stopwatch.Elapsed, drawCalls, _deviceKind)
+            {
+                ShadowDrawCalls = shadowDrawCalls
+            };
+        }
         return new HeadPreviewFrame(_width, _height, pixels, stopwatch.Elapsed, drawCalls, _deviceKind)
         {
             ShadowDrawCalls = shadowDrawCalls
@@ -867,7 +898,7 @@ public sealed class HeadPreviewRenderer : IDisposable
 
     private PostProcessConstants PreparePostProcess(
         HeadPreviewLightingRig lighting,
-        HeadOrbitCamera camera,
+        Matrix projection,
         System.Numerics.Vector3? backgroundColor,
         HeadPreviewPostProcessSettings settings,
         bool postProcessingEnabled)
@@ -875,7 +906,7 @@ public sealed class HeadPreviewRenderer : IDisposable
         var background = backgroundColor ?? new System.Numerics.Vector3(0.035f, 0.043f, 0.055f);
         var constants = new PostProcessConstants
         {
-            InverseProjection = Matrix.Invert(camera.CreateProjectionMatrix(_width / (float)_height)),
+            InverseProjection = Matrix.Invert(projection),
             PixelSizeAndSamples = new Vector4(
                 1f / _width,
                 1f / _height,
@@ -1089,16 +1120,23 @@ public sealed class HeadPreviewRenderer : IDisposable
     private void EnsureRenderTargets() =>
         _targets ??= new HeadPreviewRenderTargets(_device, _width, _height, _sampleDescription);
 
-    private byte[] ReadTexture(byte[]? destination)
+    private byte[]? ReadTexture(byte[]? destination, Action<IntPtr, int, int>? writePixels)
     {
         _context.CopyResource(_targets.Post.Texture, _targets.Staging.Texture);
         var data = _context.MapSubresource(_targets.Staging.Texture, 0, MapMode.Read, MapFlags.None);
         try
         {
+            var rowBytes = checked(_width * 4);
+            if (writePixels is not null)
+            {
+                var bufferSize = checked((_height - 1) * data.RowPitch + rowBytes);
+                writePixels(data.DataPointer, bufferSize, data.RowPitch);
+                return null;
+            }
             var pixels = destination ?? new byte[checked(_width * _height * 4)];
             for (var row = 0; row < _height; row++)
             {
-                Marshal.Copy(IntPtr.Add(data.DataPointer, row * data.RowPitch), pixels, row * _width * 4, _width * 4);
+                Marshal.Copy(IntPtr.Add(data.DataPointer, row * data.RowPitch), pixels, row * rowBytes, rowBytes);
             }
             return pixels;
         }

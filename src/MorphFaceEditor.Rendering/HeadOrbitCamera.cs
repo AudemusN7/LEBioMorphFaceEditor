@@ -45,10 +45,9 @@ public sealed class HeadOrbitCamera
 
     public void ResetFront()
     {
-        Target = _bounds.Center;
+        ResetPosition();
         Yaw = 0;
         Pitch = 0;
-        Distance = FitDistance(_bounds.Radius);
     }
 
     public void ResetThreeQuarter()

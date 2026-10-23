@@ -43,15 +43,19 @@ internal static class VisorLensAnimationLifecycleTests
                 PumpFor(TimeSpan.FromMilliseconds(200));
 
                 var staticScene = Scene(CreateMaterial(HumanMaterialPreviewModel.Default, HeadMaterialBlendMode.Opaque));
+                var lensMaterial = CreateMaterial(HumanMaterialPreviewModel.VisorLens, HeadMaterialBlendMode.Additive);
+                var lensScene = Scene(lensMaterial);
                 controller.SetScene(staticScene);
-                WaitForFrames(controller, 2, "The static scene did not finish its initial presentation.");
+                WaitForFrames(controller, 1, "The static scene did not finish its initial presentation.");
+                PumpFor(TimeSpan.FromMilliseconds(80));
                 var settledStaticFrames = controller.Diagnostics.FramesRendered;
                 PumpFor(TimeSpan.FromMilliseconds(140));
                 TestAssert.True(settledStaticFrames == controller.Diagnostics.FramesRendered,
                     "A static scene kept rendering after its publication settled.");
 
-                controller.SetScene(Scene(CreateMaterial(HumanMaterialPreviewModel.VisorLens, HeadMaterialBlendMode.Additive)));
-                WaitForFrames(controller, 4, "The visor lens did not present its initial frames.");
+                var beforeLens = controller.Diagnostics.FramesRendered;
+                controller.SetScene(lensScene);
+                WaitForFrameIncrease(controller, beforeLens + 1, "The visor lens did not present its initial frame.");
                 var beforeAnimation = controller.Diagnostics.FramesRendered;
                 WaitForFrameIncrease(controller, beforeAnimation + 3,
                     "The visible visor lens did not receive time-driven preview frames.");
@@ -67,12 +71,39 @@ internal static class VisorLensAnimationLifecycleTests
                 WaitForFrameIncrease(controller, diagnosticFrames + 3,
                     "Returning to the shaded visor preview did not restart animation frames.");
 
+                controller.SetOptions(new HeadPreviewOptions(ShowAttachment: false));
+                PumpFor(TimeSpan.FromMilliseconds(80));
+                var hiddenAttachmentFrames = controller.Diagnostics.FramesRendered;
+                PumpFor(TimeSpan.FromMilliseconds(160));
+                TestAssert.True(hiddenAttachmentFrames == controller.Diagnostics.FramesRendered,
+                    "Hiding the animated visor attachment left its preview timer rendering frames.");
+                controller.SetOptions(new HeadPreviewOptions(ShowAttachment: true));
+                WaitForFrameIncrease(controller, hiddenAttachmentFrames + 3,
+                    "Showing the visor attachment did not restart animation frames.");
+
+                var staticReplacement = CreateMaterial(HumanMaterialPreviewModel.Default, HeadMaterialBlendMode.Opaque)
+                    with { Key = lensMaterial.Key };
+                var beforeReplacement = controller.Diagnostics.FramesRendered;
+                controller.UpdateMaterials(new HeadPreviewMaterialUpdate(
+                    new Dictionary<string, HeadPreviewMaterial> { [lensMaterial.Key] = staticReplacement }));
+                WaitForFrameIncrease(controller, beforeReplacement + 1, "The static material replacement was not presented.");
+                PumpFor(TimeSpan.FromMilliseconds(80));
+                var replacedFrames = controller.Diagnostics.FramesRendered;
+                PumpFor(TimeSpan.FromMilliseconds(160));
+                TestAssert.True(replacedFrames == controller.Diagnostics.FramesRendered,
+                    "A same-key static material replacement left visor animation ticking.");
+                controller.UpdateMaterials(new HeadPreviewMaterialUpdate(
+                    new Dictionary<string, HeadPreviewMaterial> { [lensMaterial.Key] = lensMaterial }));
+                WaitForFrameIncrease(controller, replacedFrames + 3,
+                    "A same-key lens material replacement did not restart animation.");
+
                 window.Hide();
                 PumpFor(TimeSpan.FromMilliseconds(60));
                 var hiddenFrames = controller.Diagnostics.FramesRendered;
+                PublishExplicitChanges();
                 PumpFor(TimeSpan.FromMilliseconds(160));
                 TestAssert.True(hiddenFrames == controller.Diagnostics.FramesRendered,
-                    "A hidden host kept rendering visor animation frames.");
+                    "A hidden host rendered animation or explicit scene/material/options changes.");
 
                 window.Show();
                 PumpFor(TimeSpan.FromMilliseconds(100));
@@ -80,15 +111,60 @@ internal static class VisorLensAnimationLifecycleTests
                 WaitForFrameIncrease(controller, visibleFrames + 3,
                     "Showing the visor host again did not resume animation frames.");
 
+                window.WindowState = WindowState.Minimized;
+                PumpFor(TimeSpan.FromMilliseconds(80));
+                var minimizedFrames = controller.Diagnostics.FramesRendered;
+                PublishExplicitChanges();
+                PumpFor(TimeSpan.FromMilliseconds(160));
+                TestAssert.True(minimizedFrames == controller.Diagnostics.FramesRendered,
+                    "A minimized host rendered animation or explicit scene/material/options changes.");
+                window.WindowState = WindowState.Normal;
+                window.Activate();
+                WaitForFrameIncrease(controller, minimizedFrames + 3, "Restoring the visor host did not resume animation.");
+
+                Exception? modalFailure = null;
+                var picker = new Window
+                {
+                    Owner = window, Width = 96, Height = 96, Left = -2200, Top = -2000,
+                    ShowInTaskbar = false, WindowStyle = WindowStyle.None
+                };
+                picker.Loaded += (_, _) => picker.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () =>
+                {
+                    try
+                    {
+                        PumpFor(TimeSpan.FromMilliseconds(80));
+                        TestAssert.True(!window.IsActive && picker.IsActive,
+                            "The modal fixture did not deactivate its preview owner.");
+                        var inactiveFrames = controller.Diagnostics.FramesRendered;
+                        controller.RequestRender();
+                        PumpFor(TimeSpan.FromMilliseconds(160));
+                        TestAssert.True(inactiveFrames == controller.Diagnostics.FramesRendered,
+                            "An inactive modal owner rendered animation or an ordinary render request.");
+                        AssertInactivePublication(() => controller.UpdateMaterials(new HeadPreviewMaterialUpdate(
+                            new Dictionary<string, HeadPreviewMaterial> { [lensMaterial.Key] = lensMaterial })), "material");
+                        AssertInactivePublication(() => controller.SetOptions(new HeadPreviewOptions(), allowInactive: true), "options");
+                        AssertInactivePublication(() => controller.SetScene(lensScene), "scene");
+                    }
+                    catch (Exception exception) { modalFailure = exception; }
+                    finally { picker.Close(); }
+                });
+                _ = picker.ShowDialog();
+                if (modalFailure is not null) throw new InvalidOperationException("Modal preview publication failed.", modalFailure);
+                window.Activate();
+                WaitForFrameIncrease(controller, controller.Diagnostics.FramesRendered + 3,
+                    "Closing the modal picker did not resume visor animation.");
+
+                var beforeStaticSwitch = controller.Diagnostics.FramesRendered;
                 controller.SetScene(staticScene);
-                WaitForFrameIncrease(controller, controller.Diagnostics.FramesRendered + 2,
+                WaitForFrameIncrease(controller, beforeStaticSwitch + 1,
                     "Switching away from the visor did not present the static scene.");
+                PumpFor(TimeSpan.FromMilliseconds(80));
                 var afterStaticSwitch = controller.Diagnostics.FramesRendered;
                 PumpFor(TimeSpan.FromMilliseconds(160));
                 TestAssert.True(afterStaticSwitch == controller.Diagnostics.FramesRendered,
                     "Switching to a static material left visor animation ticking.");
 
-                controller.SetScene(Scene(CreateMaterial(HumanMaterialPreviewModel.VisorLens, HeadMaterialBlendMode.Additive)));
+                controller.SetScene(lensScene);
                 WaitForFrameIncrease(controller, controller.Diagnostics.FramesRendered + 3,
                     "The visor timer did not restart after switching back to the lens.");
                 controller.ClearScene();
@@ -104,6 +180,26 @@ internal static class VisorLensAnimationLifecycleTests
                 TestAssert.True(disposedFrames == controller.Diagnostics.FramesRendered,
                     "Disposing the host left an animation callback running.");
                 window.Close();
+
+                void PublishExplicitChanges()
+                {
+                    controller.UpdateMaterials(new HeadPreviewMaterialUpdate(
+                        new Dictionary<string, HeadPreviewMaterial> { [lensMaterial.Key] = lensMaterial }));
+                    controller.SetOptions(new HeadPreviewOptions(), allowInactive: true);
+                    controller.SetScene(lensScene);
+                }
+
+                void AssertInactivePublication(Action publish, string kind)
+                {
+                    var before = controller.Diagnostics.FramesRendered;
+                    publish();
+                    WaitForFrameIncrease(controller, before + 1, $"The modal owner's explicit {kind} update was not presented.");
+                    PumpFor(TimeSpan.FromMilliseconds(80));
+                    var settled = controller.Diagnostics.FramesRendered;
+                    PumpFor(TimeSpan.FromMilliseconds(160));
+                    TestAssert.True(settled == controller.Diagnostics.FramesRendered,
+                        $"The modal owner's explicit {kind} update restarted inactive animation.");
+                }
             }
             catch (Exception exception)
             {

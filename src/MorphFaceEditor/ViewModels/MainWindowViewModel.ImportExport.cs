@@ -697,7 +697,7 @@ public sealed partial class MainWindowViewModel
         _faceDetailsHasBakedFallback = false;
         FaceDetails = Loc.Format("loc_Shell_FaceDetails_DetachedMeshPreview", topology.VertexCount, topology.IndexCount / 3, topology.Sections.Count, topology.ReferenceSkeleton.Count, result.CustomMaterials?.UsedSlots.Count ?? 0);
         HasPreview = true;
-        var cameraFamily = PreviewCameraGrouping.ForProfile(result.Preview.Profile.Key);
+        var cameraFamily = PreviewCameraGrouping.ForProfile(result.Preview.Profile);
         var resetCamera = !string.Equals(_previewCameraFamily, cameraFamily, StringComparison.OrdinalIgnoreCase);
         _previewCameraFamily = cameraFamily;
         PreviewSceneReady?.Invoke(result.Preview.Scene, resetCamera);

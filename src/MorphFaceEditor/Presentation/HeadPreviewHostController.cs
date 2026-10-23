@@ -16,19 +16,15 @@ public sealed class HeadPreviewHostController : IDisposable
     private readonly FrameworkElement _host;
     private readonly Image _image;
     private readonly DispatcherTimer _animationTimer;
+    private readonly Action<IntPtr, int, int> _writePixels;
     private readonly HeadOrbitCamera _camera = new();
     private readonly HeadPreviewSceneState _scene = new();
     private HeadPreviewRenderer? _renderer;
     private HeadPreviewOptions _options = new();
     private WriteableBitmap? _bitmap;
-    private byte[]? _pixelBuffer;
-    private int _pixelWidth;
-    private int _pixelHeight;
     private bool _renderQueued;
     private bool _queuedRenderMayRunInactive;
     private bool _cameraInitialized;
-    private long _scenePublicationVersion;
-    private long _settledScenePublicationVersion;
     private bool _disposed;
 
     public HeadPreviewHostController(Window window, FrameworkElement host, Image image)
@@ -36,6 +32,7 @@ public sealed class HeadPreviewHostController : IDisposable
         _window = window;
         _host = host;
         _image = image;
+        _writePixels = WritePixels;
         _animationTimer = new DispatcherTimer(DispatcherPriority.Background, window.Dispatcher)
         {
             Interval = TimeSpan.FromSeconds(1.0 / 30)
@@ -44,13 +41,12 @@ public sealed class HeadPreviewHostController : IDisposable
         _window.Activated += OnWindowActivityChanged;
         _window.Deactivated += OnWindowActivityChanged;
         _window.StateChanged += OnWindowActivityChanged;
-        _window.IsVisibleChanged += OnVisibilityChanged;
         _window.Closed += OnWindowClosed;
-        _host.SizeChanged += OnHostSizeChanged;
+        _host.SizeChanged += OnWindowActivityChanged;
         _host.IsVisibleChanged += OnVisibilityChanged;
     }
 
-    public event Action<HeadPreviewFrame>? FramePresented;
+    public event Action<HeadPreviewFrameInfo>? FramePresented;
     public event Action<string>? PreviewFailed;
 
     public HeadPreviewDiagnostics Diagnostics { get; } = new();
@@ -62,12 +58,11 @@ public sealed class HeadPreviewHostController : IDisposable
         ArgumentNullException.ThrowIfNull(scene);
         if (_renderer is not null) _renderer.SetScene(scene);
         else _scene.SetScene(scene);
-        _scenePublicationVersion++;
         // Clearing a face releases its resources, but must not make the next
         // face reset the user's orbit as if this were the first preview.
         if (!_cameraInitialized)
         {
-            _camera.Fit(scene.Bounds);
+            _camera.UpdateBounds(scene.Bounds);
             ResetCamera(_camera.ResetThreeQuarter);
             _cameraInitialized = true;
         }
@@ -94,9 +89,6 @@ public sealed class HeadPreviewHostController : IDisposable
         if (_renderer is not null) _renderer.ClearScene();
         else _scene.ClearScene();
         _bitmap = null;
-        _pixelBuffer = null;
-        _renderQueued = false;
-        _queuedRenderMayRunInactive = false;
         _image.Source = null;
     }
 
@@ -148,7 +140,7 @@ public sealed class HeadPreviewHostController : IDisposable
 
     public void RequestRender(bool allowInactive = false)
     {
-        if (_disposed || !_scene.IsLoaded || !CanRenderNow(allowInactive))
+        if (!CanRenderNow(allowInactive))
         {
             return;
         }
@@ -170,27 +162,15 @@ public sealed class HeadPreviewHostController : IDisposable
         });
     }
 
-    private bool CanRender => PreviewRenderPolicy.CanRender(new PreviewActivityState(
-        _window.IsVisible,
-        _window.IsActive,
-        _window.WindowState == WindowState.Minimized,
-        _disposed,
-        _host.ActualWidth,
-        _host.ActualHeight));
-
-    private bool CanRenderNow(bool allowInactive) => allowInactive
-        ? PreviewRenderPolicy.CanRenderExplicitly(new PreviewActivityState(
-            _window.IsVisible,
-            _window.IsActive,
-            _window.WindowState == WindowState.Minimized,
-            _disposed,
-            _host.ActualWidth,
-            _host.ActualHeight))
-        : CanRender;
+    private bool CanRenderNow(bool allowInactive = false) =>
+        !_disposed && _scene.IsLoaded && _window.IsVisible && _host.IsVisible &&
+        _window.WindowState != WindowState.Minimized &&
+        (allowInactive || _window.IsActive) &&
+        _host.ActualWidth > 0 && _host.ActualHeight > 0;
 
     private void RenderNow(bool allowInactive = false)
     {
-        if (_disposed || !_scene.IsLoaded || !CanRenderNow(allowInactive))
+        if (!CanRenderNow(allowInactive))
         {
             return;
         }
@@ -199,24 +179,11 @@ public sealed class HeadPreviewHostController : IDisposable
         {
             var (width, height) = GetPixelSize();
             EnsureRenderer(width, height);
-            var frame = _renderer!.Render(_camera, _options, _pixelBuffer);
-            _bitmap!.WritePixels(
-                new Int32Rect(0, 0, width, height),
-                frame.BgraPixels,
-                checked(width * 4),
-                0);
+            var frame = _renderer!.RenderInto(_camera, _options, _writePixels);
+            // Publish a replacement only after its first pixels are ready.
+            if (!ReferenceEquals(_image.Source, _bitmap)) _image.Source = _bitmap;
             Diagnostics.FramesRendered++;
             FramePresented?.Invoke(frame);
-            if (_settledScenePublicationVersion != _scenePublicationVersion)
-            {
-                // Replacing a complete GPU scene can leave the first WPF-hosted
-                // frame with stale material resources on some D3D drivers. A
-                // camera input always repaired it because that requested the
-                // next frame. Settle each scene publication here so a loaded
-                // head never depends on unrelated viewport input.
-                _settledScenePublicationVersion = _scenePublicationVersion;
-                RequestRender(allowInactive: true);
-            }
         }
         catch (Exception exception)
         {
@@ -225,6 +192,10 @@ public sealed class HeadPreviewHostController : IDisposable
         }
     }
 
+    private void WritePixels(IntPtr pixels, int bufferSize, int stride) =>
+        _bitmap!.WritePixels(new Int32Rect(0, 0, _bitmap.PixelWidth, _bitmap.PixelHeight),
+            pixels, bufferSize, stride);
+
     private void EnsureRenderer(int width, int height)
     {
         if (_renderer is null)
@@ -232,19 +203,14 @@ public sealed class HeadPreviewHostController : IDisposable
             _renderer = new HeadPreviewRenderer(width, height, _scene);
             Diagnostics.RendererCreations++;
         }
-        else if (_pixelWidth != width || _pixelHeight != height)
+        else if (_renderer.Resize(width, height))
         {
-            _renderer.Resize(width, height);
             Diagnostics.ResizeOperations++;
         }
 
-        if (_bitmap is null || _pixelWidth != width || _pixelHeight != height)
+        if (_bitmap is null || _bitmap.PixelWidth != width || _bitmap.PixelHeight != height)
         {
-            _pixelWidth = width;
-            _pixelHeight = height;
-            _pixelBuffer = new byte[checked(width * height * 4)];
             _bitmap = new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgra32, null);
-            _image.Source = _bitmap;
         }
     }
 
@@ -256,25 +222,13 @@ public sealed class HeadPreviewHostController : IDisposable
         return (width, height);
     }
 
-    private void OnHostSizeChanged(object sender, SizeChangedEventArgs e)
-    {
-        if (_disposed || !_scene.IsLoaded)
-        {
-            return;
-        }
-        UpdateAnimationTimer();
-        // Coalesce with camera/content requests and read the latest pixel size
-        // when rendering, so a continuous resize keeps publishing fresh frames.
-        RequestRender();
-    }
-
     private void OnAnimationTimerTick(object? sender, EventArgs e) => RequestRender();
 
     private void UpdateAnimationTimer()
     {
-        var animate = CanRender && _host.IsVisible &&
+        var animate = CanRenderNow() &&
                       _options.RenderMode != HeadPreviewRenderMode.Diagnostic &&
-                      _scene.HasAnimatedMaterials;
+                      _scene.HasAnimatedMaterials(_options.ShowAttachment);
         if (animate) _animationTimer.Start();
         else _animationTimer.Stop();
     }
@@ -305,9 +259,8 @@ public sealed class HeadPreviewHostController : IDisposable
         _window.Activated -= OnWindowActivityChanged;
         _window.Deactivated -= OnWindowActivityChanged;
         _window.StateChanged -= OnWindowActivityChanged;
-        _window.IsVisibleChanged -= OnVisibilityChanged;
         _window.Closed -= OnWindowClosed;
-        _host.SizeChanged -= OnHostSizeChanged;
+        _host.SizeChanged -= OnWindowActivityChanged;
         _host.IsVisibleChanged -= OnVisibilityChanged;
         _scene.ClearScene();
         if (_renderer is not null)
@@ -318,6 +271,5 @@ public sealed class HeadPreviewHostController : IDisposable
         }
         _image.Source = null;
         _bitmap = null;
-        _pixelBuffer = null;
     }
 }

@@ -166,7 +166,7 @@ public sealed partial class MainWindowViewModel
             !result.EditingSession.CanEditMorphFeatures && !result.Profile.IgnoresAuthoredGeometry;
         SetGeometryDetails(geometryDetails);
         LoadedFacePath = result.Loaded.Document.Source.InstancedPath;
-        var speciesKey = PreviewCameraGrouping.SpeciesForProfile(result.Profile.Key);
+        var speciesKey = result.Profile.Archetype;
         if (string.Equals(_loadedSpeciesKey, speciesKey, StringComparison.OrdinalIgnoreCase))
         {
             editor.SelectCategory(_lastCategoryKey);
@@ -180,7 +180,7 @@ public sealed partial class MainWindowViewModel
         _activeRegistryProfile = result.Profile;
         _activeRegistryCatalogProfile = textureCatalogProfile;
         HasPreview = true;
-        var cameraFamily = PreviewCameraGrouping.ForProfile(result.Profile.Key);
+        var cameraFamily = PreviewCameraGrouping.ForProfile(result.Profile);
         var resetCameraPosition = _previewCameraFamily is not null &&
                                   !string.Equals(_previewCameraFamily, cameraFamily, StringComparison.OrdinalIgnoreCase);
         _previewCameraFamily = cameraFamily;

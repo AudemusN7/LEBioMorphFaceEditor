@@ -139,10 +139,10 @@ public sealed record HeadPreviewOptions(
     // Optional authored world-space diffuse environment; null uses the camera-relative preset rig.
     HeadPreviewEnvironment? Environment = null);
 
-public sealed record HeadPreviewFrame(
+/// <summary>Statistics for a completed render, including synchronous pixel publication when supplied.</summary>
+public record HeadPreviewFrameInfo(
     int Width,
     int Height,
-    byte[] BgraPixels,
     TimeSpan RenderTime,
     int DrawCalls,
     string DeviceKind)
@@ -150,3 +150,12 @@ public sealed record HeadPreviewFrame(
     /// <summary>Depth-only caster draws performed before the camera-view passes.</summary>
     public int ShadowDrawCalls { get; init; }
 }
+
+public sealed record HeadPreviewFrame(
+    int Width,
+    int Height,
+    byte[] BgraPixels,
+    TimeSpan RenderTime,
+    int DrawCalls,
+    string DeviceKind)
+    : HeadPreviewFrameInfo(Width, Height, RenderTime, DrawCalls, DeviceKind);

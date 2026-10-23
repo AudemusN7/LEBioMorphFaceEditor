@@ -1,21 +1,14 @@
+using MorphFaceEditor.Core.Domain;
+
 namespace MorphFaceEditor.Presentation;
 
 public static class PreviewCameraGrouping
 {
-    public static string ForProfile(string profileKey)
+    public static string ForProfile(MorphFaceProfile profile)
     {
-        var species = SpeciesForProfile(profileKey);
+        var species = profile.Archetype.ToLowerInvariant();
         return species is "human-male" or "human-female" or "asari" or "batarian"
             ? "humanoid"
             : species;
-    }
-
-    public static string SpeciesForProfile(string profileKey)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(profileKey);
-        var separator = profileKey.IndexOf('-');
-        return separator > 0 && profileKey.AsSpan(0, separator).StartsWith("le", StringComparison.OrdinalIgnoreCase)
-            ? profileKey[(separator + 1)..].ToLowerInvariant()
-            : profileKey.ToLowerInvariant();
     }
 }

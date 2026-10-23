@@ -12,7 +12,7 @@ internal static class QaUtilityTests
         new("QA coverage streams reproduce filtered cases and vary donors", Selection),
         new("QA native save values compare separately from preserved source ordering", NativeSaveOrdering),
         new("QA material comparison preserves duplicate counts and exact texture identities", MaterialNamesAndDuplicates),
-        new("QA reports escape source text and retain functional failures beside timing warnings", Report)
+        new("QA reports retain frozen timing limits and functional failures beside timing outcomes", Report)
     ];
 
     private static void MaterialNamesAndDuplicates()
@@ -106,27 +106,175 @@ internal static class QaUtilityTests
 
     private static void Report()
     {
+        TimingPolicy();
         var directory = Path.Combine(Path.GetTempPath(), "MFE-QA-Report-" + Guid.NewGuid().ToString("N"));
         try
         {
             var report = new QaReport(directory, 123, [], "synthetic") { Complete = true };
             var result = new QaResult("load/test", "source text") { Status = "failed", Error = "<script>test</script>" };
-            result.Stages.Add(new("Player fixture preparation", 1567, 0, 0, 0, 0, 0, 0, 0, QaStageKind.Load));
-            result.Stages.Add(new("Render preview", 20000, 0, 0, 0, 0, 0, 0, 0, QaStageKind.Render));
-            QaPerformance.ApplyWarnings(result);
+            result.Stages.Add(TimingStage("Player fixture preparation", 500.1, QaStageKind.Load) with
+            {
+                LimitMs = 500, FailureLimitMs = 1500, TimingKey = "load/test | <source>",
+                LimitSource = "Accepted .39 <baseline>"
+            });
+            result.Stages.Add(TimingStage("Render preview", 20000, QaStageKind.Render));
+            result.Stages.Add(TimingStage("Randomisation", 10, QaStageKind.Randomisation) with
+            {
+                LimitMs = 200, FailureLimitMs = 600, SampleCount = 100, TotalDurationMs = 1000,
+                LimitSource = "Accepted .39 baseline"
+            });
+            QaPerformance.ApplyOutcomes(result);
+            TestAssert.True(result.Status == "failed" && result.Error == "<script>test</script>",
+                "A timing warning changed the functional failure.");
             report.Results.Add(result);
+            var severe = new QaResult("save/test", "severe timing") { Status = "passed" };
+            severe.Stages.Add(TimingStage("Save PCC", 900.1, QaStageKind.FileTransfer) with
+            {
+                LimitMs = 300, FailureLimitMs = 900, TimingKey = "save/test | Save PCC",
+                LimitSource = "Accepted .39 baseline"
+            });
+            QaPerformance.ApplyOutcomes(severe);
+            TestAssert.True(severe.Status == "failed" && severe.Error is null &&
+                            severe.PerformanceWarnings.Count == 0 && severe.PerformanceFailures.Count == 1,
+                "A severe timing breach was not a separate failure.");
+            report.Results.Add(severe);
             report.Write();
             var html = File.ReadAllText(report.HtmlPath);
             TestAssert.True(html.Contains("&lt;script&gt;test&lt;/script&gt;") && !html.Contains(result.Error),
                 "Report source text became executable markup.");
             var attention = html[(html.IndexOf("<h2>Needs attention</h2>", StringComparison.Ordinal))..];
             attention = attention[..attention.IndexOf("</article>", StringComparison.Ordinal)];
-            TestAssert.True(attention.Contains("<li>Player fixture preparation — 1567.0 ms / 1500 ms</li>") &&
+            TestAssert.True(attention.Contains("Player fixture preparation — 500.1 ms / warning 500 ms / failure 1500 ms") &&
+                attention.Contains("class='failed'>Save PCC") &&
                 !attention.Contains("Render preview"), "Attention summary lost timing limits or included an exempt stage.");
+            TestAssert.True(html.Contains("Accepted .39 &lt;baseline&gt;") &&
+                            html.Contains("Key: load/test | &lt;source&gt;") &&
+                            html.Contains("Warning 300 ms<br>Failure 900 ms") &&
+                            html.Contains("10.0 ms average (100 rolls)") &&
+                            html.Contains(QaTimingBaseline.Description),
+                "Report lost limit provenance, save thresholds, batch units or the shared frozen policy.");
             using var json = JsonDocument.Parse(File.ReadAllText(report.ResultsPath));
-            TestAssert.Equal(1, json.RootElement.GetProperty("Failed").GetInt32());
+            TestAssert.Equal(2, json.RootElement.GetProperty("Failed").GetInt32());
             TestAssert.Equal(1, json.RootElement.GetProperty("PerformanceWarningCount").GetInt32());
+            TestAssert.Equal(1, json.RootElement.GetProperty("PerformanceFailureCount").GetInt32());
+            TestAssert.True(json.RootElement.GetProperty("TimingPolicy").GetString()!.Contains(QaTimingBaseline.Description),
+                "JSON omitted the frozen baseline metadata.");
+            var stages = json.RootElement.GetProperty("Results")[0].GetProperty("Stages");
+            var restored = JsonSerializer.Deserialize<QaStage>(stages[0].GetRawText(), new JsonSerializerOptions
+            {
+                Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+            })!;
+            TestAssert.True(restored.LimitMs == 500 && restored.FailureLimitMs == 1500 &&
+                            restored.TimingKey == result.Stages[0].TimingKey &&
+                            restored.LimitSource == result.Stages[0].LimitSource && restored.TimingSeverity == "warning",
+                "Reading retained stage evidence recomputed its limits or lost provenance.");
+            TestAssert.True(stages[1].GetProperty("LimitMs").ValueKind == JsonValueKind.Null &&
+                            stages[1].GetProperty("FailureLimitMs").ValueKind == JsonValueKind.Null &&
+                            stages[1].GetProperty("TimingSeverity").GetString() == "excluded" &&
+                            stages[1].GetProperty("LimitSource").GetString() == "Excluded",
+                "Render evidence acquired a limit or lost its exclusion source.");
+            var saved = json.RootElement.GetProperty("Results")[1].GetProperty("Stages")[0];
+            TestAssert.True(saved.GetProperty("LimitMs").GetDouble() == 300 &&
+                            saved.GetProperty("FailureLimitMs").GetDouble() == 900 &&
+                            saved.GetProperty("TimingSeverity").GetString() == "failure" &&
+                            saved.GetProperty("LimitSource").GetString() == "Accepted .39 baseline",
+                "Saved-output timing evidence lost its actual caps, severity or limit source.");
         }
         finally { if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true); }
     }
+
+    private static void TimingPolicy()
+    {
+        var boundary = TimingStage("explicit limits", 500, QaStageKind.Load) with
+            { LimitMs = 500, FailureLimitMs = 1500 };
+        TestAssert.True(boundary.TimingSeverity == "pass" && !boundary.ExceededLimit &&
+                        (boundary with { DurationMs = 500.01 }).TimingSeverity == "warning" &&
+                        (boundary with { DurationMs = 1500 }).TimingSeverity == "warning" &&
+                        !(boundary with { DurationMs = 1500 }).ExceededFailureLimit &&
+                        (boundary with { DurationMs = 1500.01 }).TimingSeverity == "failure",
+            "Stored warning/failure caps lost their strict boundaries.");
+        var warning = new QaResult("warning/test", "warning is not fatal") { Status = "passed" };
+        warning.Stages.Add(boundary with { DurationMs = 500.01 });
+        QaPerformance.ApplyOutcomes(warning);
+        TestAssert.True(warning.Status == "warning" && warning.Error is null &&
+                        warning.PerformanceWarnings.Count == 1 && warning.PerformanceFailures.Count == 0,
+            "An ordinary timing warning failed the case.");
+        foreach (var status in new[] { "failed", "blocked" })
+        {
+            var functional = new QaResult("functional/test", "functional outcome")
+                { Status = status, Error = "Original functional error" };
+            functional.Stages.Add(boundary with { DurationMs = 1500.01 });
+            QaPerformance.ApplyOutcomes(functional);
+            TestAssert.True(functional.Status == status && functional.Error == "Original functional error" &&
+                            functional.PerformanceFailures.Count == 1,
+                "A timing failure overwrote the functional outcome.");
+        }
+
+        var known = new QaResult("load/le1-kro", "accepted variable source") { Group = "load" };
+        known.Stages.Add(TimingStage("041 · Test workflow · Load · KRO.FirstFace", 300, QaStageKind.Load));
+        QaTimingBaseline.Apply(known);
+        TestAssert.True(known.Stages[0].LimitMs == 500 && known.Stages[0].FailureLimitMs == 1500 &&
+                        known.Stages[0].TimingKey is not null,
+            "The accepted 300 ms source did not retain its calibrated 500/1500 ms limits.");
+        var changed = new QaResult(known.Id, "different seed and measured duration") { Group = known.Group };
+        changed.Stages.Add(TimingStage("901 · Test workflow · Load · KRO.OtherFace", 20000, QaStageKind.Load));
+        QaTimingBaseline.Apply(changed);
+        TestAssert.True(changed.Stages[0].TimingKey == known.Stages[0].TimingKey &&
+                        changed.Stages[0].LimitMs == 500 && changed.Stages[0].FailureLimitMs == 1500,
+            "Selected face, display sequence or a slow judged run rebased the frozen limit.");
+
+        var native = new QaResult("pcsav/le2-male-custom", "fixed native source") { Group = "pcsav" };
+        native.Stages.Add(TimingStage("001 · Test workflow · Load · BIOG_MORPH_FACE.QaCareer", 1535, QaStageKind.Load));
+        native.Stages.Add(TimingStage("020 · Test workflow · Load · BIOG_MORPH_FACE.Reopened", 1535, QaStageKind.Load));
+        QaTimingBaseline.Apply(native);
+        TestAssert.True(native.Stages[0].LimitMs == 2000 && native.Stages[0].FailureLimitMs == 4000 &&
+                        native.Stages[0].TimingKey != native.Stages[1].TimingKey,
+            "Fixed native limits or original/reopened load grouping changed.");
+
+        var batch = new QaResult("npc-randomisation/le1-kro", "mean per roll") { Group = "npc-randomisation" };
+        batch.Stages.Add(TimingStage("013 · Test workflow · Production randomisation · 100 rolls · average", 150,
+            QaStageKind.Randomisation) with { SampleCount = 100, TotalDurationMs = 15000 });
+        QaTimingBaseline.Apply(batch);
+        TestAssert.True(batch.Stages[0].LimitMs == 200 && batch.Stages[0].FailureLimitMs == 600 &&
+                        !batch.Stages[0].ExceededLimit && batch.Stages[0].DurationMs == 150 &&
+                        batch.Stages[0].TotalDurationMs == 15000,
+            "Randomisation timing judged the batch total instead of its mean per roll.");
+
+        var audit = new QaResult("pcc-audit", "current-case control artifact");
+        const string control = "abcdef012345-0009-audit-control.pcc";
+        audit.Artifacts.Add(Path.Combine("pcc-audit", control));
+        audit.Stages.Add(TimingStage("020 · Test workflow · PCC read/import audit " + control,
+            100, QaStageKind.FileTransfer));
+        QaTimingBaseline.Apply(audit, [known]);
+        TestAssert.True(audit.Stages[0].TimingKey!.Contains("PCC read/import audit · pcc-audit · audit-control.pcc") &&
+                        audit.Stages[0].LimitSource.StartsWith("Accepted ", StringComparison.Ordinal),
+            "Earlier case owners concealed the current audit's own control artifact.");
+
+        var ron = new QaResult("ron-full/le2-hmf-npc", "distinct RON import routes");
+        foreach (var purpose in new[] { "Import RON command", "Import RON command · package replacement",
+                     "Import RON command · route unconfirmed" })
+            ron.Stages.Add(TimingStage("007 · Test workflow · " + purpose, 3754, QaStageKind.FileTransfer));
+        QaTimingBaseline.Apply(ron);
+        TestAssert.True(ron.Stages[0].LimitMs == 600 && ron.Stages[0].FailureLimitMs == 1800 &&
+                        ron.Stages.Skip(1).All(stage => stage.LimitMs == 5000 && stage.FailureLimitMs == 15000 &&
+                                                      stage.LimitSource == "Global kind policy") &&
+                        ron.Stages.Select(stage => stage.TimingKey).Distinct().Count() == 3,
+            "RON replacement or unconfirmed routes inherited a matching live-edit timing cap.");
+
+        var unknown = new QaResult("new-case/test", "uncalibrated operations");
+        foreach (var kind in new[] { QaStageKind.Load, QaStageKind.Randomisation, QaStageKind.FileTransfer,
+                     QaStageKind.ColdLoad, QaStageKind.Render, QaStageKind.Diagnostic })
+            unknown.Stages.Add(TimingStage("New operation", 100000, kind));
+        QaTimingBaseline.Apply(unknown);
+        TestAssert.True(unknown.Stages.All(stage => stage.LimitMs == QaPerformance.Limit(stage.Kind) &&
+                                                  stage.FailureLimitMs == QaPerformance.FailureLimit(stage.Kind)) &&
+                        unknown.Stages.Where(stage => stage.LimitMs is null)
+                            .All(stage => stage.TimingSeverity == "excluded" && !stage.ExceededLimit &&
+                                          !stage.ExceededFailureLimit && stage.LimitSource == "Excluded") &&
+                        unknown.Stages[0].LimitSource != known.Stages[0].LimitSource,
+            "Unknown operations lost fallback limits or excluded stages acquired timing outcomes.");
+    }
+
+    private static QaStage TimingStage(string name, double duration, QaStageKind kind) =>
+        new(name, duration, 0, 0, 0, 0, 0, 0, 0, kind);
 }

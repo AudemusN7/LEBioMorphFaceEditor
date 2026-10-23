@@ -66,6 +66,8 @@ internal static class Program
         context.AuditOutputDirectory = Option("--audit-output") is { } auditDirectory ? Path.GetFullPath(auditDirectory) : null;
         if (context.AuditOutputDirectory is not null && !Directory.Exists(context.AuditOutputDirectory))
             throw new DirectoryNotFoundException("Audit output directory does not exist: " + context.AuditOutputDirectory);
+        var priorArtifactOwners = context.AuditOutputDirectory is null
+            ? Array.Empty<QaResult>() : QaOutputFiles.ReadArtifactOwners(context.AuditOutputDirectory);
         var filter = Option("--case") ?? (context.AuditOutputDirectory is null ? null : "pcc-audit");
         var filters = filter?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var selected = args.Contains("--self-check")
@@ -118,13 +120,16 @@ internal static class Program
                     result.Error = string.Join(Environment.NewLine, new[] { result.Error, error.ToString() }.OfType<string>());
                 }
             }
-            QaPerformance.ApplyWarnings(result);
+            QaTimingBaseline.Apply(result, [.. priorArtifactOwners, .. report.Results]);
+            QaPerformance.ApplyOutcomes(result);
             result.DurationMs = clock.Elapsed.TotalMilliseconds;
             report.Results.Add(result);
             report.Write();
             Console.WriteLine($"{result.Status.ToUpperInvariant(),-7} {QaDisplay.Case(item.Id)} ({result.DurationMs / 1000:F1}s)");
             foreach (var warning in result.PerformanceWarnings)
                 Console.WriteLine($"  Warning: {warning}");
+            foreach (var failure in result.PerformanceFailures)
+                Console.Error.WriteLine($"  Timing failure: {failure}");
             if (result.Error is not null) Console.Error.WriteLine(result.Error);
         }
         report.Complete = true;
@@ -137,6 +142,9 @@ internal static class Program
         var performanceWarnings = report.Results.Sum(item => item.PerformanceWarnings.Count);
         if (performanceWarnings > 0) Console.WriteLine($"Performance: {performanceWarnings} timing warnings across " +
             $"{report.Results.Count(item => item.PerformanceWarnings.Count > 0)} cases (including failed cases).");
+        var performanceFailures = report.Results.Sum(item => item.PerformanceFailures.Count);
+        if (performanceFailures > 0) Console.WriteLine($"Performance: {performanceFailures} severe timing failures across " +
+            $"{report.Results.Count(item => item.PerformanceFailures.Count > 0)} cases.");
         return failed == 0 && blocked == 0 ? 0 : 1;
     }
 }

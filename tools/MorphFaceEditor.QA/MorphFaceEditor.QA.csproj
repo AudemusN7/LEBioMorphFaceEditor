@@ -14,4 +14,8 @@
       <Private>true</Private>
     </Reference>
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="TimingBaselines/accepted-0.10.0.39.json"
+                      LogicalName="MorphFaceEditor.QA.TimingBaselines.accepted-0.10.0.39.json" />
+  </ItemGroup>
 </Project>

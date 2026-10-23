@@ -1,5 +1,6 @@
 using MorphFaceEditor.Core.Domain;
 using System.Windows;
+using System.Windows.Controls;
 using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.LegendaryExplorer;
 
@@ -17,7 +18,13 @@ public partial class StandaloneImportGameWindow : Window
             Title = Loc.Text("loc_StandaloneImportGameWindow_NewPlayerMorph");
             Height = 300;
             PromptText.Text = Loc.Text("loc_StandaloneImportGameWindow_NewPlayerPrompt");
+            ImportGamePanel.Visibility = Visibility.Collapsed;
+            NewPlayerPanel.Visibility = Visibility.Visible;
             SexPanel.Visibility = Visibility.Visible;
+            ValidationText.Visibility = Visibility.Visible;
+            CancelButton.Margin = new Thickness(0, 0, 8, 0);
+            ContinueButton.Visibility = Visibility.Visible;
+            ContinueButton.IsDefault = true;
             ContinueButton.Content = Loc.Text("loc_StandaloneImportGameWindow_Continue");
         }
         GameBox.ItemsSource = new[]
@@ -32,6 +39,14 @@ public partial class StandaloneImportGameWindow : Window
     public StandalonePlayerSex SelectedSex => SexBox.SelectedIndex == 1 ? StandalonePlayerSex.Female : StandalonePlayerSex.Male;
 
     public MorphFaceGame? SelectedGame { get; private set; }
+
+    private void OnImportGame(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: MorphFaceGame game }) return;
+
+        SelectedGame = game;
+        DialogResult = true;
+    }
 
     private void OnContinue(object sender, RoutedEventArgs e)
     {

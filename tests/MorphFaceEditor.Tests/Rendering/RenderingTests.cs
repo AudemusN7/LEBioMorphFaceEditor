@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Numerics;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Editing;
@@ -28,6 +29,7 @@ public static class RenderingTests
         new("fixed-bake preview skins preserved imported geometry", FixedBakePreviewSkinsPreservedGeometry),
         new("deferred and live scene updates match a fresh full render", SceneUpdatesMatchFreshRendering),
         new("scene publication settles with a second viewport frame", ScenePublicationSettlesWithSecondFrame),
+        new("viewport publishes new sizes during window and pane resizing", ViewportPublishesDuringResize),
         new("renderer rejects work after deterministic disposal", RendererRejectsWorkAfterDisposal),
         .. ShadowRenderingTests.All,
         .. HdrRenderingTests.All
@@ -382,12 +384,21 @@ public static class RenderingTests
         renderer.Render(camera, new HeadPreviewOptions());
         TestAssert.True(renderer.GpuTextureBytes > 0, "The fixture did not upload a face texture.");
         var uploads = renderer.TextureUploadCount;
+        var viewport = RenderTestReadback.GetTexture(renderer, "Resolved");
+        var shadow = RenderTestReadback.GetTexture(renderer, "ShadowMap");
+        var grading = RenderTestReadback.GetTexture(renderer, "GradingLut");
 
         renderer.ClearScene();
         renderer.ClearScene();
         TestAssert.Equal(0L, renderer.GpuTextureBytes);
         TestAssert.Equal(0, renderer.Render(camera, new HeadPreviewOptions()).DrawCalls);
+        TestAssert.True(!viewport.IsDisposed && ReferenceEquals(viewport, RenderTestReadback.GetTexture(renderer, "Resolved")),
+            "Clearing the face discarded the reusable viewport targets.");
         renderer.Resize(80, 72);
+        TestAssert.True(viewport.IsDisposed && !shadow.IsDisposed && !grading.IsDisposed &&
+                        ReferenceEquals(shadow, RenderTestReadback.GetTexture(renderer, "ShadowMap")) &&
+                        ReferenceEquals(grading, RenderTestReadback.GetTexture(renderer, "GradingLut")),
+            "Viewport resize retained old targets or discarded the independent shadow map/grading LUT.");
         renderer.SetScene(scene);
         var frame = renderer.Render(camera, new HeadPreviewOptions());
         TestAssert.Equal(1, frame.DrawCalls);
@@ -625,6 +636,153 @@ public static class RenderingTests
             System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(
                 System.Windows.Threading.DispatcherPriority.ApplicationIdle,
                 () => frame.Continue = false);
+            System.Windows.Threading.Dispatcher.PushFrame(frame);
+        }
+    }
+
+    private static void ViewportPublishesDuringResize()
+    {
+        Exception? failure = null;
+        var thread = new Thread(() =>
+        {
+            var image = new System.Windows.Controls.Image();
+            var host = new System.Windows.Controls.Grid();
+            host.Children.Add(image);
+            var layout = new System.Windows.Controls.Grid();
+            layout.Children.Add(host);
+            var window = new System.Windows.Window
+            {
+                Width = 128,
+                Height = 112,
+                Left = -2000,
+                Top = -2000,
+                ShowInTaskbar = false,
+                WindowStyle = System.Windows.WindowStyle.None,
+                Content = layout
+            };
+            using var controller = new HeadPreviewHostController(window, host, image);
+            var lastPresented = (Width: 0, Height: 0);
+            string? renderFailure = null;
+            controller.FramePresented += frame => lastPresented = (frame.Width, frame.Height);
+            controller.PreviewFailed += message => renderFailure = message;
+            try
+            {
+                controller.SetOptions(new HeadPreviewOptions(HeadPreviewRenderMode.Unlit,
+                    AmbientOcclusionEnabled: false, ShadowsEnabled: false, PostProcessingEnabled: false));
+                controller.SetScene(CreateTriangleScene());
+                window.Show();
+                window.Activate();
+                controller.RequestRender(allowInactive: true);
+                PumpDispatcher(350);
+                TestAssert.True(window.IsActive, "The resize fixture could not activate its offscreen window.");
+                TestAssert.True(renderFailure is null, $"The resize fixture could not warm its renderer: {renderFailure}");
+                TestAssert.Equal(CurrentPixelSize(), lastPresented);
+
+                var activityChanges = 0;
+                void OnActivityChanged(object? sender, EventArgs args) => activityChanges++;
+                window.Activated += OnActivityChanged;
+                window.Deactivated += OnActivityChanged;
+                try
+                {
+                    var windowSizes = ExerciseResize("window", step =>
+                    {
+                        window.Width = 128 + step * 3;
+                        window.Height = 112 + step * 2;
+                    });
+                    host.HorizontalAlignment = System.Windows.HorizontalAlignment.Left;
+                    var paneSizes = ExerciseResize("pane", step => host.Width = 180 - step * 3);
+                    TestAssert.Equal(0, activityChanges);
+                    TestAssert.True(windowSizes >= 2 && paneSizes >= 2,
+                        $"The viewport waited for resizing to stop: {windowSizes} distinct updated window sizes and " +
+                        $"{paneSizes} pane sizes were presented during the sustained changes (expected multiple in each phase).");
+                }
+                finally
+                {
+                    window.Activated -= OnActivityChanged;
+                    window.Deactivated -= OnActivityChanged;
+                }
+
+                int ExerciseResize(string phase, Action<int> resize)
+                {
+                    var startingSize = lastPresented;
+                    var sizesDuringResize = new HashSet<(int Width, int Height)>();
+                    var clock = Stopwatch.StartNew();
+                    var sizeChanges = 0;
+                    var lastSizeChange = 0d;
+                    var maximumGap = 0d;
+                    void OnSizeChanged(object sender, System.Windows.SizeChangedEventArgs args)
+                    {
+                        var now = clock.Elapsed.TotalMilliseconds;
+                        if (sizeChanges > 0) maximumGap = Math.Max(maximumGap, now - lastSizeChange);
+                        lastSizeChange = now;
+                        sizeChanges++;
+                    }
+                    void OnFrame(HeadPreviewFrame frame)
+                    {
+                        var size = (frame.Width, frame.Height);
+                        if (size != startingSize) sizesDuringResize.Add(size);
+                    }
+                    host.SizeChanged += OnSizeChanged;
+                    controller.FramePresented += OnFrame;
+                    try
+                    {
+                        for (var step = 1; step <= 18; step++)
+                        {
+                            resize(step);
+                            window.UpdateLayout();
+                            PumpDispatcher(20);
+                        }
+                    }
+                    finally
+                    {
+                        host.SizeChanged -= OnSizeChanged;
+                        controller.FramePresented -= OnFrame;
+                    }
+                    Console.WriteLine($"RESIZE {phase}: {sizeChanges} size changes over {clock.Elapsed.TotalMilliseconds:F0} ms, " +
+                        $"maximum gap {maximumGap:F0} ms, {sizesDuringResize.Count} distinct updated frame sizes during resizing.");
+                    TestAssert.True(sizeChanges >= 10 && clock.Elapsed.TotalMilliseconds >= 250 && maximumGap < 150,
+                        $"The {phase} fixture did not sustain size changes faster than the old 150 ms debounce.");
+                    PumpDispatcher(300);
+                    TestAssert.True(renderFailure is null, $"Rendering failed during {phase} resizing: {renderFailure}");
+                    TestAssert.Equal(CurrentPixelSize(), lastPresented);
+                    var settledFrames = controller.Diagnostics.FramesRendered;
+                    PumpDispatcher(80);
+                    TestAssert.Equal(settledFrames, controller.Diagnostics.FramesRendered);
+                    return sizesDuringResize.Count;
+                }
+
+                (int Width, int Height) CurrentPixelSize()
+                {
+                    var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(host);
+                    return ((int)Math.Round(host.ActualWidth * dpi.DpiScaleX),
+                        (int)Math.Round(host.ActualHeight * dpi.DpiScaleY));
+                }
+            }
+            catch (Exception exception)
+            {
+                failure = exception;
+            }
+            finally
+            {
+                controller.ClearScene();
+                window.Close();
+                PumpDispatcher(20);
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+        if (failure is not null) throw new InvalidOperationException("The WPF live-resize regression failed.", failure);
+
+        static void PumpDispatcher(int milliseconds)
+        {
+            var frame = new System.Windows.Threading.DispatcherFrame();
+            var timer = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.ApplicationIdle)
+            {
+                Interval = TimeSpan.FromMilliseconds(milliseconds)
+            };
+            timer.Tick += (_, _) => { timer.Stop(); frame.Continue = false; };
+            timer.Start();
             System.Windows.Threading.Dispatcher.PushFrame(frame);
         }
     }

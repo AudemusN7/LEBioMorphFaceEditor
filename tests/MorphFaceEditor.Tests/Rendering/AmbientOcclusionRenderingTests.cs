@@ -34,11 +34,11 @@ public static class AmbientOcclusionRenderingTests
             ShadowsEnabled: true,
             PostProcessingEnabled: true));
 
-        var sceneColour = ReadFloatTexture(renderer, "_resolvedTexture", Format.R16G16B16A16_Float);
-        var ambient = ReadFloatTexture(renderer, "_resolvedAmbientTexture", Format.R16G16B16A16_Float);
-        var visibility = ReadFloatTexture(renderer, "_aoVisibilityTexture", Format.R16G16_Float);
-        var surface = ReadFloatTexture(renderer, "_aoSurfaceTexture", Format.R32G32B32A32_Float);
-        var composed = ReadFloatTexture(renderer, "_aoCompositedTexture", Format.R16G16B16A16_Float);
+        var sceneColour = ReadFloatTexture(renderer, "Resolved", Format.R16G16B16A16_Float);
+        var ambient = ReadFloatTexture(renderer, "ResolvedAmbient", Format.R16G16B16A16_Float);
+        var visibility = ReadFloatTexture(renderer, "AoVisibility", Format.R16G16_Float);
+        var surface = ReadFloatTexture(renderer, "AoSurface", Format.R32G32B32A32_Float);
+        var composed = ReadFloatTexture(renderer, "AoComposited", Format.R16G16B16A16_Float);
         RequireSameSize(sceneColour, ambient, visibility, surface, composed);
 
         var checkedPixels = 0;
@@ -110,13 +110,13 @@ public static class AmbientOcclusionRenderingTests
 
         renderer.UpdateMaterials(CreateNormalMapUpdates(normalMaterials, [128, 128, 255, 255], "flat"));
         renderer.Render(camera, new HeadPreviewOptions(AmbientOcclusionEnabled: true, ShadowsEnabled: true));
-        var flat = ReadFloatTexture(renderer, "_aoSurfaceTexture", Format.R32G32B32A32_Float);
-        var flatPlane = ReadFloatTexture(renderer, "_aoReceiverPlaneTexture", Format.R16G16B16A16_Float);
+        var flat = ReadFloatTexture(renderer, "AoSurface", Format.R32G32B32A32_Float);
+        var flatPlane = ReadFloatTexture(renderer, "AoReceiverPlane", Format.R16G16B16A16_Float);
 
         renderer.UpdateMaterials(CreateNormalMapUpdates(normalMaterials, [255, 128, 128, 255], "tilted"));
         renderer.Render(camera, new HeadPreviewOptions(AmbientOcclusionEnabled: true, ShadowsEnabled: true));
-        var tilted = ReadFloatTexture(renderer, "_aoSurfaceTexture", Format.R32G32B32A32_Float);
-        var tiltedPlane = ReadFloatTexture(renderer, "_aoReceiverPlaneTexture", Format.R16G16B16A16_Float);
+        var tilted = ReadFloatTexture(renderer, "AoSurface", Format.R32G32B32A32_Float);
+        var tiltedPlane = ReadFloatTexture(renderer, "AoReceiverPlane", Format.R16G16B16A16_Float);
         RequireSameSize(flat, tilted);
         TestAssert.True(flatPlane.Values.SequenceEqual(tiltedPlane.Values),
             "Changing material normal maps changed the actual AO receiver triangle planes.");

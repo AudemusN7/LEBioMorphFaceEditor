@@ -35,6 +35,10 @@ public static class MaterialRendererTests
         camera.Fit(scene.Bounds);
         var first = renderer.Render(camera, new HeadPreviewOptions()).BgraPixels.ToArray();
         TestAssert.Equal(1, renderer.TextureUploadCount);
+        renderer.SetScene(scene);
+        var republished = renderer.Render(camera, new HeadPreviewOptions()).BgraPixels;
+        TestAssert.True(first.SequenceEqual(republished), "Republishing the same scene changed its material output.");
+        TestAssert.Equal(1, renderer.TextureUploadCount);
         renderer.UpdateMaterials(new Dictionary<string, HeadPreviewMaterial>
         {
             [red.Key] = red with { Scalars = new Dictionary<string, float> { ["Test"] = 1 } }
@@ -46,6 +50,7 @@ public static class MaterialRendererTests
         TestAssert.True(!first.SequenceEqual(second), "Live texture update did not change the preview pixels.");
         TestAssert.Equal(1, renderer.DeviceCreationCount);
         TestAssert.Equal(2, renderer.TextureUploadCount);
+        TestAssert.Equal(4L, renderer.GpuTextureBytes);
     }
 
     private static void RendererUploadsAuthoredMipChain()

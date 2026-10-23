@@ -32,7 +32,7 @@ public static class HdrRenderingTests
             LightingPreset: HeadPreviewLightingPreset.Studio,
             AmbientOcclusionEnabled: false,
             ShadowsEnabled: false));
-        var hdr = ReadFloatTarget(renderer, "_resolvedTexture");
+        var hdr = ReadFloatTarget(renderer, "Resolved");
         var center = PixelIndex(96, 96 / 2, 96 / 2);
         var centerHdr = hdr.AsSpan(center * 4, 3);
         var rig = HeadPreviewLightingPresets.Get(HeadPreviewLightingPreset.Studio);
@@ -103,7 +103,7 @@ public static class HdrRenderingTests
             ShadowsEnabled: false,
             PostProcessMode: HeadPreviewPostProcessMode.GameInspired,
             PostProcessSettings: receiverOn)).BgraPixels;
-        var sceneHdr = ReadFloatTarget(renderer, "_resolvedTexture");
+        var sceneHdr = ReadFloatTarget(renderer, "Resolved");
         var withoutReceiver = renderer.Render(camera, new HeadPreviewOptions(
             BackgroundColor: Vector3.Zero,
             AmbientOcclusionEnabled: false,
@@ -138,7 +138,7 @@ public static class HdrRenderingTests
             ShadowsEnabled: false,
             PostProcessMode: HeadPreviewPostProcessMode.GameInspired,
             PostProcessSettings: receiverOn));
-        var bloom = ReadFloatTarget(renderer, "_bloomTexture");
+        var bloom = ReadFloatTarget(renderer, "Bloom");
         TestAssert.True(bloom.Where((_, index) => index % 4 != 3).All(value => value < 0.001f),
             "The bright selected background was extracted as a bloom source.");
     }
@@ -158,40 +158,47 @@ public static class HdrRenderingTests
             PostProcessSettings: settings);
 
         var first = renderer.Render(camera, options);
-        var gradingTexture = GetPrivateField(renderer, "_gradingTexture");
-        var bloomTexture = GetPrivateField(renderer, "_bloomTexture");
+        var gradingTexture = GetTexture(renderer, "GradingLut");
+        var resolvedTexture = GetTexture(renderer, "Resolved");
+        var bloomTexture = GetTexture(renderer, "Bloom");
+        var bloomTarget = GetSurfaceResource<RenderTargetView>(renderer, "Bloom", "Target");
+        var bloomShaderView = GetSurfaceResource<ShaderResourceView>(renderer, "Bloom", "ShaderView");
+        renderer.Resize(32, 24);
+        renderer.Resize(32, 24);
         var repeated = renderer.Render(camera, options);
         TestAssert.True(first.BgraPixels.SequenceEqual(repeated.BgraPixels),
-            "Repeated unchanged GameInspired frames produced different display pixels.");
-        TestAssert.True(ReferenceEquals(gradingTexture, GetPrivateField(renderer, "_gradingTexture")) &&
-                        ReferenceEquals(bloomTexture, GetPrivateField(renderer, "_bloomTexture")),
-            "Unchanged frames recreated the grading LUT or quarter-resolution bloom target.");
+            "Repeated unchanged GameInspired frames or same-size resizes produced different display pixels.");
+        TestAssert.True(ReferenceEquals(gradingTexture, GetTexture(renderer, "GradingLut")) &&
+                        ReferenceEquals(resolvedTexture, GetTexture(renderer, "Resolved")) &&
+                        ReferenceEquals(bloomTexture, GetTexture(renderer, "Bloom")) &&
+                        ReferenceEquals(bloomTarget, GetSurfaceResource<RenderTargetView>(renderer, "Bloom", "Target")) &&
+                        ReferenceEquals(bloomShaderView, GetSurfaceResource<ShaderResourceView>(renderer, "Bloom", "ShaderView")),
+            "Unchanged frames or same-size resizes recreated the grading LUT, viewport images or bloom views.");
 
         renderer.Render(camera, options with { PostProcessMode = HeadPreviewPostProcessMode.Neutral });
         var afterModeSwitch = renderer.Render(camera, options);
         TestAssert.True(first.BgraPixels.SequenceEqual(afterModeSwitch.BgraPixels),
             "Switching through Neutral changed the next identical GameInspired frame.");
-        TestAssert.True(ReferenceEquals(gradingTexture, GetPrivateField(renderer, "_gradingTexture")),
+        TestAssert.True(ReferenceEquals(gradingTexture, GetTexture(renderer, "GradingLut")),
             "Switching modes recreated the cached grading LUT.");
 
         renderer.Resize(7, 5);
+        TestAssert.True(resolvedTexture.IsDisposed && bloomTexture.IsDisposed &&
+                        bloomTarget.IsDisposed && bloomShaderView.IsDisposed,
+            "Resizing retained an old viewport image or one of its render/sample views.");
         var resized = renderer.Render(camera, options);
-        var resizedBloom = (Texture2D)GetPrivateField(renderer, "_bloomTexture");
+        var resizedBloom = GetTexture(renderer, "Bloom");
         TestAssert.True(resized.Width == 7 && resized.Height == 5 && resized.BgraPixels.Length == 7 * 5 * 4,
             $"Small odd-size resize returned an invalid frame ({resized.Width}x{resized.Height}, {resized.BgraPixels.Length} bytes).");
         TestAssert.True(resizedBloom.Description.Width == 2 && resizedBloom.Description.Height == 2,
             $"Odd-size bloom target was not rounded up to quarter resolution ({resizedBloom.Description.Width}x{resizedBloom.Description.Height}).");
-        TestAssert.True(ReferenceEquals(gradingTexture, GetPrivateField(renderer, "_gradingTexture")),
+        TestAssert.True(!gradingTexture.IsDisposed && ReferenceEquals(gradingTexture, GetTexture(renderer, "GradingLut")),
             "Resizing recreated the viewport-independent grading LUT.");
     }
 
     private static HeadPreviewPostProcessSettings CreateBloomSettings(float screenBlendThreshold) => new(
         Vector3.Zero, Vector3.One, Vector3.One, Vector3.One, Vector3.Zero, 0f,
         screenBlendThreshold, 32f, Vector3.One);
-
-    private static object GetPrivateField(object instance, string fieldName) =>
-        typeof(HeadPreviewRenderer).GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(instance)
-        ?? throw new InvalidOperationException($"Renderer field '{fieldName}' was not found.");
 
     private static void UnlitPostProcessingCanBeBypassed()
     {
@@ -206,14 +213,14 @@ public static class HdrRenderingTests
             AmbientOcclusionEnabled: false,
             ShadowsEnabled: false,
             PostProcessingEnabled: false));
-        var rawHdr = ReadFloatTarget(renderer, "_resolvedTexture");
+        var rawHdr = ReadFloatTarget(renderer, "Resolved");
         var processedFrame = renderer.Render(camera, new HeadPreviewOptions(
             RenderMode: HeadPreviewRenderMode.Unlit,
             BackgroundColor: new Vector3(0.001f, 0.18f, 0.5f),
             AmbientOcclusionEnabled: false,
             ShadowsEnabled: false,
             PostProcessingEnabled: true));
-        var processedHdr = ReadFloatTarget(renderer, "_resolvedTexture");
+        var processedHdr = ReadFloatTarget(renderer, "Resolved");
 
         var faceOffset = PixelIndex(frame.Width, frame.Width / 2, frame.Height / 2) * 4;
         TestAssert.True(Math.Abs(frame.BgraPixels[faceOffset] - 220) <= 3 &&

@@ -10,15 +10,36 @@ namespace MorphFaceEditor.Tests;
 
 internal static class RenderTestReadback
 {
-    internal static float[] ReadFloatTarget(HeadPreviewRenderer renderer, string fieldName) =>
-        ReadFloatTexture(renderer, fieldName, Format.R16G16B16A16_Float).Values;
+    internal static Texture2D GetTexture(HeadPreviewRenderer renderer, string surfaceName) =>
+        GetSurfaceResource<Texture2D>(renderer, surfaceName, "Texture");
 
-    internal static FloatTarget ReadFloatTexture(HeadPreviewRenderer renderer, string fieldName, Format expectedFormat)
+    internal static T GetSurfaceResource<T>(HeadPreviewRenderer renderer, string surfaceName, string resourceName) where T : class
     {
         const BindingFlags privateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
         var rendererType = typeof(HeadPreviewRenderer);
-        var source = (Texture2D?)rendererType.GetField(fieldName, privateInstance)?.GetValue(renderer)
-            ?? throw new InvalidOperationException($"Renderer target '{fieldName}' was not found.");
+        object? surface;
+        if (surfaceName is "GradingLut" or "ShadowMap")
+        {
+            surface = rendererType.GetField(surfaceName == "GradingLut" ? "_gradingLut" : "_shadowMap", privateInstance)
+                ?.GetValue(renderer);
+        }
+        else
+        {
+            var targets = rendererType.GetField("_targets", privateInstance)?.GetValue(renderer);
+            surface = targets?.GetType().GetProperty(surfaceName)?.GetValue(targets);
+        }
+        return surface?.GetType().GetProperty(resourceName)?.GetValue(surface) as T
+            ?? throw new InvalidOperationException($"Renderer surface '{surfaceName}' has no {typeof(T).Name} resource '{resourceName}'.");
+    }
+
+    internal static float[] ReadFloatTarget(HeadPreviewRenderer renderer, string surfaceName) =>
+        ReadFloatTexture(renderer, surfaceName, Format.R16G16B16A16_Float).Values;
+
+    internal static FloatTarget ReadFloatTexture(HeadPreviewRenderer renderer, string surfaceName, Format expectedFormat)
+    {
+        const BindingFlags privateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
+        var rendererType = typeof(HeadPreviewRenderer);
+        var source = GetTexture(renderer, surfaceName);
         var device = (D3DDevice?)rendererType.GetField("_device", privateInstance)?.GetValue(renderer)
             ?? throw new InvalidOperationException("Renderer D3D device was not found.");
         var context = (DeviceContext?)rendererType.GetField("_context", privateInstance)?.GetValue(renderer)
@@ -27,7 +48,7 @@ internal static class RenderTestReadback
         if (description.Format != expectedFormat || description.SampleDescription.Count != 1)
         {
             throw new InvalidOperationException(
-                $"Renderer target '{fieldName}' must be resolved {expectedFormat}; found {description.Format} " +
+                $"Renderer target '{surfaceName}' must be resolved {expectedFormat}; found {description.Format} " +
                 $"with {description.SampleDescription.Count} samples.");
         }
 

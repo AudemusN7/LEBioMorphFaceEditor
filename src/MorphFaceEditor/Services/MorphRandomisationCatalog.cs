@@ -95,6 +95,15 @@ public sealed class MorphRandomisationCatalog
         Func<string, string, bool> canResolveParameterPath)
     {
         ArgumentNullException.ThrowIfNull(canResolveParameterPath);
+        // Reuse checks only within this projection; later rolls must see changed sources.
+        var availability = new Dictionary<(string Parameter, string Path), bool>();
+        bool CanResolve(string parameter, string path)
+        {
+            var key = (parameter, path);
+            if (!availability.TryGetValue(key, out var available))
+                availability.Add(key, available = canResolveParameterPath(parameter, path));
+            return available;
+        }
         return CompatibleMaterialDonors(profileKey)
             .Select(donor => donor with
             {
@@ -103,7 +112,7 @@ public sealed class MorphRandomisationCatalog
                     {
                         family.Key,
                         Available = family.Value
-                            .Where(member => canResolveParameterPath(member.Key, member.Value))
+                            .Where(member => CanResolve(member.Key, member.Value))
                             .ToDictionary(member => member.Key, member => member.Value,
                                 StringComparer.OrdinalIgnoreCase),
                         Required = family.Value

@@ -18,7 +18,7 @@ namespace MorphFaceEditor.Rendering;
 /// <summary>Owns the D3D11 preview device, GPU resources, draw passes and deterministic readback/disposal.</summary>
 public sealed class HeadPreviewRenderer : IDisposable
 {
-    private const int MaximumBoneCount = 128;
+    private const int MaximumBoneCount = HeadPreviewSceneState.MaximumBoneCount;
     private const long MaximumGpuTextureBytes = 512L * 1024 * 1024;
     private const int DefaultShadowMapSize = 1024;
     private readonly Device _device;
@@ -60,8 +60,8 @@ public sealed class HeadPreviewRenderer : IDisposable
     private readonly SamplerState _materialSampler;
     private readonly SamplerState _postSampler;
     private readonly SampleDescription _sampleDescription;
+    private readonly HeadPreviewSceneState _sceneState;
     private readonly List<MeshBuffers> _meshes = [];
-    private readonly Dictionary<string, HeadPreviewMaterial> _materials = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, GpuTexture> _gpuTextures = new(StringComparer.OrdinalIgnoreCase);
     private int _width;
     private int _height;
@@ -116,8 +116,7 @@ public sealed class HeadPreviewRenderer : IDisposable
     private DepthStencilView _shadowDepthView = null!;
     private ShaderResourceView _shadowShaderView = null!;
     private int _shadowMapSize;
-    private int _skinningPaletteCount;
-    private System.Numerics.Matrix4x4[] _skinningPalette = [];
+    private int SkinningPaletteCount => _sceneState.SkinningPalette.Count;
     private float _shadowRadius;
     private int _textureUploadCount;
     private long _gpuTextureBytes;
@@ -125,9 +124,15 @@ public sealed class HeadPreviewRenderer : IDisposable
     private bool _disposed;
 
     public HeadPreviewRenderer(int width, int height)
+        : this(width, height, new HeadPreviewSceneState())
+    {
+    }
+
+    public HeadPreviewRenderer(int width, int height, HeadPreviewSceneState sceneState)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
+        _sceneState = sceneState ?? throw new ArgumentNullException(nameof(sceneState));
         _width = width;
         _height = height;
         try
@@ -259,6 +264,20 @@ public sealed class HeadPreviewRenderer : IDisposable
         });
         CreateRenderTargets();
         CreateShadowMap();
+        if (_sceneState.IsLoaded)
+        {
+            try
+            {
+                UploadScene();
+            }
+            catch
+            {
+                // The host cannot retain a constructor that failed. Release its
+                // GPU resources while leaving the shared scene available to retry.
+                Dispose(releaseScene: false);
+                throw;
+            }
+        }
     }
 
     public string DeviceKind => _deviceKind;
@@ -276,40 +295,29 @@ public sealed class HeadPreviewRenderer : IDisposable
         _context.ClearState();
         DisposeMeshes();
         _shadowRadius = 0;
-        _materials.Clear();
+        _sceneState.ClearScene();
         DisposeMaterialTextures();
-        _skinningPaletteCount = 0;
         _context.Flush();
     }
 
     public void SetScene(HeadPreviewScene scene)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        ArgumentNullException.ThrowIfNull(scene);
+        _sceneState.SetScene(scene);
+        UploadScene();
+    }
+
+    private void UploadScene()
+    {
         DisposeMeshes();
         _shadowRadius = 0;
-        _materials.Clear();
-        SetSkinningPalette(scene.SkinningPalette ?? []);
-        foreach (var mesh in scene.Meshes)
+        UploadSkinningPalette();
+        foreach (var mesh in _sceneState.Meshes)
         {
-            if (mesh.Vertices.Count == 0 || mesh.Indices.Count == 0)
-            {
-                continue;
-            }
-            var vertices = mesh.Vertices.Select(ToGpuVertex).ToArray();
             _meshes.Add(new MeshBuffers(
-                CreateDynamicVertexBuffer(vertices),
+                CreateDynamicVertexBuffer(mesh.Vertices),
                 Buffer.Create(_device, BindFlags.IndexBuffer, mesh.Indices.ToArray()),
-                mesh.Sections,
-                mesh.IsAttachment,
-                mesh.ApplySkinning,
-                mesh.Name,
-                vertices.Length,
-                mesh.Vertices.ToArray()));
-            foreach (var material in mesh.Sections.Select(section => section.Material))
-            {
-                _materials[material.Key] = material;
-            }
+                mesh));
         }
         // Keep reusable textures from the previous scene only while the
         // bounded LRU has room; active resources are protected from eviction.
@@ -319,38 +327,32 @@ public sealed class HeadPreviewRenderer : IDisposable
     public void UpdateMaterials(IReadOnlyDictionary<string, HeadPreviewMaterial> materials)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        ArgumentNullException.ThrowIfNull(materials);
-        foreach (var material in materials.Values)
-        {
-            _materials[material.Key] = material;
-        }
+        _sceneState.UpdateMaterials(materials);
         PruneMaterialTextures();
     }
 
-    public void UpdateMeshVertices(string meshName, IReadOnlyList<HeadPreviewVertex> vertices)
+    public void UpdateDeformation(HeadPreviewDeformationUpdate update)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        ArgumentException.ThrowIfNullOrWhiteSpace(meshName);
-        ArgumentNullException.ThrowIfNull(vertices);
-        var mesh = _meshes.SingleOrDefault(candidate => string.Equals(candidate.Name, meshName, StringComparison.Ordinal))
-            ?? throw new KeyNotFoundException($"Preview mesh '{meshName}' is not loaded.");
-        if (vertices.Count != mesh.VertexCount)
+        _sceneState.UpdateDeformation(update);
+        UploadMeshVertices(update.MeshName);
+        foreach (var attachment in update.AttachmentUpdates)
         {
-            throw new InvalidDataException($"Preview mesh '{meshName}' expects {mesh.VertexCount} vertices; received {vertices.Count}.");
+            UploadMeshVertices(attachment.MeshName);
         }
-        var cachedVertices = vertices.ToArray();
-        mesh.CachedVertices = cachedVertices;
-        WriteDynamicVertices(mesh.VertexBuffer, cachedVertices.Select(ToGpuVertex).ToArray());
+        UploadSkinningPalette();
     }
 
-    public unsafe void SetSkinningPalette(IReadOnlyList<System.Numerics.Matrix4x4> palette)
+    private void UploadMeshVertices(string meshName)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        ArgumentNullException.ThrowIfNull(palette);
-        if (palette.Count > MaximumBoneCount)
-        {
-            throw new InvalidDataException($"Skinning palette contains {palette.Count} bones; the renderer supports {MaximumBoneCount}.");
-        }
+        var mesh = _meshes.SingleOrDefault(candidate => string.Equals(candidate.Name, meshName, StringComparison.Ordinal))
+            ?? throw new KeyNotFoundException($"Preview mesh '{meshName}' is not loaded.");
+        WriteDynamicVertices(mesh.VertexBuffer, mesh.CpuMesh.Vertices);
+    }
+
+    private unsafe void UploadSkinningPalette()
+    {
+        var palette = _sceneState.SkinningPalette;
         var data = _context.MapSubresource(_skinningBuffer, 0, MapMode.WriteDiscard, MapFlags.None);
         try
         {
@@ -365,8 +367,6 @@ public sealed class HeadPreviewRenderer : IDisposable
         {
             _context.UnmapSubresource(_skinningBuffer, 0);
         }
-        _skinningPaletteCount = palette.Count;
-        _skinningPalette = palette.ToArray();
     }
 
     public void Resize(int width, int height)
@@ -453,7 +453,7 @@ public sealed class HeadPreviewRenderer : IDisposable
                 .Select(section => (
                     Mesh: mesh,
                     Section: section,
-                    Material: _materials.GetValueOrDefault(section.Material.Key, section.Material))))
+                    Material: section.Material)))
             .ToArray();
         var shadowDrawCalls = 0;
         var shadowsEnabled = options.RenderMode == HeadPreviewRenderMode.Shaded && options.ShadowsEnabled;
@@ -660,7 +660,7 @@ public sealed class HeadPreviewRenderer : IDisposable
         _context.InputAssembler.SetIndexBuffer(mesh.IndexBuffer, Format.R32_UInt, 0);
         var meshConstants = new MeshConstants
         {
-            SkinningParameters = new Vector4(mesh.ApplySkinning && _skinningPaletteCount > 0 ? 1 : 0, _skinningPaletteCount, 0, 0)
+            SkinningParameters = new Vector4(mesh.ApplySkinning && SkinningPaletteCount > 0 ? 1 : 0, SkinningPaletteCount, 0, 0)
         };
         _context.UpdateSubresource(ref meshConstants, _meshBuffer);
         var bindings = HeadPreviewMaterialBindings.Create(definition);
@@ -692,7 +692,7 @@ public sealed class HeadPreviewRenderer : IDisposable
         var min = new System.Numerics.Vector3(float.PositiveInfinity);
         var max = new System.Numerics.Vector3(float.NegativeInfinity);
         foreach (var mesh in draws.Select(draw => draw.Mesh).Distinct())
-        foreach (var vertex in mesh.CachedVertices)
+        foreach (var vertex in mesh.CpuMesh.Vertices)
         {
             var position = GetPosedPosition(mesh, vertex);
             min = System.Numerics.Vector3.Min(min, position);
@@ -709,7 +709,7 @@ public sealed class HeadPreviewRenderer : IDisposable
     {
         var radiusSquared = 0f;
         foreach (var mesh in draws.Select(draw => draw.Mesh).Distinct())
-        foreach (var vertex in mesh.CachedVertices)
+        foreach (var vertex in mesh.CpuMesh.Vertices)
         {
             radiusSquared = Math.Max(radiusSquared, System.Numerics.Vector3.DistanceSquared(GetPosedPosition(mesh, vertex), center));
         }
@@ -718,7 +718,7 @@ public sealed class HeadPreviewRenderer : IDisposable
 
     private System.Numerics.Vector3 GetPosedPosition(MeshBuffers mesh, HeadPreviewVertex vertex)
     {
-        if (!mesh.ApplySkinning || _skinningPaletteCount == 0)
+        if (!mesh.ApplySkinning || SkinningPaletteCount == 0)
         {
             return vertex.Position;
         }
@@ -737,8 +737,8 @@ public sealed class HeadPreviewRenderer : IDisposable
             var boneIndex = (int)indices[influence];
             // The GPU palette is identity-filled past its active entries.
             // Preserve that behavior for valid, unused slots here too.
-            result += boneIndex >= 0 && boneIndex < _skinningPalette.Length
-                ? System.Numerics.Vector3.Transform(vertex.Position, _skinningPalette[boneIndex]) * weight
+            result += boneIndex >= 0 && boneIndex < SkinningPaletteCount
+                ? System.Numerics.Vector3.Transform(vertex.Position, _sceneState.SkinningPalette[boneIndex]) * weight
                 : vertex.Position * weight;
             totalWeight += weight;
         }
@@ -787,8 +787,8 @@ public sealed class HeadPreviewRenderer : IDisposable
         var meshConstants = new MeshConstants
         {
             SkinningParameters = new Vector4(
-                mesh.ApplySkinning && _skinningPaletteCount > 0 ? 1 : 0,
-                _skinningPaletteCount,
+                mesh.ApplySkinning && SkinningPaletteCount > 0 ? 1 : 0,
+                SkinningPaletteCount,
                 0,
                 0)
         };
@@ -1631,11 +1631,11 @@ public sealed class HeadPreviewRenderer : IDisposable
         ResourceOptionFlags.None,
         0);
 
-    private Buffer CreateDynamicVertexBuffer(GpuVertex[] vertices)
+    private Buffer CreateDynamicVertexBuffer(IReadOnlyList<HeadPreviewVertex> vertices)
     {
         var buffer = new Buffer(
             _device,
-            checked(vertices.Length * Marshal.SizeOf<GpuVertex>()),
+            checked(vertices.Count * Marshal.SizeOf<GpuVertex>()),
             ResourceUsage.Dynamic,
             BindFlags.VertexBuffer,
             CpuAccessFlags.Write,
@@ -1645,12 +1645,16 @@ public sealed class HeadPreviewRenderer : IDisposable
         return buffer;
     }
 
-    private unsafe void WriteDynamicVertices(Buffer buffer, GpuVertex[] vertices)
+    private unsafe void WriteDynamicVertices(Buffer buffer, IReadOnlyList<HeadPreviewVertex> vertices)
     {
         var data = _context.MapSubresource(buffer, 0, MapMode.WriteDiscard, MapFlags.None);
         try
         {
-            vertices.AsSpan().CopyTo(new Span<GpuVertex>((void*)data.DataPointer, vertices.Length));
+            var destination = new Span<GpuVertex>((void*)data.DataPointer, vertices.Count);
+            for (var index = 0; index < vertices.Count; index++)
+            {
+                destination[index] = ToGpuVertex(vertices[index]);
+            }
         }
         finally
         {
@@ -1765,12 +1769,14 @@ public sealed class HeadPreviewRenderer : IDisposable
         }
     }
 
-    private HashSet<string> GetActiveTextureKeys() => _materials.Values
-        .SelectMany(material => material.Textures.Values)
-        .Select(texture => texture.Key)
-        .Concat(_materials.Values.Select(material => material.FixedCubeTexture?.Key).OfType<string>())
-        .Concat(_materials.Values.Select(material => material.SecondaryFixedCubeTexture?.Key).OfType<string>())
-        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    private HashSet<string> GetActiveTextureKeys()
+    {
+        var materials = _meshes.SelectMany(mesh => mesh.Sections).Select(section => section.Material);
+        return materials.SelectMany(material => material.Textures.Values).Select(texture => texture.Key)
+            .Concat(materials.Select(material => material.FixedCubeTexture?.Key).OfType<string>())
+            .Concat(materials.Select(material => material.SecondaryFixedCubeTexture?.Key).OfType<string>())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
 
     private void PruneMaterialTextures()
     {
@@ -1841,7 +1847,9 @@ public sealed class HeadPreviewRenderer : IDisposable
         _renderTexture.Dispose();
     }
 
-    public void Dispose()
+    public void Dispose() => Dispose(releaseScene: true);
+
+    private void Dispose(bool releaseScene)
     {
         if (_disposed)
         {
@@ -1850,6 +1858,7 @@ public sealed class HeadPreviewRenderer : IDisposable
         _context.ClearState();
         _context.Flush();
         DisposeMeshes();
+        if (releaseScene) _sceneState.ClearScene();
         DisposeMaterialTextures();
         DisposeRenderTargets();
         _gradingShaderView?.Dispose();
@@ -2033,14 +2042,12 @@ public sealed class HeadPreviewRenderer : IDisposable
     private sealed record MeshBuffers(
         Buffer VertexBuffer,
         Buffer IndexBuffer,
-        IReadOnlyList<HeadPreviewSection> Sections,
-        bool IsAttachment,
-        bool ApplySkinning,
-        string Name,
-        int VertexCount,
-        HeadPreviewVertex[] CpuVertices) : IDisposable
+        HeadPreviewSceneState.Mesh CpuMesh) : IDisposable
     {
-        public HeadPreviewVertex[] CachedVertices { get; set; } = CpuVertices;
+        public IReadOnlyList<HeadPreviewSection> Sections => CpuMesh.Sections;
+        public bool IsAttachment => CpuMesh.IsAttachment;
+        public bool ApplySkinning => CpuMesh.ApplySkinning;
+        public string Name => CpuMesh.Name;
 
         public void Dispose()
         {

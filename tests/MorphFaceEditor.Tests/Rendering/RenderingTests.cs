@@ -26,6 +26,7 @@ public static class RenderingTests
         new("custom mesh preview ignores BioMorphFace geometry and skeleton", CustomMeshIgnoresMorphFaceGeometry),
         new("detached attachments retain their native bind placement", DetachedAttachmentsRetainNativeBindPlacement),
         new("fixed-bake preview skins preserved imported geometry", FixedBakePreviewSkinsPreservedGeometry),
+        new("deferred and live scene updates match a fresh full render", SceneUpdatesMatchFreshRendering),
         new("scene publication settles with a second viewport frame", ScenePublicationSettlesWithSecondFrame),
         new("renderer rejects work after deterministic disposal", RendererRejectsWorkAfterDisposal),
         .. ShadowRenderingTests.All,
@@ -170,12 +171,14 @@ public static class RenderingTests
     private static void FixedBakePreviewSkinsPreservedGeometry()
     {
         var mesh = TestFixtures.CreateRenderableTwoLodMesh();
+        var hair = mesh with { Source = TestFixtures.CreateIdentity("Imported.Hair", "SkeletalMesh") };
+        var other = mesh with { Source = TestFixtures.CreateIdentity("Imported.Other", "SkeletalMesh") };
         var baked = mesh.Positions.Select(position => position + new Vector3(25, 0, 0)).ToArray();
         var document = new MorphFaceDocument(
             TestFixtures.CreateIdentity("Imported.PlayerFace", "BioMorphFace"),
             new PackageFingerprint(1, DateTime.UnixEpoch, new string('0', 64)),
             mesh.Source,
-            null,
+            hair.Source,
             [],
             [new BoneTranslation("root", Vector3.Zero)],
             MorphFaceMaterialOverrides.Empty,
@@ -184,9 +187,12 @@ public static class RenderingTests
         var loaded = new LoadedMorphFace(
             document,
             mesh,
-            null,
+            hair,
             ResolvedHeadMaterialSet.Empty,
-            MorphFaceEditor.Core.Diagnostics.TopologyDiagnostics.Analyze(mesh, document));
+            MorphFaceEditor.Core.Diagnostics.TopologyDiagnostics.Analyze(mesh, document))
+        {
+            OtherMeshes = [other]
+        };
         var session = new MorphFaceEditingSession(
             document,
             mesh,
@@ -194,13 +200,19 @@ public static class RenderingTests
             geometryMode: MorphFaceGeometryMode.FixedBake);
 
         session.SetBoneAxis("root", 0, 3);
-        var scene = new HeadPreviewSceneFactory().CreateEditable(loaded, session.Evaluation);
+        var factory = new HeadPreviewSceneFactory();
+        var scene = factory.CreateEditable(loaded, session.Evaluation);
+        var update = factory.CreateUpdate(loaded, session.Evaluation);
 
         TestAssert.True(scene.Meshes[0].ApplySkinning,
             "The fixed-bake preview disabled the imported mesh's verified skin weights.");
         TestAssert.Equal(baked[0], session.Evaluation.Geometry.Positions[0]);
         TestAssert.True(scene.SkinningPalette is { Count: > 0 } && scene.SkinningPalette[0] != Matrix4x4.Identity,
             "The edited fixed-bake skeleton did not reach the preview palette.");
+        AssertDeformationMatchesScene(scene, update);
+        TestAssert.Equal(new Vector3(0, 0, 3), update.AttachmentUpdates[0].Vertices[0].Position);
+        TestAssert.Equal(hair.Source.InstancedPath, update.AttachmentUpdates[0].MeshName);
+        TestAssert.Equal(other.Source.InstancedPath, update.AttachmentUpdates[1].MeshName);
     }
 
     private static void DetachedAttachmentsRetainNativeBindPlacement()
@@ -232,6 +244,31 @@ public static class RenderingTests
             scene.Meshes[0].Vertices.Select(vertex => vertex.Position)
                 .SequenceEqual(scene.Meshes[1].Vertices.Select(vertex => vertex.Position)),
             "The detached face pose displaced an attachment from its native bind geometry.");
+
+        var session = new MorphFaceEditingSession(document, mesh, [], geometryMode: MorphFaceGeometryMode.FixedBake);
+        session.SetBoneAxis("root", 0, 3);
+        var factory = new HeadPreviewSceneFactory();
+        var editable = factory.CreateEditable(loaded, session.Evaluation);
+        var update = factory.CreateUpdate(loaded, session.Evaluation);
+        AssertDeformationMatchesScene(editable, update);
+        TestAssert.True(scene.Meshes[1].Vertices.SequenceEqual(update.AttachmentUpdates[0].Vertices),
+            "An incremental face edit displaced the detached attachment from its native bind geometry.");
+    }
+
+    private static void AssertDeformationMatchesScene(HeadPreviewScene scene, HeadPreviewDeformationUpdate update)
+    {
+        TestAssert.Equal(scene.Meshes[0].Name, update.MeshName);
+        TestAssert.True(scene.Meshes[0].Vertices.SequenceEqual(update.Vertices),
+            "Incremental head vertices differ from the full editable scene.");
+        TestAssert.True(scene.SkinningPalette!.SequenceEqual(update.SkinningPalette),
+            "Incremental skinning differs from the full editable scene.");
+        TestAssert.Equal(scene.Meshes.Count - 1, update.AttachmentUpdates.Count);
+        for (var index = 0; index < update.AttachmentUpdates.Count; index++)
+        {
+            TestAssert.Equal(scene.Meshes[index + 1].Name, update.AttachmentUpdates[index].MeshName);
+            TestAssert.True(scene.Meshes[index + 1].Vertices.SequenceEqual(update.AttachmentUpdates[index].Vertices),
+                "Incremental attachment vertices differ from the full editable scene.");
+        }
     }
 
     private static void SceneFactoryHandlesUnmatchedBakedLod()
@@ -359,6 +396,103 @@ public static class RenderingTests
         TestAssert.Equal(1, renderer.DeviceCreationCount);
     }
 
+    private static void SceneUpdatesMatchFreshRendering()
+    {
+        var initial = CreateScene(0);
+        var camera = new HeadOrbitCamera();
+        camera.Fit(initial.Bounds);
+        var options = new HeadPreviewOptions(
+            AmbientOcclusionEnabled: false, ShadowsEnabled: true, PostProcessingEnabled: false);
+        using var fresh = new HeadPreviewRenderer(128, 128);
+        fresh.SetScene(initial);
+        var initialPixels = fresh.Render(camera, options, animationTimeSeconds: 2.5f).BgraPixels;
+
+        var state = new HeadPreviewSceneState();
+        state.SetScene(initial);
+        var deferred = CreateScene(1);
+        state.UpdateDeformation(Deformation(deferred));
+        state.UpdateMaterials(Materials(deferred));
+        using var renderer = new HeadPreviewRenderer(128, 128, state);
+        var deferredPixels = AssertMatchesFresh(deferred);
+        TestAssert.True(!initialPixels.SequenceEqual(deferredPixels),
+            "The deferred geometry, palette and material edits did not change the rendered fixture.");
+
+        var live = CreateScene(2);
+        renderer.UpdateDeformation(Deformation(live));
+        renderer.UpdateMaterials(Materials(live));
+        var livePixels = AssertMatchesFresh(live);
+        TestAssert.True(!deferredPixels.SequenceEqual(livePixels),
+            "The live geometry, palette and material edits did not change the rendered fixture.");
+
+        var rejected = false;
+        try
+        {
+            renderer.UpdateDeformation(Deformation(initial) with
+            {
+                AttachmentUpdates = [new HeadPreviewMeshVertexUpdate(live.Meshes[1].Name, [])]
+            });
+        }
+        catch (InvalidDataException)
+        {
+            rejected = true;
+        }
+        TestAssert.True(rejected, "A mixed update with invalid attachment geometry was accepted.");
+        TestAssert.True(livePixels.SequenceEqual(renderer.Render(camera, options, animationTimeSeconds: 2.5f).BgraPixels),
+            "A rejected attachment update partly changed the displayed head or skinning palette.");
+
+        var attachmentMaterial = live.Meshes[1].Sections[0].Material;
+        renderer.UpdateMaterials(new Dictionary<string, HeadPreviewMaterial>
+        {
+            [attachmentMaterial.Key] = attachmentMaterial with { PreviewModel = HumanMaterialPreviewModel.VisorLens }
+        });
+        TestAssert.True(state.HasAnimatedMaterials, "A live lens material did not update scene animation scheduling.");
+        renderer.UpdateMaterials(Materials(live));
+        TestAssert.True(!state.HasAnimatedMaterials, "Replacing a lens left the scene requesting animation.");
+
+        byte[] AssertMatchesFresh(HeadPreviewScene scene)
+        {
+            fresh.SetScene(scene);
+            var expected = fresh.Render(camera, options, animationTimeSeconds: 2.5f);
+            var actual = renderer.Render(camera, options, animationTimeSeconds: 2.5f);
+            TestAssert.Equal(2, actual.ShadowDrawCalls);
+            TestAssert.True(expected.BgraPixels.SequenceEqual(actual.BgraPixels),
+                "Incremental scene state rendered differently from independently loaded full geometry and materials.");
+            return actual.BgraPixels;
+        }
+
+        static HeadPreviewDeformationUpdate Deformation(HeadPreviewScene scene) => new(
+            scene.Meshes[0].Name, scene.Meshes[0].Vertices, scene.SkinningPalette!)
+        {
+            AttachmentUpdates = [new HeadPreviewMeshVertexUpdate(scene.Meshes[1].Name, scene.Meshes[1].Vertices)]
+        };
+
+        static Dictionary<string, HeadPreviewMaterial> Materials(HeadPreviewScene scene) =>
+            scene.Meshes.SelectMany(mesh => mesh.Sections).Select(section => section.Material)
+                .ToDictionary(material => material.Key, StringComparer.OrdinalIgnoreCase);
+
+        static HeadPreviewScene CreateScene(int stage)
+        {
+            var head = CreateQuadMesh("updated-head", -1 + stage * 0.05f, -1, 1, 1 - stage * 0.08f, 0,
+                Material("updated-head-material", stage, (byte)(180 - stage * 40), 170, 150)) with { ApplySkinning = true };
+            var attachment = CreateQuadMesh("updated-attachment", -0.65f + stage * 0.18f, 0.05f,
+                -0.15f + stage * 0.18f, 0.55f, 0.35f + stage * 0.05f,
+                Material("updated-attachment-material", stage, 140, (byte)(180 - stage * 40), 200)) with { IsAttachment = true };
+            return new HeadPreviewScene("Updated synthetic scene", [head, attachment],
+                new HeadPreviewBounds(new Vector3(-1.2f, -1.2f, -0.05f), new Vector3(1.2f, 1.2f, 0.5f)),
+                [Matrix4x4.CreateTranslation(stage * 0.08f, -stage * 0.05f, 0)]);
+        }
+
+        static HeadPreviewMaterial Material(string key, int stage, byte red, byte green, byte blue) =>
+            new(key, HeadMaterialFamily.Skin)
+            {
+                Textures = new Dictionary<string, HeadPreviewTexture>
+                {
+                    ["HED_Diff"] = new($"{key}-{stage}", "HED_Diff", 1, 1, [red, green, blue, 255],
+                        TextureRole.Diffuse, TextureColorSpace.Srgb, TextureAlphaPolicy.Ignore, false)
+                }
+            };
+    }
+
     private static void ScenePublicationSettlesWithSecondFrame()
     {
         Exception? failure = null;
@@ -379,19 +513,58 @@ public static class RenderingTests
                     WindowStyle = System.Windows.WindowStyle.None,
                     Content = host
                 };
-                window.Show();
-                PumpDispatcher();
-
                 using var controller = new HeadPreviewHostController(window, host, image);
-                controller.SetScene(CreateTriangleScene());
+                var scene = CreateTriangleScene();
+                var material = scene.Meshes[0].Sections[0].Material with
+                {
+                    Textures = new Dictionary<string, HeadPreviewTexture>
+                    {
+                        ["HED_Diff"] = new("deferred-host-diffuse", "HED_Diff", 1, 1, [50, 110, 220, 255],
+                            TextureRole.Diffuse, TextureColorSpace.Srgb, TextureAlphaPolicy.Ignore, false)
+                    }
+                };
+                var deferredScene = scene with
+                {
+                    Meshes = [scene.Meshes[0] with
+                    {
+                        Vertices = scene.Meshes[0].Vertices.Select(vertex => vertex with
+                        {
+                            Position = vertex.Position + new Vector3(0.15f, 0.1f, 0)
+                        }).ToArray(),
+                        Sections = [new HeadPreviewSection(0, 3, 0, material)]
+                    }]
+                };
+                controller.SetScene(scene);
+                controller.UpdateDeformation(new HeadPreviewDeformationUpdate(
+                    deferredScene.Meshes[0].Name, deferredScene.Meshes[0].Vertices, []));
+                controller.UpdateMaterials(new HeadPreviewMaterialUpdate(
+                    new Dictionary<string, HeadPreviewMaterial> { [material.Key] = material }));
+                TestAssert.Equal(0, controller.Diagnostics.RendererCreations);
+                TestAssert.Equal(0L, controller.Diagnostics.FramesRendered);
+                window.Show();
+                controller.RequestRender(allowInactive: true);
                 for (var index = 0; index < 8 && controller.Diagnostics.FramesRendered < 2; index++)
                 {
                     PumpDispatcher();
                 }
 
-                TestAssert.Equal(2L, controller.Diagnostics.FramesRendered);
+                // First visibility/activation can request another lifecycle frame.
+                // The already-visible scene replacements below still require exactly two.
+                TestAssert.True(controller.Diagnostics.FramesRendered >= 2,
+                    "The deferred scene publication did not receive its settling frame.");
                 TestAssert.True(image.Source is System.Windows.Media.Imaging.WriteableBitmap,
                     "The settled frame was not presented to the WPF image.");
+                var bitmap = (System.Windows.Media.Imaging.WriteableBitmap)image.Source;
+                var displayedPixels = new byte[bitmap.PixelWidth * bitmap.PixelHeight * 4];
+                bitmap.CopyPixels(displayedPixels, bitmap.PixelWidth * 4, 0);
+                using (var fresh = new HeadPreviewRenderer(bitmap.PixelWidth, bitmap.PixelHeight))
+                {
+                    fresh.SetScene(deferredScene);
+                    fresh.Render(controller.Camera, new HeadPreviewOptions());
+                    var expected = fresh.Render(controller.Camera, new HeadPreviewOptions()).BgraPixels;
+                    TestAssert.True(expected.SequenceEqual(displayedPixels),
+                        "The first published WPF scene lost geometry or material updates made before renderer creation.");
+                }
                 TestAssert.Near(DxMathUtil.DegreesToRadians(32), controller.Camera.Yaw, 1e-6f);
                 TestAssert.Near(DxMathUtil.DegreesToRadians(4), controller.Camera.Pitch, 1e-6f);
                 for (var load = 0; load < 3; load++)

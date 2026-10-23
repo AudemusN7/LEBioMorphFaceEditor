@@ -48,14 +48,16 @@ public static class HumanHeadShadowTests
 
         const float extremeScale = 4f;
         var center = scene.Bounds.Center;
-        foreach (var mesh in renderableMeshes)
-        {
-            var expanded = mesh.Vertices.Select(vertex => vertex with
+        var expanded = renderableMeshes.Select(mesh => new HeadPreviewMeshVertexUpdate(mesh.Name,
+            mesh.Vertices.Select(vertex => vertex with
             {
                 Position = center + (vertex.Position - center) * extremeScale
-            }).ToArray();
-            renderer.UpdateMeshVertices(mesh.Name, expanded);
-        }
+            }).ToArray())).ToArray();
+        renderer.UpdateDeformation(new HeadPreviewDeformationUpdate(
+            expanded[0].MeshName, expanded[0].Vertices, scene.SkinningPalette ?? [])
+        {
+            AttachmentUpdates = expanded[1..]
+        });
         _ = renderer.Render(camera, options, animationTimeSeconds: 0f);
         var expandedRadius = ReadShadowRadius(renderer);
         TestAssert.True(expandedRadius > initialRadius * 2,
@@ -63,10 +65,12 @@ public static class HumanHeadShadowTests
 
         // This is the exact same vertex data the renderer received initially,
         // matching an edit followed by undo from the preview's point of view.
-        foreach (var mesh in renderableMeshes)
+        renderer.UpdateDeformation(new HeadPreviewDeformationUpdate(
+            renderableMeshes[0].Name, renderableMeshes[0].Vertices, scene.SkinningPalette ?? [])
         {
-            renderer.UpdateMeshVertices(mesh.Name, mesh.Vertices);
-        }
+            AttachmentUpdates = renderableMeshes.Skip(1)
+                .Select(mesh => new HeadPreviewMeshVertexUpdate(mesh.Name, mesh.Vertices)).ToArray()
+        });
         var restored = renderer.Render(camera, options, animationTimeSeconds: 0f);
         var restoredRadius = ReadShadowRadius(renderer);
         TestAssert.True(restored.ShadowDrawCalls > 0, "Restoring the HMF geometry disabled its shadow casters.");

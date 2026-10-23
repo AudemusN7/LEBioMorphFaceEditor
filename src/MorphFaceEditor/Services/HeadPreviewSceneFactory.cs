@@ -77,18 +77,14 @@ public sealed class HeadPreviewSceneFactory
         {
             throw new InvalidDataException($"The editable face has no evaluated LOD {lodIndex}.");
         }
-        var mesh = CreateMesh(
+        var vertices = CreateVertices(
             loaded.BaseHead,
             RequireLod(loaded.BaseHead, lodIndex),
             geometry.Positions,
-            geometry.Normals,
-            loaded.Materials,
-            attachment: false,
-            applySkinning: true,
-            game: loaded.Game);
+            geometry.Normals);
         return new HeadPreviewDeformationUpdate(
-            mesh.Name,
-            mesh.Vertices,
+            loaded.BaseHead.Source.InstancedPath,
+            vertices,
             ConvertPalette(evaluation.Pose.SkinningMatrices))
         {
             AttachmentUpdates = EnumerateAttachments(loaded)
@@ -99,16 +95,12 @@ public sealed class HeadPreviewSceneFactory
                         attachment,
                         attachmentLod,
                         AttachmentPose(loaded, evaluation.FinalSkeleton));
-                    var attachmentMesh = CreateMesh(
+                    var attachmentVertices = CreateVertices(
                         attachment,
                         attachmentLod,
                         deformed.Positions,
-                        deformed.Normals,
-                        loaded.Materials,
-                        attachment: true,
-                        applySkinning: false,
-                        game: loaded.Game);
-                    return new HeadPreviewMeshVertexUpdate(attachmentMesh.Name, attachmentMesh.Vertices);
+                        deformed.Normals);
+                    return new HeadPreviewMeshVertexUpdate(attachment.Source.InstancedPath, attachmentVertices);
                 })
                 .ToArray()
         };
@@ -147,32 +139,15 @@ public sealed class HeadPreviewSceneFactory
             CreateMesh(loaded.BaseHead, RequireLod(loaded.BaseHead, lodIndex), positions, normals, loaded.Materials, attachment: false, applySkinning: applySkinning,
                 game: loaded.Game)
         };
-        if (loaded.HairMesh is not null)
+        foreach (var attachment in EnumerateAttachments(loaded))
         {
-            var attachmentLod = SelectLod(loaded.HairMesh, lodIndex);
+            var attachmentLod = SelectLod(attachment, lodIndex);
             var deformed = SkinAttachment(
-                loaded.HairMesh,
+                attachment,
                 attachmentLod,
                 AttachmentPose(loaded, finalSkeleton));
             meshes.Add(CreateMesh(
-                loaded.HairMesh,
-                attachmentLod,
-                deformed.Positions,
-                deformed.Normals,
-                loaded.Materials,
-                attachment: true,
-                applySkinning: false,
-                game: loaded.Game));
-        }
-        foreach (var otherMesh in loaded.OtherMeshes)
-        {
-            var attachmentLod = SelectLod(otherMesh, lodIndex);
-            var deformed = SkinAttachment(
-                otherMesh,
-                attachmentLod,
-                AttachmentPose(loaded, finalSkeleton));
-            meshes.Add(CreateMesh(
-                otherMesh,
+                attachment,
                 attachmentLod,
                 deformed.Positions,
                 deformed.Normals,
@@ -265,31 +240,7 @@ public sealed class HeadPreviewSceneFactory
         MorphFaceGame game)
     {
         var renderData = lod.RenderData!;
-        if (positions.Count != lod.Topology.VertexCount || normals.Count != lod.Topology.VertexCount)
-        {
-            throw new InvalidDataException(
-                $"Mesh '{source.Source.InstancedPath}' LOD {lod.LodIndex} has {lod.Topology.VertexCount} vertices but received {positions.Count} positions and {normals.Count} normals.");
-        }
-
-        var vertices = new HeadPreviewVertex[lod.Topology.VertexCount];
-        for (var index = 0; index < vertices.Length; index++)
-        {
-            var boneIndices = renderData.BoneIndices[index];
-            var previewNormal = ConvertDirection(normals[index]);
-            var previewTangent = SkeletalMeshTangentBasis.Orthogonalize(
-                ConvertTangent(renderData.Tangents[index]),
-                previewNormal);
-            vertices[index] = new HeadPreviewVertex(
-                ConvertPosition(positions[index]),
-                previewNormal,
-                previewTangent,
-                renderData.TextureCoordinates[index],
-                checked((uint)Math.Max(boneIndices.X, 0)),
-                checked((uint)Math.Max(boneIndices.Y, 0)),
-                checked((uint)Math.Max(boneIndices.Z, 0)),
-                checked((uint)Math.Max(boneIndices.W, 0)),
-                renderData.BoneWeights[index]);
-        }
+        var vertices = CreateVertices(source, lod, positions, normals);
 
         var sections = lod.Topology.Sections.Select(section =>
         {
@@ -317,6 +268,42 @@ public sealed class HeadPreviewSceneFactory
             sections,
             attachment,
             applySkinning);
+    }
+
+    private static HeadPreviewVertex[] CreateVertices(
+        SkeletalMeshAsset source,
+        SkeletalMeshLod lod,
+        IReadOnlyList<Vector3> positions,
+        IReadOnlyList<Vector3> normals)
+    {
+        var renderData = lod.RenderData!;
+        if (positions.Count != lod.Topology.VertexCount || normals.Count != lod.Topology.VertexCount)
+        {
+            throw new InvalidDataException(
+                $"Mesh '{source.Source.InstancedPath}' LOD {lod.LodIndex} has {lod.Topology.VertexCount} vertices but received {positions.Count} positions and {normals.Count} normals.");
+        }
+
+        var vertices = new HeadPreviewVertex[lod.Topology.VertexCount];
+        for (var index = 0; index < vertices.Length; index++)
+        {
+            var boneIndices = renderData.BoneIndices[index];
+            var previewNormal = ConvertDirection(normals[index]);
+            var previewTangent = SkeletalMeshTangentBasis.Orthogonalize(
+                ConvertTangent(renderData.Tangents[index]),
+                previewNormal);
+            vertices[index] = new HeadPreviewVertex(
+                ConvertPosition(positions[index]),
+                previewNormal,
+                previewTangent,
+                renderData.TextureCoordinates[index],
+                checked((uint)Math.Max(boneIndices.X, 0)),
+                checked((uint)Math.Max(boneIndices.Y, 0)),
+                checked((uint)Math.Max(boneIndices.Z, 0)),
+                checked((uint)Math.Max(boneIndices.W, 0)),
+                renderData.BoneWeights[index]);
+        }
+
+        return vertices;
     }
 
     private static SkeletalMeshLod RequireLod(SkeletalMeshAsset mesh, int lodIndex) =>

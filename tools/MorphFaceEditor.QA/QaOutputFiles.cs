@@ -39,4 +39,17 @@ internal static class QaOutputFiles
         QaContext.Require(results.Length == 1, "Audit directory must contain exactly one run results file.");
         return results[0];
     }
+
+    public static IReadOnlyList<QaResult> ReadArtifactOwners(string directory)
+    {
+        using var document = JsonDocument.Parse(File.ReadAllText(FindResults(directory)));
+        return document.RootElement.GetProperty("Results").EnumerateArray().Select(item =>
+        {
+            var id = item.GetProperty("Id").GetString()!;
+            var result = new QaResult(id, id);
+            result.Artifacts.AddRange(item.GetProperty("Artifacts").EnumerateArray()
+                .Select(artifact => artifact.GetString()!));
+            return result;
+        }).ToArray();
+    }
 }

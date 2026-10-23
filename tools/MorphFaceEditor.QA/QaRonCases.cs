@@ -114,8 +114,23 @@ internal static partial class QaCases
         QaContext.Require(MaterialSignature(ToHead(initial).MaterialData) != MaterialSignature(ToHead(beforeImport).MaterialData),
             "RON restoration setup did not perturb any material value.");
         dialogs.ImportPath = dialogs.RonExportPath;
-        await c.Measure("Import RON command", () => Execute(morphOnly ? vm.ImportMorphFeaturesRonCommand : vm.ImportMorphFaceRonCommand), QaStageKind.FileTransfer);
+        var editorBeforeImport = vm.Editor;
+        var importStageIndex = c.Current.Stages.Count;
+        var importPurpose = morphOnly ? "Import RON command" : "Import RON command · route unconfirmed";
+        if (!morphOnly) c.Current.Evidence["ronImportRoute"] = "unconfirmed";
+        await c.Measure(importPurpose, () => Execute(morphOnly ? vm.ImportMorphFeaturesRonCommand : vm.ImportMorphFaceRonCommand), QaStageKind.FileTransfer);
         CheckVm(vm);
+        var packageReplacement = !morphOnly && !ReferenceEquals(editorBeforeImport, vm.Editor);
+        if (!morphOnly)
+        {
+            c.Current.Evidence["ronImportRoute"] = packageReplacement ? "package replacement" : "matching live edit";
+            var stage = c.Current.Stages[importStageIndex];
+            c.Current.Stages[importStageIndex] = stage with
+            {
+                Name = stage.Name.Replace(importPurpose, "Import RON command" +
+                    (packageReplacement ? " · package replacement" : ""), StringComparison.Ordinal)
+            };
+        }
         var imported = vm.Editor!.CreateDraft();
         if (morphOnly)
         {
@@ -126,6 +141,19 @@ internal static partial class QaCases
                 "Restoring exported feature values did not restore their evaluated bone positions.");
             AssertMaterials(beforeImport, imported);
         }
+        else if (packageReplacement)
+        {
+            // Replacement preserves the file's authored bake. The original evaluated
+            // preview can differ by float rounding, so it is not the file oracle.
+            RequireHead(head, ReadPackageHead(imported.Source.PackagePath, vm.SelectedFace!.InstancedPath),
+                "Full RON package replacement");
+            // Editor controls order maps by profile; the raw replacement above must
+            // retain authored order, while its draft must retain every name and value.
+            var differences = QaHeadPayload.GeometryDifferences(head.MorphData, ToHead(imported).MorphData,
+                compareNameOrder: false);
+            QaContext.Require(differences.Count == 0, "Full RON replacement draft: " + string.Join("; ", differences));
+            AssertMaterials(initial, imported);
+        }
         else
         {
             // Matching imports are live edits. The RON owns the bone list; the initial
@@ -134,7 +162,7 @@ internal static partial class QaCases
             AssertMaterials(initial, imported);
         }
         AssertAttachments(initial, imported);
-        var expectedSaved = ToHead(imported);
+        var expectedSaved = packageReplacement ? head : ToHead(imported);
         // A full import marks the workspace dirty even when values match its original file.
         await c.Measure("Save imported RON", () => Execute(vm.SaveCommand), QaStageKind.FileTransfer);
         CheckVm(vm);

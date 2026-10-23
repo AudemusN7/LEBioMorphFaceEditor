@@ -14,12 +14,20 @@ internal static class QaPerformance
     public static bool Exceeded(QaStageKind kind, double milliseconds) =>
         Limit(kind) is { } limit && milliseconds > limit;
 
-    public static void ApplyWarnings(QaResult result)
+    public static double? FailureLimit(QaStageKind kind) => Limit(kind) * 3;
+
+    public static void ApplyOutcomes(QaResult result)
     {
-        var slow = result.Stages.Where(stage => stage.ExceededLimit).ToArray();
-        if (slow.Length == 0) return;
-        foreach (var stage in slow)
+        result.PerformanceWarnings.Clear();
+        result.PerformanceFailures.Clear();
+        foreach (var stage in result.Stages.Where(stage => stage.ExceededLimit && !stage.ExceededFailureLimit))
             result.PerformanceWarnings.Add($"{stage.Name}: {stage.DurationMs:F1} ms (limit {stage.LimitMs:F0} ms).");
-        if (result.Status == "passed") result.Status = "warning";
+        foreach (var stage in result.Stages.Where(stage => stage.ExceededFailureLimit))
+            result.PerformanceFailures.Add($"{stage.Name}: {stage.DurationMs:F1} ms " +
+                $"(failure limit {stage.FailureLimitMs:F0} ms; warning limit {stage.LimitMs:F0} ms).");
+        if (result.PerformanceFailures.Count > 0 && result.Status is ("passed" or "warning"))
+            result.Status = "failed";
+        else if (result.PerformanceWarnings.Count > 0 && result.Status == "passed")
+            result.Status = "warning";
     }
 }

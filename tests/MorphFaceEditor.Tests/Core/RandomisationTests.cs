@@ -86,14 +86,23 @@ public static class RandomisationTests
                 {
                     ["HED_Diff"] = "Installed.Face_Diff",
                     ["HED_Norm"] = "Missing.Face_Norm"
+                },
+                ["parameter-a"] = new Dictionary<string, string>
+                {
+                    ["Parameter_A"] = "Shared.Instanced"
+                },
+                ["parameter-b"] = new Dictionary<string, string>
+                {
+                    ["Parameter_B"] = "Shared.Instanced"
                 }
             }
         };
+        var secondDonor = donor with { Id = "LE3.HMM.Registry.Second" };
         var corpus = new MorphRandomisationCorpus(
             MorphRandomisationCorpus.CurrentFormatVersion,
             new Dictionary<MorphRandomisationPoolKey, IReadOnlyList<MorphRandomisationDonor>>
             {
-                [MorphRandomisationPoolKey.HumanMaleLe3] = [donor]
+                [MorphRandomisationPoolKey.HumanMaleLe3] = [donor, secondDonor]
             })
         {
             MaterialProfiles = new Dictionary<string, MaterialRandomisationProfile>(StringComparer.OrdinalIgnoreCase)
@@ -110,18 +119,38 @@ public static class RandomisationTests
         {
             ("HED_Scalp_Diff", "Installed.Scalp_Diff"),
             ("HED_Scalp_Norm", "Installed.Scalp_Norm"),
-            ("HED_Diff", "Installed.Face_Diff")
+            ("HED_Diff", "Installed.Face_Diff"),
+            ("Parameter_A", "Shared.Instanced")
         };
+        var resolverCalls = new Dictionary<(string Parameter, string Path), int>();
 
-        var projected = catalog.ProjectInstalledMaterialDonors(
-            "le3-human-male", (parameter, path) => available.Contains((parameter, path))).Single();
+        var projected = catalog.ProjectInstalledMaterialDonors("le3-human-male", (parameter, path) =>
+        {
+            var key = (parameter, path);
+            resolverCalls[key] = resolverCalls.GetValueOrDefault(key) + 1;
+            return available.Contains(key);
+        }).ToArray();
 
-        TestAssert.True(projected.MaterialTextureFamilies.ContainsKey("human-scalp"),
+        TestAssert.Equal("LE3.HMM.Registry|LE3.HMM.Registry.Second",
+            string.Join('|', projected.Select(value => value.Id)));
+        TestAssert.Equal(1, resolverCalls[("HED_Scalp_Diff", "Installed.Scalp_Diff")]);
+        TestAssert.True(projected[0].MaterialTextureFamilies.ContainsKey("human-scalp"),
             "A family with both required installed members was removed because an optional member was unavailable.");
-        TestAssert.True(!projected.MaterialTextureFamilies["human-scalp"].ContainsKey("HED_Scalp_Spec"),
+        TestAssert.Equal("Installed.Scalp_Diff",
+            projected[1].MaterialTextureFamilies["human-scalp"]["HED_Scalp_Diff"]);
+        TestAssert.True(!projected[0].MaterialTextureFamilies["human-scalp"].ContainsKey("HED_Scalp_Spec"),
             "An unavailable optional member remained in the installed family projection.");
-        TestAssert.True(!projected.MaterialTextureFamilies.ContainsKey("human-face"),
+        TestAssert.True(projected[0].MaterialTextureFamilies.ContainsKey("parameter-a") &&
+                        !projected[0].MaterialTextureFamilies.ContainsKey("parameter-b"),
+            "The same installed path was not resolved independently for each material parameter.");
+        TestAssert.True(!projected[0].MaterialTextureFamilies.ContainsKey("human-face"),
             "A family missing a required normal map remained eligible for randomisation.");
+
+        available.Remove(("HED_Scalp_Diff", "Installed.Scalp_Diff"));
+        var refreshed = catalog.ProjectInstalledMaterialDonors(
+            "le3-human-male", (parameter, path) => available.Contains((parameter, path)));
+        TestAssert.True(!refreshed[0].MaterialTextureFamilies.ContainsKey("human-scalp"),
+            "A later projection reused source availability from the previous call.");
     }
 
     private static void MaterialSeedUsesInstalledProjection()

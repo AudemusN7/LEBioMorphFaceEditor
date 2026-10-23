@@ -15,7 +15,6 @@ public sealed class HeadPreviewHostController : IDisposable
     private readonly Window _window;
     private readonly FrameworkElement _host;
     private readonly Image _image;
-    private readonly DispatcherTimer _resizeTimer;
     private readonly DispatcherTimer _animationTimer;
     private readonly HeadOrbitCamera _camera = new();
     private readonly HeadPreviewSceneState _scene = new();
@@ -37,11 +36,6 @@ public sealed class HeadPreviewHostController : IDisposable
         _window = window;
         _host = host;
         _image = image;
-        _resizeTimer = new DispatcherTimer(DispatcherPriority.Background, window.Dispatcher)
-        {
-            Interval = TimeSpan.FromMilliseconds(150)
-        };
-        _resizeTimer.Tick += OnResizeTimerTick;
         _animationTimer = new DispatcherTimer(DispatcherPriority.Background, window.Dispatcher)
         {
             Interval = TimeSpan.FromSeconds(1.0 / 30)
@@ -96,7 +90,6 @@ public sealed class HeadPreviewHostController : IDisposable
     public void ClearScene()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        _resizeTimer.Stop();
         _animationTimer.Stop();
         if (_renderer is not null) _renderer.ClearScene();
         else _scene.ClearScene();
@@ -270,13 +263,8 @@ public sealed class HeadPreviewHostController : IDisposable
             return;
         }
         UpdateAnimationTimer();
-        _resizeTimer.Stop();
-        _resizeTimer.Start();
-    }
-
-    private void OnResizeTimerTick(object? sender, EventArgs e)
-    {
-        _resizeTimer.Stop();
+        // Coalesce with camera/content requests and read the latest pixel size
+        // when rendering, so a continuous resize keeps publishing fresh frames.
         RequestRender();
     }
 
@@ -312,10 +300,8 @@ public sealed class HeadPreviewHostController : IDisposable
             return;
         }
         _disposed = true;
-        _resizeTimer.Stop();
         _animationTimer.Stop();
         _animationTimer.Tick -= OnAnimationTimerTick;
-        _resizeTimer.Tick -= OnResizeTimerTick;
         _window.Activated -= OnWindowActivityChanged;
         _window.Deactivated -= OnWindowActivityChanged;
         _window.StateChanged -= OnWindowActivityChanged;

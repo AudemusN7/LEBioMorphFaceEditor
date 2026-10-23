@@ -1,6 +1,4 @@
 using System.Diagnostics;
-using System.IO;
-using System.Reflection;
 using System.Runtime.InteropServices;
 using MorphFaceEditor.Core.Materials;
 using SharpDX;
@@ -19,7 +17,6 @@ namespace MorphFaceEditor.Rendering;
 public sealed class HeadPreviewRenderer : IDisposable
 {
     private const int MaximumBoneCount = HeadPreviewSceneState.MaximumBoneCount;
-    private const long MaximumGpuTextureBytes = 512L * 1024 * 1024;
     private const int DefaultShadowMapSize = 1024;
     private readonly Device _device;
     private readonly DeviceContext _context;
@@ -44,7 +41,6 @@ public sealed class HeadPreviewRenderer : IDisposable
     private readonly Buffer _postProcessBuffer;
     private readonly Buffer _shadowBuffer;
     private readonly RasterizerState _solidRasterizer;
-    private readonly RasterizerState _shadowRasterizer;
     private readonly RasterizerState _wireframeRasterizer;
     private readonly RasterizerState _solidBackFacesRasterizer;
     private readonly RasterizerState _solidFrontFacesRasterizer;
@@ -52,7 +48,6 @@ public sealed class HeadPreviewRenderer : IDisposable
     private readonly RasterizerState _wireframeFrontFacesRasterizer;
     private readonly DepthStencilState _depthState;
     private readonly DepthStencilState _depthReadState;
-    private readonly DepthStencilState _shadowDepthState;
     private readonly BlendState _opaqueBlendState;
     private readonly BlendState _translucentBlendState;
     private readonly BlendState _additiveBlendState;
@@ -62,65 +57,16 @@ public sealed class HeadPreviewRenderer : IDisposable
     private readonly SampleDescription _sampleDescription;
     private readonly HeadPreviewSceneState _sceneState;
     private readonly List<MeshBuffers> _meshes = [];
-    private readonly Dictionary<string, GpuTexture> _gpuTextures = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HeadPreviewTextureCache _textureCache;
     private int _width;
     private int _height;
-    private Texture2D _renderTexture = null!;
-    private RenderTargetView _renderTarget = null!;
-    private Texture2D _normalTexture = null!;
-    private RenderTargetView _normalTarget = null!;
-    private Texture2D _opaquePlaneTexture = null!;
-    private RenderTargetView _opaquePlaneTarget = null!;
-    private ShaderResourceView _opaquePlaneShaderView = null!;
-    private Texture2D _ambientDiffuseTexture = null!;
-    private RenderTargetView _ambientDiffuseTarget = null!;
-    private Texture2D _aoNormalTexture = null!;
-    private ShaderResourceView _aoNormalShaderView = null!;
-    private Texture2D _depthTexture = null!;
-    private DepthStencilView _depthView = null!;
-    private ShaderResourceView _depthShaderView = null!;
-    private Texture2D _aoDepthTexture = null!;
-    private ShaderResourceView _aoDepthShaderView = null!;
-    private Texture2D _resolvedTexture = null!;
-    private ShaderResourceView _resolvedShaderView = null!;
-    private Texture2D _resolvedAmbientTexture = null!;
-    private ShaderResourceView _resolvedAmbientShaderView = null!;
-    private Texture2D _aoSurfaceTexture = null!;
-    private RenderTargetView _aoSurfaceTarget = null!;
-    private ShaderResourceView _aoSurfaceShaderView = null!;
-    private Texture2D _aoReceiverPlaneTexture = null!;
-    private RenderTargetView _aoReceiverPlaneTarget = null!;
-    private ShaderResourceView _aoReceiverPlaneShaderView = null!;
-    private Texture2D _aoVisibilityTexture = null!;
-    private RenderTargetView _aoVisibilityTarget = null!;
-    private ShaderResourceView _aoVisibilityShaderView = null!;
-    private Texture2D _aoScratchTexture = null!;
-    private RenderTargetView _aoScratchTarget = null!;
-    private ShaderResourceView _aoScratchShaderView = null!;
-    private Texture2D _aoCompositedTexture = null!;
-    private RenderTargetView _aoCompositedTarget = null!;
-    private ShaderResourceView _aoCompositedShaderView = null!;
-    private Texture2D _postTexture = null!;
-    private RenderTargetView _postTarget = null!;
-    private Texture2D _stagingTexture = null!;
-    private Texture2D _bloomTexture = null!;
-    private RenderTargetView _bloomTarget = null!;
-    private ShaderResourceView _bloomShaderView = null!;
-    private Texture2D _bloomScratchTexture = null!;
-    private RenderTargetView _bloomScratchTarget = null!;
-    private ShaderResourceView _bloomScratchShaderView = null!;
-    private Texture2D? _gradingTexture;
-    private ShaderResourceView? _gradingShaderView;
+    private HeadPreviewRenderTargets _targets = null!;
+    private HeadPreviewSurface? _gradingLut;
     private HeadPreviewPostProcessSettings? _gradingSettings;
-    private Texture2D _shadowTexture = null!;
-    private DepthStencilView _shadowDepthView = null!;
-    private ShaderResourceView _shadowShaderView = null!;
-    private int _shadowMapSize;
+    private HeadPreviewSurface _shadowMap = null!;
+
     private int SkinningPaletteCount => _sceneState.SkinningPalette.Count;
     private float _shadowRadius;
-    private int _textureUploadCount;
-    private long _gpuTextureBytes;
-    private long _textureUseSerial;
     private bool _disposed;
 
     public HeadPreviewRenderer(int width, int height)
@@ -137,155 +83,145 @@ public sealed class HeadPreviewRenderer : IDisposable
         _height = height;
         try
         {
-            _device = new Device(DriverType.Hardware, DeviceCreationFlags.BgraSupport);
-            _deviceKind = "Hardware";
-        }
-        catch (SharpDXException)
-        {
-            _device = new Device(DriverType.Warp, DeviceCreationFlags.BgraSupport);
-            _deviceKind = "WARP";
-        }
-        _context = _device.ImmediateContext;
-        var hdrSupport = _device.CheckFormatSupport(Format.R16G16B16A16_Float);
-        var requiredHdrSupport = FormatSupport.RenderTarget | FormatSupport.Blendable | FormatSupport.ShaderSample;
-        if ((hdrSupport & requiredHdrSupport) != requiredHdrSupport)
-        {
-            throw new NotSupportedException(
-                "The selected D3D11 device cannot render, blend, and sample the required R16G16B16A16_FLOAT preview target.");
-        }
-        _sampleDescription = SelectMultisampleDescription();
-
-        using var vertexBytecode = LoadShader("VSMain", "vs_5_0");
-        using var pixelBytecode = LoadShader("PSMain", "ps_5_0");
-        using var shadowPixelBytecode = LoadShader("PSShadow", "ps_5_0");
-        using var postVertexBytecode = LoadShader("VSPostProcess", "vs_5_0");
-        using var postPixelBytecode = LoadShader("PSPostProcess", "ps_5_0");
-        using var aoSurfaceBytecode = LoadShader(
-            _sampleDescription.Count > 1 ? "PSAoSurfaceMsaa" : "PSAoSurfaceSingle", "ps_5_0");
-        using var ambientOcclusionBytecode = LoadShader("PSAmbientOcclusion", "ps_5_0");
-        using var aoBlurBytecode = LoadShader("PSAoBlur", "ps_5_0");
-        using var applyAmbientOcclusionBytecode = LoadShader("PSApplyAmbientOcclusion", "ps_5_0");
-        using var bloomExtractBytecode = LoadShader("PSBloomExtract", "ps_5_0");
-        using var bloomBlurBytecode = LoadShader("PSBloomBlur", "ps_5_0");
-        _vertexShader = new VertexShader(_device, vertexBytecode);
-        _pixelShader = new PixelShader(_device, pixelBytecode);
-        _shadowPixelShader = new PixelShader(_device, shadowPixelBytecode);
-        _postVertexShader = new VertexShader(_device, postVertexBytecode);
-        _postPixelShader = new PixelShader(_device, postPixelBytecode);
-        _aoSurfaceShader = new PixelShader(_device, aoSurfaceBytecode);
-        _ambientOcclusionShader = new PixelShader(_device, ambientOcclusionBytecode);
-        _aoBlurShader = new PixelShader(_device, aoBlurBytecode);
-        _applyAmbientOcclusionShader = new PixelShader(_device, applyAmbientOcclusionBytecode);
-        _bloomExtractShader = new PixelShader(_device, bloomExtractBytecode);
-        _bloomBlurShader = new PixelShader(_device, bloomBlurBytecode);
-        _inputLayout = new InputLayout(
-            _device,
-            ShaderSignature.GetInputSignature(vertexBytecode),
-            [
-                new InputElement("POSITION", 0, Format.R32G32B32_Float, 0, 0),
-                new InputElement("NORMAL", 0, Format.R32G32B32_Float, 12, 0),
-                new InputElement("TANGENT", 0, Format.R32G32B32A32_Float, 24, 0),
-                new InputElement("TEXCOORD", 0, Format.R32G32_Float, 40, 0),
-                new InputElement("BLENDINDICES", 0, Format.R32G32B32A32_UInt, 48, 0),
-                new InputElement("BLENDWEIGHT", 0, Format.R32G32B32A32_Float, 64, 0)
-            ]);
-        _sceneBuffer = CreateConstantBuffer<SceneConstants>();
-        _materialBuffer = CreateConstantBuffer<HeadPreviewMaterialConstants>();
-        _skinningBuffer = new Buffer(
-            _device,
-            MaximumBoneCount * Utilities.SizeOf<Matrix>(),
-            ResourceUsage.Dynamic,
-            BindFlags.ConstantBuffer,
-            CpuAccessFlags.Write,
-            ResourceOptionFlags.None,
-            0);
-        _meshBuffer = CreateConstantBuffer<MeshConstants>();
-        _postProcessBuffer = CreateConstantBuffer<PostProcessConstants>();
-        _shadowBuffer = CreateConstantBuffer<ShadowConstants>();
-        _solidRasterizer = CreateRasterizer(FillMode.Solid, CullMode.None);
-        // Match the preview's two-sided geometry/cutout coverage, including
-        // hair cards; PSShadow receives the real front/back-face sign.
-        _shadowRasterizer = CreateRasterizer(FillMode.Solid, CullMode.None);
-        _wireframeRasterizer = CreateRasterizer(FillMode.Wireframe, CullMode.None);
-        _solidBackFacesRasterizer = CreateRasterizer(FillMode.Solid, CullMode.Front);
-        _solidFrontFacesRasterizer = CreateRasterizer(FillMode.Solid, CullMode.Back);
-        _wireframeBackFacesRasterizer = CreateRasterizer(FillMode.Wireframe, CullMode.Front);
-        _wireframeFrontFacesRasterizer = CreateRasterizer(FillMode.Wireframe, CullMode.Back);
-        _depthState = new DepthStencilState(_device, new DepthStencilStateDescription
-        {
-            IsDepthEnabled = true,
-            DepthWriteMask = DepthWriteMask.All,
-            DepthComparison = Comparison.LessEqual,
-            IsStencilEnabled = false
-        });
-        _depthReadState = new DepthStencilState(_device, new DepthStencilStateDescription
-        {
-            IsDepthEnabled = true,
-            DepthWriteMask = DepthWriteMask.Zero,
-            DepthComparison = Comparison.LessEqual,
-            IsStencilEnabled = false
-        });
-        _shadowDepthState = new DepthStencilState(_device, new DepthStencilStateDescription
-        {
-            IsDepthEnabled = true,
-            DepthWriteMask = DepthWriteMask.All,
-            DepthComparison = Comparison.LessEqual,
-            IsStencilEnabled = false
-        });
-        _opaqueBlendState = CreateBlendState(false);
-        _translucentBlendState = CreateBlendState(true);
-        _additiveBlendState = CreateAdditiveBlendState();
-        _depthOnlyBlendState = CreateDepthOnlyBlendState();
-        _materialSampler = new SamplerState(_device, new SamplerStateDescription
-        {
-            Filter = Filter.Anisotropic,
-            AddressU = TextureAddressMode.Wrap,
-            AddressV = TextureAddressMode.Wrap,
-            AddressW = TextureAddressMode.Wrap,
-            MaximumAnisotropy = 8,
-            ComparisonFunction = Comparison.Never,
-            BorderColor = Color.Black,
-            MinimumLod = 0,
-            MaximumLod = float.MaxValue,
-            MipLodBias = 0
-        });
-        _postSampler = new SamplerState(_device, new SamplerStateDescription
-        {
-            Filter = Filter.MinMagLinearMipPoint,
-            AddressU = TextureAddressMode.Clamp,
-            AddressV = TextureAddressMode.Clamp,
-            AddressW = TextureAddressMode.Clamp,
-            MaximumAnisotropy = 1,
-            ComparisonFunction = Comparison.Never,
-            BorderColor = Color.Black,
-            MinimumLod = 0,
-            MaximumLod = 0,
-            MipLodBias = 0
-        });
-        CreateRenderTargets();
-        CreateShadowMap();
-        if (_sceneState.IsLoaded)
-        {
             try
             {
-                UploadScene();
+                _device = new Device(DriverType.Hardware, DeviceCreationFlags.BgraSupport);
+                _deviceKind = "Hardware";
             }
-            catch
+            catch (SharpDXException)
             {
-                // The host cannot retain a constructor that failed. Release its
-                // GPU resources while leaving the shared scene available to retry.
-                Dispose(releaseScene: false);
-                throw;
+                _device = new Device(DriverType.Warp, DeviceCreationFlags.BgraSupport);
+                _deviceKind = "WARP";
             }
+            _context = _device.ImmediateContext;
+            _textureCache = new HeadPreviewTextureCache(_device, _context);
+            var hdrSupport = _device.CheckFormatSupport(Format.R16G16B16A16_Float);
+            var requiredHdrSupport = FormatSupport.RenderTarget | FormatSupport.Blendable | FormatSupport.ShaderSample;
+            if ((hdrSupport & requiredHdrSupport) != requiredHdrSupport)
+            {
+                throw new NotSupportedException(
+                    "The selected D3D11 device cannot render, blend, and sample the required R16G16B16A16_FLOAT preview target.");
+            }
+            _sampleDescription = SelectMultisampleDescription();
+
+            using var vertexBytecode = LoadShader("VSMain", "vs_5_0");
+            using var pixelBytecode = LoadShader("PSMain", "ps_5_0");
+            using var shadowPixelBytecode = LoadShader("PSShadow", "ps_5_0");
+            using var postVertexBytecode = LoadShader("VSPostProcess", "vs_5_0");
+            using var postPixelBytecode = LoadShader("PSPostProcess", "ps_5_0");
+            using var aoSurfaceBytecode = LoadShader(
+                _sampleDescription.Count > 1 ? "PSAoSurfaceMsaa" : "PSAoSurfaceSingle", "ps_5_0");
+            using var ambientOcclusionBytecode = LoadShader("PSAmbientOcclusion", "ps_5_0");
+            using var aoBlurBytecode = LoadShader("PSAoBlur", "ps_5_0");
+            using var applyAmbientOcclusionBytecode = LoadShader("PSApplyAmbientOcclusion", "ps_5_0");
+            using var bloomExtractBytecode = LoadShader("PSBloomExtract", "ps_5_0");
+            using var bloomBlurBytecode = LoadShader("PSBloomBlur", "ps_5_0");
+            _vertexShader = new VertexShader(_device, vertexBytecode);
+            _pixelShader = new PixelShader(_device, pixelBytecode);
+            _shadowPixelShader = new PixelShader(_device, shadowPixelBytecode);
+            _postVertexShader = new VertexShader(_device, postVertexBytecode);
+            _postPixelShader = new PixelShader(_device, postPixelBytecode);
+            _aoSurfaceShader = new PixelShader(_device, aoSurfaceBytecode);
+            _ambientOcclusionShader = new PixelShader(_device, ambientOcclusionBytecode);
+            _aoBlurShader = new PixelShader(_device, aoBlurBytecode);
+            _applyAmbientOcclusionShader = new PixelShader(_device, applyAmbientOcclusionBytecode);
+            _bloomExtractShader = new PixelShader(_device, bloomExtractBytecode);
+            _bloomBlurShader = new PixelShader(_device, bloomBlurBytecode);
+            _inputLayout = new InputLayout(
+                _device,
+                ShaderSignature.GetInputSignature(vertexBytecode),
+                [
+                    new InputElement("POSITION", 0, Format.R32G32B32_Float, 0, 0),
+                    new InputElement("NORMAL", 0, Format.R32G32B32_Float, 12, 0),
+                    new InputElement("TANGENT", 0, Format.R32G32B32A32_Float, 24, 0),
+                    new InputElement("TEXCOORD", 0, Format.R32G32_Float, 40, 0),
+                    new InputElement("BLENDINDICES", 0, Format.R32G32B32A32_UInt, 48, 0),
+                    new InputElement("BLENDWEIGHT", 0, Format.R32G32B32A32_Float, 64, 0)
+                ]);
+            _sceneBuffer = CreateConstantBuffer<SceneConstants>();
+            _materialBuffer = CreateConstantBuffer<HeadPreviewMaterialConstants>();
+            _skinningBuffer = new Buffer(
+                _device,
+                MaximumBoneCount * Utilities.SizeOf<Matrix>(),
+                ResourceUsage.Dynamic,
+                BindFlags.ConstantBuffer,
+                CpuAccessFlags.Write,
+                ResourceOptionFlags.None,
+                0);
+            _meshBuffer = CreateConstantBuffer<MeshConstants>();
+            _postProcessBuffer = CreateConstantBuffer<PostProcessConstants>();
+            _shadowBuffer = CreateConstantBuffer<ShadowConstants>();
+            _solidRasterizer = CreateRasterizer(FillMode.Solid, CullMode.None);
+            _wireframeRasterizer = CreateRasterizer(FillMode.Wireframe, CullMode.None);
+            _solidBackFacesRasterizer = CreateRasterizer(FillMode.Solid, CullMode.Front);
+            _solidFrontFacesRasterizer = CreateRasterizer(FillMode.Solid, CullMode.Back);
+            _wireframeBackFacesRasterizer = CreateRasterizer(FillMode.Wireframe, CullMode.Front);
+            _wireframeFrontFacesRasterizer = CreateRasterizer(FillMode.Wireframe, CullMode.Back);
+            _depthState = new DepthStencilState(_device, new DepthStencilStateDescription
+            {
+                IsDepthEnabled = true,
+                DepthWriteMask = DepthWriteMask.All,
+                DepthComparison = Comparison.LessEqual,
+                IsStencilEnabled = false
+            });
+            _depthReadState = new DepthStencilState(_device, new DepthStencilStateDescription
+            {
+                IsDepthEnabled = true,
+                DepthWriteMask = DepthWriteMask.Zero,
+                DepthComparison = Comparison.LessEqual,
+                IsStencilEnabled = false
+            });
+
+            _opaqueBlendState = CreateBlendState(false);
+            _translucentBlendState = CreateBlendState(true);
+            _additiveBlendState = CreateAdditiveBlendState();
+            _depthOnlyBlendState = CreateDepthOnlyBlendState();
+            _materialSampler = new SamplerState(_device, new SamplerStateDescription
+            {
+                Filter = Filter.Anisotropic,
+                AddressU = TextureAddressMode.Wrap,
+                AddressV = TextureAddressMode.Wrap,
+                AddressW = TextureAddressMode.Wrap,
+                MaximumAnisotropy = 8,
+                ComparisonFunction = Comparison.Never,
+                BorderColor = Color.Black,
+                MinimumLod = 0,
+                MaximumLod = float.MaxValue,
+                MipLodBias = 0
+            });
+            _postSampler = new SamplerState(_device, new SamplerStateDescription
+            {
+                Filter = Filter.MinMagLinearMipPoint,
+                AddressU = TextureAddressMode.Clamp,
+                AddressV = TextureAddressMode.Clamp,
+                AddressW = TextureAddressMode.Clamp,
+                MaximumAnisotropy = 1,
+                ComparisonFunction = Comparison.Never,
+                BorderColor = Color.Black,
+                MinimumLod = 0,
+                MaximumLod = 0,
+                MipLodBias = 0
+            });
+            EnsureRenderTargets();
+            _shadowMap = HeadPreviewSurface.Depth(_device, DefaultShadowMapSize, DefaultShadowMapSize,
+                BindFlags.DepthStencil | BindFlags.ShaderResource, new SampleDescription(1, 0));
+            if (_sceneState.IsLoaded) UploadScene();
+        }
+        catch
+        {
+            // No renderer instance is returned when construction fails.
+            // Release partial GPU state without discarding the shared CPU scene.
+            Dispose(releaseScene: false);
+            throw;
         }
     }
 
     public string DeviceKind => _deviceKind;
     public int DeviceCreationCount => 1;
-    public int TextureUploadCount => _textureUploadCount;
+    public int TextureUploadCount => _textureCache.UploadCount;
     public int MultisampleCount => _sampleDescription.Count;
     public int MaterialAnisotropy => 8;
-    public long GpuTextureBytes => _gpuTextureBytes;
+    public long GpuTextureBytes => _textureCache.ByteCount;
 
     /// <summary>Releases face resources while retaining the device, shaders and render targets.</summary>
     public void ClearScene()
@@ -296,7 +232,7 @@ public sealed class HeadPreviewRenderer : IDisposable
         DisposeMeshes();
         _shadowRadius = 0;
         _sceneState.ClearScene();
-        DisposeMaterialTextures();
+        _textureCache.Clear();
         _context.Flush();
     }
 
@@ -314,21 +250,20 @@ public sealed class HeadPreviewRenderer : IDisposable
         UploadSkinningPalette();
         foreach (var mesh in _sceneState.Meshes)
         {
-            _meshes.Add(new MeshBuffers(
-                CreateDynamicVertexBuffer(mesh.Vertices),
-                Buffer.Create(_device, BindFlags.IndexBuffer, mesh.Indices.ToArray()),
-                mesh));
+            _meshes.Add(CreateMeshBuffers(mesh));
         }
         // Keep reusable textures from the previous scene only while the
         // bounded LRU has room; active resources are protected from eviction.
-        EvictGpuTexturesToFit(0, string.Empty);
+        _textureCache.SetActiveKeys(GetActiveTextureKeys());
+        _textureCache.TrimToBudget();
     }
 
     public void UpdateMaterials(IReadOnlyDictionary<string, HeadPreviewMaterial> materials)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         _sceneState.UpdateMaterials(materials);
-        PruneMaterialTextures();
+        _textureCache.SetActiveKeys(GetActiveTextureKeys());
+        _textureCache.PruneInactive();
     }
 
     public void UpdateDeformation(HeadPreviewDeformationUpdate update)
@@ -374,15 +309,16 @@ public sealed class HeadPreviewRenderer : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
-        if (_width == width && _height == height)
-        {
-            return;
-        }
+        if (_targets is not null && _width == width && _height == height) return;
         _context.ClearState();
-        DisposeRenderTargets();
+        // Release first: retaining both full viewport groups would double the
+        // already substantial target allocation during a high-DPI resize.
+        _targets?.Dispose();
+        _targets = null!;
+        var replacement = new HeadPreviewRenderTargets(_device, width, height, _sampleDescription);
+        _targets = replacement;
         _width = width;
         _height = height;
-        CreateRenderTargets();
     }
 
     public HeadPreviewFrame Render(
@@ -394,6 +330,7 @@ public sealed class HeadPreviewRenderer : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(camera);
         ArgumentNullException.ThrowIfNull(options);
+        EnsureRenderTargets();
         var requiredLength = checked(_width * _height * 4);
         if (destination is not null && destination.Length != requiredLength)
         {
@@ -469,7 +406,7 @@ public sealed class HeadPreviewRenderer : IDisposable
 
         ConfigurePipeline(options);
         _context.UpdateSubresource(ref scene, _sceneBuffer);
-        _context.PixelShader.SetShaderResources(17, shadowsEnabled ? _shadowShaderView : null);
+        _context.PixelShader.SetShaderResources(17, shadowsEnabled ? _shadowMap.ShaderView : null);
         var drawCalls = 0;
         foreach (var draw in draws.Where(draw => !IsTranslucent(draw.Material, options.RenderMode)))
         {
@@ -596,7 +533,7 @@ public sealed class HeadPreviewRenderer : IDisposable
         // enlarge the map and change its depth precision.
         _shadowRadius = Math.Max(radius * Math.Clamp(options.ShadowBoundsScale, 1, 2), 0.01f);
         radius = _shadowRadius;
-        var texelSize = (2 * radius) / _shadowMapSize;
+        var texelSize = (2 * radius) / _shadowMap.Width;
         var forward = System.Numerics.Vector3.Normalize(-lightDirection);
         var referenceUp = Math.Abs(System.Numerics.Vector3.Dot(forward, System.Numerics.Vector3.UnitY)) > 0.98f
             ? System.Numerics.Vector3.UnitZ
@@ -620,11 +557,11 @@ public sealed class HeadPreviewRenderer : IDisposable
         // t17 aliases the depth resource used as the DSV below. Explicitly
         // unbind it first to avoid D3D11's read/write resource hazard.
         _context.PixelShader.SetShaderResources(17, new ShaderResourceView?[] { null });
-        _context.OutputMerger.SetTargets(_shadowDepthView);
-        _context.ClearDepthStencilView(_shadowDepthView, DepthStencilClearFlags.Depth, 1, 0);
-        _context.Rasterizer.SetViewport(0, 0, _shadowMapSize, _shadowMapSize);
-        _context.Rasterizer.State = _shadowRasterizer;
-        _context.OutputMerger.SetDepthStencilState(_shadowDepthState);
+        _context.OutputMerger.SetTargets(_shadowMap.DepthView);
+        _context.ClearDepthStencilView(_shadowMap.DepthView, DepthStencilClearFlags.Depth, 1, 0);
+        _context.Rasterizer.SetViewport(0, 0, _shadowMap.Width, _shadowMap.Width);
+        _context.Rasterizer.State = _solidRasterizer;
+        _context.OutputMerger.SetDepthStencilState(_depthState);
         _context.OutputMerger.SetBlendState(_depthOnlyBlendState);
         _context.InputAssembler.InputLayout = _inputLayout;
         _context.InputAssembler.PrimitiveTopology = PrimitiveTopology.TriangleList;
@@ -676,8 +613,8 @@ public sealed class HeadPreviewRenderer : IDisposable
         // BindMaterial selects camera-view blend/depth states; the shadow pass
         // always writes opaque depth after PSShadow has clipped coverage.
         _context.OutputMerger.SetBlendState(_depthOnlyBlendState);
-        _context.OutputMerger.SetDepthStencilState(_shadowDepthState);
-        _context.Rasterizer.State = _shadowRasterizer;
+        _context.OutputMerger.SetDepthStencilState(_depthState);
+        _context.Rasterizer.State = _solidRasterizer;
         _context.DrawIndexed(section.IndexCount, section.BaseIndex, 0);
     }
 
@@ -752,7 +689,7 @@ public sealed class HeadPreviewRenderer : IDisposable
             LightViewProjection = lightViewProjection,
             ShadowParameters = new Vector4(
                 enabled ? 1 : 0,
-                1f / _shadowMapSize,
+                1f / _shadowMap.Width,
                 Math.Clamp(options.ShadowDepthBias, 0, 0.01f),
                 Math.Clamp(options.ShadowNormalBias, 0, 0.1f) * Math.Max(_shadowRadius, 0.01f)),
             ShadowFilterParameters = new Vector4(
@@ -827,9 +764,9 @@ public sealed class HeadPreviewRenderer : IDisposable
         // translucency. Snapshotting here keeps hair/lash cards out of both the
         // occluder depth and smooth-normal buffers while preserving opaque hats.
         _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
-        _context.CopyResource(_depthTexture, _aoDepthTexture);
-        _context.CopyResource(_normalTexture, _aoNormalTexture);
-        _context.OutputMerger.SetTargets(_depthView, _renderTarget, _normalTarget, _ambientDiffuseTarget);
+        _context.CopyResource(_targets.Depth.Texture, _targets.AoDepth.Texture);
+        _context.CopyResource(_targets.Normal.Texture, _targets.AoNormal.Texture);
+        _context.OutputMerger.SetTargets(_targets.Depth.DepthView, _targets.Color.Target, _targets.Normal.Target, _targets.AmbientDiffuse.Target);
     }
 
     private void ConfigurePipeline(HeadPreviewOptions options)
@@ -839,19 +776,19 @@ public sealed class HeadPreviewRenderer : IDisposable
             ToHdrFloat(SrgbToLinear(background.X)),
             ToHdrFloat(SrgbToLinear(background.Y)),
             ToHdrFloat(SrgbToLinear(background.Z)));
-        _context.OutputMerger.SetTargets(_depthView, _renderTarget, _normalTarget, _ambientDiffuseTarget, _opaquePlaneTarget);
+        _context.OutputMerger.SetTargets(_targets.Depth.DepthView, _targets.Color.Target, _targets.Normal.Target, _targets.AmbientDiffuse.Target, _targets.OpaquePlane.Target);
         _context.OutputMerger.SetDepthStencilState(_depthState);
         _context.Rasterizer.SetViewport(0, 0, _width, _height);
         _context.Rasterizer.State = options.Wireframe ? _wireframeRasterizer : _solidRasterizer;
-        _context.ClearRenderTargetView(_renderTarget, new Color4(
+        _context.ClearRenderTargetView(_targets.Color.Target, new Color4(
             linearBackground.X,
             linearBackground.Y,
             linearBackground.Z,
             1));
-        _context.ClearRenderTargetView(_normalTarget, new Color4(0.5f, 0.5f, 1, 1));
-        _context.ClearRenderTargetView(_opaquePlaneTarget, new Color4(0.5f, 0.5f, 1, 1));
-        _context.ClearRenderTargetView(_ambientDiffuseTarget, new Color4(0, 0, 0, 0));
-        _context.ClearDepthStencilView(_depthView, DepthStencilClearFlags.Depth, 1, 0);
+        _context.ClearRenderTargetView(_targets.Normal.Target, new Color4(0.5f, 0.5f, 1, 1));
+        _context.ClearRenderTargetView(_targets.OpaquePlane.Target, new Color4(0.5f, 0.5f, 1, 1));
+        _context.ClearRenderTargetView(_targets.AmbientDiffuse.Target, new Color4(0, 0, 0, 0));
+        _context.ClearDepthStencilView(_targets.Depth.DepthView, DepthStencilClearFlags.Depth, 1, 0);
         _context.InputAssembler.InputLayout = _inputLayout;
         _context.InputAssembler.PrimitiveTopology = PrimitiveTopology.TriangleList;
         _context.VertexShader.Set(_vertexShader);
@@ -886,181 +823,24 @@ public sealed class HeadPreviewRenderer : IDisposable
         _context.OutputMerger.SetBlendState(additive ? _additiveBlendState : translucent ? _translucentBlendState : _opaqueBlendState);
         _context.OutputMerger.SetDepthStencilState(translucent || additive ? _depthReadState : _depthState);
 
-        _context.PixelShader.SetShaderResources(
-            0,
-            ToView(bindings.Diffuse),
-            ToView(bindings.Normal),
-            ToView(bindings.Mask),
-            ToView(bindings.Detail),
-            ToView(bindings.Auxiliary1),
-            ToView(bindings.Auxiliary2),
-            ToView(bindings.Auxiliary3),
-            ToView(bindings.Auxiliary4),
-            ToCubeView(material.FixedCubeTexture),
-            ToCubeView(material.SecondaryFixedCubeTexture));
-        _context.PixelShader.SetShaderResources(
-            15,
-            ToView(bindings.Auxiliary5),
-            ToView(bindings.Auxiliary6));
-    }
-
-    private ShaderResourceView? ToCubeView(HeadPreviewCubeTexture? texture)
-    {
-        if (texture is null)
-        {
-            return null;
-        }
-        if (_gpuTextures.TryGetValue(texture.Key, out var existing))
-        {
-            existing.LastUsed = ++_textureUseSerial;
-            return existing.GetView(_device, texture.ColorSpace);
-        }
-        if (texture.Rgba8Faces.Count != 6)
-        {
-            throw new InvalidDataException($"Cube texture '{texture.Key}' must contain exactly six faces.");
-        }
-
-        var authoredMips = GetValidCubeMips(texture);
-        var streams = new List<DataStream>(authoredMips.Count * 6);
-        try
-        {
-            var rectangles = new List<DataRectangle>(authoredMips.Count * 6);
-            for (var faceIndex = 0; faceIndex < 6; faceIndex++)
-            {
-                foreach (var mip in authoredMips)
-                {
-                    var pixels = mip.Rgba8Faces[faceIndex];
-                    var stream = new DataStream(pixels.Length, true, true);
-                    stream.Write(pixels, 0, pixels.Length);
-                    stream.Position = 0;
-                    streams.Add(stream);
-                    rectangles.Add(new DataRectangle(stream.DataPointer, checked(mip.Size * 4)));
-                }
-            }
-            var resource = new Texture2D(_device, new Texture2DDescription
-            {
-                Width = texture.Size,
-                Height = texture.Size,
-                MipLevels = authoredMips.Count,
-                ArraySize = 6,
-                Format = Format.R8G8B8A8_Typeless,
-                SampleDescription = new SampleDescription(1, 0),
-                Usage = ResourceUsage.Immutable,
-                BindFlags = BindFlags.ShaderResource,
-                CpuAccessFlags = CpuAccessFlags.None,
-                OptionFlags = ResourceOptionFlags.TextureCube
-            }, rectangles.ToArray());
-            var byteCount = authoredMips.Sum(mip => mip.Rgba8Faces.Sum(face => (long)face.Length));
-            EvictGpuTexturesToFit(byteCount, texture.Key);
-            var gpuTexture = new GpuTexture(resource, byteCount, ++_textureUseSerial);
-            var view = gpuTexture.GetView(_device, texture.ColorSpace);
-            _gpuTextures[texture.Key] = gpuTexture;
-            _gpuTextureBytes += byteCount;
-            _textureUploadCount++;
-            return view;
-        }
-        finally
-        {
-            foreach (var stream in streams)
-            {
-                stream.Dispose();
-            }
-        }
-    }
-
-    private ShaderResourceView? ToView(HeadPreviewTexture? texture)
-    {
-        if (texture is null)
-        {
-            return null;
-        }
-        if (_gpuTextures.TryGetValue(texture.Key, out var existing))
-        {
-            existing.LastUsed = ++_textureUseSerial;
-            return existing.GetView(_device, texture.ColorSpace);
-        }
-
-        var authoredMips = GetValidMips(texture);
-        var streams = new List<DataStream>(authoredMips.Count);
-        try
-        {
-            var rectangles = authoredMips.Select(mip =>
-            {
-                var stream = new DataStream(mip.Rgba8.Length, true, true);
-                stream.Write(mip.Rgba8, 0, mip.Rgba8.Length);
-                stream.Position = 0;
-                streams.Add(stream);
-                return new DataRectangle(stream.DataPointer, checked(mip.Width * 4));
-            }).ToArray();
-            var resource = new Texture2D(_device, new Texture2DDescription
-            {
-                Width = texture.Width,
-                Height = texture.Height,
-                MipLevels = authoredMips.Count,
-                ArraySize = 1,
-                Format = Format.R8G8B8A8_Typeless,
-                SampleDescription = new SampleDescription(1, 0),
-                Usage = ResourceUsage.Immutable,
-                BindFlags = BindFlags.ShaderResource,
-                CpuAccessFlags = CpuAccessFlags.None,
-                OptionFlags = ResourceOptionFlags.None
-            }, rectangles);
-            var byteCount = authoredMips.Sum(mip => (long)mip.Rgba8.Length);
-            EvictGpuTexturesToFit(byteCount, texture.Key);
-            var gpuTexture = new GpuTexture(resource, byteCount, ++_textureUseSerial);
-            var view = gpuTexture.GetView(_device, texture.ColorSpace);
-            _gpuTextures[texture.Key] = gpuTexture;
-            _gpuTextureBytes += byteCount;
-            _textureUploadCount++;
-            return view;
-        }
-        finally
-        {
-            foreach (var stream in streams)
-            {
-                stream.Dispose();
-            }
-        }
-    }
-
-    private static IReadOnlyList<DecodedTextureMip> GetValidMips(HeadPreviewTexture texture)
-    {
-        var candidates = texture.Mips is { Count: > 0 }
-            ? texture.Mips
-            : [new DecodedTextureMip(texture.Width, texture.Height, texture.Rgba8)];
-        var valid = new List<DecodedTextureMip>(candidates.Count);
-        for (var level = 0; level < candidates.Count; level++)
-        {
-            var mip = candidates[level];
-            if (mip.Width != Math.Max(1, texture.Width >> level) ||
-                mip.Height != Math.Max(1, texture.Height >> level) ||
-                mip.Rgba8.Length != checked(mip.Width * mip.Height * 4))
-            {
-                break;
-            }
-            valid.Add(mip);
-        }
-        return valid.Count > 0 ? valid : [new DecodedTextureMip(texture.Width, texture.Height, texture.Rgba8)];
-    }
-
-    private static IReadOnlyList<DecodedTextureCubeMip> GetValidCubeMips(HeadPreviewCubeTexture texture)
-    {
-        var candidates = texture.Mips is { Count: > 0 }
-            ? texture.Mips
-            : [new DecodedTextureCubeMip(texture.Size, texture.Rgba8Faces)];
-        var valid = new List<DecodedTextureCubeMip>(candidates.Count);
-        for (var level = 0; level < candidates.Count; level++)
-        {
-            var mip = candidates[level];
-            var expectedSize = Math.Max(1, texture.Size >> level);
-            if (mip.Size != expectedSize || mip.Rgba8Faces.Count != 6 ||
-                mip.Rgba8Faces.Any(face => face.Length != checked(expectedSize * expectedSize * 4)))
-            {
-                break;
-            }
-            valid.Add(mip);
-        }
-        return valid.Count > 0 ? valid : [new DecodedTextureCubeMip(texture.Size, texture.Rgba8Faces)];
+        // Finish uploads/eviction before binding either group for this draw.
+        ShaderResourceView?[] views =
+        [
+            _textureCache.GetView(bindings.Diffuse),
+            _textureCache.GetView(bindings.Normal),
+            _textureCache.GetView(bindings.Mask),
+            _textureCache.GetView(bindings.Detail),
+            _textureCache.GetView(bindings.Auxiliary1),
+            _textureCache.GetView(bindings.Auxiliary2),
+            _textureCache.GetView(bindings.Auxiliary3),
+            _textureCache.GetView(bindings.Auxiliary4),
+            _textureCache.GetCubeView(material.FixedCubeTexture),
+            _textureCache.GetCubeView(material.SecondaryFixedCubeTexture)
+        ];
+        var auxiliary5 = _textureCache.GetView(bindings.Auxiliary5);
+        var auxiliary6 = _textureCache.GetView(bindings.Auxiliary6);
+        _context.PixelShader.SetShaderResources(0, views);
+        _context.PixelShader.SetShaderResources(15, auxiliary5, auxiliary6);
     }
 
     private BlendState CreateBlendState(bool translucent)
@@ -1128,13 +908,13 @@ public sealed class HeadPreviewRenderer : IDisposable
         _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
         if (_sampleDescription.Count > 1)
         {
-            _context.ResolveSubresource(_renderTexture, 0, _resolvedTexture, 0, Format.R16G16B16A16_Float);
-            _context.ResolveSubresource(_ambientDiffuseTexture, 0, _resolvedAmbientTexture, 0, Format.R16G16B16A16_Float);
+            _context.ResolveSubresource(_targets.Color.Texture, 0, _targets.Resolved.Texture, 0, Format.R16G16B16A16_Float);
+            _context.ResolveSubresource(_targets.AmbientDiffuse.Texture, 0, _targets.ResolvedAmbient.Texture, 0, Format.R16G16B16A16_Float);
         }
         else
         {
-            _context.CopyResource(_renderTexture, _resolvedTexture);
-            _context.CopyResource(_ambientDiffuseTexture, _resolvedAmbientTexture);
+            _context.CopyResource(_targets.Color.Texture, _targets.Resolved.Texture);
+            _context.CopyResource(_targets.AmbientDiffuse.Texture, _targets.ResolvedAmbient.Texture);
         }
         var background = backgroundColor ?? new System.Numerics.Vector3(0.035f, 0.043f, 0.055f);
         var settings = postProcessSettings ?? HeadPreviewPostProcessProfiles.Get(HeadPreviewLightingPreset.Studio);
@@ -1193,15 +973,15 @@ public sealed class HeadPreviewRenderer : IDisposable
         // HDR. Both bloom and display conversion consume this same composition.
         var sceneColor = constants.DepthParameters.Z > 0
             ? RenderAmbientOcclusion(ref constants)
-            : _resolvedShaderView;
+            : _targets.Resolved.ShaderView;
         if (gameInspired && postProcessingEnabled && lighting.BloomIntensity > 0)
             RenderBloom(ref constants, settings.BloomRadius1080, sceneColor);
 
-        PreparePostPass(_postTarget, _postPixelShader, _width, _height);
+        PreparePostPass(_targets.Post.Target, _postPixelShader, _width, _height);
         _context.PixelShader.SetShaderResources(10, sceneColor);
-        _context.PixelShader.SetShaderResources(18, _resolvedAmbientShaderView,
-            gameInspired && postProcessingEnabled && lighting.BloomIntensity > 0 ? _bloomShaderView : null,
-            _gradingShaderView);
+        _context.PixelShader.SetShaderResources(18, _targets.ResolvedAmbient.ShaderView,
+            gameInspired && postProcessingEnabled && lighting.BloomIntensity > 0 ? _targets.Bloom.ShaderView : null,
+            _gradingLut?.ShaderView);
         _context.Draw(3, 0);
         _context.PixelShader.SetShaderResources(10, new ShaderResourceView?[] { null });
         _context.PixelShader.SetShaderResources(18, new ShaderResourceView?[3]);
@@ -1225,26 +1005,26 @@ public sealed class HeadPreviewRenderer : IDisposable
 
     private ShaderResourceView RenderAmbientOcclusion(ref PostProcessConstants constants)
     {
-        PreparePostPass(_aoSurfaceTarget, _aoSurfaceShader, _width, _height);
-        _context.OutputMerger.SetTargets((DepthStencilView?)null, _aoSurfaceTarget, _aoReceiverPlaneTarget);
+        PreparePostPass(_targets.AoSurface.Target, _aoSurfaceShader, _width, _height);
+        _context.OutputMerger.SetTargets((DepthStencilView?)null, _targets.AoSurface.Target, _targets.AoReceiverPlane.Target);
         _context.PixelShader.SetShaderResources(11,
-            _sampleDescription.Count > 1 ? _aoDepthShaderView : null,
-            _sampleDescription.Count > 1 ? null : _aoDepthShaderView,
-            _sampleDescription.Count > 1 ? _aoNormalShaderView : null,
-            _sampleDescription.Count > 1 ? null : _aoNormalShaderView);
+            _sampleDescription.Count > 1 ? _targets.AoDepth.ShaderView : null,
+            _sampleDescription.Count > 1 ? null : _targets.AoDepth.ShaderView,
+            _sampleDescription.Count > 1 ? _targets.AoNormal.ShaderView : null,
+            _sampleDescription.Count > 1 ? null : _targets.AoNormal.ShaderView);
         _context.PixelShader.SetShaderResources(23,
-            _sampleDescription.Count > 1 ? _opaquePlaneShaderView : null,
-            _sampleDescription.Count > 1 ? null : _opaquePlaneShaderView);
+            _sampleDescription.Count > 1 ? _targets.OpaquePlane.ShaderView : null,
+            _sampleDescription.Count > 1 ? null : _targets.OpaquePlane.ShaderView);
         _context.Draw(3, 0);
         _context.PixelShader.SetShaderResources(11, new ShaderResourceView?[4]);
         _context.PixelShader.SetShaderResources(23, new ShaderResourceView?[2]);
         _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
 
-        PreparePostPass(_aoVisibilityTarget, _ambientOcclusionShader, _width, _height);
-        _context.PixelShader.SetShaderResources(21, _aoSurfaceShaderView);
-        _context.PixelShader.SetShaderResources(25, _aoReceiverPlaneShaderView);
+        PreparePostPass(_targets.AoVisibility.Target, _ambientOcclusionShader, _width, _height);
+        _context.PixelShader.SetShaderResources(21, _targets.AoSurface.ShaderView);
+        _context.PixelShader.SetShaderResources(25, _targets.AoReceiverPlane.ShaderView);
         _context.PixelShader.SetShaderResources(11,
-            _sampleDescription.Count > 1 ? _aoDepthShaderView : null);
+            _sampleDescription.Count > 1 ? _targets.AoDepth.ShaderView : null);
         _context.Draw(3, 0);
         _context.PixelShader.SetShaderResources(11, new ShaderResourceView?[] { null });
         _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
@@ -1254,8 +1034,8 @@ public sealed class HeadPreviewRenderer : IDisposable
             constants.AoFilterParameters.X = 1;
             constants.AoFilterParameters.Y = 0;
             _context.UpdateSubresource(ref constants, _postProcessBuffer);
-            PreparePostPass(_aoScratchTarget, _aoBlurShader, _width, _height);
-            _context.PixelShader.SetShaderResources(22, _aoVisibilityShaderView);
+            PreparePostPass(_targets.AoScratch.Target, _aoBlurShader, _width, _height);
+            _context.PixelShader.SetShaderResources(22, _targets.AoVisibility.ShaderView);
             _context.Draw(3, 0);
             _context.PixelShader.SetShaderResources(22, new ShaderResourceView?[] { null });
             _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
@@ -1263,33 +1043,33 @@ public sealed class HeadPreviewRenderer : IDisposable
             constants.AoFilterParameters.X = 0;
             constants.AoFilterParameters.Y = 1;
             _context.UpdateSubresource(ref constants, _postProcessBuffer);
-            PreparePostPass(_aoVisibilityTarget, _aoBlurShader, _width, _height);
-            _context.PixelShader.SetShaderResources(22, _aoScratchShaderView);
+            PreparePostPass(_targets.AoVisibility.Target, _aoBlurShader, _width, _height);
+            _context.PixelShader.SetShaderResources(22, _targets.AoScratch.ShaderView);
             _context.Draw(3, 0);
             _context.PixelShader.SetShaderResources(22, new ShaderResourceView?[] { null });
             _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
 
         }
-        PreparePostPass(_aoCompositedTarget, _applyAmbientOcclusionShader, _width, _height);
-        _context.PixelShader.SetShaderResources(10, _resolvedShaderView);
-        _context.PixelShader.SetShaderResources(18, _resolvedAmbientShaderView);
-        _context.PixelShader.SetShaderResources(22, _aoVisibilityShaderView);
+        PreparePostPass(_targets.AoComposited.Target, _applyAmbientOcclusionShader, _width, _height);
+        _context.PixelShader.SetShaderResources(10, _targets.Resolved.ShaderView);
+        _context.PixelShader.SetShaderResources(18, _targets.ResolvedAmbient.ShaderView);
+        _context.PixelShader.SetShaderResources(22, _targets.AoVisibility.ShaderView);
         _context.Draw(3, 0);
         _context.PixelShader.SetShaderResources(10, new ShaderResourceView?[] { null });
         _context.PixelShader.SetShaderResources(18, new ShaderResourceView?[] { null });
         _context.PixelShader.SetShaderResources(21, new ShaderResourceView?[2]);
         _context.PixelShader.SetShaderResources(25, new ShaderResourceView?[] { null });
         _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
-        return _aoCompositedShaderView;
+        return _targets.AoComposited.ShaderView;
     }
 
     private void RenderBloom(ref PostProcessConstants constants, float radius1080, ShaderResourceView sceneColor)
     {
-        var width = _bloomTexture.Description.Width;
-        var height = _bloomTexture.Description.Height;
-        PreparePostPass(_bloomTarget, _bloomExtractShader, width, height);
+        var width = _targets.Bloom.Width;
+        var height = _targets.Bloom.Height;
+        PreparePostPass(_targets.Bloom.Target, _bloomExtractShader, width, height);
         _context.PixelShader.SetShaderResources(10, sceneColor);
-        _context.PixelShader.SetShaderResources(18, _resolvedAmbientShaderView);
+        _context.PixelShader.SetShaderResources(18, _targets.ResolvedAmbient.ShaderView);
         _context.Draw(3, 0);
         _context.PixelShader.SetShaderResources(10, new ShaderResourceView?[] { null });
         _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
@@ -1300,16 +1080,16 @@ public sealed class HeadPreviewRenderer : IDisposable
         var stepPixels = radius1080 * _height / (1080f * 1.4f);
         constants.BloomPassParameters = new Vector4(stepPixels / _width, 0, 0, 0);
         _context.UpdateSubresource(ref constants, _postProcessBuffer);
-        PreparePostPass(_bloomScratchTarget, _bloomBlurShader, width, height);
-        _context.PixelShader.SetShaderResources(19, _bloomShaderView);
+        PreparePostPass(_targets.BloomScratch.Target, _bloomBlurShader, width, height);
+        _context.PixelShader.SetShaderResources(19, _targets.Bloom.ShaderView);
         _context.Draw(3, 0);
         _context.PixelShader.SetShaderResources(19, new ShaderResourceView?[] { null });
         _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
 
         constants.BloomPassParameters = new Vector4(0, stepPixels / _height, 0, 0);
         _context.UpdateSubresource(ref constants, _postProcessBuffer);
-        PreparePostPass(_bloomTarget, _bloomBlurShader, width, height);
-        _context.PixelShader.SetShaderResources(19, _bloomScratchShaderView);
+        PreparePostPass(_targets.Bloom.Target, _bloomBlurShader, width, height);
+        _context.PixelShader.SetShaderResources(19, _targets.BloomScratch.ShaderView);
         _context.Draw(3, 0);
         _context.PixelShader.SetShaderResources(19, new ShaderResourceView?[] { null });
         _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
@@ -1319,20 +1099,11 @@ public sealed class HeadPreviewRenderer : IDisposable
     {
         if (_gradingSettings == settings) return;
         var pixels = HeadPreviewPostProcessProfiles.BuildGradingLut(settings);
-        if (_gradingTexture is null)
-        {
-            _gradingTexture = new Texture2D(_device, new Texture2DDescription
-            {
-                Width = 256, Height = 16, MipLevels = 1, ArraySize = 1,
-                Format = Format.R32G32B32A32_Float,
-                SampleDescription = new SampleDescription(1, 0),
-                Usage = ResourceUsage.Default, BindFlags = BindFlags.ShaderResource
-            });
-            _gradingShaderView = new ShaderResourceView(_device, _gradingTexture);
-        }
+        _gradingLut ??= HeadPreviewSurface.Color(_device, 256, 16, Format.R32G32B32A32_Float,
+            BindFlags.ShaderResource, new SampleDescription(1, 0));
         using var stream = new DataStream(pixels.Length * sizeof(float), true, true);
         stream.WriteRange(pixels);
-        _context.UpdateSubresource(new DataBox(stream.DataPointer, 256 * 4 * sizeof(float), 0), _gradingTexture);
+        _context.UpdateSubresource(new DataBox(stream.DataPointer, 256 * 4 * sizeof(float), 0), _gradingLut.Texture);
         _gradingSettings = settings;
     }
 
@@ -1353,260 +1124,26 @@ public sealed class HeadPreviewRenderer : IDisposable
         ? requestedSize
         : DefaultShadowMapSize;
 
+    private void EnsureRenderTargets() =>
+        _targets ??= new HeadPreviewRenderTargets(_device, _width, _height, _sampleDescription);
+
     private void EnsureShadowMapSize(int size)
     {
-        if (_shadowMapSize == size)
-        {
-            return;
-        }
-
-        // A previous frame may still have the SRV bound when the user changes
-        // resolution. Unbind both views before releasing the old allocation.
+        if (_shadowMap.Width == size) return;
+        // A shadow map is small and independent of the viewport allocation.
+        // Complete its replacement before releasing the currently usable map.
+        var replacement = HeadPreviewSurface.Depth(_device, size, size,
+            BindFlags.DepthStencil | BindFlags.ShaderResource, new SampleDescription(1, 0));
         _context.PixelShader.SetShaderResources(17, new ShaderResourceView?[] { null });
         _context.OutputMerger.SetTargets((DepthStencilView?)null, (RenderTargetView?)null);
-        _shadowShaderView?.Dispose();
-        _shadowDepthView?.Dispose();
-        _shadowTexture?.Dispose();
-        _shadowShaderView = null!;
-        _shadowDepthView = null!;
-        _shadowTexture = null!;
-        CreateShadowMap(size);
-    }
-
-    private void CreateShadowMap(int size = DefaultShadowMapSize)
-    {
-        _shadowTexture = new Texture2D(_device, new Texture2DDescription
-        {
-            Width = size,
-            Height = size,
-            MipLevels = 1,
-            ArraySize = 1,
-            Format = Format.R32_Typeless,
-            SampleDescription = new SampleDescription(1, 0),
-            Usage = ResourceUsage.Default,
-            BindFlags = BindFlags.DepthStencil | BindFlags.ShaderResource,
-            CpuAccessFlags = CpuAccessFlags.None,
-            OptionFlags = ResourceOptionFlags.None
-        });
-        _shadowDepthView = new DepthStencilView(_device, _shadowTexture, new DepthStencilViewDescription
-        {
-            Format = Format.D32_Float,
-            Dimension = DepthStencilViewDimension.Texture2D,
-            Flags = DepthStencilViewFlags.None,
-            Texture2D = new DepthStencilViewDescription.Texture2DResource { MipSlice = 0 }
-        });
-        _shadowShaderView = new ShaderResourceView(_device, _shadowTexture, new ShaderResourceViewDescription
-        {
-            Format = Format.R32_Float,
-            Dimension = ShaderResourceViewDimension.Texture2D,
-            Texture2D = new ShaderResourceViewDescription.Texture2DResource { MostDetailedMip = 0, MipLevels = 1 }
-        });
-        _shadowMapSize = size;
-    }
-
-    private void CreateRenderTargets()
-    {
-        (_bloomTexture, _bloomTarget, _bloomShaderView) = CreateBloomTarget();
-        (_bloomScratchTexture, _bloomScratchTarget, _bloomScratchShaderView) = CreateBloomTarget();
-        // Full precision depth avoids introducing half-float depth quantization
-        // while matching one covered MSAA sample to its material normal.
-        (_aoSurfaceTexture, _aoSurfaceTarget, _aoSurfaceShaderView) =
-            CreatePostTarget(Format.R32G32B32A32_Float, _width, _height);
-        (_aoReceiverPlaneTexture, _aoReceiverPlaneTarget, _aoReceiverPlaneShaderView) =
-            CreatePostTarget(Format.R16G16B16A16_Float, _width, _height);
-        (_aoVisibilityTexture, _aoVisibilityTarget, _aoVisibilityShaderView) =
-            CreatePostTarget(Format.R16G16_Float, _width, _height);
-        (_aoScratchTexture, _aoScratchTarget, _aoScratchShaderView) =
-            CreatePostTarget(Format.R16G16_Float, _width, _height);
-        (_aoCompositedTexture, _aoCompositedTarget, _aoCompositedShaderView) =
-            CreatePostTarget(Format.R16G16B16A16_Float, _width, _height);
-        _renderTexture = new Texture2D(_device, new Texture2DDescription
-        {
-            Width = _width,
-            Height = _height,
-            MipLevels = 1,
-            ArraySize = 1,
-            Format = Format.R16G16B16A16_Float,
-            SampleDescription = _sampleDescription,
-            Usage = ResourceUsage.Default,
-            BindFlags = BindFlags.RenderTarget
-        });
-        _renderTarget = new RenderTargetView(_device, _renderTexture);
-        _normalTexture = new Texture2D(_device, new Texture2DDescription
-        {
-            Width = _width,
-            Height = _height,
-            MipLevels = 1,
-            ArraySize = 1,
-            Format = Format.R16G16B16A16_Float,
-            SampleDescription = _sampleDescription,
-            Usage = ResourceUsage.Default,
-            BindFlags = BindFlags.RenderTarget
-        });
-        _normalTarget = new RenderTargetView(_device, _normalTexture);
-        _opaquePlaneTexture = new Texture2D(_device, new Texture2DDescription
-        {
-            Width = _width,
-            Height = _height,
-            MipLevels = 1,
-            ArraySize = 1,
-            Format = Format.R16G16B16A16_Float,
-            SampleDescription = _sampleDescription,
-            Usage = ResourceUsage.Default,
-            BindFlags = BindFlags.RenderTarget | BindFlags.ShaderResource
-        });
-        _opaquePlaneTarget = new RenderTargetView(_device, _opaquePlaneTexture);
-        _opaquePlaneShaderView = new ShaderResourceView(_device, _opaquePlaneTexture);
-        _ambientDiffuseTexture = new Texture2D(_device, new Texture2DDescription
-        {
-            Width = _width,
-            Height = _height,
-            MipLevels = 1,
-            ArraySize = 1,
-            Format = Format.R16G16B16A16_Float,
-            SampleDescription = _sampleDescription,
-            Usage = ResourceUsage.Default,
-            BindFlags = BindFlags.RenderTarget
-        });
-        _ambientDiffuseTarget = new RenderTargetView(_device, _ambientDiffuseTexture);
-        _aoNormalTexture = new Texture2D(_device, new Texture2DDescription
-        {
-            Width = _width,
-            Height = _height,
-            MipLevels = 1,
-            ArraySize = 1,
-            Format = Format.R16G16B16A16_Float,
-            SampleDescription = _sampleDescription,
-            Usage = ResourceUsage.Default,
-            BindFlags = BindFlags.ShaderResource
-        });
-        _aoNormalShaderView = new ShaderResourceView(_device, _aoNormalTexture);
-        _depthTexture = new Texture2D(_device, new Texture2DDescription
-        {
-            Width = _width,
-            Height = _height,
-            MipLevels = 1,
-            ArraySize = 1,
-            Format = Format.R32_Typeless,
-            SampleDescription = _sampleDescription,
-            Usage = ResourceUsage.Default,
-            BindFlags = BindFlags.DepthStencil | BindFlags.ShaderResource
-        });
-        _depthView = new DepthStencilView(_device, _depthTexture, new DepthStencilViewDescription
-        {
-            Format = Format.D32_Float,
-            Dimension = _sampleDescription.Count > 1
-                ? DepthStencilViewDimension.Texture2DMultisampled
-                : DepthStencilViewDimension.Texture2D,
-            Texture2D = new DepthStencilViewDescription.Texture2DResource { MipSlice = 0 }
-        });
-        _depthShaderView = new ShaderResourceView(_device, _depthTexture, new ShaderResourceViewDescription
-        {
-            Format = Format.R32_Float,
-            Dimension = _sampleDescription.Count > 1
-                ? ShaderResourceViewDimension.Texture2DMultisampled
-                : ShaderResourceViewDimension.Texture2D,
-            Texture2D = new ShaderResourceViewDescription.Texture2DResource
-            {
-                MostDetailedMip = 0,
-                MipLevels = 1
-            }
-        });
-        _aoDepthTexture = new Texture2D(_device, new Texture2DDescription
-        {
-            Width = _width,
-            Height = _height,
-            MipLevels = 1,
-            ArraySize = 1,
-            Format = Format.R32_Typeless,
-            SampleDescription = _sampleDescription,
-            Usage = ResourceUsage.Default,
-            BindFlags = BindFlags.ShaderResource
-        });
-        _aoDepthShaderView = new ShaderResourceView(_device, _aoDepthTexture, new ShaderResourceViewDescription
-        {
-            Format = Format.R32_Float,
-            Dimension = _sampleDescription.Count > 1
-                ? ShaderResourceViewDimension.Texture2DMultisampled
-                : ShaderResourceViewDimension.Texture2D,
-            Texture2D = new ShaderResourceViewDescription.Texture2DResource
-            {
-                MostDetailedMip = 0,
-                MipLevels = 1
-            }
-        });
-        _resolvedTexture = new Texture2D(_device, new Texture2DDescription
-        {
-            Width = _width,
-            Height = _height,
-            MipLevels = 1,
-            ArraySize = 1,
-            Format = Format.R16G16B16A16_Float,
-            SampleDescription = new SampleDescription(1, 0),
-            Usage = ResourceUsage.Default,
-            BindFlags = BindFlags.ShaderResource
-        });
-        _resolvedShaderView = new ShaderResourceView(_device, _resolvedTexture);
-        _resolvedAmbientTexture = new Texture2D(_device, new Texture2DDescription
-        {
-            Width = _width,
-            Height = _height,
-            MipLevels = 1,
-            ArraySize = 1,
-            Format = Format.R16G16B16A16_Float,
-            SampleDescription = new SampleDescription(1, 0),
-            Usage = ResourceUsage.Default,
-            BindFlags = BindFlags.ShaderResource
-        });
-        _resolvedAmbientShaderView = new ShaderResourceView(_device, _resolvedAmbientTexture);
-        _postTexture = new Texture2D(_device, new Texture2DDescription
-        {
-            Width = _width,
-            Height = _height,
-            MipLevels = 1,
-            ArraySize = 1,
-            Format = Format.B8G8R8A8_UNorm,
-            SampleDescription = new SampleDescription(1, 0),
-            Usage = ResourceUsage.Default,
-            BindFlags = BindFlags.RenderTarget
-        });
-        _postTarget = new RenderTargetView(_device, _postTexture);
-        _stagingTexture = new Texture2D(_device, new Texture2DDescription
-        {
-            Width = _width,
-            Height = _height,
-            MipLevels = 1,
-            ArraySize = 1,
-            Format = Format.B8G8R8A8_UNorm,
-            SampleDescription = new SampleDescription(1, 0),
-            Usage = ResourceUsage.Staging,
-            BindFlags = BindFlags.None,
-            CpuAccessFlags = CpuAccessFlags.Read
-        });
-    }
-
-    private (Texture2D, RenderTargetView, ShaderResourceView) CreateBloomTarget() =>
-        CreatePostTarget(Format.R16G16B16A16_Float, Math.Max(1, (_width + 3) / 4), Math.Max(1, (_height + 3) / 4));
-
-    private (Texture2D, RenderTargetView, ShaderResourceView) CreatePostTarget(Format format, int width, int height)
-    {
-        var texture = new Texture2D(_device, new Texture2DDescription
-        {
-            Width = width,
-            Height = height,
-            MipLevels = 1, ArraySize = 1,
-            Format = format,
-            SampleDescription = new SampleDescription(1, 0),
-            Usage = ResourceUsage.Default,
-            BindFlags = BindFlags.RenderTarget | BindFlags.ShaderResource
-        });
-        return (texture, new RenderTargetView(_device, texture), new ShaderResourceView(_device, texture));
+        _shadowMap.Dispose();
+        _shadowMap = replacement;
     }
 
     private byte[] ReadTexture(byte[]? destination)
     {
-        _context.CopyResource(_postTexture, _stagingTexture);
-        var data = _context.MapSubresource(_stagingTexture, 0, MapMode.Read, MapFlags.None);
+        _context.CopyResource(_targets.Post.Texture, _targets.Staging.Texture);
+        var data = _context.MapSubresource(_targets.Staging.Texture, 0, MapMode.Read, MapFlags.None);
         try
         {
             var pixels = destination ?? new byte[checked(_width * _height * 4)];
@@ -1618,7 +1155,7 @@ public sealed class HeadPreviewRenderer : IDisposable
         }
         finally
         {
-            _context.UnmapSubresource(_stagingTexture, 0);
+            _context.UnmapSubresource(_targets.Staging.Texture, 0);
         }
     }
 
@@ -1641,8 +1178,31 @@ public sealed class HeadPreviewRenderer : IDisposable
             CpuAccessFlags.Write,
             ResourceOptionFlags.None,
             Marshal.SizeOf<GpuVertex>());
-        WriteDynamicVertices(buffer, vertices);
-        return buffer;
+        try
+        {
+            WriteDynamicVertices(buffer, vertices);
+            return buffer;
+        }
+        catch
+        {
+            buffer.Dispose();
+            throw;
+        }
+    }
+
+    private MeshBuffers CreateMeshBuffers(HeadPreviewSceneState.Mesh mesh)
+    {
+        var vertices = CreateDynamicVertexBuffer(mesh.Vertices);
+        try
+        {
+            return new MeshBuffers(vertices,
+                Buffer.Create(_device, BindFlags.IndexBuffer, mesh.Indices.ToArray()), mesh);
+        }
+        catch
+        {
+            vertices.Dispose();
+            throw;
+        }
     }
 
     private unsafe void WriteDynamicVertices(Buffer buffer, IReadOnlyList<HeadPreviewVertex> vertices)
@@ -1690,8 +1250,7 @@ public sealed class HeadPreviewRenderer : IDisposable
         {
             var colorQuality = _device.CheckMultisampleQualityLevels(Format.R16G16B16A16_Float, count);
             var depthQuality = _device.CheckMultisampleQualityLevels(Format.D32_Float, count);
-            var normalQuality = _device.CheckMultisampleQualityLevels(Format.R16G16B16A16_Float, count);
-            if (colorQuality > 0 && depthQuality > 0 && normalQuality > 0)
+            if (colorQuality > 0 && depthQuality > 0)
             {
                 // D3D11_STANDARD_MULTISAMPLE_PATTERN: predictable sample positions
                 // are required when reconstructing each selected AO depth sample.
@@ -1737,38 +1296,6 @@ public sealed class HeadPreviewRenderer : IDisposable
         _meshes.Clear();
     }
 
-    private void DisposeMaterialTextures()
-    {
-        _context.PixelShader.SetShaderResources(0, new ShaderResourceView?[10]);
-        foreach (var texture in _gpuTextures.Values)
-        {
-            texture.Dispose();
-        }
-        _gpuTextures.Clear();
-        _gpuTextureBytes = 0;
-    }
-
-    private void EvictGpuTexturesToFit(long incomingBytes, string protectedKey)
-    {
-        var activeKeys = GetActiveTextureKeys();
-        while (_gpuTextureBytes + incomingBytes > MaximumGpuTextureBytes && _gpuTextures.Count > 0)
-        {
-            var candidates = _gpuTextures
-                .Where(pair => !activeKeys.Contains(pair.Key) &&
-                               !string.Equals(pair.Key, protectedKey, StringComparison.OrdinalIgnoreCase))
-                .ToArray();
-            if (candidates.Length == 0)
-            {
-                break;
-            }
-            var candidate = candidates.MinBy(pair => pair.Value.LastUsed);
-            _context.PixelShader.SetShaderResources(0, new ShaderResourceView?[10]);
-            _gpuTextures.Remove(candidate.Key);
-            _gpuTextureBytes -= candidate.Value.ByteCount;
-            candidate.Value.Dispose();
-        }
-    }
-
     private HashSet<string> GetActiveTextureKeys()
     {
         var materials = _meshes.SelectMany(mesh => mesh.Sections).Select(section => section.Material);
@@ -1776,75 +1303,6 @@ public sealed class HeadPreviewRenderer : IDisposable
             .Concat(materials.Select(material => material.FixedCubeTexture?.Key).OfType<string>())
             .Concat(materials.Select(material => material.SecondaryFixedCubeTexture?.Key).OfType<string>())
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-    }
-
-    private void PruneMaterialTextures()
-    {
-        var activeKeys = GetActiveTextureKeys();
-        var expiredKeys = _gpuTextures.Keys.Where(key => !activeKeys.Contains(key)).ToArray();
-        if (expiredKeys.Length == 0)
-        {
-            return;
-        }
-
-        _context.PixelShader.SetShaderResources(0, new ShaderResourceView?[10]);
-        foreach (var key in expiredKeys)
-        {
-            _gpuTextures.Remove(key, out var texture);
-            if (texture is not null)
-            {
-                _gpuTextureBytes -= texture.ByteCount;
-            }
-            texture?.Dispose();
-        }
-    }
-
-    private void DisposeRenderTargets()
-    {
-        _aoSurfaceShaderView.Dispose();
-        _aoSurfaceTarget.Dispose();
-        _aoSurfaceTexture.Dispose();
-        _aoReceiverPlaneShaderView.Dispose();
-        _aoReceiverPlaneTarget.Dispose();
-        _aoReceiverPlaneTexture.Dispose();
-        _aoVisibilityShaderView.Dispose();
-        _aoVisibilityTarget.Dispose();
-        _aoVisibilityTexture.Dispose();
-        _aoScratchShaderView.Dispose();
-        _aoScratchTarget.Dispose();
-        _aoScratchTexture.Dispose();
-        _aoCompositedShaderView.Dispose();
-        _aoCompositedTarget.Dispose();
-        _aoCompositedTexture.Dispose();
-        _bloomShaderView.Dispose();
-        _bloomTarget.Dispose();
-        _bloomTexture.Dispose();
-        _bloomScratchShaderView.Dispose();
-        _bloomScratchTarget.Dispose();
-        _bloomScratchTexture.Dispose();
-        _stagingTexture.Dispose();
-        _postTarget.Dispose();
-        _postTexture.Dispose();
-        _resolvedShaderView.Dispose();
-        _resolvedTexture.Dispose();
-        _resolvedAmbientShaderView.Dispose();
-        _resolvedAmbientTexture.Dispose();
-        _aoDepthShaderView.Dispose();
-        _aoDepthTexture.Dispose();
-        _depthShaderView.Dispose();
-        _depthView.Dispose();
-        _depthTexture.Dispose();
-        _aoNormalShaderView.Dispose();
-        _aoNormalTexture.Dispose();
-        _normalTarget.Dispose();
-        _normalTexture.Dispose();
-        _opaquePlaneShaderView.Dispose();
-        _opaquePlaneTarget.Dispose();
-        _opaquePlaneTexture.Dispose();
-        _ambientDiffuseTarget.Dispose();
-        _ambientDiffuseTexture.Dispose();
-        _renderTarget.Dispose();
-        _renderTexture.Dispose();
     }
 
     public void Dispose() => Dispose(releaseScene: true);
@@ -1855,53 +1313,49 @@ public sealed class HeadPreviewRenderer : IDisposable
         {
             return;
         }
-        _context.ClearState();
-        _context.Flush();
+        _context?.ClearState();
+        _context?.Flush();
         DisposeMeshes();
         if (releaseScene) _sceneState.ClearScene();
-        DisposeMaterialTextures();
-        DisposeRenderTargets();
-        _gradingShaderView?.Dispose();
-        _gradingTexture?.Dispose();
-        _shadowShaderView.Dispose();
-        _shadowDepthView.Dispose();
-        _shadowTexture.Dispose();
-        _postSampler.Dispose();
-        _materialSampler.Dispose();
-        _depthOnlyBlendState.Dispose();
-        _additiveBlendState.Dispose();
-        _translucentBlendState.Dispose();
-        _opaqueBlendState.Dispose();
-        _depthReadState.Dispose();
-        _shadowDepthState.Dispose();
-        _depthState.Dispose();
-        _wireframeFrontFacesRasterizer.Dispose();
-        _wireframeBackFacesRasterizer.Dispose();
-        _solidFrontFacesRasterizer.Dispose();
-        _solidBackFacesRasterizer.Dispose();
-        _wireframeRasterizer.Dispose();
-        _solidRasterizer.Dispose();
-        _shadowRasterizer.Dispose();
-        _materialBuffer.Dispose();
-        _shadowBuffer.Dispose();
-        _postProcessBuffer.Dispose();
-        _meshBuffer.Dispose();
-        _skinningBuffer.Dispose();
-        _sceneBuffer.Dispose();
-        _inputLayout.Dispose();
-        _pixelShader.Dispose();
-        _shadowPixelShader.Dispose();
-        _vertexShader.Dispose();
-        _postPixelShader.Dispose();
-        _aoSurfaceShader.Dispose();
-        _ambientOcclusionShader.Dispose();
-        _aoBlurShader.Dispose();
-        _applyAmbientOcclusionShader.Dispose();
-        _bloomExtractShader.Dispose();
-        _bloomBlurShader.Dispose();
-        _postVertexShader.Dispose();
-        _context.Dispose();
-        _device.Dispose();
+        _textureCache?.Dispose();
+        _targets?.Dispose();
+        _gradingLut?.Dispose();
+        _shadowMap?.Dispose();
+
+        _postSampler?.Dispose();
+        _materialSampler?.Dispose();
+        _depthOnlyBlendState?.Dispose();
+        _additiveBlendState?.Dispose();
+        _translucentBlendState?.Dispose();
+        _opaqueBlendState?.Dispose();
+        _depthReadState?.Dispose();
+        _depthState?.Dispose();
+        _wireframeFrontFacesRasterizer?.Dispose();
+        _wireframeBackFacesRasterizer?.Dispose();
+        _solidFrontFacesRasterizer?.Dispose();
+        _solidBackFacesRasterizer?.Dispose();
+        _wireframeRasterizer?.Dispose();
+        _solidRasterizer?.Dispose();
+        _materialBuffer?.Dispose();
+        _shadowBuffer?.Dispose();
+        _postProcessBuffer?.Dispose();
+        _meshBuffer?.Dispose();
+        _skinningBuffer?.Dispose();
+        _sceneBuffer?.Dispose();
+        _inputLayout?.Dispose();
+        _pixelShader?.Dispose();
+        _shadowPixelShader?.Dispose();
+        _vertexShader?.Dispose();
+        _postPixelShader?.Dispose();
+        _aoSurfaceShader?.Dispose();
+        _ambientOcclusionShader?.Dispose();
+        _aoBlurShader?.Dispose();
+        _applyAmbientOcclusionShader?.Dispose();
+        _bloomExtractShader?.Dispose();
+        _bloomBlurShader?.Dispose();
+        _postVertexShader?.Dispose();
+        _context?.Dispose();
+        _device?.Dispose();
         _disposed = true;
     }
 
@@ -1974,63 +1428,6 @@ public sealed class HeadPreviewRenderer : IDisposable
         public Vector4 AoRadiusParameters;
         public Vector4 AoFilterParameters;
         public Vector4 AoParameters;
-    }
-
-    private sealed class GpuTexture(
-        Texture2D resource,
-        long byteCount,
-        long lastUsed) : IDisposable
-    {
-        private readonly Dictionary<TextureColorSpace, ShaderResourceView> _views = [];
-        public Texture2D Resource { get; } = resource;
-        public long ByteCount { get; } = byteCount;
-        public long LastUsed { get; set; } = lastUsed;
-
-        // One uploaded image can be sampled as both colour and packed data.
-        public ShaderResourceView GetView(Device device, TextureColorSpace colorSpace)
-        {
-            if (_views.TryGetValue(colorSpace, out var existing))
-            {
-                return existing;
-            }
-            var textureDescription = Resource.Description;
-            var description = new ShaderResourceViewDescription
-            {
-                Format = colorSpace == TextureColorSpace.Srgb
-                    ? Format.R8G8B8A8_UNorm_SRgb
-                    : Format.R8G8B8A8_UNorm
-            };
-            if ((textureDescription.OptionFlags & ResourceOptionFlags.TextureCube) != 0)
-            {
-                description.Dimension = ShaderResourceViewDimension.TextureCube;
-                description.TextureCube = new ShaderResourceViewDescription.TextureCubeResource
-                {
-                    MostDetailedMip = 0,
-                    MipLevels = textureDescription.MipLevels
-                };
-            }
-            else
-            {
-                description.Dimension = ShaderResourceViewDimension.Texture2D;
-                description.Texture2D = new ShaderResourceViewDescription.Texture2DResource
-                {
-                    MostDetailedMip = 0,
-                    MipLevels = textureDescription.MipLevels
-                };
-            }
-            var view = new ShaderResourceView(device, Resource, description);
-            _views.Add(colorSpace, view);
-            return view;
-        }
-
-        public void Dispose()
-        {
-            foreach (var view in _views.Values)
-            {
-                view.Dispose();
-            }
-            Resource.Dispose();
-        }
     }
 
     [StructLayout(LayoutKind.Sequential)]

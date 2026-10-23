@@ -47,11 +47,11 @@ public static class EnvironmentRenderingTests
             Environment: constant);
 
         renderer.Render(camera, options);
-        var constantScene = ReadFloatTarget(renderer, "_resolvedTexture");
-        var constantAmbient = ReadFloatTarget(renderer, "_resolvedAmbientTexture");
+        var constantScene = ReadFloatTarget(renderer, "Resolved");
+        var constantAmbient = ReadFloatTarget(renderer, "ResolvedAmbient");
         var variedFrame = renderer.Render(camera, options with { Environment = oriented });
-        var variedScene = ReadFloatTarget(renderer, "_resolvedTexture");
-        var variedAmbient = ReadFloatTarget(renderer, "_resolvedAmbientTexture");
+        var variedScene = ReadFloatTarget(renderer, "Resolved");
+        var variedAmbient = ReadFloatTarget(renderer, "ResolvedAmbient");
 
         // Flat normal and centre pixel avoid interpolation and silhouette edges.
         var offset = PixelIndex(96, 48, 48) * 4;
@@ -88,11 +88,11 @@ public static class EnvironmentRenderingTests
         {
             camera.Orbit(yaw, yaw * 0.2f);
             renderer.Render(camera, options);
-            var albedo = ReadFloatTarget(renderer, "_resolvedAmbientTexture");
+            var albedo = ReadFloatTarget(renderer, "ResolvedAmbient");
             renderer.Render(camera, options with { Environment = null });
-            var presetAmbient = ReadFloatTarget(renderer, "_resolvedAmbientTexture");
+            var presetAmbient = ReadFloatTarget(renderer, "ResolvedAmbient");
             renderer.Render(camera, options with { Environment = environment });
-            var worldAmbient = ReadFloatTarget(renderer, "_resolvedAmbientTexture");
+            var worldAmbient = ReadFloatTarget(renderer, "ResolvedAmbient");
             var rigNormal = new Vector3(
                 Vector3.Dot(normal, camera.TransformCameraDirectionToWorld(Vector3.UnitX)),
                 Vector3.Dot(normal, camera.TransformCameraDirectionToWorld(Vector3.UnitY)),

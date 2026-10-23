@@ -3,7 +3,6 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
-using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.Rendering;
 
 namespace MorphFaceEditor.Presentation;
@@ -19,8 +18,8 @@ public sealed class HeadPreviewHostController : IDisposable
     private readonly DispatcherTimer _resizeTimer;
     private readonly DispatcherTimer _animationTimer;
     private readonly HeadOrbitCamera _camera = new();
+    private readonly HeadPreviewSceneState _scene = new();
     private HeadPreviewRenderer? _renderer;
-    private HeadPreviewScene? _scene;
     private HeadPreviewOptions _options = new();
     private WriteableBitmap? _bitmap;
     private byte[]? _pixelBuffer;
@@ -66,7 +65,9 @@ public sealed class HeadPreviewHostController : IDisposable
     public void SetScene(HeadPreviewScene scene, bool resetPosition = false)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        _scene = scene ?? throw new ArgumentNullException(nameof(scene));
+        ArgumentNullException.ThrowIfNull(scene);
+        if (_renderer is not null) _renderer.SetScene(scene);
+        else _scene.SetScene(scene);
         _scenePublicationVersion++;
         // Clearing a face releases its resources, but must not make the next
         // face reset the user's orbit as if this were the first preview.
@@ -84,10 +85,6 @@ public sealed class HeadPreviewHostController : IDisposable
                 ResetCamera(_camera.ResetPosition);
             }
         }
-        if (_renderer is not null)
-        {
-            _renderer.SetScene(scene);
-        }
         // Scene publication is an explicit content update. A package/head load
         // often completes while the owner is briefly inactive (for example
         // after a file dialog closes); do not drop its first render and leave
@@ -101,8 +98,8 @@ public sealed class HeadPreviewHostController : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         _resizeTimer.Stop();
         _animationTimer.Stop();
-        _scene = null;
-        _renderer?.ClearScene();
+        if (_renderer is not null) _renderer.ClearScene();
+        else _scene.ClearScene();
         _bitmap = null;
         _pixelBuffer = null;
         _renderQueued = false;
@@ -121,38 +118,8 @@ public sealed class HeadPreviewHostController : IDisposable
     public void UpdateDeformation(HeadPreviewDeformationUpdate update)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        ArgumentNullException.ThrowIfNull(update);
-        if (_scene is null)
-        {
-            throw new InvalidOperationException("A preview scene must be loaded before deformation can be updated.");
-        }
-        var meshIndex = _scene.Meshes.ToList().FindIndex(mesh => string.Equals(mesh.Name, update.MeshName, StringComparison.Ordinal));
-        if (meshIndex < 0)
-        {
-            throw new KeyNotFoundException($"Preview mesh '{update.MeshName}' is not loaded.");
-        }
-        var meshes = _scene.Meshes.ToArray();
-        meshes[meshIndex] = meshes[meshIndex] with { Vertices = update.Vertices };
-        foreach (var attachmentUpdate in update.AttachmentUpdates)
-        {
-            var attachmentIndex = meshes.ToList().FindIndex(mesh =>
-                string.Equals(mesh.Name, attachmentUpdate.MeshName, StringComparison.Ordinal));
-            if (attachmentIndex < 0)
-            {
-                throw new KeyNotFoundException($"Preview attachment '{attachmentUpdate.MeshName}' is not loaded.");
-            }
-            meshes[attachmentIndex] = meshes[attachmentIndex] with { Vertices = attachmentUpdate.Vertices };
-        }
-        _scene = _scene with { Meshes = meshes, SkinningPalette = update.SkinningPalette };
-        if (_renderer is not null)
-        {
-            _renderer.UpdateMeshVertices(update.MeshName, update.Vertices);
-            foreach (var attachmentUpdate in update.AttachmentUpdates)
-            {
-                _renderer.UpdateMeshVertices(attachmentUpdate.MeshName, attachmentUpdate.Vertices);
-            }
-            _renderer.SetSkinningPalette(update.SkinningPalette);
-        }
+        if (_renderer is not null) _renderer.UpdateDeformation(update);
+        else _scene.UpdateDeformation(update);
         RequestRender();
     }
 
@@ -160,19 +127,8 @@ public sealed class HeadPreviewHostController : IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(update);
-        if (_scene is null)
-        {
-            throw new InvalidOperationException("A preview scene must be loaded before materials can be updated.");
-        }
-        var meshes = _scene.Meshes.Select(mesh => mesh with
-        {
-            Sections = mesh.Sections.Select(section =>
-                update.Materials.TryGetValue(section.Material.Key, out var material)
-                    ? section with { Material = material }
-                    : section).ToArray()
-        }).ToArray();
-        _scene = _scene with { Meshes = meshes };
-        _renderer?.UpdateMaterials(update.Materials);
+        if (_renderer is not null) _renderer.UpdateMaterials(update.Materials);
+        else _scene.UpdateMaterials(update.Materials);
         UpdateAnimationTimer();
         // A modal HDR picker deactivates the owner window. An explicit material
         // preview still needs one frame; ordinary lifecycle renders remain gated.
@@ -199,7 +155,7 @@ public sealed class HeadPreviewHostController : IDisposable
 
     public void RequestRender(bool allowInactive = false)
     {
-        if (_disposed || _scene is null || !CanRenderNow(allowInactive))
+        if (_disposed || !_scene.IsLoaded || !CanRenderNow(allowInactive))
         {
             return;
         }
@@ -241,7 +197,7 @@ public sealed class HeadPreviewHostController : IDisposable
 
     private void RenderNow(bool allowInactive = false)
     {
-        if (_disposed || _scene is null || !CanRenderNow(allowInactive))
+        if (_disposed || !_scene.IsLoaded || !CanRenderNow(allowInactive))
         {
             return;
         }
@@ -280,8 +236,7 @@ public sealed class HeadPreviewHostController : IDisposable
     {
         if (_renderer is null)
         {
-            _renderer = new HeadPreviewRenderer(width, height);
-            _renderer.SetScene(_scene!);
+            _renderer = new HeadPreviewRenderer(width, height, _scene);
             Diagnostics.RendererCreations++;
         }
         else if (_pixelWidth != width || _pixelHeight != height)
@@ -310,7 +265,7 @@ public sealed class HeadPreviewHostController : IDisposable
 
     private void OnHostSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        if (_disposed || _scene is null)
+        if (_disposed || !_scene.IsLoaded)
         {
             return;
         }
@@ -331,8 +286,7 @@ public sealed class HeadPreviewHostController : IDisposable
     {
         var animate = CanRender && _host.IsVisible &&
                       _options.RenderMode != HeadPreviewRenderMode.Diagnostic &&
-                      _scene?.Meshes.Any(mesh => mesh.Sections.Any(section =>
-                          section.Material.PreviewModel == HumanMaterialPreviewModel.VisorLens)) == true;
+                      _scene.HasAnimatedMaterials;
         if (animate) _animationTimer.Start();
         else _animationTimer.Stop();
     }
@@ -369,7 +323,7 @@ public sealed class HeadPreviewHostController : IDisposable
         _window.Closed -= OnWindowClosed;
         _host.SizeChanged -= OnHostSizeChanged;
         _host.IsVisibleChanged -= OnVisibilityChanged;
-        _scene = null;
+        _scene.ClearScene();
         if (_renderer is not null)
         {
             _renderer.Dispose();

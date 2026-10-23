@@ -51,6 +51,66 @@ public static class MaterialRendererTests
         TestAssert.Equal(1, renderer.DeviceCreationCount);
         TestAssert.Equal(2, renderer.TextureUploadCount);
         TestAssert.Equal(4L, renderer.GpuTextureBytes);
+
+        var original = HumanMaterialTestFixtures.CreateFemaleSkinMaterial(
+            red.Key, browStrength: 0, makeupRgba: [0, 255, 255, 0], eyeStrength: 1);
+        var vectorEdit = original with
+        {
+            Vectors = new Dictionary<string, Vector4>(original.Vectors)
+            {
+                ["HED_EyeShadow_Tint_Vector"] = new(0.8f, 0.1f, 0.05f, 1)
+            }
+        };
+        var scalarEdit = vectorEdit with
+        {
+            Scalars = new Dictionary<string, float>(vectorEdit.Scalars)
+            {
+                ["HED_EyeShadow_Tint_Scalar"] = 0
+            }
+        };
+        var originalPixels = UpdateAndCompare(original);
+        var vectorPixels = UpdateAndCompare(vectorEdit);
+        TestAssert.True(!originalPixels.SequenceEqual(vectorPixels),
+            "The same-key tint vector replacement did not change the visible material.");
+        var scalarPixels = UpdateAndCompare(scalarEdit);
+        TestAssert.True(!vectorPixels.SequenceEqual(scalarPixels),
+            "The same-key tint scalar replacement did not change the visible material.");
+        TestAssert.True(originalPixels.SequenceEqual(UpdateAndCompare(original)),
+            "Reverting material constants did not restore their original output.");
+        renderer.ClearScene();
+        renderer.SetScene(SceneWithMaterial(original));
+        AssertMatchesFresh(original);
+        TestAssert.Equal(1, renderer.DeviceCreationCount);
+
+        HeadPreviewScene SceneWithMaterial(HeadPreviewMaterial material) => scene with
+        {
+            Meshes = [mesh with { Sections = [new HeadPreviewSection(0, 3, 0, material)] }]
+        };
+
+        byte[] UpdateAndCompare(HeadPreviewMaterial material)
+        {
+            renderer.UpdateMaterials(new Dictionary<string, HeadPreviewMaterial> { [material.Key] = material });
+            return AssertMatchesFresh(material);
+        }
+
+        byte[] AssertMatchesFresh(HeadPreviewMaterial material)
+        {
+            using var fresh = new HeadPreviewRenderer(96, 96);
+            fresh.SetScene(SceneWithMaterial(material));
+            byte[] unlitPixels = [];
+            foreach (var mode in new[] { HeadPreviewRenderMode.Shaded, HeadPreviewRenderMode.Unlit,
+                         HeadPreviewRenderMode.Diagnostic, HeadPreviewRenderMode.Shaded })
+            {
+                var options = new HeadPreviewOptions(mode, AmbientOcclusionEnabled: false,
+                    ShadowsEnabled: false, PostProcessingEnabled: false);
+                var actual = renderer.Render(camera, options, animationTimeSeconds: 0).BgraPixels;
+                var expected = fresh.Render(camera, options, animationTimeSeconds: 0).BgraPixels;
+                TestAssert.True(expected.SequenceEqual(actual),
+                    $"Updated material constants differ from an independently loaded scene in {mode} mode.");
+                if (mode == HeadPreviewRenderMode.Unlit) unlitPixels = actual;
+            }
+            return unlitPixels;
+        }
     }
 
     private static void RendererUploadsAuthoredMipChain()

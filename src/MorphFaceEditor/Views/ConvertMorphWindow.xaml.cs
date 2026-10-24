@@ -22,12 +22,10 @@ public partial class ConvertMorphWindow : Window
         DarkTitleBar.Apply(this);
         _sourcePackagePath = sourcePackagePath;
         _suggestedFileName = suggestedFileName;
-        TargetGameBox.ItemsSource = new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 }
+        TargetGameSelector.ItemsSource = new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 }
             .Where(game => game != sourceGame)
-            .Select(game => new GameChoice(game, game.ToString()))
             .ToArray();
-        TargetGameBox.SelectedIndex = 0;
-        TargetGameBox.IsEnabled = TargetGameBox.Items.Count > 1;
+        TargetGameSelector.SelectedIndex = 0;
         DestinationBox.Focus();
     }
 
@@ -44,7 +42,7 @@ public partial class ConvertMorphWindow : Window
 
     private void OnConvert(object sender, RoutedEventArgs e)
     {
-        if (TargetGameBox.SelectedItem is not GameChoice target)
+        if (TargetGameSelector.SelectedGame is not MorphFaceGame target)
         {
             ValidationText.Text = Loc.Text("loc_ConvertMorphWindow_ChooseTargetGame");
             return;
@@ -63,7 +61,7 @@ public partial class ConvertMorphWindow : Window
                 return;
             }
             Request = new MorphConversionSaveRequest(
-                target.Game,
+                target,
                 Path.GetFullPath(destination),
                 CreateNewPackage: false,
                 TemplatePackagePath: null);
@@ -73,7 +71,7 @@ public partial class ConvertMorphWindow : Window
 
         var outputDialog = new SaveFileDialog
         {
-            Title = Loc.Format("loc_ConvertMorphWindow_CreateConvertedMorphPcc", target.Label),
+            Title = Loc.Format("loc_ConvertMorphWindow_CreateConvertedMorphPcc", target),
             Filter = EditorFileDrop.PackageFilter,
             AddExtension = true,
             DefaultExt = ".pcc",
@@ -96,7 +94,7 @@ public partial class ConvertMorphWindow : Window
             return;
         }
         Request = new MorphConversionSaveRequest(
-            target.Game,
+            target,
             Path.GetFullPath(outputDialog.FileName),
             CreateNewPackage: true,
             TemplatePackagePath: null);
@@ -116,6 +114,4 @@ public partial class ConvertMorphWindow : Window
         Path.GetFullPath(path),
         Path.GetFullPath(_sourcePackagePath),
         StringComparison.OrdinalIgnoreCase);
-
-    private sealed record GameChoice(MorphFaceGame Game, string Label);
 }

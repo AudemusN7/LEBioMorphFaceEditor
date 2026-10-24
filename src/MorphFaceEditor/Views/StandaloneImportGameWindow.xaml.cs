@@ -16,7 +16,7 @@ public partial class StandaloneImportGameWindow : Window
         if (newPlayerMode)
         {
             Title = Loc.Text("loc_StandaloneImportGameWindow_NewPlayerMorph");
-            Height = 300;
+            Height = 350;
             PromptText.Text = Loc.Text("loc_StandaloneImportGameWindow_NewPlayerPrompt");
             ImportGamePanel.Visibility = Visibility.Collapsed;
             NewPlayerPanel.Visibility = Visibility.Visible;
@@ -27,13 +27,6 @@ public partial class StandaloneImportGameWindow : Window
             ContinueButton.IsDefault = true;
             ContinueButton.Content = Loc.Text("loc_StandaloneImportGameWindow_Continue");
         }
-        GameBox.ItemsSource = new[]
-        {
-            new GameChoice(MorphFaceGame.LE1, "LE1"),
-            new GameChoice(MorphFaceGame.LE2, "LE2"),
-            new GameChoice(MorphFaceGame.LE3, "LE3")
-        };
-        GameBox.SelectedIndex = 0;
     }
 
     public StandalonePlayerSex SelectedSex => SexBox.SelectedIndex == 1 ? StandalonePlayerSex.Female : StandalonePlayerSex.Male;
@@ -50,15 +43,13 @@ public partial class StandaloneImportGameWindow : Window
 
     private void OnContinue(object sender, RoutedEventArgs e)
     {
-        if (GameBox.SelectedItem is not GameChoice choice)
+        if (TargetGameSelector.SelectedGame is not MorphFaceGame game)
         {
             ValidationText.Text = Loc.Text("loc_StandaloneImportGameWindow_ChooseTargetGame");
             return;
         }
 
-        SelectedGame = choice.Game;
+        SelectedGame = game;
         DialogResult = true;
     }
-
-    private sealed record GameChoice(MorphFaceGame Game, string Label);
 }

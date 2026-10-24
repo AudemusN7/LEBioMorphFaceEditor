@@ -1,6 +1,7 @@
 <Window x:Class="MorphFaceEditor.Views.StandaloneImportGameWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:MorphFaceEditor.Controls"
         xmlns:domain="clr-namespace:MorphFaceEditor.Core.Domain;assembly=MorphFaceEditor.Core"
         Title="{DynamicResource loc_View_StandaloneImportGameWindow_ImportMorph}"
         Width="420" Height="220" ResizeMode="NoResize"
@@ -60,8 +61,8 @@
         </StackPanel>
         <StackPanel x:Name="NewPlayerPanel" Grid.Row="1" Visibility="Collapsed">
             <TextBlock Text="{DynamicResource loc_View_StandaloneImportGameWindow_TARGETGAME}" Style="{StaticResource FieldLabel}" />
-            <ComboBox x:Name="GameBox" Width="150" HorizontalAlignment="Left" Margin="0,5,0,0"
-                      DisplayMemberPath="Label" />
+            <controls:GameSelector x:Name="TargetGameSelector" Margin="0,8,0,0"
+                                   AutomationProperties.Name="{DynamicResource loc_View_StandaloneImportGameWindow_TARGETGAME}" />
             <StackPanel x:Name="SexPanel" Visibility="Collapsed" Margin="0,12,0,0">
                 <TextBlock Text="{DynamicResource loc_View_StandaloneImportGameWindow_PLAYER}" Style="{StaticResource FieldLabel}" />
                 <ComboBox x:Name="SexBox" Width="150" HorizontalAlignment="Left" Margin="0,5,0,0" SelectedIndex="0">

@@ -1,8 +1,9 @@
 <Window x:Class="MorphFaceEditor.Views.ConvertMorphWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:MorphFaceEditor.Controls"
         Title="{DynamicResource loc_View_ConvertMorphWindow_ConvertMorph}"
-        Width="650" Height="315" ResizeMode="NoResize"
+        Width="650" Height="365" ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource WindowBackground}"
         Foreground="{DynamicResource PrimaryText}">
@@ -18,8 +19,8 @@
                    TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}" Margin="0,0,0,15" />
         <StackPanel Grid.Row="1" Margin="0,0,0,13">
             <TextBlock Text="{DynamicResource loc_View_ConvertMorphWindow_TARGETGAME}" Style="{StaticResource FieldLabel}" />
-            <ComboBox x:Name="TargetGameBox" Width="150" HorizontalAlignment="Left" Margin="0,5,0,0"
-                      DisplayMemberPath="Label" />
+            <controls:GameSelector x:Name="TargetGameSelector" Margin="0,8,0,0"
+                                   AutomationProperties.Name="{DynamicResource loc_View_ConvertMorphWindow_TARGETGAME}" />
         </StackPanel>
         <Grid Grid.Row="2">
             <Grid.RowDefinitions>

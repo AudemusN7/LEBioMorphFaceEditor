@@ -16,4 +16,6 @@ D0417B39CE27BBA575EEC6FB529DFB0614F14750636F0242C0AA7B00CBA7B745  CompressionWra
 CE8D9728246585F0389F50699B3BA37F3D3FECE722E4770B346583CAECBC5607  TexConverter.dll
 ```
 
-Managed transitive dependency versions are pinned centrally in `Directory.Packages.props` and captured in project lock files. The LegendaryExplorer adapter build also verifies the Core DLL hash before resolving references.
+Managed transitive dependency versions are pinned centrally in `Directory.Packages.props` and captured in project lock files. The LegendaryExplorer adapter build verifies the Core DLL and both shipped native DLLs before resolving references; Debug also verifies the copied portable PDB. `eng/Verify-LegendaryExplorerCore.ps1 [-Configuration Debug]` invokes that same build target. ISACTTools is retained from the source snapshot but is unused and is not shipped by MFE.
+
+The adapter pins ImageSharp 3.2.0 for the v3 security fixes. Its direct-package build validation uses the repository-root `sixlabors.lic` by default; override `SixLaborsLicenseFile` for another supplied file, or use the package-supported `SixLaborsLicenseKey` property. The included assembly-scoped Community licence covers `MorphFaceEditor.LegendaryExplorer` until 22 January 2028. Six Labors permits [sharing assembly-scoped Community keys with contributors](https://sixlabors.com/posts/security-support-and-license-enforcement/); unrestricted keys must remain private. The licence file is a build input and is not shipped with MFE.

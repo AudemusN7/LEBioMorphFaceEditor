@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 
 namespace MorphFaceEditor.Infrastructure;
 
+internal enum ThemeMode { System, Light, Dark }
 internal sealed record ViewportBackgroundPreference(bool FollowTheme = true, BackgroundColourPreference? Colour = null);
 internal sealed record BackgroundColourPreference(float Red, float Green, float Blue);
 internal sealed record SidePaneWidthsPreference(double? FaceBrowser = null, double? FaceEditor = null);

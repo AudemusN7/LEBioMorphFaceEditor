@@ -21,14 +21,17 @@ foreach ($parent in $parents) {
     if ($null -eq $highest -or $old -gt $highest) { $highest = $old }
 }
 if ($null -ne $highest) {
-    $allowed = @(
-        "$($highest.Major).$($highest.Minor).$($highest.Build).$($highest.Revision + 1)",
-        "$($highest.Major).$($highest.Minor).$($highest.Build + 1).0",
-        "$($highest.Major).$($highest.Minor + 1).0.0",
-        "$($highest.Major + 1).0.0.0"
-    )
-    if ($current.ToString(4) -notin $allowed) {
-        throw "Version $current must increment one component of $highest by one and reset lower components."
+    $oldParts = @($highest.Major, $highest.Minor, $highest.Build, $highest.Revision)
+    $newParts = @($current.Major, $current.Minor, $current.Build, $current.Revision)
+    for ($index = 0; $index -lt 4; $index++) {
+        if ($newParts[$index] -eq $oldParts[$index]) { continue }
+        # Intermediate QA builds may consume version numbers before a commit.
+        for ($lower = $index + 1; $lower -lt 4; $lower++) {
+            if ($newParts[$lower] -ne 0) {
+                throw "Version $current must reset components below the increased component of $highest."
+            }
+        }
+        break
     }
 }
 Write-Output "Version $current is valid."

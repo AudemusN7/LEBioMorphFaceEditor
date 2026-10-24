@@ -71,7 +71,7 @@ internal static class CorpusCommands
         {
             WriteIndented = true
         }), new UTF8Encoding(false));
-        Console.WriteLine($"Wrote {results.Length} unambiguous changed/omitted asset decisions to {outputPath}");
+        Console.WriteLine($"Wrote {results.Length} changed/omitted asset decisions, including reviewed exceptions, to {outputPath}");
     }
 
     public static void WriteMaterialOracle(string directory, string outputFile)
@@ -305,6 +305,23 @@ internal static class CorpusCommands
                 .ToArray();
             if (targets.Length != 1)
             {
+                // The accepted corpus retained these two exact native cap aliases.
+                // Some faces omit the cap, so aggregate fixture evidence alone is
+                // ambiguous; an omission must not erase the reviewed mapping.
+                const string capSource = "BIOG_HMM_HIR_PRO_R.Hat_Cap.HMM_HAT_Cap_MDL";
+                const string capTarget = "BIOG_HMM_HIR_PRO_R.Cap.HMM_HAT_Cap_MDL";
+                var reviewedSample = group.First();
+                if (sourceGame == "LE3" && targetGame is "LE1" or "LE2" &&
+                    reviewedSample.Kind == "Hair" && reviewedSample.Parameter is null &&
+                    reviewedSample.SourcePath.Equals(capSource, StringComparison.OrdinalIgnoreCase) &&
+                    targets.Any(path => path?.Equals(capTarget, StringComparison.OrdinalIgnoreCase) == true) &&
+                    targets.All(path => path is null || path.Equals(capTarget, StringComparison.OrdinalIgnoreCase)))
+                {
+                    Console.WriteLine($"Retained reviewed {sourceGame}->{targetGame} cap alias despite omitted fixture instances.");
+                    yield return new CorpusReconciliationDecision(
+                        sourceGame, targetGame, "Hair", null, capSource, capTarget, 1);
+                    continue;
+                }
                 Console.Error.WriteLine(
                     $"Skipped ambiguous {sourceGame}->{targetGame} reconciliation for {group.Key}: " +
                     string.Join(", ", targets.Select(value => value ?? "<omitted>")));

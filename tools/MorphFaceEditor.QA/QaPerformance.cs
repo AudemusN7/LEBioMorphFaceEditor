@@ -11,9 +11,6 @@ internal static class QaPerformance
         _ => null
     };
 
-    public static bool Exceeded(QaStageKind kind, double milliseconds) =>
-        Limit(kind) is { } limit && milliseconds > limit;
-
     public static double? FailureLimit(QaStageKind kind) => Limit(kind) * 3;
 
     public static void ApplyOutcomes(QaResult result)

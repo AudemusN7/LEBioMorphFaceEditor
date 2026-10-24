@@ -33,9 +33,21 @@ internal static class VisorLensAnimationLifecycleTests
             Content = host
         };
         using var controller = new HeadPreviewHostController(window, host, image);
+        var trace = new List<string>();
+        string? previewFailure = null;
+        void Trace(string kind) => trace.Add($"VISOR {kind}: active={window.IsActive}; state={window.WindowState}; visible={window.IsVisible}/{host.IsVisible}; size={host.ActualWidth}x{host.ActualHeight}; frames={controller.Diagnostics.FramesRendered}");
+        window.Activated += (_, _) => Trace("Activated");
+        window.Deactivated += (_, _) => Trace("Deactivated");
+        window.StateChanged += (_, _) => Trace("StateChanged");
+        controller.PreviewFailed += message =>
+        {
+            previewFailure ??= message;
+            trace.Add("VISOR PreviewFailed: " + message);
+        };
         try
         {
             window.Show();
+            WaitForActivation(window);
             PumpFor(TimeSpan.FromMilliseconds(200));
             var staticScene = Scene(CreateMaterial(HumanMaterialPreviewModel.Default, HeadMaterialBlendMode.Opaque));
             var lensMaterial = CreateMaterial(HumanMaterialPreviewModel.VisorLens, HeadMaterialBlendMode.Additive);
@@ -62,6 +74,7 @@ internal static class VisorLensAnimationLifecycleTests
             })
             {
                 var pausedFrames = AssertPublicationThenQuiet(pause, label);
+                Trace("Resuming " + label);
                 resume();
                 WaitForFrames(controller, pausedFrames + 3,
                     $"Leaving {label} did not restart visor animation.");
@@ -69,9 +82,9 @@ internal static class VisorLensAnimationLifecycleTests
 
             foreach (var (label, enter, restore) in new (string, Action, Action)[]
             {
-                ("hidden", window.Hide, () => { window.Show(); window.Activate(); }),
+                ("hidden", window.Hide, window.Show),
                 ("minimized", () => window.WindowState = WindowState.Minimized,
-                    () => { window.WindowState = WindowState.Normal; window.Activate(); })
+                    () => window.WindowState = WindowState.Normal)
             })
             {
                 enter();
@@ -83,7 +96,7 @@ internal static class VisorLensAnimationLifecycleTests
                     $"A {label} host rendered animation or explicit scene/material/options changes.");
                 restore();
                 WaitForFrames(controller, gatedFrames + 3,
-                    $"Restoring the {label} visor host did not resume animation.");
+                    $"Restoring the {label} visor host did not resume animation.", window);
             }
 
             Exception? modalFailure = null;
@@ -96,7 +109,7 @@ internal static class VisorLensAnimationLifecycleTests
             {
                 try
                 {
-                    PumpFor(TimeSpan.FromMilliseconds(80));
+                    WaitForActivation(picker);
                     TestAssert.True(!window.IsActive && picker.IsActive,
                         "The modal fixture did not deactivate its preview owner.");
                     var inactiveFrames = controller.Diagnostics.FramesRendered;
@@ -114,9 +127,8 @@ internal static class VisorLensAnimationLifecycleTests
             });
             _ = picker.ShowDialog();
             if (modalFailure is not null) throw new InvalidOperationException("Modal preview publication failed.", modalFailure);
-            window.Activate();
             WaitForFrames(controller, controller.Diagnostics.FramesRendered + 3,
-                "Closing the modal picker did not resume visor animation.");
+                "Closing the modal picker did not resume visor animation.", window);
 
             controller.ClearScene();
             var clearedFrames = controller.Diagnostics.FramesRendered;
@@ -130,6 +142,7 @@ internal static class VisorLensAnimationLifecycleTests
             PumpFor(TimeSpan.FromMilliseconds(80));
             TestAssert.True(disposedFrames == controller.Diagnostics.FramesRendered,
                 "Disposing the host left an animation callback running.");
+            TestAssert.True(previewFailure is null, $"The lifecycle preview failed: {previewFailure}");
 
             void ApplyMaterial(HeadPreviewMaterial material) => controller.UpdateMaterials(new HeadPreviewMaterialUpdate(
                 new Dictionary<string, HeadPreviewMaterial> { [material.Key] = material }));
@@ -153,6 +166,12 @@ internal static class VisorLensAnimationLifecycleTests
                     $"The {kind} update left visor animation ticking.");
                 return settled;
             }
+        }
+        catch
+        {
+            Trace("FAILED");
+            Console.WriteLine(string.Join(Environment.NewLine, trace));
+            throw;
         }
         finally
         {
@@ -214,10 +233,29 @@ internal static class VisorLensAnimationLifecycleTests
         TextureAlphaPolicy.Ignore,
         false);
 
-    private static void WaitForFrames(HeadPreviewHostController controller, int minimumFrames, string message)
+    private static void WaitForFrames(HeadPreviewHostController controller, int minimumFrames, string message,
+        Window? activateWindow = null)
     {
-        bool Ready() => controller.Diagnostics.FramesRendered >= minimumFrames;
-        if (Ready()) return;
+        // Restore/ShowDialog do not guarantee that Windows has granted activation.
+        // Retry that fixture prerequisite while waiting, without relaxing the host's activity gate.
+        bool Ready() => (activateWindow is null || TryActivate(activateWindow)) &&
+                        controller.Diagnostics.FramesRendered >= minimumFrames;
+        WaitFor(Ready, () => activateWindow is null ? message :
+            $"{message} Window active={activateWindow.IsActive}, state={activateWindow.WindowState}.");
+    }
+
+    private static void WaitForActivation(Window window) => WaitFor(() => TryActivate(window),
+        () => $"The lifecycle fixture window did not activate (state={window.WindowState}, visible={window.IsVisible}).");
+
+    private static bool TryActivate(Window window)
+    {
+        if (!window.IsActive) _ = window.Activate();
+        return window.IsActive;
+    }
+
+    private static void WaitFor(Func<bool> ready, Func<string> failure)
+    {
+        if (ready()) return;
         var dispatcher = Dispatcher.CurrentDispatcher;
         var frame = new DispatcherFrame();
         var timeout = Stopwatch.StartNew();
@@ -228,13 +266,13 @@ internal static class VisorLensAnimationLifecycleTests
         poll.Tick += (_, _) =>
         {
             // Initial D3D/shader creation can exceed two seconds on a busy host.
-            if (!Ready() && timeout.Elapsed < TimeSpan.FromSeconds(10)) return;
+            if (!ready() && timeout.Elapsed < TimeSpan.FromSeconds(10)) return;
             poll.Stop();
             frame.Continue = false;
         };
         poll.Start();
         Dispatcher.PushFrame(frame);
-        TestAssert.True(Ready(), message);
+        TestAssert.True(ready(), failure());
     }
 
     private static void PumpFor(TimeSpan duration)

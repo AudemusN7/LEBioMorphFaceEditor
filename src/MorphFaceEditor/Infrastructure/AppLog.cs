@@ -10,8 +10,7 @@ public static class AppLog
     private static bool _fileWritesStopped;
     private static int _fileWriteSuppressionCount;
     public static string DirectoryPath { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "LE BioMorphFace Editor",
+        ApplicationDataPaths.CreateDefault().CurrentDirectory,
         "Logs");
     private static readonly AppLogFileStore Files = new(DirectoryPath);
     public static string FilePath => Files.LatestFilePath;

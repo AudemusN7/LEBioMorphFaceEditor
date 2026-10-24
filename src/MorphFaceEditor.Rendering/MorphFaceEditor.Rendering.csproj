@@ -4,7 +4,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>MorphFaceEditor.Rendering</AssemblyName>
     <RootNamespace>MorphFaceEditor.Rendering</RootNamespace>
-    <HeadPreviewShaderBundle>$(BaseIntermediateOutputPath)$(Configuration)\$(TargetFramework)\HeadPreviewShaders.zip</HeadPreviewShaderBundle>
+    <HeadPreviewShaderBundle>$([System.IO.Path]::GetFullPath('$(BaseIntermediateOutputPath)$(Configuration)\$(TargetFramework)\HeadPreviewShaders.zip', '$(MSBuildProjectDirectory)'))</HeadPreviewShaderBundle>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\MorphFaceEditor.Core\MorphFaceEditor.Core.csproj" />
@@ -23,7 +23,7 @@
   <Target Name="CompileHeadPreviewShaders" BeforeTargets="PrepareResources"
           Inputs="Shaders\HeadPreview.hlsl;@(ShaderCompilerAssembly)"
           Outputs="$(HeadPreviewShaderBundle)" Condition="'$(DesignTimeBuild)' != 'true'">
-    <Exec Command="dotnet &quot;@(ShaderCompilerAssembly)&quot; &quot;$(MSBuildProjectDirectory)\Shaders\HeadPreview.hlsl&quot; &quot;$(MSBuildProjectDirectory)\$(HeadPreviewShaderBundle)&quot;" />
+    <Exec Command="dotnet &quot;@(ShaderCompilerAssembly)&quot; &quot;$(MSBuildProjectDirectory)\Shaders\HeadPreview.hlsl&quot; &quot;$(HeadPreviewShaderBundle)&quot;" />
     <ItemGroup>
       <FileWrites Include="$(HeadPreviewShaderBundle)" />
     </ItemGroup>

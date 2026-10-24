@@ -21,7 +21,7 @@
       "morphfaceeditor.rendering": {
         "type": "Project",
         "dependencies": {
-          "MorphFaceEditor.Core": "[1.0.0, )",
+          "MorphFaceEditor.Core": "[0.10.0.50, )",
           "SharpDX": "[4.2.0, )",
           "SharpDX.D3DCompiler": "[4.2.0, )",
           "SharpDX.DXGI": "[4.2.0, )",

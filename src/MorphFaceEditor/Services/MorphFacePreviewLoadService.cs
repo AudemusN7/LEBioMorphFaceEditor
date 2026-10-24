@@ -63,7 +63,11 @@ public sealed class MorphFacePreviewLoadService : IDisposable
             : profile.GeometryEditBlockReason(loaded.BaseHead.Source.InstancedPath);
         var resolvedGeometryMode = profileResolution.UsesCustomMesh || profile.IgnoresAuthoredGeometry
             ? MorphFaceGeometryMode.BaseMeshOnly
-            : geometryMode ?? MorphFaceGeometryMode.MorphEvaluated;
+            : profile.TargetSetName is null
+                ? loaded.Document.BakedLods.FirstOrDefault()?.Length == loaded.BaseHead.Topology.VertexCount
+                    ? MorphFaceGeometryMode.FixedBake
+                    : MorphFaceGeometryMode.MorphEvaluated
+                : geometryMode ?? MorphFaceGeometryMode.MorphEvaluated;
         var session = new MorphFaceEditingSession(
             loaded.Document,
             loaded.BaseHead,

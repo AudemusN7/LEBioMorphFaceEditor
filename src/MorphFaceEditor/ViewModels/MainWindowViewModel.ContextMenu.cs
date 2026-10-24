@@ -11,8 +11,11 @@ public sealed partial class MainWindowViewModel
     private bool CanMutatePackageContext() =>
         CanTargetPackageFace() && PackageWorkspace?.CanCommit == true;
 
+    private bool CanConvertMorph() =>
+        CanMutatePackageContext() && !IsAlnFace(SelectedFace);
+
     private bool CanCopyMorphData() =>
-        CanTargetPackageFace() && !IsAlnMorphClipboardFace(SelectedFace);
+        CanTargetPackageFace() && !IsAlnFace(SelectedFace);
 
     private bool CanUseMaterialContextMenu() =>
         CanTargetPackageFace() &&
@@ -24,10 +27,10 @@ public sealed partial class MainWindowViewModel
         _workspace!.GeometryModes.ContainsKey(selectedFace.InstancedPath);
 
     private bool CanPasteMorphData() =>
-        CanMutatePackageContext() && !IsAlnMorphClipboardFace(SelectedFace) &&
+        CanMutatePackageContext() && !IsAlnFace(SelectedFace) &&
         _clipboard.Contains(MorphFaceClipboardKind.Morph);
 
-    private static bool IsAlnMorphClipboardFace(BioMorphFaceListItem? face) =>
+    private static bool IsAlnFace(BioMorphFaceListItem? face) =>
         face is not null &&
         (face.ProfileTag.Equals("[ALN]", StringComparison.OrdinalIgnoreCase) ||
          face.ProfileKey.EndsWith("-vorcha", StringComparison.OrdinalIgnoreCase));
@@ -166,7 +169,7 @@ public sealed partial class MainWindowViewModel
 
     private async Task ConvertMorphAsync()
     {
-        if (SelectedFace is not { } source || WorkspacePackagePath is not { } workspacePath || PackagePath is null)
+        if (!CanConvertMorph() || SelectedFace is not { } source || WorkspacePackagePath is not { } workspacePath || PackagePath is null)
         {
             return;
         }
@@ -253,7 +256,7 @@ public sealed partial class MainWindowViewModel
         {
             return;
         }
-        if (IsAlnMorphClipboardFace(source))
+        if (IsAlnFace(source))
         {
             Status = Loc.Text("loc_Shell_Status_MorphDataCopyIsUnavailable");
             return;
@@ -288,7 +291,7 @@ public sealed partial class MainWindowViewModel
         {
             return;
         }
-        if (IsAlnMorphClipboardFace(target))
+        if (IsAlnFace(target))
         {
             Status = Loc.Text("loc_Shell_Status_MorphDataPasteIsUnavailable");
             return;

@@ -5,6 +5,9 @@ significant feature threshold, improvements within that threshold, and small fix
 Every commit increases the version, including documentation, tooling and merges.
 A higher component resets the lower components to zero. Components are numeric,
 not decimal digits: a fix counter may exceed 9. Major stays zero until release.
+Intermediate QA builds may also increase the version so accepted builds retain
+their own identification. The commit guard permits those gaps; it still rejects
+unchanged or decreasing versions and requires the lower-component resets.
 
 Run `pwsh -File tools/versioning/Bump-Version.ps1` for a fix, or pass
 `-Kind Improvement`, `Feature` or `Major` for the corresponding boundary.

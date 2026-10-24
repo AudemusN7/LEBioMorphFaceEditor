@@ -44,11 +44,21 @@
     <PackageReference Include="SixLabors.ImageSharp" />
   </ItemGroup>
 
+  <ItemGroup>
+    <_PinnedLecFile Include="$(LecDirectory)\LegendaryExplorerCore.dll"
+                    ExpectedHash="5BEFC63667C5B14E1605E8DBB6183ED9C784FCBC9F15B0F2F1B64E97ED6089B0" />
+    <_PinnedLecFile Include="$(LecDirectory)\CompressionWrappers.dll"
+                    ExpectedHash="D0417B39CE27BBA575EEC6FB529DFB0614F14750636F0242C0AA7B00CBA7B745" />
+    <_PinnedLecFile Include="$(LecDirectory)\TexConverter.dll"
+                    ExpectedHash="CE8D9728246585F0389F50699B3BA37F3D3FECE722E4770B346583CAECBC5607" />
+    <_PinnedLecFile Include="$(LecDirectory)\LegendaryExplorerCore.pdb" Condition="'$(Configuration)' == 'Debug'"
+                    ExpectedHash="67A202181CFD9EA01DE317D932BF0601DEE58BA141D184B8BD341E7DF4F3B0F6" />
+  </ItemGroup>
   <Target Name="VerifyLegendaryExplorerCorePin" BeforeTargets="ResolveReferences">
-    <GetFileHash Files="$(LecDirectory)\LegendaryExplorerCore.dll" Algorithm="SHA256">
+    <GetFileHash Files="@(_PinnedLecFile)" Algorithm="SHA256">
       <Output TaskParameter="Items" ItemName="_LecCoreHash" />
     </GetFileHash>
-    <Error Condition="'%(_LecCoreHash.FileHash)' != '5BEFC63667C5B14E1605E8DBB6183ED9C784FCBC9F15B0F2F1B64E97ED6089B0'"
-           Text="LegendaryExplorerCore.dll does not match pinned commit 804db0b9a37d6184e8a06e4fecb30270d2fb48c8." />
+    <Error Condition="'%(_LecCoreHash.FileHash)' != '%(_LecCoreHash.ExpectedHash)'"
+           Text="%(_LecCoreHash.Filename)%(_LecCoreHash.Extension) does not match pinned commit 804db0b9a37d6184e8a06e4fecb30270d2fb48c8." />
   </Target>
 </Project>

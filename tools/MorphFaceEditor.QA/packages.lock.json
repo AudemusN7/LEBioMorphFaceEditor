@@ -36,10 +36,10 @@
       "morphfaceeditor": {
         "type": "Project",
         "dependencies": {
-          "MorphFaceEditor.Core": "[1.0.0, )",
-          "MorphFaceEditor.LegendaryExplorer": "[1.0.0, )",
-          "MorphFaceEditor.Localisation": "[1.0.0, )",
-          "MorphFaceEditor.Rendering": "[1.0.0, )"
+          "MorphFaceEditor.Core": "[0.10.0.50, )",
+          "MorphFaceEditor.LegendaryExplorer": "[0.10.0.50, )",
+          "MorphFaceEditor.Localisation": "[0.10.0.50, )",
+          "MorphFaceEditor.Rendering": "[0.10.0.50, )"
         }
       },
       "morphfaceeditor.core": {
@@ -52,12 +52,12 @@
           "BCnEncoder.Net.ImageSharp": "[1.1.2, )",
           "CommunityToolkit.Diagnostics": "[8.4.0, )",
           "Microsoft.IO.RecyclableMemoryStream": "[3.0.1, )",
-          "MorphFaceEditor.Core": "[1.0.0, )",
+          "MorphFaceEditor.Core": "[0.10.0.50, )",
           "Newtonsoft.Json": "[13.0.4, )",
           "Serilog": "[4.3.0, )",
           "SharpDX.D3DCompiler": "[4.2.0, )",
           "SharpGLTF.Toolkit": "[1.0.6, )",
-          "SixLabors.ImageSharp": "[3.1.12, )"
+          "SixLabors.ImageSharp": "[3.2.0, )"
         }
       },
       "morphfaceeditor.localisation": {
@@ -66,7 +66,7 @@
       "morphfaceeditor.rendering": {
         "type": "Project",
         "dependencies": {
-          "MorphFaceEditor.Core": "[1.0.0, )",
+          "MorphFaceEditor.Core": "[0.10.0.50, )",
           "SharpDX": "[4.2.0, )",
           "SharpDX.D3DCompiler": "[4.2.0, )",
           "SharpDX.DXGI": "[4.2.0, )",
@@ -179,9 +179,9 @@
       },
       "SixLabors.ImageSharp": {
         "type": "CentralTransitive",
-        "requested": "[3.1.12, )",
-        "resolved": "3.1.12",
-        "contentHash": "iAg6zifihXEFS/t7fiHhZBGAdCp3FavsF4i2ZIDp0JfeYeDVzvmlbY1CNhhIKimaIzrzSi5M/NBFcWvZT2rB/A=="
+        "requested": "[3.2.0, )",
+        "resolved": "3.2.0",
+        "contentHash": "TuT4QJUKO1xn6HPiH7dzadQg9eI9uin+sS+pJHAjHr0nN+k9mhgJc8XKe4WU9QJ7/mNvbK6+32d2ofUf30+bqQ=="
       }
     }
   }

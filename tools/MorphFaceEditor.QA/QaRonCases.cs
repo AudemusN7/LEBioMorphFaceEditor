@@ -163,8 +163,17 @@ internal static partial class QaCases
         }
         AssertAttachments(initial, imported);
         var expectedSaved = packageReplacement ? head : ToHead(imported);
-        // A full import marks the workspace dirty even when values match its original file.
-        await c.Measure("Save imported RON", () => Execute(vm.SaveCommand), QaStageKind.FileTransfer);
+        if (vm.SaveCommand.CanExecute(null))
+            await c.Measure("Save imported RON", () => Execute(vm.SaveCommand), QaStageKind.FileTransfer);
+        else
+        {
+            // A matching live import can restore the persisted head exactly.
+            // The fresh package comparison below still proves the requested data.
+            QaContext.Require(!vm.IsBusy && !vm.IsDirty,
+                "RON import left unsaved changes with Save disabled.");
+            if (!morphOnly) expectedSaved = head;
+            c.Current.Evidence["ronSaveNotRequired"] = "Matching import restored the persisted head; the workspace is clean.";
+        }
         CheckVm(vm);
         var reopened = await c.Load(copy, source.FacePath, MorphFaceGeometryMode.RelativeBake);
         RequireHead(expectedSaved, ReadPackageHead(copy, source.FacePath), "Saved RON import");

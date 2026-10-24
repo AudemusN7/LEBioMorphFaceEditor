@@ -231,6 +231,30 @@ internal static class QaUtilityTests
                         native.Stages[0].TimingKey != native.Stages[1].TimingKey,
             "Fixed native limits or original/reopened load grouping changed.");
 
+        foreach (var (id, loadLimit, renderLimit, auditLimit) in new[]
+                 {
+                     ("le1-hmf-player", 1200d, 300d, 400d), ("le1-hmm-player", 1700d, 400d, 300d),
+                     ("le2-hmf-player", 1500d, 300d, 300d), ("le2-hmm-player", 2000d, 300d, 300d),
+                     ("le3-hmf-player", 1400d, 300d, 400d), ("le3-hmm-player", 1300d, 300d, 600d)
+                 })
+        {
+            var player = new QaResult("load/" + id, "seeded Player fixture");
+            player.Stages.Add(TimingStage("001 · Test workflow · Load · BIOG_MORPH_FACE.Player", 0, QaStageKind.Load));
+            player.Stages.Add(TimingStage("002 · Test workflow · Preview renderer initialisation · loaded.png", 0, QaStageKind.Load));
+            const string fixture = "abcdef012345-0010-seeded-player.pcc";
+            player.Artifacts.Add(fixture);
+            QaTimingBaseline.Apply(player);
+            var playerAudit = new QaResult("pcc-audit", "seeded Player package audit");
+            playerAudit.Stages.Add(TimingStage("003 · Test workflow · PCC read/import audit " + fixture, 0, QaStageKind.FileTransfer));
+            QaTimingBaseline.Apply(playerAudit, [player]);
+            TestAssert.True(player.Stages[0].LimitMs == loadLimit && player.Stages[1].LimitMs == renderLimit &&
+                            playerAudit.Stages[0].LimitMs == auditLimit &&
+                            player.Stages.Concat(playerAudit.Stages).All(stage =>
+                                stage.FailureLimitMs == stage.LimitMs * 3 &&
+                                stage.LimitSource == "Accepted 0.10.0.39 baseline (+50%)"),
+                "Seeded Player descendants inherited fixed-input limits: " + id);
+        }
+
         var batch = new QaResult("npc-randomisation/le1-kro", "mean per roll") { Group = "npc-randomisation" };
         batch.Stages.Add(TimingStage("013 · Test workflow · Production randomisation · 100 rolls · average", 150,
             QaStageKind.Randomisation) with { SampleCount = 100, TotalDurationMs = 15000 });

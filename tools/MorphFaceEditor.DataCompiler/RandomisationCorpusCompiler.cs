@@ -166,8 +166,7 @@ public static class RandomisationCorpusCompiler
             {
                 exclusionReason = reviewed.Reason;
             }
-            var materialOnlyProfile = profile.IsMaterialOnly ||
-                                      profile.PoolKey == MorphRandomisationPoolKey.Vorcha;
+            var materialOnlyProfile = profile.IsMaterialOnly;
             if (exclusionReason is null && canonicalValues.Values.All(value => value == 0))
             {
                 exclusionReason = materialOnlyProfile

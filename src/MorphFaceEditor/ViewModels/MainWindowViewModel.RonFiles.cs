@@ -56,7 +56,7 @@ public sealed partial class MainWindowViewModel
     public ICommand ImportMorphFeaturesRonCommand => _importMorphFeaturesRonCommand ??= new(
         () => ImportFaceRonAsync(true), () => CanExportMorphRon() && Editor?.CanEditMorphFeatures == true);
     public ICommand ExportMorphFeaturesRonCommand => _exportMorphFeaturesRonCommand ??= new(
-        () => ExportMorphRonAsync(true), () => CanExportMorphRon() && !IsAlnMorphClipboardFace(SelectedFace));
+        () => ExportMorphRonAsync(true), () => CanExportMorphRon() && !IsAlnFace(SelectedFace));
 
     private static bool MatchesRonTarget(RonExportProvenance source, MorphFaceGame game, string archetype, bool player, bool featuresOnly = false) =>
         (source.Game == game || featuresOnly && StandaloneNpcMorphImportService.AreGamesCompatible(source.Game, game)) &&

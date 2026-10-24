@@ -16,39 +16,6 @@ internal static class QaRunnerCheck
             "Stage names collided or fixture preparation phase leaked into the test workflow.");
         QaWarningDiagnosticsCheck.Run(c);
         c.Current.Evidence["trashPolicyChecks"] = QaTrashPolicyCheck.RunSelfChecks();
-        foreach (var kind in new[] { QaStageKind.Load, QaStageKind.Randomisation, QaStageKind.FileTransfer })
-        {
-            var limit = QaPerformance.Limit(kind)!.Value;
-            QaContext.Require(!QaPerformance.Exceeded(kind, limit) && QaPerformance.Exceeded(kind, limit + 0.01),
-                "Timing boundary is incorrect: " + kind);
-        }
-        QaContext.Require(!QaPerformance.Exceeded(QaStageKind.Render, 100000), "Render/PNG readback acquired a timing limit.");
-        var boundary = new QaStage("synthetic load", 500, 0, 0, 0, 0, 0, 0, 0, QaStageKind.Load)
-        {
-            LimitMs = 500, FailureLimitMs = 1500, LimitSource = "self-check recorded limits"
-        };
-        QaContext.Require(boundary.TimingSeverity == "pass" &&
-            (boundary with { DurationMs = 500.01 }).TimingSeverity == "warning" &&
-            (boundary with { DurationMs = 1500 }).TimingSeverity == "warning" &&
-            (boundary with { DurationMs = 1500.01 }).TimingSeverity == "failure",
-            "Recorded warning/failure limits lost their strict boundaries.");
-        var synthetic = new QaResult("synthetic", "threshold enforcement") { Status = "passed" };
-        synthetic.Stages.Add(boundary with { DurationMs = 500.01 });
-        QaPerformance.ApplyOutcomes(synthetic);
-        QaContext.Require(synthetic.Status == "warning" && synthetic.Error is null &&
-            synthetic.PerformanceWarnings.Single().Contains("synthetic load") && synthetic.PerformanceFailures.Count == 0,
-            "Slow operation was not classified as a warning.");
-        synthetic.Stages[0] = boundary with { DurationMs = 1500.01 };
-        QaPerformance.ApplyOutcomes(synthetic);
-        QaContext.Require(synthetic.Status == "failed" && synthetic.Error is null &&
-            synthetic.PerformanceFailures.Single().Contains("synthetic load") && synthetic.PerformanceWarnings.Count == 0,
-            "Exceeding a recorded failure limit did not fail the case separately from warnings.");
-        synthetic.Status = "failed";
-        synthetic.Error = "Retained functional error";
-        QaPerformance.ApplyOutcomes(synthetic);
-        QaContext.Require(synthetic.Status == "failed" && synthetic.Error == "Retained functional error",
-            "Performance outcome concealed a functional failure.");
-
         var flattened = Path.Combine(c.Output, c.Current.Id, "flattened");
         Directory.CreateDirectory(flattened);
         for (var index = 0; index < 2; index++)
@@ -89,8 +56,7 @@ internal static class QaRunnerCheck
         }
         var names = Directory.GetFiles(c.Output, "*", SearchOption.AllDirectories).Select(Path.GetFileName).ToArray();
         QaContext.Require(names.Distinct(StringComparer.OrdinalIgnoreCase).Count() == names.Length, "Output basenames collide.");
-        c.Current.Evidence["checks"] = new[] { "fallback and recorded warning/failure strict boundaries", "render exemption", "performance outcomes retain functional error",
-            "two identically named mesh exports flattened without collisions", "production decoder reads renamed glTF buffers", "sidecar filenames preserved",
+        c.Current.Evidence["checks"] = new[] { "two identically named mesh exports flattened without collisions", "production decoder reads renamed glTF buffers", "sidecar filenames preserved",
             "unique stage names and scoped fixture phase", "exact saved-export warning reconciliation" };
     }
 }

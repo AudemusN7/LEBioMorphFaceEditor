@@ -327,15 +327,12 @@ public sealed class MorphFaceProfileRegistry
         new(
             $"{game.ToString().ToLowerInvariant()}-vorcha",
             game,
-            MorphFaceProfileFeatures.VorchaMetadataOnlyFeatures,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase),
             MorphFaceProfileFeatures.NoAliases,
             "[ALN]",
 
             _ => false,
-            MatchesVorcha)
-        {
-            TargetSetName = "ALN_ReconstructedMorphSet"
-        };
+            MatchesVorcha);
 
     private static bool MatchesVorcha(string facePath, string? baseHeadPath) =>
         !string.IsNullOrWhiteSpace(baseHeadPath)

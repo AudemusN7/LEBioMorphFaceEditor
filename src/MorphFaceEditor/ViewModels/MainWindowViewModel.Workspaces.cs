@@ -34,7 +34,8 @@ public sealed partial class MainWindowViewModel
                     : Loc.Format("loc_Shell_Error_FaceMissingFromPcc", preferredFacePath));
             if (contents.Selected is not null)
                 prepared = await PrepareFaceAsync(candidate, contents.References, contents.Selected, cancellationToken);
-            if (npcImport && prepared?.Preview.EditingSession.CanEditMorphFeatures == false)
+            if (npcImport && prepared?.Preview.Profile.TargetSetName is not null &&
+                prepared.Preview.EditingSession.CanEditMorphFeatures == false)
                 throw new System.IO.InvalidDataException(Loc.Format("loc_Shell_Error_ImportedNpcMorphTargetsUnavailable",
                     prepared.Preview.EditingSession.EditBlockReason));
             cancellationToken.ThrowIfCancellationRequested();

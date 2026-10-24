@@ -7,7 +7,15 @@
     "report": "artifacts/qa/20261022-210934-6c1b7a/qa-6508c4f0fc7d-results.json"
   },
   "provenance": {
-    "reviewedAuditSha256": "250AF83D76F4A77FAF22974612DBFF4FEA8D5CC269350853F8BA361EC58B2C8C",
+    "reviewedAuditSha256": "5751168DA7C1B4A248ECAEE300449D391095DB6DAB81536BBDF302817BDA61C1",
+    "playerFixtureClassificationCorrection": {
+      "reviewedDate": "2026-10-24",
+      "originalReviewedAuditSha256": "250AF83D76F4A77FAF22974612DBFF4FEA8D5CC269350853F8BA361EC58B2C8C",
+      "entryCount": 18,
+      "fromMarginPercent": 25,
+      "toMarginPercent": 50,
+      "note": "Ryan approved correcting seeded Player load/preview/audit classifications. All .39 observations and envelopes remain unchanged."
+    },
     "note": "Frozen from Ryan's accepted .39 full run. Approved 25/50 percent margins, upward100ms caps, fixed2x/variable3x severe thresholds. Never rebase from a judged run."
   },
   "policy": {
@@ -4044,12 +4052,12 @@
     {
       "key": "load/le1-hmf-player | Test workflow | Load · <face> · load-occurrence-1 | Load | single-stage-duration",
       "envelopeMs": 735.3121,
-      "marginPercent": 25
+      "marginPercent": 50
     },
     {
       "key": "load/le1-hmf-player | Test workflow | Preview renderer initialisation · loaded.png | Load | single-stage-duration",
       "envelopeMs": 123.6826,
-      "marginPercent": 25
+      "marginPercent": 50
     },
     {
       "key": "load/le1-hmm-npc | Test workflow | Inspect faces · LE1 GlobalMorphs.pcc | Load | single-stage-duration",
@@ -4089,12 +4097,12 @@
     {
       "key": "load/le1-hmm-player | Test workflow | Load · <face> · load-occurrence-1 | Load | single-stage-duration",
       "envelopeMs": 1108.9376,
-      "marginPercent": 25
+      "marginPercent": 50
     },
     {
       "key": "load/le1-hmm-player | Test workflow | Preview renderer initialisation · loaded.png | Load | single-stage-duration",
       "envelopeMs": 202.3192,
-      "marginPercent": 25
+      "marginPercent": 50
     },
     {
       "key": "load/le1-kro | Test workflow | Inspect faces · LE1 GlobalMorphs.pcc | Load | single-stage-duration",
@@ -4254,12 +4262,12 @@
     {
       "key": "load/le2-hmf-player | Test workflow | Load · <face> · load-occurrence-1 | Load | single-stage-duration",
       "envelopeMs": 994.4278,
-      "marginPercent": 25
+      "marginPercent": 50
     },
     {
       "key": "load/le2-hmf-player | Test workflow | Preview renderer initialisation · loaded.png | Load | single-stage-duration",
       "envelopeMs": 123.9364,
-      "marginPercent": 25
+      "marginPercent": 50
     },
     {
       "key": "load/le2-hmm-npc | Test workflow | Inspect faces · LE2 GlobalMorphs.pcc | Load | single-stage-duration",
@@ -4299,12 +4307,12 @@
     {
       "key": "load/le2-hmm-player | Test workflow | Load · <face> · load-occurrence-1 | Load | single-stage-duration",
       "envelopeMs": 1277.7414,
-      "marginPercent": 25
+      "marginPercent": 50
     },
     {
       "key": "load/le2-hmm-player | Test workflow | Preview renderer initialisation · loaded.png | Load | single-stage-duration",
       "envelopeMs": 122.2598,
-      "marginPercent": 25
+      "marginPercent": 50
     },
     {
       "key": "load/le2-kro | Test workflow | Inspect faces · LE2 GlobalMorphs.pcc | Load | single-stage-duration",
@@ -4464,12 +4472,12 @@
     {
       "key": "load/le3-hmf-player | Test workflow | Load · <face> · load-occurrence-1 | Load | single-stage-duration",
       "envelopeMs": 905.6367,
-      "marginPercent": 25
+      "marginPercent": 50
     },
     {
       "key": "load/le3-hmf-player | Test workflow | Preview renderer initialisation · loaded.png | Load | single-stage-duration",
       "envelopeMs": 114.9068,
-      "marginPercent": 25
+      "marginPercent": 50
     },
     {
       "key": "load/le3-hmm-npc | Test workflow | Inspect faces · LE3 GlobalMorphs.pcc | Load | single-stage-duration",
@@ -4509,12 +4517,12 @@
     {
       "key": "load/le3-hmm-player | Test workflow | Load · <face> · load-occurrence-1 | Load | single-stage-duration",
       "envelopeMs": 843.3199,
-      "marginPercent": 25
+      "marginPercent": 50
     },
     {
       "key": "load/le3-hmm-player | Test workflow | Preview renderer initialisation · loaded.png | Load | single-stage-duration",
       "envelopeMs": 126.9334,
-      "marginPercent": 25
+      "marginPercent": 50
     },
     {
       "key": "load/le3-kro | Test workflow | Inspect faces · LE3 GlobalMorphs.pcc | Load | single-stage-duration",
@@ -7989,32 +7997,32 @@
     {
       "key": "pcc-audit | Test workflow | PCC read/import audit · load/le1-hmf-player · seeded-player.pcc | FileTransfer | single-stage-duration",
       "envelopeMs": 203.4869,
-      "marginPercent": 25
+      "marginPercent": 50
     },
     {
       "key": "pcc-audit | Test workflow | PCC read/import audit · load/le1-hmm-player · seeded-player.pcc | FileTransfer | single-stage-duration",
       "envelopeMs": 191.7787,
-      "marginPercent": 25
+      "marginPercent": 50
     },
     {
       "key": "pcc-audit | Test workflow | PCC read/import audit · load/le2-hmf-player · seeded-player.pcc | FileTransfer | single-stage-duration",
       "envelopeMs": 190.0927,
-      "marginPercent": 25
+      "marginPercent": 50
     },
     {
       "key": "pcc-audit | Test workflow | PCC read/import audit · load/le2-hmm-player · seeded-player.pcc | FileTransfer | single-stage-duration",
       "envelopeMs": 152.621,
-      "marginPercent": 25
+      "marginPercent": 50
     },
     {
       "key": "pcc-audit | Test workflow | PCC read/import audit · load/le3-hmf-player · seeded-player.pcc | FileTransfer | single-stage-duration",
       "envelopeMs": 263.7023,
-      "marginPercent": 25
+      "marginPercent": 50
     },
     {
       "key": "pcc-audit | Test workflow | PCC read/import audit · load/le3-hmm-player · seeded-player.pcc | FileTransfer | single-stage-duration",
       "envelopeMs": 356.6296,
-      "marginPercent": 25
+      "marginPercent": 50
     },
     {
       "key": "pcc-audit | Test workflow | PCC read/import audit · material-ron/le1-asa · ron-roundtrip.pcc | FileTransfer | single-stage-duration",

@@ -47,11 +47,11 @@ internal static class Program
             if (index + 1 >= args.Length) throw new ArgumentException($"{name} requires a value.");
             return args[index + 1];
         }
-        var recognized = new HashSet<string> { "--output", "--corpus", "--seed", "--case", "--poc", "--audit-output", "--self-check", "--exhaustive" };
+        var recognized = new HashSet<string> { "--output", "--corpus", "--seed", "--case", "--audit-output", "--self-check", "--exhaustive" };
         for (var index = 0; index < args.Length; index++)
         {
             if (!recognized.Contains(args[index])) throw new ArgumentException($"Unknown option '{args[index]}'.");
-            if (args[index] is not "--poc" and not "--self-check" and not "--exhaustive") index++;
+            if (args[index] is not "--self-check" and not "--exhaustive") index++;
         }
         var root = QaContext.FindWorkspace();
         var output = Path.GetFullPath(Option("--output") ?? Path.Combine(root, "artifacts", "qa",
@@ -71,7 +71,7 @@ internal static class Program
         var filter = Option("--case") ?? (context.AuditOutputDirectory is null ? null : "pcc-audit");
         var filters = filter?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var selected = args.Contains("--self-check")
-            ? new[] { new QaCase("runner-self-check", "Naming, flattened companions and timing enforcement", QaRunnerCheck.Run, "runner-self-check") }
+            ? new[] { new QaCase("runner-self-check", "Naming, flattened companions and saved-output evidence", QaRunnerCheck.Run, "runner-self-check") }
             : QaCases.All.Where(item => QaCoverageSelection.SelectCase(item.Id, item.Group, filters, args.Contains("--exhaustive"))).ToArray();
         if (selected.Length == 0) throw new ArgumentException($"Unknown case '{filter}'. Use --list.");
         var report = new QaReport(output, context.Seed, selected.Select(item => item.Id).ToArray(), context.RunToken);

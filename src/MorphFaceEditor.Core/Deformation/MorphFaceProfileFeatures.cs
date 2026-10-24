@@ -198,9 +198,6 @@ public static class MorphFaceProfileFeatures
             "shape_skinny"
         };
 
-    public static IReadOnlySet<string> VorchaMetadataOnlyFeatures { get; } =
-        new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "VorchaBase" };
-
     private static readonly IReadOnlySet<string> HumanMaleHiddenFeatures = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         // Proven zero-effect or internal construction/corrective targets.

@@ -29,9 +29,9 @@ internal static class UiPresentationTests
             var store = new ApplicationPreferencesStore(path);
             var startup = new StartupPreferencesService(store);
             var recent = new RecentFileService(store);
-            var independentTheme = new ThemePreferencesStore(path);
+            var independentTheme = new ApplicationPreferencesStore(path);
             startup.SetSuppressWelcome(false);
-            independentTheme.Save(new(ThemeMode.Dark, 120));
+            independentTheme.Update(preferences => preferences with { Mode = ThemeMode.Dark, AccentHue = 120 });
             recent.Add(Path.Combine(root, "second.pcc"));
 
             var reloaded = new ApplicationPreferencesStore(path);

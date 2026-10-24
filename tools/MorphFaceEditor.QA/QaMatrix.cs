@@ -75,9 +75,9 @@ internal static partial class QaCases
                 });
         // Source() samples by family, so repeated fixed-donor labels tested the same
         // route several times without actually selecting those named donors.
-        foreach (var face in Archetypes.Where(face => !face.IsPlayer && face.Family != "TUF"))
+        foreach (var face in Archetypes.Where(face => !face.IsPlayer && face.Family is not "TUF" and not "ALN"))
             foreach (var target in new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 }
-                         .Where(game => game != face.Game && (face.Family != "ALN" || game != MorphFaceGame.LE1)))
+                         .Where(game => game != face.Game))
                 Add("conversion", $"{face.Family} conversion {face.Game} → {target}", face,
                     c => Conversion(c, target), target.ToString().ToLowerInvariant());
         foreach (var face in Archetypes.Where(face => !face.IsPlayer))

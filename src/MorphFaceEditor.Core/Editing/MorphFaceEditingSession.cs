@@ -193,6 +193,7 @@ public sealed class MorphFaceEditingSession
                                               CanEditMorphFeatures;
 
     public bool CanFixMorph => GeometryMode == MorphFaceGeometryMode.MorphEvaluated &&
+                               _targets.Count > 0 &&
                                !CanEditMorphFeatures &&
                                _geometryEditBlockReason is null &&
                                Evaluation.Resolution.UnresolvedFeatureNames.Count == 0 &&
@@ -1001,6 +1002,7 @@ public sealed class MorphFaceEditingSession
 
     private bool IsEditableByOracle(MorphFaceEvaluation evaluation) =>
         GeometryMode == MorphFaceGeometryMode.MorphEvaluated &&
+        _targets.Count > 0 &&
         _geometryEditBlockReason is null &&
         evaluation.Resolution.UnresolvedFeatureNames.Count == 0 &&
         evaluation.OriginalOracleReport is { IsWithinTolerance: true } &&
@@ -1008,6 +1010,7 @@ public sealed class MorphFaceEditingSession
 
     private bool IsEditableByRelativeBake(MorphFaceEvaluation evaluation) =>
         GeometryMode == MorphFaceGeometryMode.RelativeBake &&
+        _targets.Count > 0 &&
         _geometryEditBlockReason is null &&
         HasSafeRelativeResolution(evaluation) &&
         HasValidRelativeTargetState(evaluation) &&

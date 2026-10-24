@@ -2,11 +2,15 @@ using MorphFaceEditor.Core.Deformation;
 using System.Numerics;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Editing;
+using MorphFaceEditor.Core.Services;
 using MorphFaceEditor.ViewModels;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.Services;
 using MorphFaceEditor.Infrastructure;
+using LegendaryExplorerCore.Packages;
+using LegendaryExplorerCore.Unreal;
+using LegendaryExplorerCore.Unreal.BinaryConverters;
 
 using static MorphFaceEditor.Tests.UiTestFixtures;
 
@@ -17,6 +21,7 @@ internal static class UiProfileTests
     internal static IReadOnlyList<TestCase> All { get; } =
     [
         new("unsupported profiles keep unsafe geometry controls unavailable", UnsupportedProfilesKeepGeometryClosed),
+        new("ALN loads preserve authored bakes without a target set, including static faces", TargetlessAlnPreservesAuthoredGeometry),
         new("malformed LE3 HMF hair and inert HMM eye metadata remain hidden", MalformedAndInertTargetsStayHidden)
     ];
 
@@ -41,6 +46,149 @@ internal static class UiProfileTests
                 TestAssert.True(!editor.CanEditMorphFeatures && !editor.CanEditAttachments,
                     $"{key} exposed authored geometry or attachment edits.");
         }
+    }
+
+    private static void TargetlessAlnPreservesAuthoredGeometry()
+    {
+        var hasNativeOffsetBake = false;
+        foreach (var game in new[] { MorphFaceGame.LE2, MorphFaceGame.LE3 })
+        PackageTestFixtures.WithPackageCopy($"{game} GlobalMorphs.pcc", path =>
+        {
+            var profiles = MorphFaceProfileRegistry.CreateDefault();
+            var targets = new MorphTargetCatalog();
+            var reader = new MorphFacePackageReader();
+            using var loader = new MorphFacePreviewLoadService(new HeadPreviewSceneFactory(), targets, profiles, reader);
+            var candidates = MorphFaceReferenceInspector.Inspect(path)
+                .Where(face => profiles.Find(face.Game, face.FacePath, face.BaseHeadPath)?.Archetype == "vorcha")
+                .Select(face => reader.Load(path, face.FacePath, decodeTextures: false))
+                .ToArray();
+            var authored = candidates.FirstOrDefault(face => face.Document.BakedLods.Count > 0 &&
+                               !face.Document.BakedLods[0].SequenceEqual(face.BaseHead.Positions)) ?? candidates.First();
+            var offsetCount = candidates.Count(face => face.Document.BakedLods.Count > 0 &&
+                !face.Document.BakedLods[0].SequenceEqual(face.BaseHead.Positions));
+            hasNativeOffsetBake |= offsetCount > 0;
+            Console.WriteLine($"{game} ALN native fixtures: {candidates.Length} faces, " +
+                $"{candidates.Count(face => face.Document.BakedLods.Count > 0)} baked, {offsetCount} offset-baked.");
+            var loaded = loader.LoadAsync(path, authored.Document.Source.InstancedPath).GetAwaiter().GetResult();
+            var session = loaded.EditingSession;
+            TestAssert.True(loaded.Profile.TargetSetName is null && targets.Load(loaded.Profile).Count == 0,
+                $"{game} ALN still depends on a reconstructed target bundle.");
+            if (authored.Document.BakedLods.Count == 0)
+            {
+                TestAssert.True(!session.CanEditMorphFeatures && !session.CanFixMorph,
+                    "A native static ALN face exposed target-based geometry edits.");
+                AssertPreviewPositions(authored.BaseHead.Positions, loaded.Scene.Meshes[0].Vertices);
+                AssertAuthoredAln(authored.Document, session.CreateDraft(authored.Document.HairMeshReference,
+                    authored.Document.OtherMeshReferences, loaded.MaterialEditingSession.CreateOverrides()));
+                AssertAlnConversionUnavailable(path, authored.Document.Source.InstancedPath);
+                return;
+            }
+            TestAssert.Equal(MorphFaceGeometryMode.FixedBake, session.GeometryMode);
+            TestAssert.True(!session.CanEditMorphFeatures && !session.CanFixMorph,
+                $"{game} ALN exposed morph editing or destructive target-based repair.");
+            TestAssert.True(session.CanEditBones, $"{game} ALN lost its valid bone rig.");
+            AssertPreviewPositions(authored.Document.BakedLods[0], loaded.Scene.Meshes[0].Vertices);
+            var explicitRelative = loader.LoadAsync(path, authored.Document.Source.InstancedPath,
+                geometryMode: MorphFaceGeometryMode.RelativeBake).GetAwaiter().GetResult();
+            TestAssert.Equal(MorphFaceGeometryMode.FixedBake, explicitRelative.EditingSession.GeometryMode);
+            TestAssert.True(!explicitRelative.EditingSession.CanEditMorphFeatures &&
+                !explicitRelative.EditingSession.CanFixMorph && explicitRelative.EditingSession.CanEditBones,
+                "An explicit RON geometry mode bypassed ALN's fixed-bake capabilities.");
+            AssertAuthoredAln(authored.Document, explicitRelative.EditingSession.CreateDraft(
+                authored.Document.HairMeshReference, authored.Document.OtherMeshReferences,
+                explicitRelative.MaterialEditingSession.CreateOverrides()));
+
+            var draft = session.CreateDraft(authored.Document.HairMeshReference,
+                authored.Document.OtherMeshReferences, loaded.MaterialEditingSession.CreateOverrides());
+            AssertAuthoredAln(authored.Document, draft);
+            var bone = session.FinalSkeleton.First();
+            session.SetBoneAxis(bone.BoneName, 0, bone.Translation.X + 0.125f);
+            draft = session.CreateDraft(draft.HairMeshReference, draft.OtherMeshReferences, draft.MaterialOverrides);
+            var expected = authored.Document with { FinalSkeleton = session.FinalSkeleton.ToArray() };
+            AssertAuthoredAln(expected, draft);
+            new MorphFacePackageWriter().SaveExisting(draft);
+            reader.InvalidatePackage(path);
+            var saved = reader.Load(path, draft.Source.InstancedPath, decodeTextures: false).Document;
+            AssertAuthoredAln(expected, saved);
+            AssertAlnConversionUnavailable(path, saved.Source.InstancedPath);
+
+            // Empty feature arrays must not make an absent target set appear safe
+            // to edit or offer repair which would erase an authored topography.
+            foreach (var baked in new[] { saved.BakedLods, authored.BaseHead.Lods.Select(lod => lod.Positions).ToArray() })
+            {
+                var noFeatures = saved with { MorphFeatures = [], BakedLods = baked };
+                var targetless = new MorphFaceEditingSession(noFeatures, authored.BaseHead, [],
+                    metadataOnlyFeatures: loaded.Profile.MetadataOnlyFeatures);
+                TestAssert.True(!targetless.CanEditMorphFeatures && !targetless.CanFixMorph,
+                    "An empty feature list enabled targetless editing or repair.");
+                AssertAuthoredAln(noFeatures, targetless.CreateDraft(noFeatures.HairMeshReference,
+                    noFeatures.OtherMeshReferences, noFeatures.MaterialOverrides));
+                var relative = new MorphFaceEditingSession(noFeatures, authored.BaseHead, [],
+                    metadataOnlyFeatures: loaded.Profile.MetadataOnlyFeatures,
+                    geometryMode: MorphFaceGeometryMode.RelativeBake);
+                TestAssert.True(!relative.CanEditMorphFeatures && !relative.CanFixMorph && relative.CanEditBones,
+                    "A targetless relative-bake session exposed morph controls or lost its valid rig.");
+                AssertAuthoredAln(noFeatures, relative.CreateDraft(noFeatures.HairMeshReference,
+                    noFeatures.OtherMeshReferences, noFeatures.MaterialOverrides));
+            }
+
+            using (var package = MEPackageHandler.OpenMEPackage(path, forceLoadFromDisk: true))
+            {
+                package.FindExport(draft.Source.InstancedPath, "BioMorphFace")!
+                    .WriteBinary(new BioMorphFace { LODs = [] });
+                package.Save();
+            }
+            reader.InvalidatePackage(path);
+            var staticFace = loader.LoadAsync(path, draft.Source.InstancedPath).GetAwaiter().GetResult();
+            TestAssert.True(!staticFace.EditingSession.CanEditMorphFeatures && !staticFace.EditingSession.CanFixMorph,
+                "A static ALN face exposed target-based geometry edits.");
+            TestAssert.Equal(0, staticFace.Loaded.Document.BakedLods.Count);
+            TestAssert.True(saved.FinalSkeleton.SequenceEqual(staticFace.Loaded.Document.FinalSkeleton),
+                "Loading a static ALN face changed its stored skeleton.");
+            AssertPreviewPositions(authored.BaseHead.Positions, staticFace.Scene.Meshes[0].Vertices);
+        });
+        TestAssert.True(hasNativeOffsetBake, "The ALN preservation regression did not exercise a native offset bake.");
+    }
+
+    private static void AssertAlnConversionUnavailable(string path, string facePath) =>
+        WpfTestDispatcher.Invoke(() => RunWithDispatcher(async () =>
+        {
+            using var reader = new MorphFacePackageReader();
+            using var shell = CreateMainWindowViewModel(reader);
+            await shell.OpenDroppedFileAsync(path);
+            shell.SelectedFace = shell.Faces.Single(face => face.InstancedPath == facePath);
+            TestAssert.True(!shell.ConvertMorphCommand.CanExecute(null),
+                "An unloaded ALN face offered approximate morph conversion.");
+            await ((AsyncRelayCommand)shell.LoadSelectedFaceCommand).ExecuteAsync();
+            TestAssert.True(shell.Editor is not null, shell.ErrorMessage ?? "The ALN face did not load.");
+            TestAssert.Equal(0, shell.Editor!.Features.Count);
+            TestAssert.True(!shell.ConvertMorphCommand.CanExecute(null),
+                "A loaded ALN face offered approximate morph conversion.");
+        }));
+
+    private static void AssertPreviewPositions(IReadOnlyList<Vector3> expected,
+        IReadOnlyList<MorphFaceEditor.Rendering.HeadPreviewVertex> actual)
+    {
+        TestAssert.Equal(expected.Count, actual.Count);
+        for (var index = 0; index < expected.Count; index++)
+            TestAssert.Near(new Vector3(expected[index].Y, expected[index].Z, expected[index].X), actual[index].Position, 0);
+    }
+
+    private static void AssertAuthoredAln(MorphFaceDocument expected, MorphFaceDocument actual)
+    {
+        TestAssert.True(expected.MorphFeatures.SequenceEqual(actual.MorphFeatures), "ALN authored features changed.");
+        TestAssert.True(expected.FinalSkeleton.SequenceEqual(actual.FinalSkeleton), "ALN authored skeleton changed.");
+        TestAssert.Equal(expected.BakedLods.Count, actual.BakedLods.Count);
+        for (var lod = 0; lod < expected.BakedLods.Count; lod++)
+            TestAssert.True(expected.BakedLods[lod].SequenceEqual(actual.BakedLods[lod]), $"ALN authored LOD {lod} changed.");
+        TestAssert.True(expected.MaterialOverrides.Scalars.OrderBy(value => value.Name)
+            .SequenceEqual(actual.MaterialOverrides.Scalars.OrderBy(value => value.Name)), "ALN scalar overrides changed.");
+        TestAssert.True(expected.MaterialOverrides.Vectors.OrderBy(value => value.Name)
+            .SequenceEqual(actual.MaterialOverrides.Vectors.OrderBy(value => value.Name)), "ALN colour overrides changed.");
+        TestAssert.True(expected.MaterialOverrides.Textures.OrderBy(value => value.Name)
+            .Select(value => (value.Name, value.TextureReference?.InstancedPath))
+            .SequenceEqual(actual.MaterialOverrides.Textures.OrderBy(value => value.Name)
+                .Select(value => (value.Name, value.TextureReference?.InstancedPath))), "ALN texture references changed.");
     }
 
     private static void MalformedAndInertTargetsStayHidden()

@@ -16,7 +16,8 @@ public static class RandomisationProfileDefinitionFactory
         ArgumentNullException.ThrowIfNull(targetCatalog);
         return registry.Profiles.Select(profile =>
         {
-            var targets = profile.IgnoresAuthoredGeometry
+            var materialOnly = profile.IgnoresAuthoredGeometry || profile.TargetSetName is null;
+            var targets = materialOnly
                 ? []
                 : targetCatalog.Load(profile);
             var available = targets
@@ -32,7 +33,7 @@ public static class RandomisationProfileDefinitionFactory
                 available,
                 profile.FeatureAliases)
             {
-                IsMaterialOnly = profile.IgnoresAuthoredGeometry
+                IsMaterialOnly = materialOnly
             };
         }).ToArray();
     }

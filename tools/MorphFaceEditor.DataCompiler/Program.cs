@@ -106,25 +106,6 @@ if (args.Length >= 1 && args[0] == "audit-randomiser")
     return 0;
 }
 
-if (args.Length >= 1 && args[0] == "reconstruct-vorcha")
-{
-    if (args.Length != 5)
-    {
-        Console.Error.WriteLine(
-            "Usage: reconstruct-vorcha <le2-vorcha.pcc> <le3-vorcha.pcc> <le2-output.mft.br> <le3-output.mft.br>");
-        return 2;
-    }
-    var reconstruction = VorchaMorphReconstructor.Reconstruct(args[1], args[2]);
-    WriteBundle(args[3], reconstruction.Le2Targets);
-    WriteBundle(args[4], reconstruction.Le3Targets);
-    Console.WriteLine(
-        $"Reconstructed {reconstruction.FeatureCount} Vorcha controls from {reconstruction.OracleFaceCount} LE2 oracles; " +
-        $"maximum LE2 error: {reconstruction.MaximumLe2PositionError:G9} position, " +
-        $"{reconstruction.MaximumLe2BoneError:G9} bone; " +
-        $"LE3-compatible LODs: {string.Join(", ", reconstruction.Le3CompatibleLods)}.");
-    return 0;
-}
-
 if (args.Length < 2 || args[0] is not ("scan" or "compile"))
 {
     Console.Error.WriteLine(
@@ -140,8 +121,7 @@ if (args.Length < 2 || args[0] is not ("scan" or "compile"))
         "conversion-stress <corpus-directory> <output-directory> [seed] | " +
         "conversion-full <corpus-directory> <output-directory> | " +
         "conversion-retest <corpus-directory> <prior-results.jsonl> <output-directory> | " +
-        "audit-randomiser <package.pcc>... <report.md> <values.csv> <bundle.mfr.br> | " +
-        "reconstruct-vorcha <le2-vorcha.pcc> <le3-vorcha.pcc> <le2-output.mft.br> <le3-output.mft.br>");
+        "audit-randomiser <package.pcc>... <report.md> <values.csv> <bundle.mfr.br>");
     return 2;
 }
 
@@ -190,10 +170,3 @@ static void WriteText(string path, string contents)
 
 static void EnsureParent(string path) =>
     Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
-
-static void WriteBundle(string path, IReadOnlyList<MorphFaceEditor.Core.Domain.MorphTargetAsset> targets)
-{
-    EnsureParent(path);
-    using var output = File.Create(path);
-    MorphTargetBundleSerializer.Write(output, targets);
-}

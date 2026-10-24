@@ -37,18 +37,18 @@ internal static class ConversionStressRunner
         var selections = selectAll
             ? SelectAllFaces(corpus, profiles)
             : SelectFaces(corpus, profiles, seed);
-        if (!selectAll && selections.Count != 115)
+        if (!selectAll && selections.Count != 105)
         {
-            throw new InvalidDataException($"Stress selection produced {selections.Count} originals, expected 115.");
+            throw new InvalidDataException($"Stress selection produced {selections.Count} originals, expected 105.");
         }
 
         var attempts = selections.SelectMany(selection => Games
-                .Where(game => game != selection.Game && IsSupportedRoute(selection, game))
+                .Where(game => game != selection.Game)
                 .Select(target => new PortAttempt(selection, target)))
             .ToArray();
-        if (!selectAll && attempts.Length != 220)
+        if (!selectAll && attempts.Length != 210)
         {
-            throw new InvalidDataException($"Stress selection produced {attempts.Length} supported ports, expected 220.");
+            throw new InvalidDataException($"Stress selection produced {attempts.Length} supported ports, expected 210.");
         }
 
         WriteJsonAtomic(Path.Combine(output, "selection-manifest.json"), new
@@ -186,9 +186,6 @@ internal static class ConversionStressRunner
         return failed == 0 ? 0 : 1;
     }
 
-    private static bool IsSupportedRoute(SelectedFace source, MorphFaceGame target) =>
-        target != MorphFaceGame.LE1 || !source.Species.Equals("vorcha", StringComparison.OrdinalIgnoreCase);
-
     internal static int RetestFailures(
         string corpusDirectory,
         string priorResultsPath,
@@ -202,8 +199,7 @@ internal static class ConversionStressRunner
             .Select(line => JsonSerializer.Deserialize<RetestSource>(line)
                             ?? throw new InvalidDataException("A prior result row was empty."))
             .Where(value => value.Status == "failed" &&
-                            !(value.Species.Equals("vorcha", StringComparison.OrdinalIgnoreCase) &&
-                              value.TargetGame == MorphFaceGame.LE1))
+                            !value.Species.Equals("vorcha", StringComparison.OrdinalIgnoreCase))
             .OrderBy(value => value.Attempt)
             .ToArray();
         var registry = new TextureCatalogService(
@@ -285,8 +281,7 @@ internal static class ConversionStressRunner
             var packagePath = Path.Combine(corpusDirectory, $"{game} GlobalMorphs.pcc");
             var candidates = MorphFaceReferenceInspector.Inspect(packagePath)
                 .Select(face => (Face: face, Profile: profiles.Find(game, face.FacePath, face.BaseHeadPath)))
-                .Where(value => value.Profile is not null &&
-                                !value.Profile.Key.EndsWith("-female-turian", StringComparison.OrdinalIgnoreCase))
+                .Where(value => IsConversionProfile(value.Profile))
                 .Select(value => new SelectedFace(
                     game,
                     Species(value.Profile!.Key),
@@ -297,14 +292,14 @@ internal static class ConversionStressRunner
                 .OrderBy(value => value.Species, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(value => value.FacePath, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            var expectedSpecies = game == MorphFaceGame.LE1 ? 7 : 8;
+            const int expectedSpecies = 7;
             var groups = candidates.GroupBy(value => value.Species, StringComparer.OrdinalIgnoreCase)
                 .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
             if (groups.Length != expectedSpecies)
             {
                 throw new InvalidDataException(
-                    $"{game} exposed {groups.Length} non-TUF species groups, expected {expectedSpecies}: " +
+                    $"{game} exposed {groups.Length} conversion species groups, expected {expectedSpecies}: " +
                     string.Join(", ", groups.Select(group => group.Key)));
             }
             foreach (var group in groups)
@@ -340,8 +335,7 @@ internal static class ConversionStressRunner
             var packagePath = Path.Combine(corpusDirectory, $"{game} GlobalMorphs.pcc");
             selected.AddRange(MorphFaceReferenceInspector.Inspect(packagePath)
                 .Select(face => (Face: face, Profile: profiles.Find(game, face.FacePath, face.BaseHeadPath)))
-                .Where(value => value.Profile is not null &&
-                                !value.Profile.Key.EndsWith("-female-turian", StringComparison.OrdinalIgnoreCase))
+                .Where(value => IsConversionProfile(value.Profile))
                 .Select(value => new SelectedFace(
                     game,
                     Species(value.Profile!.Key),
@@ -354,10 +348,13 @@ internal static class ConversionStressRunner
         }
         if (selected.Count == 0)
         {
-            throw new InvalidDataException("Full conversion selection found no supported, non-TUF faces.");
+            throw new InvalidDataException("Full conversion selection found no supported faces.");
         }
         return selected;
     }
+
+    private static bool IsConversionProfile(MorphFaceProfile? profile) =>
+        profile is { TargetSetName: not null };
 
     private static void ValidatePort(
         string packagePath,

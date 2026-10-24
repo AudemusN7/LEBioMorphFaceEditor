@@ -265,63 +265,12 @@
   <system:String x:Key="loc_Services_MetadataText_Game_LE3_HumanFemale_hair_splitside_425b64_Label" xml:space="preserve">Raya lateral</system:String>
   <system:String x:Key="loc_Services_MetadataText_Game_LE3_HumanFemale_hair_splitside_f476c9_Label" xml:space="preserve">Raya lateral"</system:String>
   <system:String x:Key="loc_Services_MetadataText_Shared_afro_29a31b_Label" xml:space="preserve">Afro</system:String>
-  <!--localiser: {"Key":"loc_Services_MetadataText_Shared_aln_hed_brows_up_mdl_lod0_2e5cea_Description","ReviewedHash":null,"DoNotTranslate":false,"Note":"Don\u0027t translate the name, only second half","SourceHash":null}-->
-  <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_brows_up_mdl_lod0_2e5cea_Description" xml:space="preserve">Likely unused/broken · aproximación basada en una suposición</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_brows_up_mdl_lod0_2e5cea_Label" xml:space="preserve">Cejas  hacia arriba</system:String>
-  <!--localiser: {"Key":"loc_Services_MetadataText_Shared_aln_hed_cheeks_wide_mdl_lod0_50bda3_Description","ReviewedHash":null,"DoNotTranslate":false,"Note":"Don\u0027t translate the name, only second half","SourceHash":null}-->
-  <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_cheeks_wide_mdl_lod0_50bda3_Description" xml:space="preserve">Likely unused/broken · aproximación basada en una suposición</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_cheeks_wide_mdl_lod0_50bda3_Label" xml:space="preserve">Mejillas  anchas</system:String>
   <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_diff_240d4a_Label" xml:space="preserve">Textura difusa de los ojos</system:String>
   <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_diff_tint_muzzle2_3ab7e5_Label" xml:space="preserve">Color secundario del hocico</system:String>
   <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_diff_tint_muzzle_66833a_Label" xml:space="preserve">Color del hocico</system:String>
   <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_diff_tint_teeth_939aec_Label" xml:space="preserve">Color de dientes / hueso</system:String>
-  <!--localiser: {"Key":"loc_Services_MetadataText_Shared_aln_hed_eyes_close_mdl_lod0_3a45c8_Description","ReviewedHash":null,"DoNotTranslate":false,"Note":"Don\u0027t translate the name, only second half","SourceHash":null}-->
-  <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_eyes_close_mdl_lod0_3a45c8_Description" xml:space="preserve">Likely unused/broken · aproximación basada en una suposición</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_eyes_close_mdl_lod0_3a45c8_Label" xml:space="preserve">Ojos  cerrados</system:String>
-  <!--localiser: {"Key":"loc_Services_MetadataText_Shared_aln_hed_eyes_sunken_mdl_lod0_943c1e_Description","ReviewedHash":null,"DoNotTranslate":false,"Note":"Don\u0027t translate the name, only second half","SourceHash":null}-->
-  <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_eyes_sunken_mdl_lod0_943c1e_Description" xml:space="preserve">Likely unused/broken · aproximación basada en una suposición</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_eyes_sunken_mdl_lod0_943c1e_Label" xml:space="preserve">Ojos  hundidos</system:String>
-  <!--localiser: {"Key":"loc_Services_MetadataText_Shared_aln_hed_eyes_wide_mdl_lod0_fb78c9_Description","ReviewedHash":null,"DoNotTranslate":false,"Note":"Don\u0027t translate the name, only second half","SourceHash":null}-->
-  <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_eyes_wide_mdl_lod0_fb78c9_Description" xml:space="preserve">Likely unused/broken · aproximación basada en una suposición</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_eyes_wide_mdl_lod0_fb78c9_Label" xml:space="preserve">Ojos  separados</system:String>
-  <!--localiser: {"Key":"loc_Services_MetadataText_Shared_aln_hed_jaw_thin_mdl_lod0_d36da9_Description","ReviewedHash":null,"DoNotTranslate":false,"Note":"Don\u0027t translate the name, only second half","SourceHash":null}-->
-  <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_jaw_thin_mdl_lod0_d36da9_Description" xml:space="preserve">Likely unused/broken · aproximación basada en una suposición</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_jaw_thin_mdl_lod0_d36da9_Label" xml:space="preserve">Mandíbula  fina</system:String>
-  <!--localiser: {"Key":"loc_Services_MetadataText_Shared_aln_hed_jaw_wide_mdl_lod0_8e7db6_Description","ReviewedHash":null,"DoNotTranslate":false,"Note":"Don\u0027t translate the name, only second half","SourceHash":null}-->
-  <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_jaw_wide_mdl_lod0_8e7db6_Description" xml:space="preserve">Likely unused/broken · aproximación basada en una suposición</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_jaw_wide_mdl_lod0_8e7db6_Label" xml:space="preserve">Mandíbula  ancha</system:String>
-  <!--localiser: {"Key":"loc_Services_MetadataText_Shared_aln_hed_mouth_down_mdl_lod0_bf6031_Description","ReviewedHash":null,"DoNotTranslate":false,"Note":"Don\u0027t translate the name, only second half","SourceHash":null}-->
-  <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_mouth_down_mdl_lod0_bf6031_Description" xml:space="preserve">Likely unused/broken · aproximación basada en una suposición</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_mouth_down_mdl_lod0_bf6031_Label" xml:space="preserve">Boca  hacia abajo</system:String>
-  <!--localiser: {"Key":"loc_Services_MetadataText_Shared_aln_hed_mouth_thin_mdl_lod0_bb8e4c_Description","ReviewedHash":null,"DoNotTranslate":false,"Note":"Don\u0027t translate the name, only second half","SourceHash":null}-->
-  <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_mouth_thin_mdl_lod0_bb8e4c_Description" xml:space="preserve">Likely unused/broken · aproximación basada en una suposición</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_mouth_thin_mdl_lod0_bb8e4c_Label" xml:space="preserve">Boca  fina</system:String>
-  <!--localiser: {"Key":"loc_Services_MetadataText_Shared_aln_hed_mouth_up_mdl_lod0_737d4c_Description","ReviewedHash":null,"DoNotTranslate":false,"Note":"Don\u0027t translate the name, only second half","SourceHash":null}-->
-  <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_mouth_up_mdl_lod0_737d4c_Description" xml:space="preserve">Likely unused/broken · aproximación basada en una suposición</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_mouth_up_mdl_lod0_737d4c_Label" xml:space="preserve">Boca  hacia arriba</system:String>
-  <!--localiser: {"Key":"loc_Services_MetadataText_Shared_aln_hed_mouth_wide_mdl_lod0_5cb81e_Description","ReviewedHash":null,"DoNotTranslate":false,"Note":"Don\u0027t translate the name, only second half","SourceHash":null}-->
-  <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_mouth_wide_mdl_lod0_5cb81e_Description" xml:space="preserve">Likely unused/broken · aproximación basada en una suposición</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_mouth_wide_mdl_lod0_5cb81e_Label" xml:space="preserve">Boca  ancha</system:String>
   <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_norm_d32514_Label" xml:space="preserve">Textura normal</system:String>
-  <!--localiser: {"Key":"loc_Services_MetadataText_Shared_aln_hed_nose_fat_tip_mdl_lod0_b31f43_Description","ReviewedHash":null,"DoNotTranslate":false,"Note":"Don\u0027t translate the name, only second half","SourceHash":null}-->
-  <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_nose_fat_tip_mdl_lod0_b31f43_Description" xml:space="preserve">Likely unused/broken · aproximación basada en una suposición</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_nose_fat_tip_mdl_lod0_b31f43_Label" xml:space="preserve">Punta de la nariz  gruesa</system:String>
-  <!--localiser: {"Key":"loc_Services_MetadataText_Shared_aln_hed_nose_high_mdl_lod0_2c23ab_Description","ReviewedHash":null,"DoNotTranslate":false,"Note":"Don\u0027t translate the name, only second half","SourceHash":null}-->
-  <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_nose_high_mdl_lod0_2c23ab_Description" xml:space="preserve">Likely unused/broken · aproximación basada en una suposición</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_nose_high_mdl_lod0_2c23ab_Label" xml:space="preserve">Nariz  elevada</system:String>
-  <!--localiser: {"Key":"loc_Services_MetadataText_Shared_aln_hed_nose_thin_mdl_lod0_9e7e5b_Description","ReviewedHash":null,"DoNotTranslate":false,"Note":"Don\u0027t translate the name, only second half","SourceHash":null}-->
-  <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_nose_thin_mdl_lod0_9e7e5b_Description" xml:space="preserve">Likely unused/broken · aproximación basada en una suposición</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_nose_thin_mdl_lod0_9e7e5b_Label" xml:space="preserve">Nariz  fina</system:String>
-  <!--localiser: {"Key":"loc_Services_MetadataText_Shared_aln_hed_nose_wide_mdl_lod0_18b0fd_Description","ReviewedHash":null,"DoNotTranslate":false,"Note":"Don\u0027t translate the name, only second half","SourceHash":null}-->
-  <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_nose_wide_mdl_lod0_18b0fd_Description" xml:space="preserve">Likely unused/broken · aproximación basada en una suposición</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_nose_wide_mdl_lod0_18b0fd_Label" xml:space="preserve">Nariz  ancha</system:String>
   <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_spec_colour_86fb06_Label" xml:space="preserve">Color especular</system:String>
-  <!--localiser: {"Key":"loc_Services_MetadataText_Shared_aln_hed_spike_close_mdl_lod0_93af0a_Description","ReviewedHash":null,"DoNotTranslate":false,"Note":"Don\u0027t translate the name, only second half","SourceHash":null}-->
-  <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_spike_close_mdl_lod0_93af0a_Description" xml:space="preserve">Likely unused/broken · aproximación basada en una suposición</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_spike_close_mdl_lod0_93af0a_Label" xml:space="preserve">Espina  cerrada</system:String>
-  <!--localiser: {"Key":"loc_Services_MetadataText_Shared_aln_hed_spike_wide_mdl_lod0_865e0a_Description","ReviewedHash":null,"DoNotTranslate":false,"Note":"Don\u0027t translate the name, only second half","SourceHash":null}-->
-  <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_spike_wide_mdl_lod0_865e0a_Description" xml:space="preserve">Likely unused/broken · aproximación basada en una suposición</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_spike_wide_mdl_lod0_865e0a_Label" xml:space="preserve">Espina  ancha</system:String>
   <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_spwr_muzzle_scalar_4e53ac_Label" xml:space="preserve">Potencia especular del hocico</system:String>
   <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_spwr_skin_scalar_5a2e93_Label" xml:space="preserve">Potencia especular de la piel</system:String>
   <system:String x:Key="loc_Services_MetadataText_Shared_aln_hed_tatt_300d25_Label" xml:space="preserve">Textura del tatuaje</system:String>
@@ -949,7 +898,6 @@
   <system:String x:Key="loc_Services_MetadataText_Shared_tur_hed_tmis_multiplier_459c92_Label" xml:space="preserve">Intensidad de transmisión</system:String>
   <system:String x:Key="loc_Services_MetadataText_Shared_u_offset_b8e626_Label" xml:space="preserve">Desplazamiento horizontal</system:String>
   <system:String x:Key="loc_Services_MetadataText_Shared_v_offset_9134b9_Label" xml:space="preserve">Desplazamiento vertical</system:String>
-  <system:String x:Key="loc_Services_MetadataText_Shared_vorchabase_b6c9ff_Label" xml:space="preserve">Vorcha base</system:String>
   <system:String x:Key="loc_Services_MetadataText_Shared_widowspeak_780904_Label" xml:space="preserve">Pico de viuda</system:String>
   <system:String x:Key="loc_Services_MetadataText_Shared_willis01_f29d29_Label" xml:space="preserve">Willis 01</system:String>
   <system:String x:Key="loc_Services_MetadataText_Shared_willis_321cef_Label" xml:space="preserve">Willis</system:String>
@@ -1051,10 +999,8 @@
   <system:String x:Key="loc_Services_Taxonomy_preserved_front_end_metadata_with_no_asa_target_fc559827" xml:space="preserve">Metadatos de interfaz conservados, sin cambios de morph ASA.</system:String>
   <system:String x:Key="loc_Services_Taxonomy_preserved_front_end_metadata_with_no_sal_target_20e94d45" xml:space="preserve">Metadatos de interfaz conservados, sin cambios de morph SAL.</system:String>
   <system:String x:Key="loc_Services_Taxonomy_preserved_front_end_metadata_with_no_tur_target_ee5830d7" xml:space="preserve">Metadatos de interfaz conservados, sin cambios de morph TUR.</system:String>
-  <system:String x:Key="loc_Services_Taxonomy_preserved_inert_le3_metadata_fa7f4e2e" xml:space="preserve">Metadatos inertes de LE3 conservados.</system:String>
   <system:String x:Key="loc_Services_Taxonomy_race_c51fb9b5" xml:space="preserve">RAZA</system:String>
   <system:String x:Key="loc_Services_Taxonomy_race_shapes_0087193f" xml:space="preserve">FORMAS DE LA RAZA</system:String>
-  <system:String x:Key="loc_Services_Taxonomy_reconstructed_vorcha_facial_shape_controls_8e9650d1" xml:space="preserve">Controles reconstruidos de forma facial vorcha.</system:String>
   <system:String x:Key="loc_Services_Taxonomy_regional_colour_199c8ed3" xml:space="preserve">COLOR REGIONAL</system:String>
   <system:String x:Key="loc_Services_Taxonomy_reserved_female_turian_placeholder_no_tuf_morph_b14ba244" xml:space="preserve">Marcador reservado para turiana; aún no hay ningún morph TUF disponible.</system:String>
   <system:String x:Key="loc_Services_Taxonomy_salarian_cranial_ring_proportions_2d573b0d" xml:space="preserve">Proporciones del anillo craneal salariano.</system:String>
@@ -1062,7 +1008,6 @@
   <system:String x:Key="loc_Services_Taxonomy_shape_cfb25fc2" xml:space="preserve">FORMA</system:String>
   <system:String x:Key="loc_Services_Taxonomy_shape_rotation_7a73993a" xml:space="preserve">FORMA / ROTACIÓN</system:String>
   <system:String x:Key="loc_Services_Taxonomy_sockets_1d56780a" xml:space="preserve">CUENCAS</system:String>
-  <system:String x:Key="loc_Services_Taxonomy_spikes_fe7e5996" xml:space="preserve">ESPINAS</system:String>
   <system:String x:Key="loc_Services_Taxonomy_stock_le3_target_retained_for_package_fidelity_i_3d37e5eb" xml:space="preserve">Objetivo original de LE3 conservado para mantener la fidelidad del paquete; afecta visiblemente a la mandíbula inferior, no al tamaño de las pupilas.</system:String>
   <system:String x:Key="loc_Services_Taxonomy_stored_character_creator_metadata_with_no_direct_4b548561" xml:space="preserve">Metadatos del creador de personajes almacenados, sin cambios directos en vértices ni huesos.</system:String>
   <system:String x:Key="loc_Services_Taxonomy_stored_creator_metadata_with_no_direct_target_de_e78cd33a" xml:space="preserve">Metadatos de creador almacenados, sin cambios directos en los morphs.</system:String>
@@ -1075,7 +1020,6 @@
   <system:String x:Key="loc_Services_Taxonomy_teeth_0afde705" xml:space="preserve">DIENTES</system:String>
   <system:String x:Key="loc_Services_Taxonomy_tip_cd320198" xml:space="preserve">PUNTA</system:String>
   <system:String x:Key="loc_Services_Taxonomy_turian_mandible_and_head_spike_proportions_81516cfd" xml:space="preserve">Proporciones de mandíbulas y espinas cefálicas turianas.</system:String>
-  <system:String x:Key="loc_Services_Taxonomy_vorcha_eye_shape_controls_and_eye_material_setti_958690ef" xml:space="preserve">Controles de forma de ojos y configuración de materiales oculares vorcha.</system:String>
   <system:String x:Key="loc_Settings_AccentAutomation" xml:space="preserve">Color de acento</system:String>
   <system:String x:Key="loc_Settings_AccentColour" xml:space="preserve">Color de acento</system:String>
   <system:String x:Key="loc_Settings_AccentTooltip" xml:space="preserve">Elige un color de acento para la interfaz</system:String>

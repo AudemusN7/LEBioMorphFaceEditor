@@ -83,17 +83,13 @@ internal sealed class DebugThemePalette
         try
         {
             var document = JsonSerializer.Deserialize<PaletteDocument>(File.ReadAllText(FilePath), JsonOptions);
-            if (document is not { SchemaVersion: 1 or 2, Colours: not null })
+            if (document is not { SchemaVersion: 2, Colours: not null })
                 throw new FormatException("Unsupported palette file.");
             var colours = new Dictionary<string, Color>();
             foreach (var (key, value) in document.Colours)
             {
                 if (value is not { Length: 9 } || value[0] != '#' || !value[1..].All(Uri.IsHexDigit))
                     throw new FormatException($"Invalid colour: {key}.");
-                // Preserve v1's surviving colours; retired standalone swatches now
-                // derive from their shared source rather than overriding Ryan's links.
-                if (document.SchemaVersion == 1 && key is "Palette.SelectedText" or "Palette.ErrorBanner" or
-                    "Palette.BadgeBorder" or "Palette.HintBorder" or "Palette.BoneSelection") continue;
                 if (!Definitions.Any(d => d.Key == key)) throw new FormatException($"Unknown colour: {key}.");
                 colours.Add(key, (Color)ColorConverter.ConvertFromString(value));
             }

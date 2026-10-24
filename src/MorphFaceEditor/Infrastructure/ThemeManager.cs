@@ -8,7 +8,7 @@ namespace MorphFaceEditor.Infrastructure;
 internal sealed class ThemeManager : IDisposable
 {
     private readonly ResourceDictionary _palette;
-    private readonly ThemePreferencesStore _preferences;
+    private readonly ApplicationPreferencesStore _preferences;
     private readonly IWindowsThemeSource _system;
     private readonly Dispatcher _dispatcher;
     private readonly IReadOnlyDictionary<string, Color> _dark;
@@ -19,7 +19,7 @@ internal sealed class ThemeManager : IDisposable
     public double? AccentHue { get; private set; }
     public event EventHandler? Changed;
 
-    public ThemeManager(ResourceDictionary resources, ThemePreferencesStore preferences, IWindowsThemeSource system)
+    public ThemeManager(ResourceDictionary resources, ApplicationPreferencesStore preferences, IWindowsThemeSource system)
     {
         _palette = ThemeResources.Palette(resources);
         _dispatcher = Dispatcher.CurrentDispatcher;
@@ -27,14 +27,17 @@ internal sealed class ThemeManager : IDisposable
         _system = system;
         _dark = ReadColours("Dark");
         _light = ReadColours("Light");
-        Mode = preferences.Current.Mode;
-        AccentHue = preferences.Current.AccentHue;
+        if (Enum.IsDefined(preferences.Current.Mode) && ApplicationPreferencesStore.ValidHue(preferences.Current.AccentHue))
+        {
+            Mode = preferences.Current.Mode;
+            AccentHue = preferences.Current.AccentHue;
+        }
         _system.Changed += OnSystemChanged;
         Apply();
     }
 
     public static ThemeManager CreateDefault(ResourceDictionary resources) =>
-        new(resources, ThemePreferencesStore.CreateDefault(), new WindowsThemeSource());
+        new(resources, ApplicationPreferencesStore.CreateDefault(), new WindowsThemeSource());
 
     internal static IReadOnlyDictionary<string, Color> ReadColours(string mode)
     {
@@ -54,7 +57,7 @@ internal sealed class ThemeManager : IDisposable
     public void SetMode(ThemeMode mode)
     {
         if (!Enum.IsDefined(mode)) throw new ArgumentOutOfRangeException(nameof(mode));
-        _preferences.Save(new(mode, AccentHue));
+        _preferences.Update(preferences => preferences with { Mode = mode, AccentHue = AccentHue });
         Mode = mode;
         Apply();
     }
@@ -66,7 +69,7 @@ internal sealed class ThemeManager : IDisposable
         Apply();
     }
 
-    public void CommitAccentHue() => _preferences.Save(new(Mode, AccentHue));
+    public void CommitAccentHue() => _preferences.Update(preferences => preferences with { Mode = Mode, AccentHue = AccentHue });
 
     private void OnSystemChanged(object? sender, EventArgs args)
     {

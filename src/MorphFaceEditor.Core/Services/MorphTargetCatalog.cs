@@ -11,6 +11,8 @@ public sealed class MorphTargetCatalog
     public IReadOnlyList<MorphTargetAsset> Load(MorphFaceProfile profile)
     {
         ArgumentNullException.ThrowIfNull(profile);
+        // Static profiles have no authoring targets; their native geometry is retained.
+        if (profile.TargetSetName is null) return [];
         lock (_sync)
         {
             var bundleKey = $"{profile.Game}.{profile.TargetSetName}";

@@ -57,6 +57,8 @@ public sealed class MorphFaceConversionService(
             source.Game,
             source.Document.Source.InstancedPath,
             source.Document.BaseHeadReference?.InstancedPath);
+        if (sourceProfile.TargetSetName is null && !sourceProfile.IgnoresAuthoredGeometry)
+            throw new NotSupportedException();
         EnsureSupportedDirection(source.Game, request.TargetGame);
         var sourceCatalog = ReadTextureCatalog(source.Game);
         var targetCatalog = ReadTextureCatalog(request.TargetGame);

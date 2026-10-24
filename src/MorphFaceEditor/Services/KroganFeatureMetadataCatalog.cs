@@ -45,14 +45,16 @@ public IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
     public MorphFeatureMetadata Describe(ResolvedMorphFeature feature, bool sessionCanEdit)
     {
         var (category, subcategory) = FeaturePlacement(feature.Feature.Name);
-        var visible = MorphFaceProfileFeatures.IsControlEligible(MorphFaceMetadataCatalogRegistry.Krogan, Core.Domain.MorphFaceGame.LE1, feature.Feature.Name, feature.Target);
+        var sortOrder = FeatureSortOrder(feature.Feature.Name, allowUnresolvedName: !feature.IsResolved);
+        var visible = MorphFaceProfileFeatures.IsControlEligible(MorphFaceMetadataCatalogRegistry.Krogan, Core.Domain.MorphFaceGame.LE1, feature.Feature.Name, feature.Target) &&
+                      (feature.IsResolved || sortOrder != int.MaxValue);
         var metadata = new MorphFeatureMetadata(
             feature.Feature.Name,
             FeatureLabel(feature.Feature.Name),
             category,
             subcategory,
             visible,
-            FeatureSortOrder(feature.Feature.Name),
+            sortOrder,
             0,
             1,
             0.01f,
@@ -142,7 +144,7 @@ public IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
         return (Head, Neck);
     }
 
-    private static int FeatureSortOrder(string name)
+    private static int FeatureSortOrder(string name, bool allowUnresolvedName)
     {
         if (MorphFaceProfileFeatures.KroganMetadataOnlyFeatures.Contains(name)) return int.MaxValue;
         return name.ToLowerInvariant() switch
@@ -172,6 +174,8 @@ public IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
             "mouth_down" => 2,
             "mouth_up" => 3,
             "jaw_chinback" => 0,
+            // Preserve unknown authored rows without creating controls; real targets still require an intentional position.
+            _ when allowUnresolvedName => int.MaxValue,
             _ => throw new InvalidOperationException(
                 $"Krogan target '{name}' has no intentional UI sort position.")
         };

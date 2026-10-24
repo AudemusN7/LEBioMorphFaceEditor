@@ -41,7 +41,7 @@ internal static class TestCatalog
                 .. Le2PlayerMaterialRonIdentityTests.All],
             ["mesh"] = [.. CustomMeshTests.All,
                 .. ImportedSkeletalMeshWriterTests.All, .. CustomMeshPccMaterializerTests.All,
-                .. GltfInverseMorphTests.All,
+                .. GltfInverseMorphTests.All, .. GltfTangentHandednessTests.All,
                 .. PccTextureDependencyResolverTests.All],
             ["tooling"] = [.. LocaliserTests.All, .. RandomisationTests.Tooling, .. QaUtilityTests.All,
                 .. QaNpcEyeGraphCheckTests.All]

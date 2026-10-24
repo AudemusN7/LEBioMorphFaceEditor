@@ -26,6 +26,7 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
     private IReadOnlyList<TextureCatalogCandidate>? _registryCandidates;
     private TextureCatalogProfile? _registryProfile;
     private bool _isRegistryAvailable;
+    private bool _extendedSliders;
     private IReadOnlyList<MaterialScalarEditorViewModel> _scalars = [];
     private IReadOnlyList<MaterialVectorEditorViewModel> _vectors = [];
     private IReadOnlyList<MaterialTextureEditorViewModel> _textures = [];
@@ -186,6 +187,7 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
             .OrderBy(value => value.Group)
             .ThenBy(value => value.Label)
             .ToArray();
+        foreach (var scalar in _scalars) scalar.SetExtendedSliders(_extendedSliders);
         _vectors = _session.VectorNames
             .Where(name => IsMaterialVisible(name, MaterialParameterKind.Vector))
             .Select(name => new MaterialVectorEditorViewModel(
@@ -369,15 +371,15 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
         _session.HasCursedRandomisation ? _session.CaptureRandomisationDefaults() : null;
 
     public void ApplyRandomisation(PreparedMaterialRandomisation values, bool cursed = false,
-        IReadOnlySet<string>? preservedTextureNames = null) =>
+        IReadOnlySet<string>? preservedTextureNames = null, MaterialRandomisationScope? resetScope = null) =>
         ApplyPreparedValues(values, cursed ? MaterialBatchKind.CursedRandomisation : MaterialBatchKind.NormalRandomisation,
-            preservedTextureNames);
+            preservedTextureNames, resetScope);
 
     public void ApplyPreparedValues(PreparedMaterialRandomisation values, MaterialBatchKind kind = MaterialBatchKind.Edit,
-        IReadOnlySet<string>? preservedTextureNames = null)
+        IReadOnlySet<string>? preservedTextureNames = null, MaterialRandomisationScope? resetScope = null)
     {
         ArgumentNullException.ThrowIfNull(values);
-        _session.SetValues(values.Scalars, values.Vectors, values.Textures, kind, preservedTextureNames);
+        _session.SetValues(values.Scalars, values.Vectors, values.Textures, kind, preservedTextureNames, resetScope);
     }
     public void ResetToDefaults() => _session.ResetToDefaults();
     public PreparedMaterialSurface PrepareAttachmentMaterials(ResolvedHeadMaterialSet materials) =>
@@ -411,6 +413,7 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
     }
     public void SetExtendedSliders(bool enabled)
     {
+        _extendedSliders = enabled;
         foreach (var scalar in Scalars)
         {
             scalar.SetExtendedSliders(enabled);

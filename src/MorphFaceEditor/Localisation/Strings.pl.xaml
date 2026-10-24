@@ -1610,7 +1610,6 @@ Nie: po pomyślnej odbudowie usuń własne bazy zasobów.</system:String>
   <system:String x:Key="loc_View_MainWindow_PostProcessing" xml:space="preserve">Postprocessing</system:String>
   <system:String x:Key="loc_View_MainWindow_LoadSelectedFace" xml:space="preserve">Wczytaj wybraną twarz</system:String>
   <system:String x:Key="loc_View_MainWindow_MATERIAL" xml:space="preserve">MATERIAŁ</system:String>
-  <system:String x:Key="loc_View_MainWindow_MD5" xml:space="preserve">MD5</system:String>
   <system:String x:Key="loc_View_MainWindow_ManageTheGameWideTexture2DRegistries" xml:space="preserve">Zarządzaj rejestrami Texture2D dla całej gry</system:String>
   <system:String x:Key="loc_View_MainWindow_Material" xml:space="preserve">Materiał</system:String>
   <!--localiser: {"Key":"loc_View_MainWindow_MaterialRandomisationStrength","ReviewedHash":null,"DoNotTranslate":false,"Note":"Exceeding current character count could result in UI clipping","SourceHash":null}-->

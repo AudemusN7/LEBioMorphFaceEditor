@@ -4,7 +4,6 @@ using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.DataCompiler;
 using MorphFaceEditor.LegendaryExplorer;
-using MorphFaceEditor.Services;
 using System.Numerics;
 
 namespace MorphFaceEditor.Tests;
@@ -429,6 +428,12 @@ public static class RandomisationTests
             new Dictionary<string, string> { ["HED_Mask"] = "CurrentlySelected_Mask3" });
         TestAssert.True(vectorOnly.Vectors["HED_Mask_Vector"] != new Vector4(1, 0, 0, 1),
             "Vector-only randomisation ignored the currently selected Mask3 texture.");
+        var unrelatedColour = MaterialRandomiser.CreateProposal(
+            PolicyDonor("le3-human-male"), [], PolicyProfile("le3-human-male", [], []), Values(),
+            current, [], new HashSet<string>(), new HashSet<string>(["EYE_Iris_Colour_Vector"]),
+            new HashSet<string>(), 100, 11,
+            new Dictionary<string, string> { ["HED_Mask"] = "CurrentlySelected_Mask3" });
+        TestAssert.Equal(current["HED_Mask_Vector"], unrelatedColour.Vectors["HED_Mask_Vector"]);
 
         var turian = PolicyDonor("le2-turian") with
         {
@@ -773,6 +778,10 @@ public static class RandomisationTests
 
     private static void BundleRoundTripsDeterministically()
     {
+        var embedded = MorphRandomisationCatalog.LoadEmbedded();
+        TestAssert.True(embedded.HasDonors("le3-human-male") && embedded.HasMaterialDonors("le3-human-male"),
+            "The shipped randomisation bundle did not provide its morph and material donors.");
+
         var donor = new MorphRandomisationDonor(
             "LE1.Face", "le1-human-male",
             new HashSet<string>(["B", "A"], StringComparer.OrdinalIgnoreCase),

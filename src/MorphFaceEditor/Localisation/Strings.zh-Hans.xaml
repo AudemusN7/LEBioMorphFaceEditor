@@ -1610,7 +1610,6 @@
   <system:String x:Key="loc_View_MainWindow_PostProcessing" xml:space="preserve">后期处理</system:String>
   <system:String x:Key="loc_View_MainWindow_LoadSelectedFace" xml:space="preserve">加载所选脸部</system:String>
   <system:String x:Key="loc_View_MainWindow_MATERIAL" xml:space="preserve">材质</system:String>
-  <system:String x:Key="loc_View_MainWindow_MD5" xml:space="preserve">MD5</system:String>
   <system:String x:Key="loc_View_MainWindow_ManageTheGameWideTexture2DRegistries" xml:space="preserve">管理整个游戏的 Texture2D 注册表</system:String>
   <system:String x:Key="loc_View_MainWindow_Material" xml:space="preserve">材质</system:String>
   <!--localiser: {"Key":"loc_View_MainWindow_MaterialRandomisationStrength","ReviewedHash":null,"DoNotTranslate":false,"Note":"Exceeding current character count could result in UI clipping","SourceHash":null}-->

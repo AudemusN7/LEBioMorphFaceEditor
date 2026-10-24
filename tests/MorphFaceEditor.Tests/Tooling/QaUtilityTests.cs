@@ -1,5 +1,9 @@
 using MorphFaceEditor.Core.Domain;
 using System.Text.Json;
+using LegendaryExplorerCore.Packages;
+using LegendaryExplorerCore.Unreal.BinaryConverters;
+using MorphFaceEditor.Core.Deformation;
+using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.QA;
 
 namespace MorphFaceEditor.Tests;
@@ -12,8 +16,66 @@ internal static class QaUtilityTests
         new("QA coverage streams reproduce filtered cases and vary donors", Selection),
         new("QA native save values compare separately from preserved source ordering", NativeSaveOrdering),
         new("QA material comparison preserves duplicate counts and exact texture identities", MaterialNamesAndDuplicates),
+        new("QA load oracle misses remain diagnostic without accepting invalid topology", () => LoadOracleDiagnostics().GetAwaiter().GetResult()),
         new("QA reports retain frozen timing limits and functional failures beside timing outcomes", Report)
     ];
+
+    private static async Task LoadOracleDiagnostics()
+    {
+        var source = PackageTestFixtures.FixturePath("LE2 GlobalMorphs.pcc");
+        if (!File.Exists(source)) throw new TestSkippedException("The LE2 GlobalMorphs corpus is unavailable.");
+        var directory = Path.Combine(Path.GetTempPath(), "MFE-QA-Oracle-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            using var context = new QaContext(Environment.CurrentDirectory, Path.GetDirectoryName(source)!, directory, 123)
+            {
+                Face = new QaFaceSpec(MorphFaceGame.LE2, "HMF"),
+                Current = new QaResult("load/oracle", "Existing authored deformation mismatch")
+            };
+            context.TrackInput(source);
+            var original = await context.Load(source, "HMF.BioFace_Ashley");
+            TestAssert.True(context.Current.Evidence["oracle"] is DeformationComparisonReport { IsWithinTolerance: false } &&
+                context.Current.Notes.Any(note => note.Contains("HMF.BioFace_Ashley", StringComparison.Ordinal)),
+                "The native oracle miss was lost or did not produce an informational note.");
+            TestAssert.True(!original.EditingSession.CanEditMorphFeatures,
+                "QA changed the production oracle gate for unsafe morph editing.");
+
+            // A different face identity and an unchanged copy must not need a named exception.
+            var copy = Path.Combine(directory, "PreservedSource.pcc");
+            File.Copy(source, copy);
+            const string renamed = "HMF.BioFace_OracleFixture";
+            using (var package = MEPackageHandler.OpenMEPackage(copy))
+            {
+                package.FindExport("HMF.BioFace_Ashley", "BioMorphFace")!.ObjectName = "BioFace_OracleFixture";
+                package.Save();
+            }
+            var reopened = await context.Load(copy, renamed);
+            TestAssert.True(context.Current.Evidence["oracle"] is DeformationComparisonReport { IsWithinTolerance: false } &&
+                context.Current.Notes.Any(note => note.Contains(renamed, StringComparison.Ordinal)),
+                "A preserved mismatch was accepted only for the original corpus identity.");
+            var before = original.Loaded.Document;
+            var after = reopened.Loaded.Document;
+            PackageTestFixtures.AssertMorphEqual(new(before.MorphFeatures, before.FinalSkeleton, before.BakedLods),
+                new(after.MorphFeatures, after.FinalSkeleton, after.BakedLods));
+
+            using (var package = MEPackageHandler.OpenMEPackage(copy))
+            {
+                var face = package.FindExport(renamed, "BioMorphFace")!;
+                var binary = face.GetBinaryData<BioMorphFace>();
+                binary.LODs[0] = binary.LODs[0][..^1];
+                face.WriteBinary(binary);
+                package.Save();
+            }
+            string? failure = null;
+            try { await context.Load(copy, renamed); }
+            catch (InvalidDataException exception) { failure = exception.Message; }
+            TestAssert.True(failure?.Contains("topology", StringComparison.OrdinalIgnoreCase) == true,
+                $"An invalid vertex count was not rejected by topology validation: {failure ?? "no exception"}.");
+            context.VerifyInputs();
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
 
     private static void MaterialNamesAndDuplicates()
     {

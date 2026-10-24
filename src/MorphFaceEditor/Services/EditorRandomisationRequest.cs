@@ -1,5 +1,6 @@
 using System.Numerics;
 using MorphFaceEditor.Core.Domain;
+using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.Core.Randomisation;
 
@@ -19,7 +20,8 @@ internal sealed record EditorRandomisationRequest(
     (MorphFaceGame Game, PlayerHairSex Sex, string? ScopeKey)? Human,
     RandomisationHairInput Hair,
     bool IncludeBones,
-    bool ResetMaterials)
+    bool ResetMaterials,
+    MaterialRandomisationScope? MaterialCleanupScope)
 {
     public bool HasMaterial => ResetMaterials || Material.ScalarScope.Count +
         Material.VectorScope.Count + Material.TextureScope.Count > 0;

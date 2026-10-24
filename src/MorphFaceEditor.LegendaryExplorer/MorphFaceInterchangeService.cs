@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Globalization;
 using System.Numerics;
 using System.Text.RegularExpressions;
 using System.Text.Json;
@@ -19,8 +18,7 @@ namespace MorphFaceEditor.LegendaryExplorer;
 public enum MorphMeshFormat
 {
     Psk,
-    Gltf,
-    Md5
+    Gltf
 }
 
 public sealed record MorphMeshExportResult(
@@ -30,7 +28,7 @@ public sealed record MorphMeshExportResult(
 
 /// <summary>
 /// Owns external mesh interchange: LEC/UModel export and position-only parsing
-/// for the three formats accepted by the inverse morph solver.
+/// for the PSK and glTF formats accepted by the inverse morph solver.
 /// </summary>
 public sealed class MorphFaceInterchangeService
 {
@@ -77,12 +75,15 @@ public sealed class MorphFaceInterchangeService
                 sourceMorph.MorphFeatures,
                 sourceMorph.FinalSkeleton,
                 sourceMorph.BakedLods);
+            var exportDirectory = format == MorphMeshFormat.Gltf
+                ? Path.Combine(temporaryDirectory, "gltf")
+                : outputDirectory;
             var arguments = new List<string> { "-export", "-lods" };
-            if (format != MorphMeshFormat.Psk)
+            if (format == MorphMeshFormat.Gltf)
             {
-                arguments.Add(format == MorphMeshFormat.Gltf ? "-gltf" : "-md5");
+                arguments.Add("-gltf");
             }
-            arguments.Add($"-out={outputDirectory}");
+            arguments.Add($"-out={exportDirectory}");
             arguments.Add(tempPackagePath);
             arguments.Add(meshName);
             arguments.Add("SkeletalMesh");
@@ -97,10 +98,9 @@ public sealed class MorphFaceInterchangeService
             {
                 MorphMeshFormat.Psk => new[] { ".psk", ".pskx" },
                 MorphMeshFormat.Gltf => new[] { ".gltf", ".bin" },
-                MorphMeshFormat.Md5 => new[] { ".md5mesh", ".md5anim" },
                 _ => throw new ArgumentOutOfRangeException(nameof(format))
             };
-            var produced = Directory.EnumerateFiles(outputDirectory, "*", SearchOption.AllDirectories)
+            var produced = Directory.EnumerateFiles(exportDirectory, "*", SearchOption.AllDirectories)
                 .Where(path => extensions.Contains(
                                Path.GetExtension(path), StringComparer.OrdinalIgnoreCase) &&
                                IsMeshLodFile(path, meshName))
@@ -110,33 +110,43 @@ public sealed class MorphFaceInterchangeService
                 throw new InvalidDataException(
                     $"UModel completed but did not produce a {format} mesh. {LastUsefulLine(run.Output)}");
             }
+            if (format == MorphMeshFormat.Gltf)
+            {
+                using var stagedPackage = MEPackageHandler.OpenMEPackage(tempPackagePath, forceLoadFromDisk: true);
+                var stagedMesh = stagedPackage.Exports.Single().GetBinaryData<BinarySkeletalMesh>();
+                GltfExportTangentRestorer.Restore(stagedMesh, meshName,
+                    produced.Where(path => IsPrimaryExtension(path, format)).ToArray());
+            }
             var primary = produced.First(path => IsPrimaryExtension(path, format));
             var sidecar = TryWriteVertexMapSidecar(primary, format, bakedPositions, fitPrior);
             if (sidecar is null && format == MorphMeshFormat.Gltf)
             {
-                var mappingOutput = Path.Combine(temporaryDirectory, "md5-map");
+                var mappingOutput = Path.Combine(temporaryDirectory, "psk-map");
                 Directory.CreateDirectory(mappingOutput);
                 var mappingRun = await RunAsync(executable,
                 [
-                    "-export", "-lods", "-md5", $"-out={mappingOutput}",
+                    "-export", "-lods", $"-out={mappingOutput}",
                     tempPackagePath, meshName, "SkeletalMesh"
                 ], cancellationToken);
                 if (mappingRun.ExitCode == 0)
                 {
-                    var md5Path = Directory.EnumerateFiles(
-                            mappingOutput, "*.md5mesh", SearchOption.AllDirectories)
-                        .FirstOrDefault();
-                    if (md5Path is not null)
+                    var pskPath = Directory.EnumerateFiles(
+                            mappingOutput, "*", SearchOption.AllDirectories)
+                        .FirstOrDefault(path => IsPrimaryExtension(path, MorphMeshFormat.Psk));
+                    if (pskPath is not null)
                     {
                         sidecar = TryWriteGltfVertexMapSidecar(
-                            primary, md5Path, bakedPositions, fitPrior);
+                            primary, pskPath, bakedPositions, fitPrior);
                     }
                 }
             }
             sidecar ??= WritePriorOnlySidecar(primary + ".mfe.json", fitPrior);
+            var completed = sidecar is null ? produced : [.. produced, sidecar];
+            if (format == MorphMeshFormat.Gltf)
+                completed = PublishGltfFiles(completed, exportDirectory, outputDirectory, cancellationToken);
             return new MorphMeshExportResult(
                 format,
-                sidecar is null ? produced : [.. produced, sidecar],
+                completed,
                 run.Output);
         }
         finally
@@ -145,6 +155,61 @@ public sealed class MorphFaceInterchangeService
             {
                 Directory.Delete(temporaryDirectory, recursive: true);
             }
+        }
+    }
+
+    internal static string[] PublishGltfFiles(IReadOnlyList<string> sources, string sourceDirectory,
+        string outputDirectory, CancellationToken cancellationToken = default)
+    {
+        var outputs = sources.Select(source => Path.Combine(outputDirectory,
+            Path.GetRelativePath(sourceDirectory, source))).ToArray();
+        var candidates = outputs.Select(path => path + $".{Guid.NewGuid():N}.tmp").ToArray();
+        var backups = outputs.Select(path => path + $".{Guid.NewGuid():N}.backup").ToArray();
+        var installed = new List<int>();
+        var complete = false;
+        try
+        {
+            for (var index = 0; index < sources.Count; index++)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(outputs[index])!);
+                File.Copy(sources[index], candidates[index]);
+            }
+            cancellationToken.ThrowIfCancellationRequested();
+            for (var index = 0; index < sources.Count; index++)
+            {
+                if (File.Exists(outputs[index]))
+                    File.Replace(candidates[index], outputs[index], backups[index], ignoreMetadataErrors: true);
+                else
+                    File.Move(candidates[index], outputs[index]);
+                installed.Add(index);
+            }
+            complete = true;
+            return outputs;
+        }
+        catch (Exception exception)
+        {
+            var rollbackErrors = new List<Exception>();
+            foreach (var index in installed.AsEnumerable().Reverse())
+            {
+                try
+                {
+                    if (File.Exists(backups[index]))
+                        File.Move(backups[index], outputs[index], overwrite: true);
+                    else
+                        File.Delete(outputs[index]);
+                }
+                catch (Exception rollbackError) { rollbackErrors.Add(rollbackError); }
+            }
+            if (rollbackErrors.Count > 0) throw new AggregateException([exception, .. rollbackErrors]);
+            throw;
+        }
+        finally
+        {
+            foreach (var candidate in candidates)
+                if (File.Exists(candidate)) File.Delete(candidate);
+            if (complete)
+                foreach (var backup in backups)
+                    if (File.Exists(backup)) File.Delete(backup);
         }
     }
 
@@ -163,9 +228,8 @@ public sealed class MorphFaceInterchangeService
         {
             ".psk" or ".pskx" => ReadPsk(path),
             ".gltf" or ".glb" => ReadGltf(path),
-            ".md5" or ".md5mesh" => ReadMd5(path),
             _ => throw new NotSupportedException(
-                "Morph mesh import supports PSK/PSKX, glTF/GLB, and MD5/MD5Mesh files.")
+                "Morph mesh import supports PSK/PSKX and glTF/GLB files.")
         };
         var sidecar = ReadVertexMapSidecar(path);
         return baseHead => ApplyVertexMapSidecar(sidecar,
@@ -271,7 +335,6 @@ public sealed class MorphFaceInterchangeService
         {
             MorphMeshFormat.Psk => ReadPsk(meshPath)(baseHead),
             MorphMeshFormat.Gltf => ReadGltf(meshPath)(baseHead),
-            MorphMeshFormat.Md5 => ReadMd5(meshPath)(baseHead),
             _ => throw new ArgumentOutOfRangeException(nameof(format))
         };
         foreach (var candidate in candidates.Where(value =>
@@ -289,17 +352,17 @@ public sealed class MorphFaceInterchangeService
 
     internal static string? TryWriteGltfVertexMapSidecar(
         string gltfPath,
-        string md5Path,
+        string pskPath,
         IReadOnlyList<Vector3> bakedPositions,
         MorphMeshFitPrior fitPrior)
     {
         var baseHead = new MeshPositionReference(bakedPositions);
-        var md5Candidates = ReadMd5(md5Path)(baseHead);
+        var pskCandidates = ReadPsk(pskPath)(baseHead);
         var gltfCandidates = ReadGltf(gltfPath)(baseHead);
-        foreach (var candidate in md5Candidates.Where(value =>
+        foreach (var candidate in pskCandidates.Where(value =>
                      value.IsFileOrder))
         {
-            if (!TryMatchExactVertexSet(candidate.Positions, bakedPositions, out var md5ToBase))
+            if (!TryMatchExactVertexSet(candidate.Positions, bakedPositions, out var pskToBase))
             {
                 continue;
             }
@@ -307,13 +370,13 @@ public sealed class MorphFaceInterchangeService
                           value.IsFileOrder))
             {
                 // The two UModel exporters need not use the same vertex order.
-                // Prove correspondence before borrowing the MD5-to-bake map;
+                // Prove correspondence before borrowing the PSK-to-bake map;
                 // corrections must never conceal a reflected basis or a reorder.
-                if (!TryMatchExactVertexSet(gltfCandidate.Positions, candidate.Positions, out var gltfToMd5))
+                if (!TryMatchExactVertexSet(gltfCandidate.Positions, candidate.Positions, out var gltfToPsk))
                 {
                     continue;
                 }
-                var exportedToBase = gltfToMd5.Select(index => md5ToBase[index]).ToArray();
+                var exportedToBase = gltfToPsk.Select(index => pskToBase[index]).ToArray();
                 if (gltfCandidate.Positions.Where((position, index) =>
                         Vector3.DistanceSquared(position, bakedPositions[exportedToBase[index]]) >
                         VertexMapTolerance * VertexMapTolerance).Any())
@@ -559,82 +622,6 @@ public sealed class MorphFaceInterchangeService
         };
     }
 
-    private static Func<MeshPositionReference, IReadOnlyList<MorphMeshPositionCandidate>> ReadMd5(string path)
-    {
-        var source = File.ReadAllText(path);
-        var jointsBlock = ExtractBlocks(source, "joints").SingleOrDefault()
-                          ?? throw new InvalidDataException("MD5 mesh has no joints block.");
-        var joints = JointRegex.Matches(jointsBlock)
-            .Select(match => new Md5Joint(
-                int.Parse(match.Groups[2].Value, CultureInfo.InvariantCulture),
-                ReadVector(match.Groups[3].Value),
-                ReadQuaternion(match.Groups[4].Value)))
-            .ToArray();
-        if (joints.Length == 0)
-        {
-            throw new InvalidDataException("MD5 mesh contains no parseable joints.");
-        }
-
-        var streams = new List<VertexStream>();
-        foreach (var meshBlock in ExtractBlocks(source, "mesh"))
-        {
-            var vertices = VertRegex.Matches(meshBlock)
-                .Select(match => new Md5Vertex(
-                    ReadVector2(match.Groups[1].Value),
-                    int.Parse(match.Groups[2].Value, CultureInfo.InvariantCulture),
-                    int.Parse(match.Groups[3].Value, CultureInfo.InvariantCulture)))
-                .ToArray();
-            var weights = WeightRegex.Matches(meshBlock)
-                .Select(match => new Md5Weight(
-                    int.Parse(match.Groups[2].Value, CultureInfo.InvariantCulture),
-                    float.Parse(match.Groups[3].Value, CultureInfo.InvariantCulture),
-                    ReadVector(match.Groups[4].Value)))
-                .ToArray();
-            if (vertices.Length == 0)
-            {
-                continue;
-            }
-            var positions = vertices.Select(vertex =>
-            {
-                var result = Vector3.Zero;
-                for (var index = vertex.FirstWeight; index < vertex.FirstWeight + vertex.WeightCount; index++)
-                {
-                    if ((uint)index >= (uint)weights.Length || (uint)weights[index].Joint >= (uint)joints.Length)
-                    {
-                        throw new InvalidDataException("MD5 vertex references an invalid weight or joint.");
-                    }
-                    var weight = weights[index];
-                    var joint = joints[weight.Joint];
-                    result += (joint.Position + Vector3.Transform(weight.Position, joint.Orientation)) * weight.Bias;
-                }
-                return result;
-            }).ToArray();
-            streams.Add(new VertexStream(positions, vertices.Select(value => value.TextureCoordinate).ToArray()));
-        }
-        return baseHead =>
-        {
-            var expectedVertexCount = baseHead.Positions.Count;
-            var viable = streams.Where(stream => stream.Positions.Length == expectedVertexCount).ToList();
-            if (viable.Count == 0 && streams.Sum(stream => stream.Positions.Length) == expectedVertexCount)
-            {
-                viable.Add(new VertexStream(
-                    streams.SelectMany(stream => stream.Positions).ToArray(),
-                    streams.SelectMany(stream => stream.TextureCoordinates).ToArray()));
-            }
-            if (viable.Count == 0)
-            {
-                viable.AddRange(streams);
-            }
-            return viable.SelectMany((stream, index) => CoordinateCandidates(
-                    stream.Positions,
-                    stream.TextureCoordinates,
-                    $"MD5 mesh {index + 1}",
-                    scale: 1,
-                    baseHead))
-                .ToArray();
-        };
-    }
-
     private static IEnumerable<MorphMeshPositionCandidate> CoordinateCandidates(
         Vector3[] source,
         Vector2[] textureCoordinates,
@@ -725,64 +712,6 @@ public sealed class MorphFaceInterchangeService
         return true;
     }
 
-    private static IReadOnlyList<string> ExtractBlocks(string source, string keyword)
-    {
-        var blocks = new List<string>();
-        var search = 0;
-        while ((search = source.IndexOf(keyword, search, StringComparison.OrdinalIgnoreCase)) >= 0)
-        {
-            var opening = source.IndexOf('{', search + keyword.Length);
-            if (opening < 0)
-            {
-                break;
-            }
-            var depth = 1;
-            var index = opening + 1;
-            while (index < source.Length && depth > 0)
-            {
-                if (source[index] == '{') depth++;
-                if (source[index] == '}') depth--;
-                index++;
-            }
-            if (depth != 0)
-            {
-                throw new InvalidDataException($"MD5 {keyword} block is not terminated.");
-            }
-            blocks.Add(source[(opening + 1)..(index - 1)]);
-            search = index;
-        }
-        return blocks;
-    }
-
-    private static Vector3 ReadVector(string value)
-    {
-        var numbers = value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
-            .Select(item => float.Parse(item, CultureInfo.InvariantCulture)).ToArray();
-        if (numbers.Length != 3)
-        {
-            throw new InvalidDataException("MD5 vector does not have three components.");
-        }
-        return new Vector3(numbers[0], numbers[1], numbers[2]);
-    }
-
-    private static Vector2 ReadVector2(string value)
-    {
-        var numbers = value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
-            .Select(item => float.Parse(item, CultureInfo.InvariantCulture)).ToArray();
-        if (numbers.Length != 2)
-        {
-            throw new InvalidDataException("MD5 texture coordinate does not have two components.");
-        }
-        return new Vector2(numbers[0], numbers[1]);
-    }
-
-    private static Quaternion ReadQuaternion(string value)
-    {
-        var vector = ReadVector(value);
-        var w = -MathF.Sqrt(MathF.Max(0, 1 - vector.LengthSquared()));
-        return Quaternion.Normalize(new Quaternion(vector, w));
-    }
-
     private static async Task<int> GetUModelBuildAsync(string executable, CancellationToken cancellationToken)
     {
         var result = await RunAsync(executable, ["-version"], cancellationToken);
@@ -833,7 +762,6 @@ public sealed class MorphFaceInterchangeService
             MorphMeshFormat.Psk => Path.GetExtension(path).Equals(".psk", StringComparison.OrdinalIgnoreCase) ||
                                    Path.GetExtension(path).Equals(".pskx", StringComparison.OrdinalIgnoreCase),
             MorphMeshFormat.Gltf => Path.GetExtension(path).Equals(".gltf", StringComparison.OrdinalIgnoreCase),
-            MorphMeshFormat.Md5 => Path.GetExtension(path).Equals(".md5mesh", StringComparison.OrdinalIgnoreCase),
             _ => false
         };
 
@@ -843,16 +771,6 @@ public sealed class MorphFaceInterchangeService
         return name.Equals(meshName, StringComparison.OrdinalIgnoreCase) ||
                name.StartsWith(meshName + "_Lod", StringComparison.OrdinalIgnoreCase);
     }
-
-    private static readonly Regex JointRegex = new(
-        "\\\"([^\\\"]+)\\\"\\s+(-?\\d+)\\s+\\(([^)]+)\\)\\s+\\(([^)]+)\\)",
-        RegexOptions.Compiled);
-    private static readonly Regex VertRegex = new(
-        @"\bvert\s+\d+\s+\(([^)]+)\)\s+(\d+)\s+(\d+)",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
-    private static readonly Regex WeightRegex = new(
-        @"\bweight\s+(\d+)\s+(\d+)\s+([-+\d.eE]+)\s+\(([^)]+)\)",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private sealed record ProcessResult(int ExitCode, string Output);
     private sealed record VertexMapSidecar(
@@ -866,8 +784,5 @@ public sealed class MorphFaceInterchangeService
         float[][]? BakedLods = null);
     private sealed record SidecarMorphFeature(string Name, float Offset);
     private sealed record SidecarBoneTranslation(string BoneName, float X, float Y, float Z);
-    private sealed record Md5Joint(int Parent, Vector3 Position, Quaternion Orientation);
     private sealed record VertexStream(Vector3[] Positions, Vector2[] TextureCoordinates);
-    private sealed record Md5Vertex(Vector2 TextureCoordinate, int FirstWeight, int WeightCount);
-    private sealed record Md5Weight(int Joint, float Bias, Vector3 Position);
 }

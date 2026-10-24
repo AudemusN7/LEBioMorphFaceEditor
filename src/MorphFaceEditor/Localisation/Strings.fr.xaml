@@ -1616,7 +1616,6 @@ Non : supprimer les bases de données de ressources personnalisées après une r
   <system:String x:Key="loc_View_MainWindow_PostProcessing" xml:space="preserve">Post-traitement</system:String>
   <system:String x:Key="loc_View_MainWindow_LoadSelectedFace" xml:space="preserve">Charger le visage sélectionné</system:String>
   <system:String x:Key="loc_View_MainWindow_MATERIAL" xml:space="preserve">MATÉRIAU</system:String>
-  <system:String x:Key="loc_View_MainWindow_MD5" xml:space="preserve">MD5</system:String>
   <system:String x:Key="loc_View_MainWindow_ManageTheGameWideTexture2DRegistries" xml:space="preserve">Gérer les registres Texture2D de tous les jeux</system:String>
   <system:String x:Key="loc_View_MainWindow_Material" xml:space="preserve">Matériau</system:String>
   <!--localiser: {"Key":"loc_View_MainWindow_MaterialRandomisationStrength","ReviewedHash":null,"DoNotTranslate":false,"Note":"Exceeding current character count could result in UI clipping","SourceHash":null}-->

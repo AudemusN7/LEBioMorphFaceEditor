@@ -1,6 +1,7 @@
 using System.Windows.Input;
 using LegendaryExplorerCore.Packages;
 using MorphFaceEditor.Core.Domain;
+using MorphFaceEditor.Core.Randomisation;
 using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.Services;

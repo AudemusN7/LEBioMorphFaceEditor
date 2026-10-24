@@ -13,16 +13,16 @@ internal enum EditorFileDropKind
 internal static class EditorFileDrop
 {
     internal static string WorkspaceOpenFilter =>
-        $"{Loc.Text("loc_EditorFileDrop_SupportedPackageMorphFiles")}|*.pcc;*.pcsav;*.ron;*.psk;*.pskx;*.gltf;*.glb;*.md5;*.md5mesh;*.me2headmorph;*.me3headmorph|" +
+        $"{Loc.Text("loc_EditorFileDrop_SupportedPackageMorphFiles")}|*.pcc;*.pcsav;*.ron;*.psk;*.pskx;*.gltf;*.glb;*.me2headmorph;*.me3headmorph|" +
         $"{PackageFilter}|" +
         $"{Loc.Text("loc_Pcsav_FileFilter")} (*.pcsav)|*.pcsav|" +
-        $"{Loc.Text("loc_EditorFileDrop_SupportedMorphFiles")}|*.ron;*.psk;*.pskx;*.gltf;*.glb;*.md5;*.md5mesh;*.me2headmorph;*.me3headmorph|" +
+        $"{Loc.Text("loc_EditorFileDrop_SupportedMorphFiles")}|*.ron;*.psk;*.pskx;*.gltf;*.glb;*.me2headmorph;*.me3headmorph|" +
         $"{AllFilesFilter}";
 
     internal static string MorphImportFilter =>
-        $"{Loc.Text("loc_EditorFileDrop_SupportedMorphFiles")}|*.ron;*.psk;*.pskx;*.gltf;*.glb;*.md5;*.md5mesh;*.me2headmorph;*.me3headmorph|" +
+        $"{Loc.Text("loc_EditorFileDrop_SupportedMorphFiles")}|*.ron;*.psk;*.pskx;*.gltf;*.glb;*.me2headmorph;*.me3headmorph|" +
         $"{RonMorphFilter}|" +
-        $"{Loc.Text("loc_EditorFileDrop_MeshFilesLabel")} (*.psk;*.pskx;*.gltf;*.glb;*.md5;*.md5mesh)|*.psk;*.pskx;*.gltf;*.glb;*.md5;*.md5mesh|" +
+        $"{Loc.Text("loc_EditorFileDrop_MeshFilesLabel")} (*.psk;*.pskx;*.gltf;*.glb)|*.psk;*.pskx;*.gltf;*.glb|" +
         $"{AllFilesFilter}";
 
     internal static string PackageFilter =>
@@ -47,8 +47,6 @@ internal static class EditorFileDrop
         ".pskx",
         ".gltf",
         ".glb",
-        ".md5",
-        ".md5mesh",
         ".me2headmorph",
         ".me3headmorph"
     };

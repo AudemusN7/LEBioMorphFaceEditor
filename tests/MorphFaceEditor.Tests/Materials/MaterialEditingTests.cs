@@ -204,6 +204,33 @@ public static class MaterialEditingTests
         AssertProtectedMaps();
         TestAssert.True(session.HasCursedRandomisation, "Cancelling an import lost the prior Cursed state.");
 
+        var scope = new MaterialRandomisationScope(new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "HED_Norm_Blend" },
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase), new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+        session.SetValues(new Dictionary<string, float> { ["HED_Norm_Blend"] = 0.2f },
+            new Dictionary<string, Vector4>(), new Dictionary<string, DecodedTextureAsset?>(),
+            MaterialBatchKind.NormalRandomisation, resetScope: scope);
+        var firstScoped = session.CreateOverrides();
+        session.SetValues(new Dictionary<string, float> { ["HED_Norm_Blend"] = 0.3f },
+            new Dictionary<string, Vector4>(), new Dictionary<string, DecodedTextureAsset?>(),
+            MaterialBatchKind.NormalRandomisation, resetScope: scope);
+        var secondScoped = session.CreateOverrides();
+        TestAssert.True(session.HasCursedRandomisation &&
+            cursed.Scalars.Where(value => value.Name != "HED_Norm_Blend").SequenceEqual(secondScoped.Scalars.Where(value => value.Name != "HED_Norm_Blend")),
+            "A partial normal roll lost remaining Cursed state or changed an unselected scalar.");
+        TestAssert.True(cursed.Vectors.SequenceEqual(secondScoped.Vectors) && cursed.Textures.SequenceEqual(secondScoped.Textures),
+            "A scoped normal roll reset unselected original, edited, null or unresolved material rows.");
+        AssertProtectedMaps();
+        session.Undo();
+        AssertOverridesEqual(firstScoped, session.CreateOverrides());
+        session.Undo();
+        AssertOverridesEqual(cursed, session.CreateOverrides());
+        session.Redo();
+        session.Redo();
+        AssertOverridesEqual(secondScoped, session.CreateOverrides());
+        session.Undo();
+        session.Undo();
+        AssertOverridesEqual(cursed, session.CreateOverrides());
+
         session.SetValues(new Dictionary<string, float> { ["HED_Norm_Blend"] = 0.2f },
             new Dictionary<string, Vector4>(),
             new Dictionary<string, DecodedTextureAsset?> { ["HED_Scalp_Diff"] = Texture("IgnoredProtectedDiffuse") },

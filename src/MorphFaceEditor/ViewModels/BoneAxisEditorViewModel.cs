@@ -42,6 +42,11 @@ public sealed class BoneAxisEditorViewModel : ObservableObject, IContinuousEditV
         get => _value;
         set
         {
+            if (!float.IsFinite(value))
+            {
+                OnPropertyChanged(nameof(Value));
+                return;
+            }
             UpdateRanges(value, expandOnly: true);
             if (SetProperty(ref _value, value))
             {

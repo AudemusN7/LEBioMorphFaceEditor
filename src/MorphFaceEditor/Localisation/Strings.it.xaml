@@ -1616,7 +1616,6 @@ No: elimina i database delle risorse personalizzate dopo una ricostruzione riusc
   <system:String x:Key="loc_View_MainWindow_PostProcessing" xml:space="preserve">Post-elaborazione</system:String>
   <system:String x:Key="loc_View_MainWindow_LoadSelectedFace" xml:space="preserve">Carica volto selezionato</system:String>
   <system:String x:Key="loc_View_MainWindow_MATERIAL" xml:space="preserve">MATERIALE</system:String>
-  <system:String x:Key="loc_View_MainWindow_MD5" xml:space="preserve">MD5</system:String>
   <system:String x:Key="loc_View_MainWindow_ManageTheGameWideTexture2DRegistries" xml:space="preserve">Gestisci i registri Texture2D di tutti i giochi</system:String>
   <system:String x:Key="loc_View_MainWindow_Material" xml:space="preserve">Materiale</system:String>
   <!--localiser: {"Key":"loc_View_MainWindow_MaterialRandomisationStrength","ReviewedHash":null,"DoNotTranslate":false,"Note":"Exceeding current character count could result in UI clipping","SourceHash":null}-->

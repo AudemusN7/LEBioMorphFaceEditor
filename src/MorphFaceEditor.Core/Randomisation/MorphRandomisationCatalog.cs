@@ -1,13 +1,10 @@
-using MorphFaceEditor.Core.Randomisation;
-using System.IO;
-
-namespace MorphFaceEditor.Services;
+namespace MorphFaceEditor.Core.Randomisation;
 
 /// <summary>Loads the embedded donor resource once and routes editor profiles into core sampling.</summary>
 public sealed class MorphRandomisationCatalog
 {
     private const string ResourceName =
-        "MorphFaceEditor.Assets.Randomisation.GlobalMorphs.mfr.br";
+        "MorphFaceEditor.Core.Assets.Randomisation.GlobalMorphs.mfr.br";
 
     public MorphRandomisationCatalog(MorphRandomisationCorpus corpus)
     {

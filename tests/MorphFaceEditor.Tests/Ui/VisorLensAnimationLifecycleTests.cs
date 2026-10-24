@@ -55,9 +55,22 @@ internal static class VisorLensAnimationLifecycleTests
                 with { Key = lensMaterial.Key };
             var lensScene = Scene(lensMaterial);
             controller.SetScene(lensScene);
-            WaitForFrames(controller, 1, "The visor lens did not present its initial frame.");
-            WaitForFrames(controller, controller.Diagnostics.FramesRendered + 3,
-                "The visible visor lens did not receive time-driven preview frames.");
+            WaitForFrames(controller, 1, "The visor lens did not present its initial frame.", window);
+            // Losing activation after startup must not make the active-animation fixture time out.
+            var competingWindow = new Window
+            {
+                Owner = window, Width = 96, Height = 96, Left = -2200, Top = -2000,
+                ShowInTaskbar = false, WindowStyle = WindowStyle.None
+            };
+            try
+            {
+                competingWindow.Show();
+                WaitForActivation(competingWindow);
+                TestAssert.True(!window.IsActive, "The startup fixture did not deactivate its preview owner.");
+                WaitForFrames(controller, controller.Diagnostics.FramesRendered + 3,
+                    "The visible visor lens did not receive time-driven preview frames.", window);
+            }
+            finally { competingWindow.Close(); }
 
             foreach (var (label, pause, resume) in new (string, Action, Action)[]
             {
@@ -77,7 +90,7 @@ internal static class VisorLensAnimationLifecycleTests
                 Trace("Resuming " + label);
                 resume();
                 WaitForFrames(controller, pausedFrames + 3,
-                    $"Leaving {label} did not restart visor animation.");
+                    $"Leaving {label} did not restart visor animation.", window);
             }
 
             foreach (var (label, enter, restore) in new (string, Action, Action)[]
@@ -136,7 +149,7 @@ internal static class VisorLensAnimationLifecycleTests
             TestAssert.True(clearedFrames == controller.Diagnostics.FramesRendered,
                 "Clearing the visor scene did not stop animation frames.");
             controller.SetScene(lensScene);
-            WaitForFrames(controller, clearedFrames + 3, "Reloading the cleared visor did not restart animation.");
+            WaitForFrames(controller, clearedFrames + 3, "Reloading the cleared visor did not restart animation.", window);
             controller.Dispose();
             var disposedFrames = controller.Diagnostics.FramesRendered;
             PumpFor(TimeSpan.FromMilliseconds(80));
@@ -236,7 +249,7 @@ internal static class VisorLensAnimationLifecycleTests
     private static void WaitForFrames(HeadPreviewHostController controller, int minimumFrames, string message,
         Window? activateWindow = null)
     {
-        // Restore/ShowDialog do not guarantee that Windows has granted activation.
+        // Startup, restore and ShowDialog do not guarantee that Windows keeps/grants activation.
         // Retry that fixture prerequisite while waiting, without relaxing the host's activity gate.
         bool Ready() => (activateWindow is null || TryActivate(activateWindow)) &&
                         controller.Diagnostics.FramesRendered >= minimumFrames;

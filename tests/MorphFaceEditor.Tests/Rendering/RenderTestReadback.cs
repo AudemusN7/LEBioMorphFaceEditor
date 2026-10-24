@@ -10,10 +10,7 @@ namespace MorphFaceEditor.Tests;
 
 internal static class RenderTestReadback
 {
-    internal static Texture2D GetTexture(HeadPreviewRenderer renderer, string surfaceName) =>
-        GetSurfaceResource<Texture2D>(renderer, surfaceName, "Texture");
-
-    internal static T GetSurfaceResource<T>(HeadPreviewRenderer renderer, string surfaceName, string resourceName) where T : class
+    internal static Texture2D GetTexture(HeadPreviewRenderer renderer, string surfaceName)
     {
         const BindingFlags privateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
         var rendererType = typeof(HeadPreviewRenderer);
@@ -28,8 +25,8 @@ internal static class RenderTestReadback
             var targets = rendererType.GetField("_targets", privateInstance)?.GetValue(renderer);
             surface = targets?.GetType().GetProperty(surfaceName)?.GetValue(targets);
         }
-        return surface?.GetType().GetProperty(resourceName)?.GetValue(surface) as T
-            ?? throw new InvalidOperationException($"Renderer surface '{surfaceName}' has no {typeof(T).Name} resource '{resourceName}'.");
+        return surface?.GetType().GetProperty("Texture")?.GetValue(surface) as Texture2D
+            ?? throw new InvalidOperationException($"Renderer surface '{surfaceName}' has no texture.");
     }
 
     internal static float[] ReadFloatTarget(HeadPreviewRenderer renderer, string surfaceName) =>

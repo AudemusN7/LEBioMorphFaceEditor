@@ -1610,7 +1610,6 @@
   <system:String x:Key="loc_View_MainWindow_PostProcessing" xml:space="preserve">Постобработка</system:String>
   <system:String x:Key="loc_View_MainWindow_LoadSelectedFace" xml:space="preserve">Загрузить выбранное лицо</system:String>
   <system:String x:Key="loc_View_MainWindow_MATERIAL" xml:space="preserve">МАТЕРИАЛ</system:String>
-  <system:String x:Key="loc_View_MainWindow_MD5" xml:space="preserve">MD5</system:String>
   <system:String x:Key="loc_View_MainWindow_ManageTheGameWideTexture2DRegistries" xml:space="preserve">Управление реестрами Texture2D для игр</system:String>
   <system:String x:Key="loc_View_MainWindow_Material" xml:space="preserve">Материал</system:String>
   <!--localiser: {"Key":"loc_View_MainWindow_MaterialRandomisationStrength","ReviewedHash":null,"DoNotTranslate":false,"Note":"Exceeding current character count could result in UI clipping","SourceHash":null}-->

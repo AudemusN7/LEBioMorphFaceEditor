@@ -21,9 +21,49 @@ internal static class UiProfileTests
     internal static IReadOnlyList<TestCase> All { get; } =
     [
         new("unsupported profiles keep unsafe geometry controls unavailable", UnsupportedProfilesKeepGeometryClosed),
+        new("native Turian and Krogan loads preserve unknown authored rows without controls", UnknownAuthoredRowsRemainLoadable),
         new("ALN loads preserve authored bakes without a target set, including static faces", TargetlessAlnPreservesAuthoredGeometry),
         new("malformed LE3 HMF hair and inert HMM eye metadata remain hidden", MalformedAndInertTargetsStayHidden)
     ];
+
+    private static void UnknownAuthoredRowsRemainLoadable()
+    {
+        const string unknown = "UnrecognisedAuthoredFeature";
+        var fixturePath = PackageTestFixtures.FixturePath("LE2 GlobalMorphs.pcc");
+        var original = System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(fixturePath));
+        foreach (var archetype in new[] { "turian", "krogan" })
+            PackageTestFixtures.WithPackageCopy("LE2 GlobalMorphs.pcc", path => RunWithDispatcher(async () =>
+            {
+                var catalog = await new MorphFaceCatalogService().ReadAsync(path);
+                var selected = catalog.Faces.First(face => face.ProfileKey == "le2-" + archetype);
+                using (var package = MEPackageHandler.OpenMEPackage(path, forceLoadFromDisk: true))
+                {
+                    var face = package.FindExport(selected.InstancedPath, "BioMorphFace")!;
+                    var properties = face.GetProperties();
+                    properties.GetProp<ArrayProperty<StructProperty>>("m_aMorphFeatures")!.Add(
+                        new StructProperty("MorphFeature", false,
+                            new NameProperty(unknown, "sFeatureName"), new FloatProperty(0, "Offset")));
+                    face.WriteProperties(properties);
+                    package.Save();
+                }
+                var authoredSource = System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path));
+                using var reader = new MorphFacePackageReader();
+                using var shell = CreateMainWindowViewModel(reader);
+                TestAssert.True(shell.CanOpenDroppedFile(path), "The authored PCC was not accepted by normal file drop.");
+                await shell.OpenDroppedFileAsync(path);
+                shell.SelectedFace = shell.Faces.Single(face => face.InstancedPath == selected.InstancedPath);
+                TestAssert.True(shell.LoadSelectedFaceCommand.CanExecute(null), "The authored face could not be selected for loading.");
+                await ((AsyncRelayCommand)shell.LoadSelectedFaceCommand).ExecuteAsync();
+                var editor = shell.Editor ?? throw new Exception(shell.ErrorMessage ?? "The authored face failed to load.");
+                TestAssert.True(shell.HasPreview && !shell.HasError, "The authored face did not publish a usable preview.");
+                TestAssert.Equal(0f, editor.CreateDraft().MorphFeatures.Single(value => value.Name == unknown).Offset);
+                TestAssert.True(editor.Features.All(value => value.Name != unknown), "An unresolved authored row became a morph control.");
+                TestAssert.True(authoredSource.SequenceEqual(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path))),
+                    "Loading the authored face changed its source PCC.");
+            }));
+        TestAssert.True(original.SequenceEqual(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(fixturePath))),
+            "The native fixture changed during authored-row loading.");
+    }
 
     private static void UnsupportedProfilesKeepGeometryClosed()
     {

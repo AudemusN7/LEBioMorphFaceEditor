@@ -432,7 +432,8 @@ public sealed class MaterialEditingSession
         IReadOnlyDictionary<string, Vector4> vectors,
         IReadOnlyDictionary<string, DecodedTextureAsset?> textures,
         MaterialBatchKind kind = MaterialBatchKind.Edit,
-        IReadOnlySet<string>? preservedTextureNames = null)
+        IReadOnlySet<string>? preservedTextureNames = null,
+        MaterialRandomisationScope? resetScope = null)
     {
         ArgumentNullException.ThrowIfNull(scalars);
         ArgumentNullException.ThrowIfNull(vectors);
@@ -453,8 +454,12 @@ public sealed class MaterialEditingSession
         var preservedTextures = preservedTextureNames?.ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (reset)
         {
-            ResetValuesToDefaults();
-            if (preservedTextures is { Count: > 0 }) RestorePreservedTextures(resetBefore!, preservedTextures);
+            if (resetScope is null)
+            {
+                ResetValuesToDefaults();
+                if (preservedTextures is { Count: > 0 }) RestorePreservedTextures(resetBefore!, preservedTextures);
+            }
+            else ResetScopedValuesToDefaults(resetScope, preservedTextures);
         }
         var changedScalars = scalars.Where(value => _scalars[value.Key] != value.Value)
             .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase);
@@ -527,6 +532,37 @@ public sealed class MaterialEditingSession
         foreach (var value in DefaultTextureOverrides()) _textureReferences[value.Key] = value.Value;
         _editedScalars.Clear();
         _editedVectors.Clear();
+    }
+
+    private void ResetScopedValuesToDefaults(MaterialRandomisationScope scope, IReadOnlySet<string>? preservedTextures)
+    {
+        var textures = scope.Textures.Where(name => preservedTextures?.Contains(name) != true)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        _originalOverrides = _originalOverrides with
+        {
+            Scalars = _originalOverrides.Scalars.Where(value =>
+                !scope.Scalars.Contains(value.Name)).ToArray(),
+            Vectors = _originalOverrides.Vectors.Where(value =>
+                !scope.Vectors.Contains(value.Name)).ToArray(),
+            Textures = _originalOverrides.Textures.Where(value =>
+                !textures.Contains(value.Name)).ToArray()
+        };
+        foreach (var name in scope.Scalars.Where(_scalars.ContainsKey))
+        {
+            _scalars[name] = _defaultScalars.GetValueOrDefault(name);
+            _editedScalars.Remove(name);
+        }
+        foreach (var name in scope.Vectors.Where(_vectors.ContainsKey))
+        {
+            _vectors[name] = _defaultVectors.GetValueOrDefault(name);
+            _editedVectors.Remove(name);
+        }
+        var defaults = DefaultTextureOverrides();
+        foreach (var name in textures)
+        {
+            _previewTextureReferences.Remove(name);
+            _textureReferences[name] = defaults.GetValueOrDefault(name);
+        }
     }
 
     private void RestorePreservedTextures(MaterialResetState state, IReadOnlySet<string> names)
@@ -1089,5 +1125,10 @@ public sealed record MaterialRandomisationDefaults(
     IReadOnlyDictionary<string, float> Scalars,
     IReadOnlyDictionary<string, Vector4> Vectors,
     IReadOnlyDictionary<string, string> Textures);
+
+public sealed record MaterialRandomisationScope(
+    IReadOnlySet<string> Scalars,
+    IReadOnlySet<string> Vectors,
+    IReadOnlySet<string> Textures);
 
 public enum MaterialBatchKind { Edit, NormalRandomisation, CursedRandomisation }

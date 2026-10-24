@@ -86,13 +86,15 @@ public IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
     public MorphFeatureMetadata Describe(ResolvedMorphFeature feature, bool sessionCanEdit)
     {
         var (category, subcategory) = FeaturePlacement(feature.Feature.Name);
+        var sortOrder = FeatureSortOrder(feature.Feature.Name, allowUnresolvedName: !feature.IsResolved);
         var metadata = new MorphFeatureMetadata(
             feature.Feature.Name,
             FeatureLabel(feature.Feature.Name),
             category,
             subcategory,
-            MorphFaceProfileFeatures.IsControlEligible(MorphFaceMetadataCatalogRegistry.Turian, Core.Domain.MorphFaceGame.LE1, feature.Feature.Name, feature.Target),
-            FeatureSortOrder(feature.Feature.Name),
+            MorphFaceProfileFeatures.IsControlEligible(MorphFaceMetadataCatalogRegistry.Turian, Core.Domain.MorphFaceGame.LE1, feature.Feature.Name, feature.Target) &&
+            (feature.IsResolved || sortOrder != int.MaxValue),
+            sortOrder,
             0,
             1,
             0.01f,
@@ -192,10 +194,12 @@ public IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
         return (Head, Surface);
     }
 
-    private static int FeatureSortOrder(string name)
+    private static int FeatureSortOrder(string name, bool allowUnresolvedName)
     {
         if (FeatureSortOrders.TryGetValue(name, out var order)) return order;
         if (MorphFaceProfileFeatures.TurianMetadataOnlyFeatures.Contains(name)) return int.MaxValue;
+        // Preserve unknown authored rows without creating controls; real targets still require an intentional position.
+        if (allowUnresolvedName) return int.MaxValue;
         throw new InvalidOperationException(
             $"Turian feature '{name}' has no explicit semantic UI position.");
     }

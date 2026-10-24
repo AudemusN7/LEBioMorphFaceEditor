@@ -20,6 +20,7 @@ public sealed class MorphFacePackageReader : IDisposable
     private readonly MorphFaceMaterialReader _materialReader;
     private readonly Dictionary<string, CachedSkeletalMesh> _meshCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, PackageFingerprint> _fingerprintCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string?> _meshContentFingerprints = new(StringComparer.OrdinalIgnoreCase);
     private bool _disposed;
 
     public MorphFacePackageReader()
@@ -30,6 +31,26 @@ public sealed class MorphFacePackageReader : IDisposable
     }
 
     public MorphFaceLoadMetrics? LastLoadMetrics { get; private set; }
+    internal int MeshContentFingerprintReadCount { get; private set; }
+
+    /// <summary>Reads geometry and rig only; material references and pixels are never resolved.</summary>
+    public string? ReadSkeletalMeshContentFingerprint(AssetIdentity identity)
+    {
+        ThrowIfDisposed();
+        LegendaryExplorerCoreRuntime.Initialize();
+        if (!identity.ClassName.Equals("SkeletalMesh", StringComparison.OrdinalIgnoreCase)) return null;
+        var fullPath = RequireFile(identity.PackagePath);
+        PackageSourceCache.Verify(_packageCache, fullPath);
+        var key = fullPath + "|" + identity.InstancedPath;
+        if (_meshContentFingerprints.TryGetValue(key, out var cached)) return cached;
+        var package = PackageSourceCache.GetPackage(_packageCache, fullPath)
+            ?? throw new InvalidDataException($"Legendary Explorer Core could not open '{fullPath}'.");
+        var export = FindDetachedAttachmentExport(package, identity.InstancedPath);
+        var binary = export.GetBinaryData<SkeletalMesh>();
+        MeshContentFingerprintReadCount++;
+        return _meshContentFingerprints[key] = SkeletalMeshContentFingerprint.Compute(binary, package.Game,
+            ReadLodMaterialMaps(export, binary.LODModels.Length, binary.Materials?.Length ?? 0));
+    }
 
     public MorphRandomisationMaterialEvidence LoadRandomisationMaterialEvidence(
         string packagePath,
@@ -163,6 +184,9 @@ public sealed class MorphFacePackageReader : IDisposable
         ThrowIfDisposed();
         var fullPath = Path.GetFullPath(packagePath);
         _fingerprintCache.Remove(fullPath);
+        foreach (var key in _meshContentFingerprints.Keys.Where(key =>
+                     key.StartsWith(fullPath + "|", StringComparison.OrdinalIgnoreCase)).ToArray())
+            _meshContentFingerprints.Remove(key);
         _materialReader.InvalidatePackage(fullPath);
         foreach (var key in _meshCache.Where(pair =>
                      pair.Key.StartsWith(fullPath + "|", StringComparison.OrdinalIgnoreCase) ||
@@ -911,6 +935,7 @@ public sealed class MorphFacePackageReader : IDisposable
         _packageCache.Dispose();
         _meshCache.Clear();
         _fingerprintCache.Clear();
+        _meshContentFingerprints.Clear();
         _disposed = true;
     }
 

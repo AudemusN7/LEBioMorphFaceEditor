@@ -24,38 +24,6 @@ public static class MorphTargetPackageReader
             .ToArray();
     }
 
-    public static MorphTargetAsset Load(string packagePath, string exportSelector)
-    {
-        LegendaryExplorerCoreRuntime.Initialize();
-        ArgumentException.ThrowIfNullOrWhiteSpace(packagePath);
-        var fullPath = Path.GetFullPath(packagePath);
-        if (!File.Exists(fullPath))
-        {
-            throw new FileNotFoundException("Morph-target package was not found.", fullPath);
-        }
-
-        using var package = MEPackageHandler.OpenMEPackage(fullPath, forceLoadFromDisk: true);
-        var export = ExportSelector.Find(package, exportSelector, "MorphTarget");
-        return Read(export);
-    }
-
-    public static IReadOnlyList<MorphTargetAsset> LoadAll(string packagePath)
-    {
-        LegendaryExplorerCoreRuntime.Initialize();
-        ArgumentException.ThrowIfNullOrWhiteSpace(packagePath);
-        var fullPath = Path.GetFullPath(packagePath);
-        if (!File.Exists(fullPath))
-        {
-            throw new FileNotFoundException("Morph-target package was not found.", fullPath);
-        }
-        using var package = MEPackageHandler.OpenMEPackage(fullPath, forceLoadFromDisk: true);
-        return package.Exports
-            .Where(export => !export.IsDefaultObject &&
-                             string.Equals(export.ClassName, "MorphTarget", StringComparison.OrdinalIgnoreCase))
-            .Select(Read)
-            .ToArray();
-    }
-
     public static IReadOnlyList<MorphTargetAsset> LoadSet(string packagePath, string setSelector)
     {
         LegendaryExplorerCoreRuntime.Initialize();

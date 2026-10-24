@@ -34,6 +34,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     private readonly List<RelayCommand> _subcategoryRandomiseCommands = [];
     private readonly MorphRandomisationCatalog _randomisationCatalog;
     private readonly EditorRandomisationService _randomisation;
+    private readonly PackageReferenceService _references;
     private readonly string _profileKey;
     private readonly string _logIdentity;
     private readonly string _logGame;
@@ -105,6 +106,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         PcsavHeadMorphWorkspace? headImportHistory = null)
     {
         _session = session;
+        _references = references;
         var scalpMaterials = materialSession.BaseMaterials.Materials.Values
             .Where(material => material.Family == HeadMaterialFamily.Scalp).ToArray();
         _sourceScalpMaterial = scalpMaterials.Length == 1 ? scalpMaterials[0] : null;
@@ -182,11 +184,13 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         if (customMaterialWorkspace is not null) customMaterialWorkspace.History = _history;
         _undoCommand = new RelayCommand(() =>
         {
+            _randomisationGeneration++;
             CancelPendingAttachmentSelections();
             _history.Undo();
         }, () => _history.CanUndo);
         _redoCommand = new RelayCommand(() =>
         {
+            _randomisationGeneration++;
             CancelPendingAttachmentSelections();
             _history.Redo();
         }, () => _history.CanRedo);
@@ -582,10 +586,21 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             requested = CoordinateHairMorphScope(requested);
             var generation = ++_randomisationGeneration;
             if (CursedMode) _cursedBaseline ??= CaptureCursedBaseline();
-            var request = CaptureRandomisationRequest(requested, includeCursedBones);
+            var request = CaptureRandomisationRequest(requested, globalRoll: includeCursedBones);
             if (!request.Cursed && request.Morphs.Scope.Count == 0 && !request.HasMaterial) return;
             int? morphSeed = request.Cursed || request.Morphs.Scope.Count > 0 ? _randomSeedFactory() : null;
             int? materialSeed = request.Cursed ? morphSeed : request.HasMaterial ? NextDistinctSeed(morphSeed) : null;
+            // Capture the current mesh, scalp references and graph before asynchronous package reads.
+            // Relocated copies use the same pairing rule as manual selection and mesh-lock protection.
+            if (request.Human is { } human &&
+                (request.ResetMaterials && request.MaterialCleanupScope is null ||
+                 request.Material.TextureScope.Any(name =>
+                     string.Equals(MaterialParameterControlKey.ScopeKey(name), human.ScopeKey,
+                         StringComparison.OrdinalIgnoreCase) &&
+                     IsHumanScalpTexture(MaterialParameterControlKey.ParameterName(name)))))
+                request = request with { Hair = request.Hair with
+                    { CurrentMeshIsPaired = await CurrentHairHasPairedScalpAsync(human) } };
+            if (generation != _randomisationGeneration) return;
             var prepared = await _randomisation.PrepareAsync(request, morphSeed, materialSeed,
                 Material.PrepareRandomisationAsync);
             if (generation != _randomisationGeneration) return;
@@ -634,7 +649,8 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             if (request.IncludeBones) ApplyRandomisedBones(request, morphSeed ?? 0);
             if (request.ResetMaterials || material is not null &&
                 (!request.Cursed || material.Scalars.Count + material.Vectors.Count + material.Textures.Count > 0))
-                Material.ApplyRandomisation(material ?? PreparedMaterialRandomisation.Empty, request.Cursed, protectedScalp);
+                Material.ApplyRandomisation(material ?? PreparedMaterialRandomisation.Empty, request.Cursed,
+                    protectedScalp, request.MaterialCleanupScope);
             if (playerHair is { } hair)
             {
                 switch (hair.Style.MeshAction)
@@ -659,7 +675,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         }
     }
 
-    private EditorRandomisationRequest CaptureRandomisationRequest(EditorRandomisationScope requested, bool includeBones)
+    private EditorRandomisationRequest CaptureRandomisationRequest(EditorRandomisationScope requested, bool globalRoll)
     {
         var defaults = !CursedMode && RandomiseMaterials ? Material.CapturePendingRandomisationDefaults() : null;
         var player = GetPlayerRandomisationContext();
@@ -689,15 +705,33 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                 !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(value.Name) &&
                 !IsProtectedPlayerEyeTexture(Material.SourceParameterName(value.Name)))
             .Select(value => value.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        // A scoped normal roll may neutralise only the controls it owns, including selected
+        // Cursed-only numeric controls that have no normal corpus entry to replace them.
+        var cleanupScalars = requested.Scalars.Where(_ => RandomiseMaterials).Select(value => value.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var cleanupVectors = requested.Vectors.Where(_ => RandomiseMaterials).Select(value => value.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        // A fully included global roll retains the complete normal cleanup, even for
+        // maps excluded from ordinary random selection (such as alignment-safe Player eyes).
+        var fullMaterialCleanup = globalRoll &&
+            Material.Scalars.All(value => cleanupScalars.Contains(value.Name)) &&
+            Material.Vectors.All(value => cleanupVectors.Contains(value.Name)) &&
+            Material.Textures.All(value => RandomiseMaterials && requested.Textures.Contains(value));
+        var cleanupScope = fullMaterialCleanup ? null : new MaterialRandomisationScope(
+            cleanupScalars, cleanupVectors, textureScope);
+        var resetMaterials = defaults is not null &&
+            (fullMaterialCleanup || cleanupScalars.Count + cleanupVectors.Count + textureScope.Count > 0);
         var includedGroups = Categories.SelectMany(category => category.SliderGroups)
             .Where(group => group.Inclusion?.IsIncluded != false).ToArray();
         var includedMorphs = includedGroups.SelectMany(group => group.MorphFeatures).Select(value => value.Name)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var currentMorphs = Features.ToDictionary(value => value.Name, value => value.Value, StringComparer.OrdinalIgnoreCase);
         var scalars = Material.Scalars.ToDictionary(value => value.Name,
-            value => defaults?.Scalars.GetValueOrDefault(value.Name, value.Value) ?? value.Value, StringComparer.OrdinalIgnoreCase);
+            value => defaults is not null && (fullMaterialCleanup || cleanupScalars.Contains(value.Name))
+                ? defaults.Scalars.GetValueOrDefault(value.Name, value.Value) : value.Value, StringComparer.OrdinalIgnoreCase);
         var vectors = Material.Vectors.ToDictionary(value => value.Name,
-            value => defaults?.Vectors.GetValueOrDefault(value.Name, value.Value) ?? value.Value, StringComparer.OrdinalIgnoreCase);
+            value => defaults is not null && (fullMaterialCleanup || cleanupVectors.Contains(value.Name))
+                ? defaults.Vectors.GetValueOrDefault(value.Name, value.Value) : value.Value, StringComparer.OrdinalIgnoreCase);
         return new(_profileKey, CursedMode, RandomiseMorphs, RandomiseMaterials,
             MorphRandomisationStrength, MaterialRandomisationStrength,
             new(currentMorphs, _cursedBaseline?.Features ?? currentMorphs,
@@ -707,18 +741,19 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                     .Select(value => value.Name).ToHashSet(StringComparer.OrdinalIgnoreCase)),
             new(scalars, vectors, _cursedBaseline?.Scalars ?? scalars, _cursedBaseline?.Vectors ?? vectors,
                 Material.Textures.ToDictionary(value => value.Name,
-                    value => defaults is null ? value.SourceName : defaults.Textures.GetValueOrDefault(value.Name, "None"), StringComparer.OrdinalIgnoreCase),
+                    value => defaults is not null && (fullMaterialCleanup || textureScope.Contains(value.Name))
+                        ? defaults.Textures.GetValueOrDefault(value.Name, "None") : value.SourceName, StringComparer.OrdinalIgnoreCase),
                 Material.Scalars.Select(value => new MaterialRandomisationScalarBounds(value.Name,
                     value.RandomisationMinimum, value.RandomisationMaximum)).ToArray(),
                 scalarScope, vectorScope, textureScope,
                 includedGroups.SelectMany(group => group.Scalars).Select(value => value.Name).ToHashSet(StringComparer.OrdinalIgnoreCase), profiles),
             player, human,
             new(HairMesh.IsRandomisationLocked, CanEditAttachments, CanEditMorphFeatures,
-                human is { } pair && CurrentHairHasPairedScalp(pair), requested.InclusionKey is not null,
+                false, requested.InclusionKey is not null,
                 Features.Where(value => value.IsEditable && includedMorphs.Contains(value.Name) &&
                     human is { } context && IsHumanHairMorph(value, context.Sex)).Select(value => value.Name).ToArray(),
                 _registryTextureCandidates, _registryAttachmentCandidates),
-            includeBones && RandomiseMorphs && CanEditBones, defaults is not null);
+            globalRoll && RandomiseMorphs && CanEditBones, resetMaterials, cleanupScope);
     }
 
     private void ApplyRandomisedBones(EditorRandomisationRequest request, int seed)
@@ -1097,10 +1132,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         var normalControl = Material.FindControlName(context.ScopeKey, "HED_Scalp_Norm",
             MaterialParameterKind.Texture);
         if (diffuseControl is null || normalControl is null) return null;
-        var style = PlayerHairStyleCatalog.Resolve(context.Game, context.Sex,
-                _registryTextureCandidates, _registryAttachmentCandidates, includeManualPairedVariants: true)
-            .FirstOrDefault(value =>
-                PlayerHairStyleCatalog.MatchesDedicatedScalpPair(value, mesh));
+        var style = await ResolveHairScalpStyleAsync(mesh, DedicatedHairScalpStyles(context));
         if (style is null) return null;
         var scopedScalp = style.ScalpTextures
             .Select(value => new
@@ -1186,15 +1218,37 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         !(_sourceScalpMaterial is { } source && Material.Materials.Materials.TryGetValue(source.Key, out var current) &&
           current.PreviewModel == HumanMaterialPreviewModel.CcScalp);
 
-    private bool CurrentHairHasPairedScalp((MorphFaceGame Game, PlayerHairSex Sex, string? ScopeKey) context)
+    private PlayerHairStyleOption[] DedicatedHairScalpStyles(
+        (MorphFaceGame Game, PlayerHairSex Sex, string? ScopeKey) context) =>
+        PlayerHairStyleCatalog.Resolve(context.Game, context.Sex,
+                _registryTextureCandidates, _registryAttachmentCandidates, includeManualPairedVariants: true)
+            .Where(style => style.HasDedicatedScalpPair).ToArray();
+
+    private async Task<PlayerHairStyleOption?> ResolveHairScalpStyleAsync(
+        AssetIdentity mesh, IReadOnlyList<PlayerHairStyleOption> styles)
+    {
+        var canonical = styles.FirstOrDefault(style => PlayerHairStyleCatalog.MatchesDedicatedScalpPair(style, mesh));
+        if (canonical is not null) return canonical;
+        var candidates = styles.SelectMany(style => style.MeshVariants).Distinct().ToArray();
+        if (candidates.Length == 0) return null;
+        var matches = await _references.FindEquivalentSkeletalMeshesAsync(mesh, candidates);
+        var matchedStyles = styles.Where(style => style.MeshVariants.Any(matches.Contains)).ToArray();
+        // Equivalent geometry can be shared by styles with different scalp requirements.
+        // An ambiguous match is insufficient evidence to offer a particular scalp switch.
+        return matchedStyles.Length == 1 ? matchedStyles[0] : null;
+    }
+
+    private async Task<bool> CurrentHairHasPairedScalpAsync(
+        (MorphFaceGame Game, PlayerHairSex Sex, string? ScopeKey) context)
     {
         if (HairMesh.Value is not { } mesh) return false;
         var textures = CurrentScalpTextureReferences(context);
-        return PlayerHairStyleCatalog.Resolve(context.Game, context.Sex,
-                _registryTextureCandidates, _registryAttachmentCandidates, includeManualPairedVariants: true)
-            .Any(style => PlayerHairStyleCatalog.MatchesDedicatedScalpPair(style, mesh) &&
-                          PlayerHairStyleCatalog.MatchesScalpTextures(style, textures) &&
-                          !RequiresCcScalpMaterial(style, context.Game));
+        var styles = DedicatedHairScalpStyles(context);
+        var pairedStyles = styles.Where(style =>
+            PlayerHairStyleCatalog.MatchesScalpTextures(style, textures) &&
+            !RequiresCcScalpMaterial(style, context.Game)).ToArray();
+        var resolved = await ResolveHairScalpStyleAsync(mesh, styles);
+        return resolved is not null && pairedStyles.Contains(resolved);
     }
 
     private void OnScalpMaterialSelectionChanged(object? sender, EventArgs e)
@@ -1735,6 +1789,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         {
             return;
         }
+        _randomisationGeneration++;
         _session.EvaluationChanged -= OnEvaluationChanged;
         _history.HistoryChanged -= OnHistoryChanged;
         Material.PreviewChanged -= OnMaterialPreviewChanged;

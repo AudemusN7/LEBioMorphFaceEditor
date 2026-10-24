@@ -4,6 +4,8 @@
     <RootNamespace>MorphFaceEditor.Core</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <EmbeddedResource Include="Assets\Randomisation\GlobalMorphs.mfr.br"
+                      LogicalName="MorphFaceEditor.Core.Assets.Randomisation.%(Filename)%(Extension)" />
     <!-- Required files are explicit so a missing bundle fails compilation. -->
     <EmbeddedResource Include="Assets\MorphTargets\LE1.ASA_BaseMorphSet.mft.br;
                                Assets\MorphTargets\LE1.BAT_BaseMorphSet.mft.br;

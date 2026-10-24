@@ -17,6 +17,7 @@ internal static class UiRandomisationTests
     internal static IReadOnlyList<TestCase> All { get; } =
     [
         new("normal roll clears the Cursed state atomically and undo restores it", NormalRollClearsCursedState),
+        new("scoped material rolls preserve unrelated selectors and authored rows", ScopedMaterialRollsKeepUnselectedState),
         new("awaitable randomisation propagates seed failures without partial edits", AwaitableRandomisationPropagatesFailure),
         new("failed Cursed randomisation rolls back its partial edit", FailedCursedRandomisationRollsBack),
         new("manual scalp preparation keeps its required pair when an optional map fails", ManualHairScalpPromptKeepsRequiredPairWhenOptionalMapFails),
@@ -137,6 +138,7 @@ internal static class UiRandomisationTests
         public FaceEditorViewModel Editor { get; } = editor;
         public MaterialEditingSession Material { get; } = material;
         public PlayerHairStyleOption Style { get; } = style;
+        public MorphFacePackageReader Reader { get; } = reader;
         public void Dispose() { Editor.Dispose(); reader.Dispose(); sourceFile.Dispose(); }
     }
 
@@ -187,6 +189,168 @@ internal static class UiRandomisationTests
         editor.RandomiseAsync().GetAwaiter().GetResult();
         TestAssert.True(MorphFaceEditorStateComparer.Equals(normal, editor.CreateDraft()),
             "Replaying normal history left a Cursed contribution for a later roll to subtract twice.");
+
+        using var sourceFile = new FileStream(Path.GetTempFileName(), FileMode.Open, FileAccess.ReadWrite,
+            FileShare.ReadWrite | FileShare.Delete, 4096, FileOptions.DeleteOnClose);
+        using var player = CreateMaskDependencyEditor(reader, sourceFile.Name, false, out var playerMaterials, protectedEye: true);
+        var nativeEye = player.Material.GetEffectiveTextureReference("EYE_Iris_Norm");
+        player.CursedMode = true;
+        player.MaterialRandomisationStrength = 100;
+        player.RandomiseCommand.Execute(null);
+        TestAssert.True(player.Material.GetEffectiveTextureReference("EYE_Iris_Norm") != nativeEye,
+            "The Cursed setup did not replace the selection-protected Player eye map.");
+        player.CursedMode = false;
+        player.RandomiseCommand.Execute(null);
+        TestAssert.True(!playerMaterials.HasCursedRandomisation, "A global normal roll with protected Player eyes left Cursed cleanup pending.");
+        TestAssert.Equal(nativeEye, player.Material.GetEffectiveTextureReference("EYE_Iris_Norm"));
+    }
+
+    private static void ScopedMaterialRollsKeepUnselectedState()
+    {
+        using var reader = new MorphFacePackageReader();
+        using (var editor = CreateRandomisationEditor(reader, randomSeedFactory: () => 771, includeUnusedMaterialParameters: true))
+        {
+            editor.CursedMode = true;
+            editor.RandomiseMorphs = false;
+            editor.MaterialRandomisationStrength = 100;
+            editor.RandomiseCommand.Execute(null);
+            editor.CursedMode = false;
+            var group = editor.Categories.SelectMany(category => category.SliderGroups)
+                .Single(value => value.Scalars.Any(scalar => scalar.Name == "HED_Norm_Blend"));
+            var before = editor.CreateDraft();
+            TestAssert.True(group.RandomiseCommand?.CanExecute(null) == true, "The selected numeric subcategory was unavailable.");
+            group.RandomiseCommand!.Execute(null);
+            var after = editor.CreateDraft();
+            TestAssert.True(before.MaterialOverrides.Vectors.SequenceEqual(after.MaterialOverrides.Vectors) &&
+                before.MaterialOverrides.Textures.SequenceEqual(after.MaterialOverrides.Textures) &&
+                before.MaterialOverrides.Scalars.Where(value => value.Name != "HED_Norm_Blend")
+                    .SequenceEqual(after.MaterialOverrides.Scalars.Where(value => value.Name != "HED_Norm_Blend")),
+                "The first scoped normal roll reset unselected Cursed material values.");
+            editor.UndoCommand.Execute(null);
+            TestAssert.True(MorphFaceEditorStateComparer.Equals(before, editor.CreateDraft()), "Scoped cleanup did not remain one Undo action.");
+            editor.RedoCommand.Execute(null);
+            TestAssert.True(MorphFaceEditorStateComparer.Equals(after, editor.CreateDraft()), "Scoped cleanup Redo lost authored state.");
+        }
+
+        foreach (var failParent in new[] { false, true })
+        {
+            using var sourceFile = new FileStream(Path.GetTempFileName(), FileMode.Open, FileAccess.ReadWrite,
+                FileShare.ReadWrite | FileShare.Delete, 4096, FileOptions.DeleteOnClose);
+            using var editor = CreateMaskDependencyEditor(reader, sourceFile.Name, failParent, out var material);
+            editor.CursedMode = true;
+            editor.MorphRandomisationStrength = editor.MaterialRandomisationStrength = 100;
+            editor.RandomiseCommand.Execute(null);
+            editor.CursedMode = false;
+            editor.RandomiseCommand.Execute(null);
+            TestAssert.True(!material.HasCursedRandomisation, "A fully permitted normal global roll retained pending Cursed cleanup.");
+            var eyes = editor.Categories.Single(category => category.Key == "eyes").ColourGroups.Single(group => group.Key == "surface");
+            var command = failParent
+                ? editor.Categories.Single(category => category.Key == HumanMaleFeatureMetadataCatalog.Additions).TextureRandomiseCommand
+                : eyes.RandomiseCommand;
+            TestAssert.True(command?.CanExecute(null) == true, "The normal selected material command was unavailable.");
+            var changedEyes = false;
+            for (var roll = 0; roll < 6; roll++)
+            {
+                var before = editor.CreateDraft();
+                var selector = material.GetVector("HED_Mask_Vector");
+                var texture = editor.Material.GetEffectiveTextureReference("HED_Mask");
+                command!.Execute(null);
+                var after = editor.CreateDraft();
+                changedEyes |= !before.MaterialOverrides.Vectors.SequenceEqual(after.MaterialOverrides.Vectors);
+                TestAssert.Equal(selector, material.GetVector("HED_Mask_Vector"));
+                TestAssert.Equal(texture, editor.Material.GetEffectiveTextureReference("HED_Mask"));
+                TestAssert.True(before.MaterialOverrides.Scalars.SequenceEqual(after.MaterialOverrides.Scalars) &&
+                    before.MaterialOverrides.Textures.SequenceEqual(after.MaterialOverrides.Textures),
+                    "A colour-only or failed-parent roll changed unrelated authored material rows.");
+                if (MorphFaceEditorStateComparer.Equals(before, after)) continue;
+                editor.UndoCommand.Execute(null);
+                TestAssert.True(MorphFaceEditorStateComparer.Equals(before, editor.CreateDraft()), "A scoped material roll split its Undo action.");
+                editor.RedoCommand.Execute(null);
+                TestAssert.True(MorphFaceEditorStateComparer.Equals(after, editor.CreateDraft()), "A scoped material roll lost its Redo state.");
+            }
+            if (!failParent) TestAssert.True(changedEyes, "The Eye subcategory scenario never changed its permitted colour.");
+        }
+    }
+
+    private static FaceEditorViewModel CreateMaskDependencyEditor(MorphFacePackageReader reader, string sourcePath,
+        bool failParent, out MaterialEditingSession material, bool protectedEye = false)
+    {
+        const string key = "le3-human-male";
+        const string parent = "BIOG_HMM_HED_PROMorph_R.Masks.Donor_Mask3";
+        var mesh = TestFixtures.CreateMesh();
+        var document = new MorphFaceDocument(TestFixtures.CreateIdentity("Face", "BioMorphFace"),
+            new PackageFingerprint(1, DateTime.UnixEpoch, new string('0', 64)), mesh.Source, null,
+            [new MorphFeatureValue("eyes_Big", 0)], [new BoneTranslation("root", Vector3.Zero)],
+            MorphFaceMaterialOverrides.Empty, [mesh.Positions.ToArray()], []);
+        var session = new MorphFaceEditingSession(document, mesh, [new MorphTargetAsset(
+            TestFixtures.CreateIdentity("Set.eyes_Big", "MorphTarget"), [new MorphTargetLod(0, 3, [])], [])]);
+        var identity = TestFixtures.CreateIdentity("Material", "MaterialInstanceConstant");
+        var vectors = new Dictionary<string, Vector4>
+        {
+            ["HED_Mask_Vector"] = new(0, 0, 0, 1), ["EYE_Iris_Colour_Vector"] = Vector4.One, ["SkinTone"] = Vector4.One
+        };
+        if (protectedEye)
+        {
+            vectors.Remove("EYE_Iris_Colour_Vector");
+            vectors.Remove("SkinTone");
+        }
+        var textures = new Dictionary<string, MaterialTextureBinding>
+            { ["HED_Mask"] = new("HED_Mask", CreateTestTexture(sourcePath, "Current_Mask3", "HED_Mask")) };
+        if (protectedEye) textures["EYE_Iris_Norm"] = new("EYE_Iris_Norm", CreateTestTexture(sourcePath, "CurrentEye_Norm", "EYE_Iris_Norm"));
+        var surface = new ResolvedHeadMaterial(MaterialIdentityKey.Create(identity), identity,
+            "HMM_HED_PRONPC_MASTER_FACE_MAT", HeadMaterialFamily.Skin, HeadMaterialBlendMode.Opaque, false,
+            new Dictionary<string, float> { ["HED_Norm_Blend"] = 0.5f }, vectors,
+            textures);
+        material = new MaterialEditingSession(MorphFaceMaterialOverrides.Empty,
+            new ResolvedHeadMaterialSet(new Dictionary<string, ResolvedHeadMaterial> { [surface.Key] = surface }));
+        var donor = new MorphRandomisationDonor("LE3:Mask3", key, new HashSet<string> { "eyes_Big" },
+            new Dictionary<string, float> { ["eyes_Big"] = 0.2f })
+        {
+            MaterialScalars = new Dictionary<string, float> { ["HED_Norm_Blend"] = 0.4f },
+            MaterialVectors = new Dictionary<string, Vector4>
+            {
+                ["HED_Mask_Vector"] = Vector4.One, ["EYE_Iris_Colour_Vector"] = new(0.2f, 0.4f, 0.6f, 1), ["SkinTone"] = Vector4.One
+            },
+            MaterialTextureFamilies = new Dictionary<string, IReadOnlyDictionary<string, string>>
+                { ["human-face-mask"] = new Dictionary<string, string> { ["HED_Mask"] = parent } }
+        };
+        if (protectedEye) donor = donor with
+        {
+            MaterialTextureFamilies = new Dictionary<string, IReadOnlyDictionary<string, string>>(donor.MaterialTextureFamilies)
+                { ["human-eye"] = new Dictionary<string, string> { ["EYE_Iris_Norm"] = "BIOG_EYE.DonorEye_Norm" } }
+        };
+        var profile = new MaterialRandomisationProfile(key,
+            new Dictionary<string, MaterialScalarStatistics> { ["HED_Norm_Blend"] = new("HED_Norm_Blend", 0, 1, 0.2f, 0.8f) },
+            vectors.ToDictionary(value => value.Key, value => new MaterialVectorStatistics(value.Key,
+                value.Key == "HED_Mask_Vector" ? MaterialVectorRandomisationKind.Selector : MaterialVectorRandomisationKind.PerceptualColour,
+                Vector4.Zero, Vector4.One, [])), donor.MaterialTextureFamilies.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase));
+        var corpus = new MorphRandomisationCorpus(MorphRandomisationCorpus.CurrentFormatVersion,
+            new Dictionary<MorphRandomisationPoolKey, IReadOnlyList<MorphRandomisationDonor>>
+            {
+                [MorphRandomisationPoolKey.HumanMaleLe3] = [donor, donor with
+                {
+                    Id = "LE3:Other",
+                    MaterialVectors = new Dictionary<string, Vector4>(donor.MaterialVectors)
+                        { ["EYE_Iris_Colour_Vector"] = new(0.7f, 0.1f, 0.2f, 1) }
+                }]
+            })
+            { MaterialProfiles = new Dictionary<string, MaterialRandomisationProfile> { [key] = profile } };
+        var occurrence = new TextureCatalogOccurrence(sourcePath, 42, 0, TextureCatalogOrigin.BaseGame,
+            1, 1, "PF_B8G8R8A8", "Character", false, null);
+        var candidate = new TextureCatalogCandidate(MorphFaceGame.LE3, parent, occurrence, [occurrence]) { IsEligibleOfficialDefault = true };
+        TextureCatalogCandidate[] candidates = protectedEye
+            ? [candidate, new TextureCatalogCandidate(MorphFaceGame.LE3, "BIOG_EYE.DonorEye_Norm", occurrence, [occurrence]) { IsEligibleOfficialDefault = true }]
+            : [candidate];
+        var seed = 770;
+        var editor = new FaceEditorViewModel(session, new HumanMaleFeatureMetadataCatalog(), material, new StubColorDialog(),
+            new PackageReferenceService(reader, TestFixtures.CreateMissingTextureCatalogService()), sourcePath, [], [], null, [],
+            _ => { }, key, new MorphRandomisationCatalog(corpus), () => ++seed,
+            registryTextureCandidates: candidates, textureCatalogProfile: TextureCatalogProfile.Empty, isTextureRegistryAvailable: true,
+            playerRandomisationGame: protectedEye ? MorphFaceGame.LE3 : null);
+        foreach (var texture in editor.Material.Textures)
+            typeof(MaterialTextureEditorViewModel).GetField("_references", System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.NonPublic)!.SetValue(texture, new ImmediateTextureLoader(failParent ? "Donor_Mask3" : null));
+        return editor;
     }
 
     private static void AwaitableRandomisationPropagatesFailure()

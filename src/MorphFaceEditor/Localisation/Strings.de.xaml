@@ -1616,7 +1616,6 @@ Nein: Benutzerdefinierte Asset-Datenbanken nach erfolgreichem Neuaufbau verwerfe
   <system:String x:Key="loc_View_MainWindow_PostProcessing" xml:space="preserve">Nachbearbeitung</system:String>
   <system:String x:Key="loc_View_MainWindow_LoadSelectedFace" xml:space="preserve">Ausgewähltes Gesicht laden</system:String>
   <system:String x:Key="loc_View_MainWindow_MATERIAL" xml:space="preserve">MATERIAL</system:String>
-  <system:String x:Key="loc_View_MainWindow_MD5" xml:space="preserve">MD5</system:String>
   <system:String x:Key="loc_View_MainWindow_ManageTheGameWideTexture2DRegistries" xml:space="preserve">Spielweite Texture2D-Registrierungen verwalten</system:String>
   <system:String x:Key="loc_View_MainWindow_Material" xml:space="preserve">Material</system:String>
   <!--localiser: {"Key":"loc_View_MainWindow_MaterialRandomisationStrength","ReviewedHash":null,"DoNotTranslate":false,"Note":"Exceeding current character count could result in UI clipping","SourceHash":null}-->

@@ -136,7 +136,7 @@ public static class MaterialRandomiser
                 : SampleColour(seedValue, FindColourTarget(name, seedValue, compatibleDonors, numericRandom),
                     statistics, strengthPercent, numericRandom);
         }
-        ApplyTextureDependencies(profile.ProfileKey, textures, currentTextures, vectors, numericRandom);
+        ApplyTextureDependencies(profile.ProfileKey, textures, currentTextures, vectorScope, vectors, numericRandom);
 
         return new MaterialRandomisationProposal(donor.Id, randomSeed, scalars, vectors, textures);
     }
@@ -372,15 +372,19 @@ public static class MaterialRandomiser
         string profileKey,
         IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> textures,
         IReadOnlyDictionary<string, string>? currentTextures,
+        IReadOnlySet<string> vectorScope,
         IDictionary<string, Vector4> vectors,
         MorphRandomiser.StableRandom random)
     {
         var dependencies = DependentVectorNames(profileKey, textures, currentTextures);
-        if (dependencies.Contains("TUR_HED_Addn_Mask_Vector") && vectors.ContainsKey("TUR_HED_Addn_Mask_Vector"))
+        var proposedDependencies = DependentVectorNames(profileKey, textures);
+        if (dependencies.Contains("TUR_HED_Addn_Mask_Vector") && vectors.ContainsKey("TUR_HED_Addn_Mask_Vector") &&
+            (vectorScope.Contains("TUR_HED_Addn_Mask_Vector") || proposedDependencies.Contains("TUR_HED_Addn_Mask_Vector")))
         {
             vectors["TUR_HED_Addn_Mask_Vector"] = new Vector4(0, 0, 0, 1);
         }
-        if (dependencies.Contains("HED_Mask_Vector") && vectors.ContainsKey("HED_Mask_Vector"))
+        if (dependencies.Contains("HED_Mask_Vector") && vectors.ContainsKey("HED_Mask_Vector") &&
+            (vectorScope.Contains("HED_Mask_Vector") || proposedDependencies.Contains("HED_Mask_Vector")))
         {
             Vector4[] validMask3States =
             [

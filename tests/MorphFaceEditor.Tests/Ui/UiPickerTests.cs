@@ -10,6 +10,16 @@ using MorphFaceEditor.Services;
 using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.Rendering;
 using System.Windows.Threading;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
+using System.Windows.Interop;
+using System.Windows.Media;
+using MorphFaceEditor.Controls;
+using LegendaryExplorerCore.Packages;
+using LegendaryExplorerCore.Unreal;
+using LegendaryExplorerCore.Unreal.BinaryConverters;
 
 using static MorphFaceEditor.Tests.UiTestFixtures;
 
@@ -19,6 +29,7 @@ internal static class UiPickerTests
 {
     internal static IReadOnlyList<TestCase> All { get; } =
     [
+        new("bound picker controls keep routed hover cancel and commit distinct", PickerControlsKeepHoverAndCommitDistinct),
         new("attachment hover and commit preserve edits without publishing failed loads", AttachmentPreparationPublication),
         new("matching scalp maps suppress repeated hair-pair prompts and preserve manual donors", MatchingHairPairIsIdempotent),
         new("CC-only Mohawk pairing keeps pending edits chronological, clears Hair and respects its lock", CcOnlyMohawkPairsAndLocks),
@@ -28,6 +39,111 @@ internal static class UiPickerTests
         new("texture hover cache is bounded and reused by an undoable commit", TexturePickerBoundsPreviewCacheAndPreservesHistory),
         new("late texture decode cannot replace a newer preview or revive a disposed picker", TexturePickerRejectsStalePreviewCacheResults)
     ];
+
+    private static void PickerControlsKeepHoverAndCommitDistinct() => WpfTestDispatcher.Invoke(() => RunWithDispatcher(async () =>
+    {
+        var material = MaterialTestFixtures.CreateSession();
+        using var texture = new MaterialTextureEditorViewModel(material,
+            HumanMaterialProfiles.Describe("HED_Diff", MaterialParameterKind.Texture, HeadMaterialFamily.Skin),
+            new SyntheticTextureLoader(), "opened.pcc", CreateSyntheticTextureCandidates("picker.pcc", 3),
+            message => throw new InvalidOperationException(message));
+        await Exercise(new SearchableTexturePicker { DataContext = texture },
+            () => material.GetTextureReference("HED_Diff"),
+            () => material.GetPreviewTexture("HED_Diff")?.Source.InstancedPath,
+            "Hover02");
+        TestAssert.True(material.CanUndo, "The routed texture commit did not create authored history.");
+        material.Undo();
+        TestAssert.True(!material.CanUndo, "Hover or cancellation added an extra texture Undo entry.");
+
+        var attachment = new AssetReferenceEditingSession(null);
+        using var mesh = new HairMeshEditorViewModel(attachment,
+            Enumerable.Range(1, 3).Select(index => new PackageAssetListItem(
+                new AssetIdentity("picker.pcc", $"Hair.Choice{index}", index, "SkeletalMesh"))).ToArray(), "Hair", 0);
+        await Exercise(new SearchableMeshPicker { DataContext = mesh }, () => mesh.Value,
+            () => mesh.PreviewSelection?.Identity?.InstancedPath, "Choice2");
+        TestAssert.True(attachment.CanUndo, "The routed attachment commit did not create authored history.");
+        attachment.Undo();
+        TestAssert.True(!attachment.CanUndo, "Hover or cancellation added an extra attachment Undo entry.");
+
+        static async Task Exercise(UserControl picker, Func<AssetIdentity?> authored, Func<string?> previewPath, string query)
+        {
+            // A hidden presentation source provides real WPF bindings, templates and routed input,
+            // without starting the editor or showing a test window.
+            using var source = new HwndSource(new HwndSourceParameters("Picker control regression")
+                { WindowStyle = 0, Width = 600, Height = 500 });
+            source.RootVisual = picker;
+            picker.Measure(new Size(600, 500));
+            picker.Arrange(new Rect(0, 0, 600, 500));
+            var popup = (Popup)picker.FindName("PickerPopup");
+            var list = (ListBox)picker.FindName("CandidateList");
+            var search = (TextBox)picker.FindName("SearchBox");
+            var before = authored();
+            var beforePreview = previewPath();
+            try
+            {
+                popup.IsOpen = true;
+                await Dispatcher.Yield(DispatcherPriority.ContextIdle);
+                TestAssert.True(list.Items.Count >= 4, "The picker did not bind its real candidate list.");
+                search.Text = query;
+                TestAssert.Equal(2, list.Items.Count); // Material default/None remains first.
+                search.Text = string.Empty;
+                popup.Child.Measure(new Size(600, 500));
+                popup.Child.Arrange(new Rect(0, 0, 600, 500));
+                list.UpdateLayout();
+                var option = list.Items[1];
+                list.ScrollIntoView(option);
+                list.UpdateLayout();
+                var row = FindRow((DependencyObject)list.ItemContainerGenerator.ContainerFromItem(option));
+                row.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, Environment.TickCount)
+                    { RoutedEvent = Mouse.MouseEnterEvent });
+                TestAssert.Equal(before, authored());
+                TestAssert.True(previewPath() != beforePreview, "The routed hover did not publish a temporary preview.");
+                SendKey(Key.Escape);
+                await Dispatcher.Yield(DispatcherPriority.ContextIdle);
+                TestAssert.True(!popup.IsOpen && authored() == before && previewPath() == beforePreview,
+                    "Escape failed to restore the committed choice without authoring the hover.");
+
+                popup.IsOpen = true;
+                await Dispatcher.Yield(DispatcherPriority.ContextIdle);
+                if (picker is SearchableTexturePicker)
+                {
+                    var checkbox = FindChild<CheckBox>((DependencyObject)popup.Child);
+                    var enter = new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, System.Windows.Input.Key.Enter)
+                        { RoutedEvent = Keyboard.PreviewKeyDownEvent };
+                    checkbox.RaiseEvent(enter);
+                    TestAssert.True(popup.IsOpen && authored() == before,
+                        $"Enter on physical-source controls changed the picker: open={popup.IsOpen}; source={enter.OriginalSource?.GetType().Name}; authored={authored()?.InstancedPath}; before={before?.InstancedPath}.");
+                }
+                for (var index = 0; index < list.Items.Count; index++) SendKey(Key.Up);
+                SendKey(Key.Down);
+                SendKey(Key.Enter);
+                TestAssert.True(!popup.IsOpen && authored() != before,
+                    "Routed keyboard selection failed to author and close the picker.");
+            }
+            finally
+            {
+                popup.IsOpen = false;
+                source.RootVisual = null;
+            }
+
+            void SendKey(Key key) => ((UIElement)popup.Child).RaiseEvent(
+                new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, key)
+                    { RoutedEvent = Keyboard.PreviewKeyDownEvent });
+        }
+
+        static Grid FindRow(DependencyObject container) => FindChild<Grid>(container);
+        static T FindChild<T>(DependencyObject parent) where T : DependencyObject
+        {
+            for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, index);
+                if (child is T result) return result;
+                try { return FindChild<T>(child); }
+                catch (InvalidOperationException) { }
+            }
+            throw new InvalidOperationException($"Picker template has no {typeof(T).Name}.");
+        }
+    }));
 
     private static void CcOnlyMohawkPairsAndLocks()
     {
@@ -119,6 +235,111 @@ internal static class UiPickerTests
         fixture.Material.PreviewTexture("HED_Scalp_Norm", normal);
         TestAssert.True(editor.PrepareManualHairScalpPairAsync(secondMesh).GetAwaiter().GetResult() is not null,
             "A matching hover hid the committed unrelated same-named normal map.");
+        RunWithDispatcher(RelocatedHairPairMatchesContentAsync);
+    }
+
+    private static async Task RelocatedHairPairMatchesContentAsync()
+    {
+        using var fixture = UiRandomisationTests.CreateHairScalpFixture();
+        var directory = Path.Combine(Path.GetTempPath(), "MFE-RelocatedHair-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var relocatedPath = Path.Combine(directory, "Relocated.pcc");
+        const string relocatedObject = "DifferentGroup.DeliberateModHair";
+        try
+        {
+            var nativeVariants = WriteMeshes(Path.Combine(directory, "Canonical.pcc"),
+                fixture.Style.MeshVariants.Select(value => value.InstancedPath).ToArray(), materialIndex: 77);
+            var relocated = WriteMeshes(relocatedPath, [relocatedObject], materialIndex: 99)[0];
+            var references = new PackageReferenceService(fixture.Reader, TestFixtures.CreateMissingTextureCatalogService());
+            var matches = await references.FindEquivalentSkeletalMeshesAsync(relocated, nativeVariants);
+            TestAssert.Equal(2, matches.Count);
+            var reads = fixture.Reader.MeshContentFingerprintReadCount;
+            await references.FindEquivalentSkeletalMeshesAsync(relocated, nativeVariants);
+            TestAssert.Equal(reads, fixture.Reader.MeshContentFingerprintReadCount);
+            var missing = nativeVariants[0] with { PackagePath = Path.Combine(directory, "Missing.pcc") };
+            TestAssert.Equal(1, (await references.FindEquivalentSkeletalMeshesAsync(relocated, [missing, nativeVariants[0]])).Count);
+            TestAssert.Equal(0, (await references.FindEquivalentSkeletalMeshesAsync(missing, nativeVariants)).Count);
+
+            var candidates = nativeVariants.Select(value => Candidate(value, TextureCatalogOrigin.BaseGame))
+                .Append(Candidate(relocated, TextureCatalogOrigin.Mod)).ToArray();
+            fixture.Editor.UpdateRegistryAttachmentMeshes(candidates, isPlayerWorkspace: false);
+            var editor = fixture.Editor;
+            var before = editor.CreateDraft();
+            var choice = editor.HairMesh.Options.Single(option => option.Identity == relocated);
+            ManualAttachmentSelectionEventArgs? request = null;
+            editor.HairMesh.ManualSelectionRequested += (_, args) => request = args;
+            editor.HairMesh.Commit(choice);
+            var prepared = await editor.PrepareManualHairScalpPairAsync(relocated)
+                ?? throw new Exception("An exact relocated native hairstyle lost its matching-scalp prompt.");
+            TestAssert.True(!editor.IsDirty && request is not null, "Content recognition authored a pending manual choice.");
+            editor.CommitManualHairSelection(choice, request!.Generation, prepared);
+            var accepted = editor.CreateDraft();
+            TestAssert.Equal(relocated, accepted.HairMeshReference!);
+            TestAssert.True(accepted.MaterialOverrides.Textures.Count > before.MaterialOverrides.Textures.Count,
+                "Accepting the relocated pair did not author its scalp maps.");
+            TestAssert.True(await editor.PrepareManualHairScalpPairAsync(relocated) is null,
+                "Matching effective maps re-prompted for the relocated hairstyle.");
+            editor.UndoCommand.Execute(null);
+            TestAssert.True(MorphFaceEditorStateComparer.Equals(before, editor.CreateDraft()) && !editor.IsDirty,
+                "One Undo did not restore the pre-pair state.");
+            editor.RedoCommand.Execute(null);
+            TestAssert.True(MorphFaceEditorStateComparer.Equals(accepted, editor.CreateDraft()),
+                "One Redo did not restore the relocated mesh and scalp maps.");
+            editor.UndoCommand.Execute(null);
+            editor.HairMesh.Commit(choice);
+            editor.CommitManualHairSelection(choice, request!.Generation, null);
+            TestAssert.True(MorphFaceEditorStateComparer.Equals(before with { HairMeshReference = relocated }, editor.CreateDraft()),
+                "Declining the relocated scalp pair changed more than the chosen mesh.");
+            editor.UndoCommand.Execute(null);
+
+            WriteMeshes(relocatedPath, [relocatedObject], 99, changeUv: true);
+            File.SetLastWriteTimeUtc(relocatedPath, DateTime.UtcNow.AddSeconds(2));
+            TestAssert.Equal(0, (await references.FindEquivalentSkeletalMeshesAsync(relocated, nativeVariants)).Count);
+            TestAssert.True(await editor.PrepareManualHairScalpPairAsync(relocated) is null,
+                "Changed lower-LOD UVs were classified from a stale fingerprint.");
+            WriteMeshes(relocatedPath, [relocatedObject], 99, changeRig: true);
+            File.SetLastWriteTimeUtc(relocatedPath, DateTime.UtcNow.AddSeconds(4));
+            TestAssert.Equal(0, (await references.FindEquivalentSkeletalMeshesAsync(relocated, nativeVariants)).Count);
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+
+        static AttachmentMeshCandidate Candidate(AssetIdentity identity, TextureCatalogOrigin origin)
+        {
+            var occurrence = new AttachmentMeshOccurrence(identity.PackagePath, identity.InstancedPath,
+                identity.UIndex, 0, origin, 1);
+            return new AttachmentMeshCandidate(identity.InstancedPath, occurrence, [occurrence])
+                { IsEligibleOfficialDefault = origin == TextureCatalogOrigin.BaseGame };
+        }
+
+        static AssetIdentity[] WriteMeshes(string path, IReadOnlyList<string> names, int materialIndex,
+            bool changeUv = false, bool changeRig = false)
+        {
+            LegendaryExplorerCoreRuntime.Initialize();
+            using var package = MEPackageHandler.CreateMemoryEmptyPackage(path, MEGame.LE1);
+            var identities = new List<AssetIdentity>();
+            var imported = new ImportedMeshAsset(path, [Vector3.Zero, Vector3.UnitX, Vector3.UnitY],
+                [Vector3.UnitZ, Vector3.UnitZ, Vector3.UnitZ],
+                [new(1, 0, 0, 1), new(1, 0, 0, -1), new(1, 0, 0, 1)],
+                [Vector2.Zero, Vector2.UnitX, Vector2.UnitY], [0, 1, 2],
+                [new(0, "Hair", 0, 3)], [], null, null, [0, 1, 2]);
+            foreach (var name in names)
+            {
+                var split = name.LastIndexOf('.');
+                var outer = package.CreatePackageExport(name[..split]);
+                var meshExport = package.CreateExport(name[(split + 1)..], "SkeletalMesh", outer, indexed: false);
+                var build = ImportedSkeletalMeshWriter.Build(imported, MEGame.LE1, [materialIndex]);
+                build.Binary.LODModels = Enumerable.Range(0, 3)
+                    .Select(_ => ImportedSkeletalMeshWriter.Build(imported, MEGame.LE1, [materialIndex]).Binary.LODModels[0]).ToArray();
+                if (changeUv) build.Binary.LODModels[2].ME1VertexBufferGPUSkin[0].UV = new Vector2(0.25f, 0);
+                if (changeRig) build.Binary.RefSkeleton[0].Position += Vector3.UnitZ;
+                while (build.LodInfo.Count < 3) build.LodInfo.Add((StructProperty)build.LodInfo[0].DeepClone());
+                meshExport.WriteBinary(build.Binary);
+                meshExport.WriteProperty(build.LodInfo);
+                identities.Add(new AssetIdentity(path, meshExport.InstancedFullPath, meshExport.UIndex, "SkeletalMesh"));
+            }
+            package.Save(path);
+            return identities.ToArray();
+        }
     }
 
     private static void ManualHairChoiceRejectsStalePairing() => RunWithDispatcher(async () =>

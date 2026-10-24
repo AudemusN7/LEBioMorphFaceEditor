@@ -9,6 +9,7 @@ using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Core.Materials;
+using MorphFaceEditor.Core.Randomisation;
 using MorphFaceEditor.Core.Services;
 using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.Models;
@@ -67,7 +68,6 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly RelayCommand _cancelNpcImportCommand;
     private readonly AsyncRelayCommand _exportMorphPskCommand;
     private readonly AsyncRelayCommand _exportMorphGltfCommand;
-    private readonly AsyncRelayCommand _exportMorphMd5Command;
     private readonly AsyncRelayCommand _exportMorphRonCommand;
     private readonly AsyncRelayCommand _assignMorphToActorCommand;
     private readonly AsyncRelayCommand _assignMaterialsToActorCommand;
@@ -204,8 +204,6 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             () => ExportMorphMeshAsync(MorphMeshFormat.Psk), CanTargetPackageFace);
         _exportMorphGltfCommand = new AsyncRelayCommand(
             () => ExportMorphMeshAsync(MorphMeshFormat.Gltf), CanTargetPackageFace);
-        _exportMorphMd5Command = new AsyncRelayCommand(
-            () => ExportMorphMeshAsync(MorphMeshFormat.Md5), CanTargetPackageFace);
         _exportMorphRonCommand = new AsyncRelayCommand(ExportMorphRonAsync, CanExportMorphRon);
         _exportTseMaterialsCommand = new AsyncRelayCommand(async () => { await ExportMeshMaterialsAsync(true); },
             () => CanUseMeshMaterialFiles() && Editor?.CanExportTseMaterials == true);
@@ -270,7 +268,6 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public ICommand CancelNpcImportCommand => _cancelNpcImportCommand;
     public ICommand ExportMorphPskCommand => _exportMorphPskCommand;
     public ICommand ExportMorphGltfCommand => _exportMorphGltfCommand;
-    public ICommand ExportMorphMd5Command => _exportMorphMd5Command;
     public ICommand ExportMorphRonCommand => _exportMorphRonCommand;
     public ICommand AssignMorphToActorCommand => _assignMorphToActorCommand;
     public ICommand AssignMaterialsToActorCommand => _assignMaterialsToActorCommand;

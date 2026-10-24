@@ -194,7 +194,7 @@ internal sealed class EditorRandomisationService(MorphRandomisationCatalog catal
                     profileScalars, profileVectors, textureFamilies,
                     request.MaterialStrength, profileSeed, currentTextures, excludedSignatures);
                 var dependentVectors = MaterialRandomiser.DependentVectorNames(
-                    profile.ProfileKey, proposal.TextureFamilies, currentTextures);
+                    profile.ProfileKey, proposal.TextureFamilies);
                 prepared = await resolve(
                     proposal.Scalars.Where(value => profileScalars.Contains(value.Key))
                         .Select(value => new

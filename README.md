@@ -2,7 +2,7 @@
 
 WPF editor for Mas Effect Legendary Edition `BioMorphFace` assets. Current support: Human Male/Female, Asari, Salarian, male Turian, Krogan and Batarian across LE1-LE3.
 
-Features: morph/final-skeleton/material/texture/attachment editing, semantic undo, transactional saves, cross-game conversion, TSE RON import/export, legacy Gibbed import, and PSK/glTF/MD5 interchange through UModel. Preview uses D3D11 and is an approximation of UE3 rendering.
+Features: morph/final-skeleton/material/texture/attachment editing, semantic undo, transactional saves, cross-game conversion, TSE RON import/export, legacy Gibbed import, and PSK/glTF interchange through UModel. Preview uses D3D11 and is an approximation of UE3 rendering.
 
 ```powershell
 dotnet run --project src/MorphFaceEditor -c Debug

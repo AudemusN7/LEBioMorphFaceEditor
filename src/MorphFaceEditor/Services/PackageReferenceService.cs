@@ -1,3 +1,4 @@
+using System.IO;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.LegendaryExplorer;
@@ -130,6 +131,31 @@ public sealed class PackageReferenceService(
         CancellationToken cancellationToken = default) => ReadAsync(
             () => reader.LoadDetachedAttachment(packagePath, meshPath),
             cancellationToken);
+
+    /// <summary>Compares only the supplied native candidates; exact authored identities are returned unchanged.</summary>
+    public Task<IReadOnlyList<AssetIdentity>> FindEquivalentSkeletalMeshesAsync(
+        AssetIdentity selected, IReadOnlyList<AssetIdentity> canonicalCandidates,
+        CancellationToken cancellationToken = default) => ReadAsync<IReadOnlyList<AssetIdentity>>(() =>
+    {
+        var fingerprint = ReadFingerprint(selected);
+        if (fingerprint is null) return [];
+        var matches = new List<AssetIdentity>();
+        foreach (var candidate in canonicalCandidates.Distinct())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (ReadFingerprint(candidate) == fingerprint) matches.Add(candidate);
+        }
+        return matches;
+
+        string? ReadFingerprint(AssetIdentity identity)
+        {
+            try { return reader.ReadSkeletalMeshContentFingerprint(identity); }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or KeyNotFoundException)
+            {
+                return null; // Optional recognition never turns a missing/corrupt donor into a failed hair selection.
+            }
+        }
+    }, cancellationToken);
 
     public Task<ResolvedHeadMaterial> LoadLe3CcScalpMaterialAsync(
         bool female, CancellationToken cancellationToken = default) =>

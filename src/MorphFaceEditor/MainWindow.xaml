@@ -329,7 +329,6 @@
                                 <MenuItem Header="{DynamicResource loc_View_MainWindow_ExportMorphAsMesh}" Style="{StaticResource PccContextAction}">
                                     <MenuItem Header="{DynamicResource loc_View_MainWindow_PSK}" Command="{Binding ExportMorphPskCommand}" />
                                     <MenuItem Header="{DynamicResource loc_View_MainWindow_GlTF}" Command="{Binding ExportMorphGltfCommand}" />
-                                    <MenuItem Header="{DynamicResource loc_View_MainWindow_MD5}" Command="{Binding ExportMorphMd5Command}" />
                                 </MenuItem>
                                 <Separator Style="{StaticResource PccContextSeparator}" />
                                 <MenuItem Header="{DynamicResource loc_View_MainWindow_AssignMorphToActor}" ToolTip="{DynamicResource loc_ActorAssignment_MorphTooltip}" Style="{StaticResource PccContextAction}" Command="{Binding AssignMorphToActorCommand}" />
@@ -834,6 +833,27 @@
                                          SelectedItem="{Binding Editor.SelectedBoneTransform, Mode=TwoWay}"
                                          BorderThickness="0" Background="{DynamicResource InputBackground}" Foreground="{DynamicResource PrimaryText}"
                                          ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                    <!-- The default disabled ListBox template paints white; keep the themed background while busy. -->
+                                    <ListBox.Template>
+                                        <ControlTemplate TargetType="ListBox">
+                                            <Border Padding="1" BorderThickness="{TemplateBinding BorderThickness}"
+                                                    BorderBrush="{TemplateBinding BorderBrush}" Background="{TemplateBinding Background}"
+                                                    SnapsToDevicePixels="True">
+                                                <ScrollViewer Padding="{TemplateBinding Padding}" Focusable="False">
+                                                    <ItemsPresenter SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
+                                                </ScrollViewer>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <MultiTrigger>
+                                                    <MultiTrigger.Conditions>
+                                                        <Condition Property="IsGrouping" Value="True" />
+                                                        <Condition Property="VirtualizingPanel.IsVirtualizingWhenGrouping" Value="False" />
+                                                    </MultiTrigger.Conditions>
+                                                    <Setter Property="ScrollViewer.CanContentScroll" Value="False" />
+                                                </MultiTrigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </ListBox.Template>
                                     <ListBox.ItemContainerStyle>
                                         <Style TargetType="ListBoxItem">
                                             <Setter Property="HorizontalContentAlignment" Value="Stretch" />

@@ -34,24 +34,6 @@ public static class LegendaryExplorerCoreRuntime
         }
     }
 
-    public static string? DefaultLe1Root
-    {
-        get
-        {
-            Initialize();
-            return LE1Directory.DefaultGamePath;
-        }
-    }
-
-    public static string? DefaultLe1CookedPath
-    {
-        get
-        {
-            Initialize();
-            return LE1Directory.CookedPCPath;
-        }
-    }
-
     public static string? DefaultLe2CookedPath
     {
         get

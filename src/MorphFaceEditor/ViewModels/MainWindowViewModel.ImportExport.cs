@@ -44,7 +44,7 @@ public sealed partial class MainWindowViewModel
         catch (Exception exception)
         {
             AppLog.Error($"MORPH:EXPORT-FAILED FORMAT:{format}", exception);
-            ErrorMessage = Loc.Format("loc_Shell_Error_TheMorphMeshCouldNot", exception.Message);
+            ErrorMessage = Loc.Format("loc_Shell_Error_TheMorphMeshCouldNot", UserFacingMessageFormatter.Format(exception));
             Status = Loc.Text("loc_Shell_Status_MorphMeshExportFailedThe");
         }
         finally

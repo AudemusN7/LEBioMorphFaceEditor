@@ -23,6 +23,7 @@ internal static class UiEditorTests
     [
         new("continuous controls complete captured edits on rebind capture focus and unload", ContinuousControlLifetimesKeepCapturedEdits),
         new("bone pointer and wheel gestures retain captured edits through rebind unload and timeout", BoneControlLifetimesKeepHistory),
+        new("bone numeric textbox rejects non-finite Enter before a wheel gesture", BoneNumericTextRejectsNonFinite),
         new("bound slider ranges preserve Cursed imported and replayed authored values", AuthoredValuesKeepCurrentSliderRanges),
         new("morph controls disable when the selected LOD has no target geometry", MorphControlsDisableForTargetlessLod),
         new("Fix Morph undo restores baked preview and survives a failing preview callback", FixMorphUndoRestoresBakedPreview),
@@ -242,6 +243,57 @@ internal static class UiEditorTests
                         MorphFaceEditorStateComparer.Equals(originalSecond, second.CreateDraft()),
             "Wheel timeout did not retain one complete authored action.");
         control.RaiseEvent(new RoutedEventArgs(FrameworkElement.UnloadedEvent));
+    }));
+
+    private static void BoneNumericTextRejectsNonFinite() => WpfTestDispatcher.Invoke(() => RunWithDispatcher(async () =>
+    {
+        using var reader = new MorphFacePackageReader();
+        using var shell = CreateMainWindowViewModel(reader);
+        using var editor = CreateEditor(reader);
+        var original = editor.CreateDraft();
+        var window = new MorphFaceEditor.MainWindow(shell);
+        try
+        {
+            var list = (ListBox)window.FindName("BoneList");
+            var content = (FrameworkElement)list.ItemTemplate.LoadContent();
+            content.DataContext = editor.BoneTransforms.Single(value => value.BoneName == "root");
+            content.Measure(new Size(600, 900));
+            content.Arrange(new Rect(0, 0, 600, 900));
+            content.UpdateLayout();
+            IEnumerable<DependencyObject> Descendants(DependencyObject node)
+            {
+                yield return node;
+                for (var index = 0; index < System.Windows.Media.VisualTreeHelper.GetChildrenCount(node); index++)
+                    foreach (var child in Descendants(System.Windows.Media.VisualTreeHelper.GetChild(node, index))) yield return child;
+            }
+            var textBox = Descendants(content).OfType<TextBox>().First();
+            var axis = (BoneAxisEditorViewModel)textBox.DataContext;
+            TestAssert.True(editor.CanEditBones && textBox.IsEnabled, "The bone textbox fixture bypassed a disabled editing capability.");
+            textBox.Text = "NaN";
+            using var input = new System.Windows.Interop.HwndSource(new System.Windows.Interop.HwndSourceParameters("MFE hidden numeric test input")
+                { WindowStyle = 0, Width = 1, Height = 1 });
+            textBox.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, input, Environment.TickCount, Key.Enter)
+                { RoutedEvent = Keyboard.PreviewKeyDownEvent });
+            TestAssert.True(!editor.IsDirty && !editor.UndoCommand.CanExecute(null) &&
+                MorphFaceEditorStateComparer.Equals(original, editor.CreateDraft()), "Rejected bone text changed authored state or history.");
+            TestAssert.True(float.IsFinite(axis.Value) && float.TryParse(textBox.Text, out var rejected) && float.IsFinite(rejected),
+                "Rejected bone text left a non-finite value in the textbox or its editor cache.");
+            Exception? wheelFailure = null;
+            try
+            {
+                textBox.RaiseEvent(new MouseWheelEventArgs(Mouse.PrimaryDevice, Environment.TickCount, 120)
+                    { RoutedEvent = Mouse.PreviewMouseWheelEvent });
+            }
+            catch (Exception exception) { wheelFailure = exception; }
+            TestAssert.True(wheelFailure is null, $"A wheel after rejected bone text failed: {wheelFailure}");
+            TestAssert.Near(0.1f, axis.Value, 0);
+            TestAssert.True(float.TryParse(textBox.Text, out var shown) && float.IsFinite(shown), "Rejected bone text left a non-finite displayed value.");
+            await Task.Delay(550);
+            editor.UndoCommand.Execute(null);
+            TestAssert.True(!editor.IsDirty && !editor.UndoCommand.CanExecute(null) &&
+                MorphFaceEditorStateComparer.Equals(original, editor.CreateDraft()), "The wheel after rejected text did not retain one complete authored edit.");
+        }
+        finally { window.Close(); }
     }));
 
     private static void MorphControlsDisableForTargetlessLod()

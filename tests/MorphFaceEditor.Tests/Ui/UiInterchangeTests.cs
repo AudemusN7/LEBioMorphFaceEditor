@@ -195,7 +195,22 @@ internal static class UiInterchangeTests
             using var shell = CreateMainWindowViewModel(reader, dialogs, customMaterials: new MaterialDropCatalogue(option));
             await shell.OpenDroppedFileAsync(meshPath);
             var editor = shell.Editor ?? throw new Exception(shell.ErrorMessage ?? "Custom mesh did not open.");
-            foreach (var slot in editor.CustomMaterialSlots) slot.Selected = slot.Options.Single(value => value.Assignment == option);
+            shell.ExtendedSliders = true;
+            foreach (var slot in editor.CustomMaterialSlots)
+            {
+                slot.Selected = slot.Options.Single(value => value.Assignment == option);
+                TestAssert.True(editor.Material.Scalars.Count > 0 && editor.Material.Scalars.All(value => value.Minimum == -value.Maximum),
+                    "A material assignment lost the checked Extended Sliders preference.");
+            }
+            var firstSlot = editor.CustomMaterialSlots.First();
+            firstSlot.Selected = firstSlot.Options[0];
+            firstSlot.Selected = firstSlot.Options.Single(value => value.Assignment == option);
+            TestAssert.True(shell.ExtendedSliders && editor.Material.Scalars.All(value => value.Minimum == -value.Maximum),
+                "Replacing a material assignment lost its signed ranges.");
+            shell.ExtendedSliders = false;
+            TestAssert.True(editor.Material.Scalars.All(value => value.Minimum == value.RandomisationMinimum),
+                "Unchecking Extended Sliders did not restore material ranges.");
+            shell.ExtendedSliders = true;
             var workspace = editor.CustomMaterials!;
             var assignments = workspace.Assignments.ToArray();
             var original = editor.CreateDraft();

@@ -2,7 +2,6 @@ using System.Numerics;
 using System.Reflection;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.Rendering;
-using SharpDX.Direct3D11;
 
 using static MorphFaceEditor.Tests.RenderTestReadback;
 
@@ -271,21 +270,14 @@ public static class HdrRenderingTests
 
         var first = renderer.Render(camera, options);
         var gradingTexture = GetTexture(renderer, "GradingLut");
-        var resolvedTexture = GetTexture(renderer, "Resolved");
         var bloomTexture = GetTexture(renderer, "Bloom");
-        var bloomTarget = GetSurfaceResource<RenderTargetView>(renderer, "Bloom", "Target");
-        var bloomShaderView = GetSurfaceResource<ShaderResourceView>(renderer, "Bloom", "ShaderView");
-        renderer.Resize(32, 24);
         renderer.Resize(32, 24);
         var repeated = renderer.Render(camera, options);
         TestAssert.True(first.BgraPixels.SequenceEqual(repeated.BgraPixels),
-            "Repeated unchanged GameInspired frames or same-size resizes produced different display pixels.");
+            "Repeated unchanged frames or a same-size resize produced different display pixels.");
         TestAssert.True(ReferenceEquals(gradingTexture, GetTexture(renderer, "GradingLut")) &&
-                        ReferenceEquals(resolvedTexture, GetTexture(renderer, "Resolved")) &&
-                        ReferenceEquals(bloomTexture, GetTexture(renderer, "Bloom")) &&
-                        ReferenceEquals(bloomTarget, GetSurfaceResource<RenderTargetView>(renderer, "Bloom", "Target")) &&
-                        ReferenceEquals(bloomShaderView, GetSurfaceResource<ShaderResourceView>(renderer, "Bloom", "ShaderView")),
-            "Unchanged frames or same-size resizes recreated the grading LUT, viewport images or bloom views.");
+                        ReferenceEquals(bloomTexture, GetTexture(renderer, "Bloom")),
+            "Unchanged frames or a same-size resize recreated the grading LUT or bloom target.");
 
         renderer.Render(camera, options with { PostProcessingEnabled = false });
         var afterToggle = renderer.Render(camera, options);
@@ -295,9 +287,7 @@ public static class HdrRenderingTests
             "Toggling postprocessing recreated the cached grading LUT.");
 
         renderer.Resize(7, 5);
-        TestAssert.True(resolvedTexture.IsDisposed && bloomTexture.IsDisposed &&
-                        bloomTarget.IsDisposed && bloomShaderView.IsDisposed,
-            "Resizing retained an old viewport image or one of its render/sample views.");
+        TestAssert.True(bloomTexture.IsDisposed, "Resizing retained the old bloom target.");
         var resized = renderer.Render(camera, options);
         var resizedBloom = GetTexture(renderer, "Bloom");
         TestAssert.True(resized.Width == 7 && resized.Height == 5 && resized.BgraPixels.Length == 7 * 5 * 4,

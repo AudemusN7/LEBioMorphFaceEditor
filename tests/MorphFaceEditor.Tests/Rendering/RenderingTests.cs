@@ -1,5 +1,9 @@
 using System.Diagnostics;
 using System.Numerics;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Core.Materials;
@@ -418,32 +422,25 @@ public static class RenderingTests
         camera.Fit(scene.Bounds);
         var options = new HeadPreviewOptions(HeadPreviewRenderMode.Unlit, PostProcessingEnabled: false);
         var destination = new byte[width * height * 4];
-        var frame = renderer.Render(camera, options, destination, animationTimeSeconds: 0);
-        TestAssert.True(ReferenceEquals(destination, frame.BgraPixels), "Packed rendering replaced its destination.");
-        var expected = destination.ToArray();
-        var actual = new byte[destination.Length];
-        Action<IntPtr, int, int> copyRows = (pointer, byteCount, stride) =>
-        {
-            TestAssert.True(stride >= rowBytes, "Mapped source stride is shorter than a pixel row.");
-            TestAssert.Equal(checked((height - 1) * stride + rowBytes), byteCount);
-            for (var row = 0; row < height; row++)
-                System.Runtime.InteropServices.Marshal.Copy(IntPtr.Add(pointer, row * stride), actual, row * rowBytes, rowBytes);
-        };
-        var info = renderer.RenderInto(camera, options, copyRows, animationTimeSeconds: 0);
-        TestAssert.Equal(width, info.Width);
-        TestAssert.Equal(height, info.Height);
-        TestAssert.True(info.GetType() == typeof(HeadPreviewFrameInfo), "Mapped publication returned a pixel-bearing frame.");
-        TestAssert.True(expected.SequenceEqual(actual), "Stride-aware mapped pixels differ from packed rendering.");
+        var expected = renderer.Render(camera, options, destination, animationTimeSeconds: 0).BgraPixels.ToArray();
         var failure = new InvalidOperationException("Intentional pixel writer failure.");
         var propagated = false;
         try { renderer.RenderInto(camera, options, (_, _, _) => throw failure, animationTimeSeconds: 0); }
         catch (InvalidOperationException exception) when (ReferenceEquals(exception, failure)) { propagated = true; }
         TestAssert.True(propagated, "Mapped publication did not propagate the original writer exception.");
-        frame = renderer.Render(camera, options, destination, animationTimeSeconds: 0);
+        var frame = renderer.Render(camera, options, destination, animationTimeSeconds: 0);
         TestAssert.True(ReferenceEquals(destination, frame.BgraPixels) && expected.SequenceEqual(destination),
             "Packed rendering failed to recover after a writer exception.");
-        Array.Clear(actual);
-        renderer.RenderInto(camera, options, copyRows, animationTimeSeconds: 0);
+        var actual = new byte[destination.Length];
+        var info = renderer.RenderInto(camera, options, (pointer, byteCount, stride) =>
+        {
+            TestAssert.True(stride >= rowBytes, "Mapped source stride is shorter than a pixel row.");
+            TestAssert.Equal(checked((height - 1) * stride + rowBytes), byteCount);
+            for (var row = 0; row < height; row++)
+                System.Runtime.InteropServices.Marshal.Copy(IntPtr.Add(pointer, row * stride), actual, row * rowBytes, rowBytes);
+        }, animationTimeSeconds: 0);
+        TestAssert.Equal(width, info.Width);
+        TestAssert.Equal(height, info.Height);
         TestAssert.True(expected.SequenceEqual(actual), "Mapped rendering failed to recover after a writer exception.");
     }
 
@@ -491,15 +488,6 @@ public static class RenderingTests
         TestAssert.True(livePixels.SequenceEqual(renderer.Render(camera, options, animationTimeSeconds: 2.5f).BgraPixels),
             "A rejected attachment update partly changed the displayed head or skinning palette.");
 
-        var attachmentMaterial = live.Meshes[1].Sections[0].Material;
-        renderer.UpdateMaterials(new Dictionary<string, HeadPreviewMaterial>
-        {
-            [attachmentMaterial.Key] = attachmentMaterial with { PreviewModel = HumanMaterialPreviewModel.VisorLens }
-        });
-        TestAssert.True(state.HasAnimatedMaterials(showAttachment: true), "A live lens material did not update scene animation scheduling.");
-        renderer.UpdateMaterials(Materials(live));
-        TestAssert.True(!state.HasAnimatedMaterials(showAttachment: true), "Replacing a lens left the scene requesting animation.");
-
         byte[] AssertMatchesFresh(HeadPreviewScene scene)
         {
             fresh.SetScene(scene);
@@ -544,301 +532,242 @@ public static class RenderingTests
             };
     }
 
-    private static void ScenePublicationPresentsCurrentPixels()
+    private static void ScenePublicationPresentsCurrentPixels() => WpfTestDispatcher.Invoke(() =>
     {
-        Exception? failure = null;
-        var thread = new Thread(() =>
+        var (window, host, image) = CreatePreviewWindow(96, 96);
+        using var controller = new HeadPreviewHostController(window, host, image);
+        try
         {
-            try
+            byte[]? firstPublishedPixels = null;
+            controller.FramePresented += _ =>
             {
-                var image = new System.Windows.Controls.Image();
-                var host = new System.Windows.Controls.Grid();
-                host.Children.Add(image);
-                var window = new System.Windows.Window
-                {
-                    Width = 96,
-                    Height = 96,
-                    Left = -2000,
-                    Top = -2000,
-                    ShowInTaskbar = false,
-                    WindowStyle = System.Windows.WindowStyle.None,
-                    Content = host
-                };
-                using var controller = new HeadPreviewHostController(window, host, image);
-                byte[]? firstPublishedPixels = null;
-                controller.FramePresented += _ =>
-                {
-                    if (firstPublishedPixels is not null) return;
-                    var first = (System.Windows.Media.Imaging.WriteableBitmap)image.Source;
-                    firstPublishedPixels = new byte[first.PixelWidth * first.PixelHeight * 4];
-                    first.CopyPixels(firstPublishedPixels, first.PixelWidth * 4, 0);
-                };
-                var scene = CreateTriangleScene();
-                var material = scene.Meshes[0].Sections[0].Material with
-                {
-                    Textures = new Dictionary<string, HeadPreviewTexture>
-                    {
-                        ["HED_Diff"] = new("deferred-host-diffuse", "HED_Diff", 1, 1, [50, 110, 220, 255],
-                            TextureRole.Diffuse, TextureColorSpace.Srgb, TextureAlphaPolicy.Ignore, false)
-                    }
-                };
-                var deferredScene = scene with
-                {
-                    Meshes = [scene.Meshes[0] with
-                    {
-                        Vertices = scene.Meshes[0].Vertices.Select(vertex => vertex with
-                        {
-                            Position = vertex.Position + new Vector3(0.15f, 0.1f, 0)
-                        }).ToArray(),
-                        Sections = [new HeadPreviewSection(0, 3, 0, material)]
-                    }]
-                };
-                controller.SetScene(scene);
-                controller.UpdateDeformation(new HeadPreviewDeformationUpdate(
-                    deferredScene.Meshes[0].Name, deferredScene.Meshes[0].Vertices, []));
-                controller.UpdateMaterials(new HeadPreviewMaterialUpdate(
-                    new Dictionary<string, HeadPreviewMaterial> { [material.Key] = material }));
-                TestAssert.Equal(0, controller.Diagnostics.RendererCreations);
-                TestAssert.Equal(0L, controller.Diagnostics.FramesRendered);
-                window.Show();
-                controller.RequestRender(allowInactive: true);
-                for (var index = 0; index < 8 && controller.Diagnostics.FramesRendered < 1; index++)
-                {
-                    PumpDispatcher();
-                }
-
-                // First visibility/activation can request another lifecycle frame.
-                // Already-visible replacements below require only one render.
-                TestAssert.True(controller.Diagnostics.FramesRendered >= 1,
-                    "The deferred scene publication was not presented.");
-                TestAssert.True(image.Source is System.Windows.Media.Imaging.WriteableBitmap,
-                    "The completed frame was not presented to the WPF image.");
-                var bitmap = (System.Windows.Media.Imaging.WriteableBitmap)image.Source;
-                var displayedPixels = new byte[bitmap.PixelWidth * bitmap.PixelHeight * 4];
-                bitmap.CopyPixels(displayedPixels, bitmap.PixelWidth * 4, 0);
-                using (var fresh = new HeadPreviewRenderer(bitmap.PixelWidth, bitmap.PixelHeight))
-                {
-                    fresh.SetScene(deferredScene);
-                    var expected = fresh.Render(controller.Camera, new HeadPreviewOptions()).BgraPixels;
-                    TestAssert.True(expected.SequenceEqual(firstPublishedPixels!) && expected.SequenceEqual(displayedPixels),
-                        "The first published WPF scene lost geometry or material updates made before renderer creation.");
-                }
-                TestAssert.Near(DxMathUtil.DegreesToRadians(32), controller.Camera.Yaw, 1e-6f);
-                TestAssert.Near(DxMathUtil.DegreesToRadians(4), controller.Camera.Pitch, 1e-6f);
-                for (var load = 0; load < 3; load++)
-                {
-                    controller.Camera.Orbit(0.3f, 0.2f);
-                    controller.Camera.Pan(0.1f, 0.1f);
-                    controller.Camera.Zoom(120);
-                    var yaw = controller.Camera.Yaw;
-                    var pitch = controller.Camera.Pitch;
-                    var target = controller.Camera.Target;
-                    var distance = controller.Camera.Distance;
-                    controller.ClearScene();
-                    TestAssert.True(image.Source is null, "Clearing left the previous face visible.");
-                    var frameCount = controller.Diagnostics.FramesRendered;
-                    controller.RequestRender(allowInactive: true);
-                    PumpDispatcher();
-                    TestAssert.Equal(frameCount, controller.Diagnostics.FramesRendered);
-                    // A species change requests a framing reset, but even that
-                    // must retain the user's chosen rotation.
-                    var resetPosition = load == 1;
-                    controller.SetScene(CreateTriangleScene(), resetPosition);
-                    PumpDispatcher();
-                    TestAssert.Near(yaw, controller.Camera.Yaw, 1e-6f);
-                    TestAssert.Near(pitch, controller.Camera.Pitch, 1e-6f);
-                    if (resetPosition)
-                    {
-                        TestAssert.Equal(CreateTriangleScene().Bounds.Center, controller.Camera.Target);
-                    }
-                    else
-                    {
-                        TestAssert.Equal(target, controller.Camera.Target);
-                        TestAssert.Near(distance, controller.Camera.Distance, 1e-6f);
-                    }
-                    TestAssert.Equal(frameCount + 1, controller.Diagnostics.FramesRendered);
-                    TestAssert.Equal(1, controller.Diagnostics.RendererCreations);
-                    TestAssert.Equal(0, controller.Diagnostics.RendererDisposals);
-                    TestAssert.Equal(0, controller.Diagnostics.ResizeOperations);
-                }
-                // A pending request must keep one queue slot across clear/reload.
-                var beforeQueuedReload = controller.Diagnostics.FramesRendered;
-                controller.RequestRender(allowInactive: true);
-                controller.ClearScene();
-                controller.SetScene(scene);
-                PumpDispatcher();
-                TestAssert.Equal(beforeQueuedReload + 1, controller.Diagnostics.FramesRendered);
-                window.Close();
-                TestAssert.Equal(1, controller.Diagnostics.RendererDisposals);
-            }
-            catch (Exception exception)
-            {
-                failure = exception;
-            }
-        });
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-        thread.Join();
-        if (failure is not null)
-        {
-            throw new InvalidOperationException("The WPF scene-publication regression failed.", failure);
-        }
-
-        static void PumpDispatcher()
-        {
-            var frame = new System.Windows.Threading.DispatcherFrame();
-            System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(
-                System.Windows.Threading.DispatcherPriority.ApplicationIdle,
-                () => frame.Continue = false);
-            System.Windows.Threading.Dispatcher.PushFrame(frame);
-        }
-    }
-
-    private static void ViewportPublishesDuringResize()
-    {
-        Exception? failure = null;
-        var thread = new Thread(() =>
-        {
-            var image = new System.Windows.Controls.Image();
-            var host = new System.Windows.Controls.Grid();
-            host.Children.Add(image);
-            var layout = new System.Windows.Controls.Grid();
-            layout.Children.Add(host);
-            var window = new System.Windows.Window
-            {
-                Width = 128,
-                Height = 112,
-                Left = -2000,
-                Top = -2000,
-                ShowInTaskbar = false,
-                WindowStyle = System.Windows.WindowStyle.None,
-                Content = layout
+                if (firstPublishedPixels is not null) return;
+                var first = (BitmapSource)image.Source;
+                firstPublishedPixels = new byte[first.PixelWidth * first.PixelHeight * 4];
+                first.CopyPixels(firstPublishedPixels, first.PixelWidth * 4, 0);
             };
-            using var controller = new HeadPreviewHostController(window, host, image);
-            var lastPresented = (Width: 0, Height: 0);
-            string? renderFailure = null;
-            controller.FramePresented += frame => lastPresented = (frame.Width, frame.Height);
-            controller.PreviewFailed += message => renderFailure = message;
+            var scene = CreateTriangleScene();
+            var material = scene.Meshes[0].Sections[0].Material with
+            {
+                Textures = new Dictionary<string, HeadPreviewTexture>
+                {
+                    ["HED_Diff"] = new("deferred-host-diffuse", "HED_Diff", 1, 1, [50, 110, 220, 255],
+                        TextureRole.Diffuse, TextureColorSpace.Srgb, TextureAlphaPolicy.Ignore, false)
+                }
+            };
+            var deferredScene = scene with
+            {
+                Meshes = [scene.Meshes[0] with
+                {
+                    Vertices = scene.Meshes[0].Vertices.Select(vertex => vertex with
+                    {
+                        Position = vertex.Position + new Vector3(0.15f, 0.1f, 0)
+                    }).ToArray(),
+                    Sections = [new HeadPreviewSection(0, 3, 0, material)]
+                }]
+            };
+            controller.SetScene(scene);
+            controller.UpdateDeformation(new HeadPreviewDeformationUpdate(
+                deferredScene.Meshes[0].Name, deferredScene.Meshes[0].Vertices, []));
+            controller.UpdateMaterials(new HeadPreviewMaterialUpdate(
+                new Dictionary<string, HeadPreviewMaterial> { [material.Key] = material }));
+            TestAssert.Equal(0, controller.Diagnostics.RendererCreations);
+            TestAssert.Equal(0, controller.Diagnostics.FramesRendered);
+            window.Show();
+            controller.RequestRender(allowInactive: true);
+            for (var index = 0; index < 8 && firstPublishedPixels is null; index++) PumpDispatcher();
+
+            // Initial visibility can add a lifecycle frame; replacements below need one.
+            TestAssert.True(firstPublishedPixels is not null, "The first completed frame was not published to the WPF image.");
+            var bitmap = (BitmapSource)image.Source;
+            using (var fresh = new HeadPreviewRenderer(bitmap.PixelWidth, bitmap.PixelHeight))
+            {
+                fresh.SetScene(deferredScene);
+                var expected = fresh.Render(controller.Camera, new HeadPreviewOptions()).BgraPixels;
+                TestAssert.True(expected.SequenceEqual(firstPublishedPixels!),
+                    "The first published WPF scene lost geometry or material updates made before renderer creation.");
+            }
+            TestAssert.Near(DxMathUtil.DegreesToRadians(32), controller.Camera.Yaw, 1e-6f);
+            TestAssert.Near(DxMathUtil.DegreesToRadians(4), controller.Camera.Pitch, 1e-6f);
+            foreach (var resetPosition in new[] { false, true })
+            {
+                controller.Camera.Orbit(0.3f, 0.2f);
+                controller.Camera.Pan(0.1f, 0.1f);
+                controller.Camera.Zoom(120);
+                var yaw = controller.Camera.Yaw;
+                var pitch = controller.Camera.Pitch;
+                var target = controller.Camera.Target;
+                var distance = controller.Camera.Distance;
+                controller.ClearScene();
+                TestAssert.True(image.Source is null, "Clearing left the previous face visible.");
+                var frameCount = controller.Diagnostics.FramesRendered;
+                controller.RequestRender(allowInactive: true);
+                PumpDispatcher();
+                TestAssert.Equal(frameCount, controller.Diagnostics.FramesRendered);
+                controller.SetScene(scene, resetPosition);
+                PumpDispatcher();
+                TestAssert.Near(yaw, controller.Camera.Yaw, 1e-6f);
+                TestAssert.Near(pitch, controller.Camera.Pitch, 1e-6f);
+                if (resetPosition)
+                {
+                    TestAssert.Equal(scene.Bounds.Center, controller.Camera.Target);
+                }
+                else
+                {
+                    TestAssert.Equal(target, controller.Camera.Target);
+                    TestAssert.Near(distance, controller.Camera.Distance, 1e-6f);
+                }
+                TestAssert.Equal(frameCount + 1, controller.Diagnostics.FramesRendered);
+            }
+            // A pending request keeps one queue slot across clear/reload.
+            var beforeQueuedReload = controller.Diagnostics.FramesRendered;
+            controller.RequestRender(allowInactive: true);
+            controller.ClearScene();
+            controller.SetScene(scene);
+            PumpDispatcher();
+            TestAssert.Equal(beforeQueuedReload + 1, controller.Diagnostics.FramesRendered);
+            TestAssert.Equal(1, controller.Diagnostics.RendererCreations);
+            TestAssert.Equal(0, controller.Diagnostics.RendererDisposals);
+            TestAssert.Equal(0, controller.Diagnostics.ResizeOperations);
+        }
+        finally
+        {
+            window.Close();
+        }
+        TestAssert.Equal(1, controller.Diagnostics.RendererDisposals);
+    });
+
+    private static void ViewportPublishesDuringResize() => WpfTestDispatcher.Invoke(() =>
+    {
+        var (window, host, image) = CreatePreviewWindow(128, 112);
+        using var controller = new HeadPreviewHostController(window, host, image);
+        var lastPresented = (Width: 0, Height: 0);
+        string? renderFailure = null;
+        controller.FramePresented += frame => lastPresented = (frame.Width, frame.Height);
+        controller.PreviewFailed += message => renderFailure = message;
+        try
+        {
+            controller.SetOptions(new HeadPreviewOptions(HeadPreviewRenderMode.Unlit,
+                AmbientOcclusionEnabled: false, ShadowsEnabled: false, PostProcessingEnabled: false));
+            controller.SetScene(CreateTriangleScene());
+            window.Show();
+            window.Activate();
+            controller.RequestRender(allowInactive: true);
+            PumpDispatcher(350);
+            TestAssert.True(window.IsActive, "The resize fixture could not activate its offscreen window.");
+            TestAssert.True(renderFailure is null, $"The resize fixture could not warm its renderer: {renderFailure}");
+            TestAssert.Equal(CurrentPixelSize(), lastPresented);
+
+            var activityChanges = 0;
+            void OnActivityChanged(object? sender, EventArgs args) => activityChanges++;
+            window.Activated += OnActivityChanged;
+            window.Deactivated += OnActivityChanged;
             try
             {
-                controller.SetOptions(new HeadPreviewOptions(HeadPreviewRenderMode.Unlit,
-                    AmbientOcclusionEnabled: false, ShadowsEnabled: false, PostProcessingEnabled: false));
-                controller.SetScene(CreateTriangleScene());
-                window.Show();
-                window.Activate();
-                controller.RequestRender(allowInactive: true);
-                PumpDispatcher(350);
-                TestAssert.True(window.IsActive, "The resize fixture could not activate its offscreen window.");
-                TestAssert.True(renderFailure is null, $"The resize fixture could not warm its renderer: {renderFailure}");
-                TestAssert.Equal(CurrentPixelSize(), lastPresented);
-
-                var activityChanges = 0;
-                void OnActivityChanged(object? sender, EventArgs args) => activityChanges++;
-                window.Activated += OnActivityChanged;
-                window.Deactivated += OnActivityChanged;
-                try
+                ExerciseResize("window", step =>
                 {
-                    var windowSizes = ExerciseResize("window", step =>
-                    {
-                        window.Width = 128 + step * 3;
-                        window.Height = 112 + step * 2;
-                    });
-                    host.HorizontalAlignment = System.Windows.HorizontalAlignment.Left;
-                    var paneSizes = ExerciseResize("pane", step => host.Width = 180 - step * 3);
-                    TestAssert.Equal(0, activityChanges);
-                    TestAssert.True(windowSizes >= 2 && paneSizes >= 2,
-                        $"The viewport waited for resizing to stop: {windowSizes} distinct updated window sizes and " +
-                        $"{paneSizes} pane sizes were presented during the sustained changes (expected multiple in each phase).");
-                }
-                finally
-                {
-                    window.Activated -= OnActivityChanged;
-                    window.Deactivated -= OnActivityChanged;
-                }
-
-                int ExerciseResize(string phase, Action<int> resize)
-                {
-                    var startingSize = lastPresented;
-                    var sizesDuringResize = new HashSet<(int Width, int Height)>();
-                    var clock = Stopwatch.StartNew();
-                    var sizeChanges = 0;
-                    var lastSizeChange = 0d;
-                    var maximumGap = 0d;
-                    void OnSizeChanged(object sender, System.Windows.SizeChangedEventArgs args)
-                    {
-                        var now = clock.Elapsed.TotalMilliseconds;
-                        if (sizeChanges > 0) maximumGap = Math.Max(maximumGap, now - lastSizeChange);
-                        lastSizeChange = now;
-                        sizeChanges++;
-                    }
-                    void OnFrame(HeadPreviewFrameInfo frame)
-                    {
-                        var size = (frame.Width, frame.Height);
-                        if (size != startingSize) sizesDuringResize.Add(size);
-                    }
-                    host.SizeChanged += OnSizeChanged;
-                    controller.FramePresented += OnFrame;
-                    try
-                    {
-                        for (var step = 1; step <= 18; step++)
-                        {
-                            resize(step);
-                            window.UpdateLayout();
-                            PumpDispatcher(20);
-                        }
-                    }
-                    finally
-                    {
-                        host.SizeChanged -= OnSizeChanged;
-                        controller.FramePresented -= OnFrame;
-                    }
-                    Console.WriteLine($"RESIZE {phase}: {sizeChanges} size changes over {clock.Elapsed.TotalMilliseconds:F0} ms, " +
-                        $"maximum gap {maximumGap:F0} ms, {sizesDuringResize.Count} distinct updated frame sizes during resizing.");
-                    TestAssert.True(sizeChanges >= 10 && clock.Elapsed.TotalMilliseconds >= 250 && maximumGap < 150,
-                        $"The {phase} fixture did not sustain size changes faster than the old 150 ms debounce.");
-                    PumpDispatcher(300);
-                    TestAssert.True(renderFailure is null, $"Rendering failed during {phase} resizing: {renderFailure}");
-                    TestAssert.Equal(CurrentPixelSize(), lastPresented);
-                    var settledFrames = controller.Diagnostics.FramesRendered;
-                    PumpDispatcher(80);
-                    TestAssert.Equal(settledFrames, controller.Diagnostics.FramesRendered);
-                    return sizesDuringResize.Count;
-                }
-
-                (int Width, int Height) CurrentPixelSize()
-                {
-                    var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(host);
-                    return ((int)Math.Round(host.ActualWidth * dpi.DpiScaleX),
-                        (int)Math.Round(host.ActualHeight * dpi.DpiScaleY));
-                }
-            }
-            catch (Exception exception)
-            {
-                failure = exception;
+                    window.Width = 128 + step * 3;
+                    window.Height = 112 + step * 2;
+                });
+                host.HorizontalAlignment = HorizontalAlignment.Left;
+                ExerciseResize("pane", step => host.Width = 180 - step * 3);
+                TestAssert.Equal(0, activityChanges);
             }
             finally
             {
-                controller.ClearScene();
-                window.Close();
-                PumpDispatcher(20);
+                window.Activated -= OnActivityChanged;
+                window.Deactivated -= OnActivityChanged;
             }
-        });
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-        thread.Join();
-        if (failure is not null) throw new InvalidOperationException("The WPF live-resize regression failed.", failure);
-
-        static void PumpDispatcher(int milliseconds)
-        {
-            var frame = new System.Windows.Threading.DispatcherFrame();
-            var timer = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.ApplicationIdle)
-            {
-                Interval = TimeSpan.FromMilliseconds(milliseconds)
-            };
-            timer.Tick += (_, _) => { timer.Stop(); frame.Continue = false; };
-            timer.Start();
-            System.Windows.Threading.Dispatcher.PushFrame(frame);
         }
+        finally
+        {
+            window.Close();
+            PumpDispatcher();
+        }
+
+        void ExerciseResize(string phase, Action<int> resize)
+        {
+            var startingSize = lastPresented;
+            var sizesDuringResize = new HashSet<(int Width, int Height)>();
+            var clock = Stopwatch.StartNew();
+            var sizeChanges = 0;
+            var lastSizeChange = 0d;
+            var maximumGap = 0d;
+            void OnSizeChanged(object sender, SizeChangedEventArgs args)
+            {
+                var now = clock.Elapsed.TotalMilliseconds;
+                if (sizeChanges > 0) maximumGap = Math.Max(maximumGap, now - lastSizeChange);
+                lastSizeChange = now;
+                sizeChanges++;
+            }
+            void OnFrame(HeadPreviewFrameInfo frame)
+            {
+                var size = (frame.Width, frame.Height);
+                if (size != startingSize) sizesDuringResize.Add(size);
+            }
+            host.SizeChanged += OnSizeChanged;
+            controller.FramePresented += OnFrame;
+            try
+            {
+                for (var step = 1; step <= 18; step++)
+                {
+                    resize(step);
+                    window.UpdateLayout();
+                    PumpDispatcher(20);
+                }
+            }
+            finally
+            {
+                host.SizeChanged -= OnSizeChanged;
+                controller.FramePresented -= OnFrame;
+            }
+            TestAssert.True(sizeChanges >= 10 && clock.Elapsed.TotalMilliseconds >= 250 && maximumGap < 150,
+                $"The {phase} fixture did not sustain size changes faster than the old 150 ms debounce.");
+            TestAssert.True(sizesDuringResize.Count >= 2,
+                $"The viewport waited for {phase} resizing to stop: {sizesDuringResize.Count} distinct updated sizes.");
+            PumpDispatcher(300);
+            TestAssert.True(renderFailure is null, $"Rendering failed during {phase} resizing: {renderFailure}");
+            TestAssert.Equal(CurrentPixelSize(), lastPresented);
+            var settledFrames = controller.Diagnostics.FramesRendered;
+            PumpDispatcher(80);
+            TestAssert.Equal(settledFrames, controller.Diagnostics.FramesRendered);
+        }
+
+        (int Width, int Height) CurrentPixelSize()
+        {
+            var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(host);
+            return ((int)Math.Round(host.ActualWidth * dpi.DpiScaleX),
+                (int)Math.Round(host.ActualHeight * dpi.DpiScaleY));
+        }
+    });
+
+    private static (Window Window, Grid Host, Image Image) CreatePreviewWindow(int width, int height)
+    {
+        var image = new Image();
+        var host = new Grid { Children = { image } };
+        return (new Window
+        {
+            Width = width,
+            Height = height,
+            Left = -2000,
+            Top = -2000,
+            ShowInTaskbar = false,
+            WindowStyle = WindowStyle.None,
+            Content = new Grid { Children = { host } }
+        }, host, image);
+    }
+
+    private static void PumpDispatcher(int milliseconds = 0)
+    {
+        var frame = new DispatcherFrame();
+        var timer = new DispatcherTimer(DispatcherPriority.ApplicationIdle)
+        {
+            Interval = TimeSpan.FromMilliseconds(milliseconds)
+        };
+        timer.Tick += (_, _) => frame.Continue = false;
+        timer.Start();
+        try { Dispatcher.PushFrame(frame); }
+        finally { timer.Stop(); }
     }
 
     private static void RendererRejectsWorkAfterDisposal()

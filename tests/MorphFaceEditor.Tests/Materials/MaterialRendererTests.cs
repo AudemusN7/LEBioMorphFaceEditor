@@ -68,6 +68,7 @@ public static class MaterialRendererTests
                 ["HED_EyeShadow_Tint_Scalar"] = 0
             }
         };
+        using var fresh = new HeadPreviewRenderer(96, 96);
         var originalPixels = UpdateAndCompare(original);
         var vectorPixels = UpdateAndCompare(vectorEdit);
         TestAssert.True(!originalPixels.SequenceEqual(vectorPixels),
@@ -95,7 +96,6 @@ public static class MaterialRendererTests
 
         byte[] AssertMatchesFresh(HeadPreviewMaterial material)
         {
-            using var fresh = new HeadPreviewRenderer(96, 96);
             fresh.SetScene(SceneWithMaterial(material));
             byte[] unlitPixels = [];
             foreach (var mode in new[] { HeadPreviewRenderMode.Shaded, HeadPreviewRenderMode.Unlit,

@@ -51,7 +51,7 @@ public partial class MainWindow : Window
         _viewModel.PreviewOptionsChanged += OnPreviewOptionsChanged;
         _viewModel.ExitRequested += OnExitRequested;
         _previewHost.FramePresented += _viewModel.SetFrameStatus;
-        _previewHost.PreviewFailed += _viewModel.SetPreviewError;
+        _previewHost.PreviewFailed += OnPreviewFailed;
         Closing += OnClosing;
         Closed += OnClosed;
         LayoutUpdated += OnPaneLayoutUpdated;
@@ -151,6 +151,12 @@ public partial class MainWindow : Window
         _previewHost.SetScene(scene, resetPosition);
 
     private void OnPreviewCleared(object? sender, EventArgs e) => _previewHost.ClearScene();
+
+    private void OnPreviewFailed(Exception exception)
+    {
+        AppLog.Error("PREVIEW:FRAME-FAILED", exception);
+        _viewModel.SetPreviewError(Loc.Format("loc_MainWindow_LiveDeformationPreviewFailedLog", AppLog.FilePath));
+    }
 
     private void OnExitRequested(object? sender, EventArgs e) => Close();
 
@@ -413,7 +419,7 @@ public partial class MainWindow : Window
         _viewModel.PreviewOptionsChanged -= OnPreviewOptionsChanged;
         _viewModel.ExitRequested -= OnExitRequested;
         _previewHost.FramePresented -= _viewModel.SetFrameStatus;
-        _previewHost.PreviewFailed -= _viewModel.SetPreviewError;
+        _previewHost.PreviewFailed -= OnPreviewFailed;
         _orbitInput.Dispose();
         _previewHost.Dispose();
     }

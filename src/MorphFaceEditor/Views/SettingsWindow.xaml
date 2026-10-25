@@ -63,7 +63,7 @@
                             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                             <TextBlock Text="{DynamicResource loc_Settings_AccentColour}" VerticalAlignment="Center" />
                             <Button x:Name="AccentColourButton" Grid.Column="1" Click="OnAccentColourClick"
-                                    Padding="4" AutomationProperties.Name="{DynamicResource loc_Settings_AccentAutomation}" ToolTip="{DynamicResource loc_Settings_AccentTooltip}">
+                                    Padding="4" AutomationProperties.Name="{DynamicResource loc_Settings_AccentColour}" ToolTip="{DynamicResource loc_Settings_AccentTooltip}">
                                 <Border Width="56" Height="24" Background="{DynamicResource Accent}"
                                         BorderBrush="{DynamicResource SwatchBorder}" BorderThickness="1" CornerRadius="2" />
                             </Button>

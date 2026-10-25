@@ -47,7 +47,7 @@ public sealed class HeadPreviewHostController : IDisposable
     }
 
     public event Action<HeadPreviewFrameInfo>? FramePresented;
-    public event Action<string>? PreviewFailed;
+    public event Action<Exception>? PreviewFailed;
 
     public HeadPreviewDiagnostics Diagnostics { get; } = new();
     public HeadOrbitCamera Camera => _camera;
@@ -188,7 +188,7 @@ public sealed class HeadPreviewHostController : IDisposable
         catch (Exception exception)
         {
             _animationTimer.Stop();
-            PreviewFailed?.Invoke(exception.Message);
+            PreviewFailed?.Invoke(exception);
         }
     }
 

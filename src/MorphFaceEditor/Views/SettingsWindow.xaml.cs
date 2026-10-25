@@ -57,7 +57,7 @@ public partial class SettingsWindow : Window
         catch (Exception exception) when (exception is System.IO.IOException or UnauthorizedAccessException)
         {
             UpdateLanguageSelection();
-            OperationStatus.Text = Loc.Format("loc_Settings_LanguageSaveFailed", exception.Message);
+            OperationStatus.Text = Loc.Format("loc_Settings_LanguageSaveFailed", UserFacingMessageFormatter.Format(exception));
         }
     }
 
@@ -75,7 +75,7 @@ public partial class SettingsWindow : Window
         catch (Exception exception) when (exception is System.IO.IOException or UnauthorizedAccessException)
         {
             UpdateThemeSelection();
-            OperationStatus.Text = Loc.Format("loc_Settings_ThemeSaveFailed", exception.Message);
+            OperationStatus.Text = Loc.Format("loc_Settings_ThemeSaveFailed", UserFacingMessageFormatter.Format(exception));
         }
     }
     private void OnAccentColourClick(object sender, RoutedEventArgs e)
@@ -111,7 +111,7 @@ public partial class SettingsWindow : Window
         catch (Exception exception)
         {
             OperationStatus.Text = Loc.Text("loc_Settings_ExportFailed");
-            _ = new EditorMessageWindow(Loc.Text("loc_Settings_ExportFailedTitle"), exception.Message)
+            _ = new EditorMessageWindow(Loc.Text("loc_Settings_ExportFailedTitle"), UserFacingMessageFormatter.Format(exception))
                 { Owner = this }.ShowDialog();
         }
         finally { SetOperating(false); }
@@ -122,7 +122,7 @@ public partial class SettingsWindow : Window
         if (_operating || _viewModel.IsBusy) return;
         var confirmation = new EditorMessageWindow(Loc.Text("loc_Settings_ClearQuestion"),
             Loc.Text("loc_Settings_ClearConfirmation"),
-            confirmation: true, primaryLabel: Loc.Text("loc_Settings_ClearExit"), secondaryLabel: Loc.Text("loc_Settings_Cancel")) { Owner = this };
+            confirmation: true, primaryLabel: Loc.Text("loc_Settings_ClearExit"), secondaryLabel: Loc.Text("loc_Common_Cancel")) { Owner = this };
         if (confirmation.ShowDialog() != true) return;
         SetOperating(true);
         try

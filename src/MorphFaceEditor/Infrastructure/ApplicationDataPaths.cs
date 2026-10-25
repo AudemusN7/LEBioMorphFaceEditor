@@ -21,7 +21,8 @@ internal sealed class ApplicationDataPaths(string localAppData)
             }
             catch (Exception exception)
             {
-                failures.Add($"{directory}: {exception.Message}");
+                AppLog.Error($"APPDATA:CLEAR-FAILED {directory}", exception);
+                failures.Add(Loc.Format("loc_App_CleanupFolderUnavailable", directory));
             }
         }
         return failures;

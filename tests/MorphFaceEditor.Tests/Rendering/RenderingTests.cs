@@ -644,7 +644,7 @@ public static class RenderingTests
         var lastPresented = (Width: 0, Height: 0);
         string? renderFailure = null;
         controller.FramePresented += frame => lastPresented = (frame.Width, frame.Height);
-        controller.PreviewFailed += message => renderFailure = message;
+        controller.PreviewFailed += exception => renderFailure = exception.ToString();
         try
         {
             controller.SetOptions(new HeadPreviewOptions(HeadPreviewRenderMode.Unlit,

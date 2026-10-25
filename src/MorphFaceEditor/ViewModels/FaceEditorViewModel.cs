@@ -382,6 +382,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     public bool CanFixMorph => _session.CanFixMorph;
     public bool HasPendingRepair => _session.HasPendingRepair;
     public string? EditBlockReason => _session.EditBlockReason;
+    public MorphEditBlockReason? EditBlock => _session.EditBlock;
     public bool CanRandomise => CanRandomiseScope(GlobalRandomisationScope(), includeCursedBones: true);
     public bool AllowsMorphRandomisation => CanEditMorphFeatures && _allowsMorphRandomisation;
     public bool AllowsMaterialRandomisation =>
@@ -572,7 +573,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     /// <summary>Runs the same global operation as the editor command and exposes completion to automation.</summary>
     public Task RandomiseAsync()
     {
-        if (!CanRandomise) throw new InvalidOperationException(Loc.Text("loc_VM_faceEditor_noRandomisationScope"));
+        if (!CanRandomise) throw Loc.Error(new InvalidOperationException(Loc.Text("loc_VM_faceEditor_noRandomisationScope")));
         return RandomiseCoreAsync(GlobalRandomisationScope(), includeCursedBones: true, propagateErrors: true);
     }
 

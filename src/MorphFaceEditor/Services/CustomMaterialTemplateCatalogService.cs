@@ -185,7 +185,7 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
             {
                 warnings.Add(
                     Loc.Format("loc_Services_CustomTemplate_SourceCouldNotBeRead", source.MeshInstancedPath,
-                        source.PackageFileName, exception.Message));
+                        source.PackageFileName, UserFacingMessageFormatter.Format(exception)));
                 continue;
             }
 
@@ -246,7 +246,8 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
         }
         catch (Exception exception)
         {
-            warnings.Add(Loc.Format("loc_Services_CustomTemplate_TextureDatabaseRequired", game, exception.Message));
+            warnings.Add(Loc.Format("loc_Services_CustomTemplate_TextureDatabaseRequired", game,
+                UserFacingMessageFormatter.Format(exception)));
             return;
         }
 
@@ -274,7 +275,8 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
             {
                 warnings.Add(candidates.Length == 0
                     ? Loc.Format("loc_Services_CustomTemplate_NoMaterialBearingHead", game, SourceLabel(source))
-                    : Loc.Format("loc_Services_CustomTemplate_NoIndexedHeadEvidence", SourceLabel(source), lastFailure?.Message));
+                    : Loc.Format("loc_Services_CustomTemplate_NoIndexedHeadEvidence", SourceLabel(source),
+                        lastFailure is null ? string.Empty : UserFacingMessageFormatter.Format(lastFailure)));
                 continue;
             }
 
@@ -374,13 +376,14 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
                     {
                         warnings.Add(
                             Loc.Format("loc_Services_CustomTemplate_PreviewAttachmentSkipped", entry.InstancedPath,
-                                fileName, exception.Message));
+                                fileName, UserFacingMessageFormatter.Format(exception)));
                     }
                 }
             }
             catch (Exception exception)
             {
-                warnings.Add(Loc.Format("loc_Services_CustomTemplate_PreviewAttachmentCatalogueUnreadable", fileName, exception.Message));
+                warnings.Add(Loc.Format("loc_Services_CustomTemplate_PreviewAttachmentCatalogueUnreadable", fileName,
+                    UserFacingMessageFormatter.Format(exception)));
             }
         }
         return results

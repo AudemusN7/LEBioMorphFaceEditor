@@ -49,7 +49,7 @@ public sealed class MeshMaterialFileService(PackageReferenceService references)
         AssetIdentity? hair, IReadOnlyList<AssetIdentity?> accessories, MorphFaceGame? game = null)
     {
         if (!MeshMaterialInterchange.CanExportTse(workspace))
-            throw new InvalidOperationException(Loc.Text("loc_Services_MeshMaterial_TseExportRequiresHumanMaterial"));
+            throw Loc.Error(new InvalidOperationException(Loc.Text("loc_Services_MeshMaterial_TseExportRequiresHumanMaterial")));
         var human = MeshMaterialInterchange.Split(QualifyTexturePaths(data)).GetValueOrDefault("human")
             ?? new MorphFaceMaterialData([], [], []);
         return MaterialRonCodec.WriteTse(human, AttachmentPath(hair), accessories.OfType<AssetIdentity>()
@@ -70,9 +70,9 @@ public sealed class MeshMaterialFileService(PackageReferenceService references)
         if (isTse)
         {
             if (!MeshMaterialInterchange.CanImportTse(workspace))
-                throw new InvalidOperationException(Loc.Text(tse
+                throw Loc.Error(new InvalidOperationException(Loc.Text(tse
                     ? "loc_Services_MeshMaterial_AssignHumanBeforeTseImport"
-                    : "loc_Services_MeshMaterial_TseRonNeedsHumanMaterial"));
+                    : "loc_Services_MeshMaterial_TseRonNeedsHumanMaterial")));
             var document = MaterialRonCodec.ReadTseDocument(input);
             parameters = MeshMaterialInterchange.Scope(document.Parameters, "human");
             hair = document.HairMesh;
@@ -82,7 +82,7 @@ public sealed class MeshMaterialFileService(PackageReferenceService references)
         {
             var document = MaterialRonCodec.ReadMfe(input);
             if (document.Game != game.ToString())
-                throw new InvalidDataException(Loc.Format("loc_Services_MeshMaterial_GameMismatch", document.Game, game));
+                throw Loc.Error(new InvalidDataException(Loc.Format("loc_Services_MeshMaterial_GameMismatch", document.Game, game)));
             parameters = MeshMaterialInterchange.Flatten(document.Parameters);
             hair = document.HairMesh;
             accessories = document.AccessoryMeshes;
@@ -114,7 +114,8 @@ public sealed class MeshMaterialFileService(PackageReferenceService references)
         }
         catch (Exception exception)
         {
-            warnings.Add(Loc.Format("loc_Services_MeshMaterial_AttachmentsCouldNotResolve", game, exception.Message));
+            warnings.Add(Loc.Format("loc_Services_MeshMaterial_AttachmentsCouldNotResolve", game,
+                UserFacingMessageFormatter.Format(exception)));
             resolved = new Dictionary<string, AssetIdentity>(StringComparer.OrdinalIgnoreCase);
         }
         var validated = new Dictionary<string, AssetIdentity>(StringComparer.OrdinalIgnoreCase);
@@ -127,7 +128,8 @@ public sealed class MeshMaterialFileService(PackageReferenceService references)
             }
             catch (Exception exception)
             {
-                warnings.Add(Loc.Format("loc_Services_MeshMaterial_AttachmentCouldNotLoad", value.Key, exception.Message));
+                warnings.Add(Loc.Format("loc_Services_MeshMaterial_AttachmentCouldNotLoad", value.Key,
+                    UserFacingMessageFormatter.Format(exception)));
             }
         }
 
@@ -141,13 +143,13 @@ public sealed class MeshMaterialFileService(PackageReferenceService references)
             return (false, null);
         }
 
-        var hair = Resolve(hairMesh, "hair mesh");
+        var hair = Resolve(hairMesh, Loc.Text("loc_Services_MeshMaterial_HairMeshKind"));
         var accessoryPath = accessoryMeshes?.FirstOrDefault();
         var accessory = accessoryMeshes is null
             ? (Apply: false, Identity: (AssetIdentity?)null)
             : accessoryMeshes.Count == 0
                 ? (Apply: true, Identity: (AssetIdentity?)null)
-                : Resolve(accessoryPath, "accessory mesh");
+            : Resolve(accessoryPath, Loc.Text("loc_Services_MeshMaterial_AccessoryMeshKind"));
         if (accessoryMeshes is { Count: > 1 })
             warnings.Add(Loc.Format("loc_Services_MeshMaterial_ExtraAccessoriesIgnored", accessoryMeshes.Count));
         return new(hair.Apply, hair.Identity, accessory.Apply, accessory.Identity);
@@ -218,7 +220,8 @@ public sealed class MeshMaterialFileService(PackageReferenceService references)
             }
             catch (Exception exception)
             {
-                warnings.Add(Loc.Format("loc_Services_MeshMaterial_TexturePreviewFailed", reference.InstancedPath, exception.Message));
+                warnings.Add(Loc.Format("loc_Services_MeshMaterial_TexturePreviewFailed", reference.InstancedPath,
+                    UserFacingMessageFormatter.Format(exception)));
             }
         }
         return new(data, decoded, warnings);
@@ -258,7 +261,8 @@ public sealed class MeshMaterialFileService(PackageReferenceService references)
     {
         var path = Path.GetFullPath(destination);
         if (path.Equals(Path.GetFullPath(sourceMeshPath), StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("A material export cannot replace its source mesh.");
+            throw Loc.Error(new InvalidOperationException(Loc.Text(
+                "loc_Services_MeshMaterial_SourceMeshDestination")));
         var temporary = Path.Combine(Path.GetDirectoryName(path)!, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
         try
         {
@@ -290,7 +294,8 @@ public sealed class MeshMaterialFileService(PackageReferenceService references)
         if (identity is null) return "None";
         var path = QualifyPath(identity);
         if (!PlayerWorkspaceReferencePolicy.IsSeekFreeQualified(path))
-            throw new InvalidDataException($"Attachment '{identity.InstancedPath}' has no full seek-free path for TSE export.");
+            throw Loc.Error(new InvalidDataException(Loc.Format(
+                "loc_Services_MeshMaterial_UnqualifiedAttachmentPath", identity.InstancedPath)));
         return path;
     }
 }

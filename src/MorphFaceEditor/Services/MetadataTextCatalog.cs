@@ -602,104 +602,40 @@ internal static class MetadataTextCatalog
             ["Y_Tile"] = new(Loc.Text("loc_Services_MetadataText_Shared_y_tile_bd4565_Label"), Loc.Text("loc_Services_MetadataText_Shared_y_tile_bd4565_Description")),
         };
 
+    // Keep only profile overrides for reachable native controls; shared names remain available across profiles.
     private static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, MetadataText>> Archetypes =
         new Dictionary<string, IReadOnlyDictionary<string, MetadataText>>(StringComparer.OrdinalIgnoreCase)
         {
             [MorphFaceMetadataCatalogRegistry.Asari] =
                 new Dictionary<string, MetadataText>(StringComparer.OrdinalIgnoreCase)
                 {
-                    ["cheeks_gaunt"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Asari_cheeks_gaunt_3c8a5d_Label"), Loc.Text("loc_Services_MetadataText_Archetype_Asari_cheeks_gaunt_3c8a5d_Description")),
-                    ["eyes_Big"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Asari_eyes_big_184173_Label"), Loc.Text("loc_Services_MetadataText_Archetype_Asari_eyes_big_184173_Description")),
-                    ["eyes_PosDown"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Asari_eyes_posdown_002c15_Label"), Loc.Text("loc_Services_MetadataText_Archetype_Asari_eyes_posdown_002c15_Description")),
-                    ["jaw_narrow"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Asari_jaw_narrow_f93eba_Label"), Loc.Text("loc_Services_MetadataText_Archetype_Asari_jaw_narrow_f93eba_Description")),
-                    ["mouth_CornersDown"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Asari_mouth_cornersdown_a0f55c_Label"), Loc.Text("loc_Services_MetadataText_Archetype_Asari_mouth_cornersdown_a0f55c_Description")),
-                    ["nose_BridgeIn"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Asari_nose_bridgein_2a9379_Label"), Loc.Text("loc_Services_MetadataText_Archetype_Asari_nose_bridgein_2a9379_Description")),
-                    ["nose_BridgeOut"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Asari_nose_bridgeout_f28321_Label"), Loc.Text("loc_Services_MetadataText_Archetype_Asari_nose_bridgeout_f28321_Description")),
-                    ["nose_BridgeThin"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Asari_nose_bridgethin_631d55_Label"), Loc.Text("loc_Services_MetadataText_Archetype_Asari_nose_bridgethin_631d55_Description")),
-                    ["nose_BridgeWide"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Asari_nose_bridgewide_deabac_Label"), Loc.Text("loc_Services_MetadataText_Archetype_Asari_nose_bridgewide_deabac_Description")),
-                    ["nose_TipDown"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Asari_nose_tipdown_06b79b_Label"), Loc.Text("loc_Services_MetadataText_Archetype_Asari_nose_tipdown_06b79b_Description")),
-                    ["nose_tipNarrow"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Asari_nose_tipnarrow_341b89_Label"), Loc.Text("loc_Services_MetadataText_Archetype_Asari_nose_tipnarrow_341b89_Description")),
-                    ["nose_TipUp"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Asari_nose_tipup_7a9e2c_Label"), Loc.Text("loc_Services_MetadataText_Archetype_Asari_nose_tipup_7a9e2c_Description")),
-                    ["nose_tipWide"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Asari_nose_tipwide_43bbc4_Label"), Loc.Text("loc_Services_MetadataText_Archetype_Asari_nose_tipwide_43bbc4_Description")),
-                    ["race_oldAsn"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Asari_race_oldasn_18a6a6_Label"), Loc.Text("loc_Services_MetadataText_Archetype_Asari_race_oldasn_18a6a6_Description")),
-                    ["race_oldBlk"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Asari_race_oldblk_ee8889_Label"), Loc.Text("loc_Services_MetadataText_Archetype_Asari_race_oldblk_ee8889_Description")),
-                    ["race_oldCauc"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Asari_race_oldcauc_2e6b40_Label"), Loc.Text("loc_Services_MetadataText_Archetype_Asari_race_oldcauc_2e6b40_Description")),
-                    ["race_yngAsn"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Asari_race_yngasn_86778d_Label"), Loc.Text("loc_Services_MetadataText_Archetype_Asari_race_yngasn_86778d_Description")),
-                    ["race_yngBlk"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Asari_race_yngblk_e4a0a8_Label"), Loc.Text("loc_Services_MetadataText_Archetype_Asari_race_yngblk_e4a0a8_Description")),
-                    ["race_yngCauc"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Asari_race_yngcauc_00f987_Label"), Loc.Text("loc_Services_MetadataText_Archetype_Asari_race_yngcauc_00f987_Description")),
+                    ["cheeks_gaunt"] = new(Loc.Text("loc_Services_MetadataText_Shared_cheeks_gaunt_f6d90e_Label"), Loc.Text("loc_Services_MetadataText_Archetype_Asari_cheeks_gaunt_3c8a5d_Description")),
+                    ["nose_BridgeIn"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Asari_nose_bridgein_2a9379_Label"), Loc.Text("loc_Services_MetadataText_Shared_nose_bridgein_1fb1bb_Description")),
+                    ["nose_BridgeOut"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Asari_nose_bridgeout_f28321_Label"), Loc.Text("loc_Services_MetadataText_Shared_nose_bridgeout_488e1a_Description")),
+                    ["nose_BridgeWide"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Asari_nose_bridgewide_deabac_Label"), Loc.Text("loc_Services_MetadataText_Shared_nose_bridgewide_8dda57_Description")),
+                    ["nose_TipDown"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Asari_nose_tipdown_06b79b_Label"), Loc.Text("loc_Services_MetadataText_Shared_nose_tipdown_1efadd_Description")),
+                    ["nose_tipNarrow"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Asari_nose_tipnarrow_341b89_Label"), Loc.Text("loc_Services_MetadataText_Shared_nose_tipnarrow_ad0fee_Description")),
+                    ["nose_tipWide"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Asari_nose_tipwide_43bbc4_Label"), Loc.Text("loc_Services_MetadataText_Shared_nose_tipwide_4a4a97_Description")),
                 },
             [MorphFaceMetadataCatalogRegistry.Batarian] =
                 new Dictionary<string, MetadataText>(StringComparer.OrdinalIgnoreCase)
                 {
-                    ["head_ScaleUp"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Batarian_head_scaleup_5c02cd_Label"), Loc.Text("loc_Services_MetadataText_Archetype_Batarian_head_scaleup_5c02cd_Description")),
-                    ["shape_chubby"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Batarian_shape_chubby_96f791_Label"), Loc.Text("loc_Services_MetadataText_Archetype_Batarian_shape_chubby_96f791_Description")),
-                    ["shape_skinny"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Batarian_shape_skinny_dc9499_Label"), Loc.Text("loc_Services_MetadataText_Archetype_Batarian_shape_skinny_dc9499_Description")),
-                },
-            [MorphFaceMetadataCatalogRegistry.FemaleTurian] =
-                new Dictionary<string, MetadataText>(StringComparer.OrdinalIgnoreCase)
-                {
-                    ["brow_Back"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_brow_back_1928e9_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_brow_back_1928e9_Description")),
-                    ["brow_Down"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_brow_down_3affa0_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_brow_down_3affa0_Description")),
-                    ["brow_Forward"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_brow_forward_4b31c6_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_brow_forward_4b31c6_Description")),
-                    ["brow_Up"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_brow_up_a44147_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_brow_up_a44147_Description")),
-                    ["cheeks_Down"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_cheeks_down_e1f58e_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_cheeks_down_e1f58e_Description")),
-                    ["cheeks_Up"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_cheeks_up_949811_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_cheeks_up_949811_Description")),
-                    ["eyes_Back"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_eyes_back_4e6802_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_eyes_back_4e6802_Description")),
-                    ["eyes_Big"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_eyes_big_5135af_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_eyes_big_5135af_Description")),
-                    ["eyes_Forward"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_eyes_forward_61aa1b_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_eyes_forward_61aa1b_Description")),
-                    ["eyes_Large"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_eyes_large_ecdf16_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_eyes_large_ecdf16_Description")),
-                    ["eyes_narrow"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_eyes_narrow_9fa3aa_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_eyes_narrow_9fa3aa_Description")),
-                    ["eyes_small"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_eyes_small_63dc2c_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_eyes_small_63dc2c_Description")),
-                    ["eyes_Wide"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_eyes_wide_9947c3_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_eyes_wide_9947c3_Description")),
-                    ["head_ScaleUp"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_head_scaleup_5f237d_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_head_scaleup_5f237d_Description")),
-                    ["headSpikes_Long"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_headspikes_long_b60044_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_headspikes_long_b60044_Description")),
-                    ["headSpikes_Short"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_headspikes_short_2129e0_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_headspikes_short_2129e0_Description")),
-                    ["mandible_extend"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_mandible_extend_71886f_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_mandible_extend_71886f_Description")),
-                    ["mandible_Flare"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_mandible_flare_224266_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_mandible_flare_224266_Description")),
-                    ["mandible_long"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_mandible_long_6081b6_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_mandible_long_6081b6_Description")),
-                    ["mandible_retract"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_mandible_retract_4827e4_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_mandible_retract_4827e4_Description")),
-                    ["mandible_Rotate"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_mandible_rotate_0b6620_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_mandible_rotate_0b6620_Description")),
-                    ["mandible_short"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_mandible_short_30be96_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_mandible_short_30be96_Description")),
-                    ["mandible_Thick"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_mandible_thick_4498f0_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_mandible_thick_4498f0_Description")),
-                    ["mouth_Back"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_mouth_back_1dd603_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_mouth_back_1dd603_Description")),
-                    ["mouth_Down"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_mouth_down_f96f65_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_mouth_down_f96f65_Description")),
-                    ["mouth_Forward"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_mouth_forward_9aca17_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_mouth_forward_9aca17_Description")),
-                    ["mouth_Narrow"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_mouth_narrow_440755_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_mouth_narrow_440755_Description")),
-                    ["mouth_Up"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_mouth_up_8122e6_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_mouth_up_8122e6_Description")),
-                    ["mouth_Wide"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_mouth_wide_4c7e7e_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_mouth_wide_4c7e7e_Description")),
-                    ["neck_Thin"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_neck_thin_94ef8b_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_neck_thin_94ef8b_Description")),
-                    ["nose_Down"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_nose_down_9eed52_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_nose_down_9eed52_Description")),
-                    ["nose_In"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_nose_in_2b47f1_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_nose_in_2b47f1_Description")),
-                    ["nose_Long"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_nose_long_c8424e_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_nose_long_c8424e_Description")),
-                    ["nose_Narrow"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_nose_narrow_8a2379_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_nose_narrow_8a2379_Description")),
-                    ["nose_Out"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_nose_out_96af4d_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_nose_out_96af4d_Description")),
-                    ["nose_Short"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_nose_short_28f909_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_nose_short_28f909_Description")),
-                    ["nose_Up"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_nose_up_e544c4_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_nose_up_e544c4_Description")),
-                    ["nose_Wide"] = new(Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_nose_wide_8d03fe_Label"), Loc.Text("loc_Services_MetadataText_Archetype_FemaleTurian_nose_wide_8d03fe_Description")),
+                    ["head_ScaleUp"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Batarian_head_scaleup_5c02cd_Label"), Loc.Text("loc_Services_MetadataText_Shared_head_scaleup_a81e9a_Description")),
                 },
             [MorphFaceMetadataCatalogRegistry.HumanFemale] =
                 new Dictionary<string, MetadataText>(StringComparer.OrdinalIgnoreCase)
                 {
-                    ["blonde"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_blonde_6bf4ff_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_blonde_6bf4ff_Description")),
-                    ["Eastwood"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_eastwood_bf71f8_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_eastwood_bf71f8_Description")),
-                    ["eyes_Shape_droop"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_eyes_shape_droop_3907c6_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_eyes_shape_droop_3907c6_Description")),
-                    ["eyes_Shape_sleepy"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_eyes_shape_sleepy_32cc60_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_eyes_shape_sleepy_32cc60_Description")),
-                    ["eyes_Shape_wide"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_eyes_shape_wide_1ee4f2_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_eyes_shape_wide_1ee4f2_Description")),
-                    ["HED_Addn_Blowout_Scalar"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_hed_addn_blowout_scalar_6948ad_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_hed_addn_blowout_scalar_6948ad_Description")),
-                    ["HED_Addn_Colour_02_Scalar"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_hed_addn_colour_02_scalar_2c7531_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_hed_addn_colour_02_scalar_2c7531_Description")),
-                    ["HED_Addn_Colour_Vector"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_hed_addn_colour_vector_0b97db_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_hed_addn_colour_vector_0b97db_Description")),
-                    ["HED_Addn_Spec_Lips_Scalar"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_hed_addn_spec_lips_scalar_49f34f_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_hed_addn_spec_lips_scalar_49f34f_Description")),
-                    ["HED_Brow_Tint_Scalar"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_hed_brow_tint_scalar_835792_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_hed_brow_tint_scalar_835792_Description")),
-                    ["HED_Brow_Tint_Vector"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_hed_brow_tint_vector_6da571_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_hed_brow_tint_vector_6da571_Description")),
-                    ["HED_EyeShadow_Tint_Scalar"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_hed_eyeshadow_tint_scalar_32e85d_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_hed_eyeshadow_tint_scalar_32e85d_Description")),
-                    ["HED_EyeShadow_Tint_Vector"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_hed_eyeshadow_tint_vector_735da0_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_hed_eyeshadow_tint_vector_735da0_Description")),
+                    ["blonde"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_blonde_6bf4ff_Label"), Loc.Text("loc_Services_MetadataText_Shared_blonde_1a9641_Description")),
+                    ["HED_Addn_Blowout_Scalar"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_hed_addn_blowout_scalar_6948ad_Label"), Loc.Text("loc_Services_MetadataText_Shared_hed_addn_blowout_scalar_1efa0f_Description")),
+                    ["HED_Addn_Colour_02_Scalar"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_hed_addn_colour_02_scalar_2c7531_Label"), Loc.Text("loc_Services_MetadataText_Shared_hed_addn_colour_02_scalar_653ee1_Description")),
+                    ["HED_Addn_Colour_Vector"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_hed_addn_colour_vector_0b97db_Label"), Loc.Text("loc_Services_MetadataText_Shared_hed_addn_colour_vector_e481bf_Description")),
+                    ["HED_Addn_Spec_Lips_Scalar"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_hed_addn_spec_lips_scalar_49f34f_Label"), Loc.Text("loc_Services_MetadataText_Shared_hed_addn_spec_lips_scalar_2097b6_Description")),
+                    ["HED_Brow_Tint_Scalar"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_hed_brow_tint_scalar_835792_Label"), Loc.Text("loc_Services_MetadataText_Shared_hed_brow_tint_scalar_75cbed_Description")),
+                    ["HED_Brow_Tint_Vector"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_hed_brow_tint_vector_6da571_Label"), Loc.Text("loc_Services_MetadataText_Shared_hed_brow_tint_vector_ffa5a5_Description")),
+                    ["HED_EyeShadow_Tint_Scalar"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_hed_eyeshadow_tint_scalar_32e85d_Label"), Loc.Text("loc_Services_MetadataText_Shared_hed_eyeshadow_tint_scalar_e33bbe_Description")),
+                    ["HED_EyeShadow_Tint_Vector"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_hed_eyeshadow_tint_vector_735da0_Label"), Loc.Text("loc_Services_MetadataText_Shared_hed_eyeshadow_tint_vector_a4dc78_Description")),
                     ["Mask"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_mask_8e2d06_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_mask_8e2d06_Description")),
-                    ["mouth_cheekMass"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_mouth_cheekmass_07a337_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_mouth_cheekmass_07a337_Description")),
-                    ["neck_apple"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_neck_apple_037b25_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_neck_apple_037b25_Description")),
                     ["race_iconic"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_race_iconic_a76408_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_race_iconic_a76408_Description")),
-                    ["rollins"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_rollins_56cef1_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_rollins_56cef1_Description")),
-                    ["teeth_close"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_teeth_close_161e43_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_teeth_close_161e43_Description")),
-                    ["teeth_Seperate"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_teeth_seperate_2bdf16_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanFemale_teeth_seperate_2bdf16_Description")),
                 },
             [MorphFaceMetadataCatalogRegistry.HumanMale] =
                 new Dictionary<string, MetadataText>(StringComparer.OrdinalIgnoreCase)
@@ -707,49 +643,28 @@ internal static class MetadataTextCatalog
                     ["eyes_Large"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_eyes_large_7eeb97_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_eyes_large_7eeb97_Description")),
                     ["eyes_lashAngle"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_eyes_lashangle_5e72c9_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_eyes_lashangle_5e72c9_Description")),
                     ["eyes_lashLength"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_eyes_lashlength_46448d_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_eyes_lashlength_46448d_Description")),
-                    ["eyes_RotateIn"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_eyes_rotatein_53c4cb_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_eyes_rotatein_53c4cb_Description")),
-                    ["eyes_RotateOut"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_eyes_rotateout_720699_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_eyes_rotateout_720699_Description")),
-                    ["eyeShape_droop"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_eyeshape_droop_eb163a_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_eyeshape_droop_eb163a_Description")),
-                    ["eyeShape_iconic"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_eyeshape_iconic_8416f1_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_eyeshape_iconic_8416f1_Description")),
-                    ["eyeShape_liara"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_eyeshape_liara_3c2c36_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_eyeshape_liara_3c2c36_Description")),
-                    ["eyeShape_oldBlk"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_eyeshape_oldblk_5ddf5a_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_eyeshape_oldblk_5ddf5a_Description")),
+                    ["eyes_RotateIn"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_eyes_rotatein_53c4cb_Label"), Loc.Text("loc_Services_MetadataText_Shared_eyes_rotatein_e6537c_Description")),
+                    ["eyes_RotateOut"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_eyes_rotateout_720699_Label"), Loc.Text("loc_Services_MetadataText_Shared_eyes_rotateout_8e822b_Description")),
                     ["eyeShape_sleepy"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_eyeshape_sleepy_8a736a_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_eyeshape_sleepy_8a736a_Description")),
-                    ["eyeShape_yngAsn"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_eyeshape_yngasn_1c63a8_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_eyeshape_yngasn_1c63a8_Description")),
-                    ["HED_Lips_Tint_Vector"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_hed_lips_tint_vector_2067f2_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_hed_lips_tint_vector_2067f2_Description")),
-                    ["HED_Spec_NoBrow"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_hed_spec_nobrow_a131ce_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_hed_spec_nobrow_a131ce_Description")),
+                    ["HED_Lips_Tint_Vector"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_hed_lips_tint_vector_2067f2_Label"), Loc.Text("loc_Services_MetadataText_Shared_hed_lips_tint_vector_ff9c9a_Description")),
+                    ["HED_Spec_NoBrow"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_hed_spec_nobrow_a131ce_Label"), Loc.Text("loc_Services_MetadataText_Shared_hed_spec_nobrow_43c5f2_Description")),
                     ["Mask"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_mask_3b2c53_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_mask_3b2c53_Description")),
                     ["pupil_Small"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_pupil_small_1699e1_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_pupil_small_1699e1_Description")),
-                    ["race_blackOld"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_race_blackold_9d7987_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_race_blackold_9d7987_Description")),
-                    ["race_Blackyng"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_race_blackyng_667057_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_race_blackyng_667057_Description")),
-                    ["race_cauOld"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_race_cauold_ab709e_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_race_cauold_ab709e_Description")),
-                    ["race_cauYng"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_race_cauyng_c87753_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_race_cauyng_c87753_Description")),
-                    ["teeth_Wide"] = new(Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_teeth_wide_14f82c_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_teeth_wide_14f82c_Description")),
-                },
-            [MorphFaceMetadataCatalogRegistry.Krogan] =
-                new Dictionary<string, MetadataText>(StringComparer.OrdinalIgnoreCase)
-                {
-                    ["race_asnOld"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Krogan_race_asnold_026594_Label"), Loc.Text("loc_Services_MetadataText_Archetype_Krogan_race_asnold_026594_Description")),
-                    ["race_asnYoung"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Krogan_race_asnyoung_d4c657_Label"), Loc.Text("loc_Services_MetadataText_Archetype_Krogan_race_asnyoung_d4c657_Description")),
+                    ["teeth_Wide"] = new(Loc.Text("loc_Services_MetadataText_Shared_teeth_wide_61bee6_Label"), Loc.Text("loc_Services_MetadataText_Archetype_HumanMale_teeth_wide_14f82c_Description")),
                 },
             [MorphFaceMetadataCatalogRegistry.Salarian] =
                 new Dictionary<string, MetadataText>(StringComparer.OrdinalIgnoreCase)
                 {
-                    ["mouth_overBite"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Salarian_mouth_overbite_568d9d_Label"), Loc.Text("loc_Services_MetadataText_Archetype_Salarian_mouth_overbite_568d9d_Description")),
-                    ["mouth_underBite"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Salarian_mouth_underbite_fe060e_Label"), Loc.Text("loc_Services_MetadataText_Archetype_Salarian_mouth_underbite_fe060e_Description")),
-                    ["shape_chubby"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Salarian_shape_chubby_b6906f_Label"), Loc.Text("loc_Services_MetadataText_Archetype_Salarian_shape_chubby_b6906f_Description")),
-                    ["shape_skinny"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Salarian_shape_skinny_0c9c20_Label"), Loc.Text("loc_Services_MetadataText_Archetype_Salarian_shape_skinny_0c9c20_Description")),
-                },
-            [MorphFaceMetadataCatalogRegistry.Turian] =
-                new Dictionary<string, MetadataText>(StringComparer.OrdinalIgnoreCase)
-                {
-                    ["eyes_Large"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Turian_eyes_large_56ec91_Label"), Loc.Text("loc_Services_MetadataText_Archetype_Turian_eyes_large_56ec91_Description")),
+                    ["mouth_overBite"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Salarian_mouth_overbite_568d9d_Label"), Loc.Text("loc_Services_MetadataText_Shared_mouth_overbite_9e8236_Description")),
+                    ["mouth_underBite"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Salarian_mouth_underbite_fe060e_Label"), Loc.Text("loc_Services_MetadataText_Shared_mouth_underbite_155112_Description")),
+                    ["shape_skinny"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Salarian_shape_skinny_0c9c20_Label"), Loc.Text("loc_Services_MetadataText_Shared_shape_skinny_fead64_Description")),
                 },
             [MorphFaceMetadataCatalogRegistry.Vorcha] =
                 new Dictionary<string, MetadataText>(StringComparer.OrdinalIgnoreCase)
                 {
-                    ["EYE_Spec_Power"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Vorcha_eye_spec_power_a3c534_Label"), Loc.Text("loc_Services_MetadataText_Archetype_Vorcha_eye_spec_power_a3c534_Description")),
-                    ["SkinLightScattering"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Vorcha_skinlightscattering_debf36_Label"), Loc.Text("loc_Services_MetadataText_Archetype_Vorcha_skinlightscattering_debf36_Description")),
-                    ["SkinTone"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Vorcha_skintone_85f7f4_Label"), Loc.Text("loc_Services_MetadataText_Archetype_Vorcha_skintone_85f7f4_Description")),
+                    ["EYE_Spec_Power"] = new(Loc.Text("loc_Services_MetadataText_Shared_eye_spec_power_fabc7b_Label"), Loc.Text("loc_Services_MetadataText_Archetype_Vorcha_eye_spec_power_a3c534_Description")),
+                    ["SkinLightScattering"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Vorcha_skinlightscattering_debf36_Label"), Loc.Text("loc_Services_MetadataText_Shared_skinlightscattering_d1f779_Description")),
+                    ["SkinTone"] = new(Loc.Text("loc_Services_MetadataText_Archetype_Vorcha_skintone_85f7f4_Label"), Loc.Text("loc_Services_MetadataText_Shared_skintone_29e51c_Description")),
                 },
         };
 
@@ -764,13 +679,11 @@ internal static class MetadataTextCatalog
             [(MorphFaceGame.LE3, MorphFaceMetadataCatalogRegistry.HumanFemale)] =
                 new Dictionary<string, MetadataText>(StringComparer.OrdinalIgnoreCase)
                 {
-                    ["HAIR_centerPart"] = new(Loc.Text("loc_Services_MetadataText_Game_LE3_HumanFemale_hair_centerpart_f31db1_Label"), Loc.Text("loc_Services_MetadataText_Game_LE3_HumanFemale_hair_centerpart_f31db1_Description")),
-                    ["HAIR_pulledBackBig"] = new(Loc.Text("loc_Services_MetadataText_Game_LE3_HumanFemale_hair_pulledbackbig_a9343e_Label"), Loc.Text("loc_Services_MetadataText_Game_LE3_HumanFemale_hair_pulledbackbig_a9343e_Description")),
-                    ["HAIR_pulledBackSlick"] = new(Loc.Text("loc_Services_MetadataText_Game_LE3_HumanFemale_hair_pulledbackslick_1523a1_Label"), Loc.Text("loc_Services_MetadataText_Game_LE3_HumanFemale_hair_pulledbackslick_1523a1_Description")),
-                    ["HAIR_sidePart"] = new(Loc.Text("loc_Services_MetadataText_Game_LE3_HumanFemale_hair_sidepart_3334dd_Label"), Loc.Text("loc_Services_MetadataText_Game_LE3_HumanFemale_hair_sidepart_3334dd_Description")),
-                    ["HAIR_slickWidowsPeak"] = new(Loc.Text("loc_Services_MetadataText_Game_LE3_HumanFemale_hair_slickwidowspeak_ed87e8_Label"), Loc.Text("loc_Services_MetadataText_Game_LE3_HumanFemale_hair_slickwidowspeak_ed87e8_Description")),
-                    ["HAIR_splitSide"] = new(Loc.Text("loc_Services_MetadataText_Game_LE3_HumanFemale_hair_splitside_425b64_Label"), Loc.Text("loc_Services_MetadataText_Game_LE3_HumanFemale_hair_splitside_425b64_Description")),
-                    ["HAIR_splitSide\""] = new(Loc.Text("loc_Services_MetadataText_Game_LE3_HumanFemale_hair_splitside_f476c9_Label"), Loc.Text("loc_Services_MetadataText_Game_LE3_HumanFemale_hair_splitside_f476c9_Description")),
+                    ["HAIR_centerPart"] = new(Loc.Text("loc_Services_MetadataText_Shared_hair_centerpart_62776a_Label"), Loc.Text("loc_Services_MetadataText_Game_LE3_HumanFemale_hair_centerpart_f31db1_Description")),
+                    ["HAIR_pulledBackBig"] = new(Loc.Text("loc_Services_MetadataText_Shared_hair_pulledbackbig_13b6d0_Label"), Loc.Text("loc_Services_MetadataText_Game_LE3_HumanFemale_hair_pulledbackbig_a9343e_Description")),
+                    ["HAIR_pulledBackSlick"] = new(Loc.Text("loc_Services_MetadataText_Shared_hair_pulledbackslick_054d6f_Label"), Loc.Text("loc_Services_MetadataText_Game_LE3_HumanFemale_hair_pulledbackslick_1523a1_Description")),
+                    ["HAIR_sidePart"] = new(Loc.Text("loc_Services_MetadataText_Shared_hair_sidepart_b65b89_Label"), Loc.Text("loc_Services_MetadataText_Game_LE3_HumanFemale_hair_sidepart_3334dd_Description")),
+                    ["HAIR_slickWidowsPeak"] = new(Loc.Text("loc_Services_MetadataText_Shared_hair_slickwidowspeak_c068a6_Label"), Loc.Text("loc_Services_MetadataText_Game_LE3_HumanFemale_hair_slickwidowspeak_ed87e8_Description")),
                 },
         };
 

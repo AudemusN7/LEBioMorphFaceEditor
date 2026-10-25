@@ -10,10 +10,12 @@ namespace MorphFaceEditor.Localiser;
 public sealed partial class ReviewViewModel : INotifyPropertyChanged
 {
     private readonly Dictionary<string, TranslationWorkspace> _translations = new(StringComparer.Ordinal);
+    private readonly HashSet<LocaliserRow> _pendingChangedRows = [];
     private string _search = "";
     private string _selectedFilter = "All strings";
     private LocaliserSection? _selectedSection;
     private bool _refreshPending;
+    private bool _viewRefreshPending;
     private bool _switching;
     private bool _cellEditing;
     public ReviewWorkspace? Workspace { get; private set; }
@@ -24,9 +26,9 @@ public sealed partial class ReviewViewModel : INotifyPropertyChanged
     public IReadOnlyList<LocaliserLanguage> Languages { get; }
     public string LanguageCode { get; private set; } = "en-GB";
     public bool IsEnglish => LanguageCode == "en-GB";
-    public string Search { get => _search; set { if (Set(ref _search, value)) Refresh(); } }
-    public string SelectedFilter { get => _selectedFilter; set { if (Set(ref _selectedFilter, value)) Refresh(); } }
-    public LocaliserSection? SelectedSection { get => _selectedSection; set { if (Set(ref _selectedSection, value)) Refresh(); } }
+    public string Search { get => _search; set { if (Set(ref _search, value)) Refresh(forceView: true, notifyDirty: false, notifyWindowTitle: false); } }
+    public string SelectedFilter { get => _selectedFilter; set { if (Set(ref _selectedFilter, value)) Refresh(forceView: true, notifyDirty: false, notifyWindowTitle: false); } }
+    public LocaliserSection? SelectedSection { get => _selectedSection; set { if (Set(ref _selectedSection, value)) Refresh(forceView: true, notifyDirty: false, notifyWindowTitle: false); } }
     public bool HasWorkspace => Workspace is not null;
     public bool IsDirty => Workspace?.IsDirty == true || _translations.Values.Any(translation => translation.IsDirty);
     public bool CurrentTranslationDirty => !IsEnglish && _translations.GetValueOrDefault(LanguageCode)?.IsDirty == true;
@@ -56,6 +58,7 @@ public sealed partial class ReviewViewModel : INotifyPropertyChanged
         }
         foreach (var row in Rows) { row.PropertyChanged -= RowChanged; row.Edited -= RowEdited; }
         ResetHistory(); _cellEditing = false;
+        _pendingChangedRows.Clear(); _viewRefreshPending = false;
         Workspace = workspace; _translations.Clear(); LanguageCode = "en-GB";
         Rows = workspace.Entries.Select(entry => new LocaliserRow(entry)).ToArray();
         Sections = new[] { new LocaliserSection("All sections", Rows) }.Concat(Rows.GroupBy(row => row.Group)
@@ -65,7 +68,7 @@ public sealed partial class ReviewViewModel : INotifyPropertyChanged
         foreach (var row in Rows) { row.PropertyChanged += RowChanged; row.Edited += RowEdited; }
         foreach (var language in Languages) language.Refresh();
         foreach (var name in new[] { nameof(Workspace), nameof(Rows), nameof(Entries), nameof(Sections), nameof(SelectedSection), nameof(SelectedFilter), nameof(Search), nameof(HasWorkspace), nameof(LanguageCode), nameof(IsEnglish), nameof(CurrentPath) }) Notify(name);
-        Refresh();
+        Refresh(updateSections: true);
     }
 
     public void SelectLanguage(string code)
@@ -91,7 +94,8 @@ public sealed partial class ReviewViewModel : INotifyPropertyChanged
             foreach (var language in Languages) language.Refresh();
         }
         finally { _switching = false; }
-        Notify(nameof(LanguageCode)); Notify(nameof(IsEnglish)); Notify(nameof(CurrentPath)); Refresh();
+        Notify(nameof(LanguageCode)); Notify(nameof(IsEnglish)); Notify(nameof(CurrentPath));
+        Refresh(updateSections: true, forceView: true);
     }
 
     public void LoadLocalisation(string path)
@@ -106,7 +110,7 @@ public sealed partial class ReviewViewModel : INotifyPropertyChanged
         _switching = true;
         try { foreach (var row in Rows) row.SelectLanguage(loaded.Entries[row.Key]); }
         finally { _switching = false; }
-        Notify(nameof(CurrentPath)); Refresh();
+        Notify(nameof(CurrentPath)); Refresh(updateSections: true, forceView: true);
     }
 
     public void SaveAs(string path)
@@ -118,7 +122,7 @@ public sealed partial class ReviewViewModel : INotifyPropertyChanged
             throw new IOException("That file is loaded for another language. Choose a separate file.");
         if (IsEnglish) Workspace.SaveAs(path);
         else _translations[LanguageCode].SaveAs(path, Workspace);
-        Notify(nameof(CurrentPath)); Refresh();
+        Notify(nameof(CurrentPath)); Refresh(notifyDirty: true);
     }
 
     public void SetFlags(IEnumerable<LocaliserRow> rows, bool excludedColumn, bool value)
@@ -127,7 +131,7 @@ public sealed partial class ReviewViewModel : INotifyPropertyChanged
         _switching = true; _historyBatch = true;
         try { foreach (var row in rows.ToArray()) { if (excludedColumn) row.Excluded = value; else row.Reviewed = value; } }
         finally { _switching = false; _historyBatch = false; CommitPendingHistory(); }
-        Refresh();
+        Refresh(updateSections: true, forceView: true);
     }
 
     private bool Matches(object item)
@@ -136,42 +140,63 @@ public sealed partial class ReviewViewModel : INotifyPropertyChanged
         if (SelectedSection?.Name is { } section && section != "All sections" && row.Group != section) return false;
         if (SelectedFilter switch
             {
-                "Needs review" => row.Reviewed, "Reviewed" => !row.Reviewed, "Excluded" => !row.Excluded,
+                "Needs review" => row.Reviewed || (!IsEnglish && row.Excluded), "Reviewed" => !row.Reviewed, "Excluded" => !row.Excluded,
                 "Has notes" => row.Notes.Length == 0, "Invalid wording" => row.Problem.Length == 0, _ => false
             }) return false;
-        return string.IsNullOrWhiteSpace(Search) || new[] { row.Key, row.English, row.Localised, row.Notes, row.References }
-            .Any(value => value.Contains(Search.Trim(), StringComparison.OrdinalIgnoreCase));
+        var search = Search.Trim();
+        return search.Length == 0 || row.Key.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+            row.English.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+            row.Localised.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+            row.Notes.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+            row.References.Contains(search, StringComparison.OrdinalIgnoreCase);
     }
     private void RowChanged(object? sender, PropertyChangedEventArgs args)
     {
         if (_switching) return;
-        QueueRefresh();
-        Notify(nameof(IsDirty)); Notify(nameof(WindowTitle));
+        QueueRefresh(sender as LocaliserRow,
+            updateSectionState: args.PropertyName is nameof(LocaliserRow.Problem) or nameof(LocaliserRow.Reviewed) or nameof(LocaliserRow.Excluded));
     }
     internal void SetCellEditing(bool editing)
     {
         _cellEditing = editing;
         if (!editing) { CommitPendingHistory(); QueueRefresh(); }
     }
-    private void QueueRefresh()
+    private void QueueRefresh(LocaliserRow? changedRow = null, bool updateSectionState = false)
     {
+        if (updateSectionState && changedRow is not null) _pendingChangedRows.Add(changedRow);
         if (_refreshPending) return;
         _refreshPending = true;
-        _ = Dispatcher.CurrentDispatcher.BeginInvoke(() => { _refreshPending = false; Refresh(); }, DispatcherPriority.Background);
+        _ = Dispatcher.CurrentDispatcher.BeginInvoke(() =>
+        {
+            _refreshPending = false;
+            if (_pendingChangedRows.Count > 0)
+            {
+                Sections.FirstOrDefault()?.Refresh();
+                foreach (var group in _pendingChangedRows.Select(row => row.Group).Distinct(StringComparer.Ordinal))
+                    Sections.FirstOrDefault(section => section.Name == group)?.Refresh();
+                _pendingChangedRows.Clear();
+            }
+            Refresh(rowStateChanged: true);
+        }, DispatcherPriority.Background);
     }
-    internal void Refresh()
+    internal void Refresh(bool updateSections = false, bool forceView = false, bool rowStateChanged = false,
+        bool notifyDirty = true, bool notifyWindowTitle = true)
     {
-        foreach (var section in Sections) section.Refresh();
+        if (forceView) _viewRefreshPending = true;
+        if (updateSections) foreach (var section in Sections) section.Refresh();
         // Refresh recreates the grid's inline editors. Keep the active editor (and its
         // caret/undo history) alive until focus leaves it, even if it stops matching a filter.
-        if (!_cellEditing && Entries is not null)
+        if (!_cellEditing && Entries is not null &&
+            (_viewRefreshPending || rowStateChanged && (HasActiveFilter || Entries.SortDescriptions.Count > 0)))
         {
-            var visible = Entries.Cast<LocaliserRow>().ToHashSet();
-            if (Entries.SortDescriptions.Count > 0 || !visible.SetEquals(Rows.Where(row => Matches(row))))
-                Entries.Refresh();
+            Entries.Refresh();
+            _viewRefreshPending = false;
         }
-        Notify(nameof(IsDirty)); Notify(nameof(WindowTitle));
+        if (notifyDirty) Notify(nameof(IsDirty));
+        if (notifyWindowTitle) Notify(nameof(WindowTitle));
     }
+    private bool HasActiveFilter => SelectedFilter != "All strings" ||
+        SelectedSection?.Name is { } section && section != "All sections" || !string.IsNullOrWhiteSpace(Search);
     private bool Set<T>(ref T field, T value, [CallerMemberName] string? name = null)
     { if (EqualityComparer<T>.Default.Equals(field, value)) return false; field = value; Notify(name); return true; }
     private void Notify([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));

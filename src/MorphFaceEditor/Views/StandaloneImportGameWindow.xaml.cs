@@ -15,7 +15,7 @@ public partial class StandaloneImportGameWindow : Window
         DarkTitleBar.Apply(this);
         if (newPlayerMode)
         {
-            Title = Loc.Text("loc_StandaloneImportGameWindow_NewPlayerMorph");
+            Title = Loc.Text("loc_View_MainWindow_NewPlayerMorph");
             Height = 350;
             PromptText.Text = Loc.Text("loc_StandaloneImportGameWindow_NewPlayerPrompt");
             ImportGamePanel.Visibility = Visibility.Collapsed;
@@ -45,7 +45,7 @@ public partial class StandaloneImportGameWindow : Window
     {
         if (TargetGameSelector.SelectedGame is not MorphFaceGame game)
         {
-            ValidationText.Text = Loc.Text("loc_StandaloneImportGameWindow_ChooseTargetGame");
+            ValidationText.Text = Loc.Text("loc_ConvertMorphWindow_ChooseTargetGame");
             return;
         }
 

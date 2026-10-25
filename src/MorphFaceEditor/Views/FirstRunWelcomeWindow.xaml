@@ -29,7 +29,7 @@
                        HorizontalAlignment="Left" VerticalAlignment="Top"
                        Stretch="Uniform" />
                 <StackPanel Grid.Column="1">
-                    <TextBlock Text="{DynamicResource loc_View_FirstRunWelcomeWindow_WelcomeToBioMorphFaceEditor_2}"
+                    <TextBlock Text="{DynamicResource loc_View_FirstRunWelcomeWindow_WelcomeToBioMorphFaceEditor}"
                                FontSize="22" FontWeight="SemiBold" />
                     <TextBlock Margin="0,0,0,0"
                                Foreground="{DynamicResource SecondaryText}"

@@ -115,7 +115,7 @@
                                  PreviewKeyDown="OnNumericValueKeyDown"
                                  GotKeyboardFocus="OnNumericValueGotFocus"
                                  PreviewMouseWheel="OnNumericValueMouseWheel"
-                                 ToolTip="{DynamicResource loc_View_MainWindow_TypeAnyFiniteValueOrUseTheMouseWheel01Ctrl1Shift10Enabl_2}" />
+                                 ToolTip="{DynamicResource loc_View_MainWindow_TypeAnyFiniteValueOrUseTheMouseWheel01Ctrl1Shift10Enabl}" />
                     </Grid>
                 </StackPanel>
             </Border>
@@ -222,7 +222,7 @@
                             </MenuItem>
                             <Separator />
                             <MenuItem Header="{DynamicResource loc_View_MainWindow_Close}" Command="{Binding CloseWorkspaceCommand}" InputGestureText="{DynamicResource loc_Shortcut_Close}" />
-                            <MenuItem x:Name="SettingsMenuItem" Header="{DynamicResource loc_View_MainWindow_Settings}" Click="OnSettingsClick">
+                            <MenuItem x:Name="SettingsMenuItem" Header="{DynamicResource loc_Settings_Title}" Click="OnSettingsClick">
                                 <MenuItem.Style>
                                     <Style TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
                                         <Style.Triggers>
@@ -320,7 +320,7 @@
                                 <MenuItem Header="{DynamicResource loc_View_MainWindow_ImportTSERON}" Command="{Binding ImportTseMaterialsCommand}"
                                           Visibility="{Binding IsDetachedMeshWorkspace, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                 <MenuItem Header="{DynamicResource loc_View_MainWindow_CloneMorph}" Style="{StaticResource PccContextAction}" Command="{Binding CloneMorphCommand}" />
-                                <MenuItem Header="{DynamicResource loc_View_MainWindow_ConvertMorph}" Style="{StaticResource PccContextAction}" Command="{Binding ConvertMorphCommand}" />
+                                <MenuItem Header="{DynamicResource loc_View_ConvertMorphWindow_ConvertMorph}" Style="{StaticResource PccContextAction}" Command="{Binding ConvertMorphCommand}" />
                                 <Separator Style="{StaticResource PccContextSeparator}" />
                                 <MenuItem Header="{DynamicResource loc_RonFiles_ImportMorphFace}" Style="{StaticResource PccContextAction}" Command="{Binding ImportMorphFaceRonCommand}" />
                                 <MenuItem Header="{DynamicResource loc_View_MainWindow_ExportMorphAsRON}" Style="{StaticResource PccContextAction}" Command="{Binding ExportMorphRonCommand}"
@@ -380,7 +380,7 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <Button Content="{DynamicResource loc_View_MainWindow_LoadSelectedFace}" Command="{Binding LoadSelectedFaceCommand}" />
-                        <Button x:Name="CommitFaceButton" Grid.Column="1" Content="{DynamicResource loc_View_MainWindow_Commit}" Command="{Binding CommitCommand}" Margin="7,0,0,0"
+                        <Button x:Name="CommitFaceButton" Grid.Column="1" Content="{DynamicResource loc_UnsavedChangesWindow_Commit}" Command="{Binding CommitCommand}" Margin="7,0,0,0"
                                 Visibility="{Binding CanCommitFace, Converter={StaticResource BooleanToVisibilityConverter}}"
                                 ToolTip="{DynamicResource loc_View_MainWindow_CommitTheLoadedFaceToTheTemporaryPackageWorkspaceWithou}" />
                     </Grid>
@@ -646,7 +646,7 @@
                                                    FontSize="10" VerticalAlignment="Center"
                                                    Margin="0,0,12,0" />
                                         <controls:SearchableMeshPicker Grid.Column="1" />
-                                        <Button Grid.Column="2" Content="{DynamicResource loc_View_MainWindow_Randomise_2}" Command="{Binding RandomiseCommand}"
+                                        <Button Grid.Column="2" Content="{DynamicResource loc_View_MainWindow_Randomise}" Command="{Binding RandomiseCommand}"
                                                 Visibility="{Binding HasRandomiseCommand, Converter={StaticResource BooleanToVisibilityConverter}}"
                                                 Margin="5,0,0,0" Padding="8,2" VerticalAlignment="Center"
                                                 ToolTip="{DynamicResource loc_View_MainWindow_RandomiseTheHairMeshAndItsEligibleScalpPairing}"
@@ -742,7 +742,7 @@
                                                                             <ColumnDefinition Width="Auto" />
                                                                         </Grid.ColumnDefinitions>
                                                                         <TextBlock Text="{Binding Label}" Style="{StaticResource FieldLabel}" VerticalAlignment="Center" />
-                                                                        <Button Grid.Column="1" Content="{DynamicResource loc_View_MainWindow_Randomise_3}" Command="{Binding RandomiseCommand}"
+                                                                        <Button Grid.Column="1" Content="{DynamicResource loc_View_MainWindow_Randomise}" Command="{Binding RandomiseCommand}"
                                                                                 Visibility="{Binding HasRandomisableValues, Converter={StaticResource BooleanToVisibilityConverter}}"
                                                                                 Padding="7,2" FontSize="9" MinWidth="58"
                                                                                 ToolTip="{DynamicResource loc_View_MainWindow_RandomiseOnlyTheMorphSlidersInThisSubcategory}" />
@@ -772,7 +772,7 @@
                                                                                 <ColumnDefinition Width="Auto" />
                                                                             </Grid.ColumnDefinitions>
                                                                             <TextBlock Text="{Binding Label}" Style="{StaticResource FieldLabel}" VerticalAlignment="Center" />
-                                                                            <Button Grid.Column="1" Content="{DynamicResource loc_View_MainWindow_Randomise_4}" Command="{Binding RandomiseCommand}"
+                                                                            <Button Grid.Column="1" Content="{DynamicResource loc_View_MainWindow_Randomise}" Command="{Binding RandomiseCommand}"
                                                                                     Visibility="{Binding HasRandomisableValues, Converter={StaticResource BooleanToVisibilityConverter}}"
                                                                                     Padding="7,2" FontSize="9" MinWidth="58"
                                                                                     ToolTip="{DynamicResource loc_View_MainWindow_RandomiseOnlyTheseAuditedColoursAndSelectorChannels}" />
@@ -798,7 +798,7 @@
                                                                 <ColumnDefinition Width="Auto" />
                                                             </Grid.ColumnDefinitions>
                                                             <TextBlock Text="{DynamicResource loc_View_MainWindow_TEXTURES}" Style="{StaticResource FieldLabel}" VerticalAlignment="Center" />
-                                                            <Button Grid.Column="1" Content="{DynamicResource loc_View_MainWindow_Randomise_5}" Command="{Binding TextureRandomiseCommand}"
+                                                            <Button Grid.Column="1" Content="{DynamicResource loc_View_MainWindow_Randomise}" Command="{Binding TextureRandomiseCommand}"
                                                                     Visibility="{Binding CanRandomiseTextures, Converter={StaticResource BooleanToVisibilityConverter}}"
                                                                     Padding="7,2" FontSize="9" MinWidth="58"
                                                                     ToolTip="{DynamicResource loc_View_MainWindow_RandomiseOnlyEligiblePairedTextureFamiliesInThisCategor}" />

@@ -38,9 +38,16 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
     {
         var result = ReadManualWithStatus(game);
         var status = WithFreshness(result.Status, result.Snapshot);
-        return status.State == TextureRegistryState.Ready && status.ErrorMessage is not null
-            ? status with { ErrorMessage = $"{status.ErrorMessage} {GetManualReportPath(game)}" }
-            : status;
+        if (status.State != TextureRegistryState.Ready || status.ErrorMessage is null) return status;
+        var missing = result.Snapshot!.ManualAssets.Count(asset => asset.IsMissing);
+        var report = GetManualReportPath(game);
+        return status with
+        {
+            ErrorMessage = $"{status.ErrorMessage} {report}",
+            UserError = missing == 1
+                ? UserFacingMessage.Create("loc_VM_textureRegistry_oneMissingCustomAsset", report)
+                : UserFacingMessage.Create("loc_VM_textureRegistry_missingCustomAssets", missing, report)
+        };
     }
 
     /// <summary>Status of automatically scanned and manually added custom assets for Settings.</summary>
@@ -178,7 +185,10 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
             return new TextureRegistryReadResult(
                 new TextureRegistryStatus(game, TextureRegistryState.Failed, path,
                     file.Exists ? file.Length : null, file.Exists ? file.LastWriteTimeUtc : null,
-                    null, exception.Message),
+                    null, exception.ToString())
+                {
+                    UserError = UserFacingMessage.Create("loc_VM_textureRegistry_databaseReadFailed")
+                },
                 null);
         }
     }

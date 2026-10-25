@@ -17,6 +17,7 @@ public sealed partial class ReviewViewModel
     public bool CanRedo => _redo.Count > 0;
     public void Undo() => MoveHistory(_undo, _redo, undo: true);
     public void Redo() => MoveHistory(_redo, _undo, undo: false);
+    internal void CommitPendingCellEdit() => CommitPendingHistory();
 
     private void RowEdited(LocaliserRow row, LocaliserRowState before, LocaliserRowState after)
     {
@@ -56,7 +57,7 @@ public sealed partial class ReviewViewModel
             from.Pop(); to.Push(item);
         }
         finally { _replayingHistory = false; _switching = false; }
-        Refresh(); NotifyHistory();
+        Refresh(updateSections: true, forceView: true); NotifyHistory();
     }
 
     private void ResetHistory()

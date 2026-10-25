@@ -30,14 +30,14 @@ public sealed partial class MainWindowViewModel
             contents = await ReadWorkspaceContentsAsync(candidate, preferredFacePath, cancellationToken);
             var npcImport = candidate.Kind == EditorWorkspaceKind.Npc && candidate.ImportedFile?.Format == WorkspaceFileFormat.MorphRon;
             if (preferredFacePath is not null && !string.Equals(contents.Selected?.InstancedPath, preferredFacePath, StringComparison.OrdinalIgnoreCase))
-                throw new System.IO.InvalidDataException(npcImport ? Loc.Text("loc_Shell_Error_ImportedNpcFaceMissingFromCatalogue")
-                    : Loc.Format("loc_Shell_Error_FaceMissingFromPcc", preferredFacePath));
+                throw Loc.Error(new System.IO.InvalidDataException(npcImport ? Loc.Text("loc_Shell_Error_ImportedNpcFaceMissingFromCatalogue")
+                    : Loc.Format("loc_Shell_Error_FaceMissingFromPcc", preferredFacePath)));
             if (contents.Selected is not null)
                 prepared = await PrepareFaceAsync(candidate, contents.References, contents.Selected, cancellationToken);
             if (npcImport && prepared?.Preview.Profile.TargetSetName is not null &&
                 prepared.Preview.EditingSession.CanEditMorphFeatures == false)
-                throw new System.IO.InvalidDataException(Loc.Format("loc_Shell_Error_ImportedNpcMorphTargetsUnavailable",
-                    prepared.Preview.EditingSession.EditBlockReason));
+                throw Loc.Error(new System.IO.InvalidDataException(Loc.Format("loc_Shell_Error_ImportedNpcMorphTargetsUnavailable",
+                    UserFacingMessageFormatter.FormatEditBlockReason(prepared.Preview.EditingSession.EditBlock))));
             cancellationToken.ThrowIfCancellationRequested();
         }
         catch
@@ -158,7 +158,8 @@ public sealed partial class MainWindowViewModel
                 ? Loc.Format("loc_Shell_FaceDetails_OracleMax", oracle!.MaximumError)
             : result.Profile.IgnoresAuthoredGeometry
                 ? Loc.Text("loc_Shell_FaceDetails_BaseHeadMaterialOnlyPreview")
-            : Loc.Format("loc_Shell_FaceDetails_BakedFallback", result.EditingSession.EditBlockReason);
+            : Loc.Format("loc_Shell_FaceDetails_BakedFallback",
+                UserFacingMessageFormatter.FormatEditBlockReason(result.EditingSession.EditBlock));
         _faceDetailsPrefix = Loc.Format("loc_Shell_FaceDetails_LoadedMorphPrefix", topology.VertexCount,
             topology.IndexCount / 3, topology.Sections.Count, displayedFinalBoneCount,
             materialOverrides.Scalars.Count, materialOverrides.Vectors.Count, materialOverrides.Textures.Count);
@@ -193,8 +194,10 @@ public sealed partial class MainWindowViewModel
             : result.EditingSession.CanEditMorphFeatures
             ? Loc.Format("loc_Shell_Status_LoadedFaceLiveGeometry", selected.DisplayName, result.Profile.GetDisplayName())
             : result.Profile.IgnoresAuthoredGeometry
-                ? Loc.Format("loc_Shell_Status_LoadedFaceBaseHeadPreview", selected.DisplayName, result.Profile.GetDisplayName(), result.EditingSession.EditBlockReason)
-            : Loc.Format("loc_Shell_Status_LoadedFaceBakedGeometryFallback", selected.DisplayName, result.Profile.GetDisplayName(), result.EditingSession.EditBlockReason);
+                ? Loc.Format("loc_Shell_Status_LoadedFaceBaseHeadPreview", selected.DisplayName, result.Profile.GetDisplayName(),
+                    UserFacingMessageFormatter.FormatEditBlockReason(result.EditingSession.EditBlock))
+            : Loc.Format("loc_Shell_Status_LoadedFaceBakedGeometryFallback", selected.DisplayName, result.Profile.GetDisplayName(),
+                UserFacingMessageFormatter.FormatEditBlockReason(result.EditingSession.EditBlock));
         AppLog.Verbose($"FACE:LOADED {LoadedFacePath} {result.Loaded.Game} EDITABLE:{result.EditingSession.CanEditMorphFeatures} " +
             $"VERTS:{topology.VertexCount} TARGETS:{result.EditingSession.Evaluation.Resolution.WeightedTargets.Count}");
         _loadCancellation ??= new CancellationTokenSource();

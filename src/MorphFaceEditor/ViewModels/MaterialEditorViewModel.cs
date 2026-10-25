@@ -114,7 +114,7 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
                     }
                     catch (Exception exception)
                     {
-                        warnings.Add(Loc.Format("loc_VM_materialImport_textureUnresolved", desired.Name, exception.Message));
+                        warnings.Add(Loc.Format("loc_VM_materialImport_textureUnresolved", desired.Name, UserFacingMessageFormatter.Format(exception)));
                     }
                 }
                 continue;
@@ -128,7 +128,7 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
             }
             catch (Exception exception)
             {
-                warnings.Add(Loc.Format("loc_VM_materialImport_textureUnresolved", desired.Name, exception.Message));
+                warnings.Add(Loc.Format("loc_VM_materialImport_textureUnresolved", desired.Name, UserFacingMessageFormatter.Format(exception)));
             }
         }
 
@@ -241,6 +241,9 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
     {
         var parameterName = _session.GetSourceParameterName(controlName);
         var definition = HumanMaterialProfiles.Describe(parameterName, kind) with { Name = controlName };
+        if (!HumanMaterialProfiles.Definitions.Any(candidate => candidate.Kind == kind &&
+                candidate.Name.Equals(parameterName, StringComparison.OrdinalIgnoreCase)))
+            definition = definition with { Description = Loc.Text("loc_VM_material_unknownParameterDescription") };
         var described = _uiProfile.DescribeMaterial(definition);
         var scopeLabel = _session.GetParameterScopeLabel(controlName);
         return described with

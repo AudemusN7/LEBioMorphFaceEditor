@@ -93,7 +93,7 @@ public sealed class PackageAssetListItem : ObservableObject
         }
         catch (Exception exception)
         {
-            ThumbnailError = exception.Message;
+            ThumbnailError = UserFacingMessageFormatter.Format(exception);
         }
         finally
         {

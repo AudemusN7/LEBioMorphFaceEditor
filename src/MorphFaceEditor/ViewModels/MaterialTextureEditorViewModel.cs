@@ -280,7 +280,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(instancedPath);
         var candidate = FindRandomisationOption(instancedPath)
-            ?? throw new FileNotFoundException(Loc.Format("loc_VM_texture_notAvailableInSources", instancedPath));
+            ?? throw Loc.Error(new FileNotFoundException(Loc.Format("loc_VM_texture_notAvailableInSources", instancedPath)));
         return ResolveReferenceAsync(candidate.Asset!.Identity);
     }
 
@@ -289,7 +289,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(instancedPath);
         var candidate = _exactPaths.GetValueOrDefault(instancedPath)
-            ?? throw new FileNotFoundException(Loc.Format("loc_VM_texture_notAvailableAtFullPath", instancedPath));
+            ?? throw Loc.Error(new FileNotFoundException(Loc.Format("loc_VM_texture_notAvailableAtFullPath", instancedPath)));
         var identity = candidate.Asset!.Identity;
         return ResolveReferenceAsync(identity);
     }
@@ -387,7 +387,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
                 return;
             }
             var sourcePackage = selected.RegistryCandidate?.EffectiveOccurrence.PackagePath ?? selected.Asset?.Identity.PackagePath
-                ?? throw new ArgumentException(Loc.Text("loc_VM_texture_noneNotPackageTexture"), nameof(selected));
+                ?? throw Loc.Error(new ArgumentException(Loc.Text("loc_VM_texture_noneNotPackageTexture"), nameof(selected)));
             var instancedPath = selected.InstancedPath;
             var texture = await _references.LoadTextureAsync(
                 sourcePackage,
@@ -413,7 +413,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
         {
             if (generation == _selectionGeneration)
             {
-                _reportError(Loc.Format("loc_VM_texture_referenceChangeFailed", exception.Message));
+                _reportError(Loc.Format("loc_VM_texture_referenceChangeFailed", UserFacingMessageFormatter.Format(exception)));
                 Refresh();
             }
         }
@@ -447,7 +447,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
             else
             {
                 var sourcePackage = selected.RegistryCandidate?.EffectiveOccurrence.PackagePath ?? selected.Asset?.Identity.PackagePath
-                    ?? throw new ArgumentException(Loc.Text("loc_VM_texture_noneNotPackageTexture"), nameof(selected));
+                    ?? throw Loc.Error(new ArgumentException(Loc.Text("loc_VM_texture_noneNotPackageTexture"), nameof(selected)));
                 texture = await _references.LoadTextureAsync(
                     sourcePackage,
                     selected.InstancedPath,
@@ -474,7 +474,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
         {
             if (generation == _previewGeneration)
             {
-                _reportError(Loc.Format("loc_VM_texture_previewLoadFailed", exception.Message));
+                _reportError(Loc.Format("loc_VM_texture_previewLoadFailed", UserFacingMessageFormatter.Format(exception)));
             }
         }
         finally

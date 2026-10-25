@@ -41,7 +41,7 @@ internal static class VisorLensAnimationLifecycleTests
         window.StateChanged += (_, _) => Trace("StateChanged");
         controller.PreviewFailed += message =>
         {
-            previewFailure ??= message;
+            previewFailure ??= message.ToString();
             trace.Add("VISOR PreviewFailed: " + message);
         };
         try

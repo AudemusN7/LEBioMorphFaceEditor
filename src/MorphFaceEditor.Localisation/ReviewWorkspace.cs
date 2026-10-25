@@ -13,6 +13,7 @@ public sealed class ReviewWorkspace
     public string Path { get; private set; }
     public string BackupPath => Path + ".localiser.bak";
     public IReadOnlyList<ReviewEntry> Entries { get; }
+    public IReadOnlySet<string> RetiredKeys => _catalogue.RetiredKeys;
     public bool IsDirty => Entries.Any(entry => entry.IsDirty);
 
     private ReviewWorkspace(string path, byte[] bytes, CatalogueData catalogue)

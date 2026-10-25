@@ -1,5 +1,6 @@
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
+using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.LegendaryExplorer.TextureRegistry;
 using MorphFaceEditor.ViewModels;
@@ -197,8 +198,9 @@ public static class TextureRegistrySettingsTests
         row.UpdateCustom(ready with { State = TextureRegistryState.Missing, IsStale = true });
         TestAssert.Equal("StatusPending", row.CustomStatusBrushKey);
         row.UpdateCustom(ready with { State = TextureRegistryState.Failed, ErrorMessage = "probe error" });
-        TestAssert.True(row.WarningLabel == "probe error" && row.RefreshGuidanceLabel.Length > 0,
-            "Separating freshness guidance hid a genuine sidecar error.");
+        TestAssert.True(row.WarningLabel == Loc.Text("loc_Error_TechnicalWarning") &&
+                        row.CustomStatus?.ErrorMessage == "probe error" && row.RefreshGuidanceLabel.Length > 0,
+            "A sidecar diagnostic leaked into UI wording or its diagnostic/freshness guidance was lost.");
     }
 
     private sealed class FakeBuilder(bool block = false, bool fail = false) : ITextureRegistryBuilder

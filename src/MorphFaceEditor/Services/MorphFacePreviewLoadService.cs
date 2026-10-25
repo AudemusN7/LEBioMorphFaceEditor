@@ -3,6 +3,7 @@ using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Core.Deformation;
 using MorphFaceEditor.Core.Materials;
+using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.Rendering;
 
@@ -47,9 +48,9 @@ public sealed class MorphFacePreviewLoadService : IDisposable
             loaded.Game,
             loaded.Document.Source.InstancedPath,
             loaded.Document.BaseHeadReference?.InstancedPath,
-            loaded.Materials) ?? throw new NotSupportedException(
-                $"{loaded.Game} BioMorphFace '{loaded.Document.Source.InstancedPath}' uses unsupported base head " +
-                $"'{loaded.Document.BaseHeadReference?.InstancedPath ?? "<unresolved>"}'.");
+            loaded.Materials) ?? throw Loc.Error(new NotSupportedException(Loc.Format(
+                "loc_Services_MorphFacePreviewLoad_UnsupportedBaseHead", loaded.Game,
+                loaded.Document.BaseHeadReference?.InstancedPath ?? "<unresolved>")));
         var profile = profileResolution.Profile;
         loaded = loaded with
         {

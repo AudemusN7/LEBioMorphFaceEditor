@@ -2,6 +2,7 @@ using MorphFaceEditor.Core.Services;
 using System.IO;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Editing;
+using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.LegendaryExplorer;
 
 namespace MorphFaceEditor.Services;
@@ -138,9 +139,9 @@ public sealed class StandaloneLegacyHeadMorphImportService
         var loaded = reader.Load(workspace.WorkingPath, templatePath, decodeTextures: false);
         if (loaded.BaseHead.Topology.VertexCount != legacy.MorphData.BakedLods[0].Length)
         {
-            throw new InvalidDataException(
-                $"The {targetGame} player template '{templatePath}' does not match the legacy LOD0 topology " +
-                $"({loaded.BaseHead.Topology.VertexCount} template vertices versus {legacy.MorphData.BakedLods[0].Length} source vertices).");
+            throw Loc.Error(new InvalidDataException(
+                Loc.Format("loc_Services_StandaloneLegacyImport_Lod0TopologyMismatch", targetGame,
+                    loaded.BaseHead.Topology.VertexCount, legacy.MorphData.BakedLods[0].Length)));
         }
         var resolution = _profiles.Resolve(
             loaded.Game,
@@ -186,8 +187,8 @@ public sealed class StandaloneLegacyHeadMorphImportService
         var sourceGame = GetSourceGame(sourcePath);
         if (sourceGame != targetGame)
         {
-            throw new InvalidDataException(
-                $"This is an {sourceGame} Gibbed head morph. Select {sourceGame} as the destination game; legacy head morphs cannot be converted to {targetGame}.");
+            throw Loc.Error(new InvalidDataException(
+                Loc.Format("loc_Services_StandaloneLegacyImport_GameMismatch", sourceGame, targetGame)));
         }
     }
 }

@@ -12,12 +12,14 @@ namespace MorphFaceEditor.Localisation;
 public sealed record EntryAnnotation(string Key, string? ReviewedHash = null, bool DoNotTranslate = false, string Note = "", string? SourceHash = null);
 public sealed record CatalogueItem(string Key, string Text, string Group);
 public sealed record CatalogueData(XDocument Document, IReadOnlyDictionary<string, string> Strings,
-    IReadOnlyDictionary<string, EntryAnnotation> Annotations, IReadOnlyList<CatalogueItem> Items);
+    IReadOnlyDictionary<string, EntryAnnotation> Annotations, IReadOnlyList<CatalogueItem> Items,
+    IReadOnlySet<string> RetiredKeys);
 
 /// <summary>String-only XML parsing and validation shared by the editor and authoring tool.</summary>
 public static partial class StringCatalogue
 {
     public const string AnnotationPrefix = "localiser: ";
+    public const string RetiredKeysPrefix = "localiser-retired: ";
     public static readonly XNamespace Presentation = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
     public static readonly XNamespace Xaml = "http://schemas.microsoft.com/winfx/2006/xaml";
 
@@ -34,12 +36,26 @@ public static partial class StringCatalogue
         var strings = new Dictionary<string, string>(StringComparer.Ordinal);
         var annotations = new Dictionary<string, EntryAnnotation>(StringComparer.Ordinal);
         var items = new List<CatalogueItem>();
+        var retiredKeys = new HashSet<string>(StringComparer.Ordinal);
         string? group = null;
         foreach (var node in root.Nodes())
         {
             if (node is XComment comment)
             {
                 var text = comment.Value.Trim();
+                if (text.StartsWith(RetiredKeysPrefix, StringComparison.Ordinal))
+                {
+                    string[] keys;
+                    try
+                    {
+                        keys = JsonSerializer.Deserialize<string[]>(text[RetiredKeysPrefix.Length..])
+                            ?? throw new FormatException("Empty retired localisation key list.");
+                    }
+                    catch (JsonException exception) { throw new FormatException("Invalid retired localisation key list.", exception); }
+                    if (keys.Length == 0 || keys.Any(key => key is null || !KeyPattern().IsMatch(key) || !retiredKeys.Add(key)))
+                        throw new FormatException("Missing, duplicate or invalid retired localisation key.");
+                    continue;
+                }
                 if (text.StartsWith(AnnotationPrefix, StringComparison.Ordinal))
                 {
                     EntryAnnotation annotation;
@@ -67,15 +83,27 @@ public static partial class StringCatalogue
                 throw new FormatException($"Missing, duplicate or invalid localisation key: {key}");
             items.Add(new CatalogueItem(key, element.Value, group ?? key[4..].Split('_')[0]));
         }
-        return new CatalogueData(document, strings, annotations, items);
+        if (retiredKeys.Any(key => strings.ContainsKey(key) || annotations.ContainsKey(key)))
+            throw new FormatException("A retired localisation key is still present in the catalogue.");
+        return new CatalogueData(document, strings, annotations, items, retiredKeys);
     }
 
     public static void ValidateOverlay(IReadOnlyDictionary<string, string> baseline, IReadOnlyDictionary<string, string> overlay,
-        IReadOnlyDictionary<string, EntryAnnotation>? annotations = null)
+        IReadOnlyDictionary<string, EntryAnnotation>? annotations = null, IReadOnlySet<string>? retiredKeys = null)
     {
+        if (retiredKeys is not null && retiredKeys.Any(key => !KeyPattern().IsMatch(key) || baseline.ContainsKey(key)))
+            throw new FormatException("Invalid retired localisation key list.");
+        if (annotations is not null)
+            foreach (var key in annotations.Keys)
+                if (!baseline.ContainsKey(key) && retiredKeys?.Contains(key) != true)
+                    throw new FormatException($"Unknown localisation key: {key}");
         foreach (var (key, value) in overlay)
         {
-            if (!baseline.TryGetValue(key, out var original)) throw new FormatException($"Unknown localisation key: {key}");
+            if (!baseline.TryGetValue(key, out var original))
+            {
+                if (retiredKeys?.Contains(key) == true) continue;
+                throw new FormatException($"Unknown localisation key: {key}");
+            }
             ValidateValue(key, original, value);
             if (annotations?.TryGetValue(key, out var annotation) == true && annotation.DoNotTranslate && value != original)
                 throw new FormatException($"This string is excluded from translation: {key}");

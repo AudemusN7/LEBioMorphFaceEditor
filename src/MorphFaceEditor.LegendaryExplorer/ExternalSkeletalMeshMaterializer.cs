@@ -16,7 +16,8 @@ internal static class ExternalSkeletalMeshMaterializer
         AssetIdentity identity,
         ICollection<string>? warnings = null,
         PackageCache? sourceCache = null,
-        InstalledGameAssetResolver? installedAssets = null)
+        InstalledGameAssetResolver? installedAssets = null,
+        ICollection<UserFacingMessage>? userWarnings = null)
         => Materialize(
             destination,
             identity.PackagePath,
@@ -25,7 +26,8 @@ internal static class ExternalSkeletalMeshMaterializer
             identity.UIndex,
             warnings,
             sourceCache,
-            installedAssets);
+            installedAssets,
+            userWarnings);
 
     internal static ExportEntry Materialize(
         IMEPackage destination,
@@ -35,7 +37,8 @@ internal static class ExternalSkeletalMeshMaterializer
         int sourceUIndex = 0,
         ICollection<string>? warnings = null,
         PackageCache? sourceCache = null,
-        InstalledGameAssetResolver? installedAssets = null)
+        InstalledGameAssetResolver? installedAssets = null,
+        ICollection<UserFacingMessage>? userWarnings = null)
     {
         ArgumentNullException.ThrowIfNull(destination);
         ArgumentException.ThrowIfNullOrWhiteSpace(donorPackagePath);
@@ -49,7 +52,7 @@ internal static class ExternalSkeletalMeshMaterializer
         var installed = resolver.Resolve(destination.Game,
             new AssetIdentity(donorPackagePath, instancedPath, sourceUIndex, className), cache);
         if (installed is not null)
-            return MaterializeResolved(destination, installed, warnings, cache, resolver);
+            return MaterializeResolved(destination, installed, warnings, cache, resolver, userWarnings);
         if (destination.FindExport(instancedPath, className) is { } existing)
             return existing;
         if (!File.Exists(donorPackagePath))
@@ -68,7 +71,7 @@ internal static class ExternalSkeletalMeshMaterializer
                 $"{className} '{instancedPath}' is from {source.Game}, but the destination is {destination.Game}.");
         }
         var sourceExport = ResolveSourceExport(source, instancedPath, className, sourceUIndex);
-        return MaterializeResolved(destination, sourceExport, warnings, cache, resolver);
+        return MaterializeResolved(destination, sourceExport, warnings, cache, resolver, userWarnings);
     }
 
     internal static ExportEntry MaterializeResolved(
@@ -76,7 +79,8 @@ internal static class ExternalSkeletalMeshMaterializer
         ExportEntry sourceExport,
         ICollection<string>? warnings,
         PackageCache? sourceCache = null,
-        InstalledGameAssetResolver? installedAssets = null)
+        InstalledGameAssetResolver? installedAssets = null,
+        ICollection<UserFacingMessage>? userWarnings = null)
     {
         var instancedPath = PccAssetPathPolicy.FromExport(sourceExport);
         var className = sourceExport.ClassName;
@@ -89,7 +93,8 @@ internal static class ExternalSkeletalMeshMaterializer
             applyCorpusMaterialPolicy: true,
             targetPathOverride: instancedPath,
             installedAssets: installedAssets,
-            sourceCache: sourceCache);
+            sourceCache: sourceCache,
+            userWarnings: userWarnings);
         if (
             !materialized.ClassName.Equals(className, StringComparison.OrdinalIgnoreCase))
         {

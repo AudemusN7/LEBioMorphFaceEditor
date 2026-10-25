@@ -126,8 +126,8 @@ public partial class TextureRegistrySettingsWindow : Window
             var inventory = await Task.Run(() => PackageAssetInspector.Inventory(
                 fileDialog.FileName, ["Texture2D", "SkeletalMesh"]));
             if (!inventory.Game.Equals(row.Game.ToString(), StringComparison.OrdinalIgnoreCase))
-                throw new InvalidDataException(Loc.Format(
-                    "loc_TextureRegistrySettingsWindow_PccBelongsToDifferentGame", inventory.Game, row.Game));
+                throw Loc.Error(new InvalidDataException(Loc.Format(
+                    "loc_TextureRegistrySettingsWindow_PccBelongsToDifferentGame", inventory.Game, row.Game)));
             var selection = new ManualAssetSelectionWindow(row.Game, inventory,
                 settings.GetManualAssets(row.Game)) { Owner = this };
             if (selection.ShowDialog() != true) return;
@@ -141,7 +141,7 @@ public partial class TextureRegistrySettingsWindow : Window
         catch (Exception exception)
         {
             AppLog.Error($"REGISTRY:ADD-ASSETS-FAILED {row.Game}", exception);
-            _ = new EditorMessageWindow(Loc.Text("loc_TextureRegistrySettingsWindow_CustomAssetImportFailedTitle"), exception.Message)
+            _ = new EditorMessageWindow(Loc.Text("loc_TextureRegistrySettingsWindow_CustomAssetImportFailedTitle"), UserFacingMessageFormatter.Format(exception))
             {
                 Owner = this
             }.ShowDialog();

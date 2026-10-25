@@ -37,6 +37,20 @@ public enum MorphFaceGeometryMode
     BaseMeshOnly
 }
 
+public enum MorphEditBlockKind
+{
+    ProfilePolicy,
+    UnresolvedFeatures,
+    ImportedTopology,
+    InvalidTargets,
+    OracleUnavailable,
+    OracleMismatch,
+    ValidationFailed
+}
+
+public sealed record MorphEditBlockReason(MorphEditBlockKind Kind, string Diagnostic,
+    IReadOnlyList<string>? FeatureNames = null, float? MaximumError = null);
+
 public sealed class MorphFaceEditingSession
 {
     /// <summary>
@@ -203,7 +217,8 @@ public sealed class MorphFaceEditingSession
                                HasCompatibleBakedLods;
     public bool HasPendingRepair { get; private set; }
     public IReadOnlyList<string> ValidationErrors { get; }
-    public string? EditBlockReason
+    public string? EditBlockReason => EditBlock?.Diagnostic;
+    public MorphEditBlockReason? EditBlock
     {
         get
         {
@@ -213,31 +228,36 @@ public sealed class MorphFaceEditingSession
             }
             if (_geometryEditBlockReason is not null)
             {
-                return _geometryEditBlockReason;
+                return new(MorphEditBlockKind.ProfilePolicy, _geometryEditBlockReason);
             }
             if (Evaluation.Resolution.UnresolvedFeatureNames.Count > 0)
             {
                 if (GeometryMode != MorphFaceGeometryMode.RelativeBake || !HasSafeRelativeResolution(Evaluation))
                 {
-                    return $"Unresolved features: {string.Join(", ", Evaluation.Resolution.UnresolvedFeatureNames.Take(5))}.";
+                    var names = Evaluation.Resolution.UnresolvedFeatureNames.Take(5).ToArray();
+                    return new(MorphEditBlockKind.UnresolvedFeatures,
+                        $"Unresolved features: {string.Join(", ", names)}.", FeatureNames: names);
                 }
             }
             if (GeometryMode == MorphFaceGeometryMode.RelativeBake && !HasCompatibleRelativeLod0)
             {
-                return "The imported authored LOD 0 does not match the selected profile topology.";
+                return new(MorphEditBlockKind.ImportedTopology,
+                    "The imported authored LOD 0 does not match the selected profile topology.");
             }
             if (GeometryMode == MorphFaceGeometryMode.RelativeBake && !HasValidRelativeTargetState(Evaluation))
             {
-                return "The selected canonical target set has invalid or incomplete topology data.";
+                return new(MorphEditBlockKind.InvalidTargets,
+                    "The selected canonical target set has invalid or incomplete topology data.");
             }
             var report = Evaluation.OriginalOracleReport;
             if (report is not { IsWithinTolerance: true })
             {
                 return report is null
-                    ? "The baked deformation oracle was unavailable."
-                    : $"The baked deformation oracle missed by {report.MaximumError:G6}.";
+                    ? new(MorphEditBlockKind.OracleUnavailable, "The baked deformation oracle was unavailable.")
+                    : new(MorphEditBlockKind.OracleMismatch,
+                        $"The baked deformation oracle missed by {report.MaximumError:G6}.", MaximumError: report.MaximumError);
             }
-            return ValidationErrors.FirstOrDefault() ?? "Profile validation failed.";
+            return new(MorphEditBlockKind.ValidationFailed, ValidationErrors.FirstOrDefault() ?? "Profile validation failed.");
         }
     }
     public bool UsesBaseVariantCorrection => _positionCorrections.Count > 0;

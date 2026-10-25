@@ -140,7 +140,7 @@ public sealed partial class MainWindowViewModel
             if (savingSource && EditorWorkspace.FileFingerprint(source.Path) != source.Fingerprint ||
                 File.Exists(target) != (targetFingerprint is not null) ||
                 targetFingerprint is not null && EditorWorkspace.FileFingerprint(target) != targetFingerprint)
-                throw new IOException(Loc.Text("loc_FileSave_SourceChanged"));
+                throw Loc.Error(new IOException(Loc.Text("loc_FileSave_SourceChanged")));
             var fingerprint = EditorWorkspace.FileFingerprint(candidate);
             File.Move(candidate, target, overwrite: true);
             _workspace!.ImportedFile = source with { Path = target, Fingerprint = fingerprint };

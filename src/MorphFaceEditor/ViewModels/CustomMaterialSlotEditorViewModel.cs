@@ -59,7 +59,7 @@ public sealed class CustomMaterialSlotEditorViewModel : ObservableObject, IDispo
                 _selected = previous;
                 OnPropertyChanged();
                 _refreshing = false;
-                _reportError(exception.Message);
+                _reportError(UserFacingMessageFormatter.Format(exception));
             }
         }
     }

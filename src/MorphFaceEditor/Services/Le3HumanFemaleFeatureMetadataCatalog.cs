@@ -19,11 +19,7 @@ public sealed class Le3HumanFemaleFeatureMetadataCatalog : HumanFemaleFeatureMet
         var metadata = base.Describe(feature, sessionCanEdit);
         if (MorphFaceProfileFeatures.IsUnsupportedLe3FemaleHair(feature.Feature.Name, feature.Target))
         {
-            metadata = metadata with
-            {
-                IsVisible = false,
-                Description = Loc.Text("loc_Services_Taxonomy_hidden_stock_le3_target_the_six_nominal_hair_con_087d3ba8")
-            };
+            metadata = metadata with { IsVisible = false };
         }
         return MetadataTextCatalog.Apply(TextArchetype, metadata, TextGame);
     }

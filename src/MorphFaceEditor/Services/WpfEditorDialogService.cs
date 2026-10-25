@@ -29,8 +29,8 @@ public sealed class WpfEditorDialogService : IEditorDialogService
         return dialog.ShowDialog() == true ? dialog.FileName : null;
     }
     public bool ConfirmDeleteCareerMorph(string name) => new EditorMessageWindow(
-        Loc.Text("loc_WpfEditorDialogService_DeleteMorphTitle"), Loc.Format("loc_Pcsav_ConfirmDelete", name),
-        confirmation: true, primaryLabel: Loc.Text("loc_WpfEditorDialogService_DeleteMorphTitle"),
+        Loc.Text("loc_View_MainWindow_DeleteMorph"), Loc.Format("loc_Pcsav_ConfirmDelete", name),
+        confirmation: true, primaryLabel: Loc.Text("loc_View_MainWindow_DeleteMorph"),
         secondaryLabel: Loc.Text("loc_Common_Cancel")) { Owner = Application.Current.MainWindow }.ShowDialog() == true;
     public MeshSaveChoice? ChooseMeshSaveFormat()
     {
@@ -194,7 +194,7 @@ public sealed class WpfEditorDialogService : IEditorDialogService
     {
         var dialog = new OpenFileDialog
         {
-            Title = Loc.Text(tse ? "loc_WpfEditorDialogService_ImportTseRonTitle" : "loc_WpfEditorDialogService_ImportMaterialsTitle"),
+            Title = Loc.Text(tse ? "loc_WpfEditorDialogService_ImportTseRonTitle" : "loc_View_MainWindow_ImportMaterials"),
             Filter = tse ? EditorFileDrop.TseRonFilter : EditorFileDrop.RonMaterialFilter,
             InitialDirectory = Directory.Exists(initialDirectory) ? initialDirectory : null,
             Multiselect = false
@@ -206,7 +206,7 @@ public sealed class WpfEditorDialogService : IEditorDialogService
     {
         var dialog = new SaveFileDialog
         {
-            Title = Loc.Text(tse ? "loc_WpfEditorDialogService_ExportTseRonTitle" : "loc_WpfEditorDialogService_ExportMaterialsTitle"),
+            Title = Loc.Text(tse ? "loc_View_MainWindow_ExportTSERON" : "loc_View_MainWindow_ExportMaterials"),
             Filter = tse ? EditorFileDrop.TseRonFilter : EditorFileDrop.RonMaterialFilter,
             DefaultExt = ".ron", AddExtension = true, OverwritePrompt = true,
             FileName = suggestedFileName,
@@ -239,12 +239,12 @@ public sealed class WpfEditorDialogService : IEditorDialogService
 
     public bool ConfirmDeleteMorph(string facePath, bool hasReferences = false) =>
         new EditorMessageWindow(
-            Loc.Text("loc_WpfEditorDialogService_DeleteMorphTitle"),
+            Loc.Text("loc_View_MainWindow_DeleteMorph"),
             Loc.Format(hasReferences
                 ? "loc_WpfEditorDialogService_DeleteReferencedMorphMessage"
                 : "loc_WpfEditorDialogService_DeleteMorphMessage", facePath),
             confirmation: true,
-            primaryLabel: Loc.Text("loc_WpfEditorDialogService_DeleteMorphTitle"),
+            primaryLabel: Loc.Text("loc_View_MainWindow_DeleteMorph"),
             secondaryLabel: Loc.Text("loc_Common_Cancel"))
         {
             Owner = Application.Current.MainWindow

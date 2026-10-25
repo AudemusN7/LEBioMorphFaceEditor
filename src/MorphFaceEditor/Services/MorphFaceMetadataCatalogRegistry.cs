@@ -16,7 +16,7 @@ public static class MorphFaceMetadataCatalogRegistry
         {
             [MorphFaceGame.LE1] = Loc.Text("loc_Services_ProfileGame_LE1"),
             [MorphFaceGame.LE2] = Loc.Text("loc_Services_ProfileGame_LE2"),
-            [MorphFaceGame.LE3] = "LE3"
+            [MorphFaceGame.LE3] = Loc.Text("loc_Shell_Game_LE3")
         };
 
     private static readonly IReadOnlyDictionary<string, string> ArchetypeTerms =

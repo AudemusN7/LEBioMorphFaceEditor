@@ -35,7 +35,7 @@ public sealed partial class MainWindowViewModel
         catch (Exception exception)
         {
             AppLog.Error($"ACTOR:PREFLIGHT-FAILED FACE:{source.InstancedPath}", exception);
-            ErrorMessage = Loc.Format("loc_Shell_Error_ActorAssignmentCouldNotBe", exception.Message);
+            ErrorMessage = Loc.Format("loc_Shell_Error_ActorAssignmentCouldNotBe", UserFacingMessageFormatter.Format(exception));
             Status = Loc.Text("loc_Shell_Status_ActorAssignmentPreflightFailedThe");
             return;
         }
@@ -96,7 +96,7 @@ public sealed partial class MainWindowViewModel
         catch (Exception exception)
         {
             ReportContextOperationFailure(
-                mode == ActorAssignmentMode.Morph ? "loc_Shell_Operation_AssignMorphToActor" : "loc_Shell_Operation_AssignMaterialsToActor",
+                mode == ActorAssignmentMode.Morph ? "loc_View_MainWindow_AssignMorphToActor" : "loc_View_MainWindow_AssignMaterialsToActor",
                 mode == ActorAssignmentMode.Morph
                     ? "loc_Shell_Error_MorphCouldNotAssign"
                     : "loc_Shell_Error_MaterialsCouldNotAssign",
@@ -148,7 +148,8 @@ public sealed partial class MainWindowViewModel
         {
             text.AppendLine(Loc.Format("loc_Shell_ActorAssignment_SkippedRow",
                 skipped.UIndex, skipped.InstancedPath,
-                skipped.UserReason is { } reason ? UserFacingMessageFormatter.Format(reason) : skipped.Reason));
+                skipped.UserReason is { } reason ? UserFacingMessageFormatter.Format(reason)
+                    : UserFacingMessageFormatter.FormatDiagnostic(skipped.Reason)));
         }
         text.AppendLine().Append(Loc.Text("loc_Shell_ActorAssignment_TemporaryWorkspaceSaveNote"));
         return text.ToString();

@@ -20,7 +20,7 @@
                        Foreground="{DynamicResource MutedText}" FontSize="11" Margin="0,8,0,0" />
         </StackPanel>
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button Content="{DynamicResource loc_View_UnsavedChangesWindow_Cancel}" MinWidth="82" IsCancel="True" Click="OnCancel" />
+            <Button Content="{DynamicResource loc_Common_Cancel}" MinWidth="82" IsCancel="True" Click="OnCancel" />
             <Button x:Name="DiscardButton" Content="{DynamicResource loc_View_UnsavedChangesWindow_DonTSave}" MinWidth="96" Margin="8,0,0,0" Click="OnDiscard" />
             <Button x:Name="SaveButton" Content="{DynamicResource loc_View_UnsavedChangesWindow_Save}" MinWidth="82" Margin="8,0,0,0" IsDefault="True" Click="OnSave" />
         </StackPanel>

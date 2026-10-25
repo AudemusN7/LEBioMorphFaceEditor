@@ -33,13 +33,11 @@ public IReadOnlyList<EditorCategoryDefinition> Categories => _turian.Categories;
                 0.01f,
                 false,
                 string.Empty);
-        var described = metadata with
+        return metadata with
         {
             IsVisible = false,
-            IsEditable = false,
-            Description = Loc.Text("loc_Services_Taxonomy_reserved_female_turian_placeholder_no_tuf_morph_b14ba244")
+            IsEditable = false
         };
-        return MetadataTextCatalog.Apply(MorphFaceMetadataCatalogRegistry.FemaleTurian, described);
     }
 
     public MaterialParameterDefinition DescribeMaterial(MaterialParameterDefinition definition) =>

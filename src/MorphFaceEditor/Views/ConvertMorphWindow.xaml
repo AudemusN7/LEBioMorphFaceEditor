@@ -40,8 +40,8 @@
         <TextBlock x:Name="ValidationText" Grid.Row="3" Foreground="{DynamicResource ValidationForeground}" FontSize="11"
                    Margin="0,8,0,0" TextWrapping="Wrap" />
         <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
-            <Button Content="{DynamicResource loc_View_ConvertMorphWindow_Cancel}" IsCancel="True" MinWidth="84" Margin="0,0,8,0" />
-            <Button Content="{DynamicResource loc_View_ConvertMorphWindow_ConvertMorph_2}" IsDefault="True" MinWidth="120" Click="OnConvert" />
+            <Button Content="{DynamicResource loc_Common_Cancel}" IsCancel="True" MinWidth="84" Margin="0,0,8,0" />
+            <Button Content="{DynamicResource loc_View_ConvertMorphWindow_ConvertMorph}" IsDefault="True" MinWidth="120" Click="OnConvert" />
         </StackPanel>
     </Grid>
 </Window>

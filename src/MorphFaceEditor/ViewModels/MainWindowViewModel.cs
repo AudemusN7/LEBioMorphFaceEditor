@@ -87,7 +87,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private string _faceSearchText = string.Empty;
     private BioMorphFaceListItem? _selectedFace;
     private FaceEditorViewModel? _editor;
-    private string _status = Loc.Text("loc_Shell_Status_OpenPackageToBegin");
+    private string _status = Loc.Text("loc_Shell_Status_OpenAPackageToBegin");
     private string? _errorMessage;
     private string? _faceDetails;
     private string? _faceDetailsPrefix;
@@ -584,7 +584,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             }
             catch (Exception exception)
             {
-                SetPreviewError(Loc.Format("loc_Shell_Error_LodPreviewFailed", value, exception.Message));
+                SetPreviewError(Loc.Format("loc_Shell_Error_LodPreviewFailed", value, UserFacingMessageFormatter.Format(exception)));
             }
         }
     }
@@ -768,7 +768,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         catch (Exception exception)
         {
             AppLog.Error($"WORKSPACE:OPEN-FAILED FILE:{selectedPath}", exception);
-            ErrorMessage = Loc.Format("loc_Shell_Error_PackageCouldNotOpen", exception.Message);
+            ErrorMessage = Loc.Format("loc_Shell_Error_PackageCouldNotOpen", UserFacingMessageFormatter.Format(exception));
             Status = Loc.Text("loc_Shell_Status_PackageLoadFailed");
             return false;
         }
@@ -801,7 +801,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         catch (Exception exception)
         {
             AppLog.Error($"WORKSPACE:REFRESH-FAILED FILE:{workspacePath}", exception);
-            ErrorMessage = Loc.Format("loc_Shell_Error_PackageCouldNotOpen", exception.Message);
+            ErrorMessage = Loc.Format("loc_Shell_Error_PackageCouldNotOpen", UserFacingMessageFormatter.Format(exception));
             Status = Loc.Text("loc_Shell_Status_PackageLoadFailed");
             return false;
         }
@@ -861,7 +861,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             AppLog.Error($"FACE:LOAD-FAILED {requestedFacePath} FILE:{workspacePath}", exception);
             HasPreview = false;
             SetEditor(null, null);
-            ErrorMessage = Loc.Format("loc_Shell_Error_FaceCouldNotLoad", exception.Message);
+            ErrorMessage = Loc.Format("loc_Shell_Error_FaceCouldNotLoad", UserFacingMessageFormatter.Format(exception));
             Status = Loc.Text("loc_Shell_Status_FaceLoadFailed");
             return false;
         }
@@ -1056,7 +1056,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             // The original workflow retained the chosen mesh when paired preparation failed.
             if (!committing) editor.CommitManualHairSelection(e.Selection, e.Generation, null);
             AppLog.Error($"HAIR:SCALP-PREPARE-FAILED {mesh.InstancedPath}", exception);
-            SetEditorError(Loc.Format("loc_Shell_Error_MatchingScalpTexturesCouldNotPrepare", exception.Message));
+            SetEditorError(Loc.Format("loc_Shell_Error_MatchingScalpTexturesCouldNotPrepare", UserFacingMessageFormatter.Format(exception)));
         }
     }
 
@@ -1126,7 +1126,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 return;
             }
             AppLog.Error($"MORPH:REPAIR-FAILED {LoadedFacePath}", exception);
-            ErrorMessage = Loc.Format("loc_Shell_Error_MorphCouldNotRepair", exception.Message);
+            ErrorMessage = Loc.Format("loc_Shell_Error_MorphCouldNotRepair", UserFacingMessageFormatter.Format(exception));
             Status = Loc.Text("loc_Shell_Status_MorphRepairFailedFaceUnchanged");
             return;
         }
@@ -1153,7 +1153,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         AppLog.Error(
             $"MORPH:REPAIRED {LoadedFacePath} PREVIEW:FAILED",
             exception);
-        ErrorMessage = Loc.Format("loc_Shell_Error_MorphRepairedPreviewCouldNotRefresh", exception.Message);
+        ErrorMessage = Loc.Format("loc_Shell_Error_MorphRepairedPreviewCouldNotRefresh", UserFacingMessageFormatter.Format(exception));
         Status = Loc.Text("loc_Shell_Status_MorphRepairedPreviewRefreshFailed");
     }
 
@@ -1184,7 +1184,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 PreviewSceneReady?.Invoke(CreateCurrentPreviewScene(), false);
                 if (Editor.CanFixMorph)
                 {
-                    SetGeometryDetails(Loc.Format("loc_Shell_FaceDetails_BakedFallback", Editor.EditBlockReason));
+                    SetGeometryDetails(Loc.Format("loc_Shell_FaceDetails_BakedFallback",
+                        UserFacingMessageFormatter.FormatEditBlockReason(Editor.EditBlock)));
                     _faceDetailsHasBakedFallback = true;
                     Status = Loc.Text("loc_Shell_Status_MorphRepairUndone");
                 }
@@ -1257,7 +1258,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             if (version == _attachmentChangeVersion)
             {
                 AppLog.Error($"ATTACHMENT:CHANGE-FAILED SLOT:{changedSlot.Label}", exception);
-                SetEditorError(Loc.Format("loc_Shell_Error_AttachmentMeshCouldNotChange", exception.Message));
+                SetEditorError(Loc.Format("loc_Shell_Error_AttachmentMeshCouldNotChange", UserFacingMessageFormatter.Format(exception)));
             }
         }
         finally
@@ -1792,7 +1793,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         catch (Exception exception)
         {
             AppLog.Error($"PCC:CUSTOM-MESH-EXPORT-FAILED FILE:{DetachedMeshSource.SourcePath}", exception);
-            ErrorMessage = Loc.Format("loc_Shell_Error_MeshCouldNotSave", exception.Message);
+            ErrorMessage = Loc.Format("loc_Shell_Error_MeshCouldNotSave", UserFacingMessageFormatter.Format(exception));
             Status = Loc.Text("loc_Shell_Status_SaveFailedSourceMeshAndMaterialEditUnmodified");
             return false;
         }

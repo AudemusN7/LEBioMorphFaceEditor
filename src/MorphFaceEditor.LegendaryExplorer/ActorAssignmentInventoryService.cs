@@ -138,9 +138,9 @@ public sealed partial class ActorAssignmentInventoryService
                 ? $"{displayEvidence.Value} (inherited)"
                 : displayEvidence.Value;
 
-        var components = ResolveComponents(actor, resolver, cache, warnings);
+        var components = ResolveComponents(actor, resolver, cache, warnings, userWarnings);
         var headComponent = components.FirstOrDefault(value => value.Role == ActorComponentRole.Head);
-        var morphTarget = ResolveMorphTarget(actor, targetKind, game, behavior, resolver, cache, warnings);
+        var morphTarget = ResolveMorphTarget(actor, targetKind, game, behavior, resolver, cache, warnings, userWarnings);
         // Type-only LE1 factory targets legitimately lack placed components. Their existing
         // morph's base head is bounded local evidence; placed pawns never receive this fallback.
         var headMeshPath = headComponent?.SkeletalMeshPath ??
@@ -152,7 +152,8 @@ public sealed partial class ActorAssignmentInventoryService
         var headProfileKey = headSuffix is null ? null : HeadProfileIdentity.WithGame(gamePrefix, headSuffix);
 
         var morphReason = MorphIneligibilityReason(
-            targetKind, game, selectedProfileKey, headMeshPath, headProfileKey, morphTarget);
+            targetKind, game, selectedProfileKey, headMeshPath, headProfileKey, morphTarget,
+            out var morphUserReason);
 
         var bodyMics = ReadBodyMics(package, components, resolver, cache);
         var attachmentPlan = HeadProfileIdentity.IsGeometryCompatible(selectedProfileKey, headProfileKey)
@@ -178,7 +179,7 @@ public sealed partial class ActorAssignmentInventoryService
                 package, component, gamePrefix, selectedProfileKey, headProfileKey, hasSkinVectors,
                 attachmentPlan.Targets.FirstOrDefault(target => component.IsLocal && target.ComponentUIndex == component.UIndex),
                 bodyMics, component.IsLocal ? ownedMics.Value[component.UIndex] : [],
-                resolver, cache, eligibleMaterials, skippedMaterials, warnings);
+                resolver, cache, eligibleMaterials, skippedMaterials, warnings, userWarnings);
         }
         eligibleMaterials = eligibleMaterials
             .OrderBy(value => value.ComponentRole)
@@ -202,7 +203,8 @@ public sealed partial class ActorAssignmentInventoryService
         }
         if (skippedMaterials.Any(material => material.Reason.Contains("import", StringComparison.OrdinalIgnoreCase)))
         {
-            warnings.Add("Imported materials were inspected for classification but are never writable targets.");
+            AddUserWarning(warnings, userWarnings, "loc_VM_actorAssignment_importedMaterialsSkipped",
+                "Imported materials were inspected for classification but are never writable targets.");
         }
         var hasHeadTargets = eligibleMaterials.Any(material => material.ComponentRole != ActorComponentRole.Body);
 
@@ -211,9 +213,17 @@ public sealed partial class ActorAssignmentInventoryService
             : [];
         if (targetKind == ActorAssignmentTargetKind.SpawnTemplate)
         {
-            warnings.Add(referencedBy.Count == 0
-                ? "This spawn-template assignment can affect every actor created from the type."
-                : $"This spawn-template assignment can affect every actor created from the type; {referencedBy.Count} local referrer(s) were found.");
+            if (referencedBy.Count == 0)
+            {
+                AddUserWarning(warnings, userWarnings, "loc_VM_actorAssignment_spawnTemplateAffectsAll",
+                    "This spawn-template assignment can affect every actor created from the type.");
+            }
+            else
+            {
+                AddUserWarning(warnings, userWarnings, "loc_VM_actorAssignment_spawnTemplateAffectsAllWithReferrers",
+                    $"This spawn-template assignment can affect every actor created from the type; {referencedBy.Count} local referrer(s) were found.",
+                    referencedBy.Count);
+            }
         }
 
         var searchValues = evidence.Select(value => value.Value)
@@ -270,10 +280,22 @@ public sealed partial class ActorAssignmentInventoryService
             referencedBy,
             warnings.Distinct(StringComparer.Ordinal).ToArray())
         {
+            UserDisplayName = displayEvidence?.Kind is ActorIdentityEvidenceKind.InheritedTag or
+                ActorIdentityEvidenceKind.InheritedUniqueTag
+                ? UserFacingMessage.Create("loc_VM_actorAssignment_inheritedDisplayName", displayEvidence.Value)
+                : null,
+            MorphIneligibilityUserReason = morphUserReason,
             UserWarnings = userWarnings,
             AttachmentTargets = attachmentPlan.Targets,
             AttachmentWarnings = attachmentPlan.Warnings
         };
+    }
+
+    private static void AddUserWarning(ICollection<string> warnings, ICollection<UserFacingMessage> userWarnings,
+        string key, string diagnostic, params object?[] arguments)
+    {
+        warnings.Add(diagnostic);
+        userWarnings.Add(UserFacingMessage.CreateWarning(key, diagnostic, arguments));
     }
 
     private static ActorAssignmentTargetKind? GetTargetKind(ExportEntry export, MorphFaceGame game)
@@ -415,7 +437,8 @@ public sealed partial class ActorAssignmentInventoryService
         ExportEntry actor,
         GamePackageReferenceResolver resolver,
         PackageCache cache,
-        ICollection<string> warnings)
+        ICollection<string> warnings,
+        ICollection<UserFacingMessage> userWarnings)
     {
         var result = new List<ActorAssignmentComponent>();
         AddComponent(ActorComponentRole.Head, HeadComponentProperties);
@@ -448,12 +471,16 @@ public sealed partial class ActorAssignmentInventoryService
                 var component = resolver.Resolve(entry);
                 if (component is null)
                 {
-                    warnings.Add($"{propertyName} on '{actor.InstancedFullPath}' could not be resolved.");
+                    AddUserWarning(warnings, userWarnings, "loc_VM_actorAssignment_componentCouldNotResolve",
+                        $"{propertyName} on '{actor.InstancedFullPath}' could not be resolved.",
+                        propertyName, actor.InstancedFullPath);
                     continue;
                 }
                 if (!component.IsA("SkeletalMeshComponent"))
                 {
-                    warnings.Add($"{propertyName} resolved to {component.ClassName}, not a skeletal component.");
+                    AddUserWarning(warnings, userWarnings, "loc_VM_actorAssignment_componentNotSkeletal",
+                        $"{propertyName} resolved to {component.ClassName}, not a skeletal component.",
+                        propertyName, component.ClassName);
                     continue;
                 }
                 // Mesh is a head fallback on skeletal actors, but the body on pawns with
@@ -489,7 +516,8 @@ public sealed partial class ActorAssignmentInventoryService
         ExportEntry? behavior,
         GamePackageReferenceResolver resolver,
         PackageCache cache,
-        ICollection<string> warnings)
+        ICollection<string> warnings,
+        ICollection<UserFacingMessage> userWarnings)
     {
         ExportEntry? owner;
         string propertyName;
@@ -504,7 +532,8 @@ public sealed partial class ActorAssignmentInventoryService
             if (owner is null || !ReferenceEquals(owner.FileRef, actor.FileRef) ||
                 !owner.IsA("BioInterface_Appearance_Pawn"))
             {
-                warnings.Add("The LE1 pawn has no local BioInterface_Appearance_Pawn; its shared actor type will not be used as a fallback.");
+                AddUserWarning(warnings, userWarnings, "loc_VM_actorAssignment_le1AppearancePawnMissing",
+                    "The LE1 pawn has no local BioInterface_Appearance_Pawn; its shared actor type will not be used as a fallback.");
                 return null;
             }
         }
@@ -538,25 +567,34 @@ public sealed partial class ActorAssignmentInventoryService
         string selectedProfileKey,
         string? headMeshPath,
         string? headProfileKey,
-        ActorAssignmentMorphTarget? morphTarget)
+        ActorAssignmentMorphTarget? morphTarget,
+        out UserFacingMessage? userReason)
     {
+        userReason = null;
         if (morphTarget is null)
         {
-            return game == MorphFaceGame.LE1 && targetKind == ActorAssignmentTargetKind.PlacedActor
-                ? "No local LE1 appearance interface owns m_oMorphFace; shared actor types are not an implicit fallback."
-                : "No safe local morph-property owner was resolved.";
+            if (game == MorphFaceGame.LE1 && targetKind == ActorAssignmentTargetKind.PlacedActor)
+            {
+                userReason = UserFacingMessage.Create("loc_VM_actorAssignment_le1MorphOwnerMissing");
+                return "No local LE1 appearance interface owns m_oMorphFace; shared actor types are not an implicit fallback.";
+            }
+            userReason = UserFacingMessage.Create("loc_VM_actorAssignment_morphOwnerMissing");
+            return "No safe local morph-property owner was resolved.";
         }
         if (string.IsNullOrWhiteSpace(headMeshPath))
         {
+            userReason = UserFacingMessage.Create("loc_VM_actorAssignment_headMeshUnresolved");
             return "No head skeletal mesh could be resolved, so morph compatibility is unknown.";
         }
         if (headProfileKey is null)
         {
+            userReason = UserFacingMessage.Create("loc_VM_actorAssignment_headMeshUnknownProfile", headMeshPath);
             return $"Head mesh '{headMeshPath}' is not a recognized morph profile.";
         }
-        return HeadProfileIdentity.IsGeometryCompatible(selectedProfileKey, headProfileKey)
-            ? null
-            : $"Head mesh profile '{headProfileKey}' is incompatible with selected face profile '{selectedProfileKey}'.";
+        if (HeadProfileIdentity.IsGeometryCompatible(selectedProfileKey, headProfileKey)) return null;
+        userReason = UserFacingMessage.Create(
+            "loc_VM_actorAssignment_incompatibleHeadProfile", headProfileKey, selectedProfileKey);
+        return $"Head mesh profile '{headProfileKey}' is incompatible with selected face profile '{selectedProfileKey}'.";
     }
 
 }

@@ -56,6 +56,7 @@ public sealed class MorphFacePackageWriter
             string facePath;
             string overridePath;
             var warnings = new List<string>();
+            var userWarnings = new List<UserFacingMessage>();
             PccDependencyGraphSnapshot dependencyGraph;
             var sourceBytes = File.ReadAllBytes(sourcePath);
             using (var sourceStream = new MemoryStream(sourceBytes, writable: false))
@@ -79,7 +80,7 @@ public sealed class MorphFacePackageWriter
                 }
                 var requestedTextures = draft.MaterialOverrides.Textures;
                 draft = draft with { MaterialOverrides = PccPackageWorkflow.OmitUnavailableSelectedTextures(
-                    draft.MaterialOverrides, sourceCache, warnings) };
+                    draft.MaterialOverrides, sourceCache, warnings, userWarnings) };
                 var omittedNames = requestedTextures.Except(draft.MaterialOverrides.Textures)
                     .Select(value => value.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
                 if (omittedNames.Count > 0)
@@ -192,7 +193,8 @@ public sealed class MorphFacePackageWriter
                 draft.BakedLods.Count,
                 draft.MaterialOverrides.Textures.Count)
             {
-                Warnings = warnings
+                Warnings = warnings,
+                UserWarnings = userWarnings
             };
         }
     }
@@ -215,6 +217,7 @@ public sealed class MorphFacePackageWriter
             File.Copy(packagePath, temporaryPath, overwrite: false);
             string overridePath;
             var warnings = new List<string>();
+            var userWarnings = new List<UserFacingMessage>();
             PccDependencyGraphSnapshot? dependencyGraph = null;
             using (var package = MEPackageHandler.OpenMEPackage(temporaryPath, forceLoadFromDisk: true))
             {
@@ -226,7 +229,7 @@ public sealed class MorphFacePackageWriter
                 VerifyUnchangedNonFiniteValues(draft, face);
                 draft = FilterSupportedAttachments(draft, warnings, sourceCache, installedAssets);
                 draft = draft with { MaterialOverrides = PccPackageWorkflow.OmitUnavailableSelectedTextures(
-                    draft.MaterialOverrides, sourceCache, warnings) };
+                    draft.MaterialOverrides, sourceCache, warnings, userWarnings) };
                 var explicitDonors = ResolveExplicitTextureDonors(draft, package.Game, sourceCache, installedAssets)
                     .Where(donor => !Path.GetFullPath(donor.FileRef.FilePath).Equals(packagePath, StringComparison.OrdinalIgnoreCase) ||
                         package.FindExport(PccAssetPathPolicy.FromExport(donor), "Texture2D")?.UIndex != donor.UIndex)
@@ -251,7 +254,8 @@ public sealed class MorphFacePackageWriter
                 draft.BakedLods.Count,
                 draft.MaterialOverrides.Textures.Count)
             {
-                Warnings = warnings
+                Warnings = warnings,
+                UserWarnings = userWarnings
             };
         }
     }

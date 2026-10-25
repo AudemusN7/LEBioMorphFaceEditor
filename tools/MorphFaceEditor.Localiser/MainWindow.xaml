@@ -13,6 +13,16 @@
                 <Setter Property="Foreground" Value="{DynamicResource PrimaryText}" />
                 <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
             </Style>
+            <ContextMenu x:Key="CellContextMenu" x:Shared="False" Opened="OnCellContextMenuOpened">
+                <MenuItem Header="Copy cell" Tag="CopyCell" Click="OnCellContextMenuClick" />
+                <MenuItem Header="Copy key" Tag="CopyKey" Click="OnCellContextMenuClick" />
+                <MenuItem Header="Paste cell" Tag="PasteCell" Click="OnCellContextMenuClick" />
+                <Separator />
+                <MenuItem Header="Copy selection" Command="ApplicationCommands.Copy"
+                          CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                <MenuItem Header="Paste at caret" Command="ApplicationCommands.Paste"
+                          CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            </ContextMenu>
             <Style x:Key="CellText" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
                 <EventSetter Event="GotKeyboardFocus" Handler="OnCellEditStarted" />
                 <EventSetter Event="LostKeyboardFocus" Handler="OnCellEditEnded" />
@@ -20,6 +30,7 @@
                 <Setter Property="Padding" Value="7,6" /><Setter Property="TextWrapping" Value="Wrap" />
                 <Setter Property="AcceptsReturn" Value="True" /><Setter Property="VerticalContentAlignment" Value="Top" />
                 <Setter Property="IsUndoEnabled" Value="False" />
+                <Setter Property="ContextMenu" Value="{StaticResource CellContextMenu}" />
                 <Style.Triggers><Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter Property="Background" Value="{DynamicResource InputBackground}" /></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Background" Value="{DynamicResource InputBackground}" /><Setter Property="Foreground" Value="{DynamicResource MutedText}" /></Trigger></Style.Triggers>
             </Style>
             <Style TargetType="RadioButton">
@@ -50,6 +61,9 @@
                 <Setter Property="Background" Value="{DynamicResource PanelBackground}" /><Setter Property="Foreground" Value="{DynamicResource PrimaryText}" />
                 <Setter Property="MinHeight" Value="34" /><Setter Property="ToolTip" Value="{Binding Problem}" />
             </Style>
+            <Style TargetType="ScrollViewer">
+                <Setter Property="Background" Value="{DynamicResource InputBackground}" />
+            </Style>
         </ResourceDictionary>
     </Window.Resources>
     <Window.CommandBindings>
@@ -75,7 +89,11 @@
             <TextBox x:Name="SearchBox" Grid.Column="2" Text="{Binding Search, UpdateSourceTrigger=PropertyChanged}" Margin="12,0,0,0" ToolTip="Search strings, notes or source references" AutomationProperties.Name="Search" />
         </Grid>
         <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions><ColumnDefinition Width="230" /><ColumnDefinition Width="10" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+            <Grid.Resources>
+                <SolidColorBrush x:Key="{x:Static SystemColors.ControlBrushKey}"
+                                 Color="{StaticResource Default.Window}" />
+            </Grid.Resources>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="230" MinWidth="150" MaxWidth="420" /><ColumnDefinition Width="10" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
             <ListBox x:Name="SectionList" ItemsSource="{Binding Sections}" SelectedItem="{Binding SelectedSection}" BorderThickness="1" BorderBrush="{DynamicResource BorderBrush}" HorizontalContentAlignment="Stretch">
                 <ListBox.ItemContainerStyle>
                     <Style TargetType="ListBoxItem">
@@ -97,6 +115,9 @@
                     </DataTemplate.Triggers>
                 </DataTemplate></ListBox.ItemTemplate>
             </ListBox>
+            <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch"
+                          ResizeDirection="Columns" ResizeBehavior="PreviousAndNext" ShowsPreview="True"
+                          Background="{DynamicResource BorderBrush}" ToolTip="Resize sections pane" />
             <DataGrid x:Name="StringList" Grid.Column="2" ItemsSource="{Binding Entries}" IsReadOnly="True" AutoGenerateColumns="False"
                       SelectionMode="Extended" SelectionUnit="FullRow" CanUserAddRows="False" CanUserDeleteRows="False"
                       Background="{DynamicResource InputBackground}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
@@ -105,18 +126,18 @@
                       ScrollViewer.CanContentScroll="True" PreviewKeyDown="OnTableKeyDown">
                 <DataGrid.Columns>
                     <DataGridTemplateColumn Header="Key" Width="1.2*" MinWidth="180" SortMemberPath="Key">
-                        <DataGridTemplateColumn.CellTemplate><DataTemplate><TextBlock Text="{Binding Key}" ToolTip="{Binding References}" ToolTipService.ShowDuration="60000" TextWrapping="Wrap" Margin="7,6" FontSize="11" Foreground="{DynamicResource SecondaryText}" /></DataTemplate></DataGridTemplateColumn.CellTemplate>
+                        <DataGridTemplateColumn.CellTemplate><DataTemplate><TextBlock Text="{Binding Key}" Tag="Key" ContextMenu="{StaticResource CellContextMenu}" ToolTip="{Binding References}" ToolTipService.ShowDuration="60000" TextWrapping="Wrap" Margin="7,6" FontSize="11" Foreground="{DynamicResource SecondaryText}" /></DataTemplate></DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
                     <DataGridTemplateColumn Header="English" Width="1.8*" MinWidth="170" SortMemberPath="English">
-                        <DataGridTemplateColumn.CellTemplate><DataTemplate><TextBox Text="{Binding English, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource CellText}" IsTabStop="{Binding EnglishEditable}">
+                        <DataGridTemplateColumn.CellTemplate><DataTemplate><TextBox Text="{Binding English, UpdateSourceTrigger=PropertyChanged}" Tag="English" Style="{StaticResource CellText}" IsTabStop="{Binding EnglishEditable}">
                             <TextBox.IsReadOnly><Binding Path="EnglishEditable" Converter="{x:Static local:InverseBooleanConverter.Instance}" /></TextBox.IsReadOnly>
                         </TextBox></DataTemplate></DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
                     <DataGridTemplateColumn Header="Localised" Width="1.8*" MinWidth="170" SortMemberPath="Localised">
-                        <DataGridTemplateColumn.CellTemplate><DataTemplate><TextBox Text="{Binding Localised, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding LocalisedEditable}" Style="{StaticResource CellText}" ToolTip="{Binding Problem}" /></DataTemplate></DataGridTemplateColumn.CellTemplate>
+                        <DataGridTemplateColumn.CellTemplate><DataTemplate><TextBox Text="{Binding Localised, UpdateSourceTrigger=PropertyChanged}" Tag="Localised" IsEnabled="{Binding LocalisedEditable}" Style="{StaticResource CellText}" ToolTip="{Binding Problem}" /></DataTemplate></DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
                     <DataGridTemplateColumn Header="Notes" Width="1.1*" MinWidth="130" SortMemberPath="Notes">
-                        <DataGridTemplateColumn.CellTemplate><DataTemplate><TextBox Text="{Binding Notes, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource CellText}" /></DataTemplate></DataGridTemplateColumn.CellTemplate>
+                        <DataGridTemplateColumn.CellTemplate><DataTemplate><TextBox Text="{Binding Notes, UpdateSourceTrigger=PropertyChanged}" Tag="Notes" Style="{StaticResource CellText}" /></DataTemplate></DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
                     <DataGridTemplateColumn Header="Excluded" Width="76" CanUserSort="False">
                         <DataGridTemplateColumn.CellTemplate><DataTemplate><CheckBox IsChecked="{Binding Excluded, Mode=OneWay}" Tag="Excluded" HorizontalAlignment="Center" PreviewMouseLeftButtonDown="OnFlagClick" PreviewKeyDown="OnFlagKey" /></DataTemplate></DataGridTemplateColumn.CellTemplate>

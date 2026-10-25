@@ -26,7 +26,7 @@ public partial class SaveMorphToPccWindow : Window
     {
         var dialog = new OpenFileDialog
         {
-            Title = Loc.Text("loc_SaveNewInstanceWindow_ChooseExistingDestinationPcc"),
+            Title = Loc.Text("loc_ConvertMorphWindow_ChooseExistingDestinationPcc"),
             Filter = EditorFileDrop.PackageFilter,
             CheckFileExists = true,
             Multiselect = false,

@@ -35,6 +35,7 @@ public sealed record TextureRegistryStatus(
     int? TextureCount,
     string? ErrorMessage)
 {
+    public UserFacingMessage? UserError { get; init; }
     public int? UnsupportedSchemaVersion { get; init; }
     public bool IsDevelopmentSchema { get; init; }
     public bool IsStale { get; init; }

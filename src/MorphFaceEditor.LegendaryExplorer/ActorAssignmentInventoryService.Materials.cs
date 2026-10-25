@@ -37,7 +37,8 @@ public sealed partial class ActorAssignmentInventoryService
         PackageCache cache,
         ICollection<ActorAssignmentMaterialTarget> eligible,
         ICollection<ActorAssignmentSkippedMaterial> skipped,
-        ICollection<string> warnings)
+        ICollection<string> warnings,
+        ICollection<UserFacingMessage> userWarnings)
     {
         var componentPackage = component.IsLocal
             ? package
@@ -45,7 +46,13 @@ public sealed partial class ActorAssignmentInventoryService
         var componentExport = componentPackage?.GetEntry(component.UIndex) as ExportEntry;
         if (componentExport is null)
         {
-            warnings.Add($"Component '{component.InstancedPath}' could not be reopened for material inspection.");
+            const string diagnosticTemplate = "Component '{0}' could not be reopened for material inspection.";
+            var diagnostic = string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                diagnosticTemplate, component.InstancedPath);
+            warnings.Add(diagnostic);
+            userWarnings.Add(UserFacingMessage.CreateWarning(
+                "loc_VM_actorAssignment_componentCouldNotReopenForMaterialInspection",
+                diagnostic, component.InstancedPath));
             return;
         }
         var materialsProperty = FindProperty<ArrayProperty<ObjectProperty>>(componentExport, "Materials", resolver, cache);
@@ -91,6 +98,9 @@ public sealed partial class ActorAssignmentInventoryService
                 reason = rawEntry is ImportEntry || resolved is not null && !ReferenceEquals(resolved.FileRef, package)
                     ? "Imported materials are read-only and are never assignment targets."
                     : $"{rawEntry.ClassName} is not a local MIC export.";
+                userReason = rawEntry is ImportEntry || resolved is not null && !ReferenceEquals(resolved.FileRef, package)
+                    ? UserFacingMessage.Create("loc_VM_actorAssignment_importedMaterialReadOnly")
+                    : UserFacingMessage.Create("loc_VM_actorAssignment_nonLocalMicExport", rawEntry.ClassName);
             }
             else if (component.Role == ActorComponentRole.Body)
             {
@@ -113,6 +123,9 @@ public sealed partial class ActorAssignmentInventoryService
                 reason = family == HeadMaterialFamily.Accessory
                     ? "The complete parent chain classifies as body, gear, headgear, or another accessory."
                     : "The complete parent chain is not a recognized safe head or hair material family.";
+                userReason = family == HeadMaterialFamily.Accessory
+                    ? UserFacingMessage.Create("loc_VM_actorAssignment_accessoryMaterialFamilyUnsafe")
+                    : UserFacingMessage.Create("loc_VM_actorAssignment_unrecognizedHeadMaterialFamily");
             }
             else
             {
@@ -125,6 +138,10 @@ public sealed partial class ActorAssignmentInventoryService
                     reason = materialProfileKey is null
                         ? "The material family is recognizable, but its species/sex profile is not safe to infer."
                         : $"Material profile '{materialProfileKey}' is incompatible with selected face profile '{selectedProfileKey}'.";
+                    userReason = materialProfileKey is null
+                        ? UserFacingMessage.Create("loc_VM_actorAssignment_materialFamilyProfileUnknown")
+                        : UserFacingMessage.Create("loc_VM_actorAssignment_incompatibleMaterialProfile",
+                            materialProfileKey, selectedProfileKey);
                 }
             }
 

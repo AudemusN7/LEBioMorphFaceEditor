@@ -1,6 +1,7 @@
 using MorphFaceEditor.Core.Domain;
 using System.IO;
 using MorphFaceEditor.Core.Materials;
+using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.LegendaryExplorer;
 
 namespace MorphFaceEditor.Services;
@@ -45,8 +46,8 @@ public sealed class RonNpcDonorResolver(MorphFaceProfileRegistry profiles)
             .ThenBy(candidate => candidate.Origin)
             .ThenBy(candidate => candidate.PackagePath, StringComparer.OrdinalIgnoreCase)
             .ThenBy(candidate => candidate.FacePath, StringComparer.OrdinalIgnoreCase)
-            .FirstOrDefault() ?? throw new InvalidDataException(
-                $"The installed {game} texture database has no native NPC '{archetype}' face. Rebuild the database and try again.");
+            .FirstOrDefault() ?? throw Loc.Error(new InvalidDataException(
+                Loc.Format("loc_Services_RonNpcDonorResolver_NoInstalledNativeNpcFace", game, archetype)));
     }
 
     // NPC RON import can use a static native base.  In particular, ALN/Vorcha

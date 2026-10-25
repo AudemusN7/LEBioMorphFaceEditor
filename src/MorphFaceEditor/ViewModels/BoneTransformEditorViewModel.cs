@@ -21,7 +21,7 @@ public sealed class BoneTransformEditorViewModel : ObservableObject
             !string.Equals(x.BoneName, z.BoneName, StringComparison.OrdinalIgnoreCase) ||
             x.Axis != 0 || y.Axis != 1 || z.Axis != 2)
         {
-            throw new ArgumentException(Loc.Text("loc_VM_boneTransform_invalidAxes"));
+            throw Loc.Error(new ArgumentException(Loc.Text("loc_VM_boneTransform_invalidAxes")));
         }
 
         BoneName = x.BoneName;

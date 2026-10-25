@@ -30,7 +30,7 @@ public partial class UnsavedChangesWindow : Window
             Title = Loc.Text("loc_UnsavedChangesWindow_UnsavedMeshMaterialSettings");
             SummaryText.Text = Loc.Text("loc_UnsavedChangesWindow_MeshWorkspaceHasUnsavedEdits");
             SaveExplanationText.Text = Loc.Text("loc_UnsavedChangesWindow_ExportMaterialsExplanation");
-            SaveButton.Content = Loc.Text("loc_UnsavedChangesWindow_ExportMaterials");
+            SaveButton.Content = Loc.Text("loc_View_MainWindow_ExportMaterials");
         }
         else if (scope == UnsavedChangesScope.StandaloneFace)
         {

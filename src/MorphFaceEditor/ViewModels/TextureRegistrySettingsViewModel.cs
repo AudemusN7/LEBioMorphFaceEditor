@@ -92,7 +92,7 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
     public async Task AppendManualAsync(MorphFaceGame game,
         IReadOnlyList<MorphFaceEditor.Core.Materials.ManualRegistryAsset> selections)
     {
-        if (IsBuilding) throw new InvalidOperationException(Loc.Text("loc_VM_textureRegistry_waitForBuild"));
+        if (IsBuilding) throw Loc.Error(new InvalidOperationException(Loc.Text("loc_VM_textureRegistry_waitForBuild")));
         _statusGeneration++;
         var status = await Task.Run(() =>
         {
@@ -149,7 +149,8 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
             UpdateActiveStatus(previous with
             {
                 State = TextureRegistryState.Failed,
-                ErrorMessage = modsOnly ? LocalizedModsBuildError(exception) : exception.Message
+                ErrorMessage = modsOnly ? LocalizedModsBuildError(exception) : Loc.Text("loc_VM_textureRegistry_fullBuildFailed"),
+                UserError = modsOnly ? ModsBuildError(exception) : UserFacingMessage.Create("loc_VM_textureRegistry_fullBuildFailed")
             });
         }
         finally
@@ -164,14 +165,17 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
         }
     }
 
-    private static string LocalizedModsBuildError(Exception exception) => exception switch
+    private static string LocalizedModsBuildError(Exception exception) =>
+        UserFacingMessageFormatter.Format(ModsBuildError(exception));
+
+    private static UserFacingMessage ModsBuildError(Exception exception) => UserFacingMessage.Create(exception switch
     {
         TextureRegistryBuildException { Reason: TextureRegistryBuildFailure.OfficialDatabaseRequired } =>
-            Loc.Text("loc_VM_textureRegistry_officialDatabaseRequired"),
+            "loc_VM_textureRegistry_officialDatabaseRequired",
         TextureRegistryBuildException { Reason: TextureRegistryBuildFailure.OfficialDatabaseChanged } =>
-            Loc.Text("loc_VM_textureRegistry_officialDatabaseChanged"),
-        _ => Loc.Text("loc_VM_textureRegistry_modRescanFailed")
-    };
+            "loc_VM_textureRegistry_officialDatabaseChanged",
+        _ => "loc_VM_textureRegistry_modRescanFailed"
+    });
 
     public async Task RebuildAllAsync(CancellationToken cancellationToken = default,
         bool keepManualAssets = true)
@@ -209,7 +213,12 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
                 catch (Exception exception)
                 {
                     AppLog.Error($"REGISTRY:BUILD-FAILED {row.Game} MODE:ALL", exception);
-                    row.Update(previous with { State = TextureRegistryState.Failed, ErrorMessage = exception.Message });
+                    row.Update(previous with
+                    {
+                        State = TextureRegistryState.Failed,
+                        ErrorMessage = Loc.Text("loc_VM_textureRegistry_fullBuildFailed"),
+                        UserError = UserFacingMessage.Create("loc_VM_textureRegistry_fullBuildFailed")
+                    });
                     break;
                 }
             }
@@ -242,7 +251,10 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
         {
             ErrorMessage = failures.Count == 1
                 ? Loc.Format("loc_VM_textureRegistry_oneMissingCustomAsset", report)
-                : Loc.Format("loc_VM_textureRegistry_missingCustomAssets", failures.Count, report)
+                : Loc.Format("loc_VM_textureRegistry_missingCustomAssets", failures.Count, report),
+            UserError = failures.Count == 1
+                ? UserFacingMessage.Create("loc_VM_textureRegistry_oneMissingCustomAsset", report)
+                : UserFacingMessage.Create("loc_VM_textureRegistry_missingCustomAssets", failures.Count, report)
         };
     }
 
@@ -361,7 +373,9 @@ public sealed class TextureRegistrySettingsRowViewModel : ObservableObject
             ? Loc.Format(status.IsDevelopmentSchema
                 ? "loc_VM_textureRegistry_developmentSchemaUnsupported"
                 : "loc_VM_textureRegistry_schemaUnsupported", version)
-            : status?.ErrorMessage;
+            : status?.ErrorMessage is not { } diagnostic ? null
+            : status.UserError is { } message ? UserFacingMessageFormatter.Format(message)
+            : UserFacingMessageFormatter.FormatDiagnostic(diagnostic);
     public bool IsBuildActionVisible
     {
         get => _isBuildActionVisible;
@@ -407,6 +421,7 @@ public sealed class TextureRegistrySettingsRowViewModel : ObservableObject
 
     public void Update(TextureRegistryStatus status)
     {
+        if (status.ErrorMessage is { } diagnostic) AppLog.Warning($"REGISTRY:STATUS {status.Game} {diagnostic}");
         _status = status;
         OnPropertyChanged(nameof(Status));
         OnPropertyChanged(nameof(StatusLabel));
@@ -420,6 +435,7 @@ public sealed class TextureRegistrySettingsRowViewModel : ObservableObject
 
     public void UpdateCustom(TextureRegistryStatus status)
     {
+        if (status.ErrorMessage is { } diagnostic) AppLog.Warning($"REGISTRY:CUSTOM-STATUS {status.Game} {diagnostic}");
         _customStatus = status;
         OnPropertyChanged(nameof(CustomStatus));
         OnPropertyChanged(nameof(CustomStatusLabel));

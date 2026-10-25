@@ -74,7 +74,7 @@ public sealed class DetachedMeshPreviewLoadService
                 ? Loc.Text("loc_Services_DetachedMeshPreviewLoad_NoRig")
                 : Loc.Format(
                     "loc_Services_DetachedMeshPreviewLoad_RigUnverified",
-                    detached.Editing.Rig.BlockReason);
+                    UserFacingMessageFormatter.FormatDiagnostic(detached.Editing.Rig.BlockReason!));
         var session = new MorphFaceEditingSession(
             detached.Document,
             detached.Mesh,

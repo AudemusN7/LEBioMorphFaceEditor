@@ -162,6 +162,8 @@ public sealed record ActorAssignmentCandidate(
     IReadOnlyList<string> Warnings)
 {
     public int SafeMaterialCount => MaterialTargets.Select(target => target.UIndex).Distinct().Count();
+    public UserFacingMessage? UserDisplayName { get; init; }
+    public UserFacingMessage? MorphIneligibilityUserReason { get; init; }
     public IReadOnlyList<UserFacingMessage> UserWarnings { get; init; } = [];
     public IReadOnlyList<ActorAssignmentAttachmentTarget> AttachmentTargets { get; init; } = [];
     public IReadOnlyList<UserFacingMessage> AttachmentWarnings { get; init; } = [];

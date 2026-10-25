@@ -73,11 +73,12 @@ internal static class PccTextureDependencyResolver
         IMEPackage destination,
         AssetIdentity identity,
         IReadOnlyList<TextureCatalogCandidate> catalog,
-        ICollection<string>? warnings = null)
+        ICollection<string>? warnings = null,
+        ICollection<UserFacingMessage>? userWarnings = null)
     {
         ArgumentNullException.ThrowIfNull(destination);
         var source = Resolve(identity, catalog);
-        return MaterializeResolved(destination, source, warnings);
+        return MaterializeResolved(destination, source, warnings, userWarnings);
     }
 
     /// <summary>
@@ -87,7 +88,8 @@ internal static class PccTextureDependencyResolver
     internal static ExportEntry MaterializeDirect(
         IMEPackage destination,
         AssetIdentity identity,
-        ICollection<string>? warnings = null)
+        ICollection<string>? warnings = null,
+        ICollection<UserFacingMessage>? userWarnings = null)
     {
         ArgumentNullException.ThrowIfNull(destination);
         ArgumentNullException.ThrowIfNull(identity);
@@ -96,13 +98,14 @@ internal static class PccTextureDependencyResolver
             ?? throw new InvalidDataException($"Texture2D '{identity.InstancedPath}' has no exact official or authored donor.");
         // Keep this resolved donor alive through its owning cache. Resolving it
         // again in MaterializeResolved opens the same PCC a second time.
-        return ImportDonor(destination, donor, identity.InstancedPath, warnings);
+        return ImportDonor(destination, donor, identity.InstancedPath, warnings, userWarnings);
     }
 
     internal static ExportEntry MaterializeResolved(
         IMEPackage destination,
         PccTextureSource source,
-        ICollection<string>? warnings)
+        ICollection<string>? warnings,
+        ICollection<UserFacingMessage>? userWarnings = null)
     {
         using var cache = new PackageCache();
         LegendaryExplorerCoreRuntime.Initialize();
@@ -111,12 +114,13 @@ internal static class PccTextureDependencyResolver
         if (donorTexture is null)
             throw new InvalidDataException(
                 $"Texture2D '{source.InstancedPath}' has no exact official installed donor.");
-        return ImportDonor(destination, donorTexture, source.InstancedPath, warnings);
+        return ImportDonor(destination, donorTexture, source.InstancedPath, warnings, userWarnings);
     }
 
     private static ExportEntry ImportDonor(
         IMEPackage destination, ExportEntry donorTexture, string requestedPath,
-        ICollection<string>? warnings)
+        ICollection<string>? warnings,
+        ICollection<UserFacingMessage>? userWarnings)
     {
         if (!donorTexture.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException($"Texture2D '{requestedPath}' has no exact texture donor.");
@@ -130,7 +134,8 @@ internal static class PccTextureDependencyResolver
             textureCatalog: null,
             warnings: warnings,
             applyCorpusMaterialPolicy: false,
-            targetPathOverride: path);
+            targetPathOverride: path,
+            userWarnings: userWarnings);
         if (!textureExport.InstancedFullPath.Equals(path, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidDataException(

@@ -85,6 +85,7 @@ public sealed class MorphFacePackageContextService
             TextureTransferResult transfer;
             AttachmentTransferResult attachments;
             IReadOnlyList<string> stagingWarnings;
+            var stagingUserWarnings = new List<UserFacingMessage>();
             string facePath;
             string materialPath;
             PccDependencyGraphSnapshot dependencyGraph;
@@ -108,7 +109,8 @@ public sealed class MorphFacePackageContextService
                     package.CreatePackageExport("MorphFaceEditor"),
                     targetTextureCatalog,
                     warnings: stagingMessages,
-                    requiredExportReferences: [templateBaseHead]);
+                    requiredExportReferences: [templateBaseHead],
+                    userWarnings: stagingUserWarnings);
                 stagingWarnings = stagingMessages;
                 face.ObjectName = new NameReference(objectName);
                 var materialOverride = ResolveMaterialOverride(face);
@@ -175,7 +177,8 @@ public sealed class MorphFacePackageContextService
                         .Concat(transfer.Warnings)
                         .Concat(attachments.Warnings)
                         .ToArray(),
-                    UserWarnings = attachments.UserWarnings
+                    UserWarnings = stagingUserWarnings.Concat(transfer.UserWarnings)
+                        .Concat(attachments.UserWarnings).ToArray()
                 },
                 transfer.MaterialData);
         }
@@ -649,7 +652,8 @@ public sealed class MorphFacePackageContextService
             var warnings = new List<string>();
             var userWarnings = new List<UserFacingMessage>();
             var resolvedMaterial = mergeWithTemplate
-                ? MergeLegacyMaterials(package, ReadMaterialData(ResolveMaterialOverride(source)), ron.MaterialData, warnings)
+                ? MergeLegacyMaterials(package, ReadMaterialData(ResolveMaterialOverride(source)), ron.MaterialData,
+                    warnings, userWarnings)
                 : npcMaterialTransfer is null
                     ? ResolveRonMaterials(package, ron.MaterialData, assetCatalog, strictAssetResolution, warnings, userWarnings)
                     : TransferNpcRonMaterials(package, ron.MaterialData, npcMaterialTransfer,
@@ -658,7 +662,7 @@ public sealed class MorphFacePackageContextService
             WriteMaterialData(package, materialOverride, resolvedMaterial);
             if (mergeWithTemplate)
             {
-                WriteLegacyMeshReferences(package, clone, ron, warnings);
+                WriteLegacyMeshReferences(package, clone, ron, warnings, userWarnings);
             }
             else
             {
@@ -961,6 +965,7 @@ public sealed class MorphFacePackageContextService
         {
             warnings.Add(warning);
         }
+        foreach (var warning in mapped.UserWarnings) userWarnings.Add(warning);
 
         // Resolve untransferred overrides by exact identity. Missing optional
         // textures are omitted so the material can inherit its default.
@@ -1029,7 +1034,8 @@ public sealed class MorphFacePackageContextService
         IMEPackage package,
         MorphFaceMaterialData template,
         MorphFaceMaterialData legacy,
-        ICollection<string> warnings)
+        ICollection<string> warnings,
+        ICollection<UserFacingMessage> userWarnings)
     {
         var scalars = MergeByName(template.Scalars, legacy.Scalars, value => value.Name);
         var vectors = MergeByName(template.Vectors, legacy.Vectors, value => value.Name);
@@ -1049,22 +1055,28 @@ public sealed class MorphFacePackageContextService
                 convertedTextures.Add(value with { TextureReference = ToIdentity(resolved) });
                 if (exact is null)
                 {
-                    warnings.Add(
+                    AddSkippedRonAssetWarning(warnings, userWarnings,
+                        "loc_RonImport_LegacyTextureMatchedByName",
                         $"Legacy texture '{value.Name}' at '{value.TextureReference.InstancedPath}' was not present exactly; " +
-                        $"retained the unique object-name match '{resolved.InstancedFullPath}'.");
+                        $"retained the unique object-name match '{resolved.InstancedFullPath}'.",
+                        value.Name, value.TextureReference.InstancedPath, resolved.InstancedFullPath);
                 }
             }
             else if (templateTextures.TryGetValue(value.Name, out var fallback))
             {
                 convertedTextures.Add(fallback);
-                warnings.Add(
+                var fallbackPath = fallback.TextureReference?.InstancedPath ?? "None";
+                AddSkippedRonAssetWarning(warnings, userWarnings,
+                    "loc_RonImport_LegacyTextureTemplateFallback",
                     $"Legacy texture '{value.Name}' at '{value.TextureReference.InstancedPath}' was unresolved; " +
-                    $"retained the selected player template texture '{fallback.TextureReference?.InstancedPath ?? "None"}'.");
+                    $"retained the selected player template texture '{fallbackPath}'.",
+                    value.Name, value.TextureReference.InstancedPath, fallbackPath);
             }
             else
             {
-                warnings.Add(
-                    $"Legacy texture '{value.Name}' at '{value.TextureReference.InstancedPath}' was unresolved and omitted.");
+                AddSkippedRonAssetWarning(warnings, userWarnings, "loc_RonImport_LegacyTextureOmitted",
+                    $"Legacy texture '{value.Name}' at '{value.TextureReference.InstancedPath}' was unresolved and omitted.",
+                    value.Name, value.TextureReference.InstancedPath);
             }
         }
         var textures = MergeByName(template.Textures, convertedTextures, value => value.Name);
@@ -1088,7 +1100,8 @@ public sealed class MorphFacePackageContextService
         IMEPackage package,
         ExportEntry clone,
         HeadMorphPayload legacy,
-        ICollection<string> warnings)
+        ICollection<string> warnings,
+        ICollection<UserFacingMessage> userWarnings)
     {
         var properties = clone.GetProperties();
         if (string.IsNullOrWhiteSpace(legacy.HairMesh) ||
@@ -1101,14 +1114,17 @@ public sealed class MorphFacePackageContextService
             properties.AddOrReplaceProp(new ObjectProperty(hair, "m_oHairMesh"));
             if (package.FindEntry(legacy.HairMesh, "SkeletalMesh") is null)
             {
-                warnings.Add(
+                AddSkippedRonAssetWarning(warnings, userWarnings, "loc_RonImport_LegacyAttachmentMatchedByName",
                     $"Legacy hair mesh '{legacy.HairMesh}' was not present exactly; " +
-                    $"retained the unique object-name match '{hair.InstancedFullPath}'.");
+                    $"retained the unique object-name match '{hair.InstancedFullPath}'.",
+                    UserFacingMessage.Create("loc_Services_MeshMaterial_HairMeshKind"), legacy.HairMesh, hair.InstancedFullPath);
             }
         }
         else
         {
-            warnings.Add($"Legacy hair mesh '{legacy.HairMesh}' was unresolved and omitted.");
+            AddSkippedRonAssetWarning(warnings, userWarnings, "loc_RonImport_LegacyAttachmentOmitted",
+                $"Legacy hair mesh '{legacy.HairMesh}' was unresolved and omitted.",
+                UserFacingMessage.Create("loc_Services_MeshMaterial_HairMeshKind"), legacy.HairMesh);
             properties.RemoveNamedProperty("m_oHairMesh");
         }
 
@@ -1121,13 +1137,16 @@ public sealed class MorphFacePackageContextService
             .ToArray();
         foreach (var accessory in accessories.Where(value => value.Entry is null))
         {
-            warnings.Add($"Legacy accessory mesh '{accessory.Path}' was unresolved and omitted.");
+            AddSkippedRonAssetWarning(warnings, userWarnings, "loc_RonImport_LegacyAttachmentOmitted",
+                $"Legacy accessory mesh '{accessory.Path}' was unresolved and omitted.",
+                UserFacingMessage.Create("loc_Services_MeshMaterial_AccessoryMeshKind"), accessory.Path);
         }
         foreach (var accessory in accessories.Where(value => value.Entry is not null && !value.Exact))
         {
-            warnings.Add(
+            AddSkippedRonAssetWarning(warnings, userWarnings, "loc_RonImport_LegacyAttachmentMatchedByName",
                 $"Legacy accessory mesh '{accessory.Path}' was not present exactly; " +
-                $"retained the unique object-name match '{accessory.Entry!.InstancedFullPath}'.");
+                $"retained the unique object-name match '{accessory.Entry!.InstancedFullPath}'.",
+                UserFacingMessage.Create("loc_Services_MeshMaterial_AccessoryMeshKind"), accessory.Path, accessory.Entry.InstancedFullPath);
         }
         var resolvedAccessories = accessories
             .Where(value => value.Entry is not null)
@@ -1201,7 +1220,8 @@ public sealed class MorphFacePackageContextService
         string instancedPath,
         StandalonePlayerAssetCatalog? assetCatalog,
         ImportEntry? existingImport,
-        ICollection<string> warnings)
+        ICollection<string> warnings,
+        ICollection<UserFacingMessage> userWarnings)
     {
         var candidates = assetCatalog?.SkeletalMeshes
             .Where(value => value.ClassName.Equals("SkeletalMesh", StringComparison.OrdinalIgnoreCase) &&
@@ -1221,7 +1241,9 @@ public sealed class MorphFacePackageContextService
         if (mesh is not null && !MorphFaceAttachmentTransferEngine.HasSupportedMaterials(
                 mesh.FileRef, mesh, out var unsupported, cache, installedAssets))
         {
-            warnings.Add($"RON attachment '{instancedPath}' was omitted because {unsupported} is outside MFE's supported canonical materials.");
+            var diagnostic = $"RON attachment '{instancedPath}' was omitted because {unsupported} is outside MFE's supported canonical materials.";
+            AddSkippedRonAssetWarning(warnings, userWarnings, "loc_Services_AttachmentTransfer_UnsupportedMaterial",
+                diagnostic, instancedPath);
             return null;
         }
         if (existingImport is not null)
@@ -1231,7 +1253,7 @@ public sealed class MorphFacePackageContextService
                 "its exact donor cannot be materialised without replacing an import ancestry.");
         }
         return ExternalSkeletalMeshMaterializer.Materialize(
-            package, candidates[0], warnings, cache, installedAssets);
+            package, candidates[0], warnings, cache, installedAssets, userWarnings);
     }
 
     private static void WriteRonMeshReferences(
@@ -1258,7 +1280,8 @@ public sealed class MorphFacePackageContextService
             {
                 try
                 {
-                    hair = ResolveMeshCandidate(package, ron.HairMesh, assetCatalog, existing as ImportEntry, warnings);
+                    hair = ResolveMeshCandidate(package, ron.HairMesh, assetCatalog, existing as ImportEntry,
+                        warnings, userWarnings);
                 }
                 catch (UnresolvedRonAttachmentException exception) when (strictAssetResolution)
                 {
@@ -1279,7 +1302,7 @@ public sealed class MorphFacePackageContextService
                     }
                 }
             }
-            hair = RetainSupportedRonAttachment(hair, warnings);
+            hair = RetainSupportedRonAttachment(hair, warnings, userWarnings);
             if (hair is not null)
             {
                 properties.AddOrReplaceProp(new ObjectProperty(hair, "m_oHairMesh"));
@@ -1295,7 +1318,8 @@ public sealed class MorphFacePackageContextService
             {
                 try
                 {
-                    entry = ResolveMeshCandidate(package, path, assetCatalog, existing as ImportEntry, warnings);
+                    entry = ResolveMeshCandidate(package, path, assetCatalog, existing as ImportEntry,
+                        warnings, userWarnings);
                 }
                 catch (UnresolvedRonAttachmentException exception) when (strictAssetResolution)
                 {
@@ -1312,7 +1336,7 @@ public sealed class MorphFacePackageContextService
                         exception);
                 }
             }
-            entry = RetainSupportedRonAttachment(entry, warnings);
+            entry = RetainSupportedRonAttachment(entry, warnings, userWarnings);
             return entry is null ? null : new ObjectProperty(entry);
         }).Where(property => property is not null).Cast<ObjectProperty>().ToArray();
         if (accessories.Length == 0)
@@ -1326,12 +1350,15 @@ public sealed class MorphFacePackageContextService
         face.WriteProperties(properties);
     }
 
-    private static IEntry? RetainSupportedRonAttachment(IEntry? entry, ICollection<string> warnings)
+    private static IEntry? RetainSupportedRonAttachment(
+        IEntry? entry, ICollection<string> warnings, ICollection<UserFacingMessage> userWarnings)
     {
         if (entry is ExportEntry mesh &&
             !MorphFaceAttachmentTransferEngine.HasSupportedMaterials(mesh.FileRef, mesh, out var unsupported))
         {
-            warnings.Add($"RON attachment '{entry.InstancedFullPath}' was omitted because {unsupported} is outside MFE's supported canonical materials.");
+            var diagnostic = $"RON attachment '{entry.InstancedFullPath}' was omitted because {unsupported} is outside MFE's supported canonical materials.";
+            AddSkippedRonAssetWarning(warnings, userWarnings, "loc_Services_AttachmentTransfer_UnsupportedMaterial",
+                diagnostic, entry.InstancedFullPath);
             return null;
         }
         return entry;

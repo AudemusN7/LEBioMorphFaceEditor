@@ -1,6 +1,8 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Windows;
 using MorphFaceEditor.Infrastructure;
+using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.Localisation;
 
 namespace MorphFaceEditor.Tests;
@@ -10,16 +12,18 @@ internal static class LocalisationTests
     internal static IReadOnlyList<TestCase> All { get; } =
     [
         new("localisation master, embedded dictionaries and source keys agree", CatalogueCoverage),
-        new("localisation rejects unsafe markup, broken placeholders and changed file filters", InvalidCataloguesAreRejected)
+        new("localisation rejects unsafe markup, broken placeholders and changed file filters", InvalidCataloguesAreRejected),
+        new("localisation keeps technical diagnostics out of UI explanations and formats nested labels", DiagnosticBoundary)
     ];
 
     private static void CatalogueCoverage()
     {
-        var english = Loc.ReadEmbeddedEnglish();
+        var englishData = EmbeddedCatalogue.Read("en-GB");
+        var english = englishData.Strings;
         TestAssert.True(english.Count > 0, "English catalogue is empty.");
         Loc.ValidateOverlay(english, english);
         var source = FindSource();
-        foreach (var path in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories).Where(path =>
+        foreach (var path in Directory.EnumerateFiles(Directory.GetParent(source)!.FullName, "*", SearchOption.AllDirectories).Where(path =>
                      Path.GetExtension(path) is ".cs" or ".xaml" &&
                      !path.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar) &&
                      !path.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar) &&
@@ -32,12 +36,40 @@ internal static class LocalisationTests
         {
             using var stream = File.OpenRead(Path.Combine(source, "Localisation", $"Strings.{locale.Code}.xaml"));
             var authored = Loc.ReadDictionary(stream);
-            Loc.ValidateOverlay(english, authored);
+            Loc.ValidateOverlay(english, authored, englishData.RetiredKeys);
             var embedded = EmbeddedCatalogue.Read(locale.Code).Strings;
             TestAssert.Equal(authored.Count, embedded.Count);
             foreach (var (key, value) in authored)
                 TestAssert.Equal(value, embedded[key]);
         }
+
+        var french = EmbeddedCatalogue.Read("fr");
+        var resources = new ResourceDictionary();
+        Loc.Initialize(resources, "fr");
+        foreach (var key in englishData.RetiredKeys)
+            TestAssert.True(!resources.Contains(key), $"Retired key {key} leaked into runtime resources.");
+        TestAssert.Equal(french.Strings.Keys.Count(english.ContainsKey), Loc.TranslatedStringCount);
+        Loc.Initialize(new ResourceDictionary(), Loc.DefaultLanguage);
+    }
+
+    private static void DiagnosticBoundary()
+    {
+        using var suppressedLogs = AppLog.SuppressPersistentWrites();
+        const string diagnostic = "UNTRANSLATED_LIBRARY_DIAGNOSTIC";
+        TestAssert.Equal(Loc.Text("loc_Error_UnexpectedFailure"),
+            UserFacingMessageFormatter.Format(new InvalidOperationException(diagnostic)));
+        TestAssert.Equal(Loc.Text("loc_Error_TechnicalWarning"), UserFacingMessageFormatter.FormatDiagnostic(diagnostic));
+
+        var localised = Loc.Error(new InvalidDataException(Loc.Text("loc_Pcsav_InvalidFile")));
+        TestAssert.Equal(localised.Message, UserFacingMessageFormatter.Format(localised));
+        var structured = UserFacingMessage.CreateError("loc_Error_InvalidData", diagnostic);
+        TestAssert.Equal(Loc.Text("loc_Error_InvalidData"), UserFacingMessageFormatter.Format(structured));
+
+        var warning = UserFacingMessage.Create("loc_RonImport_LegacyAttachmentOmitted",
+            UserFacingMessage.Create("loc_Services_MeshMaterial_HairMeshKind"), "BIOG_Test.HairMesh");
+        TestAssert.Equal(Loc.Format("loc_RonImport_LegacyAttachmentOmitted",
+            Loc.Text("loc_Services_MeshMaterial_HairMeshKind"), "BIOG_Test.HairMesh"),
+            UserFacingMessageFormatter.Format(warning));
     }
 
     private static void InvalidCataloguesAreRejected()

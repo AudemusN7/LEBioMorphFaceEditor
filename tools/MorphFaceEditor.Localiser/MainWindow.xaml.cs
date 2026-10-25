@@ -103,6 +103,111 @@ public partial class MainWindow : Window
         if (e.Key == Key.A && Keyboard.Modifiers == ModifierKeys.Control && e.OriginalSource is not TextBox)
         { StringList.SelectAll(); e.Handled = true; }
     }
+    private void OnCellContextMenuOpened(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ContextMenu menu || menu.PlacementTarget is not FrameworkElement target ||
+            target.DataContext is not LocaliserRow row)
+            return;
+
+        var field = target.Tag as string;
+        foreach (var item in menu.Items.OfType<MenuItem>())
+        {
+            item.IsEnabled = item.Tag switch
+            {
+                "CopyCell" or "CopyKey" => true,
+                "PasteCell" => CanPasteCell(row, field) && ClipboardContainsUnicodeText(),
+                _ => item.Command == ApplicationCommands.Copy
+                    ? target is TextBox
+                    : item.Command == ApplicationCommands.Paste && target is TextBox &&
+                      CanPasteCell(row, field) && ClipboardContainsUnicodeText()
+            };
+        }
+    }
+
+    private void OnCellContextMenuClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem item ||
+            ItemsControl.ItemsControlFromItemContainer(item) is not ContextMenu menu ||
+            menu.PlacementTarget is not FrameworkElement target || target.DataContext is not LocaliserRow row)
+            return;
+
+        var field = target.Tag as string;
+        switch (item.Tag as string)
+        {
+            case "CopyCell":
+                if (ReadCell(row, field) is { } value) TrySetClipboardText(value);
+                break;
+            case "CopyKey":
+                TrySetClipboardText(row.Key);
+                break;
+            case "PasteCell" when CanPasteCell(row, field) && TryGetClipboardText(out var text):
+                Review.CommitPendingCellEdit();
+                WriteCell(row, field!, text);
+                Review.CommitPendingCellEdit();
+                break;
+        }
+    }
+
+    private static bool ClipboardContainsUnicodeText()
+    {
+        try { return Clipboard.ContainsText(TextDataFormat.UnicodeText); }
+        catch (ExternalException) { return false; }
+        catch (InvalidOperationException) { return false; }
+        catch (UnauthorizedAccessException) { return false; }
+    }
+
+    private static void TrySetClipboardText(string value)
+    {
+        try { Clipboard.SetText(value, TextDataFormat.UnicodeText); }
+        catch (ExternalException) { }
+        catch (InvalidOperationException) { }
+        catch (UnauthorizedAccessException) { }
+    }
+
+    private static bool TryGetClipboardText(out string value)
+    {
+        try
+        {
+            if (Clipboard.ContainsText(TextDataFormat.UnicodeText))
+            {
+                value = Clipboard.GetText(TextDataFormat.UnicodeText);
+                return true;
+            }
+        }
+        catch (ExternalException) { }
+        catch (InvalidOperationException) { }
+        catch (UnauthorizedAccessException) { }
+        value = "";
+        return false;
+    }
+
+    private static string? ReadCell(LocaliserRow row, string? field) => field switch
+    {
+        "Key" => row.Key,
+        "English" => row.English,
+        "Localised" => row.Localised,
+        "Notes" => row.Notes,
+        _ => null
+    };
+
+    private static bool CanPasteCell(LocaliserRow row, string? field) => field switch
+    {
+        "English" => row.EnglishEditable,
+        "Localised" => row.LocalisedEditable,
+        "Notes" => true,
+        _ => false
+    };
+
+    private static void WriteCell(LocaliserRow row, string field, string value)
+    {
+        switch (field)
+        {
+            case "English": row.English = value; break;
+            case "Localised": row.Localised = value; break;
+            case "Notes": row.Notes = value; break;
+        }
+    }
+
     private void OnCellEditStarted(object sender, KeyboardFocusChangedEventArgs e)
     {
         // TextBox has its own class-level Undo/Redo commands. Override those on each

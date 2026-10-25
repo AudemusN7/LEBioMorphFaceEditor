@@ -9,7 +9,10 @@ namespace MorphFaceEditor.LegendaryExplorer;
 
 internal sealed record TextureTransferResult(
     MorphFaceMaterialData MaterialData,
-    IReadOnlyList<string> Warnings);
+    IReadOnlyList<string> Warnings)
+{
+    public IReadOnlyList<UserFacingMessage> UserWarnings { get; init; } = [];
+}
 
 /// <summary>
 /// Applies the reviewed cross-game texture policy, resolving legal destination references and
@@ -42,6 +45,7 @@ internal static class MorphFaceTextureTransferEngine
         InstalledGameAssetResolver? installedAssetsOverride = null)
     {
         var warnings = new List<string>();
+        var userWarnings = new List<UserFacingMessage>();
         LegendaryExplorerCoreRuntime.Initialize();
         var installedAssets = installedAssetsOverride ?? new InstalledGameAssetResolver();
         var textures = new List<TextureMaterialOverride>();
@@ -61,7 +65,7 @@ internal static class MorphFaceTextureTransferEngine
             {
                 targetEntry = MaterializeTargetTexture(
                     destination, sourcePath, targetTemplatePackagePath, donors,
-                    targetTextureCatalog, warnings, installedAssets, out var targetIdentityFound);
+                    targetTextureCatalog, warnings, userWarnings, installedAssets, out var targetIdentityFound);
                 if (!targetIdentityFound)
                     targetEntry = EmbedPackageStoredSourceTexture(
                         destination,
@@ -72,7 +76,8 @@ internal static class MorphFaceTextureTransferEngine
                         sourceTextureCatalog,
                         donors,
                         installedAssets,
-                        warnings);
+                        warnings,
+                        userWarnings);
             }
             else
             {
@@ -81,15 +86,19 @@ internal static class MorphFaceTextureTransferEngine
                     decision.TargetPath ?? sourcePath)!;
                 targetEntry = MaterializeTargetTexture(
                     destination, requestedPath, targetTemplatePackagePath, donors,
-                    targetTextureCatalog, warnings, installedAssets, out _,
+                    targetTextureCatalog, warnings, userWarnings, installedAssets, out _,
                     isReviewedAlias: decision.Kind == TransferKind.Alias);
             }
 
             if (targetEntry is null)
             {
-                warnings.Add(
+                var diagnostic =
                     $"Texture override '{value.Name}' could not map '{sourcePath}' into {destination.Game}; " +
-                    "the destination material default was used.");
+                    "the destination material default was used.";
+                warnings.Add(diagnostic);
+                userWarnings.Add(UserFacingMessage.CreateWarning(
+                    "loc_Services_TextureTransfer_UnmappedOverride", diagnostic,
+                    value.Name, sourcePath, destination.Game.ToString()));
                 continue;
             }
             textures.Add(value with { TextureReference = ToIdentity(targetEntry) });
@@ -100,7 +109,10 @@ internal static class MorphFaceTextureTransferEngine
                 source.Scalars.Where(value => supportedScalars.Contains(value.Name)).ToArray(),
                 source.Vectors.Where(value => supportedVectors.Contains(value.Name)).ToArray(),
                 textures),
-            warnings);
+            warnings)
+        {
+            UserWarnings = userWarnings
+        };
     }
 
     private static TransferDecision Decide(
@@ -205,6 +217,7 @@ internal static class MorphFaceTextureTransferEngine
         DonorPackages donors,
         IReadOnlyList<TextureCatalogCandidate> targetTextureCatalog,
         ICollection<string> warnings,
+        ICollection<UserFacingMessage> userWarnings,
         InstalledGameAssetResolver installedAssets,
         out bool targetIdentityFound,
         bool isReviewedAlias = false)
@@ -216,7 +229,8 @@ internal static class MorphFaceTextureTransferEngine
                 destination,
                 new AssetIdentity(official.FileRef.FilePath, canonicalPath, official.UIndex, "Texture2D"),
                 textureCatalog: null,
-                warnings: warnings);
+                warnings: warnings,
+                userWarnings: userWarnings);
         }
         if (FindEntryByCanonicalPath(destination, canonicalPath, "Texture2D") is { } existing)
         {
@@ -234,7 +248,8 @@ internal static class MorphFaceTextureTransferEngine
                     occurrence.ExportUIndex,
                     "Texture2D"),
                 textureCatalog: null,
-                warnings: warnings);
+                warnings: warnings,
+                userWarnings: userWarnings);
         }
         if (!string.IsNullOrWhiteSpace(targetTemplatePackagePath))
         {
@@ -262,7 +277,8 @@ internal static class MorphFaceTextureTransferEngine
                             destination,
                             new AssetIdentity(path, canonicalPath, export.UIndex, "Texture2D"),
                             textureCatalog: null,
-                            warnings: warnings);
+                            warnings: warnings,
+                            userWarnings: userWarnings);
                     }
                 }
             }
@@ -288,7 +304,8 @@ internal static class MorphFaceTextureTransferEngine
         IReadOnlyList<TextureCatalogCandidate> sourceTextureCatalog,
         DonorPackages donors,
         InstalledGameAssetResolver installedAssets,
-        List<string> warnings)
+        List<string> warnings,
+        ICollection<UserFacingMessage> userWarnings)
     {
         var sourceExport = ResolveSourceExport(
                                sourceGame, sourcePackagePath, sourcePath, sourceIdentity,
@@ -314,9 +331,13 @@ internal static class MorphFaceTextureTransferEngine
             image,
             importedTexture.GetProperties(),
             isPackageStored: true));
-        warnings.Add(
+        var diagnostic =
             $"Embedded '{sourcePath}' as package-stored because {destination.Game} has no stock equivalent. " +
-            "You may wish to move this texture into your mod's TFC before release.");
+            "You may wish to move this texture into your mod's TFC before release.";
+        warnings.Add(diagnostic);
+        userWarnings.Add(UserFacingMessage.CreateWarning(
+            "loc_Services_TextureTransfer_EmbeddedPackageStored", diagnostic,
+            sourcePath, destination.Game.ToString()));
         return importedTexture;
     }
 

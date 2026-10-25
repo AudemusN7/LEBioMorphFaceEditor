@@ -93,7 +93,8 @@ internal static class PccPackageWorkflow
         string? targetPathOverride = null,
         InstalledGameAssetResolver? installedAssets = null,
         IReadOnlyList<ExportEntry>? authoredMaterialDonors = null,
-        PackageCache? sourceCache = null)
+        PackageCache? sourceCache = null,
+        ICollection<UserFacingMessage>? userWarnings = null)
     {
         ArgumentNullException.ThrowIfNull(destination);
         ArgumentNullException.ThrowIfNull(source);
@@ -113,7 +114,8 @@ internal static class PccPackageWorkflow
             requiredExportReferences ?? [],
             installedAssets,
             authoredMaterialDonors ?? [],
-            cache);
+            cache,
+            userWarnings);
         var imported = session.ImportRoot(source, destinationParent, targetPathOverride);
         NormalizeNewSupportedAssets(destination, preexistingExports);
         return imported;
@@ -435,14 +437,16 @@ internal static class PccPackageWorkflow
     }
 
     internal static MorphFaceMaterialOverrides OmitUnavailableSelectedTextures(
-        MorphFaceMaterialOverrides overrides, PackageCache cache, ICollection<string> warnings)
+        MorphFaceMaterialOverrides overrides, PackageCache cache, ICollection<string> warnings,
+        ICollection<UserFacingMessage>? userWarnings = null)
     {
-        var retained = OmitUnavailableSelectedTextures(overrides.Textures, cache, warnings);
+        var retained = OmitUnavailableSelectedTextures(overrides.Textures, cache, warnings, userWarnings);
         return retained.Count == overrides.Textures.Count ? overrides : overrides with { Textures = retained };
     }
 
     internal static IReadOnlyList<TextureMaterialOverride> OmitUnavailableSelectedTextures(
-        IReadOnlyList<TextureMaterialOverride> textures, PackageCache cache, ICollection<string> warnings)
+        IReadOnlyList<TextureMaterialOverride> textures, PackageCache cache, ICollection<string> warnings,
+        ICollection<UserFacingMessage>? userWarnings = null)
     {
         return textures.Where(value =>
         {
@@ -450,8 +454,12 @@ internal static class PccPackageWorkflow
             if (identity is not { IsExplicitTextureDonor: true, IsImport: false } ||
                 InstalledGameAssetResolver.TryExact(cache, identity.PackagePath, identity.InstancedPath,
                     "Texture2D", identity.UIndex) is not null) return true;
-            warnings.Add($"Texture '{identity.InstancedPath}' for '{value.Name}' is unavailable in '{identity.PackagePath}'. " +
-                "The selection was omitted from this export; the material default will be used.");
+            var diagnostic = $"Texture '{identity.InstancedPath}' for '{value.Name}' is unavailable in '{identity.PackagePath}'. " +
+                "The selection was omitted from this export; the material default will be used.";
+            warnings.Add(diagnostic);
+            userWarnings?.Add(UserFacingMessage.CreateWarning(
+                "loc_PccSave_ExplicitTextureUnavailable", diagnostic,
+                identity.InstancedPath, value.Name, identity.PackagePath));
             return false;
         }).ToArray();
     }
@@ -688,7 +696,8 @@ internal static class PccPackageWorkflow
         IMEPackage destination,
         AssetIdentity identity,
         IReadOnlyList<TextureCatalogCandidate>? textureCatalog,
-        ICollection<string>? warnings = null)
+        ICollection<string>? warnings = null,
+        ICollection<UserFacingMessage>? userWarnings = null)
     {
         ArgumentNullException.ThrowIfNull(destination);
         ArgumentNullException.ThrowIfNull(identity);
@@ -717,12 +726,13 @@ internal static class PccPackageWorkflow
         }
         if (resolved is not null)
         {
-            return PccTextureDependencyResolver.MaterializeResolved(destination, resolved, warnings);
+            return PccTextureDependencyResolver.MaterializeResolved(destination, resolved, warnings, userWarnings);
         }
         return PccTextureDependencyResolver.MaterializeDirect(
             destination,
             identity with { InstancedPath = path },
-            warnings);
+            warnings,
+            userWarnings);
     }
 
     internal static void VerifyDependencyGraph(
@@ -748,11 +758,23 @@ internal static class PccPackageWorkflow
     /// corpus policy can see them, making the result depend on material-slot
     /// order. Shell-first planning also makes cycles and shared nodes explicit.
     /// </summary>
+    private static void AddUserWarning(
+        ICollection<string>? warnings,
+        ICollection<UserFacingMessage>? userWarnings,
+        string key,
+        string diagnostic,
+        params object?[] arguments)
+    {
+        warnings?.Add(diagnostic);
+        userWarnings?.Add(UserFacingMessage.CreateWarning(key, diagnostic, arguments));
+    }
+
     private sealed class GraphImportSession : IDisposable
     {
         private readonly IMEPackage _destination;
         private readonly IReadOnlyList<TextureCatalogCandidate> _catalog;
         private readonly ICollection<string>? _warnings;
+        private readonly ICollection<UserFacingMessage>? _userWarnings;
         private readonly bool _applyCorpusMaterialPolicy;
         private readonly IReadOnlySet<string> _requiredExportIdentities;
         private readonly IReadOnlySet<CorpusRoleIssue> _baselineCorpusRoleIssues;
@@ -775,11 +797,13 @@ internal static class PccPackageWorkflow
             IReadOnlyList<IEntry> requiredExportReferences,
             InstalledGameAssetResolver? installedAssets,
             IReadOnlyList<ExportEntry> authoredMaterialDonors,
-            PackageCache cache)
+            PackageCache cache,
+            ICollection<UserFacingMessage>? userWarnings)
         {
             _destination = destination;
             _catalog = catalog;
             _warnings = warnings;
+            _userWarnings = userWarnings;
             _applyCorpusMaterialPolicy = applyCorpusMaterialPolicy;
             _requiredExportIdentities = requiredExportReferences
                 .Select(entry => $"{entry.ClassName}|{CanonicalPath(entry)}")
@@ -820,7 +844,9 @@ internal static class PccPackageWorkflow
                 MaterialInstanceSourcePolicy.OverridesOfficialInstance(source, _officialAssets, _cache))
             {
                 targetPath = MaterialInstanceSourcePolicy.UniqueInstancePath(_destination, targetPath);
-                _warnings?.Add($"Authored material instance '{CanonicalPath(source)}' was preserved as '{targetPath}' to keep its overrides separate from the stock instance.");
+                AddUserWarning(_warnings, _userWarnings, "loc_PccSave_AuthoredMaterialInstancePreserved",
+                    $"Authored material instance '{CanonicalPath(source)}' was preserved as '{targetPath}' to keep its overrides separate from the stock instance.",
+                    CanonicalPath(source), targetPath);
             }
             var root = MaterializeExport(source, targetPath, destinationParent, forceExport: true) as ExportEntry
                        ?? throw new InvalidDataException(
@@ -877,7 +903,9 @@ internal static class PccPackageWorkflow
                 MaterialInstanceSourcePolicy.OverridesOfficialInstance(instance, _officialAssets, _cache))
             {
                 var uniquePath = MaterialInstanceSourcePolicy.UniqueInstancePath(_destination, canonicalPath);
-                _warnings?.Add($"Authored material instance '{canonicalPath}' was preserved as '{uniquePath}' to keep its overrides separate from the stock instance.");
+                AddUserWarning(_warnings, _userWarnings, "loc_PccSave_AuthoredMaterialInstancePreserved",
+                    $"Authored material instance '{canonicalPath}' was preserved as '{uniquePath}' to keep its overrides separate from the stock instance.",
+                    canonicalPath, uniquePath);
                 var authored = MaterializeExport(instance, uniquePath, destinationParent: null, forceExport: true);
                 _relinker.CrossPackageMap[reference] = authored;
                 return authored;
@@ -969,8 +997,9 @@ internal static class PccPackageWorkflow
                 }
                 var imported = EnsureImport(_destination, targetPath, "Texture2D", reference, _officialAssets, _cache);
                 _relinker.CrossPackageMap[reference] = imported;
-                _warnings?.Add(
-                    $"Preserved unresolved stock Texture2D import '{targetPath}' while constructing the PCC.");
+                AddUserWarning(_warnings, _userWarnings, "loc_PccSave_UnresolvedStockTextureImportPreserved",
+                    $"Preserved unresolved stock Texture2D import '{targetPath}' while constructing the PCC.",
+                    targetPath);
                 return imported;
             }
 

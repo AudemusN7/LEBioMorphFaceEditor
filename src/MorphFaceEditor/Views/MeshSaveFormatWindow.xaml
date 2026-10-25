@@ -8,6 +8,6 @@
         <TextBlock Text="{DynamicResource loc_FileSave_MeshChoice}" TextWrapping="Wrap" Margin="0,0,0,18" />
         <Button Content="{DynamicResource loc_View_MainWindow_ExportToPCC}" Click="OnPcc" Margin="0,0,0,8" />
         <Button Content="{DynamicResource loc_FileSave_ExportMaterialRon}" Click="OnMaterials" Margin="0,0,0,18" />
-        <Button Content="{DynamicResource loc_View_UnsavedChangesWindow_Cancel}" IsCancel="True" HorizontalAlignment="Right" MinWidth="82" />
+        <Button Content="{DynamicResource loc_Common_Cancel}" IsCancel="True" HorizontalAlignment="Right" MinWidth="82" />
     </StackPanel>
 </Window>

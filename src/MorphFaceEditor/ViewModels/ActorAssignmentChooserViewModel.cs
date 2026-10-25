@@ -41,8 +41,8 @@ public sealed class ActorAssignmentChooserViewModel : ObservableObject
     public ObservableCollection<ActorAssignmentChoice> Choices { get; }
     public System.ComponentModel.ICollectionView FilteredChoices { get; }
     public string WindowTitle => Mode == ActorAssignmentMode.Morph
-        ? Loc.Text("loc_VM_actorAssignment_titleMorph")
-        : Loc.Text("loc_VM_actorAssignment_titleMaterials");
+        ? Loc.Text("loc_View_MainWindow_AssignMorphToActor")
+        : Loc.Text("loc_View_MainWindow_AssignMaterialsToActor");
     public string Introduction => Mode == ActorAssignmentMode.Morph
         ? Loc.Format("loc_ActorAssignment_MorphIntroduction", Inventory.SelectedFacePath)
         : Loc.Format("loc_ActorAssignment_MaterialsIntroduction", Inventory.SelectedFacePath);
@@ -99,7 +99,7 @@ public sealed class ActorAssignmentChoice
         Candidate.SelectedProfileKey,
         Candidate.HeadMeshProfileKey,
         StringComparison.OrdinalIgnoreCase) ? 0 : 1;
-    public string DisplayName => Candidate.DisplayName;
+    public string DisplayName => DisplayNameFor(Candidate);
     public string TechnicalIdentity =>
         $"#{Candidate.UIndex}  {Candidate.ClassName}  ·  {ShortLevelPath(Candidate.InstancedPath)}";
     public string EvidenceSummary => Mode == ActorAssignmentMode.Morph
@@ -117,10 +117,13 @@ public sealed class ActorAssignmentChoice
         : Loc.Text("loc_VM_actorAssignment_notEligible");
     public string Details { get; }
 
+    private static string DisplayNameFor(ActorAssignmentCandidate candidate) => candidate.UserDisplayName is { } name
+        ? UserFacingMessageFormatter.Format(name) : candidate.DisplayName;
+
     private static string BuildDetails(ActorAssignmentCandidate candidate, ActorAssignmentMode mode)
     {
         var text = new StringBuilder();
-        text.AppendLine($"{candidate.DisplayName}");
+        text.AppendLine(DisplayNameFor(candidate));
         text.AppendLine($"#{candidate.UIndex} {candidate.ClassName} · {ShortLevelPath(candidate.InstancedPath)}");
         text.AppendLine();
         text.AppendLine(Loc.Text("loc_VM_actorAssignment_detailsSummaryHeading"));
@@ -202,9 +205,11 @@ public sealed class ActorAssignmentChoice
             text.AppendLine();
             text.AppendLine(Loc.Text("loc_VM_actorAssignment_warningsHeading"));
             var localizedWarnings = candidate.UserWarnings.Where(message => message.DiagnosticText is not null)
-                .ToDictionary(message => message.DiagnosticText!, UserFacingMessageFormatter.Format, StringComparer.Ordinal);
+                .GroupBy(message => message.DiagnosticText!, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => UserFacingMessageFormatter.Format(group.First()), StringComparer.Ordinal);
             foreach (var warning in candidate.Warnings)
-                text.AppendLine($"• {(localizedWarnings.TryGetValue(warning, out var localized) ? localized : warning)}");
+                text.AppendLine($"• {(localizedWarnings.TryGetValue(warning, out var localized)
+                    ? localized : UserFacingMessageFormatter.FormatDiagnostic(warning))}");
         }
         if (!(mode == ActorAssignmentMode.Morph ? candidate.CanAssignMorph : candidate.CanAssignMaterials))
         {
@@ -270,7 +275,8 @@ public sealed class ActorAssignmentChoice
                     Loc.Format("loc_VM_actorAssignment_slotFamily", skipped.SlotIndex, skipped.Family));
                 AppendCompactChain(text, skipped.ObjectName, skipped.ParentChain);
                 text.AppendLine(Loc.Format("loc_VM_actorAssignment_skippedReason",
-                    skipped.UserReason is { } reason ? UserFacingMessageFormatter.Format(reason) : skipped.Reason));
+                    skipped.UserReason is { } reason ? UserFacingMessageFormatter.Format(reason)
+                        : UserFacingMessageFormatter.FormatDiagnostic(skipped.Reason)));
             }
         }
     }
@@ -344,7 +350,11 @@ public sealed class ActorAssignmentChoice
 
     private static string CompactMorphReason(ActorAssignmentCandidate candidate)
     {
-        var reason = candidate.MorphIneligibilityReason ?? Loc.Text("loc_VM_actorAssignment_notEligibleLowercase");
+        var reason = candidate.MorphIneligibilityUserReason is { } userReason
+            ? UserFacingMessageFormatter.Format(userReason)
+            : candidate.MorphIneligibilityReason is { } diagnostic
+                ? UserFacingMessageFormatter.FormatDiagnostic(diagnostic)
+                : Loc.Text("loc_VM_actorAssignment_notEligibleLowercase");
         return string.IsNullOrWhiteSpace(candidate.HeadMeshPath)
             ? reason
             : reason.Replace(

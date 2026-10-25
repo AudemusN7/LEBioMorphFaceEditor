@@ -9,6 +9,7 @@ namespace MorphFaceEditor.Infrastructure;
 public static class Loc
 {
     public const string DefaultLanguage = "en-GB";
+    private const string LocalisedErrorMarker = "MFE.LocalisedError";
     private static readonly Lazy<CatalogueData> English = new(() => EmbeddedCatalogue.Read(DefaultLanguage));
     private static IReadOnlyDictionary<string, string>? _active;
     public static string Language { get; private set; } = DefaultLanguage;
@@ -17,6 +18,16 @@ public static class Loc
         ? value : throw new KeyNotFoundException($"Unknown localisation key: {key}");
     public static string Format(string key, params object?[] arguments) =>
         string.Format(CultureInfo.CurrentCulture, Text(key), arguments);
+
+    // App-layer exceptions already authored through Loc retain their exact
+    // localized message and exception type at the UI reporting boundary.
+    internal static T Error<T>(T exception) where T : Exception
+    {
+        exception.Data[LocalisedErrorMarker] = true;
+        return exception;
+    }
+
+    internal static bool IsLocalisedError(Exception exception) => exception.Data[LocalisedErrorMarker] is true;
 
     internal static string NormalizeLanguage(string? language) =>
         LanguageOption.All.FirstOrDefault(option => string.Equals(option.Code, language, StringComparison.OrdinalIgnoreCase))?.Code
@@ -30,9 +41,10 @@ public static class Loc
         if (selected != DefaultLanguage)
         {
             var translated = EmbeddedCatalogue.Read(selected);
-            StringCatalogue.ValidateOverlay(values, translated.Strings, English.Value.Annotations);
-            foreach (var (key, value) in translated.Strings) values[key] = value;
-            TranslatedStringCount = translated.Strings.Count;
+            StringCatalogue.ValidateOverlay(values, translated.Strings, English.Value.Annotations, English.Value.RetiredKeys);
+            foreach (var (key, value) in translated.Strings)
+                if (values.ContainsKey(key)) values[key] = value;
+            TranslatedStringCount = translated.Strings.Keys.Count(values.ContainsKey);
         }
         // Replace strings only. Theme resources and unrelated application resources are untouched.
         foreach (var (key, value) in values) resources[key] = value;
@@ -47,8 +59,9 @@ public static class Loc
 
     internal static IReadOnlyDictionary<string, string> ReadDictionary(Stream stream) => StringCatalogue.Read(stream).Strings;
 
-    internal static void ValidateOverlay(IReadOnlyDictionary<string, string> baseline, IReadOnlyDictionary<string, string> overlay)
-        => StringCatalogue.ValidateOverlay(baseline, overlay);
+    internal static void ValidateOverlay(IReadOnlyDictionary<string, string> baseline, IReadOnlyDictionary<string, string> overlay,
+        IReadOnlySet<string>? retiredKeys = null)
+        => StringCatalogue.ValidateOverlay(baseline, overlay, retiredKeys: retiredKeys);
 }
 
 public sealed record LanguageOption(string Code, string NativeNameKey, string FlagKey)

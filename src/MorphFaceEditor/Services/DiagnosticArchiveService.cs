@@ -15,11 +15,11 @@ internal sealed class DiagnosticArchiveService(ApplicationDataPaths paths, strin
     {
         destination = Path.GetFullPath(destination);
         if (!Path.GetExtension(destination).Equals(".zip", StringComparison.OrdinalIgnoreCase))
-            throw new IOException(Loc.Text("loc_Services_DiagnosticArchive_ChooseZip"));
+            throw Loc.Error(new IOException(Loc.Text("loc_Services_DiagnosticArchive_ChooseZip")));
         warnings ??= [];
         var files = new List<(string Source, string Entry)>();
         if (!File.Exists(logPath))
-            throw new FileNotFoundException(Loc.Text("loc_Services_DiagnosticArchive_LogUnavailable"), logPath);
+            throw Loc.Error(new FileNotFoundException(Loc.Text("loc_Services_DiagnosticArchive_LogUnavailable"), logPath));
         files.Add((logPath, "Logs/" + Path.GetFileName(logPath)));
         var logDirectory = Path.GetDirectoryName(Path.GetFullPath(logPath))!;
         var today = (now ?? DateTimeOffset.Now).Date;
@@ -37,7 +37,7 @@ internal sealed class DiagnosticArchiveService(ApplicationDataPaths paths, strin
                 .Select(path => (path, "TextureRegistries/" + Path.GetFileName(path))));
         }
         if (files.Any(file => Path.GetFullPath(file.Source).Equals(destination, StringComparison.OrdinalIgnoreCase)))
-            throw new IOException(Loc.Text("loc_Services_DiagnosticArchive_DestinationIsInput"));
+            throw Loc.Error(new IOException(Loc.Text("loc_Services_DiagnosticArchive_DestinationIsInput")));
 
         var temporary = Path.Combine(Path.GetDirectoryName(destination)!, $".mfe-diagnostics-{Guid.NewGuid():N}.tmp");
         try
@@ -55,7 +55,7 @@ internal sealed class DiagnosticArchiveService(ApplicationDataPaths paths, strin
                     while (remaining > 0)
                     {
                         var read = sourceStream.Read(buffer, 0, (int)Math.Min(buffer.Length, remaining));
-                        if (read == 0) throw new IOException(Loc.Format("loc_Services_DiagnosticArchive_SourceChanged", Path.GetFileName(source)));
+                        if (read == 0) throw Loc.Error(new IOException(Loc.Format("loc_Services_DiagnosticArchive_SourceChanged", Path.GetFileName(source))));
                         targetStream.Write(buffer, 0, read);
                         remaining -= read;
                     }

@@ -13,7 +13,7 @@ public sealed partial class MainWindowViewModel
     internal async Task<DiagnosticArchiveResult> GenerateDiagnosticsAsync(
         string destination, DiagnosticArchiveService? archiveService = null)
     {
-        if (IsBusy) throw new InvalidOperationException(Loc.Text("loc_Shell_Diagnostics_WaitForCurrentOperation"));
+        if (IsBusy) throw Loc.Error(new InvalidOperationException(Loc.Text("loc_Shell_Diagnostics_WaitForCurrentOperation")));
         var workspacePath = WorkspacePackagePath;
         var draft = Editor?.IsDirty == true ? Editor.CreateDraft() :
             CareerDraftPendingInPackage ? Editor?.SavedDraft : null;

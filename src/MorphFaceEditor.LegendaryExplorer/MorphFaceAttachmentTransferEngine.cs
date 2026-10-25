@@ -79,11 +79,11 @@ internal static class MorphFaceAttachmentTransferEngine
                 return null;
             }
             return MaterializeTargetMesh(
-                destination, reviewedPath, targetTemplatePackagePath, donors, warnings);
+                destination, reviewedPath, targetTemplatePackagePath, donors, warnings, userWarnings);
         }
 
         return MaterializeTargetMesh(
-            destination, requestedPath, targetTemplatePackagePath, donors, warnings);
+            destination, requestedPath, targetTemplatePackagePath, donors, warnings, userWarnings);
     }
 
     internal static IEntry EnsureImport(IMEPackage destination, string path)
@@ -112,25 +112,28 @@ internal static class MorphFaceAttachmentTransferEngine
         string canonicalPath,
         string? targetTemplatePackagePath,
         DonorPackages donors,
-        ICollection<string> warnings)
+        ICollection<string> warnings,
+        ICollection<UserFacingMessage> userWarnings)
     {
         if (donors.ResolveOfficial(destination.Game, canonicalPath, "SkeletalMesh") is { } installed)
         {
             if (!HasSupportedMaterials(installed.FileRef, installed, out var unsupported,
                     donors.Cache, donors.InstalledAssets))
             {
-                warnings.Add(
-                    $"Optional attachment '{canonicalPath}' was omitted because it requires unsupported material '{unsupported}'.");
+                AddUserWarning(warnings, userWarnings, "loc_Services_AttachmentTransfer_UnsupportedMaterial",
+                    $"Optional attachment '{canonicalPath}' was omitted because it requires unsupported material '{unsupported}'.",
+                    canonicalPath);
                 return null;
             }
             return ExternalSkeletalMeshMaterializer.MaterializeResolved(
-                destination, installed, warnings, donors.Cache, donors.InstalledAssets);
+                destination, installed, warnings, donors.Cache, donors.InstalledAssets, userWarnings);
         }
 
         var existingMatches = FindExactExports(destination, canonicalPath);
         if (existingMatches.Length > 1)
         {
-            warnings.Add($"Target SkeletalMesh '{canonicalPath}' is ambiguous in the destination and was omitted.");
+            AddUserWarning(warnings, userWarnings, "loc_Services_AttachmentTransfer_AmbiguousDestination",
+                $"Target SkeletalMesh '{canonicalPath}' is ambiguous in the destination and was omitted.", canonicalPath);
             return null;
         }
         if (existingMatches.SingleOrDefault() is { } existing)
@@ -138,8 +141,9 @@ internal static class MorphFaceAttachmentTransferEngine
             if (!HasSupportedMaterials(destination, existing, out var unsupported,
                     donors.Cache, donors.InstalledAssets))
             {
-                warnings.Add(
-                    $"Optional attachment '{canonicalPath}' was omitted because it requires unsupported material '{unsupported}'.");
+                AddUserWarning(warnings, userWarnings, "loc_Services_AttachmentTransfer_UnsupportedMaterial",
+                    $"Optional attachment '{canonicalPath}' was omitted because it requires unsupported material '{unsupported}'.",
+                    canonicalPath);
                 return null;
             }
             return existing;
@@ -155,8 +159,9 @@ internal static class MorphFaceAttachmentTransferEngine
                 var templateMatches = FindExactExports(template, canonicalPath);
                 if (templateMatches.Length > 1)
                 {
-                    warnings.Add(
-                        $"Target SkeletalMesh '{canonicalPath}' has ambiguous exact exports in the template and was omitted.");
+                    AddUserWarning(warnings, userWarnings, "loc_Services_AttachmentTransfer_AmbiguousTemplate",
+                        $"Target SkeletalMesh '{canonicalPath}' has ambiguous exact exports in the template and was omitted.",
+                        canonicalPath);
                     return null;
                 }
                 if (templateMatches.SingleOrDefault() is { } templateExport)
@@ -164,19 +169,28 @@ internal static class MorphFaceAttachmentTransferEngine
                     if (!HasSupportedMaterials(template, templateExport, out var unsupported,
                             donors.Cache, donors.InstalledAssets))
                     {
-                        warnings.Add(
-                            $"Optional attachment '{canonicalPath}' was omitted because it requires unsupported material '{unsupported}'.");
+                        AddUserWarning(warnings, userWarnings, "loc_Services_AttachmentTransfer_UnsupportedMaterial",
+                            $"Optional attachment '{canonicalPath}' was omitted because it requires unsupported material '{unsupported}'.",
+                            canonicalPath);
                         return null;
                     }
                     return ExternalSkeletalMeshMaterializer.MaterializeResolved(
-                        destination, templateExport, warnings, donors.Cache, donors.InstalledAssets);
+                        destination, templateExport, warnings, donors.Cache, donors.InstalledAssets, userWarnings);
                 }
             }
         }
 
-        warnings.Add(
-            $"Target SkeletalMesh '{canonicalPath}' has no exact {destination.Game} installed or template donor and was omitted.");
+        AddUserWarning(warnings, userWarnings, "loc_Services_AttachmentTransfer_NoExactDonor",
+            $"Target SkeletalMesh '{canonicalPath}' has no exact {destination.Game} installed or template donor and was omitted.",
+            canonicalPath, destination.Game.ToString());
         return null;
+    }
+
+    private static void AddUserWarning(ICollection<string> warnings,
+        ICollection<UserFacingMessage> userWarnings, string key, string diagnostic, params object?[] arguments)
+    {
+        warnings.Add(diagnostic);
+        userWarnings.Add(UserFacingMessage.CreateWarning(key, diagnostic, arguments));
     }
 
     private static ExportEntry[] FindExactExports(IMEPackage package, string canonicalPath) =>

@@ -60,7 +60,7 @@ public static class FaceMaterialFileService
         var tseParameters = MaterialRonCodec.ReadTse(input);
         var taggedHead = TseHeadMorphRon.ReadProvenance(input)?.Producer == RonExportProducer.MFE;
         if (!allowTse && !taggedHead && MaterialRonCodec.IdentifyMaterialFile(input) != MaterialRonCodec.MaterialFileKind.Tse)
-            throw new InvalidDataException(Loc.Text("loc_Services_FaceMaterialFile_OnlyTaggedMfeRonsAccepted"));
+            throw Loc.Error(new InvalidDataException(Loc.Text("loc_Services_FaceMaterialFile_OnlyTaggedMfeRonsAccepted")));
         return new(tseParameters, !taggedHead, [], attachments.HairMesh, attachments.AccessoryMeshes);
     }
 

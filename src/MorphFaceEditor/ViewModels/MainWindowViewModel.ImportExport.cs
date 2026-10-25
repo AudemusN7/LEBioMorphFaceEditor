@@ -115,7 +115,7 @@ public sealed partial class MainWindowViewModel
                       profiles.Find(reference.Game, reference.FacePath, null);
         if (!HasSupportedRonArchetype(archetype) || !RonNpcDonorResolver.SupportsMorphRonExport(profile, reference.BaseHeadPath))
         {
-            throw new InvalidOperationException(Loc.Text("loc_Shell_Error_RonProfileUnsupported"));
+            throw Loc.Error(new InvalidOperationException(Loc.Text("loc_Shell_Error_RonProfileUnsupported")));
         }
         var basePath = reference.BaseHeadPath ?? string.Empty;
         var player = isPlayerWorkspace ||
@@ -343,7 +343,7 @@ public sealed partial class MainWindowViewModel
                     SourceTextureCatalog: sourceCatalog.Candidates,
                     TargetTextureCatalog: textureCatalog.Candidates,
                     CancellationToken: cancellationToken)), cancellationToken);
-            importWarnings = UserFacingMessageFormatter.FormatWarnings(imported.SaveResult);
+            importWarnings = FormatSaveWarningsForUi(imported.SaveResult);
 
             var candidate = EditorWorkspace.ForNpc(imported.Workspace, targetGame);
             var importedFacePath = imported.ImportedFacePath;
@@ -357,11 +357,9 @@ public sealed partial class MainWindowViewModel
             _faceDetailsHasBakedFallback = false;
             FaceDetails = Loc.Format("loc_Shell_FaceDetails_NpcNativeRelativeBake", preview.Loaded.BaseHead.Topology.VertexCount, preview.Loaded.Document.BakedLods.Count);
             Status = Loc.Format("loc_Shell_Status_ImportedAsNpcMorphReady", selected.DisplayName, targetGame, archetype);
-            var allImportWarnings = importWarnings.Concat(preview.Loaded.Warnings).Distinct(StringComparer.Ordinal).ToArray();
-            foreach (var warning in allImportWarnings)
-            {
-                AppLog.Warning(warning);
-            }
+            var allImportWarnings = importWarnings.Concat(preview.Loaded.Warnings
+                    .Select(UserFacingMessageFormatter.FormatDiagnostic))
+                .Distinct(StringComparer.Ordinal).ToArray();
             if (allImportWarnings.Length > 0)
             {
                 Status = Loc.Format("loc_Shell_Status_ImportedWithAssetOrStatic", selected.DisplayName, allImportWarnings.Length);
@@ -413,7 +411,7 @@ public sealed partial class MainWindowViewModel
             }
             catch (Exception exception)
             {
-                ErrorMessage = exception.Message;
+                ErrorMessage = UserFacingMessageFormatter.Format(exception);
                 Status = Loc.Text("loc_Shell_Status_TheSelectedGameDoesNot");
                 return false;
             }
@@ -431,7 +429,7 @@ public sealed partial class MainWindowViewModel
             catch (Exception exception)
             {
                 AppLog.Error($"MESH:ANALYSIS-FAILED {game} FILE:{sourcePath}", exception);
-                ErrorMessage = Loc.Format("loc_Shell_Error_TheMeshCouldNotBe", exception.Message);
+                ErrorMessage = Loc.Format("loc_Shell_Error_TheMeshCouldNotBe", UserFacingMessageFormatter.Format(exception));
                 Status = Loc.Text("loc_Shell_Status_MeshImportFailedTheCurrent");
                 return false;
             }
@@ -535,7 +533,7 @@ public sealed partial class MainWindowViewModel
                     meshRecognition = meshResult.Recognition;
                 }
                 importedFacePath = saveResult.FaceInstancedPath;
-                importWarnings = UserFacingMessageFormatter.FormatWarnings(saveResult);
+                importWarnings = FormatSaveWarningsForUi(saveResult);
             }
             else
             {
@@ -551,21 +549,21 @@ public sealed partial class MainWindowViewModel
                     }
                     createdWorkspace = result.Workspace;
                     importedFacePath = result.ImportedFacePath;
-                    importWarnings = UserFacingMessageFormatter.FormatWarnings(result.SaveResult);
+                    importWarnings = FormatSaveWarningsForUi(result.SaveResult);
                 }
                 else if (isLegacy)
                 {
                     var result = await Task.Run(() => _standaloneLegacyImportService.Import(game, sourcePath, objectName));
                     createdWorkspace = result.Workspace;
                     importedFacePath = result.ImportedFacePath;
-                    importWarnings = UserFacingMessageFormatter.FormatWarnings(result.SaveResult);
+                    importWarnings = FormatSaveWarningsForUi(result.SaveResult);
                 }
                 else
                 {
                     var result = await Task.Run(() => _standaloneMeshImportService.Import(game, objectName, meshAnalysis!));
                     createdWorkspace = result.Workspace;
                     importedFacePath = result.ImportedFacePath;
-                    importWarnings = UserFacingMessageFormatter.FormatWarnings(result.SaveResult);
+                    importWarnings = FormatSaveWarningsForUi(result.SaveResult);
                     meshRecognition = result.Recognition;
                 }
                 replacement = career is null ? EditorWorkspace.ForPlayer(createdWorkspace, game)
@@ -598,10 +596,6 @@ public sealed partial class MainWindowViewModel
             OnDirtyStateChanged();
             if (importWarnings.Count > 0)
             {
-                foreach (var warning in importWarnings)
-                {
-                    AppLog.Warning(warning);
-                }
                 Status = Loc.Format("loc_Shell_Status_ImportedWithVisibleAssetWarning", importedFacePath, importWarnings.Count);
                 _dialogs.ShowInformation(
                     Loc.Text("loc_Shell_DialogTitle_PlayerMorphImportedWithWarnings"),
@@ -796,6 +790,15 @@ public sealed partial class MainWindowViewModel
 
     private async Task<bool> FlushSelectedExportSourceAsync(BioMorphFaceListItem selected) =>
         !IsLoaded(selected) || Editor?.IsDirty != true && !CareerDraftPendingInPackage || await FlushEditorToWorkspaceAsync();
+
+    private static IReadOnlyList<string> FormatSaveWarningsForUi(MorphFaceSaveResult result)
+    {
+        var structuredDiagnostics = result.UserWarnings.Where(message => message.DiagnosticText is not null)
+            .Select(message => message.DiagnosticText!).ToHashSet(StringComparer.Ordinal);
+        foreach (var warning in result.Warnings.Where(structuredDiagnostics.Contains).Distinct(StringComparer.Ordinal))
+            AppLog.Warning(warning);
+        return UserFacingMessageFormatter.FormatWarnings(result);
+    }
 
     private static string SanitizeObjectName(string value)
     {

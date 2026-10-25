@@ -1,6 +1,7 @@
 using System.IO;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
+using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.LegendaryExplorer.TextureRegistry;
 using MorphFaceEditor.Models;
@@ -178,8 +179,8 @@ public sealed class PackageReferenceService(
         ArgumentNullException.ThrowIfNull(requestedPaths);
         var catalog = await _textureCatalogService.ReadAsync(game, cancellationToken);
         if (!catalog.IsAvailable)
-            throw new InvalidOperationException(
-                $"The {game} mesh/texture database is unavailable. Build it in Mesh/Texture Databases to preview installed attachments.");
+            throw Loc.Error(new InvalidOperationException(Loc.Format(
+                "loc_Services_PackageReference_AttachmentDatabaseUnavailable", game)));
 
         var resolved = new Dictionary<string, AssetIdentity>(StringComparer.OrdinalIgnoreCase);
         foreach (var path in requestedPaths.Where(path => !string.IsNullOrWhiteSpace(path) &&

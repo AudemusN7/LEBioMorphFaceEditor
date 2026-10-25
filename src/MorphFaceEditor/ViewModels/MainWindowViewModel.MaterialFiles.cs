@@ -26,7 +26,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception exception)
         {
-            ErrorMessage = Loc.Format("loc_Shell_Error_TheRonProvenanceCouldNot", exception.Message);
+            ErrorMessage = Loc.Format("loc_Shell_Error_TheRonProvenanceCouldNot", UserFacingMessageFormatter.Format(exception));
             Status = Loc.Text("loc_Shell_Status_RonImportFailedTheCurrent");
             return true;
         }
@@ -47,7 +47,7 @@ public sealed partial class MainWindowViewModel
             }
             catch (Exception exception)
             {
-                ErrorMessage = Loc.Format("loc_Shell_Error_TheRonProvenanceCouldNot", exception.Message);
+                ErrorMessage = Loc.Format("loc_Shell_Error_TheRonProvenanceCouldNot", UserFacingMessageFormatter.Format(exception));
                 return true;
             }
             return true;
@@ -155,7 +155,7 @@ public sealed partial class MainWindowViewModel
                 warnings = await ApplyFaceMaterialsAsync(editor, imported, game, target.PlayerMorph, () => true,
                     omitUnresolvedTextures: true);
             }
-            if (preparationError is not null) throw new InvalidDataException(preparationError);
+            if (preparationError is not null) throw Loc.Error(new InvalidDataException(preparationError));
             var draft = editor.CreateDraft();
             await Task.Run(() => _packageWriter.SaveExisting(draft));
 
@@ -222,7 +222,7 @@ public sealed partial class MainWindowViewModel
         catch (Exception exception)
         {
             AppLog.Error("MESH:MATERIAL-EXPORT-FAILED", exception);
-            ErrorMessage = exception.Message;
+            ErrorMessage = UserFacingMessageFormatter.Format(exception);
             Status = Loc.Text("loc_Shell_Status_MaterialExportFailedTheCurrent");
             return false;
         }
@@ -251,7 +251,7 @@ public sealed partial class MainWindowViewModel
         catch (Exception exception)
         {
             AppLog.Error("MESH:MATERIAL-IMPORT-FAILED", exception);
-            ErrorMessage = exception.Message;
+            ErrorMessage = UserFacingMessageFormatter.Format(exception);
             Status = Loc.Text("loc_Shell_Status_MaterialImportFailedTheCurrent");
         }
         finally { IsBusy = false; }
@@ -325,7 +325,7 @@ public sealed partial class MainWindowViewModel
         catch (Exception exception)
         {
             AppLog.Error("FACE:MATERIAL-IMPORT-FAILED", exception);
-            ErrorMessage = exception.Message;
+            ErrorMessage = UserFacingMessageFormatter.Format(exception);
             Status = Loc.Text("loc_Shell_Status_MaterialImportFailedTheCurrent2");
         }
         finally { IsBusy = false; }
@@ -387,9 +387,9 @@ public sealed partial class MainWindowViewModel
     private MorphFaceGame ResolveMaterialFileGame()
     {
         if (_workspace is null)
-            throw new InvalidOperationException(Loc.Text("loc_Shell_Error_FaceWorkspaceHasNoSourcePackage"));
+            throw Loc.Error(new InvalidOperationException(Loc.Text("loc_Shell_Error_FaceWorkspaceHasNoSourcePackage")));
         if (_workspace.Game == MorphFaceGame.Unsupported)
-            throw new InvalidOperationException(Loc.Format("loc_Shell_Error_CouldNotDetermineGameForFace", LoadedFacePath));
+            throw Loc.Error(new InvalidOperationException(Loc.Format("loc_Shell_Error_CouldNotDetermineGameForFace", LoadedFacePath)));
         return _workspace.Game;
     }
 

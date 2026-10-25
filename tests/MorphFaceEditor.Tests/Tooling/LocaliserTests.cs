@@ -15,6 +15,9 @@ internal static class LocaliserTests
         new("localiser: a wording edit preserves master and translation file layout", WordingPreservesLayout),
         new("localiser: notes and protection survive XML-sensitive characters", AnnotationRoundTrip),
         new("localiser: excluded strings cannot be translated and are omitted from saved languages", ProtectedStrings),
+        new("localiser: explicitly retired translations load and are pruned on save", RetiredTranslations),
+        new("localiser: cached wording validation and review hashes invalidate on edits", CachedValidationAndReviewHashes),
+        new("localiser: needs review hides exclusions only in translation languages", NeedsReviewExclusions),
         new("localiser: invalid wording, concurrent edits and locked files preserve the master and draft", SafeSave),
         new("localiser: language drafts persist Unicode notes review stamps and missing strings", TranslationRoundTrip),
         new("localiser: combined language and master save rolls back if either file fails", TranslationSafeSave),
@@ -97,6 +100,99 @@ internal static class LocaliserTests
         workspace.Save();
         TestAssert.True(!Read(workspace.Path).Annotations.ContainsKey("loc_one"), "Cleared protection was retained in the master.");
     });
+
+    private static void RetiredTranslations() => Scratch(root =>
+    {
+        var masterPath = Path.Combine(root, "Strings.en-GB.xaml");
+        File.WriteAllText(masterPath, Xml("\n<!--localiser-retired: [\"loc_retired\"]-->\n" +
+            "<system:String x:Key=\"loc_active\">Active</system:String>\n"));
+        var master = ReviewWorkspace.Open(masterPath);
+        TestAssert.True(master.RetiredKeys.SetEquals(["loc_retired"]), "The explicit retirement list was not parsed.");
+
+        var languagePath = Path.Combine(root, "Strings.fr.xaml");
+        File.WriteAllText(languagePath, Xml("\n<!-- Keep this language section -->\n" +
+            "<!-- localiser: {\"Key\":\"loc_active\",\"Note\":\"active context\"} -->\n" +
+            "<system:String x:Key=\"loc_active\">Actif</system:String>\n" +
+            "<!-- localiser: {\"Key\":\"loc_retired\",\"Note\":\"retired context\"} -->\n" +
+            "<system:String x:Key=\"loc_retired\">Ancienne chaîne</system:String>\n"));
+        var locale = Read(languagePath);
+        StringCatalogue.ValidateOverlay(master.Entries.ToDictionary(entry => entry.Key, entry => entry.Text), locale.Strings,
+            locale.Annotations, master.RetiredKeys);
+        RejectFormat(() => StringCatalogue.ValidateOverlay(master.Entries.ToDictionary(entry => entry.Key, entry => entry.Text),
+            new Dictionary<string, string> { ["loc_unknown"] = "Unknown" }, retiredKeys: master.RetiredKeys));
+
+        var language = TranslationWorkspace.Open(master, languagePath);
+        TestAssert.Equal(1, language.Entries.Count);
+        TestAssert.True(!language.Entries.ContainsKey("loc_retired"), "A retired key appeared as a translation row.");
+        TestAssert.True(language.IsDirty, "Pending retired-string cleanup did not mark the language dirty.");
+        language.SaveAs(languagePath, master);
+        TestAssert.True(!language.IsDirty, "Saving retired-string cleanup left the language dirty.");
+        var saved = Read(languagePath);
+        TestAssert.Equal("Actif", saved.Strings["loc_active"]);
+        TestAssert.True(!saved.Strings.ContainsKey("loc_retired") && !saved.Annotations.ContainsKey("loc_retired"),
+            "Saving did not prune retired strings and their annotations.");
+        TestAssert.Equal("active context", saved.Annotations["loc_active"].Note);
+        TestAssert.True(File.ReadAllText(languagePath).Contains("Keep this language section", StringComparison.Ordinal),
+            "Saving removed the existing section heading.");
+
+        var unknownPath = Path.Combine(root, "Strings.unknown.xaml");
+        File.WriteAllText(unknownPath, Xml("<system:String x:Key=\"loc_unknown\">Unknown</system:String>"));
+        RejectFormat(() => TranslationWorkspace.Open(master, unknownPath));
+        RejectFormat(() => ReadText(Xml("<!--localiser-retired: [\"loc_active\"]-->" +
+            "<system:String x:Key=\"loc_active\">Active</system:String>")));
+        RejectFormat(() => ReadText(Xml("<!--localiser-retired: [\"loc_retired\",\"loc_retired\"]-->" +
+            "<system:String x:Key=\"loc_active\">Active</system:String>")));
+    });
+
+    private static void CachedValidationAndReviewHashes() => Scratch(root =>
+    {
+        var master = ReviewWorkspace.Open(CreateMaster(root));
+        var source = master.Entries.Single(entry => entry.Key == "loc_one");
+        TestAssert.Equal("", source.Problem);
+        source.Text = "Missing placeholder";
+        TestAssert.True(source.Problem.Length > 0, "A source wording edit did not refresh cached validation.");
+        source.Text = "Changed {0}";
+        TestAssert.Equal("", source.Problem);
+        source.Reviewed = true;
+        TestAssert.True(source.Reviewed, "A valid source wording could not be reviewed after a cached problem.");
+        source.Text = "Changed again {0}";
+        TestAssert.True(!source.Reviewed, "A source text hash cache retained a stale review.");
+
+        var translation = TranslationWorkspace.Empty(master).Entries["loc_one"];
+        translation.Text = "Un {0}";
+        TestAssert.Equal("", translation.Problem);
+        translation.Reviewed = true;
+        TestAssert.True(translation.Reviewed, "A valid translation could not be reviewed.");
+        translation.Text = "Un";
+        TestAssert.True(translation.Problem.Length > 0 && !translation.Reviewed,
+            "A translation wording edit did not invalidate its cached validation and review hash.");
+        translation.Text = "Une {0}";
+        TestAssert.Equal("", translation.Problem);
+        translation.UpdateEnglish("Changed {1}");
+        TestAssert.True(translation.Problem.Length > 0 && !translation.Reviewed,
+            "An English source update did not invalidate the cached translation validation and review hash.");
+        translation.Text = "Une {1}";
+        TestAssert.Equal("", translation.Problem);
+        translation.Reviewed = true;
+        TestAssert.True(translation.Reviewed, "A repaired translation did not accept a fresh review stamp.");
+    });
+
+    private static void NeedsReviewExclusions() => Scratch(root => WpfTestDispatcher.Invoke(() =>
+    {
+        var path = CreateMaster(root);
+        var review = new ReviewViewModel();
+        review.Open(path);
+        var row = review.Rows.Single(item => item.Key == "loc_one");
+        review.SetFlags([row], excludedColumn: true, value: true);
+        review.SelectedFilter = "Needs review";
+        TestAssert.True(review.Entries!.Cast<LocaliserRow>().Contains(row),
+            "English master review hid an unreviewed excluded row.");
+
+        review.SelectLanguage("fr");
+        review.SelectedFilter = "Needs review";
+        TestAssert.True(!review.Entries!.Cast<LocaliserRow>().Contains(row),
+            "Translation review showed a row excluded from translation.");
+    }));
 
     private static void SafeSave() => Scratch(root =>
     {

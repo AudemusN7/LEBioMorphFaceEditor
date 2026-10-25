@@ -195,7 +195,7 @@
             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
             <TextBlock x:Name="ValidationText" Foreground="{DynamicResource ValidationForeground}" VerticalAlignment="Center" />
             <StackPanel Grid.Column="1" Orientation="Horizontal">
-                <Button Content="{DynamicResource loc_View_ManualAssetSelectionWindow_Cancel}" IsCancel="True" MinWidth="88" Margin="0,0,8,0" />
+                <Button Content="{DynamicResource loc_Common_Cancel}" IsCancel="True" MinWidth="88" Margin="0,0,8,0" />
                 <Button Content="{DynamicResource loc_View_ManualAssetSelectionWindow_Confirm}" IsDefault="True" MinWidth="100" Click="OnConfirm" />
             </StackPanel>
         </Grid>

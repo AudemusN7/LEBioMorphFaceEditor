@@ -54,7 +54,7 @@ public partial class AccentColorPickerWindow : Window
         }
         catch (Exception exception) when (exception is System.IO.IOException or UnauthorizedAccessException)
         {
-            StatusText.Text = Loc.Format("loc_AccentColorPickerWindow_CouldNotSaveAccentColour", exception.Message);
+            StatusText.Text = Loc.Format("loc_AccentColorPickerWindow_CouldNotSaveAccentColour", UserFacingMessageFormatter.Format(exception));
         }
     }
 }

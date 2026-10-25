@@ -12,34 +12,38 @@ internal sealed record TranslationEntryState(string Text, string Note, string? R
 public sealed class TranslationEntry : INotifyPropertyChanged
 {
     private string _text;
+    private string _textHash;
+    private string _englishHash;
     private string _note;
     private string? _reviewedHash;
     private string? _sourceHash;
+    private string _problem;
     private (string Text, string Note, string? Reviewed, string? Source) _saved;
     public string Key { get; }
-    public string Text { get => _text; set { if (Set(ref _text, value)) Notify(nameof(Reviewed)); } }
+    public string Text
+    {
+        get => _text;
+        set
+        {
+            if (_text == value) return;
+            _text = value; _textHash = StringCatalogue.TextHash(value); _problem = Validate(value);
+            Notify(nameof(Text)); Notify(nameof(Problem)); Notify(nameof(IsDirty)); Notify(nameof(Reviewed));
+        }
+    }
     public string Note { get => _note; set => Set(ref _note, value); }
     public string English { get; private set; }
     public bool Reviewed
     {
-        get => Text.Length > 0 && _reviewedHash == StringCatalogue.TextHash(Text) && _sourceHash == StringCatalogue.TextHash(English);
+        get => Text.Length > 0 && _reviewedHash == _textHash && _sourceHash == _englishHash;
         set
         {
             if (value && (string.IsNullOrWhiteSpace(Text) || Problem.Length > 0)) return;
-            _reviewedHash = value ? StringCatalogue.TextHash(Text) : null;
-            _sourceHash = value ? StringCatalogue.TextHash(English) : null;
+            _reviewedHash = value ? _textHash : null;
+            _sourceHash = value ? _englishHash : null;
             Notify(); Notify(nameof(IsDirty));
         }
     }
-    public string Problem
-    {
-        get
-        {
-            if (Text.Length == 0) return "";
-            try { StringCatalogue.ValidateValue(Key, English, Text); return ""; }
-            catch (FormatException exception) { return exception.Message; }
-        }
-    }
+    public string Problem => _problem;
     public bool IsDirty => _saved != (Text, Note, _reviewedHash, _sourceHash);
     internal EntryAnnotation Annotation => new(Key, _reviewedHash, Note: Note, SourceHash: _sourceHash);
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -49,23 +53,36 @@ public sealed class TranslationEntry : INotifyPropertyChanged
     {
         if (CaptureState() == state) return;
         _text = state.Text; _note = state.Note; _reviewedHash = state.ReviewedHash; _sourceHash = state.SourceHash;
+        _textHash = StringCatalogue.TextHash(_text); _problem = Validate(_text);
         foreach (var name in new[] { nameof(Text), nameof(Note), nameof(Reviewed), nameof(Problem), nameof(IsDirty) }) Notify(name);
     }
 
     internal TranslationEntry(ReviewEntry master, string text, EntryAnnotation? annotation)
     {
         Key = master.Key; English = master.Text; _text = text;
+        _textHash = StringCatalogue.TextHash(text); _englishHash = StringCatalogue.TextHash(English);
         _note = annotation?.Note ?? master.Note;
         _reviewedHash = annotation?.ReviewedHash; _sourceHash = annotation?.SourceHash;
+        _problem = Validate(text);
         AcceptSaved();
     }
     public void UpdateEnglish(string text)
-    { if (English == text) return; English = text; Notify(nameof(Reviewed)); Notify(nameof(Problem)); }
+    {
+        if (English == text) return;
+        English = text; _englishHash = StringCatalogue.TextHash(text); _problem = Validate(Text);
+        Notify(nameof(Reviewed)); Notify(nameof(Problem));
+    }
     internal void AcceptSaved() => _saved = (Text, Note, _reviewedHash, _sourceHash);
     private bool Set<T>(ref T field, T value, [CallerMemberName] string? name = null)
     {
         if (EqualityComparer<T>.Default.Equals(field, value)) return false;
         field = value; Notify(name); Notify(nameof(Problem)); Notify(nameof(IsDirty)); return true;
+    }
+    private string Validate(string text)
+    {
+        if (text.Length == 0) return "";
+        try { StringCatalogue.ValidateValue(Key, English, text); return ""; }
+        catch (FormatException exception) { return exception.Message; }
     }
     private void Notify([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
@@ -76,9 +93,10 @@ public sealed class TranslationWorkspace
     private byte[]? _sourceBytes;
     private readonly IReadOnlyDictionary<string, ReviewEntry> _sources;
     private HashSet<string> _savedExclusions;
+    private bool _retiredCleanupPending;
     public string? Path { get; private set; }
     public IReadOnlyDictionary<string, TranslationEntry> Entries { get; }
-    public bool IsDirty => Entries.Values.Any(entry => entry.IsDirty ||
+    public bool IsDirty => _retiredCleanupPending || Entries.Values.Any(entry => entry.IsDirty ||
         (entry.Text.Length > 0 && _sources[entry.Key].DoNotTranslate != _savedExclusions.Contains(entry.Key)));
 
     private TranslationWorkspace(ReviewWorkspace master, string? path, CatalogueData? data, byte[]? fingerprint)
@@ -100,9 +118,14 @@ public sealed class TranslationWorkspace
         using var stream = new MemoryStream(bytes);
         var data = StringCatalogue.Read(stream);
         var keys = master.Entries.Select(entry => entry.Key).ToHashSet(StringComparer.Ordinal);
-        foreach (var key in data.Strings.Keys.Concat(data.Annotations.Keys)) if (!keys.Contains(key)) throw new FormatException($"Unknown localisation key: {key}");
+        foreach (var key in data.Strings.Keys.Concat(data.Annotations.Keys))
+            if (!keys.Contains(key) && !master.RetiredKeys.Contains(key)) throw new FormatException($"Unknown localisation key: {key}");
         // Invalid wording is retained in the table so it can be repaired before saving.
-        return new TranslationWorkspace(master, path, data, SHA256.HashData(bytes)) { _sourceBytes = bytes };
+        return new TranslationWorkspace(master, path, data, SHA256.HashData(bytes))
+        {
+            _sourceBytes = bytes,
+            _retiredCleanupPending = data.Strings.Keys.Concat(data.Annotations.Keys).Any(master.RetiredKeys.Contains)
+        };
     }
 
     public void SaveAs(string path, ReviewWorkspace master)
@@ -119,6 +142,7 @@ public sealed class TranslationWorkspace
         if (master.IsDirty) master.AcceptSaved(masterWrite);
         Path = path; _fingerprint = SHA256.HashData(bytes);
         _sourceBytes = bytes;
+        _retiredCleanupPending = false;
         foreach (var entry in Entries.Values) entry.AcceptSaved();
         _savedExclusions = _sources.Values.Where(entry => entry.DoNotTranslate).Select(entry => entry.Key).ToHashSet(StringComparer.Ordinal);
     }

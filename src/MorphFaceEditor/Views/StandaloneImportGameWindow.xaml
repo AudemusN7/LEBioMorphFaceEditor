@@ -60,9 +60,9 @@
             </Button>
         </StackPanel>
         <StackPanel x:Name="NewPlayerPanel" Grid.Row="1" Visibility="Collapsed">
-            <TextBlock Text="{DynamicResource loc_View_StandaloneImportGameWindow_TARGETGAME}" Style="{StaticResource FieldLabel}" />
+            <TextBlock Text="{DynamicResource loc_View_ConvertMorphWindow_TARGETGAME}" Style="{StaticResource FieldLabel}" />
             <controls:GameSelector x:Name="TargetGameSelector" Margin="0,8,0,0"
-                                   AutomationProperties.Name="{DynamicResource loc_View_StandaloneImportGameWindow_TARGETGAME}" />
+                                   AutomationProperties.Name="{DynamicResource loc_View_ConvertMorphWindow_TARGETGAME}" />
             <StackPanel x:Name="SexPanel" Visibility="Collapsed" Margin="0,12,0,0">
                 <TextBlock Text="{DynamicResource loc_View_StandaloneImportGameWindow_PLAYER}" Style="{StaticResource FieldLabel}" />
                 <ComboBox x:Name="SexBox" Width="150" HorizontalAlignment="Left" Margin="0,5,0,0" SelectedIndex="0">
@@ -74,7 +74,7 @@
         <TextBlock x:Name="ValidationText" Grid.Row="2" Visibility="Collapsed" Foreground="{DynamicResource ValidationForeground}" FontSize="11"
                    Margin="0,8,0,0" TextWrapping="Wrap" />
         <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
-            <Button x:Name="CancelButton" Content="{DynamicResource loc_View_StandaloneImportGameWindow_Cancel}" IsCancel="True" MinWidth="84" />
+            <Button x:Name="CancelButton" Content="{DynamicResource loc_Common_Cancel}" IsCancel="True" MinWidth="84" />
             <Button x:Name="ContinueButton" Content="{DynamicResource loc_View_StandaloneImportGameWindow_ChooseImportFile}" Visibility="Collapsed" MinWidth="132" Click="OnContinue" />
         </StackPanel>
     </Grid>

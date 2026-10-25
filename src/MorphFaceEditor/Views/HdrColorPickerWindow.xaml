@@ -90,8 +90,8 @@
         <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right">
             <Button x:Name="ResetBackgroundButton" Content="{DynamicResource loc_View_HdrColorPickerWindow_UseThemeDefault}" MinWidth="132"
                     Margin="0,0,16,0" Click="OnResetBackground" Visibility="Collapsed" />
-            <Button Content="{DynamicResource loc_View_HdrColorPickerWindow_Cancel}" IsCancel="True" MinWidth="84" Margin="0,0,8,0" />
-            <Button Content="{DynamicResource loc_View_HdrColorPickerWindow_Apply}" IsDefault="True" MinWidth="84" Click="OnApply" />
+            <Button Content="{DynamicResource loc_Common_Cancel}" IsCancel="True" MinWidth="84" Margin="0,0,8,0" />
+            <Button Content="{DynamicResource loc_View_AccentColorPickerWindow_Apply}" IsDefault="True" MinWidth="84" Click="OnApply" />
         </StackPanel>
     </Grid>
 </Window>

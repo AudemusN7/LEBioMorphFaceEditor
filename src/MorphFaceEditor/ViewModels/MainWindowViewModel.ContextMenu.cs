@@ -110,7 +110,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception exception)
         {
-            ReportContextOperationFailure("loc_Shell_Operation_DeleteMorph", "loc_Shell_Error_MorphCouldNotDelete", exception, packageModified);
+            ReportContextOperationFailure("loc_View_MainWindow_DeleteMorph", "loc_Shell_Error_MorphCouldNotDelete", exception, packageModified);
         }
         finally
         {
@@ -158,7 +158,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception exception)
         {
-            ReportContextOperationFailure("loc_Shell_Operation_CloneMorph", "loc_Shell_Error_MorphCouldNotClone", exception, packageModified);
+            ReportContextOperationFailure("loc_View_MainWindow_CloneMorph", "loc_Shell_Error_MorphCouldNotClone", exception, packageModified);
         }
         finally
         {
@@ -219,7 +219,7 @@ public sealed partial class MainWindowViewModel
             var displayedWarnings = result.SaveResult.Warnings
                 .Select(warning => localizedAttachmentWarnings.TryGetValue(warning, out var localized)
                     ? localized
-                    : warning)
+                    : UserFacingMessageFormatter.FormatDiagnostic(warning))
                 .ToArray();
             var textureWarnings = result.SaveResult.Warnings.Count == 0
                 ? string.Empty
@@ -276,7 +276,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception exception)
         {
-            ReportContextOperationFailure("loc_Shell_Operation_CopyMorphData", "loc_Shell_Error_MorphDataCouldNotCopy", exception);
+            ReportContextOperationFailure("loc_View_MainWindow_CopyMorphData", "loc_Shell_Error_MorphDataCouldNotCopy", exception);
         }
         finally
         {
@@ -313,7 +313,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception exception)
         {
-            ReportContextOperationFailure("loc_Shell_Operation_PasteMorphData", "loc_Shell_Error_MorphDataCouldNotPaste", exception);
+            ReportContextOperationFailure("loc_View_MainWindow_PasteMorphData", "loc_Shell_Error_MorphDataCouldNotPaste", exception);
         }
         finally
         {
@@ -343,7 +343,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception exception)
         {
-            ReportContextOperationFailure("loc_Shell_Operation_CopyMaterialData", "loc_Shell_Error_MaterialDataCouldNotCopy", exception);
+            ReportContextOperationFailure("loc_View_MainWindow_CopyMaterialData", "loc_Shell_Error_MaterialDataCouldNotCopy", exception);
         }
         finally
         {
@@ -375,7 +375,7 @@ public sealed partial class MainWindowViewModel
         }
         catch (Exception exception)
         {
-            ReportContextOperationFailure("loc_Shell_Operation_PasteMaterialData", "loc_Shell_Error_MaterialDataCouldNotPaste", exception);
+            ReportContextOperationFailure("loc_View_MainWindow_PasteMaterialData", "loc_Shell_Error_MaterialDataCouldNotPaste", exception);
         }
         finally
         {
@@ -387,8 +387,8 @@ public sealed partial class MainWindowViewModel
     {
         if (!string.Equals(payload.ProfileKey, target.ProfileKey, StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException(Loc.Format("loc_Shell_Error_ClipboardProfileMismatch",
-                ProfileLabel(payload.ProfileKey), target.DisplayName, ProfileLabel(target.ProfileKey)));
+            throw Loc.Error(new InvalidOperationException(Loc.Format("loc_Shell_Error_ClipboardProfileMismatch",
+                ProfileLabel(payload.ProfileKey), target.DisplayName, ProfileLabel(target.ProfileKey))));
         }
     }
 

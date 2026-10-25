@@ -3,6 +3,7 @@ using System.IO;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Core.Materials;
+using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.LegendaryExplorer.TextureRegistry;
 
@@ -177,8 +178,8 @@ public sealed class MorphFaceConversionService(
         var result = _textureCatalogService.ReadAsync(game).GetAwaiter().GetResult();
         if (!result.IsAvailable)
         {
-            throw new InvalidOperationException(
-                $"The {game} mesh/texture database is unavailable. Build it in Mesh/Texture Databases before converting across games.");
+            throw Loc.Error(new InvalidOperationException(
+                Loc.Format("loc_Services_MorphFaceConversion_DatabaseUnavailable", game)));
         }
         return result;
     }
@@ -194,8 +195,8 @@ public sealed class MorphFaceConversionService(
             File.Exists(candidate.PackagePath));
         if (match is null)
         {
-            throw new InvalidOperationException(
-                $"The {profile.Game} texture database contains no installed {profile.GetDisplayName()} face to use as a conversion template. Rebuild that database and try again.");
+            throw Loc.Error(new InvalidOperationException(
+                Loc.Format("loc_Services_MorphFaceConversion_NoInstalledTemplate", profile.Game, profile.GetDisplayName())));
         }
         return Path.GetFullPath(match.PackagePath);
     }
@@ -236,8 +237,8 @@ public sealed class MorphFaceConversionService(
         var game = references.FirstOrDefault()?.Game ?? MorphFaceGame.Unsupported;
         if (game != profile.Game)
         {
-            throw new InvalidDataException(
-                $"The template/destination PCC is {game}, but this conversion requires {profile.Game}.");
+            throw Loc.Error(new InvalidDataException(
+                Loc.Format("loc_Services_MorphFaceConversion_DestinationGameMismatch", game, profile.Game)));
         }
 
         var candidates = references
@@ -267,8 +268,8 @@ public sealed class MorphFaceConversionService(
                 // another same-profile candidate before reporting no template.
             }
         }
-        throw new InvalidOperationException(
-            $"'{templatePath}' contains no editable {profile.GetDisplayName()} BioMorphFace to use as a conversion template.");
+        throw Loc.Error(new InvalidOperationException(
+            Loc.Format("loc_Services_MorphFaceConversion_NoEditableTemplate", profile.GetDisplayName())));
     }
 
     private MorphFaceEditingSession CreateSession(

@@ -1,5 +1,6 @@
 using MorphFaceEditor.Core.Deformation;
 using MorphFaceEditor.Core.Materials;
+using MorphFaceEditor.Infrastructure;
 
 namespace MorphFaceEditor.Services;
 
@@ -32,7 +33,7 @@ public sealed class DetachedMeshFeatureMetadataCatalog : IHeadEditorUiProfile
 
     public MorphFeatureMetadata Describe(ResolvedMorphFeature feature, bool sessionCanEdit) =>
         new(feature.Feature.Name, feature.Feature.Name, string.Empty, string.Empty, false, 0, 0, 0, 0, false,
-            "Morph controls are unavailable for detached custom meshes.");
+            string.Empty);
 
     public MaterialParameterDefinition DescribeMaterial(MaterialParameterDefinition definition)
     {
@@ -142,7 +143,7 @@ public sealed class DetachedMeshFeatureMetadataCatalog : IHeadEditorUiProfile
             categories.Add(new EditorCategoryDefinition(
                 first.Key,
                 first.Label,
-                "Material controls available for the assigned custom mesh slots.",
+                Loc.Text("loc_Services_DetachedMeshFeatureMetadata_MaterialControlsDescription"),
                 groups));
         }
         return categories;

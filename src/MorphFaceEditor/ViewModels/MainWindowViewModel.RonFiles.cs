@@ -19,12 +19,12 @@ public sealed partial class MainWindowViewModel
             if (!await Task.Run(() => TseHeadMorphRon.IsMorphFeaturesOnly(source.Input))) return false;
             var (head, metadata) = await Task.Run(() => TseHeadMorphRon.ReadDocument(source.Input));
             if (metadata is null || metadata.Producer != RonExportProducer.MFE)
-                throw new InvalidDataException(Loc.Text("loc_RonFiles_Incompatible"));
+                throw Loc.Error(new InvalidDataException(Loc.Text("loc_RonFiles_Incompatible")));
             if (!HasWorkspace)
             {
                 var profile = MorphFaceProfileRegistry.CreateDefault().Profiles.SingleOrDefault(value =>
                     value.Game == metadata.Game && value.ExportTag.Trim('[', ']').Equals(metadata.Archetype, StringComparison.OrdinalIgnoreCase));
-                if (profile is null) throw new InvalidDataException(Loc.Text("loc_RonFiles_Incompatible"));
+                if (profile is null) throw Loc.Error(new InvalidDataException(Loc.Text("loc_RonFiles_Incompatible")));
                 if (await OpenDefaultMaterialFaceAsync(metadata.Game.ToString(), new MaterialFaceTarget(profile.Key, metadata.PlayerMorph),
                     path, source, WorkspaceFileFormat.MorphFeaturesRon, head.MorphData))
                     Status = Loc.Format("loc_RonFiles_Imported", Path.GetFileName(path));
@@ -34,7 +34,7 @@ public sealed partial class MainWindowViewModel
                 return true;
             var target = CreateRonExportProvenance(WorkspacePackagePath, SelectedFace, IsPlayerWorkspace);
             if (!MatchesRonTarget(metadata, target.Game, target.Archetype, target.PlayerMorph, featuresOnly: true))
-                throw new InvalidDataException(Loc.Text("loc_RonFiles_Incompatible"));
+                throw Loc.Error(new InvalidDataException(Loc.Text("loc_RonFiles_Incompatible")));
             Editor.ApplyMorphFeatures(head.MorphData);
             Status = Loc.Format("loc_RonFiles_Imported", Path.GetFileName(path));
             return true;
@@ -82,7 +82,7 @@ public sealed partial class MainWindowViewModel
             var document = await Task.Run(() => TseHeadMorphRon.ReadDocument(path));
             var metadata = document.Provenance;
             if (metadata is null ? !player : !MatchesRonTarget(metadata, game, face.ProfileTag.Trim('[', ']'), player, featuresOnly))
-                throw new InvalidDataException(Loc.Text("loc_RonFiles_Incompatible"));
+                throw Loc.Error(new InvalidDataException(Loc.Text("loc_RonFiles_Incompatible")));
             if (featuresOnly) Editor.ApplyMorphFeatures(document.Head.MorphData);
             else
             {
@@ -110,12 +110,13 @@ public sealed partial class MainWindowViewModel
                 _workspace!.GeometryModes[face.InstancedPath] = MorphFaceGeometryMode.RelativeBake;
                 refreshAttempted = true;
                 if (!await RefreshWorkspaceAsync(face.InstancedPath))
-                    throw new InvalidDataException(Loc.Text("loc_RonFiles_ImportFailed"));
+                    throw Loc.Error(new InvalidDataException(Loc.Text("loc_RonFiles_ImportFailed")));
                 CareerWorkspace?.SetImportedHead(document.Head, Editor!.CreateDraft());
                 _workspace!.MarkChanged(face.InstancedPath);
                 OnDirtyStateChanged();
                 if (result.Warnings.Count > 0)
-                    _dialogs.ShowInformation(Loc.Text("loc_RonFiles_ImportMorphFace"), string.Join("\n\n", result.Warnings.Take(8)));
+                    _dialogs.ShowInformation(Loc.Text("loc_RonFiles_ImportMorphFace"),
+                        string.Join("\n\n", FormatSaveWarningsForUi(result).Take(8)));
             }
             Status = Loc.Format("loc_RonFiles_Imported", Path.GetFileName(path));
         }

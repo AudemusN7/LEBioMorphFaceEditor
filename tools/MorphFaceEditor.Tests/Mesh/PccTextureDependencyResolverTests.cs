@@ -87,7 +87,7 @@ public static class PccTextureDependencyResolverTests
         try
         {
             using (var source = MEPackageHandler.OpenMEPackage(
-                       Path.GetFullPath("tests/Global Morphs/LE2 GlobalMorphs.pcc"),
+                       Path.GetFullPath("fixtures/Global Morphs/LE2 GlobalMorphs.pcc"),
                        forceLoadFromDisk: true))
             using (var donor = MEPackageHandler.CreateMemoryEmptyPackage(donorPath, MEGame.LE2))
             {

@@ -14,7 +14,7 @@ namespace MorphFaceEditor.Tests;
 /// <summary>GPU data-contract checks for AO using an actual LE2 human female head.</summary>
 public static class AmbientOcclusionRenderingTests
 {
-    private const string CorpusPath = "tests/Global Morphs/LE2 GlobalMorphs.pcc";
+    private const string CorpusPath = "fixtures/Global Morphs/LE2 GlobalMorphs.pcc";
 
     public static IReadOnlyList<TestCase> All { get; } =
     [

@@ -321,7 +321,7 @@ public static class TextureRegistryStoreTests
     {
         using var fixture = RegistryFixture.Create();
         fixture.Store.WriteAtomic(Snapshot(MorphFaceGame.LE1));
-        var path = Path.GetFullPath("tests/Global Morphs/LE1 GlobalMorphs.pcc");
+        var path = Path.GetFullPath("fixtures/Global Morphs/LE1 GlobalMorphs.pcc");
         var export = PackageAssetInspector.Inventory(path, ["Texture2D", "SkeletalMesh"]).Entries
             .First(value => !value.IsDefaultObject);
         var selected = new ManualRegistryAsset(path, export.UIndex,

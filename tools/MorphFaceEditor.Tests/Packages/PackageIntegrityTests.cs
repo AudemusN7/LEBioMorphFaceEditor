@@ -757,7 +757,7 @@ internal static class PackageIntegrityTests
         const string texturePath = "BIOG_Humanoid_MASTER_MTR_R.Skin_AsariHED_SpecMulitplier_Mask";
         TestAssert.Equal(MaterialOracleEntryKind.Import,
             MaterialDependencyOracle.Instance.GetKind(MEGame.LE1, "Texture2D", texturePath));
-        var sourcePath = Path.GetFullPath("tests/Global Morphs/LE1 GlobalMorphs.pcc");
+        var sourcePath = Path.GetFullPath("fixtures/Global Morphs/LE1 GlobalMorphs.pcc");
         var donorPath = Path.Combine(Path.GetTempPath(), $"BIOG_Humanoid_MASTER_MTR_R-{Guid.NewGuid():N}.pcc");
         var unflaggedOutput = Path.Combine(Path.GetTempPath(), $"MFE-UnflaggedTexture-{Guid.NewGuid():N}.pcc");
         var explicitOutput = Path.Combine(Path.GetTempPath(), $"MFE-ExplicitTexture-{Guid.NewGuid():N}.pcc");
@@ -843,7 +843,7 @@ internal static class PackageIntegrityTests
         const string texturePath = "MFE_ExactImport.Eye.EYE_Diff";
         try
         {
-            File.Copy(Path.GetFullPath("tests/Global Morphs/LE3 GlobalMorphs.pcc"), destinationPath);
+            File.Copy(Path.GetFullPath("fixtures/Global Morphs/LE3 GlobalMorphs.pcc"), destinationPath);
             if (exportCollision)
             {
                 using var destination = MEPackageHandler.OpenMEPackage(destinationPath, forceLoadFromDisk: true);
@@ -940,7 +940,7 @@ internal static class PackageIntegrityTests
         var donorPath = Path.Combine(Path.GetTempPath(), $"MFE-Donor-{Guid.NewGuid():N}.pcc");
         try
         {
-            File.Copy(Path.GetFullPath($"tests/Global Morphs/{game} GlobalMorphs.pcc"), sourcePath);
+            File.Copy(Path.GetFullPath($"fixtures/Global Morphs/{game} GlobalMorphs.pcc"), sourcePath);
             CreateDonor(donorPath, broken: false, game: game);
             int parentIndex;
             string facePath;
@@ -980,7 +980,7 @@ internal static class PackageIntegrityTests
         var donorPath = Path.Combine(Path.GetTempPath(), $"MFE-Donor-{Guid.NewGuid():N}.pcc");
         try
         {
-            File.Copy(Path.GetFullPath("tests/Global Morphs/LE1 GlobalMorphs.pcc"), sourcePath);
+            File.Copy(Path.GetFullPath("fixtures/Global Morphs/LE1 GlobalMorphs.pcc"), sourcePath);
             CreateDonor(donorPath, broken: true);
             string facePath;
             using (var package = MEPackageHandler.OpenMEPackage(sourcePath, forceLoadFromDisk: true))
@@ -1008,7 +1008,7 @@ internal static class PackageIntegrityTests
         try
         {
             LegendaryExplorerCoreRuntime.Initialize();
-            File.Copy(Path.GetFullPath("tests/Global Morphs/LE1 GlobalMorphs.pcc"), sourcePath);
+            File.Copy(Path.GetFullPath("fixtures/Global Morphs/LE1 GlobalMorphs.pcc"), sourcePath);
             var before = File.ReadAllBytes(sourcePath);
             var candidatePrefix = $".{Path.GetFileName(sourcePath)}.";
             var directory = Path.GetDirectoryName(sourcePath)!;
@@ -1142,8 +1142,8 @@ internal static class PackageIntegrityTests
             var result = MorphFaceTextureTransferEngine.Transfer(destination, new MorphFaceMaterialData([], [], textures),
                 new HashSet<string>(), new HashSet<string>(), textures.Select(value => value.Name).ToHashSet(),
                 game, game == MEGame.LE2 ? "le2-asari" : "le3-asari",
-                Path.GetFullPath($"tests/Global Morphs/{game} GlobalMorphs.pcc"),
-                Path.GetFullPath("tests/Global Morphs/LE1 GlobalMorphs.pcc"), [], []);
+                Path.GetFullPath($"fixtures/Global Morphs/{game} GlobalMorphs.pcc"),
+                Path.GetFullPath("fixtures/Global Morphs/LE1 GlobalMorphs.pcc"), [], []);
             TestAssert.Equal(paths.Length, result.MaterialData.Textures.Count);
             foreach (var texture in result.MaterialData.Textures)
             {

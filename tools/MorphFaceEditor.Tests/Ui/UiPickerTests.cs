@@ -396,7 +396,7 @@ internal static class UiPickerTests
         using var fixture = UiRandomisationTests.CreateHairScalpFixture(ccMohawk: true);
         using var shellReader = new MorphFacePackageReader();
         using var shell = CreateMainWindowViewModel(shellReader);
-        await shell.OpenDroppedFileAsync(Path.GetFullPath(Path.Combine("tests", "Global Morphs", "LE3 GlobalMorphs.pcc")));
+        await shell.OpenDroppedFileAsync(Path.GetFullPath(Path.Combine("fixtures", "Global Morphs", "LE3 GlobalMorphs.pcc")));
         shell.SelectedFace = shell.Faces.First(face => face.ProfileKey == "le3-human-male");
         await ((AsyncRelayCommand)shell.LoadSelectedFaceCommand).ExecuteAsync();
         TestAssert.True(shell.Editor is not null, shell.ErrorMessage ?? "The real clipboard target did not load.");
@@ -438,7 +438,7 @@ internal static class UiPickerTests
         await registryGate.WaitAsync();
         try
         {
-            await shell.OpenDroppedFileAsync(Path.GetFullPath(Path.Combine("tests", "Global Morphs", "LE2 GlobalMorphs.pcc")));
+            await shell.OpenDroppedFileAsync(Path.GetFullPath(Path.Combine("fixtures", "Global Morphs", "LE2 GlobalMorphs.pcc")));
             shell.SelectedFace = shell.Faces.First(face => face.ProfileKey == "le2-human-female");
             await ((AsyncRelayCommand)shell.LoadSelectedFaceCommand).ExecuteAsync();
             TestAssert.True(shell.Editor is { IsMeshDatabaseUnavailable: false },

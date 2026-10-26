@@ -61,7 +61,7 @@ internal static class Program
         var seed = Option("--seed") is { } seedText
             ? int.Parse(seedText, System.Globalization.CultureInfo.InvariantCulture)
             : RandomNumberGenerator.GetInt32(1, int.MaxValue);
-        using var context = new QaContext(root, Option("--corpus") ?? Path.Combine(root, "tests", "Global Morphs"),
+        using var context = new QaContext(root, Option("--corpus") ?? Path.Combine(root, "fixtures", "Global Morphs"),
             output, seed);
         context.AuditOutputDirectory = Option("--audit-output") is { } auditDirectory ? Path.GetFullPath(auditDirectory) : null;
         if (context.AuditOutputDirectory is not null && !Directory.Exists(context.AuditOutputDirectory))

@@ -1,13 +1,13 @@
 # MFE regression tests
 
-This executable protects focused behaviour, failure boundaries and deterministic native-asset regressions. Run broad game/archetype journeys through the [QA harness](../../tools/MorphFaceEditor.QA/README.md); inspect generic package data with LECCLI. These have different jobs and should not grow parallel versions of the same workflow.
+This executable protects focused behaviour, failure boundaries and deterministic native-asset regressions. Run broad game/archetype journeys through the [QA harness](../MorphFaceEditor.QA/README.md); inspect generic package data with LECCLI. These have different jobs and should not grow parallel versions of the same workflow.
 
 ```powershell
 dotnet build MorphFaceEditor.slnx -c Release
-dotnet run --project tests/MorphFaceEditor.Tests -c Release --no-build -- --list
-dotnet run --project tests/MorphFaceEditor.Tests -c Release --no-build -- --suite ui UiWorkspaceTests
-dotnet run --project tests/MorphFaceEditor.Tests -c Release --no-build -- --suite package "safe-save"
-dotnet run --project tests/MorphFaceEditor.Tests -c Release --no-build -- --suite all
+dotnet run --project tools/MorphFaceEditor.Tests -c Release --no-build -- --list
+dotnet run --project tools/MorphFaceEditor.Tests -c Release --no-build -- --suite ui UiWorkspaceTests
+dotnet run --project tools/MorphFaceEditor.Tests -c Release --no-build -- --suite package "safe-save"
+dotnet run --project tools/MorphFaceEditor.Tests -c Release --no-build -- --suite all
 ```
 
 The default suite is `core`. Positional filters match test names **or class names**, case-insensitively; multiple filters are ORed. `--list` respects the same suite and filters, so inspect the selection before running it. Unknown arguments and empty selections exit 2. Failed tests exit 1. Missing prerequisites remain explicit skips/partial results; exit 0 does not turn those into passes.
@@ -27,7 +27,7 @@ The default suite is `core`. Positional filters match test names **or class name
 
 [TestCatalog.cs](TestCatalog.cs) is the single registration map. Every case belongs to one suite. Shared setup belongs in `Support` or the relevant material/rendering fixture; it must not become a second implementation of product behaviour. QA utility checks reference the actual QA assembly instead of compiling copied helper sources. Randomisation's runtime/compiler checks share their fixture owner in `Core/RandomisationTests.cs`.
 
-Game-backed tests require the local `tests/Global Morphs` corpus, installed LE games and current texture registries. Live UModel round trips belong to QA. Native-save tests also use `fixtures/PCSAV_Test`. Fixtures and generated outputs stay out of Git. Persistence tests edit temporary copies; standalone workspaces also use MFE's AppData directory. Run from the checkout; direct executable invocation locates its checkout automatically.
+Game-backed tests require the local `fixtures/Global Morphs` corpus, installed LE games and current texture registries. Live UModel round trips belong to QA. Native-save tests also use `fixtures/PCSAV_Test`. Fixtures and generated outputs stay out of Git. Persistence tests edit temporary copies; standalone workspaces also use MFE's AppData directory. Run from the checkout; direct executable invocation locates its checkout automatically.
 
 ## Coverage ownership
 

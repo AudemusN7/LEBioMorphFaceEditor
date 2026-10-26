@@ -16,11 +16,6 @@
       <Platform Solution="*|x64" Project="x64" />
     </Project>
   </Folder>
-  <Folder Name="/tests/">
-    <Project Path="tests/MorphFaceEditor.Tests/MorphFaceEditor.Tests.csproj">
-      <Platform Solution="*|x64" Project="x64" />
-    </Project>
-  </Folder>
   <Configurations>
     <Platform Name="Any CPU" />
     <Platform Name="x64" />
@@ -31,6 +26,9 @@
     </Project>
   </Folder>
   <Folder Name="/tools/">
+    <Project Path="tools/MorphFaceEditor.Tests/MorphFaceEditor.Tests.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
     <Project Path="tools/MorphFaceEditor.ShaderCompiler/MorphFaceEditor.ShaderCompiler.csproj">
       <Platform Solution="*|x64" Project="x64" />
     </Project>

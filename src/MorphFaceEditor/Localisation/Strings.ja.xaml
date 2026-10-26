@@ -51,6 +51,10 @@
     <system:String x:Key="loc_Settings_ExportedTitle" xml:space="preserve">診断 ZIP をエクスポートしました</system:String>
     <system:String x:Key="loc_Settings_GenerateLogs" xml:space="preserve">トラブルシューティングログを作成</system:String>
     <system:String x:Key="loc_Settings_GenerateLogsButton" xml:space="preserve">ログをエクスポート</system:String>
+    <!--localiser: {"Key":"loc_Settings_OpenLogButton","ReviewedHash":null,"DoNotTranslate":false,"Note":"Opens the current application log in the default app.","SourceHash":null}-->
+    <system:String x:Key="loc_Settings_OpenLogButton" xml:space="preserve">現在のログを開く</system:String>
+    <!--localiser: {"Key":"loc_Settings_OpenLogFailed","ReviewedHash":null,"DoNotTranslate":false,"Note":"Shown when Windows cannot open the current application log.","SourceHash":null}-->
+    <system:String x:Key="loc_Settings_OpenLogFailed" xml:space="preserve">アプリケーションログを開けませんでした。</system:String>
     <system:String x:Key="loc_Settings_GenerateLogsDescription" xml:space="preserve">最近のアプリケーションログ、編集中の内容を含むワークスペース、メッシュ／テクスチャデータベースを ZIP にまとめてエクスポートします。トラブルシューティングのため Audemus に送ってください。</system:String>
     <system:String x:Key="loc_Settings_Heading" xml:space="preserve">設定</system:String>
     <system:String x:Key="loc_Settings_Language" xml:space="preserve">言語</system:String>
@@ -113,6 +117,10 @@
 
     <!-- Assets - Mesh/Texture Databases -->
     <!--localiser: {"Key":"loc_ManualAssetSelectionWindow_AddCustomAssetsToGame","ReviewedHash":null,"DoNotTranslate":false,"Note":"Manual asset picker heading. {0} = game selected for adding custom assets.","SourceHash":null}-->
+    <!--localiser: {"Key":"loc_ExternalLinks_UnavailableTitle","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_ExternalLinks_UnavailableTitle" xml:space="preserve">ブラウザーを開けません</system:String>
+    <!--localiser: {"Key":"loc_ExternalLinks_CouldNotOpen","ReviewedHash":null,"DoNotTranslate":false,"Note":"Browser link failure. {0} = the complete HTTPS address to open manually.","SourceHash":null}-->
+    <system:String x:Key="loc_ExternalLinks_CouldNotOpen" xml:space="preserve">リンクをブラウザーで開けませんでした。次のアドレスをコピーして手動で開いてください: {0}</system:String>
     <system:String x:Key="loc_ManualAssetSelectionWindow_AddCustomAssetsToGame" xml:space="preserve">カスタムアセットを {0} に追加</system:String>
     <system:String x:Key="loc_ManualAssetSelectionWindow_SelectAtLeastOneNewAsset" xml:space="preserve">新しいアセットを少なくとも 1 つ選択してください。</system:String>
     <!--localiser: {"Key":"loc_TextureRegistrySettingsWindow_ChooseGamePccTitle","ReviewedHash":null,"DoNotTranslate":false,"Note":"Texture Registry asset import dialog title. {0} = game selected for the custom asset database.","SourceHash":null}-->
@@ -529,7 +537,7 @@
     <!--localiser: {"Key":"loc_ActorAssignment_SharedBodyMaterial","ReviewedHash":null,"DoNotTranslate":false,"Note":"Actor material assignment retains a Body\u002Dshared MIC and assigns the attachment separately.","SourceHash":null}-->
     <system:String x:Key="loc_ActorAssignment_SharedBodyMaterial" xml:space="preserve">このマテリアルはボディと共有されています。アタッチメントの変更には別のマテリアルを使用します。</system:String>
     <!--localiser: {"Key":"loc_ActorAssignment_TargetCounts","ReviewedHash":null,"DoNotTranslate":false,"Note":"Actor assignment target counts. {0} = parameter MIC count; {1} = hair/accessory mesh count. In the chooser these are safe candidates; in the completion result they are the targets assigned and verified.","SourceHash":null}-->
-    <system:String x:Key="loc_ActorAssignment_TargetCounts" xml:space="preserve">パラメータ MaterialInstanceConstant: {0} · ヘア/アクセサリメッシュ: {1}</system:String>
+    <system:String x:Key="loc_ActorAssignment_TargetCounts" xml:space="preserve">マテリアル: {0} · メッシュ: {1}</system:String>
     <!--localiser: {"Key":"loc_Shell_ActorAssignment_Actor","ReviewedHash":null,"DoNotTranslate":false,"Note":"Actor assignment result/report. {0} = exact actor object path in the PCC; preserve the Unreal identifier.","SourceHash":null}-->
     <system:String x:Key="loc_Shell_ActorAssignment_Actor" xml:space="preserve">アクター: {0}</system:String>
     <system:String x:Key="loc_Shell_ActorAssignment_BodySkinOnly" xml:space="preserve">ボディ MIC: ソースに存在する SkinTone / SkinLightScattering 値のみを追加または更新しました。その他のボディマテリアルデータはすべて保持されました。</system:String>
@@ -728,6 +736,8 @@
     <system:String x:Key="loc_Shell_PackageName_NoPackageOpen" xml:space="preserve">パッケージは開いていません</system:String>
     <system:String x:Key="loc_Shell_Status_LoadCancelled" xml:space="preserve">読み込みをキャンセルしました。</system:String>
     <system:String x:Key="loc_Shell_Status_OpenAPackageToBegin" xml:space="preserve">パッケージを開いてください。</system:String>
+    <!--localiser: {"Key":"loc_Shell_Status_ReleasingWorkspaceMemory","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_Shell_Status_ReleasingWorkspaceMemory" xml:space="preserve">ワークスペースのメモリを解放中…</system:String>
     <system:String x:Key="loc_Shell_Status_PackageLoadFailed" xml:space="preserve">パッケージの読み込みに失敗しました。</system:String>
     <system:String x:Key="loc_Shell_Status_RecentFileCouldNotOpen" xml:space="preserve">最近使ったファイルを開けませんでした。</system:String>
     <system:String x:Key="loc_Shell_Status_SelectedFileCouldNotOpen" xml:space="preserve">選択したファイルを開けませんでした。</system:String>
@@ -1086,6 +1096,20 @@
 
     <!-- Main Window & Context Menu -->
     <!--localiser: {"Key":"loc_Editor_EditBlockedByProfile","ReviewedHash":null,"DoNotTranslate":false,"Note":"Explains a profile or custom\u002Dbase\u002Dmesh geometry restriction. The head remains available for supported material editing; its original geometry is preserved.","SourceHash":null}-->
+    <!--localiser: {"Key":"loc_About_Menu","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_About_Menu" xml:space="preserve">バージョン情報</system:String>
+    <!--localiser: {"Key":"loc_About_NexusMods","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_About_NexusMods" xml:space="preserve">Nexus Mods ページ</system:String>
+    <!--localiser: {"Key":"loc_About_GitHub","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_About_GitHub" xml:space="preserve">GitHub リポジトリ</system:String>
+    <!--localiser: {"Key":"loc_About_Donate","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_About_Donate" xml:space="preserve">寄付</system:String>
+    <!--localiser: {"Key":"loc_About_AboutMfe","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_About_AboutMfe" xml:space="preserve">MFE について</system:String>
+    <!--localiser: {"Key":"loc_Updates_UpdateAvailable","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_Updates_UpdateAvailable" xml:space="preserve">アップデートがあります</system:String>
+    <!--localiser: {"Key":"loc_Updates_BadgeTooltip","ReviewedHash":null,"DoNotTranslate":false,"Note":"Tooltip for the orange status bar update badge. {0} = latest public release version.","SourceHash":null}-->
+    <system:String x:Key="loc_Updates_BadgeTooltip" xml:space="preserve">バージョン {0} を利用できます。最新の GitHub リリースを開いてください。</system:String>
     <system:String x:Key="loc_Editor_EditBlockedByProfile" xml:space="preserve">この頭部はモーフやボーンの編集に対応していません。マテリアルの編集は引き続き利用できます。</system:String>
     <!--localiser: {"Key":"loc_Editor_GeometryVerificationMismatch","ReviewedHash":null,"DoNotTranslate":false,"Note":"Explains why the face uses baked geometry rather than live morph evaluation. {0} = maximum per\u002Dvertex difference from the geometry verification comparison; retain six\u002Dsignificant\u002Ddigit formatting.","SourceHash":null}-->
     <system:String x:Key="loc_Editor_GeometryVerificationMismatch" xml:space="preserve">ベイク済みジオメトリとモーフ計算の差は最大{0:G6}です。</system:String>
@@ -2176,4 +2200,16 @@
     <system:String x:Key="loc_View_MainWindow_PostProcessing" xml:space="preserve">ポストプロセス</system:String>
     <system:String x:Key="loc_View_MainWindow_View" xml:space="preserve">表示</system:String>
     <system:String x:Key="loc_View_MainWindow_Wireframe" xml:space="preserve">ワイヤーフレーム</system:String>
+    <!--localiser: {"Key":"loc_View_MainWindow_NewNpcMorph","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_View_MainWindow_NewNpcMorph" xml:space="preserve">新しい NPC モーフ</system:String>
+    <!--localiser: {"Key":"loc_StandaloneImportGameWindow_NewNpcPrompt","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_StandaloneImportGameWindow_NewNpcPrompt" xml:space="preserve">新しい NPC モーフのゲームとアーキタイプを選択してください。</system:String>
+    <!--localiser: {"Key":"loc_CloneMorphWindow_NameNewNpcMorph","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_CloneMorphWindow_NameNewNpcMorph" xml:space="preserve">新しい NPC モーフの名前</system:String>
+    <!--localiser: {"Key":"loc_CloneMorphWindow_NewNpcIntro","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_CloneMorphWindow_NewNpcIntro" xml:space="preserve">新しい BioMorphFace の名前を入力してください。</system:String>
+    <!--localiser: {"Key":"loc_Shell_Status_CreatedNpcDefaults","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_Shell_Status_CreatedNpcDefaults" xml:space="preserve">NPC の標準設定 {1} {2} から {0} を作成しました。</system:String>
+    <!--localiser: {"Key":"loc_Shell_Error_NewNpcMorphFailed","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_Shell_Error_NewNpcMorphFailed" xml:space="preserve">NPC モーフを作成できませんでした: {0}</system:String>
 </ResourceDictionary>

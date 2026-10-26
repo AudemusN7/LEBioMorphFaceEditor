@@ -5,7 +5,7 @@
     <UseWPF>true</UseWPF>
     <AssemblyName>MorphFaceEditor</AssemblyName>
     <RootNamespace>MorphFaceEditor</RootNamespace>
-    <ApplicationIcon>..\..\icon.ico</ApplicationIcon>
+    <ApplicationIcon>Assets\MFEIcon\icon.ico</ApplicationIcon>
   </PropertyGroup>
   <!-- Temporary palette tooling is absent from Release assemblies and resources. -->
   <ItemGroup Condition="'$(Configuration)' != 'Debug'">
@@ -17,8 +17,8 @@
     <AssemblyMetadata Include="BuildDateUtc" Value="$([System.DateTime]::UtcNow.ToString('yyyy-MM-dd'))" />
     <!-- Dictionaries are embedded once by the shared localisation library. -->
     <Page Remove="Localisation\Strings.*.xaml" />
-    <Resource Include="..\..\icon.ico" Link="icon.ico" />
-    <Resource Include="..\..\ico_256.png" Link="ico_256.png" />
+    <Resource Include="Assets\MFEIcon\icon.ico" Link="icon.ico" />
+    <Resource Include="Assets\MFEIcon\ico_256.png" Link="ico_256.png" />
     <Resource Include="Assets\GameIcons\*.png" />
     <Resource Include="Assets\Licenses\**\*" />
   </ItemGroup>

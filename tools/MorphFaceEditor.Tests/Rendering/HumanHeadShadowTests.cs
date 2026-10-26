@@ -22,7 +22,7 @@ public static class HumanHeadShadowTests
     ];
 
     private static string CorpusPath => Path.GetFullPath(Path.Combine(
-        "tests", "Global Morphs", "LE2 GlobalMorphs.pcc"));
+        "fixtures", "Global Morphs", "LE2 GlobalMorphs.pcc"));
 
     private static void HmfShadowBoundsReturnAfterGeometryRestore()
     {

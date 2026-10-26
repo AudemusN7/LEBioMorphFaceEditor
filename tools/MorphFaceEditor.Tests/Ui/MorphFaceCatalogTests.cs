@@ -20,7 +20,7 @@ public static class MorphFaceCatalogTests
         using var reader = new MorphFacePackageReader();
         var referenceService = new PackageReferenceService(reader, TestFixtures.CreateMissingTextureCatalogService());
         using var workspace = new MorphFacePackageWorkspace(
-            Path.GetFullPath(Path.Combine("tests", "Global Morphs", "LE1 GlobalMorphs.pcc")), canCommit: false);
+            Path.GetFullPath(Path.Combine("fixtures", "Global Morphs", "LE1 GlobalMorphs.pcc")), canCommit: false);
         var before = catalogService.ReadWorkspaceAsync(workspace.WorkingPath, referenceService).GetAwaiter().GetResult();
         var clone = new MorphFacePackageContextService().CloneMorph(workspace.WorkingPath,
             before.Faces.Faces.First(face => face.ProfileKey == "le1-human-male").InstancedPath, "MFE_CatalogueFace");

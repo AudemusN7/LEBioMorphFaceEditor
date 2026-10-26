@@ -198,7 +198,7 @@ Preferences will need to be reapplied when the editor reopens. Databases will al
     <system:String x:Key="loc_Shell_Profile_Unknown" xml:space="preserve">UNKNOWN PROFILE</system:String>
 
     <!--localiser: {"Key":"loc_ExternalLinks_UnavailableTitle","ReviewedHash":"420D9697C81D2C511D2011889240C24EF848B222EB263F66E57BFEA4CA7C5482","DoNotTranslate":false,"Note":"","SourceHash":null}-->
-<system:String x:Key="loc_ExternalLinks_UnavailableTitle" xml:space="preserve">Could not open browser</system:String>
+    <system:String x:Key="loc_ExternalLinks_UnavailableTitle" xml:space="preserve">Could not open browser</system:String>
     <!--localiser: {"Key":"loc_ExternalLinks_CouldNotOpen","ReviewedHash":"509506EA7995C1EEBFAC39B24A0ED3A0709F288BDFCF0D9E9C95829DCDB8D231","DoNotTranslate":false,"Note":"Browser link failure. {0} = the complete HTTPS address to open manually.","SourceHash":null}-->
     <system:String x:Key="loc_ExternalLinks_CouldNotOpen" xml:space="preserve">The link could not be opened in your browser. You can copy this address and open it manually: {0}</system:String>
 
@@ -890,7 +890,7 @@ Choose No to keep the current scalp textures.</system:String>
     <system:String x:Key="loc_ActorAssignment_SecondHairSkipped">The face's main hair mesh was applied to '{1}'. The second mesh '{0}' could not be applied because it needs the same hair component, and MFE does not currently add new component slots.</system:String>
     <!--localiser: {"Key":"loc_ActorAssignment_SharedBodyMaterial","ReviewedHash":"57FC2A3B58601E35F4D62016A09A93180E19A609AB871CD2A6B9E0DA749A16B0","DoNotTranslate":false,"Note":"Actor material assignment retains a Body\u002Dshared MIC and assigns the attachment separately.","SourceHash":null}-->
     <system:String x:Key="loc_ActorAssignment_SharedBodyMaterial" xml:space="preserve">This material is shared with Body. Attachment changes will use a separate material.</system:String>
-    <!--localiser: {"Key":"loc_ActorAssignment_TargetCounts","ReviewedHash":"F076067B52140F1208F6259CE0EF7E490EC5C9435AD8648797E62517E5F3EC13","DoNotTranslate":false,"Note":"Actor assignment target counts. {0} = parameter MIC count; {1} = hair/accessory mesh count. In the chooser these are safe candidates; in the completion result they are the targets assigned and verified.","SourceHash":null}-->
+    <!--localiser: {"Key":"loc_ActorAssignment_TargetCounts","ReviewedHash":"A03B0CECD4C4F8DD14559AFE53EC66FBF54F4E93EC2AE43B14AA368B81D6227D","DoNotTranslate":false,"Note":"Actor assignment target counts. {0} = parameter MIC count; {1} = hair/accessory mesh count. In the chooser these are safe candidates; in the completion result they are the targets assigned and verified.","SourceHash":null}-->
     <system:String x:Key="loc_ActorAssignment_TargetCounts">MATERIALS: {0} · MESHES: {1}</system:String>
     <!--localiser: {"Key":"loc_Shell_ActorAssignment_Actor","ReviewedHash":"7A7D49AC5275D371741A4251AED3F4AA8779E0812235ED7D41E75947BDDAD335","DoNotTranslate":false,"Note":"Actor assignment result/report. {0} = exact actor object path in the PCC; preserve the Unreal identifier.","SourceHash":null}-->
     <system:String x:Key="loc_Shell_ActorAssignment_Actor" xml:space="preserve">Actor: {0}</system:String>
@@ -1156,7 +1156,8 @@ Baked destination LODs: {9}{10}{11}</system:String>
     <system:String x:Key="loc_Shell_Status_LoadCancelled" xml:space="preserve">Load cancelled.</system:String>
     <!--localiser: {"Key":"loc_Shell_Status_OpenAPackageToBegin","ReviewedHash":"8F50BB9E3500B60AFB1BFFA3D72771D393AF49FF61EFF943838EAF27CD0AE5D4","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_Shell_Status_OpenAPackageToBegin" xml:space="preserve">Open a package to begin.</system:String>
-    <system:String x:Key="loc_Shell_Status_ReleasingWorkspaceMemory" xml:space="preserve">Releasing workspace memory…</system:String>
+    <!--localiser: {"Key":"loc_Shell_Status_ReleasingWorkspaceMemory","ReviewedHash":"18D89A262FA39A83C748B3591B71A833E4C86F14A6F20DBE2C94FC2DECAF18A6","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_Shell_Status_ReleasingWorkspaceMemory" xml:space="preserve">Clearing workspace RAM…</system:String>
     <!--localiser: {"Key":"loc_Shell_Status_PackageLoadFailed","ReviewedHash":"DFA44ED73B8A48F8D02D2FB43ABE876F5864A03C54C261B6446529B49C381E5D","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_Shell_Status_PackageLoadFailed" xml:space="preserve">Package load failed.</system:String>
     <!--localiser: {"Key":"loc_Shell_Status_RecentFileCouldNotOpen","ReviewedHash":"D5A670AC8E639E33A977A0F434FC5581A3B6C65CC2F92293EC06CD2C7466C2B6","DoNotTranslate":false,"Note":"","SourceHash":null}-->
@@ -1272,6 +1273,8 @@ Mesh-only files cannot recover metadata-only controls, bone-only controls, or ma
     <system:String x:Key="loc_Shell_Error_TheMeshCouldNotBe" xml:space="preserve">The mesh could not be imported: {0}</system:String>
     <!--localiser: {"Key":"loc_Shell_Error_ThePlayerMorphCouldNot","ReviewedHash":"826FA31A37A66FCBA911EED33CFEC44FC24CBC9E22D09960C3150CA2A9107260","DoNotTranslate":false,"Note":"Player morph creation error. {0} = formatted creation failure detail.","SourceHash":null}-->
     <system:String x:Key="loc_Shell_Error_ThePlayerMorphCouldNot" xml:space="preserve">The player morph could not be created: {0}</system:String>
+    <!--localiser: {"Key":"loc_Shell_Error_NewNpcMorphFailed","ReviewedHash":"BC3093B8A316777F45E6B41FBEBD0733806972D0CF805097CD6E5CDDC40031AF","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_Shell_Error_NewNpcMorphFailed" xml:space="preserve">The NPC morph could not be created: {0}</system:String>
     <!--localiser: {"Key":"loc_Shell_Error_TheStandaloneNpcMorphCould","ReviewedHash":"B31B934E067E3E5904C32D1757991F4A3465A59131CD1D9F3F27A8634A5C0255","DoNotTranslate":false,"Note":"Standalone NPC morph import error. {0} = formatted import failure detail.","SourceHash":null}-->
     <system:String x:Key="loc_Shell_Error_TheStandaloneNpcMorphCould" xml:space="preserve">The standalone NPC morph could not be imported: {0}</system:String>
     <!--localiser: {"Key":"loc_Shell_Error_TheStandalonePlayerMorphCould","ReviewedHash":"5FD17206111044D64719B311953A2A2620053A9940CC65C568DF94F29CF1DC95","DoNotTranslate":false,"Note":"Standalone Player morph import error. {0} = formatted import failure detail.","SourceHash":null}-->
@@ -1286,6 +1289,8 @@ Mesh-only files cannot recover metadata-only controls, bone-only controls, or ma
     <system:String x:Key="loc_Shell_PackageName_StandalonePlayerWorkspace" xml:space="preserve">{0} Standalone Player Workspace</system:String>
     <!--localiser: {"Key":"loc_Shell_Status_CreatedFromPlayerDefaults","ReviewedHash":"FC7E7734D59E4751A9DAC15FE0EF922973526B7A775F42028478C0FDB1E668E2","DoNotTranslate":false,"Note":"Create\u002Dfrom\u002Ddefaults status. {0} = currently selected/loaded face path; {1} = game profile whose Player defaults were used.","SourceHash":null}-->
     <system:String x:Key="loc_Shell_Status_CreatedFromPlayerDefaults" xml:space="preserve">Created {0} from {1} player defaults.</system:String>
+    <!--localiser: {"Key":"loc_Shell_Status_CreatedNpcDefaults","ReviewedHash":"18AFBAF4705CAF274563B010F05A513DADAA6BE90D3BD08FEA07E4DC77EB55DA","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_Shell_Status_CreatedNpcDefaults" xml:space="preserve">Created {0} from {1} {2} NPC defaults.</system:String>
     <!--localiser: {"Key":"loc_Shell_Status_ImportCompletedWorkspaceReloadFailed","ReviewedHash":"01A44F679E372FF72D515BA8427F3367878D686A910B2F8F5A74EAED34F8EF87","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_Shell_Status_ImportCompletedWorkspaceReloadFailed" xml:space="preserve">Import completed; workspace reload failed.</system:String>
     <!--localiser: {"Key":"loc_Shell_Status_ImportedAsCanonicalPlayerReady","ReviewedHash":"CA3D3FD8BB58EC211AE6A652A2639F894C073B56209691CDD2D0CE60F6B9B9B3","DoNotTranslate":false,"Note":"Standalone Player RON import status. {0} = imported face/file identity; {1} = selected game profile for the Player RON. Relative morph editing is ready.","SourceHash":null}-->
@@ -1338,6 +1343,8 @@ Mesh-only files cannot recover metadata-only controls, bone-only controls, or ma
     <system:String x:Key="loc_StandaloneImportGameWindow_Continue" xml:space="preserve">Continue</system:String>
     <!--localiser: {"Key":"loc_StandaloneImportGameWindow_NewPlayerPrompt","ReviewedHash":"B229CF671A7A8A9AFB84ED5F3CF2859DAA3DD1E1948BABE4698FB31948EC1D5A","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_StandaloneImportGameWindow_NewPlayerPrompt" xml:space="preserve">Choose the game and gender for your new morph.</system:String>
+    <!--localiser: {"Key":"loc_StandaloneImportGameWindow_NewNpcPrompt","ReviewedHash":"FD2A315863C1CDFE229E09E90F9CA6A3E037F2BB9507AF32ACFF093BD3767C7D","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_StandaloneImportGameWindow_NewNpcPrompt" xml:space="preserve">Choose the game and archetype for your new NPC morph.</system:String>
     <!--localiser: {"Key":"loc_View_MainWindow_CancelNPCImport","ReviewedHash":"4F42FECB0A47D87ED2B1C1985DC0210CCD94E14DD6EF133794B37B943B3D633F","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_View_MainWindow_CancelNPCImport" xml:space="preserve">Cancel NPC import</system:String>
     <!--localiser: {"Key":"loc_View_RonImportDestinationWindow_ChooseHowToImportThisRONTheTargetGameAndNPCArchetypeDet","ReviewedHash":"08E6A192925A63AE14C6BAA0BD8791ED5F227FF11E2E624B6C9BF8C1363B7481","DoNotTranslate":false,"Note":"","SourceHash":null}-->
@@ -1650,17 +1657,17 @@ Package: {0}</system:String>
 
     <!-- Main Window & Context Menu -->
     <!--localiser: {"Key":"loc_About_Menu","ReviewedHash":"4EFCA0D10C5FEB8E9B35EB1D994F2905BB71714E6A271F511D713B539EA5FAA1","DoNotTranslate":false,"Note":"","SourceHash":null}-->
-<system:String x:Key="loc_About_Menu" xml:space="preserve">About</system:String>
+    <system:String x:Key="loc_About_Menu" xml:space="preserve">About</system:String>
     <!--localiser: {"Key":"loc_About_NexusMods","ReviewedHash":"C57D068D34C0D1CFA222AEFC811E77A5911200B22D314D6399277882C3BFF65F","DoNotTranslate":false,"Note":"","SourceHash":null}-->
-<system:String x:Key="loc_About_NexusMods" xml:space="preserve">Nexus Mods Page</system:String>
+    <system:String x:Key="loc_About_NexusMods" xml:space="preserve">Nexus Mods Page</system:String>
     <!--localiser: {"Key":"loc_About_GitHub","ReviewedHash":"58846861DFB73E3CEABA818EB360E5894776D19D6F10AC6CC1D0E7C63D2A7BBC","DoNotTranslate":false,"Note":"","SourceHash":null}-->
-<system:String x:Key="loc_About_GitHub" xml:space="preserve">GitHub Repo</system:String>
+    <system:String x:Key="loc_About_GitHub" xml:space="preserve">GitHub Repo</system:String>
     <!--localiser: {"Key":"loc_About_Donate","ReviewedHash":"C91EE0F2799DF915EFCC117BA063D95E0CBF0D5E8E6ECA5373333BB9B06C5F13","DoNotTranslate":false,"Note":"","SourceHash":null}-->
-<system:String x:Key="loc_About_Donate" xml:space="preserve">Donate</system:String>
+    <system:String x:Key="loc_About_Donate" xml:space="preserve">Donate</system:String>
     <!--localiser: {"Key":"loc_About_AboutMfe","ReviewedHash":"2D13DD138D385DA81CCCE4B5114E01B20F5DC735EC8AA3904D7EBC900FE9B3D7","DoNotTranslate":false,"Note":"","SourceHash":null}-->
-<system:String x:Key="loc_About_AboutMfe" xml:space="preserve">About MFE</system:String>
+    <system:String x:Key="loc_About_AboutMfe" xml:space="preserve">About MFE</system:String>
     <!--localiser: {"Key":"loc_Updates_UpdateAvailable","ReviewedHash":"5AE200F91C64DA483B94B729655CAD16205A13042A40D898494EE6F6AFE60E26","DoNotTranslate":false,"Note":"","SourceHash":null}-->
-<system:String x:Key="loc_Updates_UpdateAvailable" xml:space="preserve">Update Available</system:String>
+    <system:String x:Key="loc_Updates_UpdateAvailable" xml:space="preserve">Update Available</system:String>
     <!--localiser: {"Key":"loc_Updates_BadgeTooltip","ReviewedHash":"2F8A4C56119ADC30DC040B1E3F1CDB5E04E6EB816E2CFF38258B3A79501BF67A","DoNotTranslate":false,"Note":"Tooltip for the orange status bar update badge. {0} = latest public release version.","SourceHash":null}-->
     <system:String x:Key="loc_Updates_BadgeTooltip" xml:space="preserve">Version {0} is available. Open the latest GitHub release.</system:String>
     <!--localiser: {"Key":"loc_Editor_EditBlockedByProfile","ReviewedHash":"10A9E2B7D4EB7BBD4959285DDFC5A990E19BCFAF272FBE1E65026A6036D8C2CD","DoNotTranslate":false,"Note":"Explains a profile or custom\u002Dbase\u002Dmesh geometry restriction. The head remains available for supported material editing; its original geometry is preserved.","SourceHash":null}-->
@@ -1805,6 +1812,10 @@ Package: {0}</system:String>
     <system:String x:Key="loc_CloneMorphWindow_NameImportedBioMorphFace" xml:space="preserve">Name Imported BioMorphFace</system:String>
     <!--localiser: {"Key":"loc_CloneMorphWindow_NameNewPlayerMorph","ReviewedHash":"30460564EBC0FFC264A7BE21BAF0FF6EA4F294EEEEE604352D5BAE188992BEE2","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_CloneMorphWindow_NameNewPlayerMorph" xml:space="preserve">Name New Player Morph</system:String>
+    <!--localiser: {"Key":"loc_CloneMorphWindow_NameNewNpcMorph","ReviewedHash":"AB7114D261F0125C0802E1042CB45F59F4E9AE1BA514C1A163FF2F9AEEA87CA0","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_CloneMorphWindow_NameNewNpcMorph" xml:space="preserve">Name New NPC Morph</system:String>
+    <!--localiser: {"Key":"loc_CloneMorphWindow_NewNpcIntro","ReviewedHash":"F720E6F5B8E9D46164DABD1AEC32B2403DE3233FC43CB62E5FD0E99D8099ABFB","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_CloneMorphWindow_NewNpcIntro" xml:space="preserve">Choose a name for the new BioMorphFace.</system:String>
     <!--localiser: {"Key":"loc_Language_de","ReviewedHash":"801CFE0FA1182664D16F4AAF7856CC73412F79EF508A866EEBC2E5CCF125FF0A","DoNotTranslate":true,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_Language_de" xml:space="preserve">Deutsch</system:String>
     <!--localiser: {"Key":"loc_Language_en_GB","ReviewedHash":"CFE636FC6A1D74CC5EE270C242E6662B14B53FAE3743B732C40D57EFE833ED32","DoNotTranslate":true,"Note":"","SourceHash":null}-->
@@ -1901,8 +1912,12 @@ This change remains temporary until you save the package.</system:String>
     <system:String x:Key="loc_View_MainWindow_Recent" xml:space="preserve">Recent</system:String>
     <!--localiser: {"Key":"loc_Shortcut_NewPlayer","ReviewedHash":"77A11D3B14EDBB5C08DFF27F21C130BA13D84DA2E948E7B6E1EA31203E0AD071","DoNotTranslate":true,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_Shortcut_NewPlayer" xml:space="preserve">Ctrl+E</system:String>
+    <!--localiser: {"Key":"loc_Shortcut_NewNpc","ReviewedHash":"9667E7C348D0D0E779C604C440D2F978E34FE05EC822AAC0535787C334E9DA98","DoNotTranslate":true,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_Shortcut_NewNpc" xml:space="preserve">Ctrl+N</system:String>
     <!--localiser: {"Key":"loc_View_MainWindow_NewPlayerMorph","ReviewedHash":"C0D49F1567A1B6E9F2B46163E8C479E27FAF72EC61FA0F1EE4BDC58ED832343E","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_View_MainWindow_NewPlayerMorph" xml:space="preserve">New Player Morph</system:String>
+    <!--localiser: {"Key":"loc_View_MainWindow_NewNpcMorph","ReviewedHash":"228F8BBB7C4A828AEA95F12FE2D13E6B5252B7F0C67F1608DC59D1AC3C0FE686","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_View_MainWindow_NewNpcMorph" xml:space="preserve">New NPC Morph</system:String>
     <!--localiser: {"Key":"loc_View_MainWindow_ExportMaterials","ReviewedHash":"A6F4AC0662B3B4E36A174E96947AD6EC203BC73B6FE430F02FA8E24C0813A763","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_View_MainWindow_ExportMaterials" xml:space="preserve">Export Materials</system:String>
     <!--localiser: {"Key":"loc_View_MainWindow_ExportMorphAsRON","ReviewedHash":"6B72FEA5DA31E1F9E01F8206E42809C2628D9309C155EF74FD606A1E59FA8F8E","DoNotTranslate":false,"Note":"","SourceHash":null}-->
@@ -4651,11 +4666,4 @@ Materials: {2}{3}</system:String>
     <system:String x:Key="loc_View_MainWindow_View" xml:space="preserve">¾ View</system:String>
     <!--localiser: {"Key":"loc_View_MainWindow_Wireframe","ReviewedHash":"04B765747018CB132ACEDA1C1FE93DD08B7A282314D17E5EED873B2E7EC62FB9","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_View_MainWindow_Wireframe" xml:space="preserve">Wireframe</system:String>
-    <system:String x:Key="loc_View_MainWindow_NewNpcMorph" xml:space="preserve">New NPC Morph</system:String>
-    <system:String x:Key="loc_StandaloneImportGameWindow_NewNpcPrompt" xml:space="preserve">Choose the game and archetype for your new NPC morph.</system:String>
-    <system:String x:Key="loc_CloneMorphWindow_NameNewNpcMorph" xml:space="preserve">Name New NPC Morph</system:String>
-    <system:String x:Key="loc_CloneMorphWindow_NewNpcIntro" xml:space="preserve">Choose a name for the new BioMorphFace.</system:String>
-    <system:String x:Key="loc_Shell_Status_CreatedNpcDefaults" xml:space="preserve">Created {0} from {1} {2} NPC defaults.</system:String>
-    <system:String x:Key="loc_Shell_Error_NewNpcMorphFailed" xml:space="preserve">The NPC morph could not be created: {0}</system:String>
-    <system:String x:Key="loc_Shortcut_NewNpc" xml:space="preserve">Ctrl+N</system:String>
 </ResourceDictionary>

@@ -6,6 +6,7 @@ using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.LegendaryExplorer;
+using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.Services;
 
 namespace MorphFaceEditor.Tests;
@@ -41,8 +42,11 @@ public static class CustomMeshTests
             else
             {
                 TestAssert.True(result.CustomMaterials is null, "Nine slots enabled material assignment.");
-                TestAssert.True(result.Detached.Warnings.Any(warning => warning.Contains("9 material slots") &&
-                    warning.Contains("up to 8")), "Overflow guidance omitted the actual count or limit.");
+                TestAssert.True(result.Detached.Warnings.Contains(Loc.Format(
+                    "loc_Services_DetachedMeshPreviewLoad_MaterialSlotsUnassigned",
+                    Loc.Format("loc_Services_DetachedMeshPreviewLoad_MaterialSlotLimit",
+                        count, CustomMaterialWorkspace.MaximumSupportedSlots))),
+                    "Overflow guidance omitted the localised warning with the actual count and limit.");
             }
         }
     }

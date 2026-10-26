@@ -4,6 +4,7 @@ using LegendaryExplorerCore.Unreal;
 using LegendaryExplorerCore.Unreal.BinaryConverters;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.LegendaryExplorer;
+using MorphFaceEditor.Infrastructure;
 
 namespace MorphFaceEditor.Tests;
 
@@ -220,7 +221,7 @@ public static class ActorAssignmentInventoryTests
             var inheritedDetails = new MorphFaceEditor.ViewModels.ActorAssignmentChoice(
                 candidate, ActorAssignmentMode.Materials).Details;
             TestAssert.True(inheritedDetails.Contains(
-                    "Some components are inherited. Check their listed owners and material slots before assigning."),
+                    Loc.Text("loc_VM_actorAssignment_inheritedComponentsWarning")),
                 "Inherited-component warning was not formatted from the master catalogue.");
             TestAssert.True(!inheritedDetails.Contains("the chooser should expose"),
                 "Internal inherited-component commentary leaked into the chooser.");

@@ -837,6 +837,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             return false;
         }
 
+        var changingArchetype = _activeRegistryProfile is { } previousProfile &&
+            !string.IsNullOrWhiteSpace(SelectedFace.ProfileKey) &&
+            !previousProfile.Key.Equals(SelectedFace.ProfileKey, StringComparison.OrdinalIgnoreCase);
+        var historyWrites = changingArchetype ? Editor?.WaitForTextureHistoryWritesAsync() : null;
         CancelPendingLoad();
         SetEditor(null, null);
         _loadCancellation = new CancellationTokenSource();
@@ -847,7 +851,13 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         AppLog.Verbose($"FACE:LOAD {SelectedFace.InstancedPath} FILE:\"{workspacePath}\"");
         try
         {
+            // Retire the old PCCs/control trees before opening the next donor
+            // set. Bounded decoded pixels survive this pass for shared assets.
+            if (changingArchetype)
+                await WorkspaceMemoryCleanup.ReleaseForArchetypeChangeAsync(_referenceService, historyWrites);
             var prepared = await PrepareFaceAsync(_workspace!, _referenceCatalog, SelectedFace, cancellationToken);
+            if (changingArchetype)
+                await _referenceService.RetainTextureCacheAsync(prepared.Preview.Loaded.Materials);
             PublishFace(prepared, SelectedFace);
             return true;
         }
@@ -1635,11 +1645,14 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             return;
         }
 
-        ClearWorkspace();
+        IsBusy = true;
+        try { await ClearWorkspaceAsync(); }
+        finally { IsBusy = false; }
     }
 
-    private void ClearWorkspace()
+    private async Task ClearWorkspaceAsync()
     {
+        var historyWrites = Editor?.WaitForTextureHistoryWritesAsync();
         _npcImportCancellation?.Cancel();
         _npcImportCancellation?.Dispose();
         _npcImportCancellation = null;
@@ -1657,10 +1670,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         LoadedFacePath = null;
         HasPreview = false;
         ErrorMessage = null;
-        Status = Loc.Text("loc_Shell_Status_OpenAPackageToBegin");
+        Status = Loc.Text("loc_Shell_Status_ReleasingWorkspaceMemory");
         OnDirtyStateChanged();
         RaiseFaceContextCanExecuteChanged();
         PreviewCleared?.Invoke(this, EventArgs.Empty);
+        await WorkspaceMemoryCleanup.ReleaseAsync(_referenceService, historyWrites);
+        Status = Loc.Text("loc_Shell_Status_OpenAPackageToBegin");
     }
 
     private async Task SaveMorphToPccCommandAsync()

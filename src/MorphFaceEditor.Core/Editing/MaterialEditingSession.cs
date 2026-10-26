@@ -414,14 +414,14 @@ public sealed class MaterialEditingSession
     public void SetTextureReference(string name, DecodedTextureAsset? texture)
     {
         var hadPreview = _previewTextureReferences.Remove(name);
-        var before = new MaterialTextureState(_textureReferences.GetValueOrDefault(name), _textureReferences.ContainsKey(name));
+        var before = new MaterialTextureState(History.CaptureTexture(_textureReferences.GetValueOrDefault(name)), _textureReferences.ContainsKey(name));
         if (GetTextureReference(name) == texture?.Source)
         {
             if (hadPreview) RefreshPreview(MaterialChangeKind.Texture, name);
             return;
         }
         _textureReferences[name] = texture;
-        History.Record(TextureKey(name), before, new MaterialTextureState(texture, true),
+        History.Record(TextureKey(name), before, new MaterialTextureState(History.CaptureTexture(texture), true),
             state => RestoreTexture(name, state));
         Refresh(MaterialChangeKind.Texture, name);
     }
@@ -576,7 +576,7 @@ public sealed class MaterialEditingSession
             // Reset keeps the same material surface. Removing its new explicit
             // default restores an originally inherited/native effective binding;
             // retaining an explicit null keeps that choice inherited as well.
-            if (state.Textures.TryGetValue(name, out var texture)) _textureReferences[name] = texture;
+            if (state.Textures.TryGetValue(name, out var texture)) _textureReferences[name] = texture?.Restore();
             else _textureReferences.Remove(name);
         }
     }
@@ -644,7 +644,7 @@ public sealed class MaterialEditingSession
         _textureReferences.Clear();
         if (preserveUnspecifiedTextures)
         {
-            foreach (var value in before.Textures) _textureReferences[value.Key] = value.Value;
+            foreach (var value in before.Textures) _textureReferences[value.Key] = value.Value?.Restore();
         }
         else foreach (var parameter in TextureParameters)
         {
@@ -946,7 +946,7 @@ public sealed class MaterialEditingSession
     private void RestoreTexture(string name, MaterialTextureState state)
     {
         _previewTextureReferences.Clear();
-        if (state.Explicit) _textureReferences[name] = state.Value;
+        if (state.Explicit) _textureReferences[name] = state.Value?.Restore();
         else _textureReferences.Remove(name);
         Refresh(MaterialChangeKind.Texture, name);
     }
@@ -996,20 +996,24 @@ public sealed class MaterialEditingSession
         textureNames.ToDictionary(name => name, name =>
         {
             var explicitValue = _textureReferences.TryGetValue(name, out var value);
-            return new MaterialTextureState(explicitValue ? value : GetSelectedTexture(name), explicitValue);
+            // Inherited pixels already belong to the material defaults and are
+            // never replayed from this state. Retain just their identity here.
+            return new MaterialTextureState(explicitValue ? History.CaptureTexture(value) : null,
+                explicitValue, explicitValue ? null : GetSelectedTexture(name)?.Source);
         }, StringComparer.OrdinalIgnoreCase));
 
     private MaterialResetState CaptureResetState() => new(
         _originalOverrides,
         new Dictionary<string, float>(_scalars, StringComparer.OrdinalIgnoreCase),
         new Dictionary<string, Vector4>(_vectors, StringComparer.OrdinalIgnoreCase),
-        new Dictionary<string, DecodedTextureAsset?>(_textureReferences, StringComparer.OrdinalIgnoreCase),
+        _textureReferences.ToDictionary(value => value.Key, value => History.CaptureTexture(value.Value), StringComparer.OrdinalIgnoreCase),
         new HashSet<string>(_editedScalars, StringComparer.OrdinalIgnoreCase),
         new HashSet<string>(_editedVectors, StringComparer.OrdinalIgnoreCase),
         HasCursedRandomisation);
 
     private void RestoreResetState(MaterialResetState state)
     {
+        var textures = state.Textures.ToDictionary(value => value.Key, value => value.Value?.Restore(), StringComparer.OrdinalIgnoreCase);
         _originalOverrides = state.OriginalOverrides;
         HasCursedRandomisation = state.HasCursedRandomisation;
         _scalars.Clear();
@@ -1017,7 +1021,7 @@ public sealed class MaterialEditingSession
         _vectors.Clear();
         foreach (var value in state.Vectors) _vectors[value.Key] = value.Value;
         _textureReferences.Clear();
-        foreach (var value in state.Textures) _textureReferences[value.Key] = value.Value;
+        foreach (var value in textures) _textureReferences[value.Key] = value.Value;
         _editedScalars.Clear();
         foreach (var value in state.EditedScalars) _editedScalars.Add(value);
         _editedVectors.Clear();
@@ -1026,6 +1030,9 @@ public sealed class MaterialEditingSession
 
     private void RestoreBatchState(MaterialBatchState state)
     {
+        // Materialise all cold images before changing the authored batch.
+        var textures = state.Textures.Where(value => value.Value.Explicit)
+            .ToDictionary(value => value.Key, value => value.Value.Value?.Restore(), StringComparer.OrdinalIgnoreCase);
         foreach (var value in state.Scalars)
         {
             _scalars[value.Key] = value.Value.Value;
@@ -1038,7 +1045,7 @@ public sealed class MaterialEditingSession
         }
         foreach (var value in state.Textures)
         {
-            if (value.Value.Explicit) _textureReferences[value.Key] = value.Value.Value;
+            if (value.Value.Explicit) _textureReferences[value.Key] = textures[value.Key];
             else _textureReferences.Remove(value.Key);
         }
     }
@@ -1049,7 +1056,7 @@ public sealed class MaterialEditingSession
         first.Scalars.All(value => second.Scalars.GetValueOrDefault(value.Key) == value.Value) &&
         first.Vectors.All(value => second.Vectors.GetValueOrDefault(value.Key) == value.Value) &&
         first.Textures.All(value => second.Textures.TryGetValue(value.Key, out var other) &&
-            other.Explicit == value.Value.Explicit && other.Value?.Source == value.Value.Value?.Source);
+            other.Explicit == value.Value.Explicit && other.Source == value.Value.Source);
 
     private static bool ResetEquals(MaterialResetState first, MaterialResetState second) =>
         first.HasCursedRandomisation == second.HasCursedRandomisation &&
@@ -1107,7 +1114,10 @@ public sealed record PreparedMaterialSurface(
 
 internal sealed record MaterialNumericState(float Value, bool Edited);
 internal sealed record MaterialVectorState(Vector4 Value, bool Edited);
-internal sealed record MaterialTextureState(DecodedTextureAsset? Value, bool Explicit);
+internal sealed record MaterialTextureState(TextureHistoryStore.HistoryTextureSnapshot? Value, bool Explicit, AssetIdentity? InheritedSource = null)
+{
+    internal AssetIdentity? Source => Explicit ? Value?.Source : InheritedSource;
+}
 internal sealed record MaterialBatchState(
     IReadOnlyDictionary<string, MaterialNumericState> Scalars,
     IReadOnlyDictionary<string, MaterialVectorState> Vectors,
@@ -1116,7 +1126,7 @@ internal sealed record MaterialResetState(
     MorphFaceMaterialOverrides OriginalOverrides,
     IReadOnlyDictionary<string, float> Scalars,
     IReadOnlyDictionary<string, Vector4> Vectors,
-    IReadOnlyDictionary<string, DecodedTextureAsset?> Textures,
+    IReadOnlyDictionary<string, TextureHistoryStore.HistoryTextureSnapshot?> Textures,
     IReadOnlySet<string> EditedScalars,
     IReadOnlySet<string> EditedVectors,
     bool HasCursedRandomisation);

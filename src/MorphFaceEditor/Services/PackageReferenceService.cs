@@ -58,6 +58,19 @@ public sealed class PackageReferenceService(
         }
     }
 
+    // Serialize lifecycle eviction with in-flight texture/attachment reads.
+    internal Task ClearCachesAsync(bool preserveDecodedTextures = false) => ReadAsync(() =>
+    {
+        reader.ClearCaches(preserveDecodedTextures);
+        return true;
+    }, CancellationToken.None);
+
+    internal Task RetainTextureCacheAsync(ResolvedHeadMaterialSet materials) => ReadAsync(() =>
+    {
+        reader.RetainTextureCache(materials);
+        return true;
+    }, CancellationToken.None);
+
     public Task<PackageReferenceCatalog> ReadCatalogAsync(
         string packagePath,
         CancellationToken cancellationToken = default) => Task.Run(() =>
@@ -196,12 +209,18 @@ public sealed class PackageReferenceService(
     private async Task<T> ReadAsync<T>(Func<T> operation, CancellationToken cancellationToken)
     {
         await _readerGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        var before = reader.PackageCacheStatistics;
         try
         {
             return await Task.Run(operation, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
+            var after = reader.PackageCacheStatistics;
+            if (after.Evictions > before.Evictions)
+                AppLog.Information($"CACHE:PCC COUNT:{after.Packages} BYTES:{after.EstimatedBytes} BUDGET:{after.BudgetBytes} " +
+                    $"EVICTED:{after.Evictions - before.Evictions} HITS:{after.Hits} MISSES:{after.Misses} " +
+                    $"OPENMS:{after.PackageOpenTime.TotalMilliseconds:F0}");
             _readerGate.Release();
         }
     }

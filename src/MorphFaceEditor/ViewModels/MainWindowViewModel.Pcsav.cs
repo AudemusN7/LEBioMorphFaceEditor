@@ -128,7 +128,7 @@ public sealed partial class MainWindowViewModel
         try
         {
             await Task.Run(career.DeleteHeadMorph);
-            ClearWorkspace();
+            await ClearWorkspaceAsync();
             Status = Loc.Format("loc_Pcsav_Deleted", Path.GetFileName(career.SourcePath));
         }
         catch (Exception exception)

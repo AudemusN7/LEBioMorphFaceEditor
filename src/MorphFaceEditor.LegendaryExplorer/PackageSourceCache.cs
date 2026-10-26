@@ -11,6 +11,12 @@ internal static class PackageSourceCache
     internal static void RegisterInvalidation(PackageCache cache, Action<string> invalidate) =>
         Caches.GetValue(cache, static _ => new Sources()).Invalidate = invalidate;
 
+    internal static void Clear(PackageCache cache)
+    {
+        // Keep the reader's invalidation callback when its empty cache is reused.
+        if (Caches.TryGetValue(cache, out var sources)) sources.Stamps.Clear();
+    }
+
     internal static IMEPackage? GetPackage(PackageCache cache, string path)
     {
         Verify(cache, path);

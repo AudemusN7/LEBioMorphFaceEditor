@@ -13,9 +13,7 @@ namespace MorphFaceEditor.LegendaryExplorer;
 
 public sealed class MorphFacePackageReader : IDisposable
 {
-    // A face can reference its mesh, materials and textures across more than a dozen PCCs.
-    // Keeping that working set resident avoids repeatedly reopening 100+ MiB game packages.
-    private readonly PackageCache _packageCache = new() { CacheMaxSize = 16 };
+    private readonly PreviewPackageCache _packageCache = new();
     private readonly GamePackageReferenceResolver _referenceResolver;
     private readonly MorphFaceMaterialReader _materialReader;
     private readonly Dictionary<string, CachedSkeletalMesh> _meshCache = new(StringComparer.OrdinalIgnoreCase);
@@ -31,12 +29,14 @@ public sealed class MorphFacePackageReader : IDisposable
     }
 
     public MorphFaceLoadMetrics? LastLoadMetrics { get; private set; }
+    public PccCacheStatistics PackageCacheStatistics => _packageCache.Statistics;
     internal int MeshContentFingerprintReadCount { get; private set; }
 
     /// <summary>Reads geometry and rig only; material references and pixels are never resolved.</summary>
     public string? ReadSkeletalMeshContentFingerprint(AssetIdentity identity)
     {
         ThrowIfDisposed();
+        using var cacheOperation = _packageCache.BeginOperation();
         LegendaryExplorerCoreRuntime.Initialize();
         if (!identity.ClassName.Equals("SkeletalMesh", StringComparison.OrdinalIgnoreCase)) return null;
         var fullPath = RequireFile(identity.PackagePath);
@@ -57,6 +57,7 @@ public sealed class MorphFacePackageReader : IDisposable
         string exportSelector)
     {
         ThrowIfDisposed();
+        using var cacheOperation = _packageCache.BeginOperation();
         LegendaryExplorerCoreRuntime.Initialize();
         var fullPath = RequireFile(packagePath);
         var package = PackageSourceCache.GetPackage(_packageCache, fullPath)
@@ -75,6 +76,7 @@ public sealed class MorphFacePackageReader : IDisposable
 
     public LoadedMorphFace Load(string packagePath, string exportSelector, bool decodeTextures = true)
     {
+        using var cacheOperation = _packageCache.BeginOperation();
         var started = Stopwatch.GetTimestamp();
         var checkpoint = started;
         static TimeSpan Mark(ref long checkpoint)
@@ -179,6 +181,29 @@ public sealed class MorphFacePackageReader : IDisposable
         };
     }
 
+    /// <summary>Releases derived package/mesh/material data; the reader remains reusable.</summary>
+    public void ClearCaches(bool preserveDecodedTextures = false)
+    {
+        ThrowIfDisposed();
+        // Explicit workspace/archetype teardown also retires the detached
+        // geometry and material caches; ordinary PCC eviction leaves them warm.
+        _meshCache.Clear();
+        _fingerprintCache.Clear();
+        _meshContentFingerprints.Clear();
+        _materialReader.ClearCaches(preserveDecodedTextures);
+        _packageCache.ReleasePackages();
+        // Retained pixels still need their original source stamps so an edited
+        // PCC invalidates them when it is next opened.
+        if (!preserveDecodedTextures) PackageSourceCache.Clear(_packageCache);
+    }
+
+    /// <summary>Keeps only decoded textures used by the newly loaded face and its defaults.</summary>
+    public void RetainTextureCache(ResolvedHeadMaterialSet materials)
+    {
+        ThrowIfDisposed();
+        _materialReader.RetainTextureCache(materials);
+    }
+
     public void InvalidatePackage(string packagePath)
     {
         ThrowIfDisposed();
@@ -190,7 +215,7 @@ public sealed class MorphFacePackageReader : IDisposable
         _materialReader.InvalidatePackage(fullPath);
         foreach (var key in _meshCache.Where(pair =>
                      pair.Key.StartsWith(fullPath + "|", StringComparison.OrdinalIgnoreCase) ||
-                     pair.Value.Materials.Any(material => Path.GetFullPath(material.FileRef.FilePath)
+                     pair.Value.Materials.Any(material => Path.GetFullPath(material.PackagePath)
                          .Equals(fullPath, StringComparison.OrdinalIgnoreCase)))
                      .Select(pair => pair.Key).ToArray())
         {
@@ -208,6 +233,7 @@ public sealed class MorphFacePackageReader : IDisposable
         string meshSelector)
     {
         ThrowIfDisposed();
+        using var cacheOperation = _packageCache.BeginOperation();
         LegendaryExplorerCoreRuntime.Initialize();
         var fullPath = RequireFile(packagePath);
         var package = PackageSourceCache.GetPackage(_packageCache, fullPath)
@@ -230,6 +256,7 @@ public sealed class MorphFacePackageReader : IDisposable
     public LoadedAttachment LoadDetachedAttachment(string packagePath, string meshSelector)
     {
         ThrowIfDisposed();
+        using var cacheOperation = _packageCache.BeginOperation();
         LegendaryExplorerCoreRuntime.Initialize();
         var fullPath = RequireFile(packagePath);
         var package = PackageSourceCache.GetPackage(_packageCache, fullPath)
@@ -255,6 +282,7 @@ public sealed class MorphFacePackageReader : IDisposable
     public void ValidateDetachedAttachment(string packagePath, string meshSelector)
     {
         ThrowIfDisposed();
+        using var cacheOperation = _packageCache.BeginOperation();
         LegendaryExplorerCoreRuntime.Initialize();
         var fullPath = RequireFile(packagePath);
         var package = PackageSourceCache.GetPackage(_packageCache, fullPath)
@@ -292,6 +320,7 @@ public sealed class MorphFacePackageReader : IDisposable
         bool decodeTextures = true)
     {
         ThrowIfDisposed();
+        using var cacheOperation = _packageCache.BeginOperation();
         LegendaryExplorerCoreRuntime.Initialize();
         var fullPath = RequireFile(packagePath);
         var package = PackageSourceCache.GetPackage(_packageCache, fullPath)
@@ -342,6 +371,7 @@ public sealed class MorphFacePackageReader : IDisposable
         string meshSelector)
     {
         ThrowIfDisposed();
+        using var cacheOperation = _packageCache.BeginOperation();
         LegendaryExplorerCoreRuntime.Initialize();
         var fullPath = RequireFile(packagePath);
         var package = PackageSourceCache.GetPackage(_packageCache, fullPath)
@@ -455,6 +485,7 @@ public sealed class MorphFacePackageReader : IDisposable
     public ResolvedHeadMaterial LoadMaterialEvidence(AssetIdentity source)
     {
         ThrowIfDisposed();
+        using var cacheOperation = _packageCache.BeginOperation();
         LegendaryExplorerCoreRuntime.Initialize();
         var package = PackageSourceCache.GetPackage(_packageCache, RequireFile(source.PackagePath))
             ?? throw new InvalidDataException($"Could not open material source '{source.PackagePath}'.");
@@ -466,6 +497,7 @@ public sealed class MorphFacePackageReader : IDisposable
     public ResolvedHeadMaterial LoadLe3CcScalpMaterial(bool female)
     {
         ThrowIfDisposed();
+        using var cacheOperation = _packageCache.BeginOperation();
         LegendaryExplorerCoreRuntime.Initialize();
         var path = Le3CcScalpMaterialPolicy.CanonicalDonorPath(female);
         var resolved = new InstalledGameAssetResolver().Resolve(
@@ -489,8 +521,10 @@ public sealed class MorphFacePackageReader : IDisposable
         MaterialParameterDefinition definition)
     {
         ThrowIfDisposed();
+        using var cacheOperation = _packageCache.BeginOperation();
         LegendaryExplorerCoreRuntime.Initialize();
         var fullPath = RequireFile(packagePath);
+        if (_materialReader.TryGetCachedTexture(fullPath, textureSelector, definition, out var cached)) return cached;
         var package = PackageSourceCache.GetPackage(_packageCache, fullPath)
             ?? throw new InvalidDataException($"Legendary Explorer Core could not open '{fullPath}'.");
         var entry = package.FindEntry(textureSelector, "Texture2D")
@@ -516,6 +550,7 @@ public sealed class MorphFacePackageReader : IDisposable
         MaterialParameterDefinition definition)
     {
         ThrowIfDisposed();
+        using var cacheOperation = _packageCache.BeginOperation();
         LegendaryExplorerCoreRuntime.Initialize();
         var fullPath = RequireFile(packagePath);
         var package = PackageSourceCache.GetPackage(_packageCache, fullPath)
@@ -818,13 +853,17 @@ public sealed class MorphFacePackageReader : IDisposable
             var asset = ReadSkeletalMesh(export, materialExports);
             _meshCache[key] = new CachedSkeletalMesh(
                 asset,
-                materialExports.Skip(firstMaterialIndex).ToArray());
+                materialExports.Skip(firstMaterialIndex).Select(material => ToIdentity(material)!).ToArray());
             return asset;
         }
 
         foreach (var material in cached.Materials)
         {
-            materialExports.Add(material);
+            // Retain parsed geometry, not ExportEntry objects that would pin
+            // whole PCCs after the package cache has evicted them.
+            var package = PackageSourceCache.GetPackage(_packageCache, material.PackagePath)
+                ?? throw new FileNotFoundException($"Material package '{material.PackagePath}' is unavailable.");
+            materialExports.Add(ExportSelector.Find(package, material.InstancedPath, material.ClassName));
         }
         return cached.Asset;
     }
@@ -932,16 +971,14 @@ public sealed class MorphFacePackageReader : IDisposable
             return;
         }
 
+        ClearCaches();
         _packageCache.Dispose();
-        _meshCache.Clear();
-        _fingerprintCache.Clear();
-        _meshContentFingerprints.Clear();
         _disposed = true;
     }
 
     private sealed record CachedSkeletalMesh(
         SkeletalMeshAsset Asset,
-        IReadOnlyList<ExportEntry> Materials);
+        IReadOnlyList<AssetIdentity> Materials);
 }
 
 /// <summary>Detached material evidence grouped by the source mesh's used slots.</summary>

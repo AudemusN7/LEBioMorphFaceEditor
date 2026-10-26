@@ -368,6 +368,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     public System.Windows.Input.ICommand RedoCommand => _redoCommand;
     public System.Windows.Input.ICommand SetToDefaultsCommand => _setToDefaultsCommand;
     public System.Windows.Input.ICommand RandomiseCommand => _randomiseCommand;
+    internal Task WaitForTextureHistoryWritesAsync() => _history.WaitForTextureWritesAsync();
     public bool CanEditMorphFeatures => _session.CanEditMorphFeatures;
     public bool CanEditBones => _session.CanEditBones;
     public bool CanEditAttachments => _allowsAttachmentEditing &&
@@ -580,6 +581,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     private async Task RandomiseCoreAsync(EditorRandomisationScope requested, bool includeCursedBones,
         bool propagateErrors)
     {
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
         try
         {
             if (requested.InclusionKey is { } key && !_randomisationInclusionState.IsIncluded(key)) return;
@@ -666,7 +668,12 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             }
             aggregate.Commit();
             AppLog.Information(AppLogMessages.Randomisation(request.Cursed, _logIdentity, _logGame,
-                request.MorphStrength, request.MaterialStrength, morphSeed, materialSeed));
+                request.MorphStrength, request.MaterialStrength, morphSeed, materialSeed) +
+                $" MS:{System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds:F0}");
+            var textures = _history.TextureStorageStatistics;
+            AppLog.Information($"MEMORY:UNDO-TEXTURES HOT:{textures.HotBytes} PENDING:{textures.PendingBytes} " +
+                $"ARCHIVED:{textures.ArchivedBytes} FALLBACK:{textures.FallbackBytes} FAILURES:{textures.StorageFailures} " +
+                $"READS:{textures.ArchiveReads} READMS:{textures.ArchiveReadMilliseconds:F0}");
         }
         catch (Exception exception)
         {

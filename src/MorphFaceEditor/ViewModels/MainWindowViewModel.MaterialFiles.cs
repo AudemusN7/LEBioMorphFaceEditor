@@ -115,13 +115,11 @@ public sealed partial class MainWindowViewModel
             var donorFace = await Task.Run(() => donorReader.Load(workspace, facePath, decodeTextures: false));
             var catalog = await _catalogService.ReadAsync(workspace);
             // The donor supplies its native graph and base mesh, not its authored NPC edits.
-            var defaults = new MorphFaceMorphData([], donorFace.BaseHead.Topology.ReferenceSkeleton
-                .Select(bone => new BoneTranslation(bone.Name, bone.Position)).ToArray(), donorFace.BaseHead.Lods
-                .Take(donorFace.Document.BakedLods.Count).Select(lod => lod.Positions.ToArray()).ToArray());
+            var defaults = MorphFacePackageContextService.CreateDefaultHead(donorFace);
             var name = SuggestImportName(SanitizeObjectName(Path.GetFileNameWithoutExtension(sourcePath)),
                 catalog.Faces.Select(face => face.ObjectName).ToArray());
             var created = await Task.Run(() => _packageContextService.CloneMorphWithData(
-                workspace, facePath, name, defaults, new MorphFaceMaterialData([], [], []), clearAttachmentReferences: true));
+                workspace, facePath, name, defaults.MorphData, defaults.MaterialData, clearAttachmentReferences: true));
             _referenceService.InvalidatePackage(workspace);
             var preview = await _previewLoadService.LoadAsync(workspace, created.FaceInstancedPath);
             var references = await _referenceService.ReadCatalogAsync(workspace);

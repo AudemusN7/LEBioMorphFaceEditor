@@ -21,6 +21,7 @@ internal static class UiWorkspaceTests
     internal static IReadOnlyList<TestCase> All { get; } =
     [
         new("failed replacement retains the live workspace and releases its candidate", FailedReplacementKeepsLiveWorkspace),
+        new("new NPC starts blank and unsaved without changing its native donor", NewNpcStartsBlank),
         new("workspace close releases cached packages and pixels and allows reopening", CloseReleasesReaderCaches),
         new("idle cleanup skips heaps dominated by useful live data", IdleCleanupRequiresSubstantialSpareCapacity),
         new("idle reader lease releases on its worker without double release", IdleReaderLeaseReleasesOffDispatcher),
@@ -31,6 +32,51 @@ internal static class UiWorkspaceTests
         new("additional Player imports and face switches retain both edited drafts", AdditionalPlayerImportsRetainStagedEdits),
         new("cancelled or failed career deletion retains source and pending edits", CareerDeletionPreservesStateOnFailure)
     ];
+
+    private static void NewNpcStartsBlank() => RunWithDispatcher(async () =>
+    {
+        const MorphFaceGame game = MorphFaceGame.LE3;
+        var catalogue = new MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureCatalogService(
+            new MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureRegistryStore(
+                MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureRegistryPaths.CreateDefault()));
+        var assets = await catalogue.ReadAsync(game);
+        TestAssert.True(assets.IsAvailable, "The installed LE3 texture registry is required.");
+        var donor = new RonNpcDonorResolver(MorphFaceProfileRegistry.CreateDefault())
+            .Resolve(game, "HMM", assets.MorphFaceTemplates, assets.OfficialPackagePaths);
+        var fingerprint = PackageFingerprint.Capture(donor.PackagePath);
+        using var reader = new MorphFacePackageReader();
+        var native = reader.Load(donor.PackagePath, donor.FacePath, decodeTextures: false);
+        var dialogs = new StubEditorDialogs { NewNpcMorphChoiceResult = new(game, "HMM"),
+            StandaloneNameChoiceResult = "MFE_NewNpc" };
+        using var shell = CreateMainWindowViewModel(reader, dialogs, catalogue);
+        await ((AsyncRelayCommand)shell.NewNpcMorphCommand).ExecuteAsync();
+        TestAssert.True(shell.Editor is not null && !shell.HasError && shell.HasPreview,
+            shell.ErrorMessage ?? "New NPC did not publish its preview.");
+        TestAssert.True(shell.Faces.Count == 1 && shell.SelectedFace?.ObjectName == "MFE_NewNpc" &&
+            shell.Editor!.CanEditMorphFeatures && shell.IsDirty && shell.SaveCommand.CanExecute(null) && !shell.CanCommitFace,
+            "New NPC must be the sole editable, unsaved face in a detached workspace.");
+        var draft = shell.Editor!.CreateDraft();
+        var head = new MorphFacePackageContextService().CaptureHead(draft.Source.PackagePath, shell.LoadedFacePath!);
+        TestAssert.True(head.MorphData.MorphFeatures.All(value => value.Offset == 0) &&
+            head.MorphData.BakedLods.Count == native.Document.BakedLods.Count &&
+            head.MorphData.BakedLods.Select((lod, index) => lod.SequenceEqual(native.BaseHead.Lods[index].Positions)).All(value => value),
+            "New NPC retained donor morphs instead of native base geometry.");
+        TestAssert.True(head.MorphData.FinalSkeleton.SequenceEqual(native.BaseHead.Topology.ReferenceSkeleton
+            .Select(bone => new BoneTranslation(bone.Name, bone.Position))) && head.HairMesh == "None" && head.AccessoryMeshes.Count == 0 &&
+            head.MaterialData.Scalars.Count == 0 && head.MaterialData.Vectors.Count == 0 && head.MaterialData.Textures.Count == 0,
+            "New NPC retained donor bone edits, attachments or material overrides.");
+        TestAssert.True(shell.Editor.Material.Scalars.Count + shell.Editor.Material.Vectors.Count + shell.Editor.Material.Textures.Count > 0,
+            "Native material defaults were not available for editing.");
+        var editor = shell.Editor;
+        dialogs.StandaloneNameChoiceResult = null;
+        await ((AsyncRelayCommand)shell.NewNpcMorphCommand).ExecuteAsync();
+        TestAssert.True(ReferenceEquals(editor, shell.Editor) && shell.IsDirty, "Cancelling naming discarded the current NPC.");
+        dialogs.StandaloneNameChoiceResult = "MFE_CancelledNpc";
+        await ((AsyncRelayCommand)shell.NewNpcMorphCommand).ExecuteAsync();
+        TestAssert.True(ReferenceEquals(editor, shell.Editor) && shell.IsDirty && !shell.IsBusy,
+            "Cancelling the unsaved-workspace prompt discarded the current NPC.");
+        TestAssert.Equal(fingerprint, PackageFingerprint.Capture(donor.PackagePath));
+    });
 
     private static void IdleCleanupRequiresSubstantialSpareCapacity()
     {
@@ -225,6 +271,11 @@ internal static class UiWorkspaceTests
             CheckRetained();
             TestAssert.True(!Directory.EnumerateFiles(Path.GetDirectoryName(workingPath)!,
                 Path.GetFileNameWithoutExtension(invalid) + ".*").Any(), "Failed candidate leaked a PCC or lease.");
+
+            dialogs.NewNpcMorphChoiceResult = new(MorphFaceGame.LE2, "SAL");
+            await ((AsyncRelayCommand)shell.NewNpcMorphCommand).ExecuteAsync();
+            TestAssert.True(shell.HasError, "Missing NPC database did not report a creation failure.");
+            CheckRetained();
 
             var ron = Path.Combine(root, "Player.ron");
             TseHeadMorphRon.Write(ron, new MorphFacePackageContextService().CapturePlayerDefaultHead(

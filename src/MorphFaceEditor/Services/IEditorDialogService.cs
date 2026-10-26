@@ -18,6 +18,8 @@ public interface IEditorDialogService
     string? ChooseMorphImportFile(string? initialDirectory = null);
     MorphFaceGame? ChooseStandaloneImportGame();
     NewPlayerMorphChoice? ChooseNewPlayerMorph() => null;
+    NewNpcMorphChoice? ChooseNewNpcMorph() => null;
+    string? ChooseNewNpcMorphName(string suggestedName) => ChooseStandaloneMorphName(suggestedName, []);
     RonImportDestinationChoice? ChooseRonImportDestination(
         MorphFaceGame targetGame,
         IReadOnlyList<RonNpcArchetypeOption> archetypes,
@@ -85,3 +87,4 @@ public enum UnsavedChangesScope
 public enum MeshSaveChoice { Pcc, MaterialsRon }
 
 public sealed record NewPlayerMorphChoice(MorphFaceGame Game, StandalonePlayerSex Sex);
+public sealed record NewNpcMorphChoice(MorphFaceGame Game, string Archetype);

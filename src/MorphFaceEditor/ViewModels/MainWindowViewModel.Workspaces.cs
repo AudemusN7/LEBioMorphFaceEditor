@@ -28,7 +28,8 @@ public sealed partial class MainWindowViewModel
         try
         {
             contents = await ReadWorkspaceContentsAsync(candidate, preferredFacePath, cancellationToken);
-            var npcImport = candidate.Kind == EditorWorkspaceKind.Npc && candidate.ImportedFile?.Format == WorkspaceFileFormat.MorphRon;
+            var npcImport = candidate.Kind == EditorWorkspaceKind.Npc &&
+                candidate.ImportedFile?.Format is null or WorkspaceFileFormat.MorphRon;
             if (preferredFacePath is not null && !string.Equals(contents.Selected?.InstancedPath, preferredFacePath, StringComparison.OrdinalIgnoreCase))
                 throw Loc.Error(new System.IO.InvalidDataException(npcImport ? Loc.Text("loc_Shell_Error_ImportedNpcFaceMissingFromCatalogue")
                     : Loc.Format("loc_Shell_Error_FaceMissingFromPcc", preferredFacePath)));

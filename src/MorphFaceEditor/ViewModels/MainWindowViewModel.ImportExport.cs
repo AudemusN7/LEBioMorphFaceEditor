@@ -159,6 +159,12 @@ public sealed partial class MainWindowViewModel
         }
     }
 
+    private async Task NewNpcMorphAsync()
+    {
+        if (_dialogs.ChooseNewNpcMorph() is not { } choice) return;
+        await ImportStandaloneNpcMorphAsync(null, choice.Game, choice.Game, choice.Archetype);
+    }
+
     private async Task ImportMorphAsync()
     {
         var game = _dialogs.ChooseStandaloneImportGame();
@@ -283,15 +289,17 @@ public sealed partial class MainWindowViewModel
     }
 
     private async Task ImportStandaloneNpcMorphAsync(
-        string sourcePath,
+        string? sourcePath,
         MorphFaceGame sourceGame,
         MorphFaceGame targetGame,
         string archetype,
-        RonImportFile source)
+        RonImportFile? source = null)
     {
+        var newNpcMode = source is null;
         var suggestedName = SuggestImportName(
-            SanitizeObjectName(Path.GetFileNameWithoutExtension(sourcePath)), []);
-        var objectName = _dialogs.ChooseStandaloneMorphName(suggestedName, []);
+            newNpcMode ? "NpcMorph" : SanitizeObjectName(Path.GetFileNameWithoutExtension(sourcePath!)), []);
+        var objectName = newNpcMode ? _dialogs.ChooseNewNpcMorphName(suggestedName)
+            : _dialogs.ChooseStandaloneMorphName(suggestedName, []);
         if (objectName is null || !await EnsureCanAbandonWorkspaceAsync())
         {
             return;
@@ -326,7 +334,13 @@ public sealed partial class MainWindowViewModel
                 throw new InvalidOperationException(
                     Loc.Format("loc_Shell_Error_NpcSourceDatabaseUnavailable", sourceGame));
             }
-            var head = await Task.Run(() => TseHeadMorphRon.Read(source.Input), cancellationToken);
+            var head = await Task.Run(() =>
+            {
+                if (source is not null) return TseHeadMorphRon.Read(source.Input);
+                using var reader = new MorphFacePackageReader();
+                return MorphFacePackageContextService.CreateDefaultHead(
+                    reader.Load(donor.PackagePath, donor.FacePath, decodeTextures: false));
+            }, cancellationToken);
             var assets = await Task.Run(() => StandalonePlayerAssetCatalog.ForHead(
                 targetGame, head, textureCatalog.Candidates, donor.PackagePath), cancellationToken);
             imported = await Task.Run(() => new StandaloneNpcMorphImportService().ImportNpcHead(
@@ -348,15 +362,20 @@ public sealed partial class MainWindowViewModel
             var candidate = EditorWorkspace.ForNpc(imported.Workspace, targetGame);
             var importedFacePath = imported.ImportedFacePath;
             candidate.GeometryModes[importedFacePath] = MorphFaceGeometryMode.RelativeBake;
-            candidate.TrackImportedFile(sourcePath, importedFacePath, WorkspaceFileFormat.MorphRon, source.Fingerprint);
+            if (source is not null)
+                candidate.TrackImportedFile(sourcePath!, importedFacePath, WorkspaceFileFormat.MorphRon, source.Fingerprint);
+            else
+                candidate.MarkChanged(importedFacePath);
             imported = null; // Candidate publication now owns the disposable package, including failure cleanup.
             var preview = (await PrepareAndPublishWorkspaceAsync(candidate, importedFacePath, cancellationToken))!;
             var selected = SelectedFace!;
-            LogWorkspaceCreated("NPC", targetGame, sourcePath, PackageWorkspace!.SourcePath);
+            LogWorkspaceCreated("NPC", targetGame, sourcePath ?? donor.PackagePath, PackageWorkspace!.SourcePath);
             _faceDetailsPrefix = null;
             _faceDetailsHasBakedFallback = false;
             FaceDetails = Loc.Format("loc_Shell_FaceDetails_NpcNativeRelativeBake", preview.Loaded.BaseHead.Topology.VertexCount, preview.Loaded.Document.BakedLods.Count);
-            Status = Loc.Format("loc_Shell_Status_ImportedAsNpcMorphReady", selected.DisplayName, targetGame, archetype);
+            Status = newNpcMode
+                ? Loc.Format("loc_Shell_Status_CreatedNpcDefaults", selected.DisplayName, targetGame, archetype)
+                : Loc.Format("loc_Shell_Status_ImportedAsNpcMorphReady", selected.DisplayName, targetGame, archetype);
             var allImportWarnings = importWarnings.Concat(preview.Loaded.Warnings
                     .Select(UserFacingMessageFormatter.FormatDiagnostic))
                 .Distinct(StringComparer.Ordinal).ToArray();
@@ -376,7 +395,8 @@ public sealed partial class MainWindowViewModel
         catch (Exception exception)
         {
             AppLog.Error($"NPC:IMPORT-FAILED {archetype} {targetGame} FILE:{sourcePath}", exception);
-            ErrorMessage = Loc.Format("loc_Shell_Error_TheStandaloneNpcMorphCould", UserFacingMessageFormatter.Format(exception));
+            ErrorMessage = Loc.Format(newNpcMode ? "loc_Shell_Error_NewNpcMorphFailed" : "loc_Shell_Error_TheStandaloneNpcMorphCould",
+                UserFacingMessageFormatter.Format(exception));
             Status = Loc.Text("loc_Shell_Status_NpcImportFailedTheCurrent");
         }
         finally

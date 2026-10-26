@@ -17,6 +17,7 @@
         WindowStartupLocation="CenterScreen">
     <Window.InputBindings>
         <KeyBinding Key="E" Modifiers="Control" Command="{Binding NewPlayerMorphCommand}" />
+        <KeyBinding Key="N" Modifiers="Control" Command="{Binding NewNpcMorphCommand}" />
         <KeyBinding Key="O" Modifiers="Control" Command="{Binding OpenPackageCommand}" />
         <KeyBinding Key="S" Modifiers="Control" Command="{Binding SaveCommand}" />
         <KeyBinding Key="S" Modifiers="Control+Shift" Command="{Binding SaveAsCommand}" />
@@ -207,6 +208,7 @@
                     <Menu VerticalAlignment="Center">
                         <MenuItem Header="{DynamicResource loc_View_MainWindow_File}" Height="30" MinWidth="54">
                             <MenuItem Header="{DynamicResource loc_View_MainWindow_NewPlayerMorph}" Command="{Binding NewPlayerMorphCommand}" InputGestureText="{DynamicResource loc_Shortcut_NewPlayer}" />
+                            <MenuItem Header="{DynamicResource loc_View_MainWindow_NewNpcMorph}" Command="{Binding NewNpcMorphCommand}" InputGestureText="{DynamicResource loc_Shortcut_NewNpc}" />
                             <MenuItem Header="{DynamicResource loc_View_MainWindow_OpenPackage}" Command="{Binding OpenPackageCommand}" InputGestureText="{DynamicResource loc_Shortcut_Open}" />
                             <MenuItem Header="{DynamicResource loc_View_MainWindow_SavePackage}" Command="{Binding SaveCommand}" InputGestureText="{DynamicResource loc_Shortcut_Save}" />
                             <MenuItem Header="{DynamicResource loc_FileSave_SaveAs}" Command="{Binding SaveAsCommand}" InputGestureText="{DynamicResource loc_Shortcut_SaveAs}" />

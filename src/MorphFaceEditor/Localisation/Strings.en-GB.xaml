@@ -4632,4 +4632,11 @@ Materials: {2}{3}</system:String>
     <system:String x:Key="loc_View_MainWindow_View" xml:space="preserve">¾ View</system:String>
     <!--localiser: {"Key":"loc_View_MainWindow_Wireframe","ReviewedHash":"04B765747018CB132ACEDA1C1FE93DD08B7A282314D17E5EED873B2E7EC62FB9","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_View_MainWindow_Wireframe" xml:space="preserve">Wireframe</system:String>
+    <system:String x:Key="loc_View_MainWindow_NewNpcMorph" xml:space="preserve">New NPC Morph</system:String>
+    <system:String x:Key="loc_StandaloneImportGameWindow_NewNpcPrompt" xml:space="preserve">Choose the game and archetype for your new NPC morph.</system:String>
+    <system:String x:Key="loc_CloneMorphWindow_NameNewNpcMorph" xml:space="preserve">Name New NPC Morph</system:String>
+    <system:String x:Key="loc_CloneMorphWindow_NewNpcIntro" xml:space="preserve">Choose a name for the new BioMorphFace.</system:String>
+    <system:String x:Key="loc_Shell_Status_CreatedNpcDefaults" xml:space="preserve">Created {0} from {1} {2} NPC defaults.</system:String>
+    <system:String x:Key="loc_Shell_Error_NewNpcMorphFailed" xml:space="preserve">The NPC morph could not be created: {0}</system:String>
+    <system:String x:Key="loc_Shortcut_NewNpc" xml:space="preserve">Ctrl+N</system:String>
 </ResourceDictionary>

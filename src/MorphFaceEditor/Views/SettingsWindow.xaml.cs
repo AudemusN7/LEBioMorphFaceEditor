@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Windows;
 using Microsoft.Win32;
 using MorphFaceEditor.Infrastructure;
@@ -85,6 +86,20 @@ public partial class SettingsWindow : Window
 
     private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
 
+    private void OnOpenLogClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(AppLog.FilePath) { UseShellExecute = true });
+            OperationStatus.Text = string.Empty;
+        }
+        catch (Exception exception)
+        {
+            AppLog.Error("SETTINGS:OPEN-LOG-FAILED", exception);
+            OperationStatus.Text = Loc.Text("loc_Settings_OpenLogFailed");
+        }
+    }
+
     private async void OnGenerateLogsClick(object sender, RoutedEventArgs e)
     {
         if (_operating || _viewModel.IsBusy) return;
@@ -138,6 +153,7 @@ public partial class SettingsWindow : Window
     {
         _operating = operating;
         GenerateLogsButton.IsEnabled = !operating;
+        OpenLogButton.IsEnabled = !operating;
         ClearDataButton.IsEnabled = !operating;
         CloseButton.IsEnabled = !operating;
         ThemeSelector.IsEnabled = !operating && _themes is not null;

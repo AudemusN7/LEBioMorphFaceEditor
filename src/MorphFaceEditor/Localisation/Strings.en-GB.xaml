@@ -73,6 +73,10 @@ Preferences will need to be reapplied when the editor reopens. Databases will al
     <system:String x:Key="loc_Settings_GenerateLogs" xml:space="preserve">Generate Troubleshooting Logs</system:String>
     <!--localiser: {"Key":"loc_Settings_GenerateLogsButton","ReviewedHash":"5DDBF16AB15A6FD5B5C3DE88E56ADCAF7A1DE99068036D03F7CB3922C32128A0","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_Settings_GenerateLogsButton" xml:space="preserve">Export Logs</system:String>
+    <!--localiser: {"Key":"loc_Settings_OpenLogButton","ReviewedHash":"7352120C78301DFC8D9E6E1A3A013BE86779A820C96EED7694EA8EAA319B951A","DoNotTranslate":false,"Note":"Opens the current application log in the default app.","SourceHash":null}-->
+    <system:String x:Key="loc_Settings_OpenLogButton" xml:space="preserve">Open Current Log</system:String>
+    <!--localiser: {"Key":"loc_Settings_OpenLogFailed","ReviewedHash":"C1CB66D78A0F25684FD6171608CA9E0794624EE261AF060D3D210902622412C7","DoNotTranslate":false,"Note":"Shown when Windows cannot open the current application log.","SourceHash":null}-->
+    <system:String x:Key="loc_Settings_OpenLogFailed" xml:space="preserve">Could not open the application log.</system:String>
     <!--localiser: {"Key":"loc_Settings_GenerateLogsDescription","ReviewedHash":"04AAFE789F626CF6786E5B0371481BA442AE9292BA18CC5620406FBBB573D71A","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_Settings_GenerateLogsDescription" xml:space="preserve">Export a ZIP containing recent application logs, the open workspace with current edits, and mesh/texture databases. Send to Audemus for troubleshooting.</system:String>
     <!--localiser: {"Key":"loc_Settings_Heading","ReviewedHash":"02F6EA12816A9E7B8CE846F149281B130033CF5145D260DFEA7405BC8866EE1E","DoNotTranslate":false,"Note":"","SourceHash":null}-->

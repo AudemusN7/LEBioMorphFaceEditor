@@ -12,7 +12,8 @@ public partial class CloneMorphWindow : Window
         string suggestedName,
         IReadOnlyCollection<string> existingObjectNames,
         bool importMode = false,
-        bool newPlayerMode = false)
+        bool newPlayerMode = false,
+        bool newNpcMode = false)
     {
         InitializeComponent();
         DarkTitleBar.Apply(this);
@@ -26,6 +27,12 @@ public partial class CloneMorphWindow : Window
         if (newPlayerMode)
         {
             Title = Loc.Text("loc_CloneMorphWindow_NameNewPlayerMorph");
+            PrimaryButton.Content = Loc.Text("loc_CloneMorphWindow_CreateMorph");
+        }
+        if (newNpcMode)
+        {
+            Title = Loc.Text("loc_CloneMorphWindow_NameNewNpcMorph");
+            IntroText.Text = Loc.Text("loc_CloneMorphWindow_NewNpcIntro");
             PrimaryButton.Content = Loc.Text("loc_CloneMorphWindow_CreateMorph");
         }
         _existingNames = existingObjectNames.ToHashSet(StringComparer.OrdinalIgnoreCase);

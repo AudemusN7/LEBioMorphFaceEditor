@@ -134,6 +134,20 @@ public sealed class WpfEditorDialogService : IEditorDialogService
             ? new NewPlayerMorphChoice(game, window.SelectedSex) : null;
     }
 
+    public NewNpcMorphChoice? ChooseNewNpcMorph()
+    {
+        var window = new StandaloneImportGameWindow(newNpcMode: true) { Owner = Application.Current.MainWindow };
+        return window.ShowDialog() == true && window.SelectedGame is { } game && window.SelectedNpcArchetype is { } archetype
+            ? new NewNpcMorphChoice(game, archetype) : null;
+    }
+
+    public string? ChooseNewNpcMorphName(string suggestedName)
+    {
+        var window = new CloneMorphWindow(suggestedName, [], importMode: true, newNpcMode: true)
+        { Owner = Application.Current.MainWindow };
+        return window.ShowDialog() == true ? window.ObjectName : null;
+    }
+
     public MorphFaceGame? ChooseStandaloneImportGame()
     {
         var window = new StandaloneImportGameWindow

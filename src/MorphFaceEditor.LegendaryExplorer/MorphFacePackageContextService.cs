@@ -456,6 +456,13 @@ public sealed class MorphFacePackageContextService
         TseHeadMorphRon.Write(destinationPath, head, provenance, morphFeaturesOnly);
     }
 
+    // Blank standalone heads use the native base, without donor edits, attachments or BMO overrides.
+    public static HeadMorphPayload CreateDefaultHead(LoadedMorphFace donor) => new(
+        "None", [], new MorphFaceMorphData([], donor.BaseHead.Topology.ReferenceSkeleton
+            .Select(bone => new BoneTranslation(bone.Name, bone.Position)).ToArray(), donor.BaseHead.Lods
+            .Take(donor.Document.BakedLods.Count).Select(lod => lod.Positions.ToArray()).ToArray()),
+        new MorphFaceMaterialData([], [], []));
+
     public HeadMorphPayload CaptureHead(string packagePath, string facePath, bool morphFeaturesOnly = false)
     {
         LegendaryExplorerCoreRuntime.Initialize();

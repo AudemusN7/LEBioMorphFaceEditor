@@ -102,11 +102,9 @@ public sealed class ActorAssignmentChoice
     public string DisplayName => DisplayNameFor(Candidate);
     public string TechnicalIdentity =>
         $"#{Candidate.UIndex}  {Candidate.ClassName}  ·  {ShortLevelPath(Candidate.InstancedPath)}";
-    public string EvidenceSummary => Mode == ActorAssignmentMode.Morph
-        ? Loc.Format("loc_ActorAssignment_MorphSummary",
+    public string EvidenceSummary => Loc.Format("loc_ActorAssignment_MorphSummary",
             Candidate.HeadMeshProfileKey ?? Loc.Text("loc_VM_actorAssignment_unresolved"),
-            ShortObjectName(Candidate.MorphTarget?.CurrentMorphPath) ?? Loc.Text("loc_VM_actorAssignment_none"))
-        : Loc.Format("loc_ActorAssignment_TargetCounts", Candidate.SafeMaterialCount, Candidate.AttachmentTargets.Count);
+            ShortObjectName(Candidate.MorphTarget?.CurrentMorphPath) ?? Loc.Text("loc_VM_actorAssignment_none"));
     public bool IsEligible => Mode == ActorAssignmentMode.Morph
         ? Candidate.CanAssignMorph
         : Candidate.CanAssignMaterials;

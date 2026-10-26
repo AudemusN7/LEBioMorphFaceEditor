@@ -17,7 +17,7 @@ internal static class LocaliserTests
         new("localiser: excluded strings cannot be translated and are omitted from saved languages", ProtectedStrings),
         new("localiser: explicitly retired translations load and are pruned on save", RetiredTranslations),
         new("localiser: cached wording validation and review hashes invalidate on edits", CachedValidationAndReviewHashes),
-        new("localiser: needs review hides exclusions only in translation languages", NeedsReviewExclusions),
+        new("localiser: excluded tab column and rows are confined to the UK master", MasterOnlyExclusions),
         new("localiser: invalid wording, concurrent edits and locked files preserve the master and draft", SafeSave),
         new("localiser: language drafts persist Unicode notes review stamps and missing strings", TranslationRoundTrip),
         new("localiser: combined language and master save rolls back if either file fails", TranslationSafeSave),
@@ -177,21 +177,61 @@ internal static class LocaliserTests
         TestAssert.True(translation.Reviewed, "A repaired translation did not accept a fresh review stamp.");
     });
 
-    private static void NeedsReviewExclusions() => Scratch(root => WpfTestDispatcher.Invoke(() =>
+    private static void MasterOnlyExclusions() => Scratch(root => WpfTestDispatcher.Invoke(() =>
     {
         var path = CreateMaster(root);
-        var review = new ReviewViewModel();
+        var window = new MorphFaceEditor.Localiser.MainWindow();
+        var review = window.Review;
         review.Open(path);
+        var tabs = (TabControl)window.FindName("FilterTabs");
+        var grid = (DataGrid)window.FindName("StringList");
+        var excludedColumn = grid.Columns.Single(column => Equals(column.Header, "Excluded"));
+        TabItem ExcludedTab()
+        {
+            Layout(window);
+            return (TabItem)tabs.ItemContainerGenerator.ContainerFromItem("Excluded");
+        }
         var row = review.Rows.Single(item => item.Key == "loc_one");
+        row.Notes = "Master-only wording";
         review.SetFlags([row], excludedColumn: true, value: true);
         review.SelectedFilter = "Needs review";
         TestAssert.True(review.Entries!.Cast<LocaliserRow>().Contains(row),
             "English master review hid an unreviewed excluded row.");
+        TestAssert.Equal(Visibility.Visible, ExcludedTab().Visibility);
+        TestAssert.Equal(Visibility.Visible, excludedColumn.Visibility);
 
-        review.SelectLanguage("fr");
-        review.SelectedFilter = "Needs review";
-        TestAssert.True(!review.Entries!.Cast<LocaliserRow>().Contains(row),
-            "Translation review showed a row excluded from translation.");
+        foreach (var code in new[] { "en-US", "fr" })
+        {
+            review.SelectedFilter = "Excluded";
+            review.SelectLanguage(code);
+            TestAssert.Equal("All strings", review.SelectedFilter);
+            TestAssert.Equal(Visibility.Collapsed, ExcludedTab().Visibility);
+            TestAssert.Equal(Visibility.Collapsed, excludedColumn.Visibility);
+            TestAssert.Equal("All strings", (string)tabs.SelectedItem);
+            TestAssert.True(grid.Items.Cast<LocaliserRow>().Any(item => item.Key == "loc_two"),
+                "Switching from Excluded left the translation table empty.");
+            foreach (var filter in review.Filters.Where(filter => filter != "Excluded"))
+            {
+                review.SelectedFilter = filter;
+                Layout(window);
+                TestAssert.True(!grid.Items.Cast<LocaliserRow>().Contains(row),
+                    $"{code} showed an excluded row under {filter}.");
+            }
+            review.SelectedFilter = "All strings";
+            review.Search = row.Key;
+            Layout(window);
+            TestAssert.Equal(0, grid.Items.Count);
+            review.Search = "";
+            review.SelectLanguage("en-GB");
+            TestAssert.Equal(Visibility.Visible, ExcludedTab().Visibility);
+            TestAssert.Equal(Visibility.Visible, excludedColumn.Visibility);
+            review.SelectedFilter = "Excluded";
+            Layout(window);
+            TestAssert.True(grid.Items.Cast<LocaliserRow>().Contains(row),
+                "Returning to the master lost the excluded row.");
+        }
+        review.Workspace!.Save();
+        window.Close();
     }));
 
     private static void SafeSave() => Scratch(root =>

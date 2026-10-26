@@ -90,6 +90,7 @@ public sealed partial class ReviewViewModel : INotifyPropertyChanged
         try
         {
             LanguageCode = code;
+            if (!IsEnglish && SelectedFilter == "Excluded") SelectedFilter = "All strings";
             foreach (var row in Rows) row.SelectLanguage(translation?.Entries[row.Key]);
             foreach (var language in Languages) language.Refresh();
         }
@@ -137,10 +138,11 @@ public sealed partial class ReviewViewModel : INotifyPropertyChanged
     private bool Matches(object item)
     {
         var row = (LocaliserRow)item;
+        if (!IsEnglish && row.Excluded) return false;
         if (SelectedSection?.Name is { } section && section != "All sections" && row.Group != section) return false;
         if (SelectedFilter switch
             {
-                "Needs review" => row.Reviewed || (!IsEnglish && row.Excluded), "Reviewed" => !row.Reviewed, "Excluded" => !row.Excluded,
+                "Needs review" => row.Reviewed, "Reviewed" => !row.Reviewed, "Excluded" => !row.Excluded,
                 "Has notes" => row.Notes.Length == 0, "Invalid wording" => row.Problem.Length == 0, _ => false
             }) return false;
         var search = Search.Trim();

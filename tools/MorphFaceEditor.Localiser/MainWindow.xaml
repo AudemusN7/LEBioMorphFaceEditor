@@ -80,7 +80,20 @@
             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="280" /></Grid.ColumnDefinitions>
             <TabControl x:Name="FilterTabs" ItemsSource="{Binding Filters}" SelectedItem="{Binding SelectedFilter}" BorderThickness="0">
                 <TabControl.Template><ControlTemplate TargetType="TabControl"><TabPanel IsItemsHost="True" /></ControlTemplate></TabControl.Template>
-                <TabControl.ItemContainerStyle><Style TargetType="TabItem" BasedOn="{StaticResource {x:Type TabItem}}"><Setter Property="Header" Value="{Binding}" /></Style></TabControl.ItemContainerStyle>
+                <TabControl.ItemContainerStyle>
+                    <Style TargetType="TabItem" BasedOn="{StaticResource {x:Type TabItem}}">
+                        <Setter Property="Header" Value="{Binding}" />
+                        <Style.Triggers>
+                            <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding}" Value="Excluded" />
+                                    <Condition Binding="{Binding DataContext.IsEnglish, RelativeSource={RelativeSource AncestorType=TabControl}}" Value="False" />
+                                </MultiDataTrigger.Conditions>
+                                <Setter Property="Visibility" Value="Collapsed" />
+                            </MultiDataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TabControl.ItemContainerStyle>
             </TabControl>
             <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="12,0,0,0">
                 <Button x:Name="UndoButton" Content="Undo" Command="ApplicationCommands.Undo" ToolTip="Undo (Ctrl+Z)" Margin="0,0,8,0" />
@@ -139,7 +152,7 @@
                     <DataGridTemplateColumn Header="Notes" Width="1.1*" MinWidth="130" SortMemberPath="Notes">
                         <DataGridTemplateColumn.CellTemplate><DataTemplate><TextBox Text="{Binding Notes, UpdateSourceTrigger=PropertyChanged}" Tag="Notes" Style="{StaticResource CellText}" /></DataTemplate></DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
-                    <DataGridTemplateColumn Header="Excluded" Width="76" CanUserSort="False">
+                    <DataGridTemplateColumn x:Name="ExcludedColumn" Header="Excluded" Width="76" CanUserSort="False">
                         <DataGridTemplateColumn.CellTemplate><DataTemplate><CheckBox IsChecked="{Binding Excluded, Mode=OneWay}" Tag="Excluded" HorizontalAlignment="Center" PreviewMouseLeftButtonDown="OnFlagClick" PreviewKeyDown="OnFlagKey" /></DataTemplate></DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
                     <DataGridTemplateColumn Header="Reviewed" Width="78" CanUserSort="False">

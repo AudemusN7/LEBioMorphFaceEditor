@@ -53,6 +53,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     private bool _isDirty;
     private bool _disposed;
     private long _randomisationGeneration;
+    private int _activeRandomisations;
     private int _morphRandomisationStrength = 50;
     private int _materialRandomisationStrength = 50;
     private bool _randomiseMorphs = true;
@@ -369,6 +370,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     public System.Windows.Input.ICommand SetToDefaultsCommand => _setToDefaultsCommand;
     public System.Windows.Input.ICommand RandomiseCommand => _randomiseCommand;
     internal Task WaitForTextureHistoryWritesAsync() => _history.WaitForTextureWritesAsync();
+    internal bool IsRandomising => Volatile.Read(ref _activeRandomisations) != 0;
     public bool CanEditMorphFeatures => _session.CanEditMorphFeatures;
     public bool CanEditBones => _session.CanEditBones;
     public bool CanEditAttachments => _allowsAttachmentEditing &&
@@ -582,6 +584,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         bool propagateErrors)
     {
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        Interlocked.Increment(ref _activeRandomisations);
         try
         {
             if (requested.InclusionKey is { } key && !_randomisationInclusionState.IsIncluded(key)) return;
@@ -680,6 +683,10 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             AppLog.Error("RAND:FAILED", exception);
             if (propagateErrors) throw;
             _reportError(Loc.Format("loc_VM_faceEditor_randomisationFailed", AppLog.FilePath));
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _activeRandomisations);
         }
     }
 

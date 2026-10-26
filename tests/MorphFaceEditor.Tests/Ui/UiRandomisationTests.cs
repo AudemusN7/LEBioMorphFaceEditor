@@ -371,6 +371,7 @@ internal static class UiRandomisationTests
         }
         TestAssert.True(MorphFaceEditorStateComparer.Equals(before, editor.CreateDraft()) && !editor.UndoCommand.CanExecute(null),
             "A failed awaited randomisation committed a partial edit.");
+        TestAssert.True(!editor.IsRandomising, "Failed randomisation left the idle guard active.");
     }
 
     private static void FailedCursedRandomisationRollsBack()

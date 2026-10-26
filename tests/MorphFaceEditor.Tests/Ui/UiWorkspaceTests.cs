@@ -22,6 +22,8 @@ internal static class UiWorkspaceTests
     [
         new("failed replacement retains the live workspace and releases its candidate", FailedReplacementKeepsLiveWorkspace),
         new("workspace close releases cached packages and pixels and allows reopening", CloseReleasesReaderCaches),
+        new("idle cleanup skips heaps dominated by useful live data", IdleCleanupRequiresSubstantialSpareCapacity),
+        new("idle reader lease releases on its worker without double release", IdleReaderLeaseReleasesOffDispatcher),
         new("archetype switches release old packages while reusing shared texture pixels", ArchetypeSwitchReleasesInactiveCaches),
         new("RON save failure preserves edits and Save As adopts its successful copy", SourceFileSaveRoundTrip),
         new("partial RON saves retain unrelated edits and chronological dirty state", PartialRonSaveRetainsHistory),
@@ -29,6 +31,33 @@ internal static class UiWorkspaceTests
         new("additional Player imports and face switches retain both edited drafts", AdditionalPlayerImportsRetainStagedEdits),
         new("cancelled or failed career deletion retains source and pending edits", CareerDeletionPreservesStateOnFailure)
     ];
+
+    private static void IdleCleanupRequiresSubstantialSpareCapacity()
+    {
+        const long gib = 1024L * 1024 * 1024;
+        TestAssert.True(!IdleMemoryCleanup.HasReclaimableCapacity(gib, gib / 4),
+            "A small heap triggered an unnecessary idle collection.");
+        TestAssert.True(!IdleMemoryCleanup.HasReclaimableCapacity(3 * gib, 3 * gib - gib / 4),
+            "A heap mostly occupied by live data triggered compaction.");
+        TestAssert.True(IdleMemoryCleanup.HasReclaimableCapacity(3 * gib, 2 * gib),
+            "Substantial unused committed capacity was ignored.");
+        TestAssert.True(!IdleMemoryCleanup.HasReclaimableCapacity(3 * gib, 3 * gib),
+            "A large fully occupied heap was treated as reclaimable spare capacity.");
+    }
+
+    private static void IdleReaderLeaseReleasesOffDispatcher()
+    {
+        using var reader = new MorphFacePackageReader();
+        var references = new PackageReferenceService(reader, TestFixtures.CreateMissingTextureCatalogService());
+        using var first = references.TryAcquireIdleLease();
+        TestAssert.True(first is not null && references.TryAcquireIdleLease() is null,
+            "Idle collection overlapped an active reader lease.");
+        Task.Run(first!.Dispose).GetAwaiter().GetResult();
+        using var next = references.TryAcquireIdleLease();
+        TestAssert.True(next is not null, "The worker did not release its idle lease.");
+        first.Dispose();
+        TestAssert.True(references.TryAcquireIdleLease() is null, "Repeated disposal released a different reader's lease.");
+    }
 
     private static void ArchetypeSwitchReleasesInactiveCaches() => RunWithDispatcher(async () =>
     {

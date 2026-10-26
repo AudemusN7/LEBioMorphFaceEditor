@@ -66,6 +66,7 @@ public static class RandomisationPublicationTests
 
         var olderRoll = fixture.Editor.RandomiseAsync();
         await fixture.Loader.WaitForPendingPathAsync(olderTextures);
+        TestAssert.True(fixture.Editor.IsRandomising, "Pending texture work was reported idle.");
         TestAssert.True(fixture.Editor.RandomiseCommand.CanExecute(null),
             "Randomise became disabled while the first roll was awaiting texture preparation.");
         var newerRoll = fixture.Editor.RandomiseAsync();
@@ -73,10 +74,12 @@ public static class RandomisationPublicationTests
 
         await CompleteRequestAsync(fixture.Loader, newerTextures);
         await newerRoll;
+        TestAssert.True(fixture.Editor.IsRandomising, "Completing a newer roll hid the still-pending older roll.");
         AssertTextures(fixture.Editor, newerTextures);
 
         await CompleteRequestAsync(fixture.Loader, olderTextures);
         await olderRoll;
+        TestAssert.True(!fixture.Editor.IsRandomising, "Completed rolls left the editor permanently active.");
         AssertTextures(fixture.Editor, newerTextures);
 
         TestAssert.True(fixture.Editor.UndoCommand.CanExecute(null), "The newer roll did not create an Undo entry.");

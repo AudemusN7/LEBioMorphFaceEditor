@@ -35,6 +35,18 @@ public sealed class PackageReferenceService(
     private readonly SemaphoreSlim _readerGate = new(1, 1);
     private readonly TextureCatalogService _textureCatalogService =
         textureCatalogService ?? throw new ArgumentNullException(nameof(textureCatalogService));
+
+    // A background idle collection must not compete with preview package reads.
+    // The lease can be released on its worker before returning to the dispatcher.
+    internal IDisposable? TryAcquireIdleLease() =>
+        _readerGate.Wait(0) ? new IdleReaderLease(_readerGate) : null;
+    internal bool IsReading => _readerGate.CurrentCount == 0;
+
+    private sealed class IdleReaderLease(SemaphoreSlim gate) : IDisposable
+    {
+        private SemaphoreSlim? _gate = gate;
+        public void Dispose() => Interlocked.Exchange(ref _gate, null)?.Release();
+    }
     private static readonly MaterialParameterDefinition ThumbnailDefinition = new(
         "Preview",
         "Preview",

@@ -140,7 +140,7 @@ internal static class UiInterchangeTests
         try
         {
             var source = Path.Combine(root, "Source.pcc");
-            File.Copy(Path.GetFullPath(Path.Combine("tests", "Global Morphs", "LE1 GlobalMorphs.pcc")), source);
+            File.Copy(Path.GetFullPath(Path.Combine("fixtures", "Global Morphs", "LE1 GlobalMorphs.pcc")), source);
             var facePath = MorphFaceReferenceInspector.Inspect(source).First(face =>
                 face.BaseHeadPath?.Contains("HMM", StringComparison.OrdinalIgnoreCase) == true).FacePath;
             using (var package = MEPackageHandler.OpenMEPackage(source, forceLoadFromDisk: true))

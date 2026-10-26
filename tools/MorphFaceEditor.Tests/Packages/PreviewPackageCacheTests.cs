@@ -59,7 +59,7 @@ internal static class PreviewPackageCacheTests
 
     private static void ReaderEvictionPreservesDetachedData()
     {
-        var source = Path.GetFullPath(Path.Combine("tests", "Global Morphs", "LE1 GlobalMorphs.pcc"));
+        var source = Path.GetFullPath(Path.Combine("fixtures", "Global Morphs", "LE1 GlobalMorphs.pcc"));
         var fingerprint = PackageFingerprint.Capture(source);
         var root = Path.Combine(Path.GetTempPath(), $"MFE-ReaderEviction-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);

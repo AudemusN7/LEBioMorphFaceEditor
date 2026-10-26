@@ -51,6 +51,10 @@ Nach dem Neustart müssen die Einstellungen erneut vorgenommen werden. Datenbank
     <system:String x:Key="loc_Settings_ExportedTitle" xml:space="preserve">Diagnose-ZIP exportiert</system:String>
     <system:String x:Key="loc_Settings_GenerateLogs" xml:space="preserve">Fehlerdiagnoseprotokolle erstellen</system:String>
     <system:String x:Key="loc_Settings_GenerateLogsButton" xml:space="preserve">Protokolle exportieren</system:String>
+    <!--localiser: {"Key":"loc_Settings_OpenLogFailed","ReviewedHash":null,"DoNotTranslate":false,"Note":"Shown when Windows cannot open the current application log.","SourceHash":"C1CB66D78A0F25684FD6171608CA9E0794624EE261AF060D3D210902622412C7"}-->
+    <system:String x:Key="loc_Settings_OpenLogFailed" xml:space="preserve">Das Anwendungsprotokoll konnte nicht geöffnet werden.</system:String>
+    <!--localiser: {"Key":"loc_Settings_OpenLogButton","ReviewedHash":null,"DoNotTranslate":false,"Note":"Opens the current application log in the default app.","SourceHash":"7352120C78301DFC8D9E6E1A3A013BE86779A820C96EED7694EA8EAA319B951A"}-->
+    <system:String x:Key="loc_Settings_OpenLogButton" xml:space="preserve">Aktuelles Protokoll öffnen</system:String>
     <system:String x:Key="loc_Settings_GenerateLogsDescription" xml:space="preserve">Exportiert eine ZIP-Datei mit aktuellen Anwendungsprotokollen, dem geöffneten Arbeitsbereich samt aktuellen Änderungen sowie Mesh- und Texturdatenbanken. Sende sie zur Fehlerdiagnose an Audemus.</system:String>
     <system:String x:Key="loc_Settings_Heading" xml:space="preserve">EINSTELLUNGEN</system:String>
     <system:String x:Key="loc_Settings_Language" xml:space="preserve">Sprache</system:String>
@@ -112,6 +116,10 @@ Nach dem Neustart müssen die Einstellungen erneut vorgenommen werden. Datenbank
     <system:String x:Key="loc_Shell_Profile_Unknown" xml:space="preserve">UNBEKANNTES PROFIL</system:String>
 
     <!-- Assets - Mesh/Texture Databases -->
+    <!--localiser: {"Key":"loc_ExternalLinks_CouldNotOpen","ReviewedHash":null,"DoNotTranslate":false,"Note":"Browser link failure. {0} = the complete HTTPS address to open manually.","SourceHash":"509506EA7995C1EEBFAC39B24A0ED3A0709F288BDFCF0D9E9C95829DCDB8D231"}-->
+    <system:String x:Key="loc_ExternalLinks_CouldNotOpen" xml:space="preserve">Der Link konnte nicht im Browser geöffnet werden. Du kannst diese Adresse kopieren und manuell öffnen: {0}</system:String>
+    <!--localiser: {"Key":"loc_ExternalLinks_UnavailableTitle","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"420D9697C81D2C511D2011889240C24EF848B222EB263F66E57BFEA4CA7C5482"}-->
+    <system:String x:Key="loc_ExternalLinks_UnavailableTitle" xml:space="preserve">Browser konnte nicht geöffnet werden</system:String>
     <!--localiser: {"Key":"loc_ManualAssetSelectionWindow_AddCustomAssetsToGame","ReviewedHash":null,"DoNotTranslate":false,"Note":"Manual asset picker heading. {0} = game selected for adding custom assets.","SourceHash":null}-->
     <system:String x:Key="loc_ManualAssetSelectionWindow_AddCustomAssetsToGame" xml:space="preserve">Benutzerdefinierte Assets zu {0} hinzufügen</system:String>
     <system:String x:Key="loc_ManualAssetSelectionWindow_SelectAtLeastOneNewAsset" xml:space="preserve">Wähle mindestens ein neues Asset aus.</system:String>
@@ -528,8 +536,8 @@ Wähle „Nein“, um die aktuellen Kopfhauttexturen beizubehalten.</system:Stri
     <system:String x:Key="loc_ActorAssignment_SecondHairSkipped" xml:space="preserve">Das Haupthaar des Gesichts wurde auf '{1}' angewendet. Das zweite Mesh '{0}' konnte nicht angewendet werden, da es dieselbe Hair-Komponente benötigt und MFE derzeit keine neuen Komponenten-Slots hinzufügt.</system:String>
     <!--localiser: {"Key":"loc_ActorAssignment_SharedBodyMaterial","ReviewedHash":null,"DoNotTranslate":false,"Note":"Actor material assignment retains a Body\u002Dshared MIC and assigns the attachment separately.","SourceHash":null}-->
     <system:String x:Key="loc_ActorAssignment_SharedBodyMaterial" xml:space="preserve">Dieses Material wird mit dem Körper geteilt. Änderungen an Anhängen verwenden ein separates Material.</system:String>
-    <!--localiser: {"Key":"loc_ActorAssignment_TargetCounts","ReviewedHash":null,"DoNotTranslate":false,"Note":"Actor assignment target counts. {0} = parameter MIC count; {1} = hair/accessory mesh count. In the chooser these are safe candidates; in the completion result they are the targets assigned and verified.","SourceHash":null}-->
-    <system:String x:Key="loc_ActorAssignment_TargetCounts" xml:space="preserve">Parameter-MaterialInstanceConstants: {0} · Hair-/Accessory-Meshes: {1}</system:String>
+    <!--localiser: {"Key":"loc_ActorAssignment_TargetCounts","ReviewedHash":null,"DoNotTranslate":false,"Note":"Actor assignment target counts. {0} = parameter MIC count; {1} = hair/accessory mesh count. In the chooser these are safe candidates; in the completion result they are the targets assigned and verified.","SourceHash":"A03B0CECD4C4F8DD14559AFE53EC66FBF54F4E93EC2AE43B14AA368B81D6227D"}-->
+    <system:String x:Key="loc_ActorAssignment_TargetCounts" xml:space="preserve">MATERIALIEN: {0} · MESHES: {1}</system:String>
     <!--localiser: {"Key":"loc_Shell_ActorAssignment_Actor","ReviewedHash":null,"DoNotTranslate":false,"Note":"Actor assignment result/report. {0} = exact actor object path in the PCC; preserve the Unreal identifier.","SourceHash":null}-->
     <system:String x:Key="loc_Shell_ActorAssignment_Actor" xml:space="preserve">Akteur: {0}</system:String>
     <system:String x:Key="loc_Shell_ActorAssignment_BodySkinOnly" xml:space="preserve">Körper-MICs: Nur die im Ausgangsmaterial vorhandenen SkinTone- / SkinLightScattering-Werte wurden hinzugefügt oder aktualisiert. Alle anderen Körpermaterialdaten blieben erhalten.</system:String>
@@ -729,6 +737,8 @@ Gebackene Ziel-LODs: {9}{10}{11}</system:String>
     <system:String x:Key="loc_Shell_PackageName_NoPackageOpen" xml:space="preserve">Kein Paket geöffnet</system:String>
     <system:String x:Key="loc_Shell_Status_LoadCancelled" xml:space="preserve">Laden abgebrochen.</system:String>
     <system:String x:Key="loc_Shell_Status_OpenAPackageToBegin" xml:space="preserve">Öffne ein Paket, um zu beginnen.</system:String>
+    <!--localiser: {"Key":"loc_Shell_Status_ReleasingWorkspaceMemory","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"18D89A262FA39A83C748B3591B71A833E4C86F14A6F20DBE2C94FC2DECAF18A6"}-->
+    <system:String x:Key="loc_Shell_Status_ReleasingWorkspaceMemory" xml:space="preserve">Arbeitsbereichsspeicher wird freigegeben…</system:String>
     <system:String x:Key="loc_Shell_Status_PackageLoadFailed" xml:space="preserve">Paket konnte nicht geladen werden.</system:String>
     <system:String x:Key="loc_Shell_Status_RecentFileCouldNotOpen" xml:space="preserve">Zuletzt verwendete Datei konnte nicht geöffnet werden.</system:String>
     <system:String x:Key="loc_Shell_Status_SelectedFileCouldNotOpen" xml:space="preserve">Die ausgewählte Datei konnte nicht geöffnet werden.</system:String>
@@ -1086,6 +1096,20 @@ Paket: {0}</system:String>
     <system:String x:Key="loc_WpfEditorDialogService_UModelExportFolderTitle" xml:space="preserve">Ordner für den UModel-Mesh-Export auswählen</system:String>
 
     <!-- Main Window & Context Menu -->
+    <!--localiser: {"Key":"loc_Updates_BadgeTooltip","ReviewedHash":null,"DoNotTranslate":false,"Note":"Tooltip for the orange status bar update badge. {0} = latest public release version.","SourceHash":"2F8A4C56119ADC30DC040B1E3F1CDB5E04E6EB816E2CFF38258B3A79501BF67A"}-->
+    <system:String x:Key="loc_Updates_BadgeTooltip" xml:space="preserve">Version {0} ist verfügbar. Öffne die neueste GitHub-Veröffentlichung.</system:String>
+    <!--localiser: {"Key":"loc_Updates_UpdateAvailable","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"5AE200F91C64DA483B94B729655CAD16205A13042A40D898494EE6F6AFE60E26"}-->
+    <system:String x:Key="loc_Updates_UpdateAvailable" xml:space="preserve">Update verfügbar</system:String>
+    <!--localiser: {"Key":"loc_About_AboutMfe","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"2D13DD138D385DA81CCCE4B5114E01B20F5DC735EC8AA3904D7EBC900FE9B3D7"}-->
+    <system:String x:Key="loc_About_AboutMfe" xml:space="preserve">Über MFE</system:String>
+    <!--localiser: {"Key":"loc_About_Donate","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"C91EE0F2799DF915EFCC117BA063D95E0CBF0D5E8E6ECA5373333BB9B06C5F13"}-->
+    <system:String x:Key="loc_About_Donate" xml:space="preserve">Spenden</system:String>
+    <!--localiser: {"Key":"loc_About_GitHub","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"58846861DFB73E3CEABA818EB360E5894776D19D6F10AC6CC1D0E7C63D2A7BBC"}-->
+    <system:String x:Key="loc_About_GitHub" xml:space="preserve">GitHub-Repository</system:String>
+    <!--localiser: {"Key":"loc_About_NexusMods","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"C57D068D34C0D1CFA222AEFC811E77A5911200B22D314D6399277882C3BFF65F"}-->
+    <system:String x:Key="loc_About_NexusMods" xml:space="preserve">Nexus-Mods-Seite</system:String>
+    <!--localiser: {"Key":"loc_About_Menu","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"4EFCA0D10C5FEB8E9B35EB1D994F2905BB71714E6A271F511D713B539EA5FAA1"}-->
+    <system:String x:Key="loc_About_Menu" xml:space="preserve">Über</system:String>
     <!--localiser: {"Key":"loc_Editor_EditBlockedByProfile","ReviewedHash":null,"DoNotTranslate":false,"Note":"Explains a profile or custom\u002Dbase\u002Dmesh geometry restriction. The head remains available for supported material editing; its original geometry is preserved.","SourceHash":null}-->
     <system:String x:Key="loc_Editor_EditBlockedByProfile" xml:space="preserve">Dieser Kopf unterstützt keine Morph- oder Knochenbearbeitung. Die Materialbearbeitung bleibt verfügbar.</system:String>
     <!--localiser: {"Key":"loc_Editor_GeometryVerificationMismatch","ReviewedHash":null,"DoNotTranslate":false,"Note":"Explains why the face uses baked geometry rather than live morph evaluation. {0} = maximum per\u002Dvertex difference from the geometry verification comparison; retain six\u002Dsignificant\u002Ddigit formatting.","SourceHash":null}-->
@@ -2191,4 +2215,16 @@ Materialien: {2}{3}</system:String>
     <system:String x:Key="loc_View_MainWindow_PostProcessing" xml:space="preserve">Nachbearbeitung</system:String>
     <system:String x:Key="loc_View_MainWindow_View" xml:space="preserve">¾ Ansicht</system:String>
     <system:String x:Key="loc_View_MainWindow_Wireframe" xml:space="preserve">Drahtgitter</system:String>
+    <!--localiser: {"Key":"loc_Shell_Error_NewNpcMorphFailed","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"BC3093B8A316777F45E6B41FBEBD0733806972D0CF805097CD6E5CDDC40031AF"}-->
+    <system:String x:Key="loc_Shell_Error_NewNpcMorphFailed" xml:space="preserve">Der NPC-Morph konnte nicht erstellt werden: {0}</system:String>
+    <!--localiser: {"Key":"loc_Shell_Status_CreatedNpcDefaults","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"18AFBAF4705CAF274563B010F05A513DADAA6BE90D3BD08FEA07E4DC77EB55DA"}-->
+    <system:String x:Key="loc_Shell_Status_CreatedNpcDefaults" xml:space="preserve">{0} wurde mit den NPC-Standardwerten für {2} ({1}) erstellt.</system:String>
+    <!--localiser: {"Key":"loc_CloneMorphWindow_NewNpcIntro","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"F720E6F5B8E9D46164DABD1AEC32B2403DE3233FC43CB62E5FD0E99D8099ABFB"}-->
+    <system:String x:Key="loc_CloneMorphWindow_NewNpcIntro" xml:space="preserve">Wähle einen Namen für das neue BioMorphFace.</system:String>
+    <!--localiser: {"Key":"loc_CloneMorphWindow_NameNewNpcMorph","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"AB7114D261F0125C0802E1042CB45F59F4E9AE1BA514C1A163FF2F9AEEA87CA0"}-->
+    <system:String x:Key="loc_CloneMorphWindow_NameNewNpcMorph" xml:space="preserve">Neuen NPC-Morph benennen</system:String>
+    <!--localiser: {"Key":"loc_StandaloneImportGameWindow_NewNpcPrompt","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"FD2A315863C1CDFE229E09E90F9CA6A3E037F2BB9507AF32ACFF093BD3767C7D"}-->
+    <system:String x:Key="loc_StandaloneImportGameWindow_NewNpcPrompt" xml:space="preserve">Wähle das Spiel und den Archetyp für deinen neuen NPC-Morph.</system:String>
+    <!--localiser: {"Key":"loc_View_MainWindow_NewNpcMorph","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"228F8BBB7C4A828AEA95F12FE2D13E6B5252B7F0C67F1608DC59D1AC3C0FE686"}-->
+    <system:String x:Key="loc_View_MainWindow_NewNpcMorph" xml:space="preserve">Neuen NPC-Morph erstellen</system:String>
 </ResourceDictionary>

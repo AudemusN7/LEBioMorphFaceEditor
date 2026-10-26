@@ -9,13 +9,13 @@ dotnet run --project src/MorphFaceEditor -c Debug
 dotnet build MorphFaceEditor.slnx -c Release
 
 # Fast default suite; opt into affected integration areas.
-dotnet run --project tests/MorphFaceEditor.Tests -c Release
-dotnet run --project tests/MorphFaceEditor.Tests -c Release --no-build -- --list
-dotnet run --project tests/MorphFaceEditor.Tests -c Release --no-build -- --suite ui UiWorkspaceTests
-dotnet run --project tests/MorphFaceEditor.Tests -c Release --no-build -- --suite all
+dotnet run --project tools/MorphFaceEditor.Tests -c Release
+dotnet run --project tools/MorphFaceEditor.Tests -c Release --no-build -- --list
+dotnet run --project tools/MorphFaceEditor.Tests -c Release --no-build -- --suite ui UiWorkspaceTests
+dotnet run --project tools/MorphFaceEditor.Tests -c Release --no-build -- --suite all
 ```
 
-See [regression test ownership and suites](tests/MorphFaceEditor.Tests/README.md) for focused checks and the [QA harness](tools/MorphFaceEditor.QA/README.md) for broad workflow matrices. Generic PCC inspection uses LECCLI.
+See [regression test ownership and suites](tools/MorphFaceEditor.Tests/README.md) for focused checks and the [QA harness](tools/MorphFaceEditor.QA/README.md) for broad workflow matrices. Generic PCC inspection uses LECCLI.
 
 Mesh exports include a versioned `.mfe.json` sidecar. Keep it beside the mesh for a lossless round trip; mesh-only import cannot reconstruct metadata-only controls, bone edits or unique lower-LOD branches.
 

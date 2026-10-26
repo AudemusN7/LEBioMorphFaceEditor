@@ -8,7 +8,7 @@ internal static class PackageTestFixtures
 {
 
     internal static string FixturePath(string fileName) =>
-        Path.GetFullPath(Path.Combine("tests", "Global Morphs", fileName));
+        Path.GetFullPath(Path.Combine("fixtures", "Global Morphs", fileName));
 
     internal static IReadOnlyList<BioMorphFaceListItem> ReadFaces(string path) =>
         new MorphFaceCatalogService().ReadAsync(path).GetAwaiter().GetResult().Faces;

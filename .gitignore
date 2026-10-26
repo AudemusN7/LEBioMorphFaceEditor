@@ -14,12 +14,9 @@ tools/PlayerHeadProbe/
 /Build_MFE.bat
 /Run_MFE_Localiser.bat
 /Run_MFE_QA.bat
+/Run_MFE_Tests.bat
 /Appdata Dir.lnk
-fixtures/local/*
-!fixtures/local/.gitkeep
-fixtures/PCSAV_Test/
-fixtures/RON_Test/
-tests/Global Morphs/
+/fixtures/
 tests/RON Stress Test/
 tests/TUF Tattoos/
 *.user

@@ -51,6 +51,10 @@
     <system:String x:Key="loc_Settings_ExportedTitle" xml:space="preserve">已导出诊断 ZIP</system:String>
     <system:String x:Key="loc_Settings_GenerateLogs" xml:space="preserve">生成故障排查日志</system:String>
     <system:String x:Key="loc_Settings_GenerateLogsButton" xml:space="preserve">导出日志</system:String>
+    <!--localiser: {"Key":"loc_Settings_OpenLogButton","ReviewedHash":null,"DoNotTranslate":false,"Note":"Opens the current application log in the default app.","SourceHash":null}-->
+    <system:String x:Key="loc_Settings_OpenLogButton" xml:space="preserve">打开当前日志</system:String>
+    <!--localiser: {"Key":"loc_Settings_OpenLogFailed","ReviewedHash":null,"DoNotTranslate":false,"Note":"Shown when Windows cannot open the current application log.","SourceHash":null}-->
+    <system:String x:Key="loc_Settings_OpenLogFailed" xml:space="preserve">无法打开应用程序日志。</system:String>
     <system:String x:Key="loc_Settings_GenerateLogsDescription" xml:space="preserve">导出包含近期应用日志、带当前编辑的已打开工作区以及网格/纹理数据库的 ZIP。请发送给 Audemus 用于故障排查。</system:String>
     <system:String x:Key="loc_Settings_Heading" xml:space="preserve">设置</system:String>
     <system:String x:Key="loc_Settings_Language" xml:space="preserve">语言</system:String>
@@ -113,6 +117,10 @@
 
     <!-- Assets - Mesh/Texture Databases -->
     <!--localiser: {"Key":"loc_ManualAssetSelectionWindow_AddCustomAssetsToGame","ReviewedHash":null,"DoNotTranslate":false,"Note":"Manual asset picker heading. {0} = game selected for adding custom assets.","SourceHash":null}-->
+    <!--localiser: {"Key":"loc_ExternalLinks_UnavailableTitle","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_ExternalLinks_UnavailableTitle" xml:space="preserve">无法打开浏览器</system:String>
+    <!--localiser: {"Key":"loc_ExternalLinks_CouldNotOpen","ReviewedHash":null,"DoNotTranslate":false,"Note":"Browser link failure. {0} = the complete HTTPS address to open manually.","SourceHash":null}-->
+    <system:String x:Key="loc_ExternalLinks_CouldNotOpen" xml:space="preserve">无法在浏览器中打开此链接。你可以复制此地址并手动打开：{0}</system:String>
     <system:String x:Key="loc_ManualAssetSelectionWindow_AddCustomAssetsToGame" xml:space="preserve">向 {0} 添加自定义资产</system:String>
     <system:String x:Key="loc_ManualAssetSelectionWindow_SelectAtLeastOneNewAsset" xml:space="preserve">请至少选择一个新资产。</system:String>
     <!--localiser: {"Key":"loc_TextureRegistrySettingsWindow_ChooseGamePccTitle","ReviewedHash":null,"DoNotTranslate":false,"Note":"Texture Registry asset import dialog title. {0} = game selected for the custom asset database.","SourceHash":null}-->
@@ -529,7 +537,7 @@
     <!--localiser: {"Key":"loc_ActorAssignment_SharedBodyMaterial","ReviewedHash":null,"DoNotTranslate":false,"Note":"Actor material assignment retains a Body\u002Dshared MIC and assigns the attachment separately.","SourceHash":null}-->
     <system:String x:Key="loc_ActorAssignment_SharedBodyMaterial" xml:space="preserve">此材质与身体共用。附件更改将使用单独的材质。</system:String>
     <!--localiser: {"Key":"loc_ActorAssignment_TargetCounts","ReviewedHash":null,"DoNotTranslate":false,"Note":"Actor assignment target counts. {0} = parameter MIC count; {1} = hair/accessory mesh count. In the chooser these are safe candidates; in the completion result they are the targets assigned and verified.","SourceHash":null}-->
-    <system:String x:Key="loc_ActorAssignment_TargetCounts" xml:space="preserve">参数 MaterialInstanceConstant：{0} · 头发/配饰网格：{1}</system:String>
+    <system:String x:Key="loc_ActorAssignment_TargetCounts" xml:space="preserve">材质：{0} · 网格：{1}</system:String>
     <!--localiser: {"Key":"loc_Shell_ActorAssignment_Actor","ReviewedHash":null,"DoNotTranslate":false,"Note":"Actor assignment result/report. {0} = exact actor object path in the PCC; preserve the Unreal identifier.","SourceHash":null}-->
     <system:String x:Key="loc_Shell_ActorAssignment_Actor" xml:space="preserve">角色：{0}</system:String>
     <system:String x:Key="loc_Shell_ActorAssignment_BodySkinOnly" xml:space="preserve">身体 MIC：仅添加或更新源中已有的 SkinTone / SkinLightScattering 值。其他所有身体材质数据均已保留。</system:String>
@@ -728,6 +736,8 @@
     <system:String x:Key="loc_Shell_PackageName_NoPackageOpen" xml:space="preserve">未打开资源包</system:String>
     <system:String x:Key="loc_Shell_Status_LoadCancelled" xml:space="preserve">加载已取消。</system:String>
     <system:String x:Key="loc_Shell_Status_OpenAPackageToBegin" xml:space="preserve">请打开资源包以开始。</system:String>
+    <!--localiser: {"Key":"loc_Shell_Status_ReleasingWorkspaceMemory","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_Shell_Status_ReleasingWorkspaceMemory" xml:space="preserve">正在释放工作区内存…</system:String>
     <system:String x:Key="loc_Shell_Status_PackageLoadFailed" xml:space="preserve">资源包加载失败。</system:String>
     <system:String x:Key="loc_Shell_Status_RecentFileCouldNotOpen" xml:space="preserve">无法打开最近使用的文件。</system:String>
     <system:String x:Key="loc_Shell_Status_SelectedFileCouldNotOpen" xml:space="preserve">无法打开所选文件。</system:String>
@@ -1086,6 +1096,20 @@
 
     <!-- Main Window & Context Menu -->
     <!--localiser: {"Key":"loc_Editor_EditBlockedByProfile","ReviewedHash":null,"DoNotTranslate":false,"Note":"Explains a profile or custom\u002Dbase\u002Dmesh geometry restriction. The head remains available for supported material editing; its original geometry is preserved.","SourceHash":null}-->
+    <!--localiser: {"Key":"loc_About_Menu","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_About_Menu" xml:space="preserve">关于</system:String>
+    <!--localiser: {"Key":"loc_About_NexusMods","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_About_NexusMods" xml:space="preserve">Nexus Mods 页面</system:String>
+    <!--localiser: {"Key":"loc_About_GitHub","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_About_GitHub" xml:space="preserve">GitHub 仓库</system:String>
+    <!--localiser: {"Key":"loc_About_Donate","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_About_Donate" xml:space="preserve">捐赠</system:String>
+    <!--localiser: {"Key":"loc_About_AboutMfe","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_About_AboutMfe" xml:space="preserve">关于 MFE</system:String>
+    <!--localiser: {"Key":"loc_Updates_UpdateAvailable","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_Updates_UpdateAvailable" xml:space="preserve">有可用更新</system:String>
+    <!--localiser: {"Key":"loc_Updates_BadgeTooltip","ReviewedHash":null,"DoNotTranslate":false,"Note":"Tooltip for the orange status bar update badge. {0} = latest public release version.","SourceHash":null}-->
+    <system:String x:Key="loc_Updates_BadgeTooltip" xml:space="preserve">版本 {0} 已可用。打开 GitHub 上的最新发布版本。</system:String>
     <system:String x:Key="loc_Editor_EditBlockedByProfile" xml:space="preserve">此头部不支持形变或骨骼编辑。仍可编辑材质。</system:String>
     <!--localiser: {"Key":"loc_Editor_GeometryVerificationMismatch","ReviewedHash":null,"DoNotTranslate":false,"Note":"Explains why the face uses baked geometry rather than live morph evaluation. {0} = maximum per\u002Dvertex difference from the geometry verification comparison; retain six\u002Dsignificant\u002Ddigit formatting.","SourceHash":null}-->
     <system:String x:Key="loc_Editor_GeometryVerificationMismatch" xml:space="preserve">烘焙几何体与形变计算的最大差异为 {0:G6}。</system:String>
@@ -2176,4 +2200,16 @@
     <system:String x:Key="loc_View_MainWindow_PostProcessing" xml:space="preserve">后期处理</system:String>
     <system:String x:Key="loc_View_MainWindow_View" xml:space="preserve">¾ 视角</system:String>
     <system:String x:Key="loc_View_MainWindow_Wireframe" xml:space="preserve">线框</system:String>
+    <!--localiser: {"Key":"loc_View_MainWindow_NewNpcMorph","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_View_MainWindow_NewNpcMorph" xml:space="preserve">新建 NPC Morph</system:String>
+    <!--localiser: {"Key":"loc_StandaloneImportGameWindow_NewNpcPrompt","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_StandaloneImportGameWindow_NewNpcPrompt" xml:space="preserve">请选择新建 NPC Morph 所用的游戏和原型。</system:String>
+    <!--localiser: {"Key":"loc_CloneMorphWindow_NameNewNpcMorph","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_CloneMorphWindow_NameNewNpcMorph" xml:space="preserve">命名新建的 NPC Morph</system:String>
+    <!--localiser: {"Key":"loc_CloneMorphWindow_NewNpcIntro","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_CloneMorphWindow_NewNpcIntro" xml:space="preserve">请为新的 BioMorphFace 命名。</system:String>
+    <!--localiser: {"Key":"loc_Shell_Status_CreatedNpcDefaults","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_Shell_Status_CreatedNpcDefaults" xml:space="preserve">已根据 {1} {2} NPC 默认值创建 {0}。</system:String>
+    <!--localiser: {"Key":"loc_Shell_Error_NewNpcMorphFailed","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_Shell_Error_NewNpcMorphFailed" xml:space="preserve">无法创建 NPC Morph：{0}</system:String>
 </ResourceDictionary>

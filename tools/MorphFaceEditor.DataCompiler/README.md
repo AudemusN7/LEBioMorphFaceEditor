@@ -64,8 +64,8 @@ Nineteen outputs reproduce directly; the two explicit prefix-casing projections 
 Generate candidates into a separate directory and compare identity, values and reviewed exceptions before publication:
 
 ```powershell
-dotnet run --project tools/MorphFaceEditor.DataCompiler -c Release -- corpus-reconciliation "tests/Global Morphs" .codex-temp/generated/CrossGameAssetReconciliation.json
-dotnet run --project tools/MorphFaceEditor.DataCompiler -c Release -- material-oracle "tests/Global Morphs" .codex-temp/generated/MaterialDependencyOracle.json
+dotnet run --project tools/MorphFaceEditor.DataCompiler -c Release -- corpus-reconciliation "fixtures/Global Morphs" .codex-temp/generated/CrossGameAssetReconciliation.json
+dotnet run --project tools/MorphFaceEditor.DataCompiler -c Release -- material-oracle "fixtures/Global Morphs" .codex-temp/generated/MaterialDependencyOracle.json
 dotnet run --project tools/MorphFaceEditor.DataCompiler -c Release -- material-metadata src/MorphFaceEditor.LegendaryExplorer/Assets/StockMaterialMetadata.json .codex-temp/generated/StockMaterialMetadata.json
 ```
 

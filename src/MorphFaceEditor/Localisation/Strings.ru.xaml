@@ -51,6 +51,10 @@
     <system:String x:Key="loc_Settings_ExportedTitle" xml:space="preserve">Диагностический ZIP-файл экспортирован</system:String>
     <system:String x:Key="loc_Settings_GenerateLogs" xml:space="preserve">Создать журналы для устранения неполадок</system:String>
     <system:String x:Key="loc_Settings_GenerateLogsButton" xml:space="preserve">Экспортировать журналы</system:String>
+    <!--localiser: {"Key":"loc_Settings_OpenLogButton","ReviewedHash":null,"DoNotTranslate":false,"Note":"Opens the current application log in the default app.","SourceHash":null}-->
+    <system:String x:Key="loc_Settings_OpenLogButton" xml:space="preserve">Открыть текущий журнал</system:String>
+    <!--localiser: {"Key":"loc_Settings_OpenLogFailed","ReviewedHash":null,"DoNotTranslate":false,"Note":"Shown when Windows cannot open the current application log.","SourceHash":null}-->
+    <system:String x:Key="loc_Settings_OpenLogFailed" xml:space="preserve">Не удалось открыть журнал приложения.</system:String>
     <system:String x:Key="loc_Settings_GenerateLogsDescription" xml:space="preserve">Экспортировать ZIP-файл с недавними журналами приложения, открытой рабочей областью и текущими изменениями, а также базами моделей и текстур. Отправьте файл Audemus для диагностики.</system:String>
     <system:String x:Key="loc_Settings_Heading" xml:space="preserve">НАСТРОЙКИ</system:String>
     <system:String x:Key="loc_Settings_Language" xml:space="preserve">Язык</system:String>
@@ -113,6 +117,10 @@
 
     <!-- Assets - Mesh/Texture Databases -->
     <!--localiser: {"Key":"loc_ManualAssetSelectionWindow_AddCustomAssetsToGame","ReviewedHash":null,"DoNotTranslate":false,"Note":"Manual asset picker heading. {0} = game selected for adding custom assets.","SourceHash":null}-->
+    <!--localiser: {"Key":"loc_ExternalLinks_UnavailableTitle","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_ExternalLinks_UnavailableTitle" xml:space="preserve">Не удалось открыть браузер</system:String>
+    <!--localiser: {"Key":"loc_ExternalLinks_CouldNotOpen","ReviewedHash":null,"DoNotTranslate":false,"Note":"Browser link failure. {0} = the complete HTTPS address to open manually.","SourceHash":null}-->
+    <system:String x:Key="loc_ExternalLinks_CouldNotOpen" xml:space="preserve">Не удалось открыть ссылку в браузере. Вы можете скопировать этот адрес и открыть его вручную: {0}</system:String>
     <system:String x:Key="loc_ManualAssetSelectionWindow_AddCustomAssetsToGame" xml:space="preserve">Добавить пользовательские ресурсы в {0}</system:String>
     <system:String x:Key="loc_ManualAssetSelectionWindow_SelectAtLeastOneNewAsset" xml:space="preserve">Выберите хотя бы один новый ресурс.</system:String>
     <!--localiser: {"Key":"loc_TextureRegistrySettingsWindow_ChooseGamePccTitle","ReviewedHash":null,"DoNotTranslate":false,"Note":"Texture Registry asset import dialog title. {0} = game selected for the custom asset database.","SourceHash":null}-->
@@ -529,7 +537,7 @@
     <!--localiser: {"Key":"loc_ActorAssignment_SharedBodyMaterial","ReviewedHash":null,"DoNotTranslate":false,"Note":"Actor material assignment retains a Body\u002Dshared MIC and assigns the attachment separately.","SourceHash":null}-->
     <system:String x:Key="loc_ActorAssignment_SharedBodyMaterial" xml:space="preserve">Этот материал также используется телом. Изменения дополнений будут использовать отдельный материал.</system:String>
     <!--localiser: {"Key":"loc_ActorAssignment_TargetCounts","ReviewedHash":null,"DoNotTranslate":false,"Note":"Actor assignment target counts. {0} = parameter MIC count; {1} = hair/accessory mesh count. In the chooser these are safe candidates; in the completion result they are the targets assigned and verified.","SourceHash":null}-->
-    <system:String x:Key="loc_ActorAssignment_TargetCounts" xml:space="preserve">Параметрические MaterialInstanceConstants: {0} · Сетки волос/аксессуаров: {1}</system:String>
+    <system:String x:Key="loc_ActorAssignment_TargetCounts" xml:space="preserve">МАТЕРИАЛЫ: {0} · СЕТКИ: {1}</system:String>
     <!--localiser: {"Key":"loc_Shell_ActorAssignment_Actor","ReviewedHash":null,"DoNotTranslate":false,"Note":"Actor assignment result/report. {0} = exact actor object path in the PCC; preserve the Unreal identifier.","SourceHash":null}-->
     <system:String x:Key="loc_Shell_ActorAssignment_Actor" xml:space="preserve">Актёр: {0}</system:String>
     <system:String x:Key="loc_Shell_ActorAssignment_BodySkinOnly" xml:space="preserve">MIC тела: добавлены или обновлены только значения SkinTone / SkinLightScattering, присутствующие в источнике. Все остальные данные материалов тела сохранены.</system:String>
@@ -728,6 +736,8 @@
     <system:String x:Key="loc_Shell_PackageName_NoPackageOpen" xml:space="preserve">Пакет не открыт</system:String>
     <system:String x:Key="loc_Shell_Status_LoadCancelled" xml:space="preserve">Загрузка отменена.</system:String>
     <system:String x:Key="loc_Shell_Status_OpenAPackageToBegin" xml:space="preserve">Откройте пакет, чтобы начать.</system:String>
+    <!--localiser: {"Key":"loc_Shell_Status_ReleasingWorkspaceMemory","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_Shell_Status_ReleasingWorkspaceMemory" xml:space="preserve">Очистка оперативной памяти рабочего пространства…</system:String>
     <system:String x:Key="loc_Shell_Status_PackageLoadFailed" xml:space="preserve">Не удалось загрузить пакет.</system:String>
     <system:String x:Key="loc_Shell_Status_RecentFileCouldNotOpen" xml:space="preserve">Не удалось открыть недавний файл.</system:String>
     <system:String x:Key="loc_Shell_Status_SelectedFileCouldNotOpen" xml:space="preserve">Не удалось открыть выбранный файл.</system:String>
@@ -1086,6 +1096,20 @@
 
     <!-- Main Window & Context Menu -->
     <!--localiser: {"Key":"loc_Editor_EditBlockedByProfile","ReviewedHash":null,"DoNotTranslate":false,"Note":"Explains a profile or custom\u002Dbase\u002Dmesh geometry restriction. The head remains available for supported material editing; its original geometry is preserved.","SourceHash":null}-->
+    <!--localiser: {"Key":"loc_About_Menu","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_About_Menu" xml:space="preserve">О программе</system:String>
+    <!--localiser: {"Key":"loc_About_NexusMods","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_About_NexusMods" xml:space="preserve">Страница на Nexus Mods</system:String>
+    <!--localiser: {"Key":"loc_About_GitHub","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_About_GitHub" xml:space="preserve">Репозиторий GitHub</system:String>
+    <!--localiser: {"Key":"loc_About_Donate","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_About_Donate" xml:space="preserve">Поддержать автора</system:String>
+    <!--localiser: {"Key":"loc_About_AboutMfe","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_About_AboutMfe" xml:space="preserve">О MFE</system:String>
+    <!--localiser: {"Key":"loc_Updates_UpdateAvailable","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_Updates_UpdateAvailable" xml:space="preserve">Доступно обновление</system:String>
+    <!--localiser: {"Key":"loc_Updates_BadgeTooltip","ReviewedHash":null,"DoNotTranslate":false,"Note":"Tooltip for the orange status bar update badge. {0} = latest public release version.","SourceHash":null}-->
+    <system:String x:Key="loc_Updates_BadgeTooltip" xml:space="preserve">Доступна версия {0}. Откройте последнюю версию на GitHub.</system:String>
     <system:String x:Key="loc_Editor_EditBlockedByProfile" xml:space="preserve">Эта голова не поддерживает редактирование морфа или костей. Редактирование материалов остаётся доступным.</system:String>
     <!--localiser: {"Key":"loc_Editor_GeometryVerificationMismatch","ReviewedHash":null,"DoNotTranslate":false,"Note":"Explains why the face uses baked geometry rather than live morph evaluation. {0} = maximum per\u002Dvertex difference from the geometry verification comparison; retain six\u002Dsignificant\u002Ddigit formatting.","SourceHash":null}-->
     <system:String x:Key="loc_Editor_GeometryVerificationMismatch" xml:space="preserve">Зафиксированная геометрия отличается от расчёта морфа на величину до {0:G6}.</system:String>
@@ -2176,4 +2200,16 @@
     <system:String x:Key="loc_View_MainWindow_PostProcessing" xml:space="preserve">Постобработка</system:String>
     <system:String x:Key="loc_View_MainWindow_View" xml:space="preserve">¾ вида</system:String>
     <system:String x:Key="loc_View_MainWindow_Wireframe" xml:space="preserve">Каркас</system:String>
+    <!--localiser: {"Key":"loc_View_MainWindow_NewNpcMorph","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_View_MainWindow_NewNpcMorph" xml:space="preserve">Новый морф NPC</system:String>
+    <!--localiser: {"Key":"loc_StandaloneImportGameWindow_NewNpcPrompt","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_StandaloneImportGameWindow_NewNpcPrompt" xml:space="preserve">Выберите игру и архетип для нового морфа NPC.</system:String>
+    <!--localiser: {"Key":"loc_CloneMorphWindow_NameNewNpcMorph","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_CloneMorphWindow_NameNewNpcMorph" xml:space="preserve">Имя нового морфа NPC</system:String>
+    <!--localiser: {"Key":"loc_CloneMorphWindow_NewNpcIntro","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_CloneMorphWindow_NewNpcIntro" xml:space="preserve">Выберите имя для нового BioMorphFace.</system:String>
+    <!--localiser: {"Key":"loc_Shell_Status_CreatedNpcDefaults","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_Shell_Status_CreatedNpcDefaults" xml:space="preserve">Создан {0} на основе стандартных параметров NPC: {1} {2}.</system:String>
+    <!--localiser: {"Key":"loc_Shell_Error_NewNpcMorphFailed","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_Shell_Error_NewNpcMorphFailed" xml:space="preserve">Не удалось создать морф NPC: {0}</system:String>
 </ResourceDictionary>

@@ -107,7 +107,7 @@ internal static class UiWorkspaceTests
 
     private static void ArchetypeSwitchReleasesInactiveCaches() => RunWithDispatcher(async () =>
     {
-        var source = Path.GetFullPath(Path.Combine("tests", "Global Morphs", "LE1 GlobalMorphs.pcc"));
+        var source = Path.GetFullPath(Path.Combine("fixtures", "Global Morphs", "LE1 GlobalMorphs.pcc"));
         var original = PackageFingerprint.Capture(source);
         using var reader = new MorphFacePackageReader();
         var dialogs = new StubEditorDialogs { ConfirmUnsavedChangesResult = UnsavedChangesChoice.Cancel };
@@ -169,7 +169,7 @@ internal static class UiWorkspaceTests
 
     private static void CloseReleasesReaderCaches() => RunWithDispatcher(async () =>
     {
-        var source = Path.GetFullPath(Path.Combine("tests", "Global Morphs", "LE1 GlobalMorphs.pcc"));
+        var source = Path.GetFullPath(Path.Combine("fixtures", "Global Morphs", "LE1 GlobalMorphs.pcc"));
         var original = PackageFingerprint.Capture(source);
         using var reader = new MorphFacePackageReader();
         var dialogs = new StubEditorDialogs { ConfirmUnsavedChangesResult = UnsavedChangesChoice.Cancel };
@@ -227,7 +227,7 @@ internal static class UiWorkspaceTests
             var source = Path.Combine(root, "Current.pcc");
             var replacement = Path.Combine(root, "Replacement.pcc");
             var invalid = Path.Combine(root, $"Broken-{Guid.NewGuid():N}.pcc");
-            File.Copy(Path.GetFullPath(Path.Combine("tests", "Global Morphs", "LE1 GlobalMorphs.pcc")), source);
+            File.Copy(Path.GetFullPath(Path.Combine("fixtures", "Global Morphs", "LE1 GlobalMorphs.pcc")), source);
             File.Copy(source, replacement);
             File.WriteAllText(invalid, "Not a PCC");
             var original = File.ReadAllBytes(source);
@@ -440,7 +440,7 @@ internal static class UiWorkspaceTests
             var source = Path.Combine(directory, "Source.pcc");
             var copy = Path.Combine(directory, "Copy.pcc");
             var lockedPath = Path.Combine(directory, "Locked.pcc");
-            File.Copy(Path.GetFullPath("tests/Global Morphs/LE1 GlobalMorphs.pcc"), source);
+            File.Copy(Path.GetFullPath("fixtures/Global Morphs/LE1 GlobalMorphs.pcc"), source);
             File.Copy(source, lockedPath);
             var original = PackageFingerprint.Capture(source);
             using var reader = new MorphFacePackageReader();

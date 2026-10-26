@@ -28,7 +28,7 @@ internal static class InstalledAssetResolutionTests
 
     private static void MissingOptionalAssetsExportWithDefaults()
     {
-        var sourcePath = Path.GetFullPath("tests/Global Morphs/LE1 GlobalMorphs.pcc");
+        var sourcePath = Path.GetFullPath("fixtures/Global Morphs/LE1 GlobalMorphs.pcc");
         var destination = Path.Combine(Path.GetTempPath(), $"MFE-Missing-Optional-{Guid.NewGuid():N}.pcc");
         try
         {
@@ -154,7 +154,7 @@ internal static class InstalledAssetResolutionTests
     {
         LegendaryExplorerCoreRuntime.Initialize();
         const string texturePath = "BIOG_Humanoid_MASTER_MTR_R.Skin_AsariHED_SpecMulitplier_Mask";
-        var sourcePath = Path.GetFullPath("tests/Global Morphs/LE1 GlobalMorphs.pcc");
+        var sourcePath = Path.GetFullPath("fixtures/Global Morphs/LE1 GlobalMorphs.pcc");
         var donorPath = Path.Combine(Path.GetTempPath(), $"MFE-SelectedDonor-{Guid.NewGuid():N}.pcc");
         var firstPath = Path.Combine(Path.GetTempPath(), $"MFE-SelectedFirst-{Guid.NewGuid():N}.pcc");
         var secondPath = Path.Combine(Path.GetTempPath(), $"MFE-SelectedSecond-{Guid.NewGuid():N}.pcc");

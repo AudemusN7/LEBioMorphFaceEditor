@@ -33,6 +33,6 @@ To use or ship edits, update the source catalogues and rebuild. All languages ar
 
 Build: `dotnet build MorphFaceEditor.slnx -c Release --no-restore` after restore.
 
-Focused checks: `dotnet run --project tests/MorphFaceEditor.Tests -c Release --no-build -- --suite tooling localiser` and `--suite ui localisation "WPF resources"`.
+Focused checks: `dotnet run --project tools/MorphFaceEditor.Tests -c Release --no-build -- --suite tooling localiser` and `--suite ui localisation "WPF resources"`.
 
 The routine tests use temporary copies of the full master and a hidden WPF window; they do not launch the product apps or modify the source corpus.

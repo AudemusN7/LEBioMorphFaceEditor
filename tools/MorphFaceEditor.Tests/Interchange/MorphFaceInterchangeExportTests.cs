@@ -16,7 +16,7 @@ public static class MorphFaceInterchangeExportTests
     {
         LegendaryExplorerCoreRuntime.Initialize();
         var sourcePath = Path.GetFullPath(Path.Combine(
-            "tests", "Global Morphs", "LE2 GlobalMorphs.pcc"));
+            "fixtures", "Global Morphs", "LE2 GlobalMorphs.pcc"));
         if (!File.Exists(sourcePath))
         {
             throw new FileNotFoundException("The LE2 GlobalMorphs fixture is required for the indexed mesh-name regression.", sourcePath);

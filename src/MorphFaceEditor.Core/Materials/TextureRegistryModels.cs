@@ -22,7 +22,7 @@ public sealed record TextureRegistrySnapshot(
     int InstalledPackageCount,
     IReadOnlyList<TextureCatalogCandidate> Candidates)
 {
-    public const int CurrentSchemaVersion = 2;
+    public const int CurrentSchemaVersion = 1;
 
     // Complete identity index, including dependencies outside the head pickers.
     public IReadOnlyList<InstalledAssetOccurrence> Assets { get; init; } = [];

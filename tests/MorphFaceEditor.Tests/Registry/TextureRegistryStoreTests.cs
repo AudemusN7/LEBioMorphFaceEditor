@@ -514,7 +514,7 @@ public static class TextureRegistryStoreTests
         var reopened = fixture.Store.Read(MorphFaceGame.LE1);
         var status = fixture.Store.GetStatus(MorphFaceGame.LE1);
 
-        TestAssert.Equal(TextureRegistrySnapshot.CurrentSchemaVersion, reopened.SchemaVersion);
+        TestAssert.Equal(1, reopened.SchemaVersion);
         TestAssert.Equal(MorphFaceGame.LE1, reopened.Game);
         TestAssert.Equal(37, reopened.InstalledPackageCount);
         TestAssert.Equal(1, reopened.Candidates.Count);

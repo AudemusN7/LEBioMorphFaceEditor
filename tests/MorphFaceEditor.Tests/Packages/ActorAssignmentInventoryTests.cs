@@ -146,6 +146,8 @@ public static class ActorAssignmentInventoryTests
             incompatibleHead.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(hmmMic)], "Materials"));
             var actor = package.CreateExport("MixedEvidenceActor", "BioPawn", indexed: false);
             actor.WriteProperty(new ObjectProperty(incompatibleHead, "HeadMesh"));
+            var currentMorph = package.CreateExport("ActorCurrentFace", "BioMorphFace", indexed: false);
+            actor.WriteProperty(new ObjectProperty(currentMorph, "MorphHead"));
             package.Save();
 
             var candidate = new ActorAssignmentInventoryService((_, _) => null)
@@ -157,6 +159,11 @@ public static class ActorAssignmentInventoryTests
                 "Recognized incompatible head mesh did not block morph assignment.");
             TestAssert.True(candidate.CanAssignMaterials && candidate.SafeMaterialCount == 1,
                 "A compatible local MIC was suppressed by independently incompatible head geometry.");
+            var choice = new MorphFaceEditor.ViewModels.ActorAssignmentChoice(candidate, ActorAssignmentMode.Materials);
+            TestAssert.True(choice.EvidenceSummary.Contains(currentMorph.ObjectNameString, StringComparison.Ordinal),
+                "The material assignment row hides the actor's current morph.");
+            TestAssert.Equal(Loc.Format("loc_ActorAssignment_TargetCounts", candidate.SafeMaterialCount,
+                candidate.AttachmentTargets.Count), choice.EligibilityLabel);
             selected.WriteProperty(new ObjectProperty(0, "m_oMaterialOverrides"));
             package.Save();
             candidate = new ActorAssignmentInventoryService((_, _) => null)

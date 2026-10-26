@@ -8,6 +8,9 @@ public interface IEditorHistoryAggregate : IDisposable
 /// <summary>Owns the editor's chronological edits, including gestures and atomic composites.</summary>
 public sealed class EditorHistory
 {
+    public EditorHistory() { }
+    internal EditorHistory(TextureHistoryStore textureStorage) => _textureStorage = textureStorage;
+    private TextureHistoryStore? _textureStorage;
     private readonly Stack<IReadOnlyList<Edit>> _undo = new();
     private readonly Stack<IReadOnlyList<Edit>> _redo = new();
     private object? _gestureKey;
@@ -18,6 +21,13 @@ public sealed class EditorHistory
     public event EventHandler? HistoryChanged;
     public bool CanUndo => _undo.Count > 0;
     public bool CanRedo => _redo.Count > 0;
+
+    internal TextureHistoryStore.HistoryTextureSnapshot? CaptureTexture(MorphFaceEditor.Core.Materials.DecodedTextureAsset? texture) =>
+        texture is null ? null : (_textureStorage ??= new()).Capture(texture);
+
+    public TextureHistoryStatistics TextureStorageStatistics => _textureStorage?.Statistics ?? new(0, 0, 0, 0, 0, 0, 0);
+
+    public Task WaitForTextureWritesAsync() => _textureStorage?.WhenWritesComplete ?? Task.CompletedTask;
 
     /// <summary>Records typed authored state; matching gesture updates retain its original before state.</summary>
     public bool Record<T>(object key, T before, T after, Action<T> restore)

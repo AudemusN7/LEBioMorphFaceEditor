@@ -25,6 +25,7 @@ internal sealed class MorphFaceMaterialReader(
 {
     private const long MaximumDecodedTextureBytes = 384L * 1024 * 1024;
     private readonly Dictionary<string, LinkedListNode<DecodedTextureAsset>> _textureCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, CachedTextureIdentity> _textureCacheAliases = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, CachedMaterialMetadata> _materialCache = new(StringComparer.OrdinalIgnoreCase);
     private const int MaximumReferenceShaderMapCacheEntries = 64;
     private const int MaximumLocalShaderMapCacheEntries = 32;
@@ -58,6 +59,7 @@ internal sealed class MorphFaceMaterialReader(
     public MaterialReadMetrics LastReadMetrics { get; private set; } = new(TimeSpan.Zero, TimeSpan.Zero, 0, 0);
 
     private sealed record TextureMetadata(AssetIdentity Source, MaterialParameterDefinition Definition);
+    private sealed record CachedTextureIdentity(string SourceKey, string CanonicalKey, string CanonicalPath);
     private sealed record CubeMetadata(AssetIdentity Source, IReadOnlyList<AssetIdentity> Faces);
     private sealed record CachedMaterialMetadata(
         ResolvedHeadMaterial Material,
@@ -269,6 +271,31 @@ internal sealed class MorphFaceMaterialReader(
         return DecodeTexture(MorphFacePackageReader.ToIdentity(texture)!, definition);
     }
 
+    internal bool TryGetCachedTexture(string packagePath, string texturePath,
+        MaterialParameterDefinition definition, out DecodedTextureAsset texture)
+    {
+        // Evicting raw PCC data must not make a decoded-pixel hit reopen the file.
+        // Source stamps still invalidate both pixels and aliases after external edits.
+        PackageSourceCache.Verify(packageCache, packagePath);
+        var key = Path.GetFullPath(packagePath) + "|" + texturePath;
+        if (_textureCacheAliases.TryGetValue(key, out var identity) &&
+            _textureCache.TryGetValue(identity.SourceKey, out var cached))
+        {
+            _textureCacheLru.Remove(cached);
+            _textureCacheLru.AddLast(cached);
+            texture = cached.Value with
+            {
+                Source = cached.Value.Source with { InstancedPath = identity.CanonicalPath },
+                Role = definition.TextureRole,
+                ColorSpace = definition.ColorSpace,
+                AlphaPolicy = definition.AlphaPolicy
+            };
+            return true;
+        }
+        texture = null!;
+        return false;
+    }
+
     /// <summary>Decodes one authored mip for picker thumbnails without entering the full-preview cache.</summary>
     internal DecodedTextureAsset DecodeTextureThumbnailReference(
         ExportEntry texture,
@@ -300,6 +327,33 @@ internal sealed class MorphFaceMaterialReader(
             top.width, top.height, [decodedMip]);
     }
 
+    internal void ClearCaches(bool preserveDecodedTextures = false)
+    {
+        if (!preserveDecodedTextures)
+        {
+            _textureCache.Clear();
+            _textureCacheAliases.Clear();
+            _textureCacheLru.Clear();
+            _decodedTextureBytes = 0;
+        }
+        _materialCache.Clear();
+        _shaderMaps.Clear();
+        _referenceShaderMaps.Clear();
+        _referenceShaderMapsLru.Clear();
+    }
+
+    internal void RetainTextureCache(ResolvedHeadMaterialSet materials)
+    {
+        // Use actual resolved assets rather than species rules: eyes, scalp and
+        // attachments can legitimately share textures across archetypes.
+        var retained = materials.Materials.Values.SelectMany(material => material.Textures.Values
+                .Concat(material.DefaultTextures.Values).Concat(material.DefaultTextureOverrides.Values))
+            .Select(binding => MaterialIdentityKey.Create(binding.Texture.Source))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var key in _textureCache.Keys.Where(key => !retained.Contains(key)).ToArray())
+            RemoveCachedTexture(key);
+    }
+
     public void InvalidatePackage(string packagePath)
     {
         var fullPath = Path.GetFullPath(packagePath);
@@ -319,12 +373,18 @@ internal sealed class MorphFaceMaterialReader(
                      .Select(pair => pair.Key)
                      .ToArray())
         {
-            if (_textureCache.Remove(key, out var removed))
-            {
-                _decodedTextureBytes -= GetDecodedByteCount(removed.Value);
-                _textureCacheLru.Remove(removed);
-            }
+            RemoveCachedTexture(key);
         }
+    }
+
+    private void RemoveCachedTexture(string sourceKey)
+    {
+        if (!_textureCache.Remove(sourceKey, out var removed)) return;
+        _decodedTextureBytes -= GetDecodedByteCount(removed.Value);
+        _textureCacheLru.Remove(removed);
+        if (_textureCacheAliases.Remove(sourceKey, out var identity) &&
+            _textureCacheAliases.GetValueOrDefault(identity.CanonicalKey) == identity)
+            _textureCacheAliases.Remove(identity.CanonicalKey);
     }
 
     private ResolvedHeadMaterial Materialize(CachedMaterialMetadata metadata, List<string>? warnings)
@@ -1272,12 +1332,18 @@ internal sealed class MorphFaceMaterialReader(
             return decoded;
         }
         _textureCache[sourceKey] = _textureCacheLru.AddLast(decoded);
+        var canonicalPath = PccAssetPathPolicy.FromExport(export);
+        var canonicalKey = Path.GetFullPath(source.PackagePath) + "|" + canonicalPath;
+        var identity = new CachedTextureIdentity(sourceKey, canonicalKey, canonicalPath);
+        _textureCacheAliases[sourceKey] = identity;
+        // Only alias a seekfree spelling when no distinct exact export owns it.
+        if (canonicalKey.Equals(sourceKey, StringComparison.OrdinalIgnoreCase) ||
+            export.FileRef.FindEntry(canonicalPath, "Texture2D") is null)
+            _textureCacheAliases[canonicalKey] = identity;
         _decodedTextureBytes += decodedBytes;
         while (_decodedTextureBytes > MaximumDecodedTextureBytes && _textureCacheLru.First is { } expired)
         {
-            _textureCacheLru.RemoveFirst();
-            _textureCache.Remove(MaterialIdentityKey.Create(expired.Value.Source));
-            _decodedTextureBytes -= GetDecodedByteCount(expired.Value);
+            RemoveCachedTexture(MaterialIdentityKey.Create(expired.Value.Source));
         }
         return decoded;
     }

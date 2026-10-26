@@ -41,6 +41,7 @@ public sealed class MorphFacePreviewLoadService : IDisposable
         CancellationToken cancellationToken = default,
         MorphFaceGeometryMode? geometryMode = null) => Task.Run(() =>
     {
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
         cancellationToken.ThrowIfCancellationRequested();
         var loaded = _reader.Load(packagePath, exportSelector);
         cancellationToken.ThrowIfCancellationRequested();
@@ -95,6 +96,9 @@ public sealed class MorphFacePreviewLoadService : IDisposable
         var scene = session.UsesLiveDeformationPreview || session.CanEditBones
             ? _sceneFactory.CreateEditable(previewLoaded, session.Evaluation)
             : _sceneFactory.Create(previewLoaded);
+        var cache = _reader.PackageCacheStatistics;
+        AppLog.Information($"PERF:FACE-LOAD PROFILE:{profile.Key} MS:{System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds:F0} " +
+            $"PCCS:{cache.Packages} PCCBYTES:{cache.EstimatedBytes} PCCHITS:{cache.Hits} PCCMISSES:{cache.Misses}");
         return new MorphFacePreviewLoadResult(loaded, scene, session, materialSession, profile);
     }, cancellationToken);
 

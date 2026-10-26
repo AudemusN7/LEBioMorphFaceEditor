@@ -4,6 +4,7 @@
     <RootNamespace>MorphFaceEditor.Core</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="MorphFaceEditor.Tests" />
     <EmbeddedResource Include="Assets\Randomisation\GlobalMorphs.mfr.br"
                       LogicalName="MorphFaceEditor.Core.Assets.Randomisation.%(Filename)%(Extension)" />
     <!-- Required files are explicit so a missing bundle fails compilation. -->

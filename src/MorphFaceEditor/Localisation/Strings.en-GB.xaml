@@ -1147,6 +1147,7 @@ Baked destination LODs: {9}{10}{11}</system:String>
     <system:String x:Key="loc_Shell_Status_LoadCancelled" xml:space="preserve">Load cancelled.</system:String>
     <!--localiser: {"Key":"loc_Shell_Status_OpenAPackageToBegin","ReviewedHash":"8F50BB9E3500B60AFB1BFFA3D72771D393AF49FF61EFF943838EAF27CD0AE5D4","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_Shell_Status_OpenAPackageToBegin" xml:space="preserve">Open a package to begin.</system:String>
+    <system:String x:Key="loc_Shell_Status_ReleasingWorkspaceMemory" xml:space="preserve">Releasing workspace memory…</system:String>
     <!--localiser: {"Key":"loc_Shell_Status_PackageLoadFailed","ReviewedHash":"DFA44ED73B8A48F8D02D2FB43ABE876F5864A03C54C261B6446529B49C381E5D","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_Shell_Status_PackageLoadFailed" xml:space="preserve">Package load failed.</system:String>
     <!--localiser: {"Key":"loc_Shell_Status_RecentFileCouldNotOpen","ReviewedHash":"D5A670AC8E639E33A977A0F434FC5581A3B6C65CC2F92293EC06CD2C7466C2B6","DoNotTranslate":false,"Note":"","SourceHash":null}-->

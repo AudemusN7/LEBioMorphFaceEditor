@@ -9,6 +9,8 @@ using MorphFaceEditor.Infrastructure;
 using LegendaryExplorerCore.Unreal;
 using LegendaryExplorerCore.Packages;
 using LegendaryExplorerCore.Unreal.BinaryConverters;
+using System.Reflection;
+using System.Runtime.CompilerServices;
 
 using static MorphFaceEditor.Tests.UiTestFixtures;
 
@@ -19,12 +21,127 @@ internal static class UiWorkspaceTests
     internal static IReadOnlyList<TestCase> All { get; } =
     [
         new("failed replacement retains the live workspace and releases its candidate", FailedReplacementKeepsLiveWorkspace),
+        new("workspace close releases cached packages and pixels and allows reopening", CloseReleasesReaderCaches),
+        new("archetype switches release old packages while reusing shared texture pixels", ArchetypeSwitchReleasesInactiveCaches),
         new("RON save failure preserves edits and Save As adopts its successful copy", SourceFileSaveRoundTrip),
         new("partial RON saves retain unrelated edits and chronological dirty state", PartialRonSaveRetainsHistory),
         new("PCC Save As retains staged faces on failure and adopts the successful copy", PccSaveAsAdoptsSuccessfulCopy),
         new("additional Player imports and face switches retain both edited drafts", AdditionalPlayerImportsRetainStagedEdits),
         new("cancelled or failed career deletion retains source and pending edits", CareerDeletionPreservesStateOnFailure)
     ];
+
+    private static void ArchetypeSwitchReleasesInactiveCaches() => RunWithDispatcher(async () =>
+    {
+        var source = Path.GetFullPath(Path.Combine("tests", "Global Morphs", "LE1 GlobalMorphs.pcc"));
+        var original = PackageFingerprint.Capture(source);
+        using var reader = new MorphFacePackageReader();
+        var dialogs = new StubEditorDialogs { ConfirmUnsavedChangesResult = UnsavedChangesChoice.Cancel };
+        using var shell = CreateMainWindowViewModel(reader, dialogs);
+        await shell.OpenDroppedFileAsync(source);
+        var maleFaces = shell.Faces.Where(face => face.ProfileKey == "le1-human-male").Take(2).ToArray();
+        TestAssert.Equal(2, maleFaces.Length);
+        shell.SelectedFace = maleFaces[0];
+        await ((AsyncRelayCommand)shell.LoadSelectedFaceCommand).ExecuteAsync();
+        TestAssert.True(shell.Editor is not null, shell.ErrorMessage ?? "Initial face did not load.");
+        var initial = CaptureReaderRetentions(reader);
+        shell.SelectedFace = maleFaces[1];
+        await ((AsyncRelayCommand)shell.LoadSelectedFaceCommand).ExecuteAsync();
+        TestAssert.True(initial.Packages.Any(reference => reference.IsAlive),
+            "A face switch within the same archetype discarded the warm package cache.");
+
+        shell.Editor!.Material.Scalars.First().Value += 0.125f;
+        var retiredEditor = new WeakReference(shell.Editor);
+        var retired = CaptureReaderRetentions(reader);
+        var oldPixels = CaptureReaderTexturePixels(reader);
+        var female = shell.Faces.First(face => face.ProfileKey == "le1-human-female");
+        shell.SelectedFace = female;
+        await ((AsyncRelayCommand)shell.LoadSelectedFaceCommand).ExecuteAsync();
+        TestAssert.True(ReferenceEquals(retiredEditor.Target, shell.Editor) && shell.Editor!.IsDirty,
+            "Cancelling an archetype switch discarded the current editor.");
+
+        dialogs.ConfirmUnsavedChangesResult = UnsavedChangesChoice.Discard;
+        shell.SelectedFace = female;
+        await ((AsyncRelayCommand)shell.LoadSelectedFaceCommand).ExecuteAsync();
+        TestAssert.True(shell.Editor is not null && shell.HasPreview && !shell.HasError && !shell.IsBusy,
+            shell.ErrorMessage ?? "Archetype switch failed to publish the new editor.");
+        var currentPixels = CaptureReaderTexturePixels(reader);
+        var shared = oldPixels.Keys.Intersect(currentPixels.Keys, StringComparer.OrdinalIgnoreCase).ToArray();
+        TestAssert.True(shared.Length > 0, "The fixture must exercise textures shared by male and female heads.");
+        TestAssert.True(shared.All(key => ReferenceEquals(oldPixels[key].Target, currentPixels[key].Target)),
+            "Switching archetype decoded shared textures again instead of reusing their pixels.");
+        var unused = oldPixels.Where(pair => !currentPixels.ContainsKey(pair.Key)).Select(pair => pair.Value).ToArray();
+        TestAssert.True(unused.Length > 0, "The fixture must also exercise textures no longer used by the new face.");
+        await Task.Run(static () => GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true));
+        TestAssert.True(!retiredEditor.IsAlive && retired.Packages.All(reference => !reference.IsAlive) &&
+                        unused.All(reference => !reference.IsAlive),
+            "The retired archetype still owns an editor, donor PCCs or unused texture pixels.");
+        shell.Editor!.Material.Scalars.First().Value += 0.125f;
+        TestAssert.True(shell.Editor.IsDirty && shell.Editor.UndoCommand.CanExecute(null),
+            "The new editor lost material editing or Undo after cache cleanup.");
+        TestAssert.Equal(original, PackageFingerprint.Capture(source));
+    });
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static Dictionary<string, WeakReference> CaptureReaderTexturePixels(MorphFacePackageReader reader)
+    {
+        const BindingFlags hidden = BindingFlags.Instance | BindingFlags.NonPublic;
+        var materials = typeof(MorphFacePackageReader).GetField("_materialReader", hidden)!.GetValue(reader)!;
+        var textures = (LinkedList<DecodedTextureAsset>)materials.GetType()
+            .GetField("_textureCacheLru", hidden)!.GetValue(materials)!;
+        return textures.ToDictionary(texture => MaterialIdentityKey.Create(texture.Source),
+            texture => new WeakReference(texture.Rgba8), StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static void CloseReleasesReaderCaches() => RunWithDispatcher(async () =>
+    {
+        var source = Path.GetFullPath(Path.Combine("tests", "Global Morphs", "LE1 GlobalMorphs.pcc"));
+        var original = PackageFingerprint.Capture(source);
+        using var reader = new MorphFacePackageReader();
+        var dialogs = new StubEditorDialogs { ConfirmUnsavedChangesResult = UnsavedChangesChoice.Cancel };
+        using var shell = CreateMainWindowViewModel(reader, dialogs);
+        await shell.OpenDroppedFileAsync(source);
+        shell.SelectedFace = shell.Faces.First(face => face.ProfileKey == "le1-human-male");
+        await ((AsyncRelayCommand)shell.LoadSelectedFaceCommand).ExecuteAsync();
+        TestAssert.True(shell.Editor is not null && shell.HasPreview, shell.ErrorMessage ?? "Face did not load.");
+        shell.Editor!.Material.Scalars.First().Value += 0.125f;
+        var retained = CaptureReaderRetentions(reader);
+        TestAssert.True(retained.Packages.Length > 1 && retained.Pixels.Length > 0,
+            "The close regression requires cached donor packages and decoded texture pixels.");
+
+        await shell.CloseWorkspaceAsync();
+        TestAssert.True(shell.HasWorkspace && shell.Editor is { IsDirty: true } &&
+                        retained.Packages.Any(reference => reference.IsAlive),
+            "Cancelling close discarded the editor or its reusable package data.");
+
+        dialogs.ConfirmUnsavedChangesResult = UnsavedChangesChoice.Discard;
+        await shell.CloseWorkspaceAsync();
+        TestAssert.True(!shell.HasWorkspace && shell.Editor is null && !shell.HasPreview && !shell.IsBusy,
+            "Close did not finish clearing the workspace or left commands busy.");
+        TestAssert.True(retained.Packages.All(reference => !reference.IsAlive) &&
+                        retained.Pixels.All(reference => !reference.IsAlive),
+            "Closed-workspace caches still retain PCCs or decoded texture pixels.");
+
+        await shell.OpenDroppedFileAsync(source);
+        shell.SelectedFace = shell.Faces.First(face => face.ProfileKey == "le1-human-male");
+        await ((AsyncRelayCommand)shell.LoadSelectedFaceCommand).ExecuteAsync();
+        TestAssert.True(shell.Editor is not null && shell.HasPreview && !shell.HasError,
+            shell.ErrorMessage ?? "The cleared reader could not load another workspace.");
+        TestAssert.Equal(original, PackageFingerprint.Capture(source));
+    });
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static (WeakReference[] Packages, WeakReference[] Pixels) CaptureReaderRetentions(MorphFacePackageReader reader)
+    {
+        // Observe lifetimes, not dictionary counts: a mesh/material side cache can
+        // keep a PCC alive even after it has left the main package cache.
+        const BindingFlags hidden = BindingFlags.Instance | BindingFlags.NonPublic;
+        var packages = (PackageCache)typeof(MorphFacePackageReader).GetField("_packageCache", hidden)!.GetValue(reader)!;
+        var materials = typeof(MorphFacePackageReader).GetField("_materialReader", hidden)!.GetValue(reader)!;
+        var textures = (LinkedList<DecodedTextureAsset>)materials.GetType()
+            .GetField("_textureCacheLru", hidden)!.GetValue(materials)!;
+        return (packages.Cache.Values.Select(package => new WeakReference(package)).ToArray(),
+            textures.Select(texture => new WeakReference(texture.Rgba8)).ToArray());
+    }
 
     private static void FailedReplacementKeepsLiveWorkspace() => RunWithDispatcher(async () =>
     {
@@ -87,7 +204,8 @@ internal static class UiWorkspaceTests
             var sourceRon = File.ReadAllBytes(ron);
             var beforeCandidates = Directory.GetFiles(Path.GetDirectoryName(workingPath)!).ToHashSet(StringComparer.OrdinalIgnoreCase);
             await shell.OpenDroppedFileAsync(ron);
-            TestAssert.True(shell.ErrorMessage?.Contains("unsupported base head", StringComparison.OrdinalIgnoreCase) == true,
+            TestAssert.True(shell.ErrorMessage?.Contains(Loc.Format("loc_Services_MorphFacePreviewLoad_UnsupportedBaseHead",
+                    MorphFaceGame.LE2, "BIOG_HMF_HED_PROMorph_R.Custom.HMF_HED_PROCustom_MDL"), StringComparison.Ordinal) == true,
                 shell.ErrorMessage ?? "Candidate did not reach the simulated final preview failure.");
             CheckRetained();
             TestAssert.True(beforeCandidates.SetEquals(Directory.GetFiles(Path.GetDirectoryName(workingPath)!)) &&

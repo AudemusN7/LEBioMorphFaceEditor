@@ -60,9 +60,9 @@
                             <ComboBoxItem Content="{DynamicResource loc_Settings_ThemeDark}" />
                         </ComboBox>
                         <Grid Margin="0,14,0,0">
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                             <TextBlock Text="{DynamicResource loc_Settings_AccentColour}" VerticalAlignment="Center" />
-                            <Button x:Name="AccentColourButton" Grid.Column="1" Click="OnAccentColourClick"
+                            <Button x:Name="AccentColourButton" Grid.Column="1" Click="OnAccentColourClick" Margin="12,0,0,0"
                                     Padding="4" AutomationProperties.Name="{DynamicResource loc_Settings_AccentColour}" ToolTip="{DynamicResource loc_Settings_AccentTooltip}">
                                 <Border Width="56" Height="24" Background="{DynamicResource Accent}"
                                         BorderBrush="{DynamicResource SwatchBorder}" BorderThickness="1" CornerRadius="2" />
@@ -74,7 +74,10 @@
                     <StackPanel>
                         <TextBlock Text="{DynamicResource loc_Settings_GenerateLogs}" Style="{StaticResource SettingsHeading}" />
                         <TextBlock Text="{DynamicResource loc_Settings_GenerateLogsDescription}" Style="{StaticResource SettingsDescription}" />
-                        <Button x:Name="GenerateLogsButton" Content="{DynamicResource loc_Settings_GenerateLogsButton}" Click="OnGenerateLogsClick" HorizontalAlignment="Left" />
+                        <StackPanel Orientation="Horizontal">
+                            <Button x:Name="GenerateLogsButton" Content="{DynamicResource loc_Settings_GenerateLogsButton}" Click="OnGenerateLogsClick" />
+                            <Button x:Name="OpenLogButton" Content="{DynamicResource loc_Settings_OpenLogButton}" Click="OnOpenLogClick" Margin="8,0,0,0" />
+                        </StackPanel>
                     </StackPanel>
                 </Border>
                 <Border Style="{StaticResource SettingsSection}">

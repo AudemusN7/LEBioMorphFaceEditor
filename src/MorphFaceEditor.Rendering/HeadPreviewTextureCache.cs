@@ -81,9 +81,12 @@ internal sealed class HeadPreviewTextureCache(Device device, DeviceContext conte
             for (var index = 0; index < subresources.Count; index++)
             {
                 var subresource = subresources[index];
-                var stream = new DataStream(subresource.Pixels.Length, true, true);
+                // D3D11 consumes the initialization pointers synchronously. Borrow
+                // the managed pixel arrays while pinned instead of copying every
+                // mip/face into a second native staging buffer.
+                var stream = DataStream.Create(subresource.Pixels, canRead: true, canWrite: false,
+                    index: 0, pinBuffer: true);
                 streams.Add(stream);
-                stream.Write(subresource.Pixels, 0, subresource.Pixels.Length);
                 stream.Position = 0;
                 rectangles[index] = new DataRectangle(stream.DataPointer, subresource.RowPitch);
             }
@@ -101,6 +104,9 @@ internal sealed class HeadPreviewTextureCache(Device device, DeviceContext conte
                 CpuAccessFlags = CpuAccessFlags.None,
                 OptionFlags = cube ? ResourceOptionFlags.TextureCube : ResourceOptionFlags.None
             }, rectangles);
+            // Release the pins as soon as Texture2D has copied its initial data.
+            foreach (var stream in streams) stream.Dispose();
+            streams.Clear();
             var byteCount = subresources.Sum(subresource => (long)subresource.Pixels.Length);
             texture = new GpuTexture(resource, byteCount, ++_useSerial);
             var view = texture.GetView(device, colorSpace);

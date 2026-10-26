@@ -14,11 +14,13 @@
     <Compile Remove="Infrastructure\DebugThemePalette.cs" />
   </ItemGroup>
   <ItemGroup>
+    <AssemblyMetadata Include="BuildDateUtc" Value="$([System.DateTime]::UtcNow.ToString('yyyy-MM-dd'))" />
     <!-- Dictionaries are embedded once by the shared localisation library. -->
     <Page Remove="Localisation\Strings.*.xaml" />
     <Resource Include="..\..\icon.ico" Link="icon.ico" />
     <Resource Include="..\..\ico_256.png" Link="ico_256.png" />
     <Resource Include="Assets\GameIcons\*.png" />
+    <Resource Include="Assets\Licenses\**\*" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="MorphFaceEditor.Tests" />

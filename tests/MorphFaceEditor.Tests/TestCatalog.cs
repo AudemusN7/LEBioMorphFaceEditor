@@ -25,7 +25,7 @@ internal static class TestCatalog
             ["ui"] = [.. UiPresentationTests.All, .. UiWorkspaceTests.All, .. UiInterchangeTests.All, .. UiRandomisationTests.All,
                 .. UiPickerTests.All, .. UiEditorTests.All, .. UiProfileTests.All,
                 .. AutomationCommandTests.All, .. VisorLensAnimationLifecycleTests.All, .. RandomisationPublicationTests.All,
-                .. ApplicationSettingsTests.All, .. LoggingTests.All, .. LocalisationTests.All,
+                .. ApplicationSettingsTests.All, .. LoggingTests.All, .. LocalisationTests.All, .. GitHubUpdateServiceTests.All,
                 .. TextureRegistrySettingsTests.All, .. MorphFaceCatalogTests.All],
             ["package"] = [.. PackagePersistenceTests.All, .. NativeMaterialReaderTests.All,
                 .. PreviewPackageCacheTests.All,

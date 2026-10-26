@@ -1,0 +1,68 @@
+Bundled third-party notice provenance
+====================================
+
+This inventory describes the notices included with Morph Face Editor. It does
+not assign a licence to Morph Face Editor itself. Notice texts are reproduced
+from the installed packages or upstream source snapshots listed below.
+
+LegendaryExplorerCore 6.5.0.0, TexConverter and CompressionWrappers
+Source snapshot: 804db0b9a37d6184e8a06e4fecb30270d2fb48c8
+https://github.com/ME3Tweaks/LegendaryExplorer/tree/804db0b9a37d6184e8a06e4fecb30270d2fb48c8
+
+LegendaryExplorer.txt: repository LICENSE
+MassEffectModder.txt: Licenses/COPYING_MASSEFFECTMODDER.txt
+LzmaSdk.txt: Licenses/COPYING_7ZIP.txt
+Zlib.txt: Licenses/COPYING_ZLIB.txt
+MiniZip.txt: Licenses/COPYING_MINIZIP.txt
+FastZlib.txt: Licenses/LICENSE_FastZlib.txt
+PsychonautsExplorer.txt: Licenses/LIcense_PsychonautsExplorer.txt
+TextureCodecs.txt: LegendaryExplorer/LegendaryExplorerCore/Textures/Codecs/LICENSE
+
+DirectXTex.txt: https://github.com/microsoft/DirectXTex/blob/main/LICENSE
+The pinned LegendaryExplorer/TexConverter/DirectXTex sources identify Microsoft
+Corporation's copyright and MIT licence in their headers. Their snapshot does
+not contain a standalone DirectXTex licence file; Microsoft's upstream MIT
+licence text is included here.
+
+BCnEncoder.txt: LICENSE-MIT at source commit from BCnEncoder.Net 2.2.1 nuspec
+https://github.com/Nominom/BCnEncoder.NET/blob/7173400b43f18e646ba6dc924a070296638b2d9e/LICENSE-MIT
+The MIT notice at BCnEncoder.Net.ImageSharp 1.1.2 source snapshot
+924e267a9fa70bd4fc08e4a9b9c8bba96e95933c was verified identical.
+Both packages offer MIT OR Unlicense; this distribution reproduces MIT.
+
+SharpDX.txt: License.txt at source commit from the 4.2.0 nuspec
+https://github.com/sharpdx/SharpDX/blob/8e5df9f17b1d328c595a9df5851dbb2537b55621/License.txt
+Covers SharpDX, Direct3D11, DXGI, D3DCompiler and Mathematics 4.2.0.
+
+SharpGLTF.txt: LICENSE at source commit from the 1.0.6 nuspec
+https://github.com/vpenades/SharpGLTF/blob/5153478a209ca2e276d8092f7166ff9d7ae4974f/LICENSE
+Covers SharpGLTF.Core, SharpGLTF.Runtime and SharpGLTF.Toolkit 1.0.6.
+
+CommunityToolkit.txt and CommunityToolkit-ThirdPartyNotices.txt:
+Unmodified License.md and ThirdPartyNotices.txt from the installed
+CommunityToolkit.Diagnostics 8.4.0 NuGet package. The HighPerformance 8.4.0
+package includes the same notices. Upstream:
+https://github.com/CommunityToolkit/dotnet/tree/638b41dad30dffabb123a39aa38eabc7e3721371
+The full upstream third-party notice is retained; it also describes Toolkit
+components not included in this application.
+
+RecyclableMemoryStream.txt: LICENSE from the 3.0.1 nuspec source commit
+https://github.com/microsoft/Microsoft.IO.RecyclableMemoryStream/blob/e29a28387da9018fa9605a1dcb3f7a0435aa9974/LICENSE
+
+NewtonsoftJson.txt: Unmodified LICENSE.md from Newtonsoft.Json 13.0.4 NuGet.
+https://github.com/JamesNK/Newtonsoft.Json/tree/4e13299d4b0ec96bd4df9954ef646bd2d1b5bf2a
+
+Serilog.txt: LICENSE from the 4.3.0 nuspec source commit
+https://github.com/serilog/serilog/blob/726e29c5b172aa8813285be1ad8cc728fd531eab/LICENSE
+Apache-2.0.txt: Identical Apache 2.0 licence text, also referenced by ImageSharp.
+
+ImageSharp.txt: Unmodified LICENSE from SixLabors.ImageSharp 3.2.0 NuGet.
+https://github.com/SixLabors/ImageSharp/tree/baa37cd19077b2a2a0c5667535111cf31d48c019
+The MFE adapter's assembly-scoped Community licence is documented in
+lib/LegendaryExplorerCore/DEPENDENCY.md. No key is included in these notices.
+
+Coverage is based on the desktop application's packages.lock.json and actual
+Release output. NETStandard.Library and Microsoft.NETCore.Platforms are
+compatibility package metadata, with no separate DLL in this output. The .NET
+Windows Desktop runtime is an installed prerequisite, not bundled here.
+ISACTTools.dll is not shipped. Game-provided Oodle is not redistributed.

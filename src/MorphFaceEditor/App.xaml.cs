@@ -16,6 +16,7 @@ public partial class App : Application
 {
     private MainWindowViewModel? _viewModel;
     private ThemeViewportBinding? _themeViewport;
+    private IdleMemoryCleanup? _idleMemoryCleanup;
     internal ThemeManager? Themes { get; private set; }
     internal bool ClearApplicationDataOnExit { get; set; }
 
@@ -80,6 +81,7 @@ public partial class App : Application
         var window = new MainWindow(_viewModel, ApplicationPreferencesStore.CreateDefault());
         MainWindow = window;
         window.Show();
+        _idleMemoryCleanup = new IdleMemoryCleanup(window, _viewModel, referenceService);
 #if DEBUG
         if (debugPalette is not null)
         {
@@ -118,6 +120,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _idleMemoryCleanup?.Dispose();
         _themeViewport?.Dispose();
         Themes?.Dispose();
         if (ClearApplicationDataOnExit) AppLog.StopFileWrites();

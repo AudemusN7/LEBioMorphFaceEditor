@@ -4,6 +4,7 @@ using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.LegendaryExplorer.TextureRegistry;
 using MorphFaceEditor.Services;
+using MorphFaceEditor.Infrastructure;
 using LegendaryExplorerCore.Packages;
 using LegendaryExplorerCore.Unreal;
 using LegendaryExplorerCore.Unreal.BinaryConverters;
@@ -149,9 +150,8 @@ internal static class ConversionTests
         }
         catch (InvalidOperationException exception)
         {
-            TestAssert.True(
-                exception.Message.Contains("texture database is unavailable", StringComparison.OrdinalIgnoreCase),
-                $"The missing-database failure was unclear: {exception.Message}");
+            TestAssert.Equal(Loc.Format("loc_Services_MorphFaceConversion_DatabaseUnavailable", MorphFaceGame.LE1),
+                exception.Message);
         }
         finally
         {

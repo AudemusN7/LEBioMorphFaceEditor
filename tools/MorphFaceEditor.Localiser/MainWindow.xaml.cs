@@ -3,6 +3,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -17,6 +18,8 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent(); DataContext = Review;
+        BindingOperations.SetBinding(ExcludedColumn, DataGridColumn.VisibilityProperty,
+            new Binding(nameof(ReviewViewModel.IsEnglish)) { Source = Review, Converter = new BooleanToVisibilityConverter() });
         ApplyDarkCaption(this);
     }
 

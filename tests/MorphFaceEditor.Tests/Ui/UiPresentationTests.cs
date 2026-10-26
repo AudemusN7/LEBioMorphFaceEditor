@@ -8,8 +8,18 @@ internal static class UiPresentationTests
 {
     internal static IReadOnlyList<TestCase> All { get; } =
     [
-        new("independent preference consumers preserve each other's settings", ApplicationPreferencesPersist)
+        new("independent preference consumers preserve each other's settings", ApplicationPreferencesPersist),
+        new("About library credits include bundled readable licence notices", AboutNotices)
     ];
+
+    private static void AboutNotices() => WpfTestDispatcher.Invoke(() =>
+    {
+        TestAssert.True(ThirdPartyNotices.All.Count > 0, "The About library list is empty.");
+        foreach (var credit in ThirdPartyNotices.All)
+            TestAssert.True(!string.IsNullOrWhiteSpace(credit.Notice), $"Missing licence notice for {credit.Name}.");
+        var window = new MorphFaceEditor.Views.AboutWindow();
+        window.Close();
+    });
 
     private static void ApplicationPreferencesPersist()
     {

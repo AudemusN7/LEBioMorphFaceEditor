@@ -197,6 +197,11 @@ Preferences will need to be reapplied when the editor reopens. Databases will al
     <!--localiser: {"Key":"loc_Shell_Profile_Unknown","ReviewedHash":"FE339590497FE3BF5912E0ADB114F59358EB2A7D3F77E748466E1443A5DB0055","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_Shell_Profile_Unknown" xml:space="preserve">UNKNOWN PROFILE</system:String>
 
+    <!--localiser: {"Key":"loc_ExternalLinks_UnavailableTitle","ReviewedHash":"420D9697C81D2C511D2011889240C24EF848B222EB263F66E57BFEA4CA7C5482","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_ExternalLinks_UnavailableTitle" xml:space="preserve">Could not open browser</system:String>
+    <!--localiser: {"Key":"loc_ExternalLinks_CouldNotOpen","ReviewedHash":"509506EA7995C1EEBFAC39B24A0ED3A0709F288BDFCF0D9E9C95829DCDB8D231","DoNotTranslate":false,"Note":"Browser link failure. {0} = the complete HTTPS address to open manually.","SourceHash":null}-->
+    <system:String x:Key="loc_ExternalLinks_CouldNotOpen" xml:space="preserve">The link could not be opened in your browser. You can copy this address and open it manually: {0}</system:String>
+
     <!-- Assets - Mesh/Texture Databases -->
     <!--localiser: {"Key":"loc_ManualAssetSelectionWindow_AddCustomAssetsToGame","ReviewedHash":"E2FF5E2A26C18E86C9D4AE87FCEF517CDFC0407A2BF68FD3A8975C516D5EF831","DoNotTranslate":false,"Note":"Manual asset picker heading. {0} = game selected for adding custom assets.","SourceHash":null}-->
     <system:String x:Key="loc_ManualAssetSelectionWindow_AddCustomAssetsToGame" xml:space="preserve">Add custom assets to {0}</system:String>
@@ -1644,6 +1649,20 @@ Package: {0}</system:String>
     <system:String x:Key="loc_WpfEditorDialogService_UModelExportFolderTitle" xml:space="preserve">Select a folder for the UModel mesh export</system:String>
 
     <!-- Main Window & Context Menu -->
+    <!--localiser: {"Key":"loc_About_Menu","ReviewedHash":"4EFCA0D10C5FEB8E9B35EB1D994F2905BB71714E6A271F511D713B539EA5FAA1","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_About_Menu" xml:space="preserve">About</system:String>
+    <!--localiser: {"Key":"loc_About_NexusMods","ReviewedHash":"C57D068D34C0D1CFA222AEFC811E77A5911200B22D314D6399277882C3BFF65F","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_About_NexusMods" xml:space="preserve">Nexus Mods Page</system:String>
+    <!--localiser: {"Key":"loc_About_GitHub","ReviewedHash":"58846861DFB73E3CEABA818EB360E5894776D19D6F10AC6CC1D0E7C63D2A7BBC","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_About_GitHub" xml:space="preserve">GitHub Repo</system:String>
+    <!--localiser: {"Key":"loc_About_Donate","ReviewedHash":"C91EE0F2799DF915EFCC117BA063D95E0CBF0D5E8E6ECA5373333BB9B06C5F13","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_About_Donate" xml:space="preserve">Donate</system:String>
+    <!--localiser: {"Key":"loc_About_AboutMfe","ReviewedHash":"2D13DD138D385DA81CCCE4B5114E01B20F5DC735EC8AA3904D7EBC900FE9B3D7","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_About_AboutMfe" xml:space="preserve">About MFE</system:String>
+    <!--localiser: {"Key":"loc_Updates_UpdateAvailable","ReviewedHash":"5AE200F91C64DA483B94B729655CAD16205A13042A40D898494EE6F6AFE60E26","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_Updates_UpdateAvailable" xml:space="preserve">Update Available</system:String>
+    <!--localiser: {"Key":"loc_Updates_BadgeTooltip","ReviewedHash":"2F8A4C56119ADC30DC040B1E3F1CDB5E04E6EB816E2CFF38258B3A79501BF67A","DoNotTranslate":false,"Note":"Tooltip for the orange status bar update badge. {0} = latest public release version.","SourceHash":null}-->
+    <system:String x:Key="loc_Updates_BadgeTooltip" xml:space="preserve">Version {0} is available. Open the latest GitHub release.</system:String>
     <!--localiser: {"Key":"loc_Editor_EditBlockedByProfile","ReviewedHash":"10A9E2B7D4EB7BBD4959285DDFC5A990E19BCFAF272FBE1E65026A6036D8C2CD","DoNotTranslate":false,"Note":"Explains a profile or custom\u002Dbase\u002Dmesh geometry restriction. The head remains available for supported material editing; its original geometry is preserved.","SourceHash":null}-->
     <system:String x:Key="loc_Editor_EditBlockedByProfile" xml:space="preserve">This head does not support morph or bone editing. Material editing remains available.</system:String>
     <!--localiser: {"Key":"loc_Editor_GeometryVerificationMismatch","ReviewedHash":"22778917168B181921600398302424FB9703B1EBD142D7CF27D280D40F92209F","DoNotTranslate":false,"Note":"Explains why the face uses baked geometry rather than live morph evaluation. {0} = maximum per\u002Dvertex difference from the geometry verification comparison; retain six\u002Dsignificant\u002Ddigit formatting.","SourceHash":null}-->

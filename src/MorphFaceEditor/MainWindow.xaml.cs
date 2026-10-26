@@ -55,6 +55,7 @@ public partial class MainWindow : Window
         Closing += OnClosing;
         Closed += OnClosed;
         LayoutUpdated += OnPaneLayoutUpdated;
+        InitializeAboutAndUpdates();
     }
 
     private void OnPaneLayoutUpdated(object? sender, EventArgs e)
@@ -407,6 +408,7 @@ public partial class MainWindow : Window
 
     private void OnClosed(object? sender, EventArgs e)
     {
+        CloseAboutAndUpdates();
         SavePaneWidths();
         _numericEdit.Dispose();
         Closing -= OnClosing;

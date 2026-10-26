@@ -88,7 +88,6 @@ internal sealed class TextureHistoryStore
                 {
                     _writing = false;
                     _idle!.TrySetResult();
-                    Monitor.PulseAll(_sync);
                     return;
                 }
             }
@@ -126,11 +125,7 @@ internal sealed class TextureHistoryStore
         }
         finally
         {
-            lock (_sync)
-            {
-                _pendingBytes -= work.Pixels.Length;
-                Monitor.PulseAll(_sync);
-            }
+            lock (_sync) _pendingBytes -= work.Pixels.Length;
         }
     }
 
@@ -198,11 +193,6 @@ internal sealed class TextureHistoryStore
             lock (_sync) return new(_hotBytes, _pendingBytes, _archivedBytes, _fallbackBytes,
                 _storageFailures, _reads, _readMilliseconds);
         }
-    }
-
-    internal void WaitForPendingWrites()
-    {
-        lock (_sync) while (_writing) Monitor.Wait(_sync);
     }
 
     internal Task WhenWritesComplete

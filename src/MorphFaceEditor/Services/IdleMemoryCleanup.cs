@@ -23,16 +23,13 @@ internal sealed class IdleMemoryCleanup : IDisposable
     private readonly MainWindowViewModel _viewModel;
     private readonly PackageReferenceService _packageReferences;
     private readonly DispatcherTimer _poll;
-    private long _lastInputTimestamp;
-    private long _workIdleSince;
+    private long _quietSince;
     private long _backgroundSince;
     private long _lastCollectionTimestamp;
     private int _inputGeneration;
-    private int _disposedFlag;
-    private bool _wasForeground;
     private bool _attemptedThisIdlePeriod;
     private bool _running;
-    private bool _disposed;
+    private volatile bool _disposed;
 
     internal IdleMemoryCleanup(
         Window window,
@@ -44,10 +41,8 @@ internal sealed class IdleMemoryCleanup : IDisposable
         _packageReferences = packageReferences ?? throw new ArgumentNullException(nameof(packageReferences));
 
         var now = Stopwatch.GetTimestamp();
-        _lastInputTimestamp = now;
-        _workIdleSince = now;
-        _wasForeground = IsCurrentProcessForeground();
-        _backgroundSince = _wasForeground ? 0 : now;
+        _quietSince = now;
+        _backgroundSince = IsCurrentProcessForeground() ? 0 : now;
 
         _poll = new DispatcherTimer(DispatcherPriority.ApplicationIdle, window.Dispatcher)
         {
@@ -62,56 +57,35 @@ internal sealed class IdleMemoryCleanup : IDisposable
             $"COOLDOWNSEC:{CollectionCooldown.TotalSeconds:F0} MINCOMMITTED:{MinimumCommittedBytes} MINSPARE:{MinimumReclaimableBytes}");
     }
 
-    internal static bool HasReclaimableCapacity(long committedBytes, long managedBytes)
-    {
-        if (committedBytes < MinimumCommittedBytes) return false;
-        return committedBytes - managedBytes >= MinimumReclaimableBytes;
-    }
+    internal static bool HasReclaimableCapacity(long committedBytes, long managedBytes) =>
+        committedBytes >= MinimumCommittedBytes && committedBytes - managedBytes >= MinimumReclaimableBytes;
 
     private async void OnPoll(object? sender, EventArgs args)
     {
         if (_disposed || _running) return;
 
         var now = Stopwatch.GetTimestamp();
-        var foreground = IsCurrentProcessForeground();
-        if (foreground)
+        if (IsCurrentProcessForeground())
         {
-            if (!_wasForeground) ResetForForeground(now);
-            _wasForeground = true;
+            if (_backgroundSince != 0) RecordActivity(now);
             _backgroundSince = 0;
             return;
         }
 
-        if (_wasForeground)
-        {
-            _wasForeground = false;
-            _backgroundSince = now;
-        }
-        else if (_backgroundSince == 0)
-        {
-            _backgroundSince = now;
-        }
+        if (_backgroundSince == 0) _backgroundSince = now;
 
         var editor = _viewModel.Editor;
         if (!_viewModel.HasWorkspace || _viewModel.IsBusy || editor is null || editor.IsRandomising ||
-            _packageReferences.IsReading)
+            _packageReferences.IsReading || !editor.WaitForTextureHistoryWritesAsync().IsCompletedSuccessfully)
         {
-            ResetWorkQuietClock(now);
-            return;
-        }
-
-        var historyWrites = editor.WaitForTextureHistoryWritesAsync();
-        if (!historyWrites.IsCompletedSuccessfully)
-        {
-            ResetWorkQuietClock(now);
+            _quietSince = now;
             return;
         }
 
         // Observe busy/archive work on every poll, including while the quiet
         // period is still counting down. Otherwise a late load could look idle.
         if (Stopwatch.GetElapsedTime(_backgroundSince, now) < RequiredIdlePeriod ||
-            Stopwatch.GetElapsedTime(_lastInputTimestamp, now) < RequiredIdlePeriod ||
-            Stopwatch.GetElapsedTime(_workIdleSince, now) < RequiredIdlePeriod ||
+            Stopwatch.GetElapsedTime(_quietSince, now) < RequiredIdlePeriod ||
             _attemptedThisIdlePeriod ||
             (_lastCollectionTimestamp != 0 &&
              Stopwatch.GetElapsedTime(_lastCollectionTimestamp, now) < CollectionCooldown))
@@ -125,18 +99,13 @@ internal sealed class IdleMemoryCleanup : IDisposable
         var lease = _packageReferences.TryAcquireIdleLease();
         if (lease is null)
         {
-            ResetWorkQuietClock(now);
+            _quietSince = now;
             return;
         }
 
+        // No dispatcher yield separates the state checks above. The worker
+        // rechecks input, disposal and process focus after it is scheduled.
         var inputGeneration = Volatile.Read(ref _inputGeneration);
-        if (!IsReadyToCollect(editor, inputGeneration, now))
-        {
-            lease.Dispose();
-            ResetWorkQuietClock(Stopwatch.GetTimestamp());
-            return;
-        }
-
         _running = true;
         _attemptedThisIdlePeriod = true;
         try
@@ -148,15 +117,15 @@ internal sealed class IdleMemoryCleanup : IDisposable
                 AppLog.Information(
                     $"MEMORY:IDLE-CLEANUP WALLMS:{measurement.Duration.TotalMilliseconds:F2} " +
                     $"GCPAUSEMS:{measurement.FullBlockingPause.TotalMilliseconds:F2} " +
-                    $"MANAGED:{measurement.ManagedBefore}->{measurement.ManagedAfter} " +
-                    $"COMMITTED:{measurement.CommittedBefore}->{measurement.CommittedAfter} " +
-                    $"RESIDENT:{measurement.ResidentBefore}->{measurement.ResidentAfter}");
+                    $"MANAGED:{measurement.Before.ManagedBytes}->{measurement.After.ManagedBytes} " +
+                    $"COMMITTED:{measurement.Before.CommittedBytes}->{measurement.After.CommittedBytes} " +
+                    $"RESIDENT:{measurement.Before.ResidentBytes}->{measurement.After.ResidentBytes}");
             }
             else if (IsCurrentProcessForeground())
             {
                 // The background check can race a window activation after the
                 // UI-thread checks but before the worker starts the collection.
-                ResetForForeground(Stopwatch.GetTimestamp());
+                RecordActivity(Stopwatch.GetTimestamp());
             }
         }
         catch (Exception exception)
@@ -172,24 +141,16 @@ internal sealed class IdleMemoryCleanup : IDisposable
         }
     }
 
-    private bool IsReadyToCollect(FaceEditorViewModel editor, int inputGeneration, long now) =>
-        !_disposed && !_viewModel.IsBusy && _viewModel.HasWorkspace &&
-        ReferenceEquals(editor, _viewModel.Editor) && !editor.IsRandomising &&
-        editor.WaitForTextureHistoryWritesAsync().IsCompletedSuccessfully &&
-        Volatile.Read(ref _inputGeneration) == inputGeneration &&
-        _backgroundSince != 0 && Stopwatch.GetElapsedTime(_backgroundSince, now) >= RequiredIdlePeriod &&
-        Stopwatch.GetElapsedTime(_lastInputTimestamp, now) >= RequiredIdlePeriod &&
-        Stopwatch.GetElapsedTime(_workIdleSince, now) >= RequiredIdlePeriod &&
-        !IsCurrentProcessForeground();
+    private bool CollectionInterrupted(int inputGeneration) =>
+        _disposed || Volatile.Read(ref _inputGeneration) != inputGeneration || IsCurrentProcessForeground();
 
     private CollectionMeasurement? CollectIfStillIdle(IDisposable lease, int inputGeneration)
     {
-        try
+        // Release on the worker: a UI reader must never wait for a lease whose
+        // release is queued behind that same UI thread.
+        using (lease)
         {
-            if (Volatile.Read(ref _disposedFlag) != 0 ||
-                Volatile.Read(ref _inputGeneration) != inputGeneration ||
-                IsCurrentProcessForeground())
-                return null;
+            if (CollectionInterrupted(inputGeneration)) return null;
 
             var before = CaptureMemorySnapshot();
             // A natural collection may have already reclaimed the spare
@@ -197,10 +158,7 @@ internal sealed class IdleMemoryCleanup : IDisposable
             if (!HasReclaimableCapacity(before.CommittedBytes, before.ManagedBytes)) return null;
             // Last guard immediately before the blocking operation. UI input
             // and foreground changes advance the generation or fail this check.
-            if (Volatile.Read(ref _disposedFlag) != 0 ||
-                Volatile.Read(ref _inputGeneration) != inputGeneration ||
-                IsCurrentProcessForeground())
-                return null;
+            if (CollectionInterrupted(inputGeneration)) return null;
 
             var stopwatch = Stopwatch.StartNew();
             GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
@@ -210,20 +168,7 @@ internal sealed class IdleMemoryCleanup : IDisposable
             var blockingInfo = GC.GetGCMemoryInfo(GCKind.FullBlocking);
             var pause = TimeSpan.Zero;
             foreach (var duration in blockingInfo.PauseDurations) pause += duration;
-            var after = CaptureMemorySnapshot();
-            return new CollectionMeasurement(
-                stopwatch.Elapsed,
-                pause,
-                before.ManagedBytes,
-                after.ManagedBytes,
-                before.CommittedBytes,
-                after.CommittedBytes,
-                before.ResidentBytes,
-                after.ResidentBytes);
-        }
-        finally
-        {
-            lease.Dispose();
+            return new CollectionMeasurement(stopwatch.Elapsed, pause, before, CaptureMemorySnapshot());
         }
     }
 
@@ -241,29 +186,20 @@ internal sealed class IdleMemoryCleanup : IDisposable
     private void OnInput(object sender, PreProcessInputEventArgs args)
     {
         if (args.StagingItem.Input is not (KeyboardEventArgs or MouseEventArgs or StylusEventArgs or TouchEventArgs)) return;
-        var now = Stopwatch.GetTimestamp();
-        Interlocked.Increment(ref _inputGeneration);
-        _lastInputTimestamp = now;
-        _workIdleSince = now;
-        _attemptedThisIdlePeriod = false;
+        RecordActivity(Stopwatch.GetTimestamp());
     }
 
-    private void ResetForForeground(long now)
+    private void RecordActivity(long now)
     {
         Interlocked.Increment(ref _inputGeneration);
-        _lastInputTimestamp = now;
-        _workIdleSince = now;
+        _quietSince = now;
         _attemptedThisIdlePeriod = false;
     }
-
-    private void ResetWorkQuietClock(long now) => _workIdleSince = now;
 
     private void OnWindowActivated(object? sender, EventArgs args)
     {
         if (!IsCurrentProcessForeground()) return;
-        var now = Stopwatch.GetTimestamp();
-        ResetForForeground(now);
-        _wasForeground = true;
+        RecordActivity(Stopwatch.GetTimestamp());
         _backgroundSince = 0;
     }
 
@@ -281,7 +217,6 @@ internal sealed class IdleMemoryCleanup : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
-        Interlocked.Exchange(ref _disposedFlag, 1);
         _poll.Stop();
         _poll.Tick -= OnPoll;
         InputManager.Current.PreProcessInput -= OnInput;
@@ -300,10 +235,6 @@ internal sealed class IdleMemoryCleanup : IDisposable
     private sealed record CollectionMeasurement(
         TimeSpan Duration,
         TimeSpan FullBlockingPause,
-        long ManagedBefore,
-        long ManagedAfter,
-        long CommittedBefore,
-        long CommittedAfter,
-        long ResidentBefore,
-        long ResidentAfter);
+        MemorySnapshot Before,
+        MemorySnapshot After);
 }

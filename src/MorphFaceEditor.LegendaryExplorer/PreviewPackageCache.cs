@@ -7,9 +7,8 @@ namespace MorphFaceEditor.LegendaryExplorer;
 internal sealed class PreviewPackageCache : PackageCache
 {
     internal const long DefaultMaximumBytes = 512L * 1024 * 1024;
-    private readonly Dictionary<string, Entry> _entries = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, long> _packageBytes = new(StringComparer.OrdinalIgnoreCase);
     private readonly long _maximumBytes;
-    private long _serial;
     private long _hits;
     private long _misses;
     private long _evictions;
@@ -54,8 +53,7 @@ internal sealed class PreviewPackageCache : PackageCache
                 _misses++;
                 _openTime += Stopwatch.GetElapsedTime(started);
             }
-            Touch(package);
-            CheckCacheFullness();
+            _latestPath = package.FilePath;
             return package;
         }
     }
@@ -64,7 +62,7 @@ internal sealed class PreviewPackageCache : PackageCache
     {
         lock (syncObj)
         {
-            _entries[package.FilePath] = new(EstimateBytes(package), ++_serial);
+            _packageBytes[package.FilePath] = EstimateBytes(package);
             _latestPath = package.FilePath;
             base.InsertIntoCache(package);
         }
@@ -77,15 +75,15 @@ internal sealed class PreviewPackageCache : PackageCache
             // A face/material read can revisit its dependency packages many times.
             // Finish that read before trimming, so a large graph is opened once.
             if (_operationDepth > 0) return;
-            foreach (var stale in _entries.Keys.Where(path => !Cache.ContainsKey(path)).ToArray())
-                _entries.Remove(stale);
+            foreach (var stale in _packageBytes.Keys.Where(path => !Cache.ContainsKey(path)).ToArray())
+                _packageBytes.Remove(stale);
             var bytes = RetainedBytes();
             foreach (var candidate in Cache.Keys
                          .Where(path => !path.Equals(_latestPath, StringComparison.OrdinalIgnoreCase) && !IsResidentPackage(path))
-                         .OrderBy(path => _entries.GetValueOrDefault(path)?.LastUse ?? 0).ToArray())
+                         .OrderBy(path => LastAccessMap.TryGetValue(path, out var lastUse) ? lastUse : DateTime.MinValue).ToArray())
             {
                 if (bytes <= _maximumBytes && (CacheMaxSize <= 0 || Cache.Count <= CacheMaxSize)) break;
-                bytes -= _entries.GetValueOrDefault(candidate)?.Bytes ?? 0;
+                bytes -= _packageBytes.GetValueOrDefault(candidate);
                 ReleasePackage(candidate);
                 _evictions++;
             }
@@ -99,7 +97,7 @@ internal sealed class PreviewPackageCache : PackageCache
     {
         lock (syncObj)
         {
-            _entries.Remove(packagePath);
+            _packageBytes.Remove(packagePath);
             base.ReleasePackage(packagePath);
         }
     }
@@ -108,20 +106,13 @@ internal sealed class PreviewPackageCache : PackageCache
     {
         lock (syncObj)
         {
-            _entries.Clear();
+            _packageBytes.Clear();
             _latestPath = null;
             base.ReleasePackages(gc);
         }
     }
 
-    private void Touch(IMEPackage package)
-    {
-        var bytes = _entries.TryGetValue(package.FilePath, out var entry) ? entry.Bytes : EstimateBytes(package);
-        _entries[package.FilePath] = new(bytes, ++_serial);
-        _latestPath = package.FilePath;
-    }
-
-    private long RetainedBytes() => _entries.Where(pair => Cache.ContainsKey(pair.Key)).Sum(pair => pair.Value.Bytes);
+    private long RetainedBytes() => _packageBytes.Where(pair => Cache.ContainsKey(pair.Key)).Sum(pair => pair.Value);
 
     internal static long EstimateBytes(IMEPackage package) =>
         // Use uncompressed export sizes, not the often much smaller PCC on disk.
@@ -139,7 +130,6 @@ internal sealed class PreviewPackageCache : PackageCache
         }
     }
 
-    private sealed record Entry(long Bytes, long LastUse);
     private sealed class Operation(PreviewPackageCache owner) : IDisposable
     {
         private PreviewPackageCache? _owner = owner;

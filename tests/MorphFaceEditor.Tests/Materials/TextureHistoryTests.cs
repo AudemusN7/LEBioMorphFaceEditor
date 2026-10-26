@@ -41,7 +41,7 @@ internal static class TextureHistoryTests
         var oldPixels = new List<WeakReference>();
         for (var index = 1; index <= 25; index++) oldPixels.Add(ApplyEdit(session, index));
         session.ResetToDefaults();
-        store.WaitForPendingWrites();
+        store.WhenWritesComplete.GetAwaiter().GetResult();
         Collect();
         TestAssert.True(oldPixels.Take(20).All(reference => !reference.IsAlive),
             "Old material history still pins decoded images beyond its hot budget.");
@@ -72,7 +72,7 @@ internal static class TextureHistoryTests
     {
         var store = new TextureHistoryStore(0, () => throw new UnauthorizedAccessException("Simulated unavailable storage"));
         var captured = CaptureFixture(store, 57);
-        store.WaitForPendingWrites();
+        store.WhenWritesComplete.GetAwaiter().GetResult();
         Collect();
         AssertImage(captured.Snapshot.Restore(), 57);
         TestAssert.True(store.Statistics.FallbackBytes > 0 && store.Statistics.StorageFailures > 0,
@@ -95,7 +95,7 @@ internal static class TextureHistoryTests
         var store = new TextureHistoryStore(0, () => File.OpenHandle(path, FileMode.CreateNew,
             FileAccess.ReadWrite, FileShare.None, FileOptions.DeleteOnClose | FileOptions.RandomAccess));
         var captured = CaptureFixture(store, 77);
-        store.WaitForPendingWrites();
+        store.WhenWritesComplete.GetAwaiter().GetResult();
         return new SnapshotOwner { Snapshot = captured.Snapshot };
     }
 

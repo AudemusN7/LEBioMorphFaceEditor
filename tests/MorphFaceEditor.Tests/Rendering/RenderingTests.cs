@@ -12,7 +12,12 @@ using MorphFaceEditor.Models;
 using MorphFaceEditor.Presentation;
 using MorphFaceEditor.Rendering;
 using MorphFaceEditor.Services;
+using SharpDX.Direct3D;
+using SharpDX.Direct3D11;
+using SharpDX.DXGI;
 using DxMathUtil = SharpDX.MathUtil;
+using D3DDevice = SharpDX.Direct3D11.Device;
+using D3DMapFlags = SharpDX.Direct3D11.MapFlags;
 
 namespace MorphFaceEditor.Tests;
 
@@ -25,6 +30,7 @@ public static class RenderingTests
         new("LE tangent basis uses TangentZ handedness", TangentBasisUsesTangentZHandedness),
         new("unlit mode bypasses lighting and ambient occlusion", UnlitModeBypassesLightingAndAmbientOcclusion),
         new("renderer releases face resources and draws again after clear", RendererReleasesFaceResourcesAfterClear),
+        new("texture upload preserves every 2D mip and cube face", TextureUploadPreservesMipAndCubePixels),
         new("mapped readback preserves pixels and releases mapping after writer failure", MappedReadbackPreservesPixelsAfterWriterFailure),
         new("scene factory maps non-contiguous LOD IDs to baked ordinals", SceneFactoryMapsNonContiguousLodIds),
         new("scene factory falls back to base geometry for an unmatched baked LOD", SceneFactoryHandlesUnmatchedBakedLod),
@@ -410,6 +416,95 @@ public static class RenderingTests
         TestAssert.Equal(80, frame.Width);
         TestAssert.True(renderer.TextureUploadCount > uploads, "The cleared texture was not uploaded again.");
         TestAssert.Equal(1, renderer.DeviceCreationCount);
+    }
+
+    private static void TextureUploadPreservesMipAndCubePixels()
+    {
+        using var device = new D3DDevice(DriverType.Hardware, DeviceCreationFlags.None);
+        using var context = device.ImmediateContext;
+        using var cache = new HeadPreviewTextureCache(device, context);
+
+        byte[] textureTop = [11, 23, 37, 251, 41, 53, 67, 241, 71, 83, 97, 231, 101, 113, 127, 221];
+        byte[] textureMip = [139, 151, 163, 211];
+        var expectedTextureTop = textureTop.ToArray();
+        var expectedTextureMip = textureMip.ToArray();
+        var texture = new HeadPreviewTexture(
+            "mip-upload-test", "Diffuse", 2, 2, textureTop, TextureRole.Diffuse,
+            TextureColorSpace.Srgb, TextureAlphaPolicy.Ignore, false,
+            [new DecodedTextureMip(2, 2, textureTop), new DecodedTextureMip(1, 1, textureMip)]);
+        var textureView = cache.GetView(texture)!;
+        using var textureResource = textureView.Resource;
+        using var uploadedTexture = textureResource.QueryInterface<Texture2D>();
+        TestAssert.True(ReadTextureSubresource(device, context, uploadedTexture, mip: 0, face: 0).SequenceEqual(expectedTextureTop),
+            "The uploaded 2D top mip changed pixel data.");
+        TestAssert.True(ReadTextureSubresource(device, context, uploadedTexture, mip: 1, face: 0).SequenceEqual(expectedTextureMip),
+            "The uploaded 2D lower mip changed pixel data.");
+
+        var cubeTop = Enumerable.Range(0, 6).Select(face => Enumerable.Range(0, 16)
+            .Select(channel => (byte)(face * 29 + channel + 1)).ToArray()).ToArray();
+        var cubeMip = Enumerable.Range(0, 6).Select(face => Enumerable.Range(0, 4)
+            .Select(channel => (byte)(face * 31 + channel + 3)).ToArray()).ToArray();
+        var expectedCubeTop = cubeTop.Select(pixels => pixels.ToArray()).ToArray();
+        var expectedCubeMip = cubeMip.Select(pixels => pixels.ToArray()).ToArray();
+        var cube = new HeadPreviewCubeTexture(
+            "cube-upload-test", 2, cubeTop, TextureColorSpace.Linear,
+            [new DecodedTextureCubeMip(2, cubeTop), new DecodedTextureCubeMip(1, cubeMip)]);
+        var cubeView = cache.GetCubeView(cube)!;
+        using var cubeResource = cubeView.Resource;
+        using var uploadedCube = cubeResource.QueryInterface<Texture2D>();
+        for (var face = 0; face < 6; face++)
+        {
+            TestAssert.True(ReadTextureSubresource(device, context, uploadedCube, mip: 0, face: face).SequenceEqual(expectedCubeTop[face]),
+                $"Cube face {face} top mip changed pixel data or upload order.");
+            TestAssert.True(ReadTextureSubresource(device, context, uploadedCube, mip: 1, face: face).SequenceEqual(expectedCubeMip[face]),
+                $"Cube face {face} lower mip changed pixel data or upload order.");
+        }
+        TestAssert.True(textureTop.SequenceEqual(expectedTextureTop) && textureMip.SequenceEqual(expectedTextureMip) &&
+                        cubeTop.SelectMany(value => value).SequenceEqual(expectedCubeTop.SelectMany(value => value)) &&
+                        cubeMip.SelectMany(value => value).SequenceEqual(expectedCubeMip.SelectMany(value => value)),
+            "Texture upload modified one of the source pixel arrays.");
+    }
+
+    private static byte[] ReadTextureSubresource(
+        D3DDevice device,
+        DeviceContext context,
+        Texture2D source,
+        int mip,
+        int face)
+    {
+        var description = source.Description;
+        var subresource = face * description.MipLevels + mip;
+        var stagingDescription = new Texture2DDescription
+        {
+            Width = description.Width,
+            Height = description.Height,
+            MipLevels = description.MipLevels,
+            ArraySize = description.ArraySize,
+            Format = Format.R8G8B8A8_UNorm,
+            SampleDescription = new SampleDescription(1, 0),
+            Usage = ResourceUsage.Staging,
+            BindFlags = BindFlags.None,
+            CpuAccessFlags = CpuAccessFlags.Read,
+            OptionFlags = ResourceOptionFlags.None
+        };
+        using var staging = new Texture2D(device, stagingDescription);
+        context.CopySubresourceRegion(source, subresource, null, staging, subresource);
+        var mapped = context.MapSubresource(staging, subresource, MapMode.Read, D3DMapFlags.None);
+        try
+        {
+            var width = Math.Max(1, description.Width >> mip);
+            var height = Math.Max(1, description.Height >> mip);
+            var rowBytes = checked(width * 4);
+            var pixels = new byte[checked(rowBytes * height)];
+            for (var row = 0; row < height; row++)
+                System.Runtime.InteropServices.Marshal.Copy(mapped.DataPointer + row * mapped.RowPitch,
+                    pixels, row * rowBytes, rowBytes);
+            return pixels;
+        }
+        finally
+        {
+            context.UnmapSubresource(staging, subresource);
+        }
     }
 
     private static void MappedReadbackPreservesPixelsAfterWriterFailure()

@@ -7,6 +7,9 @@
     <HeadPreviewShaderBundle>$([System.IO.Path]::GetFullPath('$(BaseIntermediateOutputPath)$(Configuration)\$(TargetFramework)\HeadPreviewShaders.zip', '$(MSBuildProjectDirectory)'))</HeadPreviewShaderBundle>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="MorphFaceEditor.Tests" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\MorphFaceEditor.Core\MorphFaceEditor.Core.csproj" />
     <ProjectReference Include="..\..\tools\MorphFaceEditor.ShaderCompiler\MorphFaceEditor.ShaderCompiler.csproj"
                       ReferenceOutputAssembly="false" Private="false" OutputItemType="ShaderCompilerAssembly" />

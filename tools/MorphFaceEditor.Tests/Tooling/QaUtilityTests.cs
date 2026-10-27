@@ -16,9 +16,38 @@ internal static class QaUtilityTests
         new("QA coverage streams reproduce filtered cases and vary donors", Selection),
         new("QA native save values compare separately from preserved source ordering", NativeSaveOrdering),
         new("QA material comparison preserves duplicate counts and exact texture identities", MaterialNamesAndDuplicates),
+        new("QA morph clipboard refusals accept localised errors but reject silent or changed targets", ClipboardRefusal),
         new("QA load oracle misses remain diagnostic without accepting invalid topology", () => LoadOracleDiagnostics().GetAwaiter().GetResult()),
         new("QA reports retain frozen timing limits and functional failures beside timing outcomes", Report)
     ];
+
+    private static void ClipboardRefusal() => WpfTestDispatcher.Invoke(() =>
+    {
+        using var reader = new MorphFacePackageReader();
+        using var editor = UiTestFixtures.CreateEditor(reader, ignoresAuthoredGeometry: true);
+        var before = editor.CreateDraft();
+        string? error = null;
+        try { editor.ApplyMorphData(new(before.MorphFeatures, before.FinalSkeleton, before.BakedLods)); }
+        catch (InvalidOperationException exception)
+        {
+            error = MorphFaceEditor.Infrastructure.UserFacingMessageFormatter.Format(exception);
+        }
+        TestAssert.True(!string.IsNullOrWhiteSpace(error), "The non-editable profile did not report a paste refusal.");
+        QaCases.RequireRejectedMorphPaste(error, before, editor.CreateDraft());
+        TestAssert.True(!editor.IsDirty, "The refused paste dirtied the real editor.");
+
+        void MustFail(string? message, MorphFaceDocument after)
+        {
+            try { QaCases.RequireRejectedMorphPaste(message, before, after); }
+            catch (InvalidDataException) { return; }
+            throw new Exception("QA accepted a silent or mutating morph paste refusal.");
+        }
+        MustFail(null, before);
+        MustFail(" ", before);
+        MustFail(error, before with { MorphFeatures = [new("Target", 0.5f)] });
+        MustFail(error, before with { FinalSkeleton = [new("root", System.Numerics.Vector3.One)] });
+        MustFail(error, before with { BakedLods = [before.BakedLods[0].Reverse().ToArray()] });
+    });
 
     private static async Task LoadOracleDiagnostics()
     {

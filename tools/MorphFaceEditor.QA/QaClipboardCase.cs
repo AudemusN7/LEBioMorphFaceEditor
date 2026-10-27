@@ -83,7 +83,7 @@ internal static partial class QaCases
         }
         else c.Current.Evidence["morphPasteScope"] = isAln
             ? "ALN geometry is intentionally non-editable; morph clipboard refusal is expected and the copied PCC must preserve authored geometry."
-            : "No safe morph slider; copies/pastes preserved authored morph data, and asserts unsupported controls remain unavailable.";
+            : "No safe morph slider; copy preserves authored data, and paste must report refusal without changing the target.";
         await EditMaterial(c, editor, 0.025f);
         var sourceBeforeCopy = editor.CreateDraft();
         MorphFaceMorphData? morph = null;
@@ -112,6 +112,8 @@ internal static partial class QaCases
         var destination = vm.Faces.Single(face => face.InstancedPath == cloned.FaceInstancedPath);
         await Select(destination, "morph paste target");
         var beforePaste = vm.Editor!.CreateDraft();
+        var editorDirtyBeforePaste = vm.Editor.IsDirty;
+        var packageDirtyBeforePaste = vm.IsDirty;
         var expectedMorph = morph ?? new MorphFaceMorphData(sourceBeforeCopy.MorphFeatures,
             sourceBeforeCopy.FinalSkeleton, sourceBeforeCopy.BakedLods);
         QaContext.Require(beforePaste.BakedLods.Count == expectedMorph.BakedLods.Count &&
@@ -129,8 +131,9 @@ internal static partial class QaCases
             await Execute(vm.PasteMorphDataCommand);
             if (!vm.Editor!.CanEditMorphFeatures)
             {
-                QaContext.Require(vm.ErrorMessage?.Contains("disabled", StringComparison.OrdinalIgnoreCase) == true,
-                    "Unsafe morph clipboard paste was not explicitly rejected.");
+                RequireRejectedMorphPaste(vm.ErrorMessage, beforePaste, vm.Editor.CreateDraft());
+                QaContext.Require(vm.Editor.IsDirty == editorDirtyBeforePaste && vm.IsDirty == packageDirtyBeforePaste,
+                    "Rejected morph clipboard paste changed the target's dirty state.");
                 c.Current.Evidence["expectedMorphPasteRejection"] = vm.ErrorMessage;
             }
             else
@@ -184,7 +187,8 @@ internal static partial class QaCases
         c.Current.Evidence["morphPasteTargetSave"] = new
         {
             Expected = morphPasteSaveExpected,
-            SkippedBecause = isAln ? "ALN morph clipboard operations are intentionally blocked; the unchanged target has nothing to save." : null
+            SkippedBecause = morphPasteSaveExpected ? null
+                : "Morph paste was blocked for this target; the unchanged target has nothing to save."
         };
         if (morphPasteSaveExpected) await SaveClipboard("morph paste target");
         await Select(sourceItem, "material copy source");
@@ -213,6 +217,16 @@ internal static partial class QaCases
         QaContext.Require(command.CanExecute(null), $"Required editor command '{commandName}' is disabled.");
         if (command is AsyncRelayCommand asyncCommand) await asyncCommand.ExecuteAsync();
         else command.Execute(null);
+    }
+
+    internal static void RequireRejectedMorphPaste(string? error, MorphFaceDocument before, MorphFaceDocument after)
+    {
+        // The shell localises technical exceptions; their original English wording
+        // is not part of the clipboard contract. Refusal must still be explicit
+        // and preserve every authored value, including geometry and materials.
+        QaContext.Require(!string.IsNullOrWhiteSpace(error),
+            "Unsafe morph clipboard paste was not explicitly rejected.");
+        AssertState(before, after, "rejected morph clipboard paste preserves the complete target draft");
     }
 
     private static void CheckVm(MainWindowViewModel vm) => QaContext.Require(

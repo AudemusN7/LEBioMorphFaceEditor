@@ -403,7 +403,12 @@ internal static class UiRandomisationTests
             .First(value => value is not null && value.TryGetValue("HED_Scalp_Spec", out var spec) &&
                             spec.Contains("GBL_ARM_ALL_Black", StringComparison.OrdinalIgnoreCase))!;
         const string packagePath = "working.pcc";
-        var currentTextures = family.Keys.ToDictionary(
+        var requiredFailure = new Dictionary<string, string>
+        {
+            ["HED_Diff"] = "Test.FailRequired_Diff",
+            ["HED_Norm"] = "Test.Valid_Norm"
+        };
+        var currentTextures = family.Keys.Concat(requiredFailure.Keys).ToDictionary(
             name => name,
             name => new MaterialTextureBinding(name, CreateTestTexture(packagePath, $"Current.{name}", name)),
             StringComparer.OrdinalIgnoreCase);
@@ -413,12 +418,12 @@ internal static class UiRandomisationTests
             HeadMaterialFamily.Skin, HeadMaterialBlendMode.Opaque, false,
             new Dictionary<string, float>(), new Dictionary<string, Vector4>(), currentTextures)
         {
-            SupportedTextures = family.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase)
+            SupportedTextures = currentTextures.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase)
         };
         var session = new MorphFaceEditor.Core.Editing.MaterialEditingSession(
             MorphFaceMaterialOverrides.Empty,
             new ResolvedHeadMaterialSet(new Dictionary<string, ResolvedHeadMaterial> { [material.Key] = material }));
-        var candidates = family.Values.Select((path, index) =>
+        var candidates = family.Values.Concat(requiredFailure.Values).Select((path, index) =>
         {
             var occurrence = new TextureCatalogOccurrence(
                 sourceFile.Name, 42 + index, 0, TextureCatalogOrigin.BaseGame, 1, 1,
@@ -426,8 +431,9 @@ internal static class UiRandomisationTests
             return new TextureCatalogCandidate(MorphFaceGame.LE3, path, occurrence, [occurrence])
             { IsEligibleOfficialDefault = true };
         }).ToArray();
+        var loader = new RecordingBatchTextureLoader();
         using var editor = new MaterialEditorViewModel(
-            session, new StubColorDialog(), new ImmediateTextureLoader("GBL_ARM_ALL_Black"), packagePath, [],
+            session, new StubColorDialog(), loader, packagePath, [],
             message => throw new Exception(message), new HumanMaleFeatureMetadataCatalog(),
             candidates, TextureCatalogProfile.Empty, true);
 
@@ -435,17 +441,51 @@ internal static class UiRandomisationTests
                 new Dictionary<string, float>(),
                 new Dictionary<string, Vector4>(),
                 new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.OrdinalIgnoreCase)
-                    { ["manual|human-scalp"] = family })
+                    { ["manual|human-scalp"] = family, ["manual|human-face"] = requiredFailure })
             .GetAwaiter().GetResult();
 
         TestAssert.Equal(1, prepared.AppliedTextureFamilies);
-        TestAssert.True(prepared.FailedTextureFamilySignatures.Count == 0,
+        TestAssert.True(!prepared.FailedTextureFamilySignatures.Contains(MaterialRandomiser.TextureFamilySignature(family)),
             "An unresolved optional scalp map rejected the manual prompt family.");
         TestAssert.True(prepared.Textures.ContainsKey("HED_Scalp_Diff") &&
                         prepared.Textures.ContainsKey("HED_Scalp_Norm"),
             "The manual prompt must still apply the required Diff/Norm pair.");
         TestAssert.True(!prepared.Textures.ContainsKey("HED_Scalp_Spec"),
             "The unresolved optional Mask should be omitted from the prompt result.");
+        TestAssert.Equal(1, loader.BatchCalls);
+        TestAssert.True(loader.Requests.Count == family.Count + requiredFailure.Count &&
+                        loader.Requests.All(request => request.PackagePath == sourceFile.Name),
+            "The batch did not use the selected official physical donors.");
+        TestAssert.True(!prepared.Textures.ContainsKey("HED_Diff") && !prepared.Textures.ContainsKey("HED_Norm"),
+            "A failed required member left part of its family in the result.");
+        TestAssert.Equal(1, prepared.FailedTextureFamilySignatures.Count);
+        TestAssert.True(prepared.FailedTextureFamilySignatures.Contains(MaterialRandomiser.TextureFamilySignature(requiredFailure)),
+            "The required failure did not identify the rejected human-face family.");
+        TestAssert.True(!session.History.CanUndo, "Preparing a roll must not create an undo entry.");
+    }
+
+    private sealed class RecordingBatchTextureLoader : ITextureReferenceLoader
+    {
+        internal int BatchCalls { get; private set; }
+        internal IReadOnlyList<TextureReadRequest> Requests { get; private set; } = [];
+
+        public Task<DecodedTextureAsset> LoadTextureAsync(string packagePath, string texturePath,
+            MaterialParameterDefinition definition, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("Randomisation should use the batch loader.");
+
+        public Task<IReadOnlyList<TextureReadResult>> LoadTexturesAsync(
+            IReadOnlyList<TextureReadRequest> requests, CancellationToken cancellationToken = default)
+        {
+            BatchCalls++;
+            Requests = requests.ToArray();
+            IReadOnlyList<TextureReadResult> results = requests.Select(request =>
+                request.TexturePath.Contains("GBL_ARM_ALL_Black", StringComparison.OrdinalIgnoreCase) ||
+                request.TexturePath.Contains("FailRequired", StringComparison.OrdinalIgnoreCase)
+                    ? new TextureReadResult(null, new FileNotFoundException(request.TexturePath))
+                    : new TextureReadResult(CreateTestTexture(request.PackagePath, request.TexturePath,
+                        request.Definition.Name), null)).ToArray();
+            return Task.FromResult(results);
+        }
     }
 
     private static void ExhaustedTextureRandomisationIsReported()

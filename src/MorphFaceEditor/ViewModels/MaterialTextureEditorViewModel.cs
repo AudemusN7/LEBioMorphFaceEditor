@@ -257,6 +257,14 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
 
     public async Task<DecodedTextureAsset> ResolveReferenceAsync(AssetIdentity reference)
     {
+        var plan = PrepareReferenceRead(reference);
+        var resolved = plan.CachedTexture ?? await _references.LoadTextureAsync(
+            plan.Request.PackagePath, plan.Request.TexturePath, plan.Request.Definition);
+        return plan.ApplyDonorIdentity(resolved);
+    }
+
+    private TextureReferenceReadPlan PrepareReferenceRead(AssetIdentity reference)
+    {
         ArgumentNullException.ThrowIfNull(reference);
         MaterialTextureOption? option;
         if (string.IsNullOrWhiteSpace(reference.PackagePath))
@@ -266,13 +274,10 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
                 reference.PackagePath, reference.UIndex), out option);
         if (option is not null && !option.MatchesIdentity(reference)) option = null;
         var cached = option is null ? null : ResolvedTexture(option);
-        var resolved = cached ?? await _references.LoadTextureAsync(
+        return new(_references, new TextureReadRequest(
             option?.RegistryCandidate?.EffectiveOccurrence.PackagePath ?? reference.PackagePath,
             reference.InstancedPath,
-            _definition);
-        return reference.IsExplicitTextureDonor
-            ? resolved with { Source = resolved.Source with { IsExplicitTextureDonor = true } }
-            : resolved;
+            _definition), cached, reference.IsExplicitTextureDonor);
     }
 
     /// <summary>Automatic rolls use installed official defaults; picker and file imports retain their own choices.</summary>
@@ -282,6 +287,14 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
         var candidate = FindRandomisationOption(instancedPath)
             ?? throw Loc.Error(new FileNotFoundException(Loc.Format("loc_VM_texture_notAvailableInSources", instancedPath)));
         return ResolveReferenceAsync(candidate.Asset!.Identity);
+    }
+
+    internal TextureReferenceReadPlan PrepareRandomisationTextureRead(string instancedPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(instancedPath);
+        var candidate = FindRandomisationOption(instancedPath)
+            ?? throw Loc.Error(new FileNotFoundException(Loc.Format("loc_VM_texture_notAvailableInSources", instancedPath)));
+        return PrepareReferenceRead(candidate.Asset!.Identity);
     }
 
     /// <summary>Resolves file imports by full path, without the picker’s unique-name fallback.</summary>
@@ -795,6 +808,15 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
                 ?? visible[0]
             : visible[0];
     }
+}
+
+internal sealed record TextureReferenceReadPlan(
+    ITextureReferenceLoader Loader, TextureReadRequest Request,
+    DecodedTextureAsset? CachedTexture, bool IsExplicitTextureDonor)
+{
+    internal DecodedTextureAsset ApplyDonorIdentity(DecodedTextureAsset texture) => IsExplicitTextureDonor
+        ? texture with { Source = texture.Source with { IsExplicitTextureDonor = true } }
+        : texture;
 }
 
 public sealed record MaterialTextureOption(

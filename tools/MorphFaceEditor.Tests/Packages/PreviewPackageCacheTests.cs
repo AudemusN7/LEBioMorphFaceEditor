@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using LegendaryExplorerCore.Packages;
 using LegendaryExplorerCore.Unreal;
+using LegendaryExplorerCore.Unreal.BinaryConverters;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.LegendaryExplorer;
@@ -14,8 +15,72 @@ internal static class PreviewPackageCacheTests
     [
         new("PCC byte budget evicts cold inputs after the read and retains hot packages", EvictsColdPackages),
         new("one oversized PCC stays reusable instead of repeatedly reopening", OversizedPackageStaysReusable),
-        new("reader eviction releases PCCs while preserving geometry, pixels and source refresh", ReaderEvictionPreservesDetachedData)
+        new("reader eviction releases PCCs while preserving geometry, pixels and source refresh", ReaderEvictionPreservesDetachedData),
+        new("batched interleaved texture reads reuse donors and isolate failures", BatchTextureReadsReuseDonors)
     ];
+
+    private static void BatchTextureReadsReuseDonors()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        var root = Path.Combine(Path.GetTempPath(), $"MFE-BatchTextures-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var paths = Enumerable.Range(0, 2).Select(index => Path.Combine(root, $"Donor{index}.pcc")).ToArray();
+            foreach (var path in paths)
+            {
+                using var package = MEPackageHandler.CreateMemoryEmptyPackage(path, MEGame.LE1);
+                package.CreateExport("Payload", "Object", indexed: false).Data = new byte[2 * 1024 * 1024];
+                for (var index = 0; index < 2; index++)
+                {
+                    var texture = package.CreateExport($"Pixels{index}", "Texture2D", indexed: false);
+                    texture.WriteProperty(new EnumProperty(new NameReference("PF_A8R8G8B8"),
+                        new NameReference("EPixelFormat"), MEGame.LE1, "Format"));
+                    texture.WriteBinary(new UTexture2D { Mips =
+                        [new UTexture2D.Texture2DMipMap([(byte)(20 + index), 30, 40, 255], 1, 1)] });
+                }
+                package.Save(path);
+            }
+
+            using var reader = new MorphFacePackageReader();
+            var cache = (PreviewPackageCache)typeof(MorphFacePackageReader).GetField("_packageCache",
+                BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(reader)!;
+            typeof(PreviewPackageCache).GetField("_maximumBytes", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(cache, 3L * 1024 * 1024);
+            var definition = new MaterialParameterDefinition("Preview", "Preview", "Preview", MaterialParameterKind.Texture,
+                HeadMaterialFamily.Unknown, TextureRole: TextureRole.Diffuse, ColorSpace: TextureColorSpace.Srgb,
+                AlphaPolicy: TextureAlphaPolicy.Ignore);
+            var requests = new[]
+            {
+                new TextureReadRequest(paths[0], "Pixels0", definition),
+                new TextureReadRequest(paths[1], "Pixels0", definition),
+                new TextureReadRequest(Path.Combine(root, "missing.pcc"), "Missing", definition),
+                new TextureReadRequest(paths[0], "Pixels1", definition),
+                new TextureReadRequest(paths[1], "Pixels1", definition)
+            };
+            var results = reader.LoadTextures(requests);
+            TestAssert.Equal(requests.Length, results.Count);
+            foreach (var index in new[] { 0, 1, 3, 4 })
+                TestAssert.True(results[index].Error is null &&
+                    results[index].Texture?.Source.InstancedPath ==
+                        $"{Path.GetFileNameWithoutExtension(requests[index].PackagePath)}.{requests[index].TexturePath}" &&
+                    Path.GetFullPath(results[index].Texture!.Source.PackagePath) == requests[index].PackagePath,
+                    $"Texture request {index} failed or returned the wrong identity: {results[index].Error}; " +
+                    $"actual {results[index].Texture?.Source}; expected {requests[index].PackagePath}|{requests[index].TexturePath}.");
+            TestAssert.True(results[2].Texture is null && results[2].Error is not null,
+                "A missing donor did not produce an isolated item error.");
+            TestAssert.Equal(2L, reader.PackageCacheStatistics.Misses);
+            TestAssert.True(reader.PackageCacheStatistics.EstimatedBytes <= reader.PackageCacheStatistics.BudgetBytes,
+                "The batch left cold donors above the cache budget.");
+            using var cancelled = new CancellationTokenSource();
+            cancelled.Cancel();
+            var threw = false;
+            try { reader.LoadTextures(requests, cancelled.Token); }
+            catch (OperationCanceledException) { threw = true; }
+            TestAssert.True(threw, "Cancellation was returned as an item error instead of stopping the batch.");
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
 
     private static void EvictsColdPackages() => WithPackages((paths) =>
     {

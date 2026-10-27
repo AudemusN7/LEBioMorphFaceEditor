@@ -310,46 +310,97 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
             .ToDictionary(value => value.Key, value => value.Value, StringComparer.OrdinalIgnoreCase);
         var decoded = new Dictionary<string, DecodedTextureAsset?>(StringComparer.OrdinalIgnoreCase);
         var failedTextureFamilySignatures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var appliedFamilies = 0;
+        var requests = new List<TextureReadRequest>();
+        var readers = new Dictionary<ITextureReferenceLoader, List<int>>(ReferenceEqualityComparer.Instance);
+        var families = new List<(string Name, IReadOnlyDictionary<string, string> Values,
+            List<RandomisationTextureRead> Members)>();
+        // Capture the selected physical donors and control metadata on the UI
+        // thread. Only their I/O order changes; family acceptance stays ordered.
         foreach (var family in textureFamilies.OrderBy(value => value.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            var members = new List<RandomisationTextureRead>();
+            families.Add((family.Key, family.Value, members));
+            foreach (var member in family.Value)
+            {
+                var required = MaterialTextureFamilyPolicy.IsRequiredMember(family.Key, member.Key);
+                var editor = MaterialParameterControlKey.TryParse(member.Key, out _, out _)
+                    ? Textures.FirstOrDefault(value =>
+                        value.Name.Equals(member.Key, StringComparison.OrdinalIgnoreCase))
+                    : Textures.FirstOrDefault(value =>
+                        SourceParameterName(value.Name).Equals(member.Key, StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals(ParameterScopeKey(value.Name), parameterScopeKey,
+                            StringComparison.OrdinalIgnoreCase));
+                if (editor is null)
+                {
+                    members.Add(new(member.Key, null, required, null, -1, required
+                        ? new InvalidDataException(Loc.Format(
+                            "loc_VM_material_randomisationMissingParameter", family.Key, member.Key)) : null));
+                    if (required) break;
+                    continue;
+                }
+                try
+                {
+                    var plan = editor.PrepareRandomisationTextureRead(member.Value);
+                    var index = plan.CachedTexture is null ? requests.Count : -1;
+                    if (index >= 0)
+                    {
+                        requests.Add(plan.Request);
+                        if (!readers.TryGetValue(plan.Loader, out var indexes))
+                            readers.Add(plan.Loader, indexes = []);
+                        indexes.Add(index);
+                    }
+                    members.Add(new(member.Key, editor.Name, required, plan, index, null));
+                }
+                catch (Exception exception)
+                {
+                    members.Add(new(member.Key, editor.Name, required, null, -1, exception));
+                    if (required) break;
+                }
+            }
+        }
+
+        var results = new TextureReadResult[requests.Count];
+        foreach (var reader in readers)
+        {
+            var batch = await reader.Key.LoadTexturesAsync(reader.Value.Select(index => requests[index]).ToArray());
+            for (var index = 0; index < reader.Value.Count; index++)
+                results[reader.Value[index]] = batch[index];
+        }
+        var appliedFamilies = 0;
+        foreach (var family in families)
         {
             var resolved = new Dictionary<string, DecodedTextureAsset?>(StringComparer.OrdinalIgnoreCase);
             try
             {
-                foreach (var member in family.Value)
+                foreach (var member in family.Members)
                 {
-                    var required = MaterialTextureFamilyPolicy.IsRequiredMember(family.Key, member.Key);
-                    var editor = MaterialParameterControlKey.TryParse(member.Key, out _, out _)
-                        ? Textures.FirstOrDefault(value =>
-                            value.Name.Equals(member.Key, StringComparison.OrdinalIgnoreCase))
-                        : Textures.FirstOrDefault(value =>
-                            SourceParameterName(value.Name).Equals(member.Key, StringComparison.OrdinalIgnoreCase) &&
-                            string.Equals(ParameterScopeKey(value.Name), parameterScopeKey,
-                                StringComparison.OrdinalIgnoreCase));
-                    if (editor is null)
-                    {
-                        if (required)
-                        {
-                            throw new InvalidDataException(
-                                Loc.Format("loc_VM_material_randomisationMissingParameter", family.Key, member.Key));
-                        }
-                        AppLog.Verbose($"MATERIAL:OPTIONAL-SKIP FAMILY:{family.Key} MEMBER:{member.Key} REASON:unsupported");
-                        continue;
-                    }
                     try
                     {
-                        resolved[editor.Name] = await editor.ResolveRandomisationPathAsync(member.Value);
+                        if (member.Error is { } error) throw error;
+                        if (member.ControlName is null)
+                        {
+                            AppLog.Verbose($"MATERIAL:OPTIONAL-SKIP FAMILY:{family.Name} MEMBER:{member.ParameterName} REASON:unsupported");
+                            continue;
+                        }
+                        var texture = member.Plan!.CachedTexture;
+                        if (texture is null)
+                        {
+                            var result = results[member.RequestIndex];
+                            if (result.Error is { } readError) throw readError;
+                            texture = result.Texture!;
+                        }
+                        resolved[member.ControlName] = member.Plan.ApplyDonorIdentity(texture);
                     }
-                    catch (Exception exception) when (!required)
+                    catch (Exception exception) when (!member.Required)
                     {
-                        AppLog.Verbose($"MATERIAL:OPTIONAL-SKIP FAMILY:{family.Key} MEMBER:{member.Key} REASON:unresolved {exception.Message}");
+                        AppLog.Verbose($"MATERIAL:OPTIONAL-SKIP FAMILY:{family.Name} MEMBER:{member.ParameterName} REASON:unresolved {exception.Message}");
                     }
                 }
             }
             catch (Exception exception)
             {
-                AppLog.Warning($"MATERIAL:FAMILY-SKIP FAMILY:{family.Key} REASON:unresolved {exception.Message}");
-                failedTextureFamilySignatures.Add(MaterialRandomiser.TextureFamilySignature(family.Value));
+                AppLog.Warning($"MATERIAL:FAMILY-SKIP FAMILY:{family.Name} REASON:unresolved {exception.Message}");
+                failedTextureFamilySignatures.Add(MaterialRandomiser.TextureFamilySignature(family.Values));
                 continue;
             }
             foreach (var value in resolved) decoded[value.Key] = value.Value;
@@ -358,6 +409,9 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
         return new PreparedMaterialRandomisation(
             applicableScalars, applicableVectors, decoded, appliedFamilies, failedTextureFamilySignatures);
     }
+
+    private sealed record RandomisationTextureRead(string ParameterName, string? ControlName,
+        bool Required, TextureReferenceReadPlan? Plan, int RequestIndex, Exception? Error);
 
     private static string LocalizedScopeLabel(string? scopeKey, string sourceLabel) => scopeKey?.ToLowerInvariant() switch
     {

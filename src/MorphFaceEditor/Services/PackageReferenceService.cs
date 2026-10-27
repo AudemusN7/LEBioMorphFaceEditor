@@ -20,6 +20,32 @@ public interface ITextureReferenceLoader
         MaterialParameterDefinition definition,
         CancellationToken cancellationToken = default);
 
+    async Task<IReadOnlyList<TextureReadResult>> LoadTexturesAsync(
+        IReadOnlyList<TextureReadRequest> requests,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(requests);
+        var results = new TextureReadResult[requests.Count];
+        for (var i = 0; i < requests.Count; i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var request = requests[i];
+            try
+            {
+                results[i] = new TextureReadResult(await LoadTextureAsync(
+                    request.PackagePath, request.TexturePath, request.Definition, cancellationToken), null);
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception error)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                results[i] = new TextureReadResult(null, error);
+            }
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return results;
+    }
+
     async Task<System.Windows.Media.ImageSource> LoadTextureThumbnailAsync(
         string packagePath,
         string texturePath,
@@ -137,6 +163,11 @@ public sealed class PackageReferenceService(
         CancellationToken cancellationToken = default) => ReadAsync(
             () => reader.LoadTexture(packagePath, texturePath, definition),
             cancellationToken);
+
+    public Task<IReadOnlyList<TextureReadResult>> LoadTexturesAsync(
+        IReadOnlyList<TextureReadRequest> requests,
+        CancellationToken cancellationToken = default) => ReadAsync(
+            () => reader.LoadTextures(requests, cancellationToken), cancellationToken);
 
     public Task<TextureCatalogReadResult> ReadTextureCatalogAsync(
         MorphFaceGame game,

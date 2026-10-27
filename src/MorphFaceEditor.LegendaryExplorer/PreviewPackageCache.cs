@@ -6,7 +6,9 @@ namespace MorphFaceEditor.LegendaryExplorer;
 /// <summary>Bounds the reader's retained PCC payloads without interrupting an in-flight asset read.</summary>
 internal sealed class PreviewPackageCache : PackageCache
 {
-    internal const long DefaultMaximumBytes = 512L * 1024 * 1024;
+    // Several large human donor PCCs need to stay hot together; a smaller
+    // budget repeatedly decompresses them and increases allocation pressure.
+    internal const long DefaultMaximumBytes = 1536L * 1024 * 1024;
     private readonly Dictionary<string, long> _packageBytes = new(StringComparer.OrdinalIgnoreCase);
     private readonly long _maximumBytes;
     private long _hits;

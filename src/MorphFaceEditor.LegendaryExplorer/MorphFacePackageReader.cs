@@ -11,6 +11,11 @@ using MorphFaceEditor.Core.Materials;
 
 namespace MorphFaceEditor.LegendaryExplorer;
 
+public sealed record TextureReadRequest(
+    string PackagePath, string TexturePath, MaterialParameterDefinition Definition);
+
+public sealed record TextureReadResult(DecodedTextureAsset? Texture, Exception? Error);
+
 public sealed class MorphFacePackageReader : IDisposable
 {
     private readonly PreviewPackageCache _packageCache = new();
@@ -513,6 +518,57 @@ public sealed class MorphFacePackageReader : IDisposable
         if (material.PreviewModel != HumanMaterialPreviewModel.CcScalp)
             throw new InvalidDataException($"The official scalp donor '{path}' does not use the CC scalp graph.");
         return material;
+    }
+
+    public IReadOnlyList<TextureReadResult> LoadTextures(
+        IReadOnlyList<TextureReadRequest> requests,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(requests);
+        var results = new TextureReadResult[requests.Count];
+        var groups = new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i < requests.Count; i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                var path = RequireFile(requests[i].PackagePath);
+                if (!groups.TryGetValue(path, out var indexes))
+                    groups.Add(path, indexes = []);
+                indexes.Add(i);
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception error)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                results[i] = new TextureReadResult(null, error);
+            }
+        }
+
+        foreach (var group in groups)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            using var cacheOperation = _packageCache.BeginOperation();
+            foreach (var index in group.Value)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var request = requests[index];
+                try
+                {
+                    results[index] = new TextureReadResult(
+                        LoadTexture(group.Key, request.TexturePath, request.Definition), null);
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception error)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    results[index] = new TextureReadResult(null, error);
+                }
+            }
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return results;
     }
 
     public DecodedTextureAsset LoadTexture(

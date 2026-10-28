@@ -7,7 +7,7 @@ internal static class TestCatalog
     internal static IReadOnlyDictionary<string, IReadOnlyList<TestCase>> Suites { get; } =
         new Dictionary<string, IReadOnlyList<TestCase>>(StringComparer.OrdinalIgnoreCase)
         {
-            ["core"] = [.. DeformationTests.All, .. EditingTests.All, .. DetachedMeshPreviewTests.All,
+            ["core"] = [.. DeformationTests.All, .. EditingTests.All, .. FemaleTurianTests.All, .. DetachedMeshPreviewTests.All,
                 .. CustomMaterialWorkspaceTests.All, .. RandomisationTests.Runtime,
                 .. PlayerFacialDetailTexturePolicyTests.All, .. PlayerHairStyleCatalogTests.All,
                 .. PlayerFaceScarTexturePolicyTests.All, .. Player2DaRandomisationPolicyTests.All],
@@ -22,7 +22,7 @@ internal static class TestCatalog
             ["rendering"] = [.. RenderingTests.All, .. AmbientOcclusionRenderingTests.All,
                 .. EnvironmentLightingTests.All, .. EnvironmentRenderingTests.All,
                 .. HumanHeadShadowTests.All, .. NativeHairPreviewTests.All],
-            ["ui"] = [.. UiPresentationTests.All, .. UiWorkspaceTests.All, .. UiInterchangeTests.All, .. UiRandomisationTests.All,
+            ["ui"] = [.. FemaleTurianTests.Ui, .. TufTattooRandomisationTests.All, .. UiPresentationTests.All, .. UiWorkspaceTests.All, .. UiInterchangeTests.All, .. UiRandomisationTests.All,
                 .. UiPickerTests.All, .. UiEditorTests.All, .. UiProfileTests.All,
                 .. AutomationCommandTests.All, .. VisorLensAnimationLifecycleTests.All, .. RandomisationPublicationTests.All,
                 .. ApplicationSettingsTests.All, .. LoggingTests.All, .. LocalisationTests.All, .. GitHubUpdateServiceTests.All,
@@ -37,7 +37,7 @@ internal static class TestCatalog
                 .. MaterialInstancePreservationTests.All, .. Le2LocalizedEyeOverrideImportRoleTests.All,
                 .. HeadHairTextureOwnershipTests.All, .. NativeHairMaterialSupportTests.All,
                 .. PlayerRuntimeAssetTests.All],
-            ["conversion"] = ConversionTests.All,
+            ["conversion"] = [.. ConversionTests.All],
             ["interchange"] = [.. RonCodecTests.All, .. PcsavHeadMorphTests.All,
                 .. MorphFaceInterchangeExportTests.All, .. MaterialInterchangeTests.All,
                 .. Le2PlayerMaterialRonIdentityTests.All],

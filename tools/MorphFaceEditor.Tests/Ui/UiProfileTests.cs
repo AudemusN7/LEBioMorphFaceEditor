@@ -21,10 +21,38 @@ internal static class UiProfileTests
     internal static IReadOnlyList<TestCase> All { get; } =
     [
         new("unsupported profiles keep unsafe geometry controls unavailable", UnsupportedProfilesKeepGeometryClosed),
+        new("TUF face with mismatched bake remains a material preview", LegacyTufPlaceholderRemainsMaterialPreview),
         new("native Turian and Krogan loads preserve unknown authored rows without controls", UnknownAuthoredRowsRemainLoadable),
         new("ALN loads preserve authored bakes without a target set, including static faces", TargetlessAlnPreservesAuthoredGeometry),
         new("malformed LE3 HMF hair and inert HMM eye metadata remain hidden", MalformedAndInertTargetsStayHidden)
     ];
+
+    private static void LegacyTufPlaceholderRemainsMaterialPreview() => WpfTestDispatcher.Invoke(() => RunWithDispatcher(async () =>
+    {
+        var path = TufInstalledDonorFixture.CreateMismatchedBakeCopy();
+        try
+        {
+            var originalHash = System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path));
+            var catalog = await new MorphFaceCatalogService().ReadAsync(path);
+            var face = catalog.Faces.Single(value => value.ProfileKey == "le3-female-turian" && value.ObjectName == "TUF_Authored_Neutral");
+            var original = new MorphFacePackageContextService().CaptureMorphData(path, face.InstancedPath);
+            using var reader = new MorphFacePackageReader();
+            using var shell = CreateMainWindowViewModel(reader);
+            await shell.OpenDroppedFileAsync(path);
+            shell.SelectedFace = shell.Faces.Single(value => value.InstancedPath == face.InstancedPath);
+            await ((AsyncRelayCommand)shell.LoadSelectedFaceCommand).ExecuteAsync();
+            var editor = shell.Editor ?? throw new Exception(shell.ErrorMessage ?? "Legacy TUF face failed to load.");
+            TestAssert.True(shell.HasPreview && !shell.HasError, "Legacy TUF face did not publish a material preview.");
+            TestAssert.True(!editor.CanEditMorphFeatures && editor.Bones.Count == 0 && editor.Features.Count == 0,
+                "Legacy TUF placeholder geometry became editable.");
+            TestAssert.True(editor.AllowsMaterialRandomisation, "Legacy TUF placeholder lost material editing.");
+            var draft = editor.CreateDraft();
+            PackageTestFixtures.AssertMorphEqual(original, new MorphFaceMorphData(draft.MorphFeatures, draft.FinalSkeleton, draft.BakedLods));
+            TestAssert.True(originalHash.SequenceEqual(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path))),
+                "Loading the legacy TUF face changed its source PCC.");
+        }
+        finally { File.Delete(path); }
+    }));
 
     private static void UnknownAuthoredRowsRemainLoadable()
     {
@@ -70,7 +98,7 @@ internal static class UiProfileTests
         using var reader = new MorphFacePackageReader();
         var profiles = MorphFaceProfileRegistry.CreateDefault().Profiles;
         foreach (var (key, bones) in new[]
-                 { ("le2-vorcha", true), ("le2-female-turian", false), ("le2-female-batarian", false) })
+                 { ("le2-vorcha", true), ("le2-female-batarian", false) })
         {
             var profile = profiles.Single(value => value.Key == key);
             using var editor = CreateEditor(reader, profile.GetUiProfile(), key, ignoresAuthoredGeometry: !bones);

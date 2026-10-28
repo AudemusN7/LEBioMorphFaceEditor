@@ -109,6 +109,7 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
         var occurrencesByPath = new Dictionary<string, List<TextureCatalogOccurrence>>(
             StringComparer.OrdinalIgnoreCase);
         var morphFaceTemplates = new List<MorphFaceTemplateCandidate>();
+        var profiles = MorphFaceProfileRegistry.CreateDefault();
         var meshesByPath = new Dictionary<string, List<AttachmentMeshOccurrence>>(
             StringComparer.OrdinalIgnoreCase);
         var assets = new List<InstalledAssetOccurrence>();
@@ -133,6 +134,10 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
             }
             if (officialPaths.Contains(Path.GetFullPath(packagePath)))
                 morphFaceTemplates.AddRange(scan.MorphFaceTemplates);
+            else
+                morphFaceTemplates.AddRange(scan.MorphFaceTemplates.Where(candidate =>
+                    candidate.Origin == TextureCatalogOrigin.Mod &&
+                    profiles.Find(game, candidate.FacePath, candidate.BaseHeadPath)?.Archetype == "female-turian"));
             foreach (var mesh in scan.AttachmentMeshes)
             {
                 var canonicalPath = PccAssetPathPolicy.FromDonorOccurrence(
@@ -333,7 +338,8 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
             Candidates = candidates,
             AttachmentMeshes = meshes,
             Assets = assets,
-            MorphFaceTemplates = includeModOnly ? [] : source.MorphFaceTemplates
+            MorphFaceTemplates = source.MorphFaceTemplates.Where(candidate =>
+                includedPackages.Contains(Path.GetFullPath(candidate.PackagePath))).ToArray()
         };
     }
 

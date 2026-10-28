@@ -180,6 +180,15 @@ public static class MorphFaceProfileFeatures
         "mouth_Wide",
     };
 
+    // Female heads have no fringes; the neck target is outside this authored set.
+    public static IReadOnlySet<string> FemaleTurianMetadataOnlyFeatures { get; } =
+        new HashSet<string>(TurianMetadataOnlyFeatures, StringComparer.OrdinalIgnoreCase)
+        { "headSpikes_Short", "headSpikes_Long", "neck_Thin" };
+
+    public static IReadOnlySet<string> FemaleTurianTargetNames { get; } =
+        TurianAllFeatureNames.Except(FemaleTurianMetadataOnlyFeatures, StringComparer.OrdinalIgnoreCase)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
     public static IReadOnlySet<string> KroganMetadataOnlyFeatures { get; } =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -262,10 +271,11 @@ public static class MorphFaceProfileFeatures
             "asari" => !AsariHiddenFeatures.Contains(name),
             "salarian" => !SalarianHiddenFeatures.Contains(name),
             "turian" => !TurianMetadataOnlyFeatures.Contains(name),
+            "female-turian" => FemaleTurianTargetNames.Contains(name),
             "batarian" => !BatarianMetadataOnlyFeatures.Contains(name) &&
                           !name.Equals("teeth_correction", StringComparison.OrdinalIgnoreCase),
             "krogan" => !KroganMetadataOnlyFeatures.Contains(name),
-            "female-turian" or "female-batarian" or "vorcha" or "detached-mesh" => false,
+            "female-batarian" or "vorcha" or "detached-mesh" => false,
             _ => true
         };
 

@@ -33330,6 +33330,16 @@
         },
         {
           "ClassName": "MaterialInstanceConstant",
+          "Path": "BIOG_TUF_HED_PROMorph_R.Eye.TUF_HED_PROEye_Mat_1a",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "MaterialInstanceConstant",
+          "Path": "BIOG_TUF_HED_PROMorph_R.PROBase.TUF_HED_PROMorph_MAT_1a",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "MaterialInstanceConstant",
           "Path": "BIOG_TUR_HED_PROMorph_R.Eye.TUR_HED_PROEye_Mat_1a",
           "Kind": "Export"
         },
@@ -33595,6 +33605,31 @@
         },
         {
           "ClassName": "Package",
+          "Path": "BIOG_TUF_HED_PROMorph_R",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Package",
+          "Path": "BIOG_TUF_HED_PROMorph_R.Add",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Package",
+          "Path": "BIOG_TUF_HED_PROMorph_R.Eye",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Package",
+          "Path": "BIOG_TUF_HED_PROMorph_R.PROBase",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Package",
+          "Path": "BIOG_TUF_HED_PROMorph_R.Tattoo",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Package",
           "Path": "BIOG_TUR_HED_PROMorph_R",
           "Kind": "Export"
         },
@@ -33635,6 +33670,11 @@
         },
         {
           "ClassName": "Package",
+          "Path": "BIOG_V_Env_Hologram_Z.Textures",
+          "Kind": "Import"
+        },
+        {
+          "ClassName": "Package",
           "Path": "BIOG_V_Z_TEXTURES_A_Z",
           "Kind": "Export"
         },
@@ -33652,6 +33692,11 @@
           "ClassName": "Package",
           "Path": "EffectsMaterials.Users",
           "Kind": "Export"
+        },
+        {
+          "ClassName": "Package",
+          "Path": "VFX_zz_ME1_Global_METR.Textures",
+          "Kind": "Import"
         },
         {
           "ClassName": "RvrEffectsMaterialUser",
@@ -34401,6 +34446,41 @@
         {
           "ClassName": "Texture2D",
           "Path": "biog_sal_hed_promorph_r._Eye.SAL_HED_EYE_Spec",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Texture2D",
+          "Path": "BIOG_TUF_HED_PROMorph_R.Add.TUF_HED_PRO_Add1",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Texture2D",
+          "Path": "BIOG_TUF_HED_PROMorph_R.Eye.TUF_EYE_Diff",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Texture2D",
+          "Path": "BIOG_TUF_HED_PROMorph_R.PROBase.TUF_HED_PROBase_Norm_Stack",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Texture2D",
+          "Path": "BIOG_TUF_HED_PROMorph_R.PROBase.TUF_HED_PRO_Diff_Stack",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Texture2D",
+          "Path": "BIOG_TUF_HED_PROMorph_R.PROBase.TUF_HED_PRO_Mask",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Texture2D",
+          "Path": "BIOG_TUF_HED_PROMorph_R.PROBase.TUF_HED_PRO_Tint",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Texture2D",
+          "Path": "BIOG_TUF_HED_PROMorph_R.Tattoo.TUF_HED_PRO_Tat1",
           "Kind": "Export"
         },
         {
@@ -63129,6 +63209,16 @@
         },
         {
           "ClassName": "MaterialInstanceConstant",
+          "Path": "BIOG_TUF_HED_PROMorph_R.Eye.TUF_HED_PROEye_Mat_1a",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "MaterialInstanceConstant",
+          "Path": "BIOG_TUF_HED_PROMorph_R.PROBase.TUF_HED_PROMorph_MAT_1a",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "MaterialInstanceConstant",
           "Path": "BIOG_TUR_HED_PROMorph_R.Garrus.TUR_EYE_PROGarrus_Mat_1a",
           "Kind": "Export"
         },
@@ -63460,6 +63550,31 @@
         {
           "ClassName": "Package",
           "Path": "BIOG_SAL_HED_PROMorph_R._Eye",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Package",
+          "Path": "BIOG_TUF_HED_PROMorph_R",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Package",
+          "Path": "BIOG_TUF_HED_PROMorph_R.Add",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Package",
+          "Path": "BIOG_TUF_HED_PROMorph_R.Eye",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Package",
+          "Path": "BIOG_TUF_HED_PROMorph_R.PROBase",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Package",
+          "Path": "BIOG_TUF_HED_PROMorph_R.Tattoo",
           "Kind": "Export"
         },
         {
@@ -64385,6 +64500,41 @@
         {
           "ClassName": "Texture2D",
           "Path": "BIOG_SAL_HED_PROMorph_R._Eye.SAL_HED_EYE_Spec",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Texture2D",
+          "Path": "BIOG_TUF_HED_PROMorph_R.Add.TUF_HED_PRO_Add1",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Texture2D",
+          "Path": "BIOG_TUF_HED_PROMorph_R.Eye.TUF_EYE_Diff",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Texture2D",
+          "Path": "BIOG_TUF_HED_PROMorph_R.PROBase.TUF_HED_PROBase_Norm_Stack",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Texture2D",
+          "Path": "BIOG_TUF_HED_PROMorph_R.PROBase.TUF_HED_PRO_Diff_Stack",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Texture2D",
+          "Path": "BIOG_TUF_HED_PROMorph_R.PROBase.TUF_HED_PRO_Mask",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Texture2D",
+          "Path": "BIOG_TUF_HED_PROMorph_R.PROBase.TUF_HED_PRO_Tint",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Texture2D",
+          "Path": "BIOG_TUF_HED_PROMorph_R.Tattoo.TUF_HED_PRO_Tat1",
           "Kind": "Export"
         },
         {
@@ -111973,6 +112123,16 @@
         },
         {
           "ClassName": "MaterialInstanceConstant",
+          "Path": "BIOG_TUF_HED_PROMorph_R.Eye.TUF_HED_PROEye_Mat_1a",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "MaterialInstanceConstant",
+          "Path": "BIOG_TUF_HED_PROMorph_R.PROBase.TUF_HED_PROMorph_MAT_1a",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "MaterialInstanceConstant",
           "Path": "BIOG_TUR_HED_PROMorph_R.Eye.TUR_HED_Eye_Mat_1a",
           "Kind": "Export"
         },
@@ -112679,6 +112839,31 @@
         {
           "ClassName": "Package",
           "Path": "BIOG_SAL_HED_PROMorph_R.PROBase",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Package",
+          "Path": "BIOG_TUF_HED_PROMorph_R",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Package",
+          "Path": "BIOG_TUF_HED_PROMorph_R.Add",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Package",
+          "Path": "BIOG_TUF_HED_PROMorph_R.Eye",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Package",
+          "Path": "BIOG_TUF_HED_PROMorph_R.PROBase",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Package",
+          "Path": "BIOG_TUF_HED_PROMorph_R.Tattoo",
           "Kind": "Export"
         },
         {
@@ -114029,6 +114214,41 @@
         {
           "ClassName": "Texture2D",
           "Path": "BIOG_SAL_HED_PROMorph_R.SAL_HED_PRO_Tat1",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Texture2D",
+          "Path": "BIOG_TUF_HED_PROMorph_R.Add.TUF_HED_PRO_Add1",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Texture2D",
+          "Path": "BIOG_TUF_HED_PROMorph_R.Eye.TUF_EYE_Diff",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Texture2D",
+          "Path": "BIOG_TUF_HED_PROMorph_R.PROBase.TUF_HED_PROBase_Norm_Stack",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Texture2D",
+          "Path": "BIOG_TUF_HED_PROMorph_R.PROBase.TUF_HED_PRO_Diff_Stack",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Texture2D",
+          "Path": "BIOG_TUF_HED_PROMorph_R.PROBase.TUF_HED_PRO_Mask",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Texture2D",
+          "Path": "BIOG_TUF_HED_PROMorph_R.PROBase.TUF_HED_PRO_Tint",
+          "Kind": "Export"
+        },
+        {
+          "ClassName": "Texture2D",
+          "Path": "BIOG_TUF_HED_PROMorph_R.Tattoo.TUF_HED_PRO_Tat1",
           "Kind": "Export"
         },
         {

@@ -14,12 +14,33 @@ internal static class QaUtilityTests
     [
         new("QA roll batches retain early and final failures", () => BatchResults().GetAwaiter().GetResult()),
         new("QA coverage streams reproduce filtered cases and vary donors", Selection),
+        new("QA TUF matrix matches Turian workflow coverage", TufMatrixParity),
         new("QA native save values compare separately from preserved source ordering", NativeSaveOrdering),
         new("QA material comparison preserves duplicate counts and exact texture identities", MaterialNamesAndDuplicates),
         new("QA morph clipboard refusals accept localised errors but reject silent or changed targets", ClipboardRefusal),
         new("QA load oracle misses remain diagnostic without accepting invalid topology", () => LoadOracleDiagnostics().GetAwaiter().GetResult()),
         new("QA reports retain frozen timing limits and functional failures beside timing outcomes", Report)
     ];
+
+    private static void TufMatrixParity()
+    {
+        var ids = QaCases.All.Select(value => value.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var game in new[] { "le1", "le2", "le3" })
+        foreach (var group in new[] { "load", "material-ron", "clipboard", "undo-redo", "benchmark",
+                     "npc-randomisation", "ron-full", "ron-morph", "donor-sweep" })
+        {
+            TestAssert.True(ids.Contains($"{group}/{game}-tur") && ids.Contains($"{group}/{game}-tuf"),
+                $"Missing TUR or TUF {group} coverage for {game}.");
+        }
+        foreach (var source in new[] { "le1", "le2", "le3" })
+        foreach (var destination in new[] { "le1", "le2", "le3" }.Where(value => value != source))
+            TestAssert.True(ids.Contains($"conversion/{source}-tur/{destination}") &&
+                ids.Contains($"conversion/{source}-tuf/{destination}"),
+                $"Missing TUR or TUF conversion {source} to {destination}.");
+        foreach (var game in new[] { "le1", "le2" })
+            TestAssert.True(ids.Contains($"ron-cross-game/{game}-tur") && ids.Contains($"ron-cross-game/{game}-tuf"),
+                $"Missing TUR or TUF cross-game RON coverage for {game}.");
+    }
 
     private static void ClipboardRefusal() => WpfTestDispatcher.Invoke(() =>
     {

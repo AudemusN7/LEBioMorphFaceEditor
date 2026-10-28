@@ -53,6 +53,12 @@ public sealed class MorphFacePreviewLoadService : IDisposable
                 "loc_Services_MorphFacePreviewLoad_UnsupportedBaseHead", loaded.Game,
                 loaded.Document.BaseHeadReference?.InstancedPath ?? "<unresolved>")));
         var profile = profileResolution.Profile;
+        // Earlier TUF material corpora carry TUR-sized bakes. Keep those
+        // payloads intact and preview the female base until explicitly rebaked.
+        if (profile.Archetype == "female-turian" && loaded.Document.BakedLods
+                .Where((lod, index) => index >= loaded.BaseHead.Lods.Count ||
+                    lod.Length != loaded.BaseHead.Lods[index].Positions.Length).Any())
+            profile = profile with { IgnoresAuthoredGeometry = true };
         loaded = loaded with
         {
             UsesCustomBaseMesh = profileResolution.UsesCustomMesh,

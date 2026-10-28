@@ -16,7 +16,12 @@ public static class RandomisationProfileDefinitionFactory
         ArgumentNullException.ThrowIfNull(targetCatalog);
         return registry.Profiles.Select(profile =>
         {
-            var materialOnly = profile.IgnoresAuthoredGeometry || profile.TargetSetName is null;
+            // The reviewed TUF corpus remains material evidence only. Its old
+            // faces contain inherited TUR geometry, while runtime TUF morph
+            // randomisation deliberately uses the separately reviewed TUR seeds.
+            // A profile becoming editable must not silently refresh that corpus.
+            var materialOnly = profile.IgnoresAuthoredGeometry || profile.TargetSetName is null ||
+                profile.Archetype == "female-turian";
             var targets = materialOnly
                 ? []
                 : targetCatalog.Load(profile);

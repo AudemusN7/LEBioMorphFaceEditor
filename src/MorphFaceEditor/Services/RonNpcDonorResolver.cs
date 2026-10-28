@@ -37,8 +37,9 @@ public sealed class RonNpcDonorResolver(MorphFaceProfileRegistry profiles)
             $"The selected {game} game has no supported native NPC '{archetype}' archetype.");
 
         return candidates
-            .Where(candidate => IsNativeNpc(candidate) &&
-                                (eligiblePackages is null || eligiblePackages.Contains(Path.GetFullPath(candidate.PackagePath))) &&
+            .Where(candidate => IsNativeNpc(candidate, profile.Archetype == "female-turian") &&
+                                (eligiblePackages is null || eligiblePackages.Contains(Path.GetFullPath(candidate.PackagePath)) ||
+                                 profile.Archetype == "female-turian" && candidate.Origin == TextureCatalogOrigin.Mod) &&
                                 _profiles.Find(game, candidate.FacePath, candidate.BaseHeadPath)?.Key == profile.Key &&
                                 profile.GeometryEditBlockReason(candidate.BaseHeadPath) is null &&
                                 File.Exists(candidate.PackagePath))
@@ -52,7 +53,7 @@ public sealed class RonNpcDonorResolver(MorphFaceProfileRegistry profiles)
 
     // NPC RON import can use a static native base.  In particular, ALN/Vorcha
     // faces are valid donors even when the profile does not expose editable
-    // authored morph controls.  Keep geometry-ignored profiles (such as TUF)
+    // authored morph controls. Keep geometry-ignored profiles
     // out of the donor list because their native payload is intentionally not
     // safe to use as an NPC morph base.
     internal static bool SupportsMorphRonExport(MorphFaceProfile? profile, string? baseHeadPath) =>
@@ -62,9 +63,11 @@ public sealed class RonNpcDonorResolver(MorphFaceProfileRegistry profiles)
         MorphFaceGame game, string profileKey, IReadOnlyList<MorphFaceTemplateCandidate> candidates,
         IReadOnlyCollection<string> eligibleOfficialPackagePaths)
     {
+        var profile = _profiles.Profiles.SingleOrDefault(p => p.Game == game && p.Key == profileKey);
         var eligible = eligibleOfficialPackagePaths.Select(Path.GetFullPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        return candidates.Where(candidate => IsNativeNpc(candidate) &&
-                eligible.Contains(Path.GetFullPath(candidate.PackagePath)) && File.Exists(candidate.PackagePath) &&
+        return candidates.Where(candidate => IsNativeNpc(candidate, profile?.Archetype == "female-turian") &&
+                (eligible.Contains(Path.GetFullPath(candidate.PackagePath)) ||
+                 profile?.Archetype == "female-turian" && candidate.Origin == TextureCatalogOrigin.Mod) && File.Exists(candidate.PackagePath) &&
                 (_profiles.Find(game, candidate.FacePath, candidate.BaseHeadPath) ??
                  _profiles.Find(game, candidate.FacePath, null))?.Key == profileKey)
             .OrderByDescending(candidate => candidate.MountPriority)
@@ -76,8 +79,9 @@ public sealed class RonNpcDonorResolver(MorphFaceProfileRegistry profiles)
         !profile.IgnoresAuthoredGeometry &&
         profile.ExportTag.Trim('[', ']').Length > 0;
 
-    private static bool IsNativeNpc(MorphFaceTemplateCandidate candidate) =>
-        (candidate.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc) &&
+    private static bool IsNativeNpc(MorphFaceTemplateCandidate candidate, bool allowInstalledMod) =>
+        (candidate.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc ||
+         allowInstalledMod && candidate.Origin == TextureCatalogOrigin.Mod) &&
         !IsPlayerOrCreator(candidate.FacePath) &&
         !IsPlayerOrCreator(candidate.BaseHeadPath);
 

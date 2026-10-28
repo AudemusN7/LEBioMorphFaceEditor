@@ -24,7 +24,12 @@ internal static class CorpusCommands
                 $"Expected the nine canonical GlobalMorphs packages in '{corpusDirectory}', but found {packagePaths.Length}.");
         }
 
-        var audit = packagePaths.Select(AuditCorpusPackage).ToArray();
+        var tufPackages = new[] { "LE1", "LE2", "LE3" }
+            .Select(game => Path.Combine(corpusDirectory, "TUF", $"{game} TUF.pcc"))
+            .ToArray();
+        foreach (var path in tufPackages)
+            if (!File.Exists(path)) throw new FileNotFoundException("Dedicated TUF corpus package was not found.", path);
+        var audit = packagePaths.Concat(tufPackages).Select(AuditCorpusPackage).ToArray();
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
         File.WriteAllText(outputPath, JsonSerializer.Serialize(audit, new JsonSerializerOptions
         {
@@ -55,11 +60,14 @@ internal static class CorpusCommands
             ("LE2", "LE1"), ("LE2", "LE3"),
             ("LE3", "LE1"), ("LE3", "LE2")
         };
+        var tufAudits = new[] { "LE1", "LE2", "LE3" }.ToDictionary(
+            game => game,
+            game => AuditCorpusPackage(Path.Combine(corpusDirectory, "TUF", $"{game} TUF.pcc")),
+            StringComparer.OrdinalIgnoreCase);
         var results = pairs.SelectMany(pair => BuildReconciliation(
                 audits[$"{pair.Item1} GlobalMorphs.pcc"],
                 audits[$"{pair.Item1} to {pair.Item2} GlobalMorphs.pcc"],
-                pair.Item1,
-                pair.Item2))
+                pair.Item1, pair.Item2, (tufAudits[pair.Item1], tufAudits[pair.Item2])))
             .OrderBy(value => value.SourceGame, StringComparer.Ordinal)
             .ThenBy(value => value.TargetGame, StringComparer.Ordinal)
             .ThenBy(value => value.Kind, StringComparer.Ordinal)
@@ -98,6 +106,34 @@ internal static class CorpusCommands
                 .OrderBy(entry => entry.ClassName, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(entry => entry.Path, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
+            // TUF has its own non-vanilla native corpus. Add identities absent
+            // from the established oracle, while retaining already-reviewed roles
+            // for identities shared with other families.
+            var tufPath = Path.Combine(oracleDirectory, "TUF", $"{gameName} TUF.pcc");
+            using (var tuf = MEPackageHandler.OpenMEPackage(tufPath, forceLoadFromDisk: true))
+            {
+                var tufEntries = tuf.Exports
+                    .Where(entry => IsMaterialGraphRootClass(entry.ClassName) && !IsTrashedMaterialGraphEntry(entry))
+                    .SelectMany(root => EntryImporter.GetAllReferencesOfExport(root).Append<IEntry>(root))
+                    .Distinct()
+                    .Where(entry => !IsTrashedMaterialGraphEntry(entry))
+                    .Select(entry => new MaterialOracleEntry(entry.ClassName, entry.InstancedFullPath,
+                        entry is ExportEntry ? "Export" : "Import"))
+                    .GroupBy(entry => $"{entry.ClassName}\u001f{entry.Path}", StringComparer.OrdinalIgnoreCase)
+                    .Select(group =>
+                    {
+                        var kinds = group.Select(entry => entry.Kind).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+                        if (kinds.Length != 1)
+                            throw new InvalidDataException($"Ambiguous TUF material role for '{group.Key}'.");
+                        return group.First();
+                    });
+                var existing = entries.Select(entry => $"{entry.ClassName}\u001f{entry.Path}")
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                entries = entries.Concat(tufEntries.Where(entry => existing.Add($"{entry.ClassName}\u001f{entry.Path}")))
+                    .OrderBy(entry => entry.ClassName, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(entry => entry.Path, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
             if (gameName.Equals("LE2", StringComparison.OrdinalIgnoreCase))
             {
                 // These Player-only dependencies have reviewed native Startup import
@@ -265,35 +301,39 @@ internal static class CorpusCommands
         CorpusPackageAudit source,
         CorpusPackageAudit target,
         string sourceGame,
-        string targetGame)
+        string targetGame,
+        params (CorpusPackageAudit Source, CorpusPackageAudit Target)[] additionalPackages)
     {
-        var targetFaces = target.Faces.ToDictionary(value => value.Path, StringComparer.OrdinalIgnoreCase);
         var evidence = new List<(string Kind, string? Parameter, string SourcePath, string? TargetPath)>();
-        foreach (var sourceFace in source.Faces)
+        foreach (var (sourcePackage, targetPackage) in new[] { (source, target) }.Concat(additionalPackages))
         {
-            if (!targetFaces.TryGetValue(sourceFace.Path, out var targetFace))
+            var targetFaces = targetPackage.Faces.ToDictionary(value => value.Path, StringComparer.OrdinalIgnoreCase);
+            foreach (var sourceFace in sourcePackage.Faces)
             {
-                continue;
-            }
-            if (sourceFace.Hair is not null)
-            {
-                evidence.Add(("Hair", null, sourceFace.Hair.Path, targetFace.Hair?.Path));
-            }
-            for (var index = 0; index < sourceFace.OtherMeshes.Count; index++)
-            {
-                if (sourceFace.OtherMeshes[index] is { } other)
+                if (!targetFaces.TryGetValue(sourceFace.Path, out var targetFace))
                 {
-                    evidence.Add(("Other", null, other.Path,
-                        index < targetFace.OtherMeshes.Count ? targetFace.OtherMeshes[index]?.Path : null));
+                    continue;
                 }
-            }
-            var targetTextures = targetFace.TextureOverrides
-                .GroupBy(value => value.Parameter, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(group => group.Key, group => group.First().Texture?.Path, StringComparer.OrdinalIgnoreCase);
-            foreach (var texture in sourceFace.TextureOverrides.Where(value => value.Texture is not null))
-            {
-                targetTextures.TryGetValue(texture.Parameter, out var targetPath);
-                evidence.Add(("Texture", texture.Parameter, texture.Texture!.Path, targetPath));
+                if (sourceFace.Hair is not null)
+                {
+                    evidence.Add(("Hair", null, sourceFace.Hair.Path, targetFace.Hair?.Path));
+                }
+                for (var index = 0; index < sourceFace.OtherMeshes.Count; index++)
+                {
+                    if (sourceFace.OtherMeshes[index] is { } other)
+                    {
+                        evidence.Add(("Other", null, other.Path,
+                            index < targetFace.OtherMeshes.Count ? targetFace.OtherMeshes[index]?.Path : null));
+                    }
+                }
+                var targetTextures = targetFace.TextureOverrides
+                    .GroupBy(value => value.Parameter, StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(group => group.Key, group => group.First().Texture?.Path, StringComparer.OrdinalIgnoreCase);
+                foreach (var texture in sourceFace.TextureOverrides.Where(value => value.Texture is not null))
+                {
+                    targetTextures.TryGetValue(texture.Parameter, out var targetPath);
+                    evidence.Add(("Texture", texture.Parameter, texture.Texture!.Path, targetPath));
+                }
             }
         }
 

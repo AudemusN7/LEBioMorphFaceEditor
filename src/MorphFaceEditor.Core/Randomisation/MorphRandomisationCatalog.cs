@@ -1,3 +1,5 @@
+using MorphFaceEditor.Core.Deformation;
+
 namespace MorphFaceEditor.Core.Randomisation;
 
 /// <summary>Loads the embedded donor resource once and routes editor profiles into core sampling.</summary>
@@ -33,7 +35,8 @@ public sealed class MorphRandomisationCatalog
         try
         {
             var key = MorphRandomisationPoolRouter.Resolve(profileKey);
-            return Corpus.Pools.TryGetValue(key, out var donors) && donors.Count > 0;
+            return Corpus.Pools.TryGetValue(key, out var donors) &&
+                   donors.Any(donor => IsMorphDonor(key, donor));
         }
         catch (NotSupportedException)
         {
@@ -49,9 +52,27 @@ public sealed class MorphRandomisationCatalog
         int randomSeed)
     {
         var pool = MorphRandomisationPoolRouter.Resolve(profileKey);
-        return MorphRandomiser.SelectDonor(Corpus, pool, randomSeed,
-            donor => donor.AvailableFeatures.Count > 0);
+        var donor = MorphRandomiser.SelectDonor(Corpus, pool, randomSeed,
+            donor => IsMorphDonor(pool, donor));
+        if (!profileKey.EndsWith("-female-turian", StringComparison.OrdinalIgnoreCase)) return donor;
+
+        // Shared TUR seeds retain their identity and zero pattern. Only the
+        // female set's authored channels participate; material selection uses
+        // the separate, unchanged female material population.
+        var names = MorphFaceProfileFeatures.FemaleTurianTargetNames;
+        return donor with
+        {
+            AvailableFeatures = donor.AvailableFeatures.Where(names.Contains)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase),
+            NonZeroValues = donor.NonZeroValues.Where(row => names.Contains(row.Key))
+                .ToDictionary(row => row.Key, row => row.Value, StringComparer.OrdinalIgnoreCase)
+        };
     }
+
+    private static bool IsMorphDonor(MorphRandomisationPoolKey pool, MorphRandomisationDonor donor) =>
+        donor.AvailableFeatures.Count > 0 &&
+        (pool != MorphRandomisationPoolKey.Turian ||
+         !donor.SourceProfileKey.EndsWith("-female-turian", StringComparison.OrdinalIgnoreCase));
 
     public MorphRandomisationDonor SelectMaterialDonor(
         string profileKey,

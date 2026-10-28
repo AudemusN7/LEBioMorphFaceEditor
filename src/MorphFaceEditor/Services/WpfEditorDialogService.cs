@@ -3,6 +3,7 @@ using System.IO;
 using Microsoft.Win32;
 using System.Windows;
 using MorphFaceEditor.LegendaryExplorer;
+using MorphFaceEditor.LegendaryExplorer.TextureRegistry;
 using MorphFaceEditor.Views;
 using MorphFaceEditor.ViewModels;
 using MorphFaceEditor.Infrastructure;
@@ -38,9 +39,14 @@ public sealed class WpfEditorDialogService : IEditorDialogService
         return window.ShowDialog() == true ? window.Choice : null;
     }
     private readonly TextureRegistrySettingsViewModel _textureRegistrySettings;
+    private readonly TextureCatalogService _textureCatalog;
 
-    public WpfEditorDialogService(TextureRegistrySettingsViewModel textureRegistrySettings) =>
+    public WpfEditorDialogService(TextureRegistrySettingsViewModel textureRegistrySettings,
+        TextureCatalogService textureCatalog)
+    {
         _textureRegistrySettings = textureRegistrySettings;
+        _textureCatalog = textureCatalog;
+    }
     public string? ChoosePackage(string? initialDirectory = null)
     {
         var dialog = new OpenFileDialog
@@ -136,7 +142,8 @@ public sealed class WpfEditorDialogService : IEditorDialogService
 
     public NewNpcMorphChoice? ChooseNewNpcMorph()
     {
-        var window = new StandaloneImportGameWindow(newNpcMode: true) { Owner = Application.Current.MainWindow };
+        var window = new StandaloneImportGameWindow(newNpcMode: true, textureCatalog: _textureCatalog)
+        { Owner = Application.Current.MainWindow };
         return window.ShowDialog() == true && window.SelectedGame is { } game && window.SelectedNpcArchetype is { } archetype
             ? new NewNpcMorphChoice(game, archetype) : null;
     }

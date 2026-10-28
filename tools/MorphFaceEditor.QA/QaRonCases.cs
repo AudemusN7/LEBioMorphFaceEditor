@@ -56,7 +56,7 @@ internal static partial class QaCases
         await SelectFileFace(c, vm, copy, source.FacePath);
         var export = morphOnly ? vm.ExportMorphFeaturesRonCommand : vm.ExportMorphRonCommand;
         var profile = c.Profiles.Find(source.Game, source.FacePath, source.BaseHeadPath);
-        var expectedBlocked = c.Face.Family is "TUF" or "BAF" || morphOnly && c.Face.Family == "ALN" ||
+        var expectedBlocked = c.Face.Family == "BAF" || morphOnly && c.Face.Family == "ALN" ||
             !RonNpcDonorResolver.SupportsMorphRonExport(profile, source.BaseHeadPath);
         if (expectedBlocked)
         {

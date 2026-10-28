@@ -224,16 +224,14 @@ public sealed class MorphFaceProfileRegistry
         new(
             $"{game.ToString().ToLowerInvariant()}-female-turian",
             game,
-            MorphFaceProfileFeatures.TurianAllFeatureNames,
+            MorphFaceProfileFeatures.FemaleTurianMetadataOnlyFeatures,
             MorphFaceProfileFeatures.NoAliases,
             "[TUF]",
 
             _ => false,
             MatchesFemaleTurian)
         {
-            IgnoresAuthoredGeometry = true,
-            GeometryEditBlockReason = _ =>
-                "Female Turian morph, bone, and baked LOD data currently contains inherited male Turian payloads and is intentionally ignored. Material editing remains available."
+            TargetSetName = "TUF_BaseMorphSet"
         };
 
     private static bool MatchesFemaleTurian(string facePath, string? baseHeadPath)

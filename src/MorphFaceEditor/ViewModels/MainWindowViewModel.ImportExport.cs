@@ -102,7 +102,7 @@ public sealed partial class MainWindowViewModel
             ? Loc.Text("loc_Shell_Error_RonProfileUnsupported") : null;
 
     private static bool HasSupportedRonArchetype(string archetype) =>
-        archetype is "ALN" or "ASA" or "BAT" or "HMM" or "HMF" or "KRO" or "SAL" or "TUR";
+        archetype is "ALN" or "ASA" or "BAT" or "HMM" or "HMF" or "KRO" or "SAL" or "TUR" or "TUF";
 
     internal static RonExportProvenance CreateRonExportProvenance(
         string workspacePath, BioMorphFaceListItem selected, bool isPlayerWorkspace)

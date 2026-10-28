@@ -1,8 +1,10 @@
 using MorphFaceEditor.Core.Domain;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.LegendaryExplorer;
+using MorphFaceEditor.LegendaryExplorer.TextureRegistry;
 using MorphFaceEditor.Services;
 
 namespace MorphFaceEditor.Views;
@@ -10,8 +12,12 @@ namespace MorphFaceEditor.Views;
 /// <summary>Selects the game and optional archetype for a standalone workspace.</summary>
 public partial class StandaloneImportGameWindow : Window
 {
-    public StandaloneImportGameWindow(bool newPlayerMode = false, bool newNpcMode = false)
+    private readonly TextureCatalogService? _textureCatalog;
+
+    public StandaloneImportGameWindow(bool newPlayerMode = false, bool newNpcMode = false,
+        TextureCatalogService? textureCatalog = null)
     {
+        _textureCatalog = textureCatalog;
         InitializeComponent();
         DarkTitleBar.Apply(this);
         if (newPlayerMode || newNpcMode)
@@ -31,20 +37,39 @@ public partial class StandaloneImportGameWindow : Window
         if (newNpcMode)
         {
             ArchetypePanel.Visibility = Visibility.Visible;
-            TargetGameSelector.SelectionChanged += (_, _) => RefreshArchetypes();
-            RefreshArchetypes();
+            TargetGameSelector.SelectionChanged += async (_, _) => await RefreshArchetypesAsync();
+            Loaded += async (_, _) => await RefreshArchetypesAsync();
         }
     }
 
     public string? SelectedNpcArchetype => ArchetypeBox.SelectedValue as string;
 
-    private void RefreshArchetypes()
+    private async Task RefreshArchetypesAsync()
     {
         var previous = SelectedNpcArchetype;
-        ArchetypeBox.ItemsSource = TargetGameSelector.SelectedGame is { } game
-            ? new RonNpcDonorResolver(MorphFaceProfileRegistry.CreateDefault()).Archetypes(game)
-                .Where(option => option.Key is not ("TUF" or "BAF")).ToArray()
-            : [];
+        var game = TargetGameSelector.SelectedGame;
+        var resolver = new RonNpcDonorResolver(MorphFaceProfileRegistry.CreateDefault());
+        var options = game is { } selectedGame ? resolver.Archetypes(selectedGame)
+            .Where(option => option.Key is not "BAF").ToArray() : [];
+        // TUF has no vanilla donor. Offer it only when the installed catalogue
+        // can supply the same native face used by the ordinary workspace builder.
+        ArchetypeBox.ItemsSource = options.Where(option => option.Key != "TUF").ToArray();
+        ArchetypeBox.SelectedValue = previous;
+        if (ArchetypeBox.SelectedIndex < 0) ArchetypeBox.SelectedIndex = 0;
+        if (game is { } targetGame && _textureCatalog is not null)
+        {
+            var catalog = await _textureCatalog.ReadAsync(targetGame);
+            if (TargetGameSelector.SelectedGame != game) return;
+            if (catalog.IsAvailable)
+            {
+                try
+                {
+                    resolver.Resolve(targetGame, "TUF", catalog.MorphFaceTemplates, catalog.OfficialPackagePaths);
+                    ArchetypeBox.ItemsSource = options;
+                }
+                catch (InvalidDataException) { /* The normal missing-donor case. */ }
+            }
+        }
         ArchetypeBox.SelectedValue = previous;
         if (ArchetypeBox.SelectedIndex < 0) ArchetypeBox.SelectedIndex = 0;
     }

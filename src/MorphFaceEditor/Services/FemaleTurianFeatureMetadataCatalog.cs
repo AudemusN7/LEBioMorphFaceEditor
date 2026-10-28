@@ -5,8 +5,7 @@ using MorphFaceEditor.Core.Materials;
 namespace MorphFaceEditor.Services;
 
 /// <summary>
-/// Retains the complete Turian control vocabulary as dormant metadata while
-/// exposing the shared Turian material authoring surface for Female Turians.
+/// Uses the shared Turian labels for the authored female target set.
 /// </summary>
 public sealed class FemaleTurianFeatureMetadataCatalog : IHeadEditorUiProfile
 {
@@ -15,12 +14,23 @@ public sealed class FemaleTurianFeatureMetadataCatalog : IHeadEditorUiProfile
     public FemaleTurianFeatureMetadataCatalog(TurianFeatureMetadataCatalog? turian = null) =>
         _turian = turian ?? MorphFaceMetadataCatalogRegistry.TurianParent;
 
-public IReadOnlyList<EditorCategoryDefinition> Categories => _turian.Categories;
+    public IReadOnlyList<EditorCategoryDefinition> Categories => _turian.Categories.Select(category =>
+        category.Key == TurianFeatureMetadataCatalog.FacialStructure
+            ? category with { Description = string.Empty, SliderGroups = category.SliderGroups.Where(g => g.Key != "head-spikes").ToArray() }
+            : category.Key == TurianFeatureMetadataCatalog.Head
+                ? category with
+                {
+                    Description = string.Empty,
+                    SliderGroups = [new("shape", Loc.Text("loc_Services_Taxonomy_shape_cfb25fc2")),
+                        .. category.SliderGroups.Where(g => g.Key != "neck")]
+                }
+                : category).ToArray();
 
     public MorphFeatureMetadata Describe(ResolvedMorphFeature feature, bool sessionCanEdit)
     {
-        var metadata = MorphFaceProfileFeatures.TurianAllFeatureNames.Contains(feature.Feature.Name)
-            ? _turian.Describe(feature, false)
+        var eligible = MorphFaceProfileFeatures.FemaleTurianTargetNames.Contains(feature.Feature.Name);
+        var metadata = eligible
+            ? _turian.Describe(feature, sessionCanEdit)
             : new MorphFeatureMetadata(
                 feature.Feature.Name,
                 feature.Feature.Name,
@@ -33,10 +43,12 @@ public IReadOnlyList<EditorCategoryDefinition> Categories => _turian.Categories;
                 0.01f,
                 false,
                 string.Empty);
+        if (feature.Feature.Name.Equals("head_ScaleUp", StringComparison.OrdinalIgnoreCase))
+            metadata = metadata with { CategoryKey = TurianFeatureMetadataCatalog.Head, SubcategoryKey = "shape" };
         return metadata with
         {
-            IsVisible = false,
-            IsEditable = false
+            IsVisible = eligible && metadata.IsVisible,
+            IsEditable = eligible && metadata.IsEditable
         };
     }
 

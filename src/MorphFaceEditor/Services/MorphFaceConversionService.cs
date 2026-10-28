@@ -61,6 +61,11 @@ public sealed class MorphFaceConversionService(
         if (sourceProfile.TargetSetName is null && !sourceProfile.IgnoresAuthoredGeometry)
             throw new NotSupportedException();
         EnsureSupportedDirection(source.Game, request.TargetGame);
+        var sourceSession = CreateSession(source, sourceProfile);
+        // Earlier TUF corpora inherited male Turian bakes. Projecting their
+        // sliders would silently replace that unverified authored geometry.
+        if (sourceProfile.Archetype == "female-turian" && !sourceSession.CanEditMorphFeatures)
+            throw Loc.Error(new InvalidOperationException(Loc.Text("loc_Editor_GeometryVerificationUnavailable")));
         var sourceCatalog = ReadTextureCatalog(source.Game);
         var targetCatalog = ReadTextureCatalog(request.TargetGame);
         var species = SpeciesForProfile(sourceProfile.Key);
@@ -77,7 +82,6 @@ public sealed class MorphFaceConversionService(
             : RequirePackage(destinationPath, "destination");
 
         var (templateReference, template, templateReferences) = FindEditableTemplate(reader, templatePath, targetProfile);
-        var sourceSession = CreateSession(source, sourceProfile);
         var transfer = sourceSession.CaptureSemanticTransferData();
         var targetSession = CreateSession(template, targetProfile);
         if (!targetProfile.IgnoresAuthoredGeometry)
@@ -189,7 +193,7 @@ public sealed class MorphFaceConversionService(
         IReadOnlyList<MorphFaceTemplateCandidate> candidates)
     {
         var match = candidates.FirstOrDefault(candidate =>
-            candidate.Origin != TextureCatalogOrigin.Mod &&
+            (candidate.Origin != TextureCatalogOrigin.Mod || profile.Archetype == "female-turian") &&
             profiles.Find(profile.Game, candidate.FacePath, candidate.BaseHeadPath)?.Key == profile.Key &&
             (profile.IgnoresAuthoredGeometry || profile.GeometryEditBlockReason(candidate.BaseHeadPath) is null) &&
             File.Exists(candidate.PackagePath));

@@ -75,7 +75,7 @@ internal static partial class QaCases
                 });
         // Source() samples by family, so repeated fixed-donor labels tested the same
         // route several times without actually selecting those named donors.
-        foreach (var face in Archetypes.Where(face => !face.IsPlayer && face.Family is not "TUF" and not "ALN"))
+        foreach (var face in Archetypes.Where(face => !face.IsPlayer && face.Family is not "ALN"))
             foreach (var target in new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 }
                          .Where(game => game != face.Game))
                 Add("conversion", $"{face.Family} conversion {face.Game} → {target}", face,
@@ -90,7 +90,7 @@ internal static partial class QaCases
             Add("ron-morph", "Morph-only RON export/import/save/reopen, or explicit unsupported capability", face, c => RonRoundTrip(c, true));
             if (!face.IsPlayer)
                 Add("donor-sweep", "Every eligible corpus donor: load/export/reopen/value preservation", face, DonorSweep);
-            if (face.Game is MorphFaceGame.LE1 or MorphFaceGame.LE2 && face.Family is not "ALN" and not "TUF" and not "BAF")
+            if (face.Game is MorphFaceGame.LE1 or MorphFaceGame.LE2 && face.Family is not "ALN" and not "BAF")
             {
                 var target = face.Game == MorphFaceGame.LE1 ? MorphFaceGame.LE2 : MorphFaceGame.LE1;
                 Add("ron-cross-game", "Full RON between compatible LE1/LE2 games", face, c => CrossGameRon(c, target));

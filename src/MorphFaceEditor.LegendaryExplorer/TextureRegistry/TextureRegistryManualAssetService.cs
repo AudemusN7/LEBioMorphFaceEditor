@@ -90,6 +90,8 @@ public sealed class TextureRegistryManualAssetService(TextureRegistryStore store
                 StringComparer.OrdinalIgnoreCase).ToArray(),
             AttachmentMeshes = meshes.Values.OrderBy(value => value.CanonicalPath,
                 StringComparer.OrdinalIgnoreCase).ToArray(),
+            MorphFaceTemplates = installed.MorphFaceTemplates.Concat(manual.MorphFaceTemplates)
+                .DistinctBy(value => $"{value.PackagePath}|{value.ExportUIndex}", StringComparer.OrdinalIgnoreCase).ToArray(),
             ManualAssets = manual.ManualAssets
         };
     }

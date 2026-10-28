@@ -215,6 +215,15 @@ internal sealed class QaContext : IDisposable
                 Donor = texture.Value.Texture.Source, texture.Value.Texture.Width, texture.Value.Texture.Height,
                 PixelSha256 = Convert.ToHexString(SHA256.HashData(texture.Value.Texture.Rgba8)) })).ToArray();
         Require(result.Scene.Meshes.Count > 0, "Face load produced an empty preview scene.");
+        if (Face.Family == "TUF")
+        {
+            var targetNames = Targets.Load(result.Profile).Select(target => target.Source.InstancedPath.Split('.').Last())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            Require(targetNames.SetEquals(MorphFaceEditor.Core.Deformation.MorphFaceProfileFeatures.FemaleTurianTargetNames),
+                "TUF did not load its complete approved native target set.");
+            Require(result.EditingSession.CanEditMorphFeatures && result.EditingSession.CanEditBones,
+                "TUF did not expose its native morph and bone editing capabilities.");
+        }
         Require(result.Loaded.TopologyDiagnostics.Issues.All(issue =>
             issue.Severity != MorphFaceEditor.Core.Diagnostics.DiagnosticSeverity.Error ||
             result.Profile.IgnoresAuthoredGeometry && issue.Code == "FACE_VERTEX_COUNT"),

@@ -43,11 +43,18 @@ public static class TextureRegistryStoreTests
         File.WriteAllBytes(modPackage, [2]);
         const string stock = "BIOG_HMF_HED.Stock.Diff";
         const string addition = "BIOG_Custom.Head.Diff";
+        var femaleTurian = new MorphFaceTemplateCandidate(modPackage, 7, "Faces.TUF_Test",
+            "BIOG_TUF_HED_PROMorph_R.PROBase.TUF_HED_PROBase_MDL", 9000, TextureCatalogOrigin.Mod);
+        var modHuman = femaleTurian with { ExportUIndex = 8, FacePath = "HMF.BioFace_Test",
+            BaseHeadPath = "BIOG_HMF_HED_PROMorph_R.PROBase.HMF_HED_PROBase_MDL" };
         var scanner = new FakePackageScanner(new Dictionary<string, IReadOnlyList<TextureRegistryScannedTexture>>
         {
             [basePackage] = [new(stock, Occurrence(basePackage, 0, TextureCatalogOrigin.BaseGame))],
             [modPackage] = [new(stock, Occurrence(modPackage, 9000, TextureCatalogOrigin.Mod)),
                 new(addition, Occurrence(modPackage, 9000, TextureCatalogOrigin.Mod))]
+        }, templates: new Dictionary<string, IReadOnlyList<MorphFaceTemplateCandidate>>
+        {
+            [modPackage] = [femaleTurian, modHuman]
         });
         var manual = Snapshot(MorphFaceGame.LE3);
         fixture.Store.WriteManualAtomic(manual);
@@ -65,6 +72,15 @@ public static class TextureRegistryStoreTests
             "A mod replacement displaced the official randomisation donor.");
         TestAssert.True(!catalog.Candidates.Single(value => value.InstancedPath == addition).IsEligibleOfficialDefault,
             "A mod addition became an automatic official randomisation donor.");
+        TestAssert.Equal(femaleTurian, fixture.Store.ReadMods(MorphFaceGame.LE3).MorphFaceTemplates.Single());
+        TestAssert.Equal(femaleTurian, catalog.MorphFaceTemplates.Single(value => value.FacePath == femaleTurian.FacePath));
+        TestAssert.True(catalog.MorphFaceTemplates.All(value => value != modHuman),
+            "An unrelated mod NPC became an automatic template.");
+        TestAssert.Equal(0, fixture.Store.Read(MorphFaceGame.LE3).MorphFaceTemplates.Count);
+        fixture.CreateBuilder(scanner, _ => [basePackage, modPackage])
+            .RebuildModsAsync(MorphFaceGame.LE3).GetAwaiter().GetResult();
+        var rebuilt = new TextureCatalogService(fixture.Store).ReadAsync(MorphFaceGame.LE3).GetAwaiter().GetResult();
+        TestAssert.Equal(femaleTurian, rebuilt.MorphFaceTemplates.Single(value => value.FacePath == femaleTurian.FacePath));
     }
 
     private static void ChangedPackageInvalidatesCachedCatalogue()
@@ -776,7 +792,8 @@ public static class TextureRegistryStoreTests
         IReadOnlyDictionary<string, IReadOnlyList<TextureRegistryScannedTexture>>? results = null,
         Action? onScan = null,
         IReadOnlyDictionary<string, IReadOnlyList<AttachmentMeshOccurrence>>? meshes = null,
-        IReadOnlyDictionary<string, IReadOnlyList<InstalledAssetOccurrence>>? assets = null) : ITextureRegistryPackageScanner
+        IReadOnlyDictionary<string, IReadOnlyList<InstalledAssetOccurrence>>? assets = null,
+        IReadOnlyDictionary<string, IReadOnlyList<MorphFaceTemplateCandidate>>? templates = null) : ITextureRegistryPackageScanner
     {
         private readonly IReadOnlyDictionary<string, IReadOnlyList<TextureRegistryScannedTexture>> _results =
             results ?? new Dictionary<string, IReadOnlyList<TextureRegistryScannedTexture>>();
@@ -794,7 +811,7 @@ public static class TextureRegistryStoreTests
             onScan?.Invoke();
             ScannedPaths.Add(packagePath);
             return new TextureRegistryPackageScan(
-                _results.GetValueOrDefault(packagePath) ?? [], [])
+                _results.GetValueOrDefault(packagePath) ?? [], templates?.GetValueOrDefault(packagePath) ?? [])
             {
                 AttachmentMeshes = _meshes.GetValueOrDefault(packagePath) ?? [],
                 Assets = _assets.GetValueOrDefault(packagePath) ?? []

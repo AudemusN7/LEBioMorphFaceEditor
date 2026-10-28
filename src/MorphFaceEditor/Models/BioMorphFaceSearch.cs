@@ -2,7 +2,7 @@ namespace MorphFaceEditor.Models;
 
 public static class BioMorphFaceSearch
 {
-    private static readonly string[] KnownTags = ["HMM", "HMF", "ASA", "SAL", "TUR", "BAT", "KRO"];
+    private static readonly string[] KnownTags = ["HMM", "HMF", "ASA", "SAL", "TUR", "TUF", "BAT", "KRO"];
 
     public static bool Matches(BioMorphFaceListItem face, string? query)
     {

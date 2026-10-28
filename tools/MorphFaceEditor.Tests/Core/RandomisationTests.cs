@@ -17,6 +17,7 @@ public static class RandomisationTests
     public static IReadOnlyList<TestCase> Runtime { get; } =
     [
         new("morph proposals preserve donor zeros and scope and reject invalid bounds", ZeroStrengthReproducesDonor),
+        new("TUF morph randomisation reuses TUR seeds within the female target set", FemaleTurianReusesTurianSeeds),
         new("LE1 Batarian specular power stays between 0.4 and 0.7", Le1BatarianSpecularPowerIsBounded),
         new("LE3 HMF highlight colours share one complete donor and interpolation", Le3FemaleHighlightsStayPaired),
         new("missing selected hair highlights fall back to compatible corpus colours", MissingSelectedHairHighlightsUseCompatibleDonors),
@@ -35,6 +36,27 @@ public static class RandomisationTests
         new("cursed randomisation keeps extreme finite inputs finite", CursedRandomisationKeepsExtremeInputsFinite),
         new("feature batches ignore no-ops and reject invalid input atomically", InvalidFeatureBatchIsAtomic),
     ];
+
+    private static void FemaleTurianReusesTurianSeeds()
+    {
+        var catalog = MorphRandomisationCatalog.LoadEmbedded();
+        var names = Core.Deformation.MorphFaceProfileFeatures.FemaleTurianTargetNames;
+        foreach (var game in new[] { "le1", "le2", "le3" })
+        foreach (var seed in Enumerable.Range(0, 32))
+        {
+            var male = catalog.SelectDonor(game + "-turian", seed);
+            var female = catalog.SelectDonor(game + "-female-turian", seed);
+            TestAssert.Equal(male.Id, female.Id);
+            TestAssert.True(male.SourceProfileKey.EndsWith("-turian", StringComparison.OrdinalIgnoreCase),
+                "A TUF material donor became a morph seed.");
+            TestAssert.True(female.AvailableFeatures.SetEquals(male.AvailableFeatures.Where(names.Contains)) &&
+                female.NonZeroValues.Count == male.NonZeroValues.Count(row => names.Contains(row.Key)) &&
+                female.NonZeroValues.All(row => names.Contains(row.Key) && male.NonZeroValues[row.Key] == row.Value),
+                "Female channels did not preserve the male donor's values and zero pattern.");
+        }
+        TestAssert.True(catalog.SelectMaterialDonor("le3-female-turian", 42).SourceProfileKey == "le3-female-turian",
+            "TUF material randomisation used a male donor.");
+    }
 
     private static void Le1FemaleMakeupRandomisationAppliesMask()
     {
@@ -240,6 +262,7 @@ public static class RandomisationTests
 
     public static IReadOnlyList<TestCase> Tooling { get; } =
     [
+        new("TUF corpus compilation keeps material-only evidence despite editable profile", FemaleTurianCompilerRemainsMaterialOnly),
         new("randomisation bundle round-trips deterministically", BundleRoundTripsDeterministically),
         new("compiler retains native hair aliases and their observed statistics", CompilationPreservesNativeHairAliases),
         new("corpus compilation distinguishes unavailable zero and nonzero features", CompilationPreservesFeatureStates),
@@ -247,6 +270,21 @@ public static class RandomisationTests
         new("reviewed exclusions follow source faces into ports and preserve material-only seeds", ReviewedExclusionsFollowSource),
         new("corpus drops mismatched HMM scalp families without losing other donor data", CompilationRejectsConflictingScalps),
     ];
+
+    private static void FemaleTurianCompilerRemainsMaterialOnly()
+    {
+        var profiles = RandomisationProfileDefinitionFactory.CreateDefault(
+            MorphFaceProfileRegistry.CreateDefault(), new MorphFaceEditor.Core.Services.MorphTargetCatalog());
+        foreach (var game in new[] { "le1", "le2", "le3" })
+        {
+            var female = profiles.Single(value => value.ProfileKey == game + "-female-turian");
+            var male = profiles.Single(value => value.ProfileKey == game + "-turian");
+            TestAssert.True(female.IsMaterialOnly && female.AvailableFeatures.Count == 0,
+                "TUF inherited geometry became compiler morph evidence.");
+            TestAssert.True(!male.IsMaterialOnly && male.AvailableFeatures.Count > 0,
+                "TUR morph evidence was unintentionally disabled.");
+        }
+    }
 
     private static void ZeroStrengthReproducesDonor()
     {

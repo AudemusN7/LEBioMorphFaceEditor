@@ -50,7 +50,7 @@ public partial class App : Application
         var textureCatalogService = new TextureCatalogService(textureRegistryStore);
         var textureRegistrySettings = new TextureRegistrySettingsViewModel(
             textureRegistryStore, textureRegistryBuilder, textureCatalogService.Invalidate);
-        var dialogs = new WpfEditorDialogService(textureRegistrySettings);
+        var dialogs = new WpfEditorDialogService(textureRegistrySettings, textureCatalogService);
         var packageReader = new MorphFacePackageReader();
         var referenceService = new PackageReferenceService(packageReader, textureCatalogService);
         var profiles = MorphFaceProfileRegistry.CreateDefault();

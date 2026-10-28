@@ -37,18 +37,18 @@ internal static class ConversionStressRunner
         var selections = selectAll
             ? SelectAllFaces(corpus, profiles)
             : SelectFaces(corpus, profiles, seed);
-        if (!selectAll && selections.Count != 105)
+        if (!selectAll && selections.Count != 120)
         {
-            throw new InvalidDataException($"Stress selection produced {selections.Count} originals, expected 105.");
+            throw new InvalidDataException($"Stress selection produced {selections.Count} originals, expected 120.");
         }
 
         var attempts = selections.SelectMany(selection => Games
                 .Where(game => game != selection.Game)
                 .Select(target => new PortAttempt(selection, target)))
             .ToArray();
-        if (!selectAll && attempts.Length != 210)
+        if (!selectAll && attempts.Length != 240)
         {
-            throw new InvalidDataException($"Stress selection produced {attempts.Length} supported ports, expected 210.");
+            throw new InvalidDataException($"Stress selection produced {attempts.Length} supported ports, expected 240.");
         }
 
         WriteJsonAtomic(Path.Combine(output, "selection-manifest.json"), new
@@ -100,9 +100,9 @@ internal static class ConversionStressRunner
                 }
                 else
                 {
-                    var canonicalPort = Path.Combine(corpus, $"{sourceGame} to {targetGame} GlobalMorphs.pcc");
+                    var canonicalPort = DestinationPackage(corpus, attempt.Source.Species, attempt.Source.Game, attempt.TargetGame);
                     var result = service.Convert(new MorphFaceConversionRequest(
-                        Path.Combine(corpus, $"{sourceGame} GlobalMorphs.pcc"),
+                        SourcePackage(corpus, attempt.Source.Species, attempt.Source.Game),
                         attempt.Source.FacePath,
                         attempt.TargetGame,
                         destination,
@@ -224,9 +224,9 @@ internal static class ConversionStressRunner
             string? error = null;
             try
             {
-                var canonicalPort = Path.Combine(corpus, $"{sourceGame} to {targetGame} GlobalMorphs.pcc");
+                var canonicalPort = DestinationPackage(corpus, attempt.Species, attempt.Game, attempt.TargetGame);
                 var result = service.Convert(new MorphFaceConversionRequest(
-                    Path.Combine(corpus, $"{sourceGame} GlobalMorphs.pcc"),
+                    SourcePackage(corpus, attempt.Species, attempt.Game),
                     attempt.FacePath,
                     attempt.TargetGame,
                     destination,
@@ -278,21 +278,11 @@ internal static class ConversionStressRunner
         var selected = new List<SelectedFace>();
         foreach (var game in Games)
         {
-            var packagePath = Path.Combine(corpusDirectory, $"{game} GlobalMorphs.pcc");
-            var candidates = MorphFaceReferenceInspector.Inspect(packagePath)
-                .Select(face => (Face: face, Profile: profiles.Find(game, face.FacePath, face.BaseHeadPath)))
-                .Where(value => IsConversionProfile(value.Profile))
-                .Select(value => new SelectedFace(
-                    game,
-                    Species(value.Profile!.Key),
-                    value.Profile.Key,
-                    value.Face.FacePath,
-                    value.Face.FaceUIndex,
-                    value.Face.BaseHeadPath))
+            var candidates = EnumerateGameFaces(corpusDirectory, game, profiles)
                 .OrderBy(value => value.Species, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(value => value.FacePath, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            const int expectedSpecies = 7;
+            const int expectedSpecies = 8;
             var groups = candidates.GroupBy(value => value.Species, StringComparer.OrdinalIgnoreCase)
                 .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
@@ -332,17 +322,7 @@ internal static class ConversionStressRunner
         var selected = new List<SelectedFace>();
         foreach (var game in Games)
         {
-            var packagePath = Path.Combine(corpusDirectory, $"{game} GlobalMorphs.pcc");
-            selected.AddRange(MorphFaceReferenceInspector.Inspect(packagePath)
-                .Select(face => (Face: face, Profile: profiles.Find(game, face.FacePath, face.BaseHeadPath)))
-                .Where(value => IsConversionProfile(value.Profile))
-                .Select(value => new SelectedFace(
-                    game,
-                    Species(value.Profile!.Key),
-                    value.Profile.Key,
-                    value.Face.FacePath,
-                    value.Face.FaceUIndex,
-                    value.Face.BaseHeadPath))
+            selected.AddRange(EnumerateGameFaces(corpusDirectory, game, profiles)
                 .OrderBy(value => value.Species, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(value => value.FacePath, StringComparer.OrdinalIgnoreCase));
         }
@@ -352,6 +332,40 @@ internal static class ConversionStressRunner
         }
         return selected;
     }
+
+    private static IEnumerable<SelectedFace> EnumerateGameFaces(
+        string corpusDirectory, MorphFaceGame game, MorphFaceProfileRegistry profiles)
+    {
+        foreach (var (path, femaleTurian) in new[]
+                 {
+                     (SourcePackage(corpusDirectory, "turian", game), false),
+                     (SourcePackage(corpusDirectory, "female-turian", game), true)
+                 })
+        foreach (var face in MorphFaceReferenceInspector.Inspect(path))
+        {
+            var profile = profiles.Find(game, face.FacePath, face.BaseHeadPath);
+            if (!IsConversionProfile(profile) ||
+                (profile!.Archetype == "female-turian") != femaleTurian) continue;
+            // The dedicated TUF packages contain all three games' ported
+            // populations. Select the native-origin group only once per game.
+            if (femaleTurian &&
+                !face.FacePath.StartsWith($"{game}.", StringComparison.OrdinalIgnoreCase) &&
+                !face.FacePath.Contains($".{game}.", StringComparison.OrdinalIgnoreCase))
+                continue;
+            yield return new SelectedFace(game, Species(profile.Key), profile.Key,
+                face.FacePath, face.FaceUIndex, face.BaseHeadPath);
+        }
+    }
+
+    private static string SourcePackage(string corpus, string species, MorphFaceGame game) =>
+        species.Equals("female-turian", StringComparison.OrdinalIgnoreCase)
+            ? Path.Combine(corpus, "TUF", $"{game} TUF.pcc")
+            : Path.Combine(corpus, $"{game} GlobalMorphs.pcc");
+
+    private static string DestinationPackage(string corpus, string species, MorphFaceGame source, MorphFaceGame target) =>
+        species.Equals("female-turian", StringComparison.OrdinalIgnoreCase)
+            ? SourcePackage(corpus, species, target)
+            : Path.Combine(corpus, $"{source} to {target} GlobalMorphs.pcc");
 
     private static bool IsConversionProfile(MorphFaceProfile? profile) =>
         profile is { TargetSetName: not null };

@@ -2,6 +2,7 @@ using System.IO;
 using MorphFaceEditor.Core.Editing;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
+using MorphFaceEditor.Core.Randomisation;
 using MorphFaceEditor.Infrastructure;
 using MorphFaceEditor.Models;
 using MorphFaceEditor.Services;
@@ -20,6 +21,16 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
     private readonly Action<string> _reportError;
     private readonly IReadOnlyList<PackageAssetListItem> _localCandidates;
     private IReadOnlyList<TextureCatalogCandidate> _registryCandidates;
+    private TextureCatalogProfile _registryProfile;
+    private static readonly Lazy<IReadOnlyDictionary<string, IReadOnlySet<string>>> TufCorpusTextureMembers = new(() =>
+    {
+        var catalog = MorphRandomisationCatalog.LoadEmbedded();
+        return new[] { "le1-female-turian", "le2-female-turian", "le3-female-turian" }
+            .ToDictionary(key => key, key => (IReadOnlySet<string>)catalog.CompatibleMaterialDonors(key)
+                .SelectMany(donor => donor.MaterialTextureFamilies.Values)
+                .SelectMany(family => family.Select(member => $"{member.Key}|{member.Value}"))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase);
+    });
     private bool _isRegistryAvailable;
     private readonly List<MaterialTextureOption> _allCandidates;
     private IReadOnlyList<MaterialTextureOption> _defaultCandidates = [];
@@ -62,9 +73,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
         _reportError = reportError;
         _localCandidates = candidates;
         _registryCandidates = registryCandidates ?? [];
-        // Keep the profile in the constructor contract for the merged catalogue,
-        // but do not let profile relevance reorder an open picker.
-        _ = registryProfile;
+        _registryProfile = registryProfile ?? TextureCatalogProfile.Empty;
         _isRegistryAvailable = isRegistryAvailable;
         _officialDefaultKeys = BuildOfficialDefaultKeys(_registryCandidates);
         var currentTexture = session.GetSelectedTexture(Name);
@@ -280,13 +289,17 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
             _definition), cached, reference.IsExplicitTextureDonor);
     }
 
-    /// <summary>Automatic rolls use installed official defaults; picker and file imports retain their own choices.</summary>
+    /// <summary>Automatic rolls use official defaults or approved TUF textures from available sources.</summary>
     public Task<DecodedTextureAsset> ResolveRandomisationPathAsync(string instancedPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(instancedPath);
         var candidate = FindRandomisationOption(instancedPath)
             ?? throw Loc.Error(new FileNotFoundException(Loc.Format("loc_VM_texture_notAvailableInSources", instancedPath)));
-        return ResolveReferenceAsync(candidate.Asset!.Identity);
+        var identity = candidate.Asset!.Identity;
+        if (ReferenceEquals(candidate, FindTrustedTufWorkspaceOption(instancedPath)) ||
+            candidate.RegistryCandidate?.EffectiveOccurrence.Origin == TextureCatalogOrigin.Mod)
+            identity = identity with { IsExplicitTextureDonor = true };
+        return ResolveReferenceAsync(identity);
     }
 
     internal TextureReferenceReadPlan PrepareRandomisationTextureRead(string instancedPath)
@@ -294,7 +307,11 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
         ArgumentException.ThrowIfNullOrWhiteSpace(instancedPath);
         var candidate = FindRandomisationOption(instancedPath)
             ?? throw Loc.Error(new FileNotFoundException(Loc.Format("loc_VM_texture_notAvailableInSources", instancedPath)));
-        return PrepareReferenceRead(candidate.Asset!.Identity);
+        var identity = candidate.Asset!.Identity;
+        if (ReferenceEquals(candidate, FindTrustedTufWorkspaceOption(instancedPath)) ||
+            candidate.RegistryCandidate?.EffectiveOccurrence.Origin == TextureCatalogOrigin.Mod)
+            identity = identity with { IsExplicitTextureDonor = true };
+        return PrepareReferenceRead(identity);
     }
 
     /// <summary>Resolves file imports by full path, without the picker’s unique-name fallback.</summary>
@@ -347,6 +364,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
         ArgumentNullException.ThrowIfNull(candidates);
         ArgumentNullException.ThrowIfNull(profile);
         _registryCandidates = candidates;
+        _registryProfile = profile;
         _officialDefaultKeys = BuildOfficialDefaultKeys(candidates);
         _isRegistryAvailable = isRegistryAvailable;
         CancelTexturePreview();
@@ -640,6 +658,9 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
                     : null;
                 if (explicitlySelected is not null) return explicitlySelected;
 
+                // The opened TUF package can contain newer artwork than the install.
+                var localTuf = FindTrustedTufWorkspaceOption(values[0].InstancedPath);
+                if (localTuf is not null && values.Contains(localTuf)) return localTuf;
                 var official = values.FirstOrDefault(option => option.RegistryCandidate is { } candidate &&
                     _officialDefaultKeys.Contains(PhysicalCandidateKey(candidate.InstancedPath,
                         candidate.EffectiveOccurrence.PackagePath, candidate.EffectiveOccurrence.ExportUIndex)));
@@ -689,6 +710,7 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
 
     private MaterialTextureOption? FindRandomisationOption(string instancedPath)
     {
+        if (FindTrustedTufWorkspaceOption(instancedPath) is { } trusted) return trusted;
         MaterialTextureOption? candidate;
         if (_randomisationPaths.TryGetValue(instancedPath, out var exact)) candidate = exact;
         else
@@ -700,6 +722,25 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
         }
         return candidate is not null && File.Exists(candidate.RegistryCandidate!.EffectiveOccurrence.PackagePath)
             ? candidate : null;
+    }
+
+    // Female Turian is a non-vanilla corpus. Its approved donor identities may
+    // resolve from the exact export in the open package, which takes precedence
+    // over stale installed copies. Never promote arbitrary registry mod assets.
+    private MaterialTextureOption? FindTrustedTufWorkspaceOption(string instancedPath)
+    {
+        if (!_registryProfile.Key.EndsWith("-female-turian", StringComparison.OrdinalIgnoreCase) ||
+            !TufCorpusTextureMembers.Value.TryGetValue(_registryProfile.Key, out var members) ||
+            !members.Contains($"{_session.GetSourceParameterName(Name)}|{instancedPath}") ||
+            !File.Exists(_packagePath)) return null;
+        var matches = _allCandidates.Skip(1).Where(option => option.RegistryCandidate is null &&
+            option.Asset?.Identity is { IsImport: false, UIndex: > 0 } identity &&
+            identity.ClassName.Equals("Texture2D", StringComparison.OrdinalIgnoreCase) &&
+            identity.InstancedPath.Equals(instancedPath, StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrWhiteSpace(identity.PackagePath) &&
+            Path.GetFullPath(identity.PackagePath).Equals(Path.GetFullPath(_packagePath), StringComparison.OrdinalIgnoreCase))
+            .Take(2).ToArray();
+        return matches.Length == 1 ? matches[0] : null;
     }
 
     // Corpus availability is queried thousands of times per material roll. Index
@@ -774,10 +815,14 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
         $"{TextureCatalogPicker.CanonicalPath(instancedPath, packagePath)}|" +
         $"{(string.IsNullOrWhiteSpace(packagePath) ? string.Empty : Path.GetFullPath(packagePath))}|{exportUIndex}";
 
-    private static HashSet<string> BuildOfficialDefaultKeys(
+    private HashSet<string> BuildOfficialDefaultKeys(
         IReadOnlyList<TextureCatalogCandidate> candidates) => TextureCatalogPicker.Select(candidates)
         .Where(candidate => candidate.IsEligibleOfficialDefault &&
-            candidate.EffectiveOccurrence.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc)
+            candidate.EffectiveOccurrence.Origin is TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc ||
+            candidate.EffectiveOccurrence.Origin == TextureCatalogOrigin.Mod &&
+            _registryProfile.Key.EndsWith("-female-turian", StringComparison.OrdinalIgnoreCase) &&
+            TufCorpusTextureMembers.Value.TryGetValue(_registryProfile.Key, out var members) &&
+            members.Contains($"{_session.GetSourceParameterName(Name)}|{candidate.InstancedPath}"))
         .Select(candidate => PhysicalCandidateKey(candidate.InstancedPath,
             candidate.EffectiveOccurrence.PackagePath, candidate.EffectiveOccurrence.ExportUIndex))
         .ToHashSet(StringComparer.OrdinalIgnoreCase);

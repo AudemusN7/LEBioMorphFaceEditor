@@ -144,7 +144,7 @@ if (args[0] == "compile")
 var wanted = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
 {
     "HMM_BaseMorphSet", "HMF_BaseMorphSet", "ASA_BaseMorphSet", "SAL_BaseMorphSet",
-    "TUR_BaseMorphSet", "KRO_baseMorphSet", "BAT_BaseMorphSet"
+    "TUR_BaseMorphSet", "TUF_BaseMorphSet", "KRO_baseMorphSet", "BAT_BaseMorphSet"
 };
 foreach (var path in Directory.EnumerateFiles(args[1], "*.pcc", SearchOption.AllDirectories))
 {

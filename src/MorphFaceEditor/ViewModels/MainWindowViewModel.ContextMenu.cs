@@ -267,6 +267,14 @@ public sealed partial class MainWindowViewModel
         Status = Loc.Format("loc_Shell_Status_CopyingMorphDataFrom", source.DisplayName);
         try
         {
+            if (source.ProfileKey.EndsWith("-female-turian", StringComparison.OrdinalIgnoreCase))
+            {
+                var editable = IsLoaded(source) && Editor is not null
+                    ? Editor.CanEditMorphFeatures
+                    : (await _previewLoadService.LoadAsync(workspacePath, source.InstancedPath)).EditingSession.CanEditMorphFeatures;
+                if (!editable)
+                    throw Loc.Error(new InvalidOperationException(Loc.Text("loc_Editor_GeometryVerificationUnavailable")));
+            }
             var data = IsLoaded(source) && Editor is not null
                 ? ToMorphData(Editor.CreateDraft())
                 : await Task.Run(() =>

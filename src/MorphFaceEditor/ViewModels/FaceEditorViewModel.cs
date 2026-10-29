@@ -268,6 +268,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                 },
                 _randomisationInclusionState,
                 RaiseRandomisationCanExecuteChanged))
+            .Where(category => category.SettingCount > 0)
             .ToArray();
     }
 

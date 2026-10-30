@@ -14,6 +14,7 @@
         AllowDrop="True"
         PreviewDragOver="OnFileDragOver"
         Drop="OnFileDrop"
+        KeyDown="OnWindowKeyDown"
         WindowStartupLocation="CenterScreen">
     <Window.InputBindings>
         <KeyBinding Key="E" Modifiers="Control" Command="{Binding NewPlayerMorphCommand}" />

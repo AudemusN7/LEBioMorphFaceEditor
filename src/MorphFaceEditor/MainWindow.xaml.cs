@@ -131,6 +131,26 @@ public partial class MainWindow : Window
         }
     }
 
+    private void OnWindowKeyDown(object sender, KeyEventArgs e)
+    {
+        if (Keyboard.Modifiers != ModifierKeys.Control || _viewModel.IsBusy ||
+            !EditorActions.IsEnabled || Keyboard.FocusedElement is TextBoxBase ||
+            _viewModel.Editor is not { } editor)
+            return;
+
+        var command = e.Key switch
+        {
+            Key.Z => editor.UndoCommand,
+            Key.Y => editor.RedoCommand,
+            _ => null
+        };
+        if (command?.CanExecute(null) == true)
+        {
+            command.Execute(null);
+            e.Handled = true;
+        }
+    }
+
     private void ResizeSidePane(object sender, double horizontalChange)
     {
         var pane = GetSidePane(sender);

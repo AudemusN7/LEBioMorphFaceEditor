@@ -1,38 +1,41 @@
 # MFE Localiser
 
-A standalone Windows localisation editor for all ten supported languages, using MFE's authored dark palette and control styles. It depends on the shared localisation library, with no game, renderer or package dependencies.
+Use the Localiser to edit MFE's ten languages on Windows.
 
-Run `Run_MFE_Localiser.bat` from the repository root to build and open it, or open `bin/Release/net10.0-windows/MorphFaceEditor.Localiser.exe` after a Release build. An optional first argument selects a master XAML file.
+Run `dotnet run --project tools/MorphFaceEditor.Localiser -c Release` from the repository root to build and open it. To specify a master XAML file, add `--` followed by its path.
 
-When run from this checkout, it opens `src/MorphFaceEditor/Localisation/Strings.en-GB.xaml`, the single editable source catalogue. Outside the checkout, pass the English master path on the command line or use **Load localisation**. Selecting a language loads its adjacent `Strings.<code>.xaml` when available, then retains its draft in memory. **Load localisation** selects a different file for the current language. **Save localisation as** chooses its output path; `Ctrl+S` opens the same dialog. The save button's tooltip shows the current file path.
+In a checkout, it opens the English master at `src/MorphFaceEditor/Localisation/Strings.en-GB.xaml`. Selecting a language loads the adjacent `Strings.<code>.xaml` if available. Use **Load localisation** to choose another file for the current language, and **Save localisation as** or **Ctrl+S** to choose an output path. Hover over the save button to see the current path.
 
-## Review workflow
+## Review and translate
 
-1. Choose a filter tab and a section from the left list; search scans keys, source/translated wording, notes and source references. **Excluded** is available only in the UK master.
-2. Edit wording and notes directly in the table. **English** is editable only in UK mode; **Localised** is blank/disabled in UK mode and editable for other languages. Hover a key for its source references.
-3. Select rows with Shift/Ctrl (or Ctrl+A when the table has focus), then click an **Excluded** or **Reviewed** checkbox to apply that value to all selected rows. Clicking an unselected row's checkbox changes only that row. Space on a focused checkbox performs the same action. Tab moves between inline fields; Ctrl+A within a text field selects its text.
-4. **Excluded** is shared master policy; its checkbox column appears only in the UK master. **Reviewed** tracks the selected language; changing either its translation or its English source invalidates a translation's review. Excluded rows review the source wording. Blank/invalid translations cannot be marked reviewed.
-5. Section colours prioritise invalid wording (red), any excluded string (orange), then fully reviewed sections (green); other sections use the default dark shade. Colours update for the active language.
-6. Save to persist wording, notes and review marks. Saving a language also saves pending master edits/exclusions. Other language drafts remain in memory until saved, with a prompt on closing or replacing them. Missing and excluded translations are omitted from output, preserving UK fallback. Notes for missing translations are retained in XML comments.
+1. Choose a filter and section. Search covers keys, wording, notes and references; hover over a key to see its references.
+2. Edit wording and notes in the table. **English** is editable in UK mode; **Localised** is editable for the other languages. The **Excluded** filter and column appear only in UK mode.
+3. Select rows with **Shift/Ctrl**, or **Ctrl+A** with the table focused. Click an **Excluded** or **Reviewed** checkbox to apply it to the selection. An unselected checkbox changes only that row. **Space** toggles a focused checkbox; **Ctrl+A** inside a text field selects its text.
+4. Save your changes. Saving a language also saves pending master edits and exclusions. Other drafts stay in memory; you'll be prompted before closing or replacing them.
 
-Drag the divider beside the sections list to resize it. Right-click a key, English, Localised or Notes cell to **Copy cell**, **Copy key** or **Paste cell**. Paste cell replaces the entire editable value and has its own undo step; **Copy selection** and **Paste at caret** operate within the text editor. Keys and read-only wording cannot be pasted over. In other languages, all filters hide excluded entries; the English master still includes excluded wording that needs source review.
+**Excluded** applies to every language. Excluded entries stay hidden outside UK mode. Saving omits missing and excluded translations so MFE falls back to English, while keeping notes for missing translations in XML comments.
 
-The tool stores keyed JSON annotations in ordinary XML comments prefixed `localiser: `. WPF ignores them; MFE's shared reader enforces exclusions. Source reviews hash the wording, and translation reviews hash both source and translated wording, so external changes invalidate stale reviews. Resource keys stay fixed. Numbered placeholders and native file-filter patterns are checked before saving. Invalid imported translations remain editable for repair.
+**Reviewed** applies to the selected language. Changing the translation or English source clears its review. Blank or invalid translations can't be reviewed; excluded rows still need their English reviewed. Section colours show invalid wording first (red), exclusions next (orange), then fully reviewed sections (green).
 
-Master sections follow user workflows and control anatomy rather than source filenames. A section is an ordinary XML heading comment in the master; each control label sits beside its tooltip, with genuine profile-specific wording variants together. Keep these pairs together when adding entries. Reuse a key for the same control/action and wording. Notes explain non-obvious context, each numbered argument, and any native identifiers that must remain exact; omit notes that merely repeat the section or label. Preserve existing review/exclusion marks when moving rows; new wording remains unreviewed until Ryan reviews it.
+Drag the divider to resize the section list. Right-click a cell for **Copy cell**, **Copy key** or **Paste cell**. Paste replaces an editable value with its own undo step. Use **Copy selection** and **Paste at caret** within a text field.
 
-Remove strings only after tracing their real UI consumers, including parameter-name lookup tables. Hidden future controls reuse existing wording where possible instead of reserving duplicate translations. An explicit master `localiser-retired: [...]` comment lists removed keys whose old translations may still exist. Only those listed keys are tolerated: they are never displayed or added to runtime resources, and are removed from a language file on its next deliberate save. Other unknown keys remain errors. This lets the English master be reviewed before the other language files are updated.
+## Maintaining the catalogue
 
-Product errors and warnings show localised explanations. Unstructured technical diagnostics from package libraries or the operating system go to AppData logs; they must not be inserted as untranslated fragments into UI wording. The app preserves specific catalogue-backed validation messages and structured package-layer reasons.
+Keep labels beside their tooltips and related wording together. Reuse keys for identical controls and wording. Use notes for context, numbered arguments and identifiers that must stay exact. Preserve review/exclusion marks when moving rows, and review new wording before translating it.
 
-Saving validates adjacent candidates and checks fingerprints before replacing files. Previous files are retained as `.localiser.bak` backups. A combined language/master save rolls back the language if the master write fails. Concurrent changes block overwriting the loaded file; drafts can still be saved to a different path. The source corpus and locale scaffolds are not automatically edited or translated.
+Check where a string is used before removing it. Add removed keys to the master's `localiser-retired: [...]` comment if old translations still contain them. Retired keys are ignored and removed on the language file's next save; other unknown keys are errors.
 
-To use or ship edits, update the source catalogues and rebuild. All languages are embedded in `MorphFaceEditor.Localisation.dll`; MFE does not read loose dictionary overrides. Translations must preserve placeholders and excluded keys; the localisation tests validate the compiled catalogues and UK fallback.
+Review and exclusion data lives in `localiser: ` XML comments. Preserve numbered placeholders and file-filter patterns in translations. Invalid imports stay editable for repair.
+
+Saving keeps `.localiser.bak` backups and checks for external changes. If a combined save fails on the master, it rolls back the language write. Save your draft elsewhere if another program has changed the loaded file.
+
+To use or ship edits, update the source catalogues and rebuild. Languages are embedded in `MorphFaceEditor.Localisation.dll`; MFE doesn't read loose dictionary overrides.
 
 ## Validation
 
-Build: `dotnet build MorphFaceEditor.slnx -c Release --no-restore` after restore.
-
-Focused checks: `dotnet run --project tools/MorphFaceEditor.Tests -c Release --no-build -- --suite tooling localiser` and `--suite ui localisation "WPF resources"`.
-
-The routine tests use temporary copies of the full master and a hidden WPF window; they do not launch the product apps or modify the source corpus.
+After restoring, build with `dotnet build MorphFaceEditor.slnx -c Release --no-restore`. Run the focused checks with:
+```powershell
+dotnet run --project tools/MorphFaceEditor.Tests -c Release --no-build -- --suite tooling localiser
+dotnet run --project tools/MorphFaceEditor.Tests -c Release --no-build -- --suite ui localisation "WPF resources"
+```
+These checks use temporary catalogue copies.

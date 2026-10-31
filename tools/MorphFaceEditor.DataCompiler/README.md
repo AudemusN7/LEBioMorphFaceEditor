@@ -1,94 +1,52 @@
 # MorphFaceEditor DataCompiler
 
-Developer commands for MFE's generated data and corpus checks. The editor consumes the reviewed, embedded outputs; it never runs this tool. Commands use MFE's pinned `lib/LegendaryExplorerCore` dependency and share its readers and policies.
+DataCompiler generates and checks data used by MFE. It uses MFE's pinned `lib/LegendaryExplorerCore`; the editor reads the embedded results and doesn't run the compiler itself.
 
 Run commands from the repository root:
-
 ```powershell
 dotnet run --project tools/MorphFaceEditor.DataCompiler -c Release -- <command> <arguments>
 ```
+Replace the example paths and set name below with your own. `scan` can find target sets in a folder of PCCs; `compile` writes a bundle from one selected set.
+```powershell
+dotnet run --project tools/MorphFaceEditor.DataCompiler -c Release -- scan "C:\MyPackages"
+dotnet run --project tools/MorphFaceEditor.DataCompiler -c Release -- compile "C:\MyPackages\Head.pcc" "Package.PROBase.HMM_BaseMorphSet" "C:\MyOutput\head.mft.br"
+dotnet run --project tools/MorphFaceEditor.DataCompiler -c Release -- build-texture-registries all "C:\MyOutput\Registries"
+```
+## Commands
 
-| Command and arguments | Purpose / output owner |
-|---|---|
+| Command | What it does |
+| --- | --- |
 | `scan <directory>` | Find canonical morph target sets in PCCs. |
-| `compile <package.pcc> <set-name> <output.mft.br>` | Compile a target bundle for Core's `Assets/MorphTargets`. |
-| `audit-randomiser <package.pcc>... <report.md> <values.csv> <bundle.mfr.br>` | Audit donors and compile Core's runtime randomisation corpus. |
-| `material-metadata <manifest.json> <output.json>` | Refresh reviewed stock material metadata from installed official packages and compiled shader evidence. |
-| `unpack-mftr <input.mftr> [output.json]` | Read the MFTR wire format directly, including older/development schemas and manual sidecars. Defaults to JSON beside the input; leaves the MFTR untouched. |
-| `texture-registry-audit <LE1\|LE2\|LE3> <output-directory>` | Compare the app's saved registry with effective installed packages; write JSON and TSV reports without changing either input. |
-| `verify-texture-registries <registry-directory>` | Check LE1–LE3 texture exclusions, attachment names, duplicate meshes and official donor selection. |
-| `build-texture-registries <LE1\|LE2\|LE3\|all> <output-directory>` | Build registry files into the explicitly selected directory. Both arguments are required. |
-| `corpus-audit <corpus-directory> <output.json>` | Audit nine top-level native/cross-game `GlobalMorphs` packages and the three dedicated TUF packages. |
-| `corpus-reconciliation <corpus-directory> <output.json>` | Generate direction-specific asset decisions from standard and TUF corpora for LE's `Assets/CrossGameAssetReconciliation.json`. Both populations use the existing ambiguity rules. |
-| `material-oracle <corpus-directory> <output.json>` | Generate LE's `Assets/MaterialDependencyOracle.json` from native and TUF corpora, retaining reviewed existing and Player-only roles. |
-| `conversion-stress <corpus-directory> <output-directory> [seed]` | Run the existing seeded conversion sample. |
-| `conversion-full <corpus-directory> <output-directory>` | Run all supported corpus conversions. |
+| `compile <package.pcc> <set-name> <output.mft.br>` | Compile a morph target bundle. |
+| `audit-randomiser <package.pcc>... <report.md> <values.csv> <bundle.mfr.br>` | Audit donors and compile a randomisation corpus. |
+| `material-metadata <manifest.json> <output.json>` | Refresh reviewed stock material metadata from official packages and compiled shaders. |
+| `unpack-mftr <input.mftr> [output.json]` | Read an MFTR directly, including older schemas and manual sidecars. The default output is JSON beside the input; the MFTR isn't changed. |
+| `texture-registry-audit <LE1\|LE2\|LE3> <output-directory>` | Compare a saved registry with effective installed packages and write JSON and TSV reports. |
+| `verify-texture-registries <registry-directory>` | Check LE1–LE3 exclusions, attachment names, duplicate meshes and official donor selection. |
+| `build-texture-registries <LE1\|LE2\|LE3\|all> <output-directory>` | Build registries into the specified directory. Both arguments are required. |
+| `corpus-audit <corpus-directory> <output.json>` | Audit the GlobalMorphs and dedicated TUF packages. |
+| `corpus-reconciliation <corpus-directory> <output.json>` | Generate direction-specific asset decisions, omitting ambiguous evidence. |
+| `material-oracle <corpus-directory> <output.json>` | Generate material dependency roles, retaining reviewed existing and Player-only roles. |
+| `conversion-stress <corpus-directory> <output-directory> [seed]` | Run a seeded sample of corpus conversions. |
+| `conversion-full <corpus-directory> <output-directory>` | Run all supported corpus conversions with canonical output/reference comparisons. |
 | `conversion-retest <corpus-directory> <prior-results.jsonl> <output-directory>` | Repeat previously failed conversions. |
 
-Ordinary registry publication belongs to the editor's Settings. The developer builder has no default AppData destination. For a separate calibration build:
+For normal use, build registries through the editor's Settings. Registry audits read saved registries and installed packages without changing either. Rebuild through Settings after an installation change before treating omissions as scanner defects.
 
-```powershell
-dotnet run --project tools/MorphFaceEditor.DataCompiler -c Release -- build-texture-registries all .codex-temp/texture-registry-calibration
-```
+## Generated data
 
-The old `conversion-smoke` command is retired. QA owns successful family/game conversion journeys; the regression runner's `conversion` suite retains targeted prerequisite, rejection, exact-donor and texture-transfer contracts. The stress/full/retest runner remains for corpus reconciliation and retained results, with canonical output/reference comparisons in `conversion-full`.
+The embedded outputs include morph target bundles and the randomisation corpus in `src/MorphFaceEditor.Core/Assets`, plus stock material metadata, cross-game reconciliation and the material dependency oracle in `src/MorphFaceEditor.LegendaryExplorer/Assets`. MFTR databases are installed/user data, not embedded assets.
 
-The fixed conversion corpus covers eight morph families per game, including native-origin faces in the dedicated TUF packages. The seeded stress sample selects five faces per family (120 originals, 240 directional ports); `conversion-full` selects every eligible fixed-corpus face. TUF direction comparisons use the target game's dedicated package. Vorcha conversion is retired, including old failed rows supplied to `conversion-retest`; authored Vorcha faces remain loadable. QA separately covers the supported material-only female Batarian routes.
+The source packages used to produce the embedded data aren't included in this repository. Supplying other PCCs can produce useful candidates, but doesn't necessarily reproduce the existing assets. Write candidates separately and compare identities, values and reviewed exceptions before replacing anything. `compile` preserves source paths, so compare identity as well as geometry when using equivalent seekfree and level copies. Don't substitute earlier-game deltas for later-game data.
 
-## Generated-artifact ownership
+`material-metadata` uses the accepted JSON as its manifest, reading its exact GUID/name identities from effective official packages and compiled shaders. Manifest membership, source paths and optional `compiledDefaults` are reviewed inputs.
 
-| Embedded output | Authoritative input and producer | Consumer / reviewed exceptions |
-|---|---|---|
-| Core `Assets/MorphTargets/<game>.<set>.mft.br` | Exact native `MorphTargetSet` and its ordered `Targets`; `compile`. Eight sets per game: HMM, HMF, ASA, SAL, TUR, TUF, KRO and BAT. TUF uses the authored native sets in `fixtures/Global Morphs/TUF/<game> TUF.pcc`; their sculpt authoring remains local. | `MorphTargetCatalog`; profile capability and feature eligibility are runtime policy, not invented target data. `compile` retains the selected source's instanced paths, so equivalent seekfree and level copies need an identity comparison as well as geometry comparison. Vorcha has no target bundle. |
-| Core `Assets/Randomisation/GlobalMorphs.mfr.br` | Nine native/directional `GlobalMorphs` PCCs plus reviewed TUF material evidence; `audit-randomiser`. | Core `MorphRandomisationCatalog`; `ReviewedRandomisationExclusions` owns exact exclusions, scope and reason. Compiler deduplication/statistics precede generated human hair-colour aliases. No runtime repair. |
-| LE `Assets/StockMaterialMetadata.json` | The accepted JSON itself is the reviewed identity/source manifest; `material-metadata` re-reads those exact GUID/name identities from effective official packages and compiled shaders. | `StockMaterialMetadata` supplies known stock defaults/support; unknown compilations use live inspection. Manifest membership, source paths and optional `compiledDefaults` inclusion remain reviewed inputs. |
-| LE `Assets/CrossGameAssetReconciliation.json` | Nine `GlobalMorphs` PCCs plus the three dedicated TUF packages; `corpus-reconciliation` compares matching face paths for six directions. | Attachment/texture transfer and texture-registry discovery. Ambiguous evidence is omitted. Two exact accepted LE3 cap aliases to LE1/LE2 remain explicit producer exceptions when some fixtures omit the cap. |
-| LE `Assets/MaterialDependencyOracle.json` | Three native `GlobalMorphs` PCCs plus the three dedicated TUF packages; `material-oracle` projects their material graphs while preserving existing shared-identity roles. | `PccPackageWorkflow` uses class/path import/export roles for missing dependencies; existing exact destination entries take precedence. Producer retains three reviewed LE2 Player imports and seven reviewed LE3 hair exports independently of NPC corpus membership. |
+## Corpus layout
 
-MFTR asset databases are installed/user data, not embedded artifacts. Settings and `build-texture-registries` share `TextureRegistryBuilder`; audits inspect the stored result and never become a second builder. The shader compiler owns build-time shader bundles. QA's frozen timing JSON has its separate exporter and accepted-report provenance under `tools/MorphFaceEditor.QA/TimingBaselines`.
+The corpus commands require a separately supplied collection of packages. `corpus-audit` expects nine top-level PCCs whose names contain `GlobalMorphs`, plus `TUF/LE1 TUF.pcc`, `TUF/LE2 TUF.pcc` and `TUF/LE3 TUF.pcc`. Reconciliation and conversion use the named native packages `LE1 GlobalMorphs.pcc`, `LE2 GlobalMorphs.pcc` and `LE3 GlobalMorphs.pcc`, and directional packages such as `LE1 to LE2 GlobalMorphs.pcc`. The material oracle uses the three native packages and three TUF packages.
 
-The 21 original bundles retain their verified canonical target-source provenance; the three authored TUF bundles use the separate inputs below. Original BioWare-supplied inputs are retained locally under ignored `fixtures/local/morph-target-sources/`: `LE1 morphs.pcc` (SHA256 `114A3552F23B3A5B1DFA1AE989516529E1544017385B63F05DEE82AA4BC0EC1C`) and `LE3 morphs.pcc` (`C8597518A9392C812C478C2694D12F0E6EB753169533CA50ECAD4EF034B6960C`). These explain why an installed-package scan cannot recover every original set. Do not replace later-game deltas with earlier-game approximations.
+Conversion stress tests select five faces per family; the full run selects every eligible face. TUF comparisons use the target game's dedicated package. Vorcha conversion isn't supported.
 
-| Bundles | Source and exact-output rule |
-|---|---|
-| LE1 HMM/HMF/ASA/SAL/KRO/TUR | Compile the corresponding set from supplied LE1. |
-| LE1 BAT | Compile supplied LE3 BAT; retain the accepted source-root casing `biog_bat_hed_promorph_r.` instead of `BIOG_BAT_HED_PROMorph_R.`. All native target data and the `PROBase` outer remain unchanged. |
-| LE2 ASA/KRO | Compile supplied LE1. |
-| LE2 BAT/SAL | Compile supplied LE3; these bundles are already shared byte-for-byte with LE3. |
-| LE2 HMM/HMF | Compile installed official `DLC_METR_Patch01/CookedPCConsole/BIOG_HMM_HED_PROMorph.pcc` / `BIOG_HMF_HED_PROMorph_R.pcc`. |
-| LE2 TUR | Compile supplied LE1; retain accepted root casing `BIOG_TUR_HED_PROMorph_R.` instead of `biog_tur_hed_promorph_r.`. |
-| All seven LE3 bundles | Compile supplied LE3. |
+## Inspect packages
 
-Nineteen outputs reproduce directly; the two explicit prefix-casing projections reproduce the remaining accepted bytes. `compile` preserves source paths by default. Apply these reviewed projections only to `MorphTargetAsset.Source.InstancedPath`, after verifying native target membership/order and exact geometry/normal/bone bits; never infer or rewrite deltas. LE2 shares the supplied LE1 data, with one native HMM membership addition: its 156-target set includes `Jacob`; all 155 common targets match bit-for-bit. Keep the verified LE2 source rather than dropping that target. No accepted dataset was refreshed during this audit.
-
-Generate candidates into a separate directory and compare identity, values and reviewed exceptions before publication:
-
-```powershell
-dotnet run --project tools/MorphFaceEditor.DataCompiler -c Release -- corpus-reconciliation "fixtures/Global Morphs" .codex-temp/generated/CrossGameAssetReconciliation.json
-dotnet run --project tools/MorphFaceEditor.DataCompiler -c Release -- material-oracle "fixtures/Global Morphs" .codex-temp/generated/MaterialDependencyOracle.json
-dotnet run --project tools/MorphFaceEditor.DataCompiler -c Release -- material-metadata src/MorphFaceEditor.LegendaryExplorer/Assets/StockMaterialMetadata.json .codex-temp/generated/StockMaterialMetadata.json
-```
-
-The TUF corpus PCCs contain every source game's ported faces grouped beneath `LE1`, `LE2` and `LE3`. The archived original fixtures had inherited TUR geometry; the canonical fixtures contain rebaked TUF geometry and the neutral face. The accepted embedded material populations remain 47/33/80. Feeding all 163 faces per game directly into `audit-randomiser` is a population refresh, not reproduction of the accepted corpus. The original input snapshot is unavailable. Native-origin filtering gives 49/34/80 candidates, and current LE2/LE3 resolved material defaults still differ from the accepted evidence, so filtering alone is not an exact reproduction recipe. Review identities, populations and material values before replacement. Runtime morph randomisation reuses TUR seeds restricted to female channels, while this embedded material population remains unchanged.
-
-Audit generated data before replacing embedded assets. Keep disposable reports and conversion outputs under `.codex-temp` or `artifacts`; do not commit them. Installed packages remain read-only. Registry audits require current saved registries; rebuild them through Settings after an installation change before interpreting omissions as scanner defects.
-
-Generic package inspection belongs to LECCLI. The retired Research commands map to these existing commands:
-
-| Retired command | LECCLI replacement |
-|---|---|
-| `locate-export` | `find-object` / `search-objects`, then `find-export` or `list-exports` in the exact package. |
-| `inventory-faces` | `list-exports --class BioMorphFace`, `get-properties` and `get-binary`. |
-| `actor-inventory` | `list-exports`, `get-properties` and `find-usages` for package-level evidence; MFE's actor-assignment workflow owns eligibility decisions. |
-| `trace-material` | `get-properties`, `get-binary`, `resolve-import` and `list-shaders`. |
-| `dump-shaders` | `list-shaders` and `export-shader` (`hlsl` or `raw`). |
-
-Consult `LECCLI <command> help` for current options. LECCLI uses its own LegendaryExplorerCore checkout: it provides package evidence, but does not establish how MFE's pinned version behaves. Retain MFE-specific generation and pinned-dependency checks here rather than copying them into a generic inspection tool.
-
-TUF contains 34 authored targets over three native LODs; head fringes and neck are excluded. Compile each approved native source with:
-
-```powershell
-dotnet run --project tools/MorphFaceEditor.DataCompiler -c Release -- compile "fixtures/Global Morphs/TUF/LE3 TUF.pcc" BIOG_TUF_HED_PROMorph_R.PROBase.TUF_BaseMorphSet <output.mft.br>
-```
-
-Use the corresponding LE1/LE2 PCC for those games. These PCCs, artist scenes and experimental Blender tools remain local; MFE ships only the derived bundles. The three approved bundles are byte-identical (SHA-256 `20f26297e00a656bf0376f26e486461236540f8211315fbbebd02bc75bc04d36`), but retain game-specific resource names. Morph randomisation projects TUR seeds onto these 34 targets while TUF material evidence remains a separate reviewed corpus.
+Use LECCLI for general package inspection, with `LECCLI <command> help` for options. It uses its own LegendaryExplorerCore checkout, so check MFE's pinned version when investigating behaviour specific to MFE.

@@ -1,116 +1,70 @@
 # MFE QA Utility
 
-The QA utility runs production workflows across supported games and archetypes, then saves reports and output packages for review. It exposes failures; it does not repair MFE or game assets.
+The QA utility runs MFE workflows across the supported games and archetypes, then saves reports, previews and output packages for inspection. It reports problems; it doesn't repair the editor or game assets.
 
-Double-click `Run_MFE_QA.bat` in the checkout root, or run:
+## Before you start
 
+You'll need the repository's .NET SDK, installed LE1, LE2 and LE3, current MFE asset databases, and Legendary Explorer's installed UModel build 1589 or newer. The Global Morphs corpus needed for this utility belongs in `fixtures/Global Morphs`, including TUF and the three `BAF/BAF LE1.pcc`, `BAF/BAF LE2.pcc` and `BAF/BAF LE3.pcc` files. These files can be downloaded from the mod page as game assets are not included in this repo.
+
+Player and Clipboard cases use MFE's temporary AppData workspaces. The utility doesn't change the Windows Clipboard or installed PCCs; it checks input package fingerprints after each case, including failures. Its diagnostics go into the QA reports rather than the editor's persistent AppData log.
+
+## Run and select cases
+
+Use the following command:
 ```powershell
 dotnet run --project tools/MorphFaceEditor.QA -c Release --
 ```
-
-Every run chooses a fresh random seed. Cases that select a corpus donor choose a face randomly from the available Global Morphs for that game and archetype. Pass `--seed <integer>` to reproduce the run's choices. Random choices can coincide by chance.
-
-The matrix has 35 game/archetype entries: 29 NPC entries and six Player entries. NPC journeys sample by game and family; extra fixed-donor labels do not create additional routes. Mesh interchange separately selects the fixed editable Security2 donor.
-
-The normal run includes all workflow groups except `benchmark` and `donor-sweep`. Add `--exhaustive` to include every eligible corpus donor's load/export/reopen checks alongside the normal workflows. `--case donor-sweep,pcc-audit` runs just that sweep and its output audit. Random workflow combinations remain sampled: exhaustive donor coverage does not mean every possible edit combination. Benchmark warm repeats require explicit `--case benchmark` or an exact benchmark case ID; archetype filters do not silently enable them.
-
-Requires the repository's .NET SDK, corpus PCCs in `fixtures/Global Morphs` (including TUF and `BAF/BAF LE1.pcc`, `BAF/BAF LE2.pcc`, `BAF/BAF LE3.pcc`), installed LE1/LE2/LE3, current MFE asset databases, and Legendary Explorer's installed UModel build 1589 or newer. Missing prerequisites are reported and do not count as passes. Player and Clipboard workflows use MFE's temporary AppData workspaces. QA diagnostics remain available to the harness for its reports but are not appended to the editor's persistent AppData log. The Windows Clipboard and installed PCCs are untouched.
-
-## Coverage
-
-- `load`, `material-ron`, `clipboard` and `undo-redo` cover supported game/archetype combinations, including HMM/HMF NPC and Player workflows, Asari, Salarian, male/female Turian, male/female Batarian, Krogan and Vorcha where supported. Player cases share one seeded fixture per game/sex/run, stored under `fixtures/` inside the run output. Fixture operation seeds depend on the run seed and game/sex, so filtered runs prepare the same authored values. Each case loads it independently, writes into its own folder and retains input fingerprint checks. History uses one randomisation to check a single undo transaction, not another stress batch. TSE fixtures and curated careers provide independent Player authored shapes.
-- `benchmark` is an explicit load-only measurement: one new-reader sample and three warm-reader repeats per archetype. It does not repeat randomisation, export or rendering. Fresh loads after saving remain in the workflow cases as persistence checks.
-- `ron-full` and `ron-morph` drive the editor export/import commands, Save when changes remain, reopen the copied PCC and compare persisted values. A matching import can restore the persisted head exactly and leave Save disabled; this clean route still requires independent PCC readback. Full import compares the authored package payload to the exported RON, rather than treating an evaluated editor draft as native data. Morph-only import checks exported feature values and retains independently edited materials. TUF follows the same full and morph RON journeys as TUR. BAF full and morph RON, ALN morph-only RON, and base-specific restrictions such as LE3 Omega Batarian are tested as disabled capabilities. Material RON remains covered for every archetype.
-- `ron-cross-game` exports full RONs from every supported LE1/LE2 archetype, including TUF and both Player sexes, imports them through the explicit Import command with the other game selected, exports a PCC and checks fresh geometry/material readback. Dropping a tagged MFE RON deliberately chooses its provenance game and is not the cross-game route. ALN has no LE1 destination; BAF does not expose full-head RON. This group covers full-head cross-game routing; partial RON commands are covered within each game.
-- `ron-missing-assets` tests absent hair, accessory and texture identities separately for each game, so an accessory failure does not conceal the other omission routes. Import must complete, report omissions, exclude those references and preserve its resulting data through PCC export/reopen. Current strict accessory rejection remains a failing Checkpoint C behavior gap against the requested skip policy; the harness does not reclassify it as a pass.
-- `tse-ron` owns the five external files in `fixtures/RON_Test` across their eight compatible routes; the test suite owns RON codecs and schema checks. The journey compares original geometry, hair/accessory identities and head-owned BMO values with the initial import, checks authored LOD0 and creator aliases in the editor, then exports RON and verifies PCC persistence. Sheploo's exact malformed scalp reference must be omitted and named in a warning; LE2 Ashley must retain its canonical single hair MIC, and its empty `HAIR_Mask` must not produce a malformed-texture warning. Installed seeds and exact resolved source donor packages are fingerprinted before import. These are untagged TSE inputs, separate from generated MFE RONs.
-- `pcsav` covers all nine custom/default careers in `fixtures/PCSAV_Test`: native head/default projection, one seeded randomisation, PCSAV save/reopen, RON export and full replacement through the editor commands. Edited values compare by name while the native career's original feature/bone order is checked independently. LOD and vertex order remain exact. It also checks unrelated career bytes. Native unavailable references may survive unrelated edits; full replacement/publication must safely refuse an unsafe head.
-- `pcsav-extra` uses six deliberately selected inputs from `fixtures/PCSAV_Test`, not automatic folder discovery. `LE3_HMM_Key.pcsav` adds a 32-bone LE3 male head; `LE3_HMF_Commander.pcsav` adds a single-LOD LE3 female head with explicit zero features; `LE2_HMF_Dahlia.pcsav` adds the corresponding LE2 female shape; `LE1_HMF_Jane.pcsav` and `LE3_HMF_Jane.pcsav` add female default-head creation in LE1 and LE3 (the curated defaults are male). `LE1_HMM_Alistair.pcsav` tests controlled refusal of an incomplete native LOD payload. The other 26 inspected files repeat these branches or the existing corpus and are not registered. Each valid extra uses one roll. Sources are always fingerprinted and only copies are edited.
-- Player full-head RON outputs (including the final randomized head), Player material-only RON files and newly written PCSAV references must pass the production seekfree/startup/face-factory source validator. PCC structural auditing alone does not establish this safety. Unchanged unavailable native career references are exempt only during unrelated edits.
-- `conversion` covers 54 unique NPC family/game directions, including all six TUF and six BAF directions using their dedicated destination packages. ALN retains its authored baked geometry without reconstructed targets and has no morph conversion route. Each route samples its source from the matching Global Morphs family, records the selected donor, keeps its PCC and freshly loads and renders the result. The regression runner retains targeted prerequisite, rejection, source-identity and donor-policy checks.
-- `npc-randomisation` runs a 100% production Randomisation for each supported game/NPC archetype, including material-only profiles, and checks persisted geometry and Material values.
-- `player-randomisation` covers male and female Players in each game: installed Player → RON → detached RelativeBake workspace → 100% Randomisation → PCC/reload/image.
-- `mesh-psk` and `mesh-gltf` make one deliberate HMM slider edit on the known editable Security2 fixture, save and reopen the bake, then export and import a real mesh into a detached Custom workspace. They check the bake, four Material slots, raw Custom vertex correspondence and inverse-bake recovery. They do not repeat randomisation or randomly select a donor that may intentionally lack morph editing.
-- `custom-randomisation` creates its own edited source mesh, assigns compatible Material families to all four HMM slots, then randomizes, exports, reopens and renders. Its inputs remain the same for a recorded seed when running the case alone or within the full matrix.
-- `custom-human-materials` explicitly assigns every male and female Human Face/Scalp NPC/Player choice in LE1/LE2/LE3, and checks the Eye/Lash choices and ordering. It checks supported controls, edits, material RON, history and freshly reopened Custom PCCs.
-- `custom-human-hair` explicitly covers Hair and Advanced Hair in each game, plus LE3 James Vega Hair. It exercises shared scalp/hair parameters, Custom texture controls, material RON and PCC readback, with three rolls per graph to check actual colour participation.
-- `native-human-hair` exercises the same seven hair graphs on ordinary faces. Hair edits remain BioMaterialOverrides; hair textures remain MIC-owned. Four rolls cover strengths 0%, 50%, 100%, 100%; the final pair checks variation in each eligible hair colour rather than accepting a change to an unrelated face colour.
-- `cc-scalp-switch` covers LE3 HMM and HMF NPCs selecting ShortAfro and accepting its paired textures and Player scalp graph. It checks one-transaction undo/redo, existing-package save and fresh export, then verifies the selected graph and preserved head data after reopening.
-- `player-cc-scalp` checks both official LE3 Player scalp defaults and their persisted CC graphs. `kaidan-preview` renders the native Kaidan graph and verifies its preview-only authoring boundary.
-- `pcc-audit` freshly reads every exported PCC and checks structure, references, properties and import resolution against installed donors. Existing copied PCCs retain their structural baseline; newly built outputs have no exemptions. The exact documented LE2 specular-mask import is allowed. Entries under the exact `ME3ExplorerTrashPackage` root are exempt from donor resolution only after their retained data and ancestry are checked. References from retained data into trash entries fail. Custom mesh PCCs must preserve ForcedExport on their `MorphFaceEditor` root and direct SkeletalMesh exports.
-
-Material RON uses capture/write/read/merge, value and history checks, and saved PCC readback. Clipboard uses the production editor copy/paste/Save commands and codec in memory between a face and an independent clone in a copied open PCC. A rejected unsafe morph paste must report an error and preserve the complete target draft and its dirty state; QA does not match English words in localised errors. Undo/redo checks edit chronology, whole-roll undo/redo and redo-branch invalidation. TUF exercises its 34 editable morph controls, bone rig and morph clipboard alongside Material history. Unsupported or incomplete workflows remain failures; the utility does not substitute another edit to make a case pass.
-
-Only `npc-randomisation`, `player-randomisation` and `custom-randomisation` perform 100-roll stress batches: each covers a distinct game/profile/Player policy or Custom scope. History and native saves use one roll; hair-specific checks use three or four; mesh interchange uses a deterministic slider edit. The normal matrix has 36 stress batches and a budget of about 3,700 rolls including setup, down from the observed 127 batches/12,700 rolls. Startup prints the selected workload's roll budget. Reports summarize successful rolls and average time for the actual sample count; JSON records total duration and per-roll diagnostics. Failed rolls remain failures even when later persistence checks complete.
-
-The Human material cases are included in a full run. To run just the new coverage and audit its outputs:
-
-```powershell
-dotnet run --project tools/MorphFaceEditor.QA -c Release -- --case custom-human-materials,custom-human-hair,native-human-hair,cc-scalp-switch,player-cc-scalp,kaidan-preview,pcc-audit
-```
-
-These are 25 explicit material cases. Their required material graphs are fixed, even when their source geometry fixture varies with the run seed. Material labels may be translated; case routing uses stable option identities. A missing required graph, parameter or donor is reported rather than substituted with another material.
-
-## Reports and results
-
-Each run writes to a new folder under `artifacts/qa`, with a separate directory for each case. The HTML report summarizes results and links to failures, previews and outputs. The JSON report contains diagnostics, selected donor identities, texture hashes and stage measurements. Artifact filenames include a run token, sequence and original basename; mesh sidecars retain their required names beside the primary mesh, and glTF buffer/image URIs are rewritten when files are renamed. Every case is attempted even if another fails. Exit code 0 means selected cases completed without failures, 1 means cases failed or could not complete, and 2 means invalid invocation or startup failure. Original input package fingerprints are checked after each case, including failures.
-
-The HTML `Needs attention` list shows each slow stage beneath its case link, with measured milliseconds and the stage limit.
-
-Timing caps are calibrated per case, phase and operation from Ryan's accepted full **0.10.0.39** run (seed `713890369`). Fixed/native inputs receive **25% headroom**; seeded variable inputs and edited outputs receive **50%**. Caps retain at least 100 ms of absolute slack and round upward in **100 ms increments**, preserving the agreed headroom. Minimum caps are 100 ms for Load/Randomisation and 300 ms for FileTransfer. Inputs and outputs, first-use setup and repeated reads have separate keys; changing a selected face or output GUID does not create a new key.
-
-Each limited stage has three outcomes:
-
-- **Pass:** at or below its calibrated cap.
-- **Warning:** above that cap, up to and including the severe threshold.
-- **Failure:** more than **2× the cap for fixed inputs**, or **3× for variable inputs**. A severe timing failure makes an otherwise passing case Failed and the runner exits 1. Functional errors remain intact alongside timing outcomes.
-
-New/unmapped stages retain the fallback caps of **1,500 ms** for Load/Randomisation and **5,000 ms** for FileTransfer, with a severe threshold of 3×. ColdLoad, Render and Diagnostic remain excluded. Randomisation is judged by its average across the actual roll count; batch totals and allocations remain separate. Player fixture setup's untimed roll is outside the production Randomisation average.
-
-The baseline is frozen: a slow run cannot raise its own limits. `TimingBaselines/accepted-0.10.0.39.json` records accepted-report provenance and reviewed envelopes; `export_accepted.py <original-reviewed-baseline-candidates.json> <corrected-reviewed-audit.json>` reproduces it from the pinned original audit and writes a separate corrected audit. Ryan approved correcting 18 seeded Player load/preview/PCC-audit classifications on 24 October; their original observations and envelopes remain unchanged, and both audit identities are retained. Recalibration requires another reviewed, accepted dataset. JSON preserves each stage's `LimitMs`, `FailureLimitMs`, `TimingSeverity`, `TimingKey` and `LimitSource`; HTML and console use the same stored caps. Historical reports retain their original evidence.
-
-Full RON import records its actual route after the command: matching live edits retain the legacy baseline key; package replacement and unconfirmed routes use separate keys and the FileTransfer fallback until independently calibrated. A raw replacement must reproduce the imported RON payload exactly, including all baked LODs and map order. Its editor draft must retain bit-exact geometry and all feature/bone names and values; editor controls may order those maps by profile. Save/reopen checks the raw RON again for replacement, and the complete editor draft for saved live edits. A clean full restoration checks the unchanged PCC against the raw RON. Matching live edits continue checking the restored editor state. The initial evaluated preview can differ from the raw file by float rounding and is not the authored-file geometry oracle.
-
-Preview renderer initialisation is recorded separately as a Load stage with its own calibrated cap (the fallback is 1,500 ms). This includes its first-use setup rather than hiding that cost inside the untimed Render PNG stage. Shader bytecode is compiled and embedded during the build; preview construction does not compile HLSL.
-
-Face-load material breakdowns also report defaults, shader lookup and texture decoding/cache time. Defaults include shader lookup, so these are overlapping diagnostic timings, not values to add together. They help distinguish reference shader-cache I/O from texture work when a long-run load stalls.
-
-Each stage name contains its sequence number, phase and purpose; run and case identity are supplied by the containing report record. `Player fixture preparation` covers stock loading/catalogue construction and fixture export; `Test workflow` covers the randomized-input test. Face/file names and Clipboard copy/paste roles distinguish repeated operations.
-
-Before the matrix tests a game's first face, it records a separate `ColdLoad` warm-up using that game's corpus package. Cold-load timings have no performance limit; subsequent face loads use their calibrated caps, or the 1,500 ms fallback when unmapped. This measures the first load in the QA session without flushing Windows file caches. The benchmark case likewise records its first load separately from its warm repeats.
-
-Custom workflows share one run-lifetime package reader and template catalogue, matching the app's service lifetime and normal install/registry/source invalidation. Each workspace measures catalogue access separately from geometry/workspace construction; the measured result feeds the workspace without a second catalogue load. The first catalogue access per game is labelled `First-use catalogue`; later accesses are `Session catalogue access`, with separately calibrated caps. Filtered runs still measure their own first use, so compare matching phases rather than assuming a filtered case has the same cache state as a full run. Original source-face loads and saved-output verification still use fresh readers.
-
-JSON and HTML report timing-warning counts by phase, including Player fixture preparation, first-use catalogue and test workflow. A slow fixture export is a setup warning, not a slow later load; its limit is still enforced. Preview-load stages include the reader's existing package/document/head/attachment/material/diagnostic breakdown and material cache hit/miss counts. Reader total and material substeps overlap their components: do not sum them. Managed allocation is process-wide allocation volume during the stage, not peak/live heap or proof of a leak. Working set is a whole-process snapshot at stage end. Run timing workloads serially without competing workloads; these limits are single observed stage timings, not statistical benchmarks.
-
-Load/export warnings include their phase, package and face. A relinker warning for an unresolved import is informational when a fresh read proves that the output contains exactly one export at the full path, its class matches the canonical oracle, and no matching import exists. The original message and export index remain in JSON evidence. Unverified warnings and duplicate import/export roles remain Warnings. Material RON diagnostics list differing parameters and canonical expected/actual texture identities. Clipboard diagnostics identify the disabled command and dirty/capability state. glTF reporting distinguishes raw Custom geometry checks from inverse-morph sidecar recovery.
-
-Deformation-oracle misses on load are informational diagnostics, including unchanged exported copies. GlobalMorphs faces can have authored bakes that already differ from target reconstruction; no per-face exception or enlarged tolerance is used. The complete oracle metrics remain in JSON evidence and the diagnostic identifies the package and face. This does not change production morph/bone eligibility, structural topology failures, or the independent comparisons of actual saved geometry, features, bones and materials.
-
-The JSON `materialInstanceComparisons` evidence captures each material-instance comparison that detects a stock difference at the actual comparison point, including its source and selected official donor and normalized property differences. These are comparison decisions, not a count of renamed exports: a dependency can be checked more than once, or recursively through a parent MIC. Correlate them with the save warnings by original identity. This diagnostic is enabled only for the QA case and does not alter the material preservation policy.
-
-The unused retained `HMF.Asari` morph is excluded by exact identity from normal corpus donors and native hair fixture seeds. Its pre-existing broken deformation must not become a failure of unrelated material tests; geometry checks remain strict for selected fixtures.
-
-## Commands
-
-```powershell
+The normal run includes every workflow group except `benchmark` and `donor-sweep`. Use `--list` to see the available groups and exact case IDs. For example:
+```powershe
 dotnet run --project tools/MorphFaceEditor.QA -c Release -- --list
-
-dotnet run --project tools/MorphFaceEditor.QA -c Release -- --exhaustive
-
-dotnet run --project tools/MorphFaceEditor.QA -c Release -- --case ron-full,ron-morph,ron-cross-game,ron-missing-assets,tse-ron,pcsav,pcsav-extra,material-ron,pcc-audit
-
-dotnet run --project tools/MorphFaceEditor.QA -c Release -- --case benchmark
-dotnet run --project tools/MorphFaceEditor.QA -c Release -- --case custom-randomisation --seed 29092026
-dotnet run --project tools/MorphFaceEditor.QA -c Release -- --case player-randomisation
 dotnet run --project tools/MorphFaceEditor.QA -c Release -- --case material-ron/le3-hmf-player,undo-redo/le1-tuf
+dotnet run --project tools/MorphFaceEditor.QA -c Release -- --case BAF,pcc-audit
+dotnet run --project tools/MorphFaceEditor.QA -c Release -- --case custom-randomisation --seed 29092026
+dotnet run --project tools/MorphFaceEditor.QA -c Release -- --exhaustive
+dotnet run --project tools/MorphFaceEditor.QA -c Release -- --case donor-sweep,pcc-audit
+dotnet run --project tools/MorphFaceEditor.QA -c Release -- --case benchmark
+```
+`--case` accepts a group, an exact case ID, an archetype such as `BAF`, or a comma-separated selection. Include `pcc-audit` when you want to audit outputs from a filtered run. Benchmark cases must be selected explicitly; an archetype filter won't enable them.
+
+Each run chooses a random seed and may sample a Global Morphs donor. Pass the recorded `--seed <integer>` to reproduce those choices. `--exhaustive` adds load, export and reopen checks for every eligible donor, but edit combinations are still sampled. BAF donor selection requires the female Batarian mesh profile.
+
+Other options:
+```powershell
+dotnet run --project tools/MorphFaceEditor.QA -c Release -- --corpus "path/to/corpus"
 dotnet run --project tools/MorphFaceEditor.QA -c Release -- --output artifacts/qa/my-new-run
 dotnet run --project tools/MorphFaceEditor.QA -c Release -- --audit-output artifacts/qa/my-completed-run
 dotnet run --project tools/MorphFaceEditor.QA -c Release -- --self-check
 ```
+An output directory must be new or empty. `--audit-output` audits a completed run into a separate report without changing its evidence. Older reports without saved structural baselines reconstruct them from the current original inputs and report that limitation. `--self-check` checks the utility's own reporting and fixture handling; it doesn't run the game corpus.
 
-`--case` accepts a utility group, an exact case ID from `--list`, an archetype code such as `BAF`, or a comma-separated selection. For BAF alone, including the final audit of its outputs, run `Run_MFE_QA.bat --case BAF,pcc-audit` (27 BAF workflows plus one audit). BAF donor selection requires the female Batarian mesh profile, so an accidentally retained male head cannot count as BAF coverage. `--corpus` selects another corpus directory. Output directories must be new or empty; reruns never overwrite evidence. `--audit-output` audits a completed run and writes a separate report. It leaves previous evidence untouched. Older reports without persisted baseline sets reconstruct them from current original inputs and report that limitation; unresolved imports are never excused by a structural baseline.
+## What the cases cover
 
-The self-check covers unique stage phases, saved-export warning reconciliation and safe trash exemptions. It also decodes two renamed glTF fixtures after flattening them into one folder; it does not run the game corpus. Timing boundaries, fallback caps, render exclusion, failure propagation and persisted report evidence belong to the regression suite's `QaUtilityTests`.
+| Group | Coverage |
+| --- | --- |
+| `load`, `material-ron`, `clipboard`, `undo-redo` | Load supported NPC and Player profiles; check material preset round trips, copy/paste, saves and edit history. Unsupported commands and unsafe morph pastes must be rejected without changing the target. |
+| `ron-full`, `ron-morph`, `ron-cross-game` | Export and import headmorphs or morph presets, save and reopen them, and compare the persisted result. Cross-game cases use the explicit import route. Disabled capabilities are checked too. |
+| `ron-missing-assets`, `tse-ron` | Check missing attachment and texture handling, plus the external TSE RON fixtures and their PCC round trips. Missing assets must be reported and omitted; the current strict accessory rejection is a known failing gap, not a pass. |
+| `pcsav`, `pcsav-extra` | Exercise curated careers, default heads, randomisation, save/reopen and full-head replacement. Checks include geometry, feature and bone data, ordering and unrelated career bytes; incomplete native LOD data must be refused safely. |
+| `conversion` | Convert supported NPC families between games, then load and render the exported PCC. ALN keeps its authored bakes and has no morph conversion route. |
+| `npc-randomisation`, `player-randomisation`, `custom-randomisation` | Run 100-roll stress batches for the relevant NPC, Player or Custom workflows, then check saved results. Other cases use smaller samples or deliberate edits. |
+| `mesh-psk`, `mesh-gltf` | Edit and reopen a known editable face, then export and import a mesh into Custom, checking geometry, materials and inverse-bake recovery. |
+| `custom-human-materials`, `custom-human-hair`, `native-human-hair` | Exercise Human material and hair choices, controls, randomisation, presets and PCC readback. Required graphs and donors must be present; they aren't substituted. |
+| `cc-scalp-switch`, `player-cc-scalp`, `kaidan-preview` | Check LE3 scalp switching and Player defaults, history and persistence, plus Kaidan's native preview boundary. |
+| `pcc-audit` | Freshly read exported PCCs and check structure, references, properties and import resolution against installed donors. |
+| `donor-sweep`, `benchmark` | Check each eligible donor's load/export/reopen, or measure a first load and three warm repeats. Benchmark is load-only. |
 
-Known vanilla exceptions: LE2 `Skin_HumanHED_SpecMulitplier_Mask` may remain unresolved because the Community Patch supplies a fixed import. `HMF_HIR_MIR_LOD0` is an unused broken Miranda mesh; the game uses `HMF_HIR_MIR_MDL`. The runner retains optional preview-catalog warnings about the broken LOD0 and does not substitute or modify MFE's assets.
+Player RON outputs and newly written PCSAV references must also pass the production runtime-source validator; a structurally valid PCC alone doesn't prove those references are safe. Unavailable native career references may remain untouched during unrelated edits. Full replacement must refuse an unsafe head.
+
+PCC audit allows for `Skin_HumanHED_SpecMulitplier_Mask` import to remain broken in LE2, as this is fixed by the Unofficial LE2 Patch. Existing copied packages retain their structural baseline; new outputs have no baseline exemptions, and unresolved imports aren't excused by one. Trash entries are exempt from donor resolution only after their data and ancestry are checked; retained data must not reference them. The optional preview catalogue can warn about the unused broken `HMF_HIR_MIR_LOD0`; since the game uses `HMF_HIR_MIR_MDL`.
+
+## Reports and timing
+
+Each run creates a folder under `artifacts/qa`, with a folder per case. Open the HTML report for results, slow stages, previews and outputs; JSON contains the detailed diagnostics, donor identities, texture hashes and measurements. Every selected case is attempted. Exit code **0** means no failures, **1** means a case failed or couldn't complete, and **2** means an invalid invocation or startup failure.
+
+A deformation mismatch on load is informational: an authored bake can differ from reconstructed targets. Structural topology checks and comparisons of saved geometry, features, bones and materials remain strict. A relinker warning is informational only when a fresh read verifies one matching export of the correct class and no matching import; otherwise it remains a warning.
+
+Timing caps come from the accepted baseline in `TimingBaselines`. Fixed inputs have 25% headroom and variable inputs 50%, with at least 100 ms slack, rounded up to 100 ms. A stage above its cap warns; above **2×** the cap for fixed inputs or **3×** for variable inputs it fails the case. Unmapped Load/Randomisation stages use 1,500 ms and FileTransfer stages 5,000 ms, with failure above 3×. ColdLoad, Render and Diagnostic stages have no cap. Randomisation is judged by average time per actual roll, not batch total.
+
+Run timing workloads serially without competing workloads. ColdLoad records the first load without clearing Windows caches; compare first-use and session catalogue stages like for like. Some diagnostic timings overlap, so don't add them together. Managed allocation is process-wide allocation during a stage, not peak memory or proof of a leak; working set is a process snapshot.
+
+The baseline is frozen: a slow run cannot raise its own limits. Recalibrate only from another reviewed, accepted dataset. The baseline export script uses the pinned original audit and writes a separate corrected audit; existing reports keep their original evidence.

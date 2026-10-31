@@ -1,38 +1,80 @@
-# LE BioMorphFace Editor
+# Morph Face Editor
 
-WPF editor for Mas Effect Legendary Edition `BioMorphFace` assets. Current support: Human Male/Female, Asari, Salarian, male Turian, Krogan and Batarian across LE1-LE3.
+Morph Face Editor (MFE) is a Windows tool for editing Shepard and NPC faces in Mass Effect Legendary Edition, with a live 3D preview. For most players, opening a Shepard save (`.pcsav`) is the easiest place to start. Mod developers can also work with NPC faces and custom head meshes.
 
-Features: morph/final-skeleton/material/texture/attachment editing, semantic undo, transactional saves, cross-game conversion, TSE RON import/export, legacy Gibbed import, and PSK/glTF interchange through UModel. Preview uses D3D11 and is an approximation of UE3 rendering.
+**Download:** [Nexus Mods](https://www.nexusmods.com/masseffectlegendaryedition/mods/3477) · [GitHub Releases](https://github.com/AudemusN7/LEBioMorphFaceEditor/releases)
 
-```powershell
-dotnet run --project src/MorphFaceEditor -c Debug
-dotnet build MorphFaceEditor.slnx -c Release
+![Morph Face Editor editing a Shepard career save](documentation/images/player-workspace.png)
 
-# Fast default suite; opt into affected integration areas.
-dotnet run --project tools/MorphFaceEditor.Tests -c Release
-dotnet run --project tools/MorphFaceEditor.Tests -c Release --no-build -- --list
-dotnet run --project tools/MorphFaceEditor.Tests -c Release --no-build -- --suite ui UiWorkspaceTests
-dotnet run --project tools/MorphFaceEditor.Tests -c Release --no-build -- --suite all
-```
+## Core features
 
-See [regression test ownership and suites](tools/MorphFaceEditor.Tests/README.md) for focused checks and the [QA harness](tools/MorphFaceEditor.QA/README.md) for broad workflow matrices. Generic PCC inspection uses LECCLI.
+- Edit Shepard directly in a PC save, or import headmorphs previously exported from save editors or MFE itself.
+- Create and edit Human Male/Female, Asari, Salarian, Turian, Krogan, Batarian and Vorcha NPC faces.
+- Change face shape, materials, textures, hair and accessories, with Undo/Redo while you experiment.
+- Randomise a face or selected features. Try **Cursed Mode** when conventional beauty standards are simply too tame for you.
+- Assign NPC faces and materials to actors, and convert compatible faces between LE1, LE2 and LE3.
+- Share headmorphs and material presets, or import PSK/glTF meshes for advanced material work.
 
-Mesh exports include a versioned `.mfe.json` sidecar. Keep it beside the mesh for a lossless round trip; mesh-only import cannot reconstruct metadata-only controls, bone edits or unique lower-LOD branches.
+## Requirements
 
-The application embeds canonical compressed morph targets and the randomisation donor corpus. Runtime editing never depends on the GlobalMorphs packages. Data regeneration remains available through `tools/MorphFaceEditor.DataCompiler`.
+- 64-bit Windows.
+- [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/en-us/download/dotnet/10.0) — choose the Windows **x64** installer.
+- Mass Effect Legendary Edition (Steam/EA/Game Pass etc)
 
-Developer commands and data ownership are documented in [DataCompiler](tools/MorphFaceEditor.DataCompiler/README.md). For example, unpack an MFTR to JSON beside the input, or pass an optional JSON output path:
+MFE uses meshes and textures from your installed games and mods. Game assets aren't included with the editor.
 
-```powershell
-dotnet run --project tools/MorphFaceEditor.DataCompiler -c Release -- unpack-mftr "C:\path\to\LE1.mftr"
-```
+## Documentation
 
-## Logging
+Start with **Getting Started**, then follow the guide for your workflow.
 
-Daily logs live in `%LocalAppData%\LE BioMorphFace Editor\Logs`. Each session starts with `SESSION N`; records use `yyyy-MM-dd HH:mm:ss.fff zzz [INF|WAR|ERR]` followed by compact event fields. Session numbering restarts in each daily file, and a running editor rolls over at midnight.
+| Guide | Level |
+| --- | --- |
+| [Getting Started](documentation/GETTING-STARTED.md) | Beginner |
+| [Player Faces](documentation/PLAYER-FACES.md) | Beginner |
+| [Editing Faces](documentation/EDITING-FACES.md) | Beginner, with advanced sections |
+| [NPC Faces and Actor Assignment](documentation/NPC-FACES.md) | Intermediate |
+| [Custom Meshes](documentation/CUSTOM-MESHES.md) | Advanced |
+| [Materials, Textures and Attachments](documentation/MATERIALS-TEXTURES-AND-ATTACHMENTS.md) | Detailed reference |
+| [Saving, Exporting and Conversion](documentation/SAVING-EXPORTING-AND-CONVERSION.md) | Reference |
+| [Shortcuts and Gestures](documentation/SHORTCUTS-AND-GESTURES.md) | Reference |
+| [Troubleshooting and Limitations](documentation/TROUBLESHOOTING-AND-LIMITATIONS.md) | Reference |
 
-Launch `MorphFaceEditor.exe -verboselogging` for workspace refresh, face loading, registry lifecycle, feature preview/drag and optional material-member diagnostics. Ordinary logging keeps operation results, randomisation summaries, warnings and errors. In-process QA observers still receive verbose diagnostics, while the QA runner suppresses all AppData log writes.
+## Launching the editor
 
-Normal randomisation uses `RAND:NOR <tag>.<morph> <game> STR<morph>/<material> SEED<morph>[/<material>]`; `-` marks an absent seed. Cursed randomisation uses `RAND:CUR` and its single shared seed.
+1. Extract the complete release archive into a folder. Keep its files together.
+2. Run **MorphFaceEditor.exe**.
+3. On the welcome screen, click **Build Mesh/Texture Databases**.
+4. Click **Rebuild** beside the game you need, or **Rebuild All** for all detected games. Close the database window once the scan finishes.
+5. Open your file through **File → Open File**, or drag it onto the editor.
 
-Startup removes application logs last written more than seven days ago and orphaned `*.workspace.pcc` files. Live workspace leases protect files owned by other editor instances; unleased files from older builds are preserved while another editor is running. Diagnostic ZIPs include today and the preceding two calendar days of logs, plus the current workspace and databases.
+The scan finds assets without changing game files. After installing or removing mods, use **Mesh/Texture Databases → Rescan Mods**.
+
+## Saving your work
+
+Use **File → Save File** (Ctrl+S) to update an open save or PCC, or **Save As** (Ctrl+Shift+S) for a separate copy.
+
+Exports are separate files. Follow the Player or NPC guide above to apply them in game.
+
+## Limitations
+
+- Career-save editing supports Legendary Edition PC saves.
+- Available controls depend on the face. Use material editing for Vorcha; morph sliders aren't available.
+- The preview closely approximates the game, but lighting and animation can differ. Check the result in game.
+- MFE saves and exports files; it doesn't install the finished mod.
+
+## Problems or questions
+
+Check [Troubleshooting and Limitations](documentation/TROUBLESHOOTING-AND-LIMITATIONS.md) first. Report problems through [GitHub Issues](https://github.com/AudemusN7/LEBioMorphFaceEditor/issues) or the Nexus mod page. Include the steps that caused it and a diagnostic ZIP from **File → Settings → Export Logs**.
+
+## Special thanks
+
+- **Mgamerz** — LEC support, advice and the inspiration for Cursed Mode.
+- **DropTheSquid** — glTF export reference and BioMorphFace experiments.
+- **HenBagle** — BioMorphFace experiments.
+- **Karlitos** — Trilogy Save Editor formats and CLI.
+- **BioWare** — For everything. Ad Astra Per Aspera.
+
+For third-party credits and licences, open **About → About MFE** in the editor.
+
+# AI Diclosure
+This tool was developed over the course of 3 months with extensive assistance from OpenAI's Codex, which wrote the majority of the application's code. However, all features, functionality and design decisions were directed by me, with extensive hands-on testing, debugging and validation throughout development. While AI was responsible for much of the implementation, the vision, quality standards and responsibility for the finished application remain entirely my own based on my own extensive knowledge of Mass Effect modding, and backed by Legendary Explorer's human-written code as foundational.

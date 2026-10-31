@@ -1,22 +1,29 @@
-# MFE version contract
+# Versioning
 
-`Version.props` is the build version oracle. The four numbers are major release,
-significant feature threshold, improvements within that threshold, and small fixes.
-Every commit increases the version, including documentation, tooling and merges.
-A higher component resets the lower components to zero. Components are numeric,
-not decimal digits: a fix counter may exceed 9. Major stays zero until release.
-Intermediate QA builds may also increase the version so accepted builds retain
-their own identification. The commit guard permits those gaps; it still rejects
-unchanged or decreasing versions and requires the lower-component resets.
+Most of this document is LLM instruction for how to handle version bumping.
 
-Run `pwsh -File tools/versioning/Bump-Version.ps1` for a fix, or pass
-`-Kind Improvement`, `Feature` or `Major` for the corresponding boundary.
-Stage `Version.props` with the change. Install the local commit guard with
-`git config core.hooksPath .githooks`; it validates the staged version against all
-parents. For merges, increment from the highest parent version. Amending a commit
-also requires a new version so changed builds never share a version. New clones need
-the hook installation too; Git does not activate repository hooks automatically.
+`Version.props` sets MFE's build version and the number in the title bar.
 
-Assembly, file and informational versions derive from this file. The title bar
-combines the existing translated application name with the built assembly version.
-The historical migration ledger is local documentation and is not required by these tools.
+Use **major.feature.improvement.fix**, keeping major at zero until release. Numbers can go above 9; increasing one resets those after it to zero.
+
+## Bump the version
+
+From the repository root, bump an ordinary fix with:
+
+```powershell
+pwsh -File tools/versioning/Bump-Version.ps1
+```
+
+For larger changes, add `-Kind Improvement`, `-Kind Feature` or `-Kind Major`.
+
+Bump every commit, including documentation, tooling, merges and amendments, and stage `Version.props` with the changes. A merge's version must exceed both parents. QA builds can use intermediate versions; gaps are fine.
+
+## Enable the commit check
+
+Run this once in each new clone:
+
+```powershell
+git config core.hooksPath .githooks
+```
+
+The hook rejects unchanged or lower staged versions and checks the resets.

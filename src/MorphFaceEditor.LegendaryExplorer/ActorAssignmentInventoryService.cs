@@ -13,8 +13,9 @@ namespace MorphFaceEditor.LegendaryExplorer;
 /// </summary>
 public sealed partial class ActorAssignmentInventoryService
 {
-    private static readonly string[] HeadComponentProperties =
-        ["m_oHeadMesh", "HeadMesh", "Mesh", "SkeletalMeshComponent"];
+    private static readonly string[] HeadComponentProperties = ["m_oHeadMesh", "HeadMesh"];
+    private static readonly string[] SkeletalActorHeadComponentProperties =
+        [.. HeadComponentProperties, "Mesh", "SkeletalMeshComponent"];
     private static readonly string[] HairComponentProperties = ["m_oHairMesh", "HairMesh"];
     private static readonly string[] BodyComponentProperties =
         ["m_oBodyMesh", "BodyMesh", "Mesh", "SkeletalMeshComponent"];
@@ -157,7 +158,9 @@ public sealed partial class ActorAssignmentInventoryService
 
         var bodyMics = ReadBodyMics(package, components, resolver, cache);
         var attachmentPlan = HeadProfileIdentity.IsGeometryCompatible(selectedProfileKey, headProfileKey)
-            ? ReadAttachmentTargets(package, actor, selectedFace, components, bodyMics, morphTarget,
+            ? ReadAttachmentTargets(package, actor, selectedFace, hasMaterialParameters,
+                components.Where(component => component.IsLocal && IsActorOwned(package.GetEntry(component.UIndex), actor)).ToArray(),
+                bodyMics, morphTarget,
                 knownHairMeshes, knownOtherMeshes, resolver, cache, referrers, ownedMics)
             : (Targets: (IReadOnlyList<ActorAssignmentAttachmentTarget>)[], Warnings: (IReadOnlyList<UserFacingMessage>)[]);
         attachmentPlan = (attachmentPlan.Targets.Select(target => target with
@@ -176,7 +179,7 @@ public sealed partial class ActorAssignmentInventoryService
         foreach (var component in hasMaterialParameters ? components : [])
         {
             InventoryComponentMaterials(
-                package, component, gamePrefix, selectedProfileKey, headProfileKey, hasSkinVectors,
+                package, actor, component, gamePrefix, selectedProfileKey, headProfileKey, hasSkinVectors,
                 attachmentPlan.Targets.FirstOrDefault(target => component.IsLocal && target.ComponentUIndex == component.UIndex),
                 bodyMics, component.IsLocal ? ownedMics.Value[component.UIndex] : [],
                 resolver, cache, eligibleMaterials, skippedMaterials, warnings, userWarnings);
@@ -441,7 +444,9 @@ public sealed partial class ActorAssignmentInventoryService
         ICollection<UserFacingMessage> userWarnings)
     {
         var result = new List<ActorAssignmentComponent>();
-        AddComponent(ActorComponentRole.Head, HeadComponentProperties);
+        // A pawn's generic Mesh is its body, including when a helmet intentionally replaces the head.
+        AddComponent(ActorComponentRole.Head,
+            actor.IsA("BioPawn") ? HeadComponentProperties : SkeletalActorHeadComponentProperties);
         AddComponent(ActorComponentRole.Hair, HairComponentProperties);
         AddComponent(ActorComponentRole.Body, BodyComponentProperties);
         foreach (var property in new[] { "m_aoAccessories", "m_aoMeshes" })
@@ -483,8 +488,8 @@ public sealed partial class ActorAssignmentInventoryService
                         propertyName, component.ClassName);
                     continue;
                 }
-                // Mesh is a head fallback on skeletal actors, but the body on pawns with
-                // a separate HeadMesh. Do not inventory one component twice under both roles.
+                // Skeletal actors can use Mesh as their head. Do not inventory that
+                // component twice under both Head and Body roles.
                 if (role == ActorComponentRole.Body && result.Any(value =>
                         value.InstancedPath.Equals(component.InstancedFullPath, StringComparison.OrdinalIgnoreCase) &&
                         value.PackagePath.Equals(component.FileRef.FilePath, StringComparison.OrdinalIgnoreCase)))

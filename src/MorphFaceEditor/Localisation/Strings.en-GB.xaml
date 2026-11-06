@@ -838,6 +838,7 @@ Choose No to keep the current scalp textures.</system:String>
     <system:String x:Key="loc_VM_materialScope_vorcha" xml:space="preserve">Vorcha</system:String>
 
     <!-- Faces - Actor assignment -->
+    <system:String x:Key="loc_ActorAssignment_OutsideActor">'{0}' is not owned by the selected actor and will not be modified.</system:String>
     <!--localiser: {"Key":"loc_ActorAssignment_Accessory","ReviewedHash":"ADF7651801AEA4615532B8DCF29730FA72FF404908A78A4B4E007EB11156C149","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_ActorAssignment_Accessory">Accessory</system:String>
     <!--localiser: {"Key":"loc_ActorAssignment_AssignedMaterialTargets","ReviewedHash":"960306520DF10C9193CF5BDB5A8817FE683EC2C638B89211D80778D1D572164E","DoNotTranslate":false,"Note":"Actor assignment result. {0} = verified parameter MIC count; {1} = verified hair/accessory mesh count. Save File commits the changes.","SourceHash":null}-->

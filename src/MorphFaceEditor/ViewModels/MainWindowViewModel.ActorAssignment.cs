@@ -88,7 +88,7 @@ public sealed partial class MainWindowViewModel
                     return;
                 }
                 var changedCount = result.ChangedMaterials.Select(value => value.UIndex).Distinct().Count();
-                Status = Loc.Format("loc_ActorAssignment_AssignedMaterialTargets", changedCount, result.ChangedAttachments.Count);
+                Status = Loc.Format("loc_ActorAssignment_AssignedMaterialTargets", changedCount, result.ChangedMeshCount);
                 _dialogs.ShowInformation(Loc.Text("loc_Shell_DialogTitle_MaterialsAssigned"), BuildMaterialCompletion(result));
                 AppLog.Information($"ACTOR:MATERIALS {result.ActorPath} MICS:{changedCount} VERIFIED");
             }
@@ -118,7 +118,7 @@ public sealed partial class MainWindowViewModel
             .AppendLine(Loc.Format("loc_Shell_ActorAssignment_Actor", result.ActorPath))
             .AppendLine(Loc.Format("loc_Shell_ActorAssignment_SourceOverride",
                 result.SourceMaterialOverridePath ?? Loc.Text("loc_VM_actorAssignment_none")))
-            .AppendLine(Loc.Format("loc_ActorAssignment_TargetCounts", changed.Length, result.ChangedAttachments.Count))
+            .AppendLine(Loc.Format("loc_ActorAssignment_TargetCounts", changed.Length, result.ChangedMeshCount))
             .AppendLine(Loc.Format("loc_Shell_ActorAssignment_CategoriesReplaced", string.Join(", ", new[]
             {
                 result.ReplacedTextures ? Loc.Text("loc_Shell_ActorAssignment_Textures") : null,
@@ -140,7 +140,8 @@ public sealed partial class MainWindowViewModel
             text.AppendLine(Loc.Text("loc_Shell_ActorAssignment_BodySkinOnly"));
         }
         text.AppendLine().AppendLine(Loc.Text("loc_ActorAssignment_AttachmentsHeading"));
-        ActorAssignmentChoice.AppendAttachmentTargets(text, result.ChangedAttachments);
+        ActorAssignmentChoice.AppendAttachmentTargets(text,
+            result.ChangedAttachments.Where(value => value.Role != ActorComponentRole.Head).ToArray());
         foreach (var warning in result.UserWarnings)
             text.AppendLine($"• {UserFacingMessageFormatter.Format(warning)}");
         text.AppendLine().AppendLine(Loc.Format("loc_Shell_ActorAssignment_SkippedSlots", result.SkippedMaterials.Count));

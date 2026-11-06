@@ -94,7 +94,7 @@ public sealed class ActorAssignmentService
             {
                 foreach (var target in plan.Targets.DistinctBy(value => value.UIndex))
                 {
-                    var mic = RequireExport(package, target.UIndex, "MaterialInstanceConstant");
+                    var mic = RequireActorOwnedExport(package, target.UIndex, "MaterialInstanceConstant", plan.ActorUIndex);
                     var properties = mic.GetProperties();
                     if (target.ComponentRole == ActorComponentRole.Body)
                     {
@@ -165,6 +165,15 @@ public sealed class ActorAssignmentService
         }
     }
 
+    private static ExportEntry RequireActorOwnedExport(IMEPackage package, int uIndex, string expectedClass, int actorUIndex)
+    {
+        var entry = RequireExport(package, uIndex, expectedClass);
+        if (!ActorAssignmentInventoryService.IsActorOwned(entry, package.GetUExport(actorUIndex)))
+            throw UserFacingMessage.CreateError("loc_ActorAssignment_OutsideActor",
+                $"Object '{entry.InstancedFullPath}' is not owned by the selected actor and cannot be modified.", entry.InstancedFullPath);
+        return entry;
+    }
+
     private static IReadOnlyDictionary<int, byte[]> ApplyAttachments(
         IMEPackage package, string originalPackagePath, IReadOnlyList<ActorAssignmentAttachmentTarget> targets, MaterialPlan plan)
     {
@@ -173,11 +182,13 @@ public sealed class ActorAssignmentService
         var changed = new HashSet<ExportEntry>();
         foreach (var target in targets)
         {
-            var component = RequireExport(package, target.ComponentUIndex, "SkeletalMeshComponent");
+            var component = RequireActorOwnedExport(package, target.ComponentUIndex, "SkeletalMeshComponent", plan.ActorUIndex);
             var properties = component.GetProperties();
-            properties.AddOrReplaceProp(new ObjectProperty(target.SourceMeshUIndex, "SkeletalMesh"));
+            if (target.Role != ActorComponentRole.Head)
+                properties.AddOrReplaceProp(new ObjectProperty(target.SourceMeshUIndex, "SkeletalMesh"));
             var slots = target.SourceMeshUIndex == 0 ? [] : target.MaterialSlots
-                .Where(slot => target.ApplyMaterialParameters || slot.OverridePath is not null).ToArray();
+                .Where(slot => !slot.PreserveOverride &&
+                    (target.ApplyMaterialParameters || slot.OverridePath is not null)).ToArray();
             if (!target.MaterialSlotsKnown && slots.Length > 0)
                 throw MissingAttachmentMaterials(target.SourceMeshPath!);
             ArrayProperty<ObjectProperty>? replacements = null;
@@ -185,7 +196,7 @@ public sealed class ActorAssignmentService
             {
                 var parent = LocalMaterial(slot.SourceMaterial, target.SourceMeshPath!);
                 var mic = slot.LocalMicUIndex != 0
-                    ? RequireExport(package, slot.LocalMicUIndex, "MaterialInstanceConstant") : null;
+                    ? RequireActorOwnedExport(package, slot.LocalMicUIndex, "MaterialInstanceConstant", plan.ActorUIndex) : null;
                 if (mic is null && parent is not null && target.ApplyMaterialParameters)
                 {
                     mic = ExportCreator.CreateExport(package, "MaterialInstanceConstant", "MaterialInstanceConstant", component);
@@ -198,9 +209,9 @@ public sealed class ActorAssignmentService
                 }
                 if (mic is not null && parent is not null)
                 {
-                    plan.ParentUIndices[mic.UIndex] = parent.UIndex;
                     if (!ReferenceEquals(mic, parent))
                     {
+                        plan.ParentUIndices[mic.UIndex] = parent.UIndex;
                         mic.WriteProperty(new ObjectProperty(parent, "Parent"));
                         changed.Add(mic);
                     }
@@ -229,7 +240,7 @@ public sealed class ActorAssignmentService
             if (replacements is not null) properties.AddOrReplaceProp(replacements);
             foreach (var reference in target.MaterialParentsToClear)
             {
-                var mic = RequireExport(package, reference.UIndex, "MaterialInstanceConstant");
+                var mic = RequireActorOwnedExport(package, reference.UIndex, "MaterialInstanceConstant", plan.ActorUIndex);
                 var values = mic.GetProperties();
                 values.AddOrReplaceProp(new ObjectProperty(0, "Parent"));
                 if (target.SourceMeshUIndex == 0)
@@ -309,6 +320,7 @@ public sealed class ActorAssignmentService
             id => RequireExport(package, id, "MaterialInstanceConstant")
                 .GetProperty<ObjectProperty>("Parent")?.Value ?? 0);
         return new MaterialPlan(
+            candidate.UIndex,
             inventory.SelectedFaceUIndex,
             face.Data.ToArray(),
             overrideEntry?.UIndex ?? 0,
@@ -434,8 +446,10 @@ public sealed class ActorAssignmentService
         }
         foreach (var protectedExport in plan.ProtectedMicData)
         {
-            if (!RequireExport(package, protectedExport.Key, "MaterialInstanceConstant").Data
-                    .SequenceEqual(attachmentData.GetValueOrDefault(protectedExport.Key, protectedExport.Value)))
+            var mic = RequireExport(package, protectedExport.Key, "MaterialInstanceConstant");
+            var expected = ActorAssignmentInventoryService.IsActorOwned(mic, package.GetUExport(plan.ActorUIndex))
+                ? attachmentData.GetValueOrDefault(protectedExport.Key, protectedExport.Value) : protectedExport.Value;
+            if (!mic.Data.SequenceEqual(expected))
             {
                 throw new InvalidDataException(
                     $"Verification failed: non-target MIC #{protectedExport.Key} changed.");
@@ -523,6 +537,7 @@ public sealed class ActorAssignmentService
         ?? throw new InvalidDataException($"A MIC parameter is missing {name}.");
 
     private sealed record MaterialPlan(
+        int ActorUIndex,
         int FaceUIndex,
         byte[] FaceData,
         int MaterialOverrideUIndex,

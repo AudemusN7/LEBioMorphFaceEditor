@@ -16,9 +16,72 @@ public static class ActorAssignmentInventoryTests
         new("actor inventory preserves authored identity precedence and search aliases", PreservesIdentityAndSearch),
         new("LE1 actor inventory separates local appearance owners from spawn templates", SeparatesLe1Owners),
         new("actor inventory scopes morph and material profile compatibility independently", ScopesOperationCompatibility),
+        new("actor inventory keeps headless pawn bodies out of head assignment", RejectsHeadlessPawnBodyFallback),
         new("actor inventory discovers inherited components and safe MICs deterministically", DiscoversMaterialsDeterministically),
         new("actor inventory follows effective roots for shared eyes lashes scalp and hair", FollowsEffectiveRootsForSharedFamilies)
     ];
+
+    private static void RejectsHeadlessPawnBodyFallback()
+    {
+        foreach (var game in new[] { MEGame.LE1, MEGame.LE2, MEGame.LE3 })
+        foreach (var genericProperty in new[] { "Mesh", "SkeletalMeshComponent" })
+        foreach (var actorClass in game == MEGame.LE1 ? new[] { "BioPawn" } : new[] { "BioPawn", "SFXSkeletalMeshActor" })
+        WithPackage(game, (path, package) =>
+        {
+            var isPawn = actorClass == "BioPawn";
+            var face = CreateSelectedFace(package);
+            var sourceHead = package.CreateExport("TUF_HED_Source_MDL", "SkeletalMesh", indexed: false);
+            sourceHead.WriteBinary(SkeletalMesh.Create());
+            face.WriteProperty(new ObjectProperty(sourceHead, "m_oBaseHead"));
+            var component = CreateHeadComponent(package,
+                isPawn ? "TUF_ARM_NYRa_MDL" : "TUF_HED_PROBase_MDL", "ActorComponent");
+            var mesh = (ExportEntry)component.GetProperty<ObjectProperty>("SkeletalMesh")!.ResolveToEntry(package);
+            var material = CreateMic(package, "MeshMaterial", isPawn ? "BodyMaster" : "TUR_HED_PRO_MASTER_MAT");
+            var binary = SkeletalMesh.Create();
+            binary.Materials = [material.UIndex];
+            mesh.WriteBinary(binary);
+            component.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(0)], "Materials"));
+            var actor = package.CreateExport("TargetActor", actorClass, indexed: false);
+            component.Parent = actor;
+            actor.WriteProperty(new ObjectProperty(component, genericProperty));
+            // Cover an absent head reference and an explicitly empty head reference.
+            if (isPawn && genericProperty == "SkeletalMeshComponent")
+                actor.WriteProperty(new ObjectProperty(0, game == MEGame.LE1 ? "m_oHeadMesh" : "HeadMesh"));
+            var owner = actor;
+            if (game == MEGame.LE1)
+            {
+                owner = package.CreateExport("Appearance", "BioInterface_Appearance_Pawn", indexed: false);
+                var behavior = package.CreateExport("Behavior", "BioPawnBehavior", indexed: false);
+                behavior.WriteProperty(new ObjectProperty(owner, "m_oAppearanceType"));
+                actor.WriteProperty(new ObjectProperty(behavior, "m_oBehavior"));
+            }
+            // An existing morph does not prove that a placed pawn currently has a head.
+            owner.WriteProperty(new ObjectProperty(face, game == MEGame.LE1 ? "m_oMorphFace" : "MorphHead"));
+            package.Save();
+            var profile = game.ToString().ToLowerInvariant() + "-female-turian";
+            var service = new ActorAssignmentService(new ActorAssignmentInventoryService((_, _) => null));
+            var inventory = service.ReadInventory(path, face.UIndex.ToString(), profile);
+            var candidate = inventory.Candidates.Single();
+            foreach (var mode in new[] { ActorAssignmentMode.Morph, ActorAssignmentMode.Materials })
+            {
+                var chooser = new MorphFaceEditor.ViewModels.ActorAssignmentChooserViewModel(inventory, mode);
+                TestAssert.Equal(!isPawn, chooser.CanConfirm);
+                if (!isPawn) continue;
+                var before = File.ReadAllBytes(path);
+                var rejected = false;
+                try
+                {
+                    if (mode == ActorAssignmentMode.Morph) service.AssignMorph(path, face.UIndex.ToString(), profile, actor.UIndex);
+                    else service.AssignMaterials(path, face.UIndex.ToString(), profile, actor.UIndex);
+                }
+                catch (Exception exception) when (exception is InvalidOperationException or InvalidDataException) { rejected = true; }
+                TestAssert.True(rejected && before.SequenceEqual(File.ReadAllBytes(path)), "Headless assignment changed the PCC.");
+            }
+            TestAssert.Equal(isPawn ? ActorComponentRole.Body : ActorComponentRole.Head, candidate.Components.Single().Role);
+            TestAssert.Equal(isPawn ? null : mesh.InstancedFullPath, candidate.HeadMeshPath);
+            if (isPawn) TestAssert.Equal(0, candidate.AttachmentTargets.Count);
+        });
+    }
 
     private static void PreservesIdentityAndSearch()
     {
@@ -145,6 +208,8 @@ public static class ActorAssignmentInventoryTests
             var hmmMic = CreateMic(package, "HMM_HED_PRO_Face_Mat", "HMM_HED_PRONPC_MASTER_FACE_MAT");
             incompatibleHead.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(hmmMic)], "Materials"));
             var actor = package.CreateExport("MixedEvidenceActor", "BioPawn", indexed: false);
+            incompatibleHead.Parent = actor;
+            hmmMic.Parent = incompatibleHead;
             actor.WriteProperty(new ObjectProperty(incompatibleHead, "HeadMesh"));
             var currentMorph = package.CreateExport("ActorCurrentFace", "BioMorphFace", indexed: false);
             actor.WriteProperty(new ObjectProperty(currentMorph, "MorphHead"));
@@ -179,6 +244,8 @@ public static class ActorAssignmentInventoryTests
             var customEye = CreateMic(package, "Custom_Eye_Instance", "Custom_Eye_Master");
             head.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(customEye)], "Materials"));
             var actor = package.CreateExport("CustomMaterialActor", "BioPawn", indexed: false);
+            head.Parent = actor;
+            customEye.Parent = head;
             actor.WriteProperty(new ObjectProperty(head, "HeadMesh"));
             package.Save();
 
@@ -216,6 +283,8 @@ public static class ActorAssignmentInventoryTests
             var archetype = package.CreateExport("Default__BioPawn", "BioPawn", indexed: false);
             archetype.WriteProperty(new ObjectProperty(head, "HeadMesh"));
             var actor = package.CreateExport("InheritedHeadPawn", "BioPawn", indexed: false);
+            head.Parent = actor;
+            foreach (var mic in new[] { validFace, body, customEye, incompatible }) mic.Parent = head;
             actor.Archetype = archetype;
             package.Save();
 
@@ -254,6 +323,14 @@ public static class ActorAssignmentInventoryTests
                 "Imported MIC was not retained as a read-only skipped slot.");
             TestAssert.True(candidate.CanAssignMaterials && candidate.SafeMaterialCount == 1,
                 "Valid face MIC was suppressed by unsafe sibling slots.");
+
+            // A component owned by the archetype is read-only even when it is in the same PCC.
+            head.Parent = archetype;
+            package.Save();
+            var inherited = new ActorAssignmentInventoryService((_, _) => null)
+                .Read(path, selected.UIndex.ToString(), "le3-human-male").Candidates.Single();
+            TestAssert.True(!inherited.CanAssignMaterials && inherited.MaterialTargets.Count == 0 && inherited.AttachmentTargets.Count == 0,
+                "Materials owned by an inherited component escaped the selected actor boundary.");
         });
     }
 
@@ -279,6 +356,10 @@ public static class ActorAssignmentInventoryTests
             binary.Materials = [hair.UIndex];
             hairMesh.WriteBinary(binary);
             var actor = package.CreateExport("AsariWithSharedMaterials", "BioPawn", indexed: false);
+            head.Parent = actor;
+            hairComponent.Parent = actor;
+            foreach (var mic in new[] { eye, lashes, scalp }) mic.Parent = head;
+            hair.Parent = hairComponent;
             actor.WriteProperty(new ObjectProperty(head, "HeadMesh"));
             actor.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(hairComponent)], "m_aoAccessories"));
             package.Save();
@@ -311,6 +392,7 @@ public static class ActorAssignmentInventoryTests
     private static ExportEntry CreateHeadComponent(IMEPackage package, string meshName, string componentName)
     {
         var mesh = package.CreateExport(meshName, "SkeletalMesh", indexed: false);
+        mesh.WriteBinary(SkeletalMesh.Create());
         var component = package.CreateExport(componentName, "SkeletalMeshComponent", indexed: false);
         component.WriteProperty(new ObjectProperty(mesh, "SkeletalMesh"));
         return component;

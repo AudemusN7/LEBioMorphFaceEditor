@@ -10,7 +10,7 @@ namespace MorphFaceEditor.LegendaryExplorer;
 public sealed partial class ActorAssignmentInventoryService
 {
     private static (IReadOnlyList<ActorAssignmentAttachmentTarget> Targets, IReadOnlyList<UserFacingMessage> Warnings)
-        ReadAttachmentTargets(IMEPackage package, ExportEntry actor, ExportEntry face,
+        ReadAttachmentTargets(IMEPackage package, ExportEntry actor, ExportEntry face, bool hasMaterialParameters,
             IReadOnlyList<ActorAssignmentComponent> components, IReadOnlySet<int> bodyMics, ActorAssignmentMorphTarget? morphTarget,
             IReadOnlyList<IEntry> knownHairMeshes, IReadOnlyList<IEntry> knownOtherMeshes,
             GamePackageReferenceResolver resolver, PackageCache cache,
@@ -37,7 +37,7 @@ public sealed partial class ActorAssignmentInventoryService
             ? FindProperty<ObjectProperty>(actor, "m_oHeadGearMesh", resolver, cache)
               ?? FindProperty<ObjectProperty>(actor, "HeadGearMesh", resolver, cache) : null;
         var gear = gearReference?.Property.ResolveToEntry(gearReference.Owner.FileRef) as ExportEntry;
-        if (gear is not null && (!ReferenceEquals(gear.FileRef, package) || !gear.IsA("SkeletalMeshComponent"))) gear = null;
+        if (gear is not null && (!IsActorOwned(gear, actor) || !gear.IsA("SkeletalMeshComponent"))) gear = null;
         var otherAmbiguous = false;
         if ((others?.Count ?? 0) <= 1)
         {
@@ -75,9 +75,28 @@ public sealed partial class ActorAssignmentInventoryService
         }
 
         var clearing = assignments.Where(value => value.Mesh is null).Select(value => value.Component.UIndex).ToHashSet();
-        return (assignments.Select(value => DescribeAttachment(
+        var targets = assignments.Select(value => DescribeAttachment(
             package, actor, value.Role, value.Component, value.Mesh, resolver, cache, clearing, bodyMics,
-            referrers, ownedMics.Value)).ToArray(), warnings);
+            referrers, ownedMics.Value)).ToList();
+        if (hasMaterialParameters)
+        {
+            foreach (var head in components.Where(value => value.IsLocal && value.Role == ActorComponentRole.Head))
+            {
+                var component = package.GetUExport(head.UIndex);
+                var headMesh = FindProperty<ObjectProperty>(component, "SkeletalMesh", resolver, cache);
+                var source = headMesh?.Property.ResolveToEntry(headMesh.Owner.FileRef);
+                if (source is null) continue;
+                var target = DescribeAttachment(package, actor, head.Role, component, source, resolver, cache,
+                    clearing, bodyMics, referrers, ownedMics.Value);
+                // Fill only missing head instances through the shared slot writer. Existing
+                // head MICs retain their parents and normal parameter-eligibility checks.
+                var missing = target.MaterialSlots.Where(slot => !slot.PreserveOverride &&
+                    slot.LocalMicUIndex == 0 && slot.SourceMaterial is not null).ToArray();
+                if (missing.Length > 0)
+                    targets.Add(target with { MaterialSlots = missing, MaterialParentsToClear = [] });
+            }
+        }
+        return (targets, warnings);
 
         bool IsEmpty(ExportEntry component)
         {
@@ -105,12 +124,18 @@ public sealed partial class ActorAssignmentInventoryService
             var raw = overrides is not null && slot < overrides.Property.Count
                 ? overrides.Property[slot].ResolveToEntry(overrides.Owner.FileRef) : null;
             // Reparenting an attachment must never change a MIC also used by Body.
-            var mic = IsWritableMic(raw, package) && !bodyMics.Contains(raw!.UIndex) ? (ExportEntry)raw : null;
+            var mic = IsWritableMic(raw, package) && IsActorOwned(raw, actor) && !bodyMics.Contains(raw!.UIndex)
+                ? (ExportEntry)raw : null;
             var parent = mic is null ? null : FindProperty<ObjectProperty>(mic, "Parent", resolver, cache);
             return new ActorAssignmentAttachmentSlot(slot, raw?.InstancedFullPath, mic?.UIndex ?? 0,
                 parent?.Property.ResolveToEntry(parent.Owner.FileRef)?.InstancedFullPath,
                 material is null ? null : new AssetIdentity(material.FileRef.FilePath,
-                    PccPackageWorkflow.CanonicalPath(material), material.UIndex, material.ClassName));
+                    PccPackageWorkflow.CanonicalPath(material), material.UIndex, material.ClassName))
+            {
+                // An authored external reference deliberately uses a shared material.
+                // It is not a missing pawn-specific override to manufacture or replace.
+                PreserveOverride = raw is not null && !IsActorOwned(raw, actor)
+            };
         }).ToArray();
         return new ActorAssignmentAttachmentTarget(role, component.UIndex, component.InstancedFullPath,
             current?.Property.ResolveToEntry(current.Owner.FileRef)?.InstancedFullPath,
@@ -207,6 +232,9 @@ public sealed partial class ActorAssignmentInventoryService
     internal static bool IsWritableMic(IEntry? entry, IMEPackage package) =>
         entry is ExportEntry mic && ReferenceEquals(mic.FileRef, package) &&
         (mic.IsA("MaterialInstanceConstant") || mic.ClassName.Equals("BioMaterialInstanceConstant", StringComparison.OrdinalIgnoreCase));
+
+    internal static bool IsActorOwned(IEntry? entry, ExportEntry actor) =>
+        entry is ExportEntry && ReferenceEquals(entry.FileRef, actor.FileRef) && entry.IsDescendantOf(actor);
 
     private static bool SameReference(IEntry? left, IEntry? right) => left is not null && right is not null &&
         left.ClassName.Equals(right.ClassName, StringComparison.OrdinalIgnoreCase) &&

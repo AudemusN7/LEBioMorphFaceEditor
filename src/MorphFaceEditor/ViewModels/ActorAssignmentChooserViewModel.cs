@@ -111,7 +111,7 @@ public sealed class ActorAssignmentChoice
     public string EligibilityLabel => IsEligible
         ? Mode == ActorAssignmentMode.Morph
             ? Loc.Text("loc_VM_actorAssignment_morphReady")
-            : Loc.Format("loc_ActorAssignment_TargetCounts", Candidate.SafeMaterialCount, Candidate.AttachmentTargets.Count)
+            : Loc.Format("loc_ActorAssignment_TargetCounts", Candidate.SafeMaterialCount, Candidate.MeshTargetCount)
         : Loc.Text("loc_VM_actorAssignment_notEligible");
     public string Details { get; }
 
@@ -137,7 +137,7 @@ public sealed class ActorAssignmentChoice
         else
         {
             text.AppendLine(Loc.Format("loc_VM_actorAssignment_detailsMaterials", candidate.CanAssignMaterials
-                ? Loc.Format("loc_ActorAssignment_TargetCounts", candidate.SafeMaterialCount, candidate.AttachmentTargets.Count)
+                ? Loc.Format("loc_ActorAssignment_TargetCounts", candidate.SafeMaterialCount, candidate.MeshTargetCount)
                 : Loc.Text("loc_VM_actorAssignment_noMaterialOrAttachmentTargets")));
         }
 
@@ -156,7 +156,8 @@ public sealed class ActorAssignmentChoice
             text.AppendLine();
             text.AppendLine(Loc.Text("loc_VM_actorAssignment_safeMaterialTargetsHeading"));
             var parameterTargets = candidate.MaterialTargets.Where(value => value.ComponentRole != ActorComponentRole.Hair).ToArray();
-            if (parameterTargets.Length == 0)
+            var headSlots = candidate.AttachmentTargets.Where(value => value.Role == ActorComponentRole.Head).ToArray();
+            if (parameterTargets.Length == 0 && headSlots.Length == 0)
             {
                 text.AppendLine(Loc.Format("loc_VM_actorAssignment_noneBullet", Loc.Text("loc_VM_actorAssignment_none")));
             }
@@ -165,10 +166,11 @@ public sealed class ActorAssignmentChoice
                 text.AppendLine();
                 AppendMaterialTargets(text, parameterTargets);
             }
+            if (headSlots.Length > 0) AppendAttachmentTargets(text, headSlots);
 
             text.AppendLine();
             text.AppendLine(Loc.Text("loc_ActorAssignment_AttachmentsHeading"));
-            AppendAttachmentTargets(text, candidate.AttachmentTargets);
+            AppendAttachmentTargets(text, candidate.AttachmentTargets.Where(value => value.Role != ActorComponentRole.Head).ToArray());
             // Hair MIC parameter targets can exist even when geometry compatibility
             // prevents a mesh update; keep those independently assignable slots visible.
             var hairParameters = candidate.MaterialTargets.Where(value => value.ComponentRole == ActorComponentRole.Hair).ToArray();
@@ -303,10 +305,11 @@ public sealed class ActorAssignmentChoice
         {
             text.AppendLine(Loc.Format("loc_ActorAssignment_AttachmentComponent", LocalizedComponentRole(target.Role),
                 ShortLevelPath(target.ComponentPath)));
-            text.AppendLine(Loc.Format("loc_ActorAssignment_MeshChange",
-                ShortObjectName(target.CurrentMeshPath) ?? Loc.Text("loc_VM_actorAssignment_none"),
-                ShortObjectName(target.SourceMeshPath) ?? Loc.Text("loc_ActorAssignment_ClearMesh")));
-            foreach (var slot in target.MaterialSlots)
+            if (target.Role != ActorComponentRole.Head)
+                text.AppendLine(Loc.Format("loc_ActorAssignment_MeshChange",
+                    ShortObjectName(target.CurrentMeshPath) ?? Loc.Text("loc_VM_actorAssignment_none"),
+                    ShortObjectName(target.SourceMeshPath) ?? Loc.Text("loc_ActorAssignment_ClearMesh")));
+            foreach (var slot in target.MaterialSlots.Where(slot => !slot.PreserveOverride))
             {
                 var source = ShortObjectName(slot.SourceMaterial?.InstancedPath) ?? Loc.Text("loc_VM_actorAssignment_none");
                 text.AppendLine(target.SourceMeshUIndex == 0

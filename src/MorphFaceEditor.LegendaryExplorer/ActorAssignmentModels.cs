@@ -78,7 +78,10 @@ public sealed record ActorAssignmentAttachmentSlot(
     string? OverridePath,
     int LocalMicUIndex,
     string? CurrentParentPath,
-    AssetIdentity? SourceMaterial);
+    AssetIdentity? SourceMaterial)
+{
+    public bool PreserveOverride { get; init; }
+}
 
 /// <summary>One node in the complete local-MIC-to-master parent chain used for classification.</summary>
 public sealed record ActorMaterialChainEntry(
@@ -161,7 +164,9 @@ public sealed record ActorAssignmentCandidate(
     IReadOnlyList<ActorAssignmentReference> ReferencedBy,
     IReadOnlyList<string> Warnings)
 {
-    public int SafeMaterialCount => MaterialTargets.Select(target => target.UIndex).Distinct().Count();
+    public int SafeMaterialCount => MaterialTargets.Select(target => target.UIndex).Distinct().Count() +
+        AttachmentTargets.Where(target => target.Role == ActorComponentRole.Head).Sum(target => target.MaterialSlots.Count);
+    public int MeshTargetCount => AttachmentTargets.Count(target => target.Role != ActorComponentRole.Head);
     public UserFacingMessage? UserDisplayName { get; init; }
     public UserFacingMessage? MorphIneligibilityUserReason { get; init; }
     public IReadOnlyList<UserFacingMessage> UserWarnings { get; init; } = [];
@@ -202,5 +207,6 @@ public sealed record ActorMaterialAssignmentResult(
     bool ReplacedScalars)
 {
     public IReadOnlyList<ActorAssignmentAttachmentTarget> ChangedAttachments { get; init; } = [];
+    public int ChangedMeshCount => ChangedAttachments.Count(target => target.Role != ActorComponentRole.Head);
     public IReadOnlyList<UserFacingMessage> UserWarnings { get; init; } = [];
 }

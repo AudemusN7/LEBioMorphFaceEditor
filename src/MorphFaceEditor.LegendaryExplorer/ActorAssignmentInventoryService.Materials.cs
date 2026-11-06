@@ -25,6 +25,7 @@ public sealed partial class ActorAssignmentInventoryService
     // Material preflight is intentionally per slot: one unsafe sibling must not hide a valid face MIC.
     private static void InventoryComponentMaterials(
         IMEPackage package,
+        ExportEntry actor,
         ActorAssignmentComponent component,
         string gamePrefix,
         string selectedProfileKey,
@@ -102,6 +103,11 @@ public sealed partial class ActorAssignmentInventoryService
                     ? UserFacingMessage.Create("loc_VM_actorAssignment_importedMaterialReadOnly")
                     : UserFacingMessage.Create("loc_VM_actorAssignment_nonLocalMicExport", rawEntry.ClassName);
             }
+            else if (!IsActorOwned(rawEntry, actor))
+            {
+                reason = "The material is not owned by the selected actor and will not be modified.";
+                userReason = UserFacingMessage.Create("loc_ActorAssignment_OutsideActor", rawEntry.InstancedFullPath);
+            }
             else if (component.Role == ActorComponentRole.Body)
             {
                 // Body slots are surgical targets regardless of their parent material family.
@@ -111,8 +117,17 @@ public sealed partial class ActorAssignmentInventoryService
                     userReason = UserFacingMessage.Create("loc_VM_actorAssignment_bodySkinParametersMissing");
                 }
             }
+            else if ((HeadProfileIdentity.SuffixFromProfileKey(selectedProfileKey)?.ToLowerInvariant(),
+                      HeadProfileIdentity.SuffixFromProfileKey(headProfileKey)?.ToLowerInvariant()) is
+                     ("female-turian", "turian") or ("turian", "female-turian"))
+            {
+                // TUR and TUF share material masters, but their head textures are not interchangeable.
+                reason = $"Head mesh profile '{headProfileKey}' is incompatible with selected face profile '{selectedProfileKey}'.";
+                userReason = UserFacingMessage.Create("loc_VM_actorAssignment_incompatibleHeadProfile",
+                    headProfileKey, selectedProfileKey);
+            }
             else if (HeadProfileIdentity.IsGeometryCompatible(selectedProfileKey, headProfileKey) &&
-                     (unparented || attachment is not null || component.Role == ActorComponentRole.Other ||
+                     (unparented || attachment is { Role: not ActorComponentRole.Head } || component.Role == ActorComponentRole.Other ||
                       component.Role == ActorComponentRole.Accessory && family == HeadMaterialFamily.Accessory))
             {
                 // Proven attachment ownership applies to every child MIC, including

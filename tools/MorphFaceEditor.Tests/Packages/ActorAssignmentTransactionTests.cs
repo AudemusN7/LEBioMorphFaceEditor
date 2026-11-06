@@ -14,11 +14,236 @@ public static class ActorAssignmentTransactionTests
         new("actor assignment rejects an outside edit and cleans its candidate", OutsideEditPreserved),
         new("LE1 placed morph assignment leaves the shared spawn type untouched", LeavesSharedLe1TypeUntouched),
         new("actor material assignment converts BMO arrays and protects non-target MICs", ConvertsAndProtectsMaterials),
+        new("actor material assignment fills missing head MIC slots and reuses them", CreatesMissingHeadMaterials),
+        new("actor material assignment separates TUR and TUF texture compatibility", SeparatesTurianHeadMaterials),
         new("actor material assignment surgically updates body MIC skin vectors across all games", UpdatesBodySkinVectors),
         new("actor attachments preserve shared Body MICs with and without face overrides", SharedBodyAttachmentMaterial),
+        new("actor material assignment preserves external materials and their component references", PreservesMaterialsOutsideActor),
         new("actor material assignment adds only skin vectors present on the source", AddsOnlyPresentBodySkinVectors),
         new("actor material assignment preserves target categories missing from the BMO", PreservesMissingMaterialCategories)
     ];
+
+    private static void SeparatesTurianHeadMaterials()
+    {
+        foreach (var game in new[] { MEGame.LE1, MEGame.LE2, MEGame.LE3 })
+        foreach (var sourceFemale in new[] { true, false })
+        foreach (var targetFemale in new[] { false, true })
+        WithPackage(game, (path, package) =>
+        {
+            var (face, bmo, actor, _, _) = CreateBodyAssignmentFixture(package,
+                SourceVector("SkinTone", 0.1f, 0.2f, 0.3f, 0.4f));
+            var texture = package.CreateExport(sourceFemale ? "TUF_Texture" : "TUR_Texture", "Texture2D", indexed: false);
+            bmo.WriteProperty(new ArrayProperty<StructProperty>([
+                new StructProperty("TextureParameter", false, new NameProperty("HED_Diff", "nName"),
+                    new ObjectProperty(texture, "m_pTexture"))], "m_aTextureOverrides"));
+            var head = (ExportEntry)actor.GetProperty<ObjectProperty>(game == MEGame.LE1 ? "m_oHeadMesh" : "HeadMesh")!
+                .ResolveToEntry(package);
+            var mesh = (ExportEntry)head.GetProperty<ObjectProperty>("SkeletalMesh")!.ResolveToEntry(package);
+            mesh.ObjectName = targetFemale ? "TUF_HED_PROBase_MDL" : "TUR_HED_PROBase_MDL";
+            var sourceMesh = package.CreateExport("SelectedHead", "SkeletalMesh", indexed: false);
+            sourceMesh.ObjectName = sourceFemale ? "TUF_HED_Selected_MDL" : "TUR_HED_Selected_MDL";
+            sourceMesh.WriteBinary(SkeletalMesh.Create());
+            face.WriteProperty(new ObjectProperty(sourceMesh, "m_oBaseHead"));
+            var skin = CreateMic(package, "ActorSkin", "TUR_HED_PRO_MASTER_MAT");
+            var eye = CreateMic(package, "ActorEye", "TUR_HED_EYE_MASTER_MAT");
+            skin.Parent = head;
+            eye.Parent = head;
+            head.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(skin), new ObjectProperty(eye)], "Materials"));
+            // A disconnected child must not provide a way around the connected-slot gate.
+            var retained = CreateMic(package, "RetainedHead", "TUR_HED_PRO_MASTER_MAT");
+            retained.Parent = head;
+            package.Save();
+            var profile = game.ToString().ToLowerInvariant() + (sourceFemale ? "-female-turian" : "-turian");
+            var service = new ActorAssignmentService(new ActorAssignmentInventoryService((_, _) => null));
+            var inventory = service.ReadInventory(path, face.UIndex.ToString(), profile);
+            var chooser = new MorphFaceEditor.ViewModels.ActorAssignmentChooserViewModel(inventory, ActorAssignmentMode.Materials);
+            var compatible = sourceFemale == targetFemale;
+            TestAssert.True(chooser.CanConfirm == compatible,
+                $"{game}: chooser allowed incompatible TUR/TUF assignment or blocked matching heads ({sourceFemale} -> {targetFemale}).");
+            if (!compatible)
+            {
+                var before = File.ReadAllBytes(path);
+                var rejected = false;
+                try { service.AssignMaterials(path, face.UIndex.ToString(), profile, actor.UIndex); }
+                catch (InvalidDataException) { rejected = true; }
+                TestAssert.True(rejected, "The transaction accepted incompatible TUR/TUF head textures.");
+                TestAssert.True(before.SequenceEqual(File.ReadAllBytes(path)), "Rejected assignment changed the PCC.");
+                return;
+            }
+            service.AssignMaterials(path, face.UIndex.ToString(), profile, actor.UIndex);
+            using var reopened = MEPackageHandler.OpenMEPackage(path, forceLoadFromDisk: true);
+            foreach (var mic in new[] { skin, eye, retained })
+                TestAssert.Equal(texture.UIndex, reopened.GetUExport(mic.UIndex)
+                    .GetProperty<ArrayProperty<StructProperty>>("TextureParameterValues")!.Single()
+                    .GetProp<ObjectProperty>("ParameterValue")!.Value);
+        });
+    }
+
+    private static void CreatesMissingHeadMaterials()
+    {
+        foreach (var game in new[] { MEGame.LE1, MEGame.LE2, MEGame.LE3 })
+        foreach (var partial in new[] { false, true })
+        WithPackage(game, (path, package) =>
+        {
+            var face = package.CreateExport("SelectedFace", "BioMorphFace", indexed: false);
+            var bmo = package.CreateExport("FaceMaterials", "BioMaterialOverride", face, indexed: false);
+            var texture = package.CreateExport("FaceTexture", "Texture2D", indexed: false);
+            bmo.WriteProperty(new ArrayProperty<StructProperty>([
+                new StructProperty("TextureParameter", false, new NameProperty("FaceMap", "nName"),
+                    new ObjectProperty(texture, "m_pTexture"))], "m_aTextureOverrides"));
+            bmo.WriteProperty(new ArrayProperty<StructProperty>([
+                SourceVector("FaceTint", 0.1f, 0.2f, 0.3f, 0.4f)], "m_aColorOverrides"));
+            bmo.WriteProperty(new ArrayProperty<StructProperty>([
+                new StructProperty("ScalarParameter", false, new NameProperty("FaceScalar", "nName"),
+                    new FloatProperty(0.6f, "sValue"))], "m_aScalarOverrides"));
+            var head = CreateHeadComponent(package, "HMM_HED_PROBase_MDL", "HeadComponent");
+            var mesh = package.GetUExport(head.GetProperty<ObjectProperty>("SkeletalMesh")!.Value);
+            var firstParent = CreateMic(package, "FirstParent", "HMM_HED_PRONPC_MASTER_FACE_MAT");
+            var secondParent = CreateMic(package, "SecondParent", "HMM_HED_PRONPC_MASTER_FACE_MAT");
+            var binary = SkeletalMesh.Create();
+            binary.Materials = [firstParent.UIndex, secondParent.UIndex, firstParent.UIndex, secondParent.UIndex];
+            mesh.WriteBinary(binary);
+            var existing = CreateMic(package, "AuthoredHeadMic", "HMM_HED_PRONPC_MASTER_FACE_MAT");
+            if (partial) existing.Parent = head;
+            var existingParent = existing.GetProperty<ObjectProperty>("Parent")!.Value;
+            existing.WriteProperty(new BoolProperty(true, "bTwoSided"));
+            if (partial)
+                head.WriteProperty(new ArrayProperty<ObjectProperty>([
+                    new ObjectProperty(0), new ObjectProperty(existing),
+                    new ObjectProperty(firstParent.GetProperty<ObjectProperty>("Parent")!.Value)], "Materials"));
+            var actor = package.CreateExport("TargetPawn", "BioPawn", indexed: false);
+            head.Parent = actor;
+            actor.WriteProperty(new ObjectProperty(head, game == MEGame.LE1 ? "m_oHeadMesh" : "HeadMesh"));
+            var headBefore = head.GetProperties();
+            headBefore.RemoveNamedProperty("Materials");
+            var exportCount = package.ExportCount;
+            var profile = game.ToString().ToLowerInvariant() + "-human-male";
+            var service = new ActorAssignmentService(new ActorAssignmentInventoryService((_, _) => null));
+            package.Save();
+            TestAssert.True(!service.ReadInventory(path, face.UIndex.ToString(), profile).Candidates.Single().CanAssignMaterials,
+                "A face without BMO categories offered head MIC creation.");
+            face.WriteProperty(new ObjectProperty(bmo, "m_oMaterialOverrides"));
+            package.Save();
+            var candidate = service.ReadInventory(path, face.UIndex.ToString(), profile).Candidates.Single();
+            TestAssert.True(candidate.CanAssignMaterials, "A compatible head without material overrides was not assignable.");
+            var choice = new MorphFaceEditor.ViewModels.ActorAssignmentChoice(candidate, ActorAssignmentMode.Materials);
+            TestAssert.True(choice.IsEligible, "The chooser disabled missing head material assignment.");
+            TestAssert.Equal(partial ? 3 : 4, candidate.SafeMaterialCount);
+            TestAssert.Equal(0, candidate.MeshTargetCount);
+            var protectedData = new[] { face, bmo, mesh, actor, firstParent, secondParent }
+                .ToDictionary(entry => entry.UIndex, entry => entry.Data.ToArray());
+            service.AssignMaterials(path, face.UIndex.ToString(), profile, actor.UIndex);
+            int[] assigned;
+            using (var reopened = MEPackageHandler.OpenMEPackage(path, forceLoadFromDisk: true))
+            {
+                assigned = reopened.GetUExport(head.UIndex).GetProperty<ArrayProperty<ObjectProperty>>("Materials")!
+                    .Select(value => value.Value).ToArray();
+                TestAssert.Equal(binary.Materials.Length, assigned.Length);
+                TestAssert.Equal(assigned.Length, assigned.Distinct().Count());
+                TestAssert.Equal(exportCount + (partial ? 2 : 4), reopened.ExportCount);
+                for (var slot = 0; slot < assigned.Length; slot++)
+                {
+                    if (partial && slot == 2)
+                    {
+                        TestAssert.Equal(firstParent.GetProperty<ObjectProperty>("Parent")!.Value, assigned[slot]);
+                        continue;
+                    }
+                    var mic = reopened.GetUExport(assigned[slot]);
+                    TestAssert.Equal("MaterialInstanceConstant", mic.ClassName);
+                    TestAssert.Equal(head.UIndex, mic.idxLink);
+                    TestAssert.Equal(partial && slot == 1 ? existingParent : binary.Materials[slot],
+                        mic.GetProperty<ObjectProperty>("Parent")!.Value);
+                    TestAssert.Equal(texture.UIndex, mic.GetProperty<ArrayProperty<StructProperty>>("TextureParameterValues")!
+                        .Single().GetProp<ObjectProperty>("ParameterValue")!.Value);
+                    var vector = mic.GetProperty<ArrayProperty<StructProperty>>("VectorParameterValues")!.Single();
+                    TestAssert.Equal("FaceTint", vector.GetProp<NameProperty>("ParameterName")!.Value.Name);
+                    TestAssert.Equal(0.4f, vector.GetProp<StructProperty>("ParameterValue")!.GetProp<FloatProperty>("A")!.Value);
+                    TestAssert.Equal(0.6f, mic.GetProperty<ArrayProperty<StructProperty>>("ScalarParameterValues")!
+                        .Single().GetProp<FloatProperty>("ParameterValue")!.Value);
+                }
+                if (partial)
+                {
+                    TestAssert.Equal(existing.UIndex, assigned[1]);
+                    TestAssert.True(reopened.GetUExport(existing.UIndex).GetProperty<BoolProperty>("bTwoSided")!.Value,
+                        "An existing head MIC lost its authored properties.");
+                }
+                var headAfter = reopened.GetUExport(head.UIndex).GetProperties();
+                headAfter.RemoveNamedProperty("Materials");
+                TestAssert.True(headBefore.Equivalent(headAfter), "Creating head materials changed other component properties.");
+                foreach (var (id, data) in protectedData)
+                    TestAssert.True(reopened.GetUExport(id).Data.SequenceEqual(data), "Head assignment changed source or actor data.");
+            }
+            service.AssignMaterials(path, face.UIndex.ToString(), profile, actor.UIndex);
+            using var repeated = MEPackageHandler.OpenMEPackage(path, forceLoadFromDisk: true);
+            TestAssert.Equal(exportCount + (partial ? 2 : 4), repeated.ExportCount);
+            TestAssert.True(assigned.SequenceEqual(repeated.GetUExport(head.UIndex)
+                    .GetProperty<ArrayProperty<ObjectProperty>>("Materials")!.Select(value => value.Value)),
+                "Repeated head assignment replaced or reordered its MICs.");
+        });
+    }
+
+    private static void PreservesMaterialsOutsideActor()
+    {
+        foreach (var game in new[] { MEGame.LE1, MEGame.LE2, MEGame.LE3 })
+        foreach (var foreignActorOwned in new[] { false, true })
+        foreach (var hasOverrides in new[] { false, true })
+        WithPackage(game, (path, package) =>
+        {
+            var (face, _, actor, headMic, body) = CreateBodyAssignmentFixture(package,
+                SourceVector("SkinTone", 0.6f, 0.7f, 0.8f, 0.9f),
+                SourceVector("HatTint", 0.1f, 0.2f, 0.3f, 0.4f));
+            if (!hasOverrides) face.WriteProperty(new ObjectProperty(0, "m_oMaterialOverrides"));
+            var otherActor = package.CreateExport("OtherActor", "BioPawn", indexed: false);
+            var head = (ExportEntry)headMic.Parent;
+            headMic.Parent = foreignActorOwned ? otherActor : null;
+            var headMesh = package.GetUExport(head.GetProperty<ObjectProperty>("SkeletalMesh")!.Value);
+            var headBinary = SkeletalMesh.Create();
+            headBinary.Materials = [headMic.UIndex];
+            headMesh.WriteBinary(headBinary);
+            var bodyMic = CreateMic(package, "SharedBodyMaterial", "BodyMaster");
+            bodyMic.Parent = foreignActorOwned ? otherActor : null;
+            body.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(bodyMic)], "Materials"));
+            var hat = CreateHeadComponent(package, "HMM_HAT_Mtr_MDL", "HatComponent");
+            hat.Parent = actor;
+            var mesh = package.GetUExport(hat.GetProperty<ObjectProperty>("SkeletalMesh")!.Value);
+            var mic = CreateMic(package, "HMM_HAT_Mtr_MAT_1a", "HMN_HAT_MASTER_MAT");
+            mic.Parent = foreignActorOwned ? otherActor : null;
+            mic.WriteProperty(new BoolProperty(true, "bTwoSided"));
+            var meshDefault = CreateMic(package, "MeshDefaultHatMaterial", "HMN_HAT_MASTER_MAT");
+            var binary = SkeletalMesh.Create();
+            binary.Materials = [meshDefault.UIndex];
+            mesh.WriteBinary(binary);
+            hat.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(mic)], "Materials"));
+            actor.WriteProperty(new ObjectProperty(hat, game == MEGame.LE3 ? "HairMesh" : "m_oHairMesh"));
+            face.WriteProperty(new ObjectProperty(mesh, "m_oHairMesh"));
+            var protectedData = package.Exports.Where(entry => entry != actor && !entry.IsDescendantOf(actor))
+                .ToDictionary(entry => entry.UIndex, entry => entry.Data.ToArray());
+            foreach (var component in new[] { head, hat, body })
+                protectedData.Add(component.UIndex, component.Data.ToArray());
+            var exportCount = package.ExportCount;
+            package.Save();
+            var profile = game.ToString().ToLowerInvariant() + "-human-male";
+            var service = new ActorAssignmentService(new ActorAssignmentInventoryService((_, _) => null));
+            var candidate = service.ReadInventory(path, face.UIndex.ToString(), profile).Candidates
+                .Single(value => value.UIndex == actor.UIndex);
+            TestAssert.Equal(0, candidate.SafeMaterialCount);
+            TestAssert.True(candidate.AttachmentTargets.All(target => target.Role != ActorComponentRole.Head),
+                "An existing shared head material was treated as a missing override.");
+            for (var attempt = 0; attempt < 2; attempt++)
+            {
+                service.AssignMaterials(path, face.UIndex.ToString(), profile, actor.UIndex);
+                using var reopened = MEPackageHandler.OpenMEPackage(path, forceLoadFromDisk: true);
+                foreach (var (component, source) in new[] { (head, headMic), (hat, mic), (body, bodyMic) })
+                {
+                    var id = reopened.GetUExport(component.UIndex).GetProperty<ArrayProperty<ObjectProperty>>("Materials")!.Single().Value;
+                    TestAssert.Equal(source.UIndex, id);
+                }
+                foreach (var (id, data) in protectedData)
+                    TestAssert.True(reopened.GetUExport(id).Data.SequenceEqual(data), $"Assignment changed export #{id} outside the selected actor.");
+                TestAssert.Equal(exportCount, reopened.ExportCount);
+            }
+        });
+    }
 
     private static void SharedBodyAttachmentMaterial()
     {
@@ -30,10 +255,12 @@ public static class ActorAssignmentTransactionTests
                 SourceVector("SkinTone", 0.1f, 0.2f, 0.3f, 0.4f), SourceVector("HeadOnly", 1, 1, 1, 1));
             if (!hasOverrides) face.WriteProperty(new ObjectProperty(0, "m_oMaterialOverrides"));
             var shared = CreateMic(package, "SharedBodyMaterial", "BodyParent");
+            shared.Parent = body;
             shared.WriteProperty(new ArrayProperty<StructProperty>([MicVector("GearTint", 0.9f)], "VectorParameterValues"));
             shared.WriteProperty(new BoolProperty(true, "bTwoSided"));
             body.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(shared)], "Materials"));
             var hair = CreateHeadComponent(package, "HMM_HIR_Custom_MDL", "HairSMC");
+            hair.Parent = actor;
             var hairParent = CreateMic(package, "HairMaterial", "HMN_HED_PRO_MASTER_HAIR_MAT");
             var hairMesh = package.GetUExport(hair.GetProperty<ObjectProperty>("SkeletalMesh")!.Value);
             var binary = SkeletalMesh.Create();
@@ -92,6 +319,7 @@ public static class ActorAssignmentTransactionTests
             var old = package.CreateExport("OldFace", "BioMorphFace", indexed: false);
             var head = CreateHeadComponent(package, "HMM_HED_PROBase_MDL", "TargetHead");
             var actor = package.CreateExport("TargetActor", actorClass, indexed: false);
+            head.Parent = actor;
             actor.WriteProperty(new ObjectProperty(head, game == MEGame.LE1 ? "m_oHeadMesh" : "HeadMesh"));
             var owner = actor;
             var morphProperty = "MorphHead";
@@ -111,6 +339,7 @@ public static class ActorAssignmentTransactionTests
             }
             else owner.WriteProperty(new ObjectProperty(old, morphProperty));
             var hair = CreateHeadComponent(package, "OldHairMesh", "ExistingHairComponent");
+            hair.Parent = actor;
             actor.WriteProperty(new ObjectProperty(hair, actorClass == "BioPawn" ? "m_oHairMesh" : "HairMesh"));
             if (actorClass == "BioPawn")
                 actor.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(hair), new ObjectProperty(hair)], "m_aoAccessories"));
@@ -150,8 +379,9 @@ public static class ActorAssignmentTransactionTests
             newAccessory.WriteBinary(hatBinary);
             selected.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(newAccessory)], "m_oOtherMeshes"));
             var gear = package.CreateExport("ExistingGearComponent", "SkeletalMeshComponent", indexed: false);
+            gear.Parent = actor;
             var gearMic = CreateMic(package, "ActorGearMic", "UnusedGearMaster");
-            if (game == MEGame.LE3) gearMic.Parent = gear;
+            gearMic.Parent = gear;
             gearMic.WriteProperty(new ObjectProperty(oldHatMaterial, "Parent"));
             gear.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(gearMic)], "Materials"));
             actor.WriteProperty(new ObjectProperty(gear, actorClass == "BioPawn" ? "m_oHeadGearMesh" : "HeadGearMesh"));
@@ -333,7 +563,8 @@ public static class ActorAssignmentTransactionTests
                     "An aliased head component in the accessory array was overwritten.");
                 if (game == MEGame.LE3)
                 {
-                    var duplicate = arraySaved.CreateExport("OtherGearComponent", "SkeletalMeshComponent", indexed: false);
+                    var duplicate = arraySaved.CreateExport("OtherGearComponent", "SkeletalMeshComponent",
+                        arraySaved.GetUExport(actorId), indexed: false);
                     duplicate.WriteProperty(new ObjectProperty(newAccessory.UIndex, "SkeletalMesh"));
                     arraySaved.GetUExport(actorId).WriteProperty(new ObjectProperty(duplicate, "m_oHeadGearMesh"));
                     arraySaved.Save();
@@ -500,8 +731,12 @@ public static class ActorAssignmentTransactionTests
             head.WriteProperty(new ArrayProperty<ObjectProperty>(
                 [new ObjectProperty(target), new ObjectProperty(body)], "Materials"));
             var actor = package.CreateExport("TargetPawn", actorClass, indexed: false);
+            head.Parent = actor;
+            target.Parent = head;
+            body.Parent = actor;
             actor.WriteProperty(new ObjectProperty(head, "HeadMesh"));
             var hair = CreateHeadComponent(package, "HMM_HIR_Custom_MDL", "HairSMC");
+            hair.Parent = actor;
             var hairParent = CreateMic(package, "SourceHairMaterial", "HMN_HED_PRO_MASTER_HAIR_MAT");
             var hairMesh = package.GetUExport(hair.GetProperty<ObjectProperty>("SkeletalMesh")!.Value);
             var binary = SkeletalMesh.Create();
@@ -524,6 +759,7 @@ public static class ActorAssignmentTransactionTests
             if (game == MEGame.LE3 || actorClass == "BioPawn")
             {
                 var gear = CreateHeadComponent(package, "HMM_HAT_Cap_MDL", "GearSMC");
+                gear.Parent = actor;
                 var gearParent = CreateMic(package, "SourceHatMaterial", "HMN_HAT_MASTER_MAT");
                 var gearMesh = package.GetUExport(gear.GetProperty<ObjectProperty>("SkeletalMesh")!.Value);
                 var gearBinary = SkeletalMesh.Create();
@@ -540,9 +776,10 @@ public static class ActorAssignmentTransactionTests
             if (actorClass == "BioPawn")
             {
                 var bodyComponent = CreateHeadComponent(package, "HMM_ARM_Test_MDL", "BodySMC");
+                bodyComponent.Parent = actor;
                 bodyComponent.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(body)], "Materials"));
                 actor.WriteProperty(new ObjectProperty(bodyComponent, "Mesh"));
-                var free = package.CreateExport("UnassignedSMC", "SkeletalMeshComponent", indexed: false);
+                var free = package.CreateExport("UnassignedSMC", "SkeletalMeshComponent", actor, indexed: false);
                 free.WriteProperty(new ObjectProperty(0, "SkeletalMesh"));
                 var freeMic = package.CreateExport("ActorOwnedFreeMic", "BioMaterialInstanceConstant", actor, indexed: false);
                 freeMic.WriteProperty(new ObjectProperty(0, "Parent"));
@@ -681,11 +918,15 @@ public static class ActorAssignmentTransactionTests
             var head = CreateHeadComponent(package, "HMM_HED_PROBase_MDL", "HeadComponent");
             head.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(target)], "Materials"));
             var actor = package.CreateExport("TargetPawn", "BioPawn", indexed: false);
+            head.Parent = actor;
+            target.Parent = head;
             actor.WriteProperty(new ObjectProperty(head, "HeadMesh"));
             var bodyMic = CreateMic(package, "BodyMaterial", "UnrecognizedParent");
             bodyMic.WriteProperty(new ArrayProperty<StructProperty>(
                 [MicVector("SkinTone", 0.9f)], "VectorParameterValues"));
             var body = CreateHeadComponent(package, "Body_MDL", "BodyComponent");
+            body.Parent = actor;
+            bodyMic.Parent = body;
             body.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(bodyMic)], "Materials"));
             actor.WriteProperty(new ObjectProperty(body, "Mesh"));
             package.Save();
@@ -729,6 +970,7 @@ public static class ActorAssignmentTransactionTests
 
                 // Unknown parents must still work. Neither their other parameters nor GUIDs may change.
                 var existing = CreateMic(package, "CustomBodyMaterial", "UnrecognizedParent");
+                existing.Parent = body;
                 var skin = MicVector("sKiNtOnE", 0.9f);
                 skin.GetProp<StructProperty>("ExpressionGUID")!.GetProp<IntProperty>("A")!.Value = 123;
                 skin.Properties.Add(new IntProperty(42, "AuthoredExtraField"));
@@ -744,6 +986,7 @@ public static class ActorAssignmentTransactionTests
                 ], "TextureParameterValues"));
                 existing.WriteProperty(new BoolProperty(true, "bTwoSided"));
                 var empty = CreateMic(package, "SecondBodyMaterial", "AnotherUnknownParent");
+                empty.Parent = body;
                 var unrelated = CreateMic(package, "OtherActorsBodyMaterial", "UnrecognizedParent");
                 var imported = package.CreateImport("MaterialInstanceConstant", "ImportedBodyMaterial",
                     package.CreatePackageImport("MFEFixture_BodyImport"));
@@ -805,6 +1048,7 @@ public static class ActorAssignmentTransactionTests
             var (face, _, actor, _, body) = CreateBodyAssignmentFixture(package,
                 SourceVector("SkinTone", 0.1f, 0.2f, 0.3f, 0.4f));
             var bodyMic = CreateMic(package, "BodyMaterial", "UnknownParent");
+            bodyMic.Parent = body;
             bodyMic.WriteProperty(new ArrayProperty<StructProperty>(
                 [MicVector("SkinLightScattering", 0.9f)], "VectorParameterValues"));
             body.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(bodyMic)], "Materials"));
@@ -831,6 +1075,9 @@ public static class ActorAssignmentTransactionTests
         head.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(headMic)], "Materials"));
         var body = CreateHeadComponent(package, "Body_MDL", "BodyComponent");
         var actor = package.CreateExport("TargetActor", package.Game == MEGame.LE3 ? "SFXStuntActor" : "BioPawn", indexed: false);
+        head.Parent = actor;
+        body.Parent = actor;
+        headMic.Parent = head;
         actor.WriteProperty(new ObjectProperty(head, package.Game == MEGame.LE1 ? "m_oHeadMesh" : "HeadMesh"));
         // Cover inherited BodyMesh in LE3 and the pawn Mesh property in LE1/2.
         if (package.Game == MEGame.LE3)
@@ -855,6 +1102,7 @@ public static class ActorAssignmentTransactionTests
     {
         var head = CreateHeadComponent(package, meshName, $"{actorName}_Head");
         var actor = package.CreateExport(actorName, actorClass, indexed: false);
+        head.Parent = actor;
         actor.WriteProperty(new ObjectProperty(head, "HeadMesh"));
         return actor;
     }
@@ -862,6 +1110,7 @@ public static class ActorAssignmentTransactionTests
     private static ExportEntry CreateHeadComponent(IMEPackage package, string meshName, string componentName)
     {
         var mesh = package.CreateExport(meshName, "SkeletalMesh", indexed: false);
+        mesh.WriteBinary(SkeletalMesh.Create());
         var component = package.CreateExport(componentName, "SkeletalMeshComponent", indexed: false);
         component.WriteProperty(new ObjectProperty(mesh, "SkeletalMesh"));
         return component;

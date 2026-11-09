@@ -45,7 +45,7 @@ internal static class TestCatalog
                 .. ImportedSkeletalMeshWriterTests.All, .. CustomMeshPccMaterializerTests.All,
                 .. GltfInverseMorphTests.All, .. GltfTangentHandednessTests.All,
                 .. PccTextureDependencyResolverTests.All],
-            ["tooling"] = [.. LocaliserTests.All, .. RandomisationTests.Tooling, .. QaUtilityTests.All,
+            ["tooling"] = [.. NativeDependencyTests.All, .. LocaliserTests.All, .. RandomisationTests.Tooling, .. QaUtilityTests.All,
                 .. QaNpcEyeGraphCheckTests.All]
         };
 }

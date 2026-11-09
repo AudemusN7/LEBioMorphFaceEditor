@@ -1,0 +1,104 @@
+name: Release MFE
+
+# Each push builds its resulting tip once, even when it contains multiple commits.
+on:
+  push:
+    branches: [main, dev]
+  workflow_dispatch:
+    inputs:
+      validate_only:
+        description: Build and verify the package without publishing
+        type: boolean
+        default: true
+
+# Queue releases instead of cancelling an upload when another commit arrives.
+concurrency:
+  group: mfe-release-${{ github.ref }}
+  cancel-in-progress: false
+  queue: max
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: github.repository == 'AudemusN7/LEBioMorphFaceEditor' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
+    runs-on: windows-2025
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_CHANNEL: ${{ github.ref == 'refs/heads/dev' && 'Beta' || 'Stable' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          global-json-file: global.json
+      - name: Check Nexus credentials
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || !inputs.validate_only)
+        env:
+          NEXUS_API_KEY: ${{ secrets.NEXUSMODS_API_KEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:NEXUS_API_KEY)) { throw 'Set the NEXUSMODS_API_KEY repository secret before publishing.' }
+      - name: Build and verify release archive
+        id: package
+        run: |
+          ./eng/Test-ReleaseAutomation.ps1
+          ./eng/Build-Release.ps1 -Channel $env:RELEASE_CHANNEL
+      - name: Retain package and validation evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: MFE-${{ env.RELEASE_CHANNEL }}-${{ steps.package.outputs.version }}-${{ github.sha }}
+          path: |
+            ${{ steps.package.outputs.directory }}/*.zip
+            ${{ steps.package.outputs.directory }}/*.json
+            ${{ steps.package.outputs.directory }}/*.txt
+            ${{ steps.package.outputs.directory }}/release-notes.md
+          if-no-files-found: error
+      - name: Publish shareable GitHub beta
+        if: github.ref == 'refs/heads/dev' && (github.event_name == 'push' || !inputs.validate_only)
+        env:
+          RELEASE_DIRECTORY: ${{ steps.package.outputs.directory }}
+        run: ./eng/Publish-Release.ps1 -Stage PublishBeta -ReleaseDirectory $env:RELEASE_DIRECTORY
+      - name: Prepare GitHub draft
+        id: draft
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || !inputs.validate_only)
+        env:
+          RELEASE_DIRECTORY: ${{ steps.package.outputs.directory }}
+        run: ./eng/Publish-Release.ps1 -Stage Prepare -ReleaseDirectory $env:RELEASE_DIRECTORY
+      - name: Record Nexus upload attempt
+        if: steps.draft.outputs.skip_nexus == 'false'
+        env:
+          RELEASE_DIRECTORY: ${{ steps.package.outputs.directory }}
+        run: ./eng/Publish-Release.ps1 -Stage BeginNexus -ReleaseDirectory $env:RELEASE_DIRECTORY
+      - name: Upload the same archive and changelog to Nexus
+        id: nexus
+        if: steps.draft.outputs.skip_nexus == 'false'
+        uses: Nexus-Mods/upload-action@98532f7670c27cbecc78fae03fa3e278147827e2
+        with:
+          api_key: ${{ secrets.NEXUSMODS_API_KEY }}
+          file_id: '8326725'
+          mod_id: '15942918606229'
+          filename: ${{ steps.package.outputs.archive }}
+          version: ${{ steps.package.outputs.version }}
+          display_name: Morph Face Editor ${{ steps.package.outputs.version }}
+          category: main
+          archive_existing_version: 'true'
+          update_mod_version: 'true'
+          description: ${{ steps.package.outputs.notes }}
+          changelog: ${{ steps.package.outputs.notes }}
+      - name: Record successful Nexus publication
+        if: steps.draft.outputs.skip_nexus == 'false'
+        env:
+          RELEASE_DIRECTORY: ${{ steps.package.outputs.directory }}
+          NEXUS_VERSION_ID: ${{ steps.nexus.outputs.version_id }}
+        run: ./eng/Publish-Release.ps1 -Stage CompleteNexus -ReleaseDirectory $env:RELEASE_DIRECTORY -NexusVersionId $env:NEXUS_VERSION_ID
+      - name: Publish GitHub release
+        if: steps.draft.outputs.published == 'false'
+        env:
+          RELEASE_DIRECTORY: ${{ steps.package.outputs.directory }}
+        run: ./eng/Publish-Release.ps1 -Stage Publish -ReleaseDirectory $env:RELEASE_DIRECTORY

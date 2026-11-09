@@ -50,7 +50,7 @@
     <_PinnedLecFile Include="$(LecDirectory)\CompressionWrappers.dll"
                     ExpectedHash="D0417B39CE27BBA575EEC6FB529DFB0614F14750636F0242C0AA7B00CBA7B745" />
     <_PinnedLecFile Include="$(LecDirectory)\TexConverter.dll"
-                    ExpectedHash="CE8D9728246585F0389F50699B3BA37F3D3FECE722E4770B346583CAECBC5607" />
+                    ExpectedHash="D7FDDC6F0B5A6F2E3D6D2C125B6ABB06B526B6EDEBA8275D5AE91BBED6902F8F" />
     <_PinnedLecFile Include="$(LecDirectory)\LegendaryExplorerCore.pdb" Condition="'$(Configuration)' == 'Debug'"
                     ExpectedHash="67A202181CFD9EA01DE317D932BF0601DEE58BA141D184B8BD341E7DF4F3B0F6" />
   </ItemGroup>

@@ -384,17 +384,23 @@ internal static class UiWorkspaceTests
         {
             var game = MorphFaceGame.LE2;
             var head = new MorphFacePackageContextService().CapturePlayerDefaultHead(game, StandalonePlayerSex.Female);
-            foreach (var featuresOnly in new[] { true, false })
+            foreach (var format in new[] { "morphs", "mfe-materials", "tse-materials" })
             {
+                var featuresOnly = format == "morphs";
                 if (featuresOnly)
                     TseHeadMorphRon.WriteMorphFeatures(path, head.MorphData, new(RonExportProducer.MFE, game, "HMF", true));
+                else if (format == "tse-materials")
+                    File.WriteAllText(path, string.Join('\n', MaterialRonCodec.WriteTse(head.MaterialData, "None", [])
+                        .Split('\n').Where(line => !line.StartsWith("//"))));
                 else
                     File.WriteAllText(path, MaterialRonCodec.WriteMfe(FaceMaterialFileService.Capture(game,
                         "PartialSave", head.MaterialData) with { DefaultFace = new("le2-human-female", true) }));
                 using var reader = new MorphFacePackageReader();
-                using var shell = CreateMainWindowViewModel(reader, new StubEditorDialogs { StandaloneGameChoiceResult = game });
+                using var shell = CreateMainWindowViewModel(reader, new StubEditorDialogs { StandaloneGameChoiceResult = game,
+                    MaterialImportTargetChoiceResult = new(game, StandalonePlayerSex.Female) });
                 await shell.OpenDroppedFileAsync(path);
                 var editor = shell.Editor ?? throw new Exception(shell.ErrorMessage ?? "Partial RON did not open.");
+                TestAssert.Equal("le2-human-female", shell.SelectedFace!.ProfileKey);
                 var initial = editor.CreateDraft();
                 var feature = editor.Features.First(value => value.IsEditable);
                 var scalar = editor.Material.Scalars.First();
@@ -406,6 +412,8 @@ internal static class UiWorkspaceTests
 
                 await ((AsyncRelayCommand)shell.SaveCommand).ExecuteAsync();
                 TestAssert.True(!shell.HasError && shell.IsDirty, shell.ErrorMessage ?? "Partial save cleared unrelated edits.");
+                if (format == "tse-materials")
+                    TestAssert.Equal(MaterialRonCodec.MaterialFileKind.Tse, MaterialRonCodec.IdentifyMaterialFile(File.ReadAllText(path))!.Value);
                 if (featuresOnly)
                     TestAssert.Near(feature.Value, TseHeadMorphRon.ReadDocument(path).Head.MorphData.MorphFeatures
                         .Single(value => value.Name == feature.Name).Offset, 0);

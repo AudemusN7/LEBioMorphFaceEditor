@@ -17,7 +17,7 @@ public sealed partial class MainWindowViewModel
     internal static string AppendDatabaseImportGuidance(string details) =>
         details + "\n\n" + Loc.Text("loc_Shell_ImportWarnings_DatabaseGuidance");
 
-    private async Task<bool> TryImportMaterialRonAsync(string sourcePath, RonImportFile source)
+    private async Task<bool> TryImportMaterialRonAsync(string sourcePath, RonImportFile source, MorphFaceGame? requestedGame = null)
     {
         MaterialRonCodec.MaterialFileKind? kind;
         try
@@ -36,6 +36,13 @@ public sealed partial class MainWindowViewModel
             try
             {
                 var target = await Task.Run(() => MaterialRonCodec.ReadDefaultFace(source.Input));
+                if (target is null && kind == MaterialRonCodec.MaterialFileKind.Tse)
+                {
+                    if (_dialogs.ChooseMaterialImportTarget(requestedGame) is not { } choice) return true;
+                    var sex = choice.Sex == StandalonePlayerSex.Male ? "male" : "female";
+                    target = (choice.Game.ToString(), new MaterialFaceTarget(
+                        $"{choice.Game.ToString().ToLowerInvariant()}-human-{sex}", true));
+                }
                 if (target is null)
                 {
                     ErrorMessage = Loc.Text("loc_Shell_Status_RonImportFailedTheCurrent");

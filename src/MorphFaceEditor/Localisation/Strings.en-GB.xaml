@@ -1344,6 +1344,7 @@ Mesh-only files cannot recover metadata-only controls, bone-only controls, or ma
     <system:String x:Key="loc_StandaloneImportGameWindow_Continue" xml:space="preserve">Continue</system:String>
     <!--localiser: {"Key":"loc_StandaloneImportGameWindow_NewPlayerPrompt","ReviewedHash":"B229CF671A7A8A9AFB84ED5F3CF2859DAA3DD1E1948BABE4698FB31948EC1D5A","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_StandaloneImportGameWindow_NewPlayerPrompt" xml:space="preserve">Choose the game and gender for your new morph.</system:String>
+    <system:String x:Key="loc_StandaloneImportGameWindow_MaterialPreviewPrompt" xml:space="preserve">Choose the game and player base used to preview these materials. This file does not contain a head mesh.</system:String>
     <!--localiser: {"Key":"loc_StandaloneImportGameWindow_NewNpcPrompt","ReviewedHash":"FD2A315863C1CDFE229E09E90F9CA6A3E037F2BB9507AF32ACFF093BD3767C7D","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_StandaloneImportGameWindow_NewNpcPrompt" xml:space="preserve">Choose the game and archetype for your new NPC morph.</system:String>
     <!--localiser: {"Key":"loc_View_MainWindow_CancelNPCImport","ReviewedHash":"4F42FECB0A47D87ED2B1C1985DC0210CCD94E14DD6EF133794B37B943B3D633F","DoNotTranslate":false,"Note":"","SourceHash":null}-->

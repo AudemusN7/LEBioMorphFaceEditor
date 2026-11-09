@@ -242,6 +242,8 @@ internal static class UiTestFixtures
         public bool ConfirmCreateCareerMorph(string name) => true;
         public string? ChooseSaveAsFile(string sourcePath) => SaveAsPath;
         public NewPlayerMorphChoice? ChooseNewPlayerMorph() => null;
+        public NewPlayerMorphChoice? MaterialImportTargetChoiceResult { get; set; }
+        public NewPlayerMorphChoice? ChooseMaterialImportTarget(MorphFaceGame? game = null) => MaterialImportTargetChoiceResult;
         public NewNpcMorphChoice? NewNpcMorphChoiceResult { get; set; }
         public NewNpcMorphChoice? ChooseNewNpcMorph() => NewNpcMorphChoiceResult;
         public string? ChooseNewPlayerMorphName(string suggestedName, IReadOnlyCollection<string> existingObjectNames) => null;

@@ -231,7 +231,7 @@ public sealed partial class MainWindowViewModel
         {
             source = await RonImportFile.ReadAsync(sourcePath);
             if (await TryImportMorphFeaturesRonAsync(sourcePath, source, requestedGame)) return;
-            if (await TryImportMaterialRonAsync(sourcePath, source)) return;
+            if (await TryImportMaterialRonAsync(sourcePath, source, requestedGame)) return;
             provenance = await Task.Run(() => TseHeadMorphRon.ReadProvenance(source.Input));
         }
         catch (Exception exception)

@@ -18,6 +18,7 @@ public interface IEditorDialogService
     string? ChooseMorphImportFile(string? initialDirectory = null);
     MorphFaceGame? ChooseStandaloneImportGame();
     NewPlayerMorphChoice? ChooseNewPlayerMorph() => null;
+    NewPlayerMorphChoice? ChooseMaterialImportTarget(MorphFaceGame? game = null) => null;
     NewNpcMorphChoice? ChooseNewNpcMorph() => null;
     string? ChooseNewNpcMorphName(string suggestedName) => ChooseStandaloneMorphName(suggestedName, []);
     RonImportDestinationChoice? ChooseRonImportDestination(

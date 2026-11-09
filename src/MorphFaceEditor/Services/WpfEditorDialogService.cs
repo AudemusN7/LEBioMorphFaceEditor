@@ -148,6 +148,14 @@ public sealed class WpfEditorDialogService : IEditorDialogService
             ? new NewNpcMorphChoice(game, archetype) : null;
     }
 
+    public NewPlayerMorphChoice? ChooseMaterialImportTarget(MorphFaceGame? game = null)
+    {
+        var window = new StandaloneImportGameWindow(materialImportMode: true, importGame: game)
+        { Owner = Application.Current.MainWindow };
+        return window.ShowDialog() == true && window.SelectedGame is { } selectedGame
+            ? new NewPlayerMorphChoice(selectedGame, window.SelectedSex) : null;
+    }
+
     public string? ChooseNewNpcMorphName(string suggestedName)
     {
         var window = new CloneMorphWindow(suggestedName, [], importMode: true, newNpcMode: true)

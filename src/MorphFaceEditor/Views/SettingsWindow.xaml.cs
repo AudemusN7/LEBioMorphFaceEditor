@@ -1,7 +1,10 @@
 using System.Diagnostics;
+using System.IO;
 using System.Windows;
+using System.Windows.Input;
 using Microsoft.Win32;
 using MorphFaceEditor.Infrastructure;
+using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.ViewModels;
 using ThemeMode = MorphFaceEditor.Infrastructure.ThemeMode;
 
@@ -15,6 +18,7 @@ public partial class SettingsWindow : Window
     private bool _updatingTheme;
     private bool _updatingLanguage;
     private readonly ApplicationPreferencesStore _preferences;
+    private string _savedGameDirectoryText;
 
     public SettingsWindow(MainWindowViewModel viewModel) : this(viewModel, (Application.Current as App)?.Themes) { }
 
@@ -24,6 +28,9 @@ public partial class SettingsWindow : Window
         DarkTitleBar.Apply(this);
         _viewModel = viewModel;
         _preferences = preferences ?? ApplicationPreferencesStore.CreateDefault();
+        _savedGameDirectoryText = _preferences.Current.LegendaryEditionDirectory ??
+            LegendaryExplorerCoreRuntime.LegendaryEditionDirectory ?? string.Empty;
+        GameDirectoryPath.Text = _savedGameDirectoryText;
         LanguageSelector.ItemsSource = LanguageOption.All;
         UpdateLanguageSelection();
         _themes = themes;
@@ -35,7 +42,10 @@ public partial class SettingsWindow : Window
             UpdateThemeSelection();
             Closed += (_, _) => themes.Changed -= OnThemeChanged;
         }
-        Closing += (_, args) => args.Cancel = _operating;
+        Closing += (_, args) =>
+        {
+            args.Cancel = _operating || !SaveGameDirectory();
+        };
     }
 
     public bool ClearDataRequested { get; private set; }
@@ -85,6 +95,64 @@ public partial class SettingsWindow : Window
     }
 
     private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
+
+    private void OnGameDirectoryLostFocus(object sender, KeyboardFocusChangedEventArgs e) => SaveGameDirectory();
+
+    private void OnGameDirectoryKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter) return;
+        e.Handled = true;
+        SaveGameDirectory();
+    }
+
+    private void OnBrowseGameDirectoryClick(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFolderDialog
+        {
+            Title = Loc.Text("loc_Settings_LegendaryEditionDirectory"),
+            InitialDirectory = Directory.Exists(GameDirectoryPath.Text) ? GameDirectoryPath.Text : null,
+            Multiselect = false
+        };
+        if (dialog.ShowDialog(this) != true) return;
+        GameDirectoryPath.Text = dialog.FolderName;
+        SaveGameDirectory();
+    }
+
+    private bool SaveGameDirectory()
+    {
+        var path = GameDirectoryPath.Text.Trim();
+        if (path == _savedGameDirectoryText) return true;
+        if (path.Length > 0 && !LegendaryExplorerCoreRuntime.IsValidLegendaryEditionDirectory(path))
+        {
+            OperationStatus.Text = Loc.Text("loc_Settings_InvalidGameDirectory");
+            return false;
+        }
+        try
+        {
+            var directory = path.Length == 0 ? null : Path.GetFullPath(path);
+            _preferences.Update(current => current with { LegendaryEditionDirectory = directory });
+            var compressionAvailable = false;
+            try { compressionAvailable = LegendaryExplorerCoreRuntime.SetLegendaryEditionDirectory(directory); }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or DllNotFoundException or BadImageFormatException)
+            {
+                // The directory is already applied; a DLL retry failure must not masquerade as a failed save.
+                AppLog.Error("GAME:DECOMPRESSION-FAILED after directory change", exception);
+            }
+            if (!compressionAvailable)
+                AppLog.Warning("GAME:DECOMPRESSION-UNAVAILABLE after directory change");
+            AppLog.Information($"GAME:DIRECTORY {LegendaryExplorerCoreRuntime.LegendaryEditionDirectory ?? "(not detected)"}");
+            _savedGameDirectoryText = LegendaryExplorerCoreRuntime.LegendaryEditionDirectory ?? string.Empty;
+            GameDirectoryPath.Text = _savedGameDirectoryText;
+            OperationStatus.Text = Loc.Text(compressionAvailable
+                ? "loc_Settings_GameDirectoryApplied" : "loc_Settings_GameDirectoryCompressionUnavailable");
+            return true;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            OperationStatus.Text = Loc.Format("loc_Settings_GameDirectorySaveFailed", UserFacingMessageFormatter.Format(exception));
+            return false;
+        }
+    }
 
     private void OnOpenLogClick(object sender, RoutedEventArgs e)
     {
@@ -159,5 +227,7 @@ public partial class SettingsWindow : Window
         ThemeSelector.IsEnabled = !operating && _themes is not null;
         AccentColourButton.IsEnabled = !operating && _themes is not null;
         LanguageSelector.IsEnabled = !operating;
+        GameDirectoryPath.IsEnabled = !operating;
+        BrowseGameDirectoryButton.IsEnabled = !operating;
     }
 }

@@ -104,6 +104,9 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
             throw new TextureRegistryBuildException(TextureRegistryBuildFailure.OfficialDatabaseRequired,
                 $"Build the {game} installed database before rebuilding its mod database.");
         var officialPackagePaths = modsOnly ? [] : SelectOfficialFilenameWinners(files, game);
+        if (!modsOnly && officialPackagePaths.Count == 0)
+            throw new TextureRegistryBuildException(TextureRegistryBuildFailure.NoInstalledPackages,
+                $"No installed official {game} packages were found. Check the detected installation path. Existing databases were preserved.");
         var officialPaths = officialPackagePaths.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var fingerprints = files.Where(File.Exists).Select(MountedPackageFingerprint.Read).ToArray();
         var occurrencesByPath = new Dictionary<string, List<TextureCatalogOccurrence>>(

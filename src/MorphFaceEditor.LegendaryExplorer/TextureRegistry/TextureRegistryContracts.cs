@@ -15,6 +15,7 @@ public enum TextureRegistryState
 
 public enum TextureRegistryBuildFailure
 {
+    NoInstalledPackages,
     OfficialDatabaseRequired,
     OfficialDatabaseChanged
 }

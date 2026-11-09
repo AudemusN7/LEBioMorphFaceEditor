@@ -92,8 +92,20 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
         return false;
     }
 
-    internal TextureRegistryReadResult ReadWithStatus(MorphFaceGame game) =>
-        ReadWithStatus(game, paths.GetPath(game));
+    internal TextureRegistryReadResult ReadWithStatus(MorphFaceGame game)
+    {
+        var result = ReadWithStatus(game, paths.GetPath(game));
+        // Older builds could publish a successful scan without finding a single package.
+        // Empty mod/manual sidecars remain valid; only the installed database needs sources.
+        return result.Snapshot is { InstalledPackageCount: 0 }
+            ? new(result.Status with
+            {
+                State = TextureRegistryState.Failed,
+                ErrorMessage = "The installed database contains no game packages.",
+                UserError = UserFacingMessage.Create("loc_VM_textureRegistry_noInstalledPackages")
+            }, null)
+            : result;
+    }
 
     internal TextureRegistryReadResult ReadModsWithStatus(MorphFaceGame game) =>
         ReadWithStatus(game, paths.GetModsPath(game));

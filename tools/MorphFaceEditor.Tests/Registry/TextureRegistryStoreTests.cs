@@ -247,7 +247,9 @@ public static class TextureRegistryStoreTests
         }
         TestAssert.Equal(0, missingScanner.ScannedPaths.Count);
 
-        fixture.CreateBuilder(new FakePackageScanner(), _ => []).RebuildAsync(MorphFaceGame.LE1)
+        var basePackage = Path.Combine(Path.GetDirectoryName(fixture.Paths.GetPath(MorphFaceGame.LE1))!, "Base.pcc");
+        File.WriteAllBytes(basePackage, [1]);
+        fixture.CreateBuilder(new FakePackageScanner(), _ => [basePackage]).RebuildAsync(MorphFaceGame.LE1)
             .GetAwaiter().GetResult();
         var modsPath = fixture.Paths.GetModsPath(MorphFaceGame.LE1);
         var modsBefore = File.ReadAllBytes(modsPath);

@@ -34,7 +34,9 @@ public partial class App : Application
                 args.ExceptionObject as Exception ?? new Exception(args.ExceptionObject?.ToString()));
         TaskScheduler.UnobservedTaskException += (_, args) =>
             AppLog.Error("APP:TASK-EXCEPTION", args.Exception);
-        LegendaryExplorerCoreRuntime.Initialize(TaskScheduler.FromCurrentSynchronizationContext());
+        LegendaryExplorerCoreRuntime.Initialize(TaskScheduler.FromCurrentSynchronizationContext(),
+            ApplicationPreferencesStore.CreateDefault().Current.LegendaryEditionDirectory);
+        AppLog.Information($"GAME:DIRECTORY {LegendaryExplorerCoreRuntime.LegendaryEditionDirectory ?? "(not detected)"}");
         Themes = ThemeManager.CreateDefault(Resources);
 
 #if DEBUG

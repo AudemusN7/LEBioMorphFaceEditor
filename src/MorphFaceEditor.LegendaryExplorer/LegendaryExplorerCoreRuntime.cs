@@ -1,5 +1,6 @@
 using MorphFaceEditor.Core.Domain;
 using LegendaryExplorerCore;
+using LegendaryExplorerCore.Compression;
 using LegendaryExplorerCore.GameFilesystem;
 using LegendaryExplorerCore.Packages;
 
@@ -13,7 +14,7 @@ public static class LegendaryExplorerCoreRuntime
 
     public static event Action<string>? PackageSaveFailed;
 
-    public static void Initialize(TaskScheduler? scheduler = null)
+    public static void Initialize(TaskScheduler? scheduler = null, string? legendaryEditionDirectory = null)
     {
         lock (Sync)
         {
@@ -22,16 +23,60 @@ public static class LegendaryExplorerCoreRuntime
                 return;
             }
 
+            if (!string.IsNullOrWhiteSpace(legendaryEditionDirectory))
+                ConfigureDirectory(legendaryEditionDirectory);
+            else
+                ReloadGamePaths();
+            // LEC also locates the game's decompression DLL during initialization.
+            // Apply the saved directory before that one-time lookup.
             LegendaryExplorerCoreLib.InitLib(
                 scheduler ?? TaskScheduler.Default,
                 message => PackageSaveFailed?.Invoke(message),
                 objectDBsToLoad: [MEGame.LE1, MEGame.LE2, MEGame.LE3],
                 usePropertyDBLazyLoad: true);
-            LE1Directory.ReloadDefaultGamePath();
-            LE2Directory.ReloadDefaultGamePath();
-            LE3Directory.ReloadDefaultGamePath();
             _initialized = true;
         }
+    }
+
+    public static string? LegendaryEditionDirectory
+    {
+        get
+        {
+            Initialize();
+            return LegendaryExplorerCoreLibSettings.Instance.LEDirectory;
+        }
+    }
+
+    public static bool IsValidLegendaryEditionDirectory(string path) => LEDirectory.IsValidGameDir(path);
+
+    public static bool SetLegendaryEditionDirectory(string? directory)
+    {
+        lock (Sync)
+        {
+            Initialize();
+            ConfigureDirectory(directory);
+            MELoadedFiles.InvalidateCaches();
+            // Retry if startup could not find Oodle; an already loaded DLL is reused.
+            return OodleHelper.EnsureOodleDll();
+        }
+    }
+
+    private static void ConfigureDirectory(string? directory)
+    {
+        LegendaryExplorerCoreLibSettings.Instance.LEDirectory = directory;
+        if (string.IsNullOrWhiteSpace(directory)) LEDirectory.LookupDefaultPath();
+        // LEC caches these separately from its shared installation root.
+        LE1Directory.DefaultGamePath = null;
+        LE2Directory.DefaultGamePath = null;
+        LE3Directory.DefaultGamePath = null;
+        ReloadGamePaths();
+    }
+
+    private static void ReloadGamePaths()
+    {
+        LE1Directory.ReloadDefaultGamePath();
+        LE2Directory.ReloadDefaultGamePath();
+        LE3Directory.ReloadDefaultGamePath();
     }
 
     public static string? DefaultLe2CookedPath

@@ -15,7 +15,8 @@ internal sealed record ApplicationPreferences(
     ViewportBackgroundPreference? ViewportBackground = null,
     string[]? RecentFiles = null,
     string Language = "en-GB",
-    SidePaneWidthsPreference? SidePaneWidths = null);
+    SidePaneWidthsPreference? SidePaneWidths = null,
+    string? LegendaryEditionDirectory = null);
 
 /// <summary>One atomic preferences document shared by all application settings.</summary>
 internal sealed class ApplicationPreferencesStore

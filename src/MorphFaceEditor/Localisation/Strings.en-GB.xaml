@@ -100,6 +100,13 @@ Preferences will need to be reapplied when the editor reopens. Databases will al
     <system:String x:Key="loc_Settings_ThemeLight" xml:space="preserve">Light</system:String>
     <!--localiser: {"Key":"loc_Settings_ThemeSaveFailed","ReviewedHash":"89DAAA6B7F1080E59DC672C8288D42083DC939240C5F49BE6BFF61FD634176BB","DoNotTranslate":false,"Note":"Theme settings save error. {0} = underlying save exception detail.","SourceHash":null}-->
     <system:String x:Key="loc_Settings_ThemeSaveFailed" xml:space="preserve">Could not save your theme: {0}</system:String>
+    <system:String x:Key="loc_Settings_GamePaths" xml:space="preserve">Game Paths</system:String>
+    <system:String x:Key="loc_Settings_LegendaryEditionDirectory" xml:space="preserve">Mass Effect Legendary Edition Directory</system:String>
+    <system:String x:Key="loc_Settings_Browse" xml:space="preserve">Browse</system:String>
+    <system:String x:Key="loc_Settings_InvalidGameDirectory" xml:space="preserve">Select the Mass Effect Legendary Edition folder containing Game\Launcher\MassEffectLauncher.exe.</system:String>
+    <system:String x:Key="loc_Settings_GameDirectoryApplied" xml:space="preserve">Game directory applied.</system:String>
+    <system:String x:Key="loc_Settings_GameDirectoryCompressionUnavailable" xml:space="preserve">Game directory applied, but required game files could not be loaded. Check the application log.</system:String>
+    <system:String x:Key="loc_Settings_GameDirectorySaveFailed" xml:space="preserve">Could not update your game directory: {0}</system:String>
     <!--localiser: {"Key":"loc_Settings_ThemeSystem","ReviewedHash":"6725E7BBCD28F3A8A586FA34BF191FD72DDE8B61756932CD3237C17A6F196F1A","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_Settings_ThemeSystem" xml:space="preserve">System</system:String>
     <!--localiser: {"Key":"loc_Settings_Title","ReviewedHash":"74A883A037BC227F91891AB654A753D3A99F31AB06AE5B5D2B6E594A692B41F8","DoNotTranslate":false,"Note":"","SourceHash":null}-->
@@ -244,6 +251,8 @@ No: discard custom asset databases after a successful rebuild.</system:String>
     <system:String x:Key="loc_VM_textureRegistry_developmentSchemaUnsupported" xml:space="preserve">Dev schema v{0} is no longer supported</system:String>
     <!--localiser: {"Key":"loc_VM_textureRegistry_fullBuildFailed","ReviewedHash":"8D8BDFDFC8E3D28723C424D2E400AC66D7D930A3CA9BAB02EE8B9D5EF24DAED5","DoNotTranslate":false,"Note":"Shown for failed official full builds and Rebuild All. The full exception remains in the existing application log entry.","SourceHash":null}-->
     <system:String x:Key="loc_VM_textureRegistry_fullBuildFailed" xml:space="preserve">The basegame texture database could not be rebuilt. Check the application log for details.</system:String>
+    <!--localiser: {"Key":"loc_VM_textureRegistry_noInstalledPackages","ReviewedHash":null,"DoNotTranslate":false,"Note":"An installed-game scan found no official packages, or an existing installed database was created by an empty scan. Empty custom databases are valid.","SourceHash":null}-->
+    <system:String x:Key="loc_VM_textureRegistry_noInstalledPackages" xml:space="preserve">No installed game packages were found. Check the game directory in Settings, then rebuild this database.</system:String>
     <!--localiser: {"Key":"loc_VM_textureRegistry_missingCustomAssets","ReviewedHash":"4DB2760CAF05B6AA918624FA631170D718462E4EFEA5B7AE273CC7A3E46115EE","DoNotTranslate":false,"Note":"Texture Registry rebuild result. {0} = number of custom assets that could not be found; {1} = path to the report listing them.","SourceHash":null}-->
     <system:String x:Key="loc_VM_textureRegistry_missingCustomAssets" xml:space="preserve">{0} custom assets could not be found. Details: {1}</system:String>
     <!--localiser: {"Key":"loc_VM_textureRegistry_modRescanFailed","ReviewedHash":"2D4EBEE68B29DDB35A60C4C1767308AC9AA1BED7059620B33C46219C268C28EB","DoNotTranslate":false,"Note":"","SourceHash":null}-->

@@ -2,8 +2,8 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!-- Authored and reviewed by Audemus; WPF alpha is preserved verbatim. -->
     <Color x:Key="Default.Window">#FFFFFFFF</Color>
-    <Color x:Key="Default.Panel">#FFD3D3D3</Color>
-    <Color x:Key="Default.Raised">#FFEDEDED</Color>
+    <Color x:Key="Default.Panel">#FFE7E7E7</Color>
+    <Color x:Key="Default.Raised">#FFF4F4F4</Color>
     <Color x:Key="Default.Hover">#FFADC9E6</Color>
     <Color x:Key="Default.Pressed">#FFC0DFFF</Color>
     <Color x:Key="Default.Primary">#FF000000</Color>
@@ -12,20 +12,20 @@
     <Color x:Key="Default.Accent">#FF365E80</Color>
     <Color x:Key="Default.Border">#FF5A5A5A</Color>
     <Color x:Key="Default.SelectedRow">#0C209BC6</Color>
-    <Color x:Key="Default.Ready">#FF68EA88</Color>
-    <Color x:Key="Default.Pending">#FFFFC264</Color>
-    <Color x:Key="Default.Failed">#FFFE5959</Color>
+    <Color x:Key="Default.Ready">#FF127C16</Color>
+    <Color x:Key="Default.Pending">#FFA98034</Color>
+    <Color x:Key="Default.Failed">#FFFF4C3E</Color>
     <Color x:Key="Default.PreviewHost">#FFF2F2F2</Color>
-    <Color x:Key="Default.Tag.HMM">#FF87C3FF</Color>
-    <Color x:Key="Default.Tag.HMF">#FFFF8DE6</Color>
-    <Color x:Key="Default.Tag.ASA">#FFA98AFF</Color>
-    <Color x:Key="Default.Tag.SAL">#FF6DFF8A</Color>
+    <Color x:Key="Default.Tag.HMM">#FFA6C8FF</Color>
+    <Color x:Key="Default.Tag.HMF">#FFFFA5E6</Color>
+    <Color x:Key="Default.Tag.ASA">#FFD4ACFF</Color>
+    <Color x:Key="Default.Tag.SAL">#FF90FFA5</Color>
     <Color x:Key="Default.Tag.TUR">#FF7DFFE6</Color>
     <Color x:Key="Default.Tag.TUF">#FFFF9AAC</Color>
-    <Color x:Key="Default.Tag.KRO">#FFFF8079</Color>
-    <Color x:Key="Default.Tag.BAT">#FFFFD07A</Color>
-    <Color x:Key="Default.Tag.BAF">#FFB48BFF</Color>
-    <Color x:Key="Default.Tag.ALN">#FFFEFF76</Color>
+    <Color x:Key="Default.Tag.KRO">#FFFFAA98</Color>
+    <Color x:Key="Default.Tag.BAT">#FFFFD687</Color>
+    <Color x:Key="Default.Tag.BAF">#FFE8BEFF</Color>
+    <Color x:Key="Default.Tag.ALN">#FFE9FF7E</Color>
     <Color x:Key="Default.Tag.CUSTOM">#FFD1E0FF</Color>
     <Color x:Key="Default.Tag.MESH">#FFD1E0FF</Color>
 </ResourceDictionary>

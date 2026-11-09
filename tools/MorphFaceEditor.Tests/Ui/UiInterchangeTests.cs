@@ -19,11 +19,65 @@ internal static class UiInterchangeTests
 {
     internal static IReadOnlyList<TestCase> All { get; } =
     [
+        new("compatible RONs use the chosen game and reuse the open workspace", CompatibleRonRouting),
         new("full RON import preserves existing history and lower-LOD sculpt data", MatchingFullRonKeepsHistory),
         new("RON capture protects against source replacement during destination choice", RonDropUsesCapturedFile),
         new("nonfinite RON export preserves its destination and source", RonExportRejectsNonFiniteFields),
         new("Custom material RON preserves slot assignments and ignores unsupported values", CustomMeshMaterialRonIgnoresSlots)
     ];
+
+    private static void CompatibleRonRouting() => RunWithDispatcher(async () =>
+    {
+        var ron = Path.Combine(Path.GetTempPath(), $"MFE-CompatibleRon-{Guid.NewGuid():N}.ron");
+        try
+        {
+            var head = new MorphFacePackageContextService().CapturePlayerDefaultHead(MorphFaceGame.LE1, StandalonePlayerSex.Female);
+            foreach (var featuresOnly in new[] { false, true })
+            {
+                void Write(RonExportProvenance metadata)
+                {
+                    if (featuresOnly) TseHeadMorphRon.WriteMorphFeatures(ron, head.MorphData, metadata);
+                    else TseHeadMorphRon.Write(ron, head, metadata);
+                }
+                Write(new(RonExportProducer.MFE, MorphFaceGame.LE1, "HMF", true));
+                using var reader = new MorphFacePackageReader();
+                var dialogs = new StubEditorDialogs
+                {
+                    MorphImportPath = ron,
+                    StandaloneGameChoiceResult = MorphFaceGame.LE2,
+                    StandaloneNameChoiceResult = "CompatibleHead"
+                };
+                using var shell = CreateMainWindowViewModel(reader, dialogs);
+                await shell.OpenDroppedFileAsync(ron);
+                TestAssert.Equal(1, dialogs.StandaloneGameChoiceCount);
+                TestAssert.True(!shell.HasError && shell.Editor is not null && shell.SelectedFace?.ProfileKey == "le2-human-female",
+                    shell.ErrorMessage ?? "Opening the LE1 RON ignored the selected LE2 game.");
+                dialogs.StandaloneNameChoiceResult = "AdditionalHead";
+                await ((AsyncRelayCommand)shell.ImportMorphCommand).ExecuteAsync();
+                TestAssert.True(!shell.HasError && shell.SelectedFace?.ProfileKey == "le2-human-female",
+                    shell.ErrorMessage ?? "The Import menu did not reuse the active game.");
+                TestAssert.Equal(1, dialogs.StandaloneGameChoiceCount);
+                if (!featuresOnly) TestAssert.Equal(2, shell.Faces.Count);
+                var importFace = featuresOnly ? shell.ImportMorphFeaturesRonCommand : shell.ImportMorphFaceRonCommand;
+                TestAssert.True(importFace.CanExecute(null), "The open face did not enable RON import.");
+                await ((AsyncRelayCommand)importFace).ExecuteAsync();
+                TestAssert.True(!shell.HasError, shell.ErrorMessage ?? "Importing the compatible LE1 RON into the LE2 face failed.");
+                var draft = shell.Editor!.CreateDraft();
+                foreach (var incompatible in new[]
+                {
+                    new RonExportProvenance(RonExportProducer.MFE, MorphFaceGame.LE3, "HMF", true),
+                    new RonExportProvenance(RonExportProducer.MFE, MorphFaceGame.LE1, "HMM", true)
+                })
+                {
+                    Write(incompatible);
+                    await ((AsyncRelayCommand)importFace).ExecuteAsync();
+                    TestAssert.True(shell.HasError && MorphFaceEditorStateComparer.Equals(draft, shell.Editor!.CreateDraft()),
+                        "An incompatible game or head profile changed the active face.");
+                }
+            }
+        }
+        finally { if (File.Exists(ron)) File.Delete(ron); }
+    });
 
     private static void MatchingFullRonKeepsHistory() => RunWithDispatcher(async () =>
     {

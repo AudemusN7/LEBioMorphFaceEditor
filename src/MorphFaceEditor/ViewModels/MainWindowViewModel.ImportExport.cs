@@ -167,6 +167,12 @@ public sealed partial class MainWindowViewModel
 
     private async Task ImportMorphAsync()
     {
+        if (_workspace is { Game: not MorphFaceGame.Unsupported })
+        {
+            var importPath = _dialogs.ChooseMorphImportFile(Path.GetDirectoryName(_workspace.BrowsePath));
+            if (importPath is not null) await ImportMorphAsync(importPath);
+            return;
+        }
         var game = _dialogs.ChooseStandaloneImportGame();
         if (game is null)
         {
@@ -224,7 +230,7 @@ public sealed partial class MainWindowViewModel
         try
         {
             source = await RonImportFile.ReadAsync(sourcePath);
-            if (await TryImportMorphFeaturesRonAsync(sourcePath, source)) return;
+            if (await TryImportMorphFeaturesRonAsync(sourcePath, source, requestedGame)) return;
             if (await TryImportMaterialRonAsync(sourcePath, source)) return;
             provenance = await Task.Run(() => TseHeadMorphRon.ReadProvenance(source.Input));
         }
@@ -235,8 +241,7 @@ public sealed partial class MainWindowViewModel
             return;
         }
 
-        if ((requestedGame ?? (provenance?.Producer == RonExportProducer.MFE
-                ? provenance.Game : _dialogs.ChooseStandaloneImportGame())) is not { } targetGame) return;
+        if (ChooseRonImportGame(provenance, requestedGame) is not { } targetGame) return;
 
         // Untagged Trilogy Save Editor RONs follow the accepted HMM/HMF Player route.
         if (provenance is null)
@@ -286,6 +291,19 @@ public sealed partial class MainWindowViewModel
 
         await ImportStandaloneNpcMorphAsync(
             sourcePath, provenance.Game, targetGame, archetype, source);
+    }
+
+    private MorphFaceGame? ChooseRonImportGame(RonExportProvenance? provenance, MorphFaceGame? requestedGame = null)
+    {
+        if (requestedGame is not null) return requestedGame;
+        if (provenance?.Producer != RonExportProducer.MFE) return _dialogs.ChooseStandaloneImportGame();
+        if (_workspace is { Game: not MorphFaceGame.Unsupported } workspace &&
+            StandaloneNpcMorphImportService.AreGamesCompatible(provenance.Game, workspace.Game))
+            return workspace.Game;
+
+        // LE1/LE2 tags describe the source, rather than fixing the destination game.
+        return provenance.Game is MorphFaceGame.LE1 or MorphFaceGame.LE2
+            ? _dialogs.ChooseStandaloneImportGame() : provenance.Game;
     }
 
     private async Task ImportStandaloneNpcMorphAsync(

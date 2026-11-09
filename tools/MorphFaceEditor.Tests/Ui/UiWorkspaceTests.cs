@@ -234,7 +234,7 @@ internal static class UiWorkspaceTests
             using var reader = new MorphFacePackageReader();
             var dialogs = new StubEditorDialogs { ConfirmUnsavedChangesResult = UnsavedChangesChoice.Cancel,
                 StandaloneNameChoiceResult = "RejectedPreview" };
-            // Keep normal LE1 editing available, but force the LE2 candidate's final preview to fail.
+            // Keep normal LE1 editing available, but force the incompatible LE3 candidate's final preview to fail.
             var previewProfiles = new MorphFaceProfileRegistry(MorphFaceProfileRegistry.CreateDefault().Profiles
                 .Where(profile => profile.Game == MorphFaceGame.LE1).ToArray());
             using var shell = CreateMainWindowViewModel(reader, dialogs, previewProfiles: previewProfiles);
@@ -279,13 +279,13 @@ internal static class UiWorkspaceTests
 
             var ron = Path.Combine(root, "Player.ron");
             TseHeadMorphRon.Write(ron, new MorphFacePackageContextService().CapturePlayerDefaultHead(
-                MorphFaceGame.LE2, StandalonePlayerSex.Female),
-                new RonExportProvenance(RonExportProducer.MFE, MorphFaceGame.LE2, "HMF", true));
+                MorphFaceGame.LE3, StandalonePlayerSex.Female),
+                new RonExportProvenance(RonExportProducer.MFE, MorphFaceGame.LE3, "HMF", true));
             var sourceRon = File.ReadAllBytes(ron);
             var beforeCandidates = Directory.GetFiles(Path.GetDirectoryName(workingPath)!).ToHashSet(StringComparer.OrdinalIgnoreCase);
             await shell.OpenDroppedFileAsync(ron);
             TestAssert.True(shell.ErrorMessage?.Contains(Loc.Format("loc_Services_MorphFacePreviewLoad_UnsupportedBaseHead",
-                    MorphFaceGame.LE2, "BIOG_HMF_HED_PROMorph_R.Custom.HMF_HED_PROCustom_MDL"), StringComparison.Ordinal) == true,
+                    MorphFaceGame.LE3, "BIOG_HMF_HED_PROMorph_R.Custom.HMF_HED_PROCustom_MDL_CC"), StringComparison.Ordinal) == true,
                 shell.ErrorMessage ?? "Candidate did not reach the simulated final preview failure.");
             CheckRetained();
             TestAssert.True(beforeCandidates.SetEquals(Directory.GetFiles(Path.GetDirectoryName(workingPath)!)) &&
@@ -392,7 +392,7 @@ internal static class UiWorkspaceTests
                     File.WriteAllText(path, MaterialRonCodec.WriteMfe(FaceMaterialFileService.Capture(game,
                         "PartialSave", head.MaterialData) with { DefaultFace = new("le2-human-female", true) }));
                 using var reader = new MorphFacePackageReader();
-                using var shell = CreateMainWindowViewModel(reader, new StubEditorDialogs());
+                using var shell = CreateMainWindowViewModel(reader, new StubEditorDialogs { StandaloneGameChoiceResult = game });
                 await shell.OpenDroppedFileAsync(path);
                 var editor = shell.Editor ?? throw new Exception(shell.ErrorMessage ?? "Partial RON did not open.");
                 var initial = editor.CreateDraft();
@@ -523,7 +523,8 @@ internal static class UiWorkspaceTests
                 TseHeadMorphRon.Write(source, head, new(RonExportProducer.MFE, game, "HMM", true));
                 var sourceBytes = File.ReadAllBytes(source);
                 using var reader = new MorphFacePackageReader();
-                var dialogs = new StubEditorDialogs { StandaloneNameChoiceResult = "MFE_RonSource", RonExportPath = exported };
+                var dialogs = new StubEditorDialogs { StandaloneGameChoiceResult = game,
+                    StandaloneNameChoiceResult = "MFE_RonSource", RonExportPath = exported };
                 using var shell = CreateMainWindowViewModel(reader, dialogs);
                 await shell.OpenDroppedFileAsync(source);
                 TestAssert.True(!shell.HasError && shell.Editor is not null, shell.ErrorMessage ?? "Player source did not open.");

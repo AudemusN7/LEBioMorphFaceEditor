@@ -13,7 +13,8 @@ public static class GltfInverseMorphTests
     [
         new("glTF inverse morph PSK fallback proves differently ordered vertices", ReorderedFallback),
         new("glTF inverse morph PSK fallback expands shared points through wedges", WedgeExpandedFallback),
-        new("glTF inverse morph PSK fallback rejects unrelated same-count vertices", RejectUnrelatedFallback)
+        new("glTF inverse morph PSK fallback rejects unrelated same-count vertices", RejectUnrelatedFallback),
+        new("posed PSK and glTF sidecars recover the original RON payload", PosedSidecarRoundTrip)
     ];
 
     // Asymmetric coordinates distinguish the canonical basis from every reflected candidate.
@@ -49,6 +50,51 @@ public static class GltfInverseMorphTests
         var sidecar = MorphFaceInterchangeService.TryWriteGltfVertexMapSidecar(gltf, psk, Baked, Prior);
         TestAssert.True(sidecar is null && !File.Exists(gltf + ".mfe.json"),
             "Equal vertex counts must not authorize an unrelated map or large recovery corrections.");
+        try
+        {
+            MorphFaceInterchangeService.RequireVertexMapSidecar(sidecar);
+            throw new InvalidOperationException("Export accepted a mesh without its pose recovery map.");
+        }
+        catch (InvalidDataException exception)
+        {
+            TestAssert.Equal("loc_MeshExport_UnverifiedRoundTrip",
+                UserFacingMessage.FromException(exception)!.LocalizationKey);
+        }
+    });
+
+    private static void PosedSidecarRoundTrip() => WithFixture((gltf, psk) =>
+    {
+        Vector3[] posed = [Baked[0] + new Vector3(0.5f, 0, 0), Baked[1] + new Vector3(0, -0.75f, 0), Baked[2] + new Vector3(0, 0, 1)];
+        Vector3[] lowerLod = [new(31, 37, 41), new(43, 47, 53)];
+        var prior = new MorphMeshFitPrior(Prior.BaseHeadPath,
+            [new MorphFeatureValue("Smile", 0.75f)],
+            [new BoneTranslation("headBase", new Vector3(1, 2, 3))],
+            [Baked, lowerLod]);
+        WritePsk(psk, [1, 2, 0], posed);
+        WriteGltf(gltf, [2, 0, 1], baked: posed);
+        TestAssert.True(MorphFaceInterchangeService.TryWriteVertexMapSidecar(psk, MorphMeshFormat.Psk, posed, prior) is not null,
+            "The reordered posed PSK did not receive a sidecar.");
+        TestAssert.True(MorphFaceInterchangeService.TryWriteGltfVertexMapSidecar(gltf, psk, posed, prior) is not null,
+            "The reordered posed glTF did not receive a sidecar.");
+
+        foreach (var path in new[] { psk, gltf })
+        {
+            var candidates = new MorphFaceInterchangeService().ReadMeshPositions(path, BaseHead);
+            var result = MorphMeshInverter.Fit(BaseHead, [], candidates, [], prior.BakedLods);
+            TestAssert.True(result.UsedSourcePrior, "The posed mesh did not recover its original authored bake.");
+            var ron = path + ".ron";
+            TseHeadMorphRon.Write(ron, new HeadMorphPayload("None", [], result.MorphData, new([], [], [])));
+            var roundTrip = TseHeadMorphRon.Read(ron).MorphData;
+            TestAssert.Equal(prior.MorphFeatures.Single(), roundTrip.MorphFeatures.Single());
+            TestAssert.Equal(prior.FinalSkeleton.Single(), roundTrip.FinalSkeleton.Single());
+            TestAssert.Equal(2, roundTrip.BakedLods.Count);
+            for (var lod = 0; lod < prior.BakedLods.Count; lod++)
+            {
+                TestAssert.Equal(prior.BakedLods[lod].Length, roundTrip.BakedLods[lod].Length);
+                for (var vertex = 0; vertex < prior.BakedLods[lod].Length; vertex++)
+                    TestAssert.Near(prior.BakedLods[lod][vertex], roundTrip.BakedLods[lod][vertex], 0.00001f);
+            }
+        }
     });
 
     private static void AssertSidecar(string gltf, string? sidecar, int[] expectedMap, Vector3[]? baked = null)

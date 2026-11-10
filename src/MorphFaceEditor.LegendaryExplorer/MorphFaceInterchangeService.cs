@@ -67,7 +67,7 @@ public sealed class MorphFaceInterchangeService
                 facePath,
                 temporaryDirectory,
                 out var meshName,
-                out var bakedPositions,
+                out var exportPositions,
                 out var baseHeadPath);
             var sourceMorph = new MorphFacePackageContextService().CaptureMorphData(packagePath, facePath);
             var fitPrior = new MorphMeshFitPrior(
@@ -75,9 +75,7 @@ public sealed class MorphFaceInterchangeService
                 sourceMorph.MorphFeatures,
                 sourceMorph.FinalSkeleton,
                 sourceMorph.BakedLods);
-            var exportDirectory = format == MorphMeshFormat.Gltf
-                ? Path.Combine(temporaryDirectory, "gltf")
-                : outputDirectory;
+            var exportDirectory = Path.Combine(temporaryDirectory, format == MorphMeshFormat.Gltf ? "gltf" : "psk");
             var arguments = new List<string> { "-export", "-lods" };
             if (format == MorphMeshFormat.Gltf)
             {
@@ -118,7 +116,7 @@ public sealed class MorphFaceInterchangeService
                     produced.Where(path => IsPrimaryExtension(path, format)).ToArray());
             }
             var primary = produced.First(path => IsPrimaryExtension(path, format));
-            var sidecar = TryWriteVertexMapSidecar(primary, format, bakedPositions, fitPrior);
+            var sidecar = TryWriteVertexMapSidecar(primary, format, exportPositions, fitPrior);
             if (sidecar is null && format == MorphMeshFormat.Gltf)
             {
                 var mappingOutput = Path.Combine(temporaryDirectory, "psk-map");
@@ -136,14 +134,14 @@ public sealed class MorphFaceInterchangeService
                     if (pskPath is not null)
                     {
                         sidecar = TryWriteGltfVertexMapSidecar(
-                            primary, pskPath, bakedPositions, fitPrior);
+                            primary, pskPath, exportPositions, fitPrior);
                     }
                 }
             }
-            sidecar ??= WritePriorOnlySidecar(primary + ".mfe.json", fitPrior);
-            var completed = sidecar is null ? produced : [.. produced, sidecar];
-            if (format == MorphMeshFormat.Gltf)
-                completed = PublishGltfFiles(completed, exportDirectory, outputDirectory, cancellationToken);
+            // A posed mesh without its recovery map would retain the original
+            // bone payload on import and apply that deformation a second time.
+            string[] completed = [.. produced, RequireVertexMapSidecar(sidecar)];
+            completed = PublishMeshFiles(completed, exportDirectory, outputDirectory, cancellationToken);
             return new MorphMeshExportResult(
                 format,
                 completed,
@@ -158,7 +156,7 @@ public sealed class MorphFaceInterchangeService
         }
     }
 
-    internal static string[] PublishGltfFiles(IReadOnlyList<string> sources, string sourceDirectory,
+    internal static string[] PublishMeshFiles(IReadOnlyList<string> sources, string sourceDirectory,
         string outputDirectory, CancellationToken cancellationToken = default)
     {
         var outputs = sources.Select(source => Path.Combine(outputDirectory,
@@ -245,7 +243,7 @@ public sealed class MorphFaceInterchangeService
         string facePath,
         string temporaryDirectory,
         out string meshName,
-        out Vector3[] bakedPositions,
+        out Vector3[] exportPositions,
         out string baseHeadPath)
     {
         using var sourcePackage = MEPackageHandler.OpenMEPackage(packagePath, forceLoadFromDisk: true);
@@ -273,35 +271,16 @@ public sealed class MorphFaceInterchangeService
         var tempPackagePath = Path.Combine(temporaryDirectory, "MorphFaceExport.pcc");
         MEPackageHandler.CreateAndSavePackage(tempPackagePath, face.Game);
         using var temporaryPackage = MEPackageHandler.OpenMEPackage(tempPackagePath, forceLoadFromDisk: true);
-        bakedPositions = bakedLods[0].ToArray();
-
-        for (var lodIndex = 0; lodIndex < Math.Min(
-                 bakedLods.Length,
-                 appliedHead.LODModels.Length); lodIndex++)
+        var vertexCount = appliedHead.LODModels[0].VertexBufferGPUSkin?.VertexData.Length
+                          ?? appliedHead.LODModels[0].ME1VertexBufferGPUSkin.Length;
+        if (bakedLods[0].Length != vertexCount)
         {
-            var bakedLod = bakedLods[lodIndex];
-            var vertices = appliedHead.LODModels[lodIndex].VertexBufferGPUSkin.VertexData;
-            if (bakedLod.Length != vertices.Length)
-            {
-                if (lodIndex > 0)
-                {
-                    // Some shipped faces retain a lower BioMorphFace LOD whose
-                    // topology does not match the base mesh's same-numbered LOD.
-                    // It cannot be staged in UModel, but version 3 sidecars carry
-                    // it losslessly for an unchanged export/import round trip.
-                    continue;
-                }
-                throw new InvalidDataException(
-                    $"BioMorphFace '{facePath}' LOD {lodIndex} has {bakedLod.Length} vertices; " +
-                    $"its base head has {vertices.Length}.");
-            }
-            for (var vertexIndex = 0; vertexIndex < vertices.Length; vertexIndex++)
-            {
-                var vertex = vertices[vertexIndex];
-                vertex.Position = bakedLod[vertexIndex];
-                vertices[vertexIndex] = vertex;
-            }
+            throw new InvalidDataException(
+                $"BioMorphFace '{facePath}' LOD 0 has {bakedLods[0].Length} vertices; " +
+                $"its base head has {vertexCount}.");
         }
+        var sourceMorph = MorphFacePackageCodec.ReadMorphData(face);
+        exportPositions = MorphMeshExportPose.Apply(appliedHead, bakedLods, sourceMorph.FinalSkeleton);
 
         // UModel only needs the SkeletalMesh binary. Cloning the base head's full
         // dependency graph also clones MICs whose texture parameters can retain
@@ -327,10 +306,10 @@ public sealed class MorphFaceInterchangeService
     internal static string? TryWriteVertexMapSidecar(
         string meshPath,
         MorphMeshFormat format,
-        IReadOnlyList<Vector3> bakedPositions,
+        IReadOnlyList<Vector3> exportPositions,
         MorphMeshFitPrior fitPrior)
     {
-        var baseHead = new MeshPositionReference(bakedPositions);
+        var baseHead = new MeshPositionReference(exportPositions);
         var candidates = format switch
         {
             MorphMeshFormat.Psk => ReadPsk(meshPath)(baseHead),
@@ -340,12 +319,12 @@ public sealed class MorphFaceInterchangeService
         foreach (var candidate in candidates.Where(value =>
                      value.IsFileOrder))
         {
-            if (!TryMatchExactVertexSet(candidate.Positions, bakedPositions, out var exportedToBase))
+            if (!TryMatchExactVertexSet(candidate.Positions, exportPositions, out var exportedToBase))
             {
                 continue;
             }
             var sidecarPath = meshPath + ".mfe.json";
-            return WriteSidecar(sidecarPath, candidate, exportedToBase, bakedPositions, fitPrior);
+            return WriteSidecar(sidecarPath, candidate, exportedToBase, fitPrior);
         }
         return null;
     }
@@ -353,16 +332,16 @@ public sealed class MorphFaceInterchangeService
     internal static string? TryWriteGltfVertexMapSidecar(
         string gltfPath,
         string pskPath,
-        IReadOnlyList<Vector3> bakedPositions,
+        IReadOnlyList<Vector3> exportPositions,
         MorphMeshFitPrior fitPrior)
     {
-        var baseHead = new MeshPositionReference(bakedPositions);
+        var baseHead = new MeshPositionReference(exportPositions);
         var pskCandidates = ReadPsk(pskPath)(baseHead);
         var gltfCandidates = ReadGltf(gltfPath)(baseHead);
         foreach (var candidate in pskCandidates.Where(value =>
                      value.IsFileOrder))
         {
-            if (!TryMatchExactVertexSet(candidate.Positions, bakedPositions, out var pskToBase))
+            if (!TryMatchExactVertexSet(candidate.Positions, exportPositions, out var pskToBase))
             {
                 continue;
             }
@@ -378,12 +357,12 @@ public sealed class MorphFaceInterchangeService
                 }
                 var exportedToBase = gltfToPsk.Select(index => pskToBase[index]).ToArray();
                 if (gltfCandidate.Positions.Where((position, index) =>
-                        Vector3.DistanceSquared(position, bakedPositions[exportedToBase[index]]) >
+                        Vector3.DistanceSquared(position, exportPositions[exportedToBase[index]]) >
                         VertexMapTolerance * VertexMapTolerance).Any())
                 {
                     continue;
                 }
-                return WriteSidecar(gltfPath + ".mfe.json", gltfCandidate, exportedToBase, bakedPositions, fitPrior);
+                return WriteSidecar(gltfPath + ".mfe.json", gltfCandidate, exportedToBase, fitPrior);
             }
         }
         return null;
@@ -393,12 +372,13 @@ public sealed class MorphFaceInterchangeService
         string sidecarPath,
         MorphMeshPositionCandidate candidate,
         int[] exportedToBase,
-        IReadOnlyList<Vector3> bakedPositions,
         MorphMeshFitPrior fitPrior)
     {
         var corrections = exportedToBase.SelectMany((baseIndex, exportedIndex) =>
         {
-            var value = bakedPositions[baseIndex] - candidate.Positions[exportedIndex];
+            // Correspondence was proven against the posed export. Restore the
+            // original unposed bake before reapplying its retained final bones.
+            var value = fitPrior.BakedLods[0][baseIndex] - candidate.Positions[exportedIndex];
             return new[] { value.X, value.Y, value.Z };
         }).ToArray();
         WriteSidecarFile(sidecarPath, new VertexMapSidecar(
@@ -418,24 +398,9 @@ public sealed class MorphFaceInterchangeService
         return sidecarPath;
     }
 
-    private static string WritePriorOnlySidecar(string sidecarPath, MorphMeshFitPrior fitPrior)
-    {
-        WriteSidecarFile(sidecarPath, new VertexMapSidecar(
-            3,
-            string.Empty,
-            [],
-            null,
-            fitPrior.BaseHeadPath,
-            fitPrior.MorphFeatures.Select(value =>
-                new SidecarMorphFeature(value.Name, value.Offset)).ToArray(),
-            fitPrior.FinalSkeleton.Select(value => new SidecarBoneTranslation(
-                value.BoneName,
-                value.Translation.X,
-                value.Translation.Y,
-                value.Translation.Z)).ToArray(),
-            EncodeBakedLods(fitPrior.BakedLods)));
-        return sidecarPath;
-    }
+    internal static string RequireVertexMapSidecar(string? sidecar) => sidecar
+        ?? throw UserFacingMessage.CreateError("loc_MeshExport_UnverifiedRoundTrip",
+            "Generated mesh has no proven posed-to-authored vertex map.");
 
     private static void WriteSidecarFile(string path, VertexMapSidecar sidecar) =>
         File.WriteAllText(path, JsonSerializer.Serialize(

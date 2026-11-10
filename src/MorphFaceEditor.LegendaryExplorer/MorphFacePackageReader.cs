@@ -960,7 +960,7 @@ public sealed class MorphFacePackageReader : IDisposable
             : triangleCount;
     }
 
-    private static BoneIndex4 ResolveBoneIndices(
+    internal static BoneIndex4 ResolveBoneIndices(
         int vertexIndex,
         Influences localIndices,
         IReadOnlyList<SkelMeshChunk>? chunks)

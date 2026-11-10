@@ -90,7 +90,7 @@ public static class GltfTangentHandednessTests
                 {
                     try
                     {
-                        MorphFaceInterchangeService.PublishGltfFiles(names.Select(name => Path.Combine(source, name)).ToArray(), source, output);
+                        MorphFaceInterchangeService.PublishMeshFiles(names.Select(name => Path.Combine(source, name)).ToArray(), source, output);
                         throw new InvalidOperationException("Publishing over a locked later output succeeded.");
                     }
                     catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { }

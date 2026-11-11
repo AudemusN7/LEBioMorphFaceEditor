@@ -17,6 +17,7 @@ public static class CustomMeshTests
     [
         new("detached PSK decoding expands seams and preserves sections", PskDecodeExpandsSeams),
         new("detached PSK decoding preserves optional rig weights", PskDecodePreservesRig),
+        new("detached PSK automatically reduces excess weights without changing geometry", PskWeightReduction),
         new("detached glTF decoding applies node transforms and derives streams", GltfDecodeAppliesTransforms),
         new("detached GLB decoding retains render sections", GlbDecodeRetainsSections),
         new("detached mesh preview accepts eight slots and explains nine-slot overflow", DetachedMaterialSlotLimit),
@@ -177,6 +178,82 @@ public static class CustomMeshTests
                 "Rigged detached PSK exposed morph controls.");
             TestAssert.True(preview.Preview.Scene.Meshes.Single().ApplySkinning,
                 "Verified detached PSK rig did not enable renderer skinning.");
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
+    }
+
+    private static void PskWeightReduction()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"mfe-{Guid.NewGuid():N}.psk");
+        try
+        {
+            var psk = new PSK
+            {
+                Points = [new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)],
+                Wedges =
+                [
+                    new() { PointIndex = 0, U = 0, V = 0 },
+                    new() { PointIndex = 1, U = 1, V = 0 },
+                    new() { PointIndex = 2, U = 0, V = 1 },
+                    new() { PointIndex = 0, U = 0.5f, V = 0.5f }
+                ],
+                Faces =
+                [
+                    new() { WedgeIdx0 = 0, WedgeIdx1 = 1, WedgeIdx2 = 2, MatIndex = 0 },
+                    new() { WedgeIdx0 = 3, WedgeIdx1 = 2, WedgeIdx2 = 1, MatIndex = 0 }
+                ],
+                Materials = [new() { Name = "Skin" }],
+                Bones = Enumerable.Range(0, 6).Select(i => new PSA.PSABone
+                {
+                    Name = $"Bone{i}", ParentIndex = i == 0 ? -1 : 0, Rotation = Quaternion.Identity
+                }).ToList(),
+                Weights = [], VertexNormals = []
+            };
+            for (var i = 0; i < 6; i++) psk.Weights.Add(new() { Point = 0, Bone = i, Weight = i + 1 });
+            for (var i = 0; i < 5; i++) psk.Weights.Add(new() { Point = 1, Bone = i, Weight = i + 1 });
+            psk.Weights.Add(new() { Point = 2, Bone = 0, Weight = 1 });
+            psk.ToFile(path);
+            var original = File.ReadAllBytes(path);
+            var service = new MorphFaceInterchangeService();
+            var mesh = service.ReadMesh(path);
+            TestAssert.Equal(2, mesh.ReducedBoneInfluencePointCount);
+            TestAssert.True(original.SequenceEqual(File.ReadAllBytes(path)), "Conversion modified the source PSK.");
+            TestAssert.True(mesh.Positions.SequenceEqual(new[] { Vector3.Zero, Vector3.UnitX, -Vector3.UnitY, Vector3.Zero }),
+                "Conversion changed positions or the seam.");
+            TestAssert.True(mesh.Indices.SequenceEqual(new[] { 0, 2, 1, 3, 1, 2 }), "Conversion changed triangles.");
+            TestAssert.True(mesh.TextureCoordinates!.SequenceEqual(new[] { Vector2.Zero, Vector2.UnitX, Vector2.UnitY, new Vector2(0.5f, 0.5f) }),
+                "Conversion changed UV coordinates.");
+            TestAssert.True(mesh.SourceVertexIndices.SequenceEqual(new[] { 0, 1, 2, 0 }), "Conversion changed point mapping.");
+            TestAssert.True(mesh.Bones.Select(bone => bone.Name).SequenceEqual(Enumerable.Range(0, 6).Select(i => $"Bone{i}")),
+                "Conversion changed the skeleton.");
+            TestAssert.Equal("Skin", mesh.Sections.Single().MaterialName);
+            TestAssert.Equal(new BoneIndex4(5, 4, 3, 2), mesh.BoneIndices![0]);
+            TestAssert.Equal(mesh.BoneIndices[0], mesh.BoneIndices[3]);
+            var weights = mesh.BoneWeights![0];
+            TestAssert.Near(6f / 18, weights.X, 0.000001f);
+            TestAssert.Near(5f / 18, weights.Y, 0.000001f);
+            TestAssert.Near(4f / 18, weights.Z, 0.000001f);
+            TestAssert.Near(3f / 18, weights.W, 0.000001f);
+            TestAssert.Equal(weights, mesh.BoneWeights[3]);
+            TestAssert.Equal(new BoneIndex4(4, 3, 2, 1), mesh.BoneIndices[1]);
+            TestAssert.Near(1, mesh.BoneWeights[1].X + mesh.BoneWeights[1].Y + mesh.BoneWeights[1].Z + mesh.BoneWeights[1].W, 0.000001f);
+            var preview = new DetachedMeshPreviewLoadService(new HeadPreviewSceneFactory()).Load(MorphFaceGame.LE2, mesh);
+            TestAssert.True(preview.Preview.EditingSession.CanEditBones, "The converted valid rig lost bone editing.");
+
+            foreach (var invalid in new[]
+            {
+                new PSK.PSKWeight { Point = 0, Bone = 0, Weight = -1 },
+                new PSK.PSKWeight { Point = 0, Bone = 0, Weight = float.NaN },
+                new PSK.PSKWeight { Point = 99, Bone = 0, Weight = 1 },
+                new PSK.PSKWeight { Point = 0, Bone = 99, Weight = 1 }
+            })
+            {
+                psk.Weights.Add(invalid);
+                psk.ToFile(path);
+                try { service.ReadMesh(path); throw new Exception("PSK import accepted an invalid weight."); }
+                catch (InvalidDataException) { }
+                psk.Weights.RemoveAt(psk.Weights.Count - 1);
+            }
         }
         finally { if (File.Exists(path)) File.Delete(path); }
     }

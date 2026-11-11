@@ -55,9 +55,7 @@ public static class ImportedMeshDecoder
             .Where(weight => weight.Weight > 0)
             .GroupBy(weight => weight.Point)
             .ToDictionary(group => group.Key, group => group.OrderByDescending(weight => weight.Weight).ToArray());
-        if (weightsByPoint.Values.Any(influences => influences.Length > 4))
-            throw new InvalidDataException("PSK contains more than four positive bone influences for one point.");
-
+        var reducedPointCount = weightsByPoint.Values.Count(influences => influences.Length > 4);
         var positions = wedges.Select(w => RestorePskHandedness(points[w.PointIndex])).ToArray();
         var uvs = wedges.Select(w => new Vector2(w.U, w.V)).ToArray();
         var sourceIndices = wedges.Select(w => (int)w.PointIndex).ToArray();
@@ -104,14 +102,19 @@ public static class ImportedMeshDecoder
                 var sum = values.Sum(v => v.Weight);
                 if (!float.IsFinite(sum)) throw new InvalidDataException("PSK point weights do not have a finite sum.");
                 if (sum <= 0) continue;
-                var ids = values.Select(v => v.Bone).Concat([0, 0, 0, 0]).Take(4).ToArray();
-                var ws = values.Select(v => v.Weight / sum).Concat([0f, 0f, 0f, 0f]).Take(4).ToArray();
+                var retained = values.Take(4).ToArray();
+                var retainedSum = retained.Sum(v => v.Weight);
+                var ids = retained.Select(v => v.Bone).Concat([0, 0, 0, 0]).Take(4).ToArray();
+                var ws = retained.Select(v => v.Weight / retainedSum).Concat([0f, 0f, 0f, 0f]).Take(4).ToArray();
                 boneIndices[i] = new BoneIndex4(ids[0], ids[1], ids[2], ids[3]);
                 boneWeights[i] = new Vector4(ws[0], ws[1], ws[2], ws[3]);
             }
         }
         return new ImportedMeshAsset(path, positions, normals, tangents, uvs, [.. indices], sections,
-            bones, boneIndices, boneWeights, sourceIndices, generatedNormals, false);
+            bones, boneIndices, boneWeights, sourceIndices, generatedNormals, false)
+        {
+            ReducedBoneInfluencePointCount = reducedPointCount
+        };
     }
 
     private static ImportedMeshAsset ReadGltf(string path)

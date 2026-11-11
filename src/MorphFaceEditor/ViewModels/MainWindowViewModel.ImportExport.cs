@@ -632,6 +632,9 @@ public sealed partial class MainWindowViewModel
                 career?.SourcePath ?? sourcePath, PackageWorkspace!.SourcePath, append: appendingToCurrentGame);
             OnPropertyChanged(nameof(PackageName));
             OnDirtyStateChanged();
+            var reducedPointCount = meshAnalysis?.ImportedMesh.ReducedBoneInfluencePointCount ?? 0;
+            if (reducedPointCount > 0)
+                importWarnings = [.. importWarnings, Loc.Format("loc_MeshImport_PlayerBoneWeightsReplaced", reducedPointCount)];
             if (importWarnings.Count > 0)
             {
                 Status = Loc.Format("loc_Shell_Status_ImportedWithVisibleAssetWarning", importedFacePath, importWarnings.Count);
@@ -747,11 +750,15 @@ public sealed partial class MainWindowViewModel
         OnPropertyChanged(nameof(PackageDisplayName));
         OnDirtyStateChanged();
         RaiseFaceContextCanExecuteChanged();
-        if (result.CustomMaterials is null)
+        var reducedPointCount = result.Detached.Source.ReducedBoneInfluencePointCount;
+        if (result.CustomMaterials is null || reducedPointCount > 0)
         {
+            var warnings = result.CustomMaterials is null ? result.Detached.Warnings.ToList() : [];
+            if (reducedPointCount > 0)
+                warnings.Add(Loc.Format("loc_MeshImport_BoneWeightsReduced", reducedPointCount));
             _dialogs.ShowInformation(
                 Loc.Text("loc_Shell_DialogTitle_MeshImportedWithWarnings"),
-                string.Join("\n\n", result.Detached.Warnings));
+                string.Join("\n\n", warnings));
         }
     }
 

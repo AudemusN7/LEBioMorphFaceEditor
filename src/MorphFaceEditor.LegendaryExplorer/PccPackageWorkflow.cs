@@ -697,7 +697,8 @@ internal static class PccPackageWorkflow
         AssetIdentity identity,
         IReadOnlyList<TextureCatalogCandidate>? textureCatalog,
         ICollection<string>? warnings = null,
-        ICollection<UserFacingMessage>? userWarnings = null)
+        ICollection<UserFacingMessage>? userWarnings = null,
+        ExportEntry? resolvedDonor = null)
     {
         ArgumentNullException.ThrowIfNull(destination);
         ArgumentNullException.ThrowIfNull(identity);
@@ -728,6 +729,9 @@ internal static class PccPackageWorkflow
         {
             return PccTextureDependencyResolver.MaterializeResolved(destination, resolved, warnings, userWarnings);
         }
+        // A newly qualified identity needs its own official winner lookup.
+        if (resolvedDonor is not null && path.Equals(identity.InstancedPath, StringComparison.OrdinalIgnoreCase))
+            return PccTextureDependencyResolver.ImportDonor(destination, resolvedDonor, path, warnings, userWarnings);
         return PccTextureDependencyResolver.MaterializeDirect(
             destination,
             identity with { InstancedPath = path },

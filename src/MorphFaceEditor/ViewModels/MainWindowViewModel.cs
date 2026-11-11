@@ -1518,7 +1518,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             AppLog.Verbose($"FACE:FLUSH {LoadedFacePath} FILE:\"{WorkspacePackagePath}\"");
             var draft = Editor.CreateDraft();
-            var result = await Task.Run(() => _packageWriter.SaveExisting(draft));
+            // Player workspaces are disposable seed copies, initially written
+            // uncompressed and immediately reopened after this flush.
+            bool? compress = IsPlayerWorkspace ? false : null;
+            var result = await Task.Run(() => _packageWriter.SaveExisting(draft, compress));
             MarkWorkspaceChanged(result.FaceInstancedPath);
             var reopened = await RefreshWorkspaceAsync(result.FaceInstancedPath);
             if (!reopened)

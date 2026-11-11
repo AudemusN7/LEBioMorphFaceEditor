@@ -98,6 +98,17 @@ public sealed class WpfEditorDialogService : IEditorDialogService
         return window.ShowDialog() == true ? window.Request : null;
     }
 
+    public MorphConversionSaveRequest? ChoosePlayerMorphConversionDestination(
+        MorphFaceGame sourceGame, string suggestedFileName, string sourceBrowsePath, bool allowBakedShapeTransfer = false)
+    {
+        var window = new ConvertMorphWindow(sourceGame, suggestedFileName, sourceBrowsePath, playerRonMode: true,
+            allowBakedShapeTransfer: allowBakedShapeTransfer)
+        {
+            Owner = Application.Current.MainWindow
+        };
+        return window.ShowDialog() == true ? window.Request : null;
+    }
+
     public string? ChooseCloneName(string suggestedName, IReadOnlyCollection<string> existingObjectNames)
     {
         var window = new CloneMorphWindow(suggestedName, existingObjectNames)

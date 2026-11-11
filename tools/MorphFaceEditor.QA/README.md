@@ -20,6 +20,7 @@ dotnet run --project tools/MorphFaceEditor.QA -c Release -- --list
 dotnet run --project tools/MorphFaceEditor.QA -c Release -- --case material-ron/le3-hmf-player,undo-redo/le1-tuf
 dotnet run --project tools/MorphFaceEditor.QA -c Release -- --case BAF,pcc-audit
 dotnet run --project tools/MorphFaceEditor.QA -c Release -- --case custom-randomisation --seed 29092026
+dotnet run --project tools/MorphFaceEditor.QA -c Release -- --case player-conversion,pcc-audit --seed 11112026
 dotnet run --project tools/MorphFaceEditor.QA -c Release -- --exhaustive
 dotnet run --project tools/MorphFaceEditor.QA -c Release -- --case donor-sweep,pcc-audit
 dotnet run --project tools/MorphFaceEditor.QA -c Release -- --case benchmark
@@ -46,6 +47,7 @@ An output directory must be new or empty. `--audit-output` audits a completed ru
 | `ron-missing-assets`, `tse-ron` | Check missing attachment and texture handling, plus the external TSE RON fixtures and their PCC round trips. Missing assets must be reported and omitted; the current strict accessory rejection is a known failing gap, not a pass. |
 | `pcsav`, `pcsav-extra` | Exercise curated careers, default heads, randomisation, save/reopen and full-head replacement. Checks include geometry, feature and bone data, ordering and unrelated career bytes; incomplete native LOD data must be refused safely. |
 | `conversion` | Convert supported NPC families between games, then load and render the exported PCC. ALN keeps its authored bakes and has no morph conversion route. |
+| `player-conversion` | Exercise native and generated Player baselines for both sexes in all six game directions. Known-baseline cases generate disposable reference RONs from installed Player seeds with deterministic synthetic vertex edits; the same catalog is supplied to preview and conversion. Three seeded samples combine production slider randomisation with small multi-bone edits, persistence, Player RON conversion, reimport and return. Checks include baseline-relative geometry, full shared pose, pending edits and cancellation, provenance, source fingerprints, ordinary PCC opening and safe rejection of an extra sculpt. Verify the authored face and scalp maps and FemShep lashes through the round trip, then check the textures bound to the reopened head’s rendered sections. FemShep cases cover both the iconic scalp and a generic scalp paired with the iconic face, including the LE1 → LE3 approximate conversion. |
 | `npc-randomisation`, `player-randomisation`, `custom-randomisation` | Run 100-roll stress batches for the relevant NPC, Player or Custom workflows, then check saved results. Other cases use smaller samples or deliberate edits. |
 | `mesh-psk`, `mesh-gltf` | Edit and reopen a known editable face, then export and import a mesh into Custom, checking geometry, materials and inverse-bake recovery. |
 | `custom-human-materials`, `custom-human-hair`, `native-human-hair` | Exercise Human material and hair choices, controls, randomisation, presets and PCC readback. Required graphs and donors must be present; they aren't substituted. |

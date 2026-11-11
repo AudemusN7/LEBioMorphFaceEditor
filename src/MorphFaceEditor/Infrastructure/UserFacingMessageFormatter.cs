@@ -10,12 +10,15 @@ internal static class UserFacingMessageFormatter
         Loc.Format(message.LocalizationKey, message.Arguments.Select(argument =>
             argument is UserFacingMessage nested ? Format(nested) : argument).ToArray());
 
-    internal static IReadOnlyList<string> FormatWarnings(MorphFaceSaveResult result)
+    internal static IReadOnlyList<string> FormatWarnings(MorphFaceSaveResult result) =>
+        FormatWarnings(result.Warnings, result.UserWarnings);
+
+    internal static IReadOnlyList<string> FormatWarnings(IReadOnlyList<string> warnings, IReadOnlyList<UserFacingMessage> userWarnings)
     {
-        var localized = result.UserWarnings.Where(message => message.DiagnosticText is not null)
+        var localized = userWarnings.Where(message => message.DiagnosticText is not null)
             .GroupBy(message => message.DiagnosticText!, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => Format(group.First()), StringComparer.Ordinal);
-        return result.Warnings.Select(warning => localized.TryGetValue(warning, out var value)
+        return warnings.Select(warning => localized.TryGetValue(warning, out var value)
             ? value : FormatDiagnostic(warning)).Distinct(StringComparer.Ordinal).ToArray();
     }
 

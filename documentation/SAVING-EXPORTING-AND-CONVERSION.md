@@ -103,7 +103,7 @@ Use a full headmorph RON or PCC as well if you want to keep the complete face se
 
 This is particularly useful for converting a LE1/LE2 face to LE3 and vice-versa, since LE3 uses a morph system that is incompatible with the earlier games. Note that for humans there's a small handful of morph sliders that do not exist in previous games. For example the human male "Jacob" slider does not exist in LE1, so it will not be used when converting a face into LE1.
 
-Start from an open PCC. If you're working on a standalone RON, Gibbed headmorph or PCSAV head, export the face to a new PCC and open that PCC first.
+For Shepard in a Player workspace, you can convert straight to a new Player RON. See [Convert Shepard to another game](PLAYER-FACES.md#convert-shepard-to-another-game). For a PCC conversion, start from an open package and follow the steps below.
 
 1. Build the **Mesh/Texture Databases** for both the source and target games if you haven't already.
 2. Open the source PCC and select the face you want to convert.

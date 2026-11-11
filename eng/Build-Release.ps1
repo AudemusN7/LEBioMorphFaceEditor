@@ -36,6 +36,14 @@ try {
             throw "Incorrect version/source metadata in $($file.Name)."
         }
     }
+    # This assembly ships reference metadata. Check inside it before archiving:
+    # an embedded private fixture has no loose file for the extension check to see.
+    $allowedResources = @('MorphFaceEditor.CrossGameAssetReconciliation.json',
+        'MorphFaceEditor.MaterialDependencyOracle.json', 'MorphFaceEditor.StockMaterialMetadata.json')
+    $library = Join-Path $publish 'MorphFaceEditor.LegendaryExplorer.dll'
+    $resources = [Reflection.Assembly]::Load([IO.File]::ReadAllBytes($library)).GetManifestResourceNames()
+    $unexpectedResources = @($resources | Where-Object { $_ -cnotin $allowedResources })
+    if ($unexpectedResources.Count) { throw "Unexpected LegendaryExplorer resource: $($unexpectedResources -join ', ')" }
     foreach ($name in @('LegendaryExplorerCore.dll','CompressionWrappers.dll','TexConverter.dll')) {
         if ((Get-FileHash -LiteralPath (Join-Path $publish $name)).Hash -ne
             (Get-FileHash -LiteralPath (Join-Path $repo "lib/LegendaryExplorerCore/$name")).Hash) {
@@ -49,7 +57,7 @@ try {
     Copy-Item -LiteralPath documentation -Destination $publish -Recurse
     $files = @(Get-ChildItem -LiteralPath $publish -Recurse -File)
     $unexpected = @($files | Where-Object {
-        $_.Extension -in @('.pdb','.pcc','.7z','.zip','.ps1') -or
+        $_.Extension -in @('.pdb','.pcc','.ron','.br','.7z','.zip','.ps1') -or
         $_.Name -in @('ISACTTools.dll','System.IO.Hashing.dll','sixlabors.lic') -or
         $_.Name -match '^MorphFaceEditor\.(Tests|QA|Localiser|DataCompiler|ShaderCompiler)\.'
     })

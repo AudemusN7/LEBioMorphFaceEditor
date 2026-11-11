@@ -53,6 +53,23 @@ Once opened, the face can be edited in the same way as a career head. A full `.r
 
 An opened full RON can be saved back to its source with **Save File**, or written to a separate RON with **Save As**. Exporting a RON creates a separate headmorph file; it doesn't change a career save by itself.
 
+## Convert Shepard to another game
+
+Build the mesh/texture databases for both games. Open the head as a Player morph, right-click Shepard in the face list and choose **Convert Morph**. Select the target game and save the new RON. You can then open it in MFE or apply it to a career save for that game.
+
+MFE checks whether the source game's sliders can reproduce the highest-detail head (LOD0) and transfers the sliders and manual bone edits. If the head was built on a custom baked reference, MFE can also use matching starting heads that you supply for the two games.
+
+For a female Shepard going from LE1 to LE3, **Approximate baked shape** can carry a sculpt using just the edited Player head and the installed game meshes. MFE first tries its usual conversion. If that cannot reproduce the head, it transfers the visible LOD0 shape, accounting for the final bone pose in each game. Check the eyes and mouth in the exported RON. Lower LODs use the target game's sliders.
+
+For example, for a female head built on your own LE1 and LE3 sculpts, place copies of the two original, unedited full Player RONs here:
+
+```text
+%APPDATA%\LE BioMorphFace Editor\PlayerBaselines\MyShepard\human-female\LE1.ron
+%APPDATA%\LE BioMorphFace Editor\PlayerBaselines\MyShepard\human-female\LE3.ron
+```
+
+Choose your own folder name in place of `MyShepard`. Use `human-male` for a male head and `LE2.ron` for an LE2 reference. The folder groups the heads you intend as counterparts. MFE checks that the source reference and sliders reproduce the edited face before applying those edits to the target reference. A similar-looking head can still have different vertex positions and fail that check.
+
 ## Create a new player face
 
 A new face is started through **File → New Player Morph**. Once the game and gender have been selected and a name entered, a face based on the game's player defaults will be opened for editing.

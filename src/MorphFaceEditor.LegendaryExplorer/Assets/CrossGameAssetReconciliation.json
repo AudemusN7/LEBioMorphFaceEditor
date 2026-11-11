@@ -1326,6 +1326,51 @@
     "SourceGame": "LE1",
     "TargetGame": "LE3",
     "Kind": "Texture",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.PROSheppard.EyeLashMASK_Iconic_Femshep",
+    "TargetPath": "BIOG_HMF_HED_PROMorph_R.PROShepard.EyeLashMASK_Iconic_Femshep",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.PROSheppard.HMF_HED_PROSheppard_Face_Diff_Stack",
+    "TargetPath": "BIOG_HMF_HED_PROMorph_R.PROShepard.HMF_HED_PROShepard_Face_Diff",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.PROSheppard.HMF_HED_PROSheppard_Face_Norm_Stack",
+    "TargetPath": "BIOG_HMF_HED_PROMorph_R.PROShepard.HMF_HED_PROSheppard_Face_Norm_Stack",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.PROSheppard.HMF_HED_PROSheppard_Scalp_Diff_Stack",
+    "TargetPath": "BIOG_HMF_HED_PROMorph_R.PROShepard.HMF_HED_PROShepard_Scalp_Diff",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.PROSheppard.HMF_HED_PROSheppard_Scalp_Norm_Stack",
+    "TargetPath": "BIOG_HMF_HED_PROMorph_R.PROShepard.HMF_HED_PROShepard_Scalp_Norm",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE1",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
     "Parameter": "ASA_HED_Diff",
     "SourcePath": "BIOG_ASA_HED_PROMorph_R.Liara.ASA_HED_PROLiara_Diff_Stack",
     "TargetPath": null,
@@ -3342,6 +3387,51 @@
     "SourceGame": "LE2",
     "TargetGame": "LE3",
     "Kind": "Texture",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.PROSheppard.EyeLashMASK_Iconic_Femshep",
+    "TargetPath": "BIOG_HMF_HED_PROMorph_R.PROShepard.EyeLashMASK_Iconic_Femshep",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.PROSheppard.HMF_HED_PROSheppard_Face_Diff_Stack",
+    "TargetPath": "BIOG_HMF_HED_PROMorph_R.PROShepard.HMF_HED_PROShepard_Face_Diff",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.PROSheppard.HMF_HED_PROSheppard_Face_Norm_Stack",
+    "TargetPath": "BIOG_HMF_HED_PROMorph_R.PROShepard.HMF_HED_PROSheppard_Face_Norm_Stack",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.PROSheppard.HMF_HED_PROSheppard_Scalp_Diff_Stack",
+    "TargetPath": "BIOG_HMF_HED_PROMorph_R.PROShepard.HMF_HED_PROShepard_Scalp_Diff",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.PROSheppard.HMF_HED_PROSheppard_Scalp_Norm_Stack",
+    "TargetPath": "BIOG_HMF_HED_PROMorph_R.PROShepard.HMF_HED_PROShepard_Scalp_Norm",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE2",
+    "TargetGame": "LE3",
+    "Kind": "Texture",
     "Parameter": "ASA_HED_Diff",
     "SourcePath": "BIOG_ASA_HED_PROMorph_R.Liara.ASA_HED_PROLiara_Diff_Stack",
     "TargetPath": null,
@@ -4629,6 +4719,60 @@
     "SourceGame": "LE3",
     "TargetGame": "LE1",
     "Kind": "Texture",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.PROShepard.EyeLashMASK_Iconic_Femshep",
+    "TargetPath": "BIOG_HMF_HED_PROMorph_R.PROSheppard.EyeLashMASK_Iconic_Femshep",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.PROShepard.HMF_HED_PROShepard_Face_Diff",
+    "TargetPath": "BIOG_HMF_HED_PROMorph_R.PROSheppard.HMF_HED_PROSheppard_Face_Diff_Stack",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.PROShepard.HMF_HED_PROShepard_Scalp_Diff",
+    "TargetPath": "BIOG_HMF_HED_PROMorph_R.PROSheppard.HMF_HED_PROSheppard_Scalp_Diff_Stack",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.PROShepard.HMF_HED_PROShepard_Scalp_Norm",
+    "TargetPath": "BIOG_HMF_HED_PROMorph_R.PROSheppard.HMF_HED_PROSheppard_Scalp_Norm_Stack",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.PROShepard.HMF_HED_PROSheppard_Face_Norm_Stack",
+    "TargetPath": "BIOG_HMF_HED_PROMorph_R.PROSheppard.HMF_HED_PROSheppard_Face_Norm_Stack",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.PROShepard.HMF_PROShepard_Face_Norm",
+    "TargetPath": "BIOG_HMF_HED_PROMorph_R.PROSheppard.HMF_HED_PROSheppard_Face_Norm_Stack",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE1",
+    "Kind": "Texture",
     "Parameter": "EYE_Lens_Norm",
     "SourcePath": "BIOG_HMM_HED_PROMorph.Eye.EYE_Lens_Norm",
     "TargetPath": null,
@@ -5362,6 +5506,60 @@
     "SourcePath": "BIOG_HMM_HIR_PRO_R.Hat_Moto.HMM_HAT_MTR_MDL",
     "TargetPath": "BIOG_HMM_HIR_PRO_R.Moto.HMM_HAT_MTR_MDL",
     "EvidenceCount": 8
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.PROShepard.EyeLashMASK_Iconic_Femshep",
+    "TargetPath": "BIOG_HMF_HED_PROMorph_R.PROSheppard.EyeLashMASK_Iconic_Femshep",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.PROShepard.HMF_HED_PROShepard_Face_Diff",
+    "TargetPath": "BIOG_HMF_HED_PROMorph_R.PROSheppard.HMF_HED_PROSheppard_Face_Diff_Stack",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.PROShepard.HMF_HED_PROShepard_Scalp_Diff",
+    "TargetPath": "BIOG_HMF_HED_PROMorph_R.PROSheppard.HMF_HED_PROSheppard_Scalp_Diff_Stack",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.PROShepard.HMF_HED_PROShepard_Scalp_Norm",
+    "TargetPath": "BIOG_HMF_HED_PROMorph_R.PROSheppard.HMF_HED_PROSheppard_Scalp_Norm_Stack",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.PROShepard.HMF_HED_PROSheppard_Face_Norm_Stack",
+    "TargetPath": "BIOG_HMF_HED_PROMorph_R.PROSheppard.HMF_HED_PROSheppard_Face_Norm_Stack",
+    "EvidenceCount": 1
+  },
+  {
+    "SourceGame": "LE3",
+    "TargetGame": "LE2",
+    "Kind": "Texture",
+    "Parameter": null,
+    "SourcePath": "BIOG_HMF_HED_PROMorph_R.PROShepard.HMF_PROShepard_Face_Norm",
+    "TargetPath": "BIOG_HMF_HED_PROMorph_R.PROSheppard.HMF_HED_PROSheppard_Face_Norm_Stack",
+    "EvidenceCount": 1
   },
   {
     "SourceGame": "LE3",

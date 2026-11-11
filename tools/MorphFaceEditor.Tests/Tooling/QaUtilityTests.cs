@@ -3,6 +3,8 @@ using System.Text.Json;
 using LegendaryExplorerCore.Packages;
 using LegendaryExplorerCore.Unreal.BinaryConverters;
 using MorphFaceEditor.Core.Deformation;
+using MorphFaceEditor.Core.Randomisation;
+using MorphFaceEditor.Core.Services;
 using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.QA;
 
@@ -15,12 +17,72 @@ internal static class QaUtilityTests
         new("QA roll batches retain early and final failures", () => BatchResults().GetAwaiter().GetResult()),
         new("QA coverage streams reproduce filtered cases and vary donors", Selection),
         new("QA TUF matrix matches Turian workflow coverage", TufMatrixParity),
+        new("QA Player conversion matrix includes native and baked mixed-edit stress", PlayerConversionMatrix),
+        new("QA Player conversion selects productive seeded donors", PlayerConversionDonors),
         new("QA native save values compare separately from preserved source ordering", NativeSaveOrdering),
         new("QA material comparison preserves duplicate counts and exact texture identities", MaterialNamesAndDuplicates),
         new("QA morph clipboard refusals accept localised errors but reject silent or changed targets", ClipboardRefusal),
         new("QA load oracle misses remain diagnostic without accepting invalid topology", () => LoadOracleDiagnostics().GetAwaiter().GetResult()),
         new("QA reports retain frozen timing limits and functional failures beside timing outcomes", Report)
     ];
+
+    private static void PlayerConversionDonors()
+    {
+        const int runSeed = 57556813;
+        var stream = QaCoverageSelection.Stream(runSeed, "player-conversion/le3-hmf-player/le1/known", "player-conversion-rolls");
+        var seeds = new[] { stream.Next(), stream.Next(), stream.Next() };
+        var catalog = MorphRandomisationCatalog.LoadEmbedded();
+        var profiles = MorphFaceProfileRegistry.CreateDefault().Profiles;
+        var source = profiles.Single(p => p.Key == "le3-human-female");
+        var target = profiles.Single(p => p.Key == "le1-human-female");
+        var targets = new MorphTargetCatalog();
+        var current = QaCases.DirectPlayerSliders(source, targets.Load(source))
+            .Intersect(QaCases.DirectPlayerSliders(target, targets.Load(target)), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(n => n, _ => 0f, StringComparer.OrdinalIgnoreCase);
+        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var replay = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var rollSeed in seeds)
+        {
+            var selected = QaCases.SelectPlayerConversionDonor(catalog, source.Key, rollSeed, current, used);
+            TestAssert.Equal(selected.Donor.Id, QaCases.SelectPlayerConversionDonor(catalog, source.Key, rollSeed, current, replay).Donor.Id);
+            TestAssert.True(selected.Scope.Count(n => Math.Abs(selected.Proposal.Values[n] - current[n]) > 0.000001f) >= 2,
+                "Selected donor did not produce two shared slider changes.");
+        }
+        TestAssert.Equal(3, used.Count);
+
+        // A donor with two nonzero channels can still produce no edits when its sampled values
+        // already match the current face. Eligibility must test the proposal, not only its keys.
+        var values = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase) { ["A"] = .2f, ["B"] = .3f };
+        var donor = new MorphRandomisationDonor("only", source.Key, values.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase), values);
+        var pool = MorphRandomisationPoolRouter.Resolve(source.Key);
+        var single = new MorphRandomisationCatalog(new(MorphRandomisationCorpus.CurrentFormatVersion,
+            new Dictionary<MorphRandomisationPoolKey, IReadOnlyList<MorphRandomisationDonor>> { [pool] = [donor] }));
+        var sampled = QaCases.SelectPlayerConversionDonor(single, source.Key, seeds[1],
+            values.Keys.ToDictionary(n => n, _ => 0f), new HashSet<string> { "only" });
+        TestAssert.Equal("only", sampled.Donor.Id);
+        var rejected = false;
+        try { QaCases.SelectPlayerConversionDonor(single, source.Key, seeds[1], sampled.Proposal.Values, new HashSet<string>()); }
+        catch (InvalidDataException) { rejected = true; }
+        TestAssert.True(rejected, "A donor producing no slider changes was accepted.");
+    }
+
+    private static void PlayerConversionMatrix()
+    {
+        var cases = QaCases.All.Where(value => value.Group == "player-conversion").ToArray();
+        var expected = from source in new[] { "le1", "le2", "le3" }
+                       from target in new[] { "le1", "le2", "le3" }
+                       where source != target
+                       from sex in new[] { "hmm", "hmf" }
+                       from baseline in new[] { "native", "known" }
+                       select $"player-conversion/{source}-{sex}-player/{target}/{baseline}";
+        TestAssert.True(expected.Order().SequenceEqual(cases.Select(value => value.Id).Order()),
+            "Player QA must cover each direction, sex and baseline exactly once.");
+        TestAssert.Equal(3, QaCoverageSelection.PlannedRolls("player-conversion"));
+        foreach (var test in cases)
+            TestAssert.True(QaCoverageSelection.SelectCase(test.Id, test.Group, null, false) &&
+                QaCoverageSelection.SelectCase(test.Id, test.Group, [test.Group], false),
+                "Player conversion stress was omitted from normal or filtered QA runs.");
+    }
 
     private static void TufMatrixParity()
     {
@@ -161,6 +223,15 @@ internal static class QaUtilityTests
             "Native semantic comparison rejected unchanged values in source order.");
         TestAssert.True(QaHeadPayload.GeometryDifferences(head, reordered).Count > 0,
             "Raw payload comparison stopped enforcing authored ordering.");
+        var signedZero = head with { FinalSkeleton = [new("boneA", new(-0f, 2, 3)), new("boneB", new(4, 5, 6))] };
+        var positiveZero = signedZero with { FinalSkeleton = [new("boneA", new(0f, 2, 3)), new("boneB", new(4, 5, 6))] };
+        TestAssert.True(QaHeadPayload.GeometryDifferences(signedZero, positiveZero).Count > 0,
+            "Raw persistence comparison ignored a zero sign change.");
+        TestAssert.True(QaHeadPayload.GeometryDifferences(signedZero, positiveZero, compareNameOrder: false,
+            equivalentBoneZeroSigns: true).Count == 0, "Bone projection rejected equivalent zero signs.");
+        var changedBone = positiveZero with { FinalSkeleton = [new("boneA", new(0.00001f, 2, 3)), new("boneB", new(4, 5, 6))] };
+        TestAssert.True(QaHeadPayload.GeometryDifferences(signedZero, changedBone, compareNameOrder: false,
+            equivalentBoneZeroSigns: true).Count > 0, "Bone projection concealed a non-zero change.");
         TestAssert.True(QaHeadPayload.RetainsOrder(new[] { "B", "A" }, new[] { "B", "A", "new" }), "Native append lost original ordering.");
         TestAssert.True(!QaHeadPayload.RetainsOrder(new[] { "B", "A" }, new[] { "A", "B" }), "Native reorder was accepted.");
         foreach (var damaged in new[]

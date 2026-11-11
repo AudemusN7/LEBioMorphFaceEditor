@@ -57,6 +57,20 @@ public sealed class MorphFacePackageReader : IDisposable
             ReadLodMaterialMaps(export, binary.LODModels.Length, binary.Materials?.Length ?? 0));
     }
 
+    public bool MatchesPlayerBaseHead(LoadedMorphFace source, StandalonePlayerSex sex)
+    {
+        if (ReadSkeletalMeshContentFingerprint(source.BaseHead.Source) is not { } actual) return false;
+        using var operation = _packageCache.BeginOperation();
+        var seedPath = StandalonePlayerMorphImportService.ResolveInstalledSeed(source.Game);
+        var package = PackageSourceCache.GetPackage(_packageCache, seedPath)
+            ?? throw new InvalidDataException($"Legendary Explorer Core could not open '{seedPath}'.");
+        var template = ExportSelector.Find(package, StandalonePlayerMorphImportService.ResolvePlayerTemplate(source.Game, sex), "BioMorphFace");
+        // The proof needs only the exact template's mesh and rig. Resolving its
+        // hair, materials and render data would load an entire second face.
+        var mesh = ToIdentity(ResolveObjectReference(template, "m_oBaseHead"));
+        return mesh is not null && ReadSkeletalMeshContentFingerprint(mesh) == actual;
+    }
+
     public MorphRandomisationMaterialEvidence LoadRandomisationMaterialEvidence(
         string packagePath,
         string exportSelector)
@@ -457,7 +471,7 @@ public sealed class MorphFacePackageReader : IDisposable
         }
     }
 
-    private static SortedDictionary<int, List<MeshMaterialEvidenceSection>> ResolveUsedMaterialSections(
+    internal static SortedDictionary<int, List<MeshMaterialEvidenceSection>> ResolveUsedMaterialSections(
         ExportEntry meshExport,
         SkeletalMesh mesh,
         int materialCount)

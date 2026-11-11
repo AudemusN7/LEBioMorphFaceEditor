@@ -84,6 +84,21 @@ internal static partial class QaCases
             Add("npc-randomisation", "Dedicated 100-roll production stress, export/reopen/render", face, NpcRandomisation);
         foreach (var face in Archetypes.Where(face => face.IsPlayer))
             Add("player-randomisation", "Standalone Player RON import, dedicated 100-roll stress, export/reopen/render", face, PlayerRandomisation);
+        // Small seeded Player conversion journeys own the broad game/sex matrix.
+        foreach (var face in Archetypes.Where(face => face.IsPlayer))
+            foreach (var target in new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 }.Where(game => game != face.Game))
+                foreach (var baseline in new[] { "native", "known" })
+                {
+                    var selectedBaseline = baseline;
+                    cases.Add(new($"player-conversion/{face.Id}/{target.ToString().ToLowerInvariant()}/{baseline}",
+                        $"Player {baseline} baseline conversion {face.Game} to {target}", async c =>
+                        {
+                            c.Face = face; c.PreparedPlayer = null;
+                            c.Current.Evidence["archetype"] = face;
+                            await c.WarmGame(face.Game);
+                            await PlayerConversionJourney(c, target, selectedBaseline == "known");
+                        }, "player-conversion"));
+                }
         foreach (var face in Archetypes)
         {
             Add("ron-full", "Full RON export/import/save/reopen, or explicit unsupported capability", face, c => RonRoundTrip(c, false));

@@ -12,7 +12,12 @@ public sealed partial class MainWindowViewModel
         CanTargetPackageFace() && PackageWorkspace?.CanCommit == true;
 
     private bool CanConvertMorph() =>
-        CanMutatePackageContext() && !IsAlnFace(SelectedFace);
+        IsPlayerWorkspace ? CanConvertPlayerMorph() : CanMutatePackageContext() && !IsAlnFace(SelectedFace);
+
+    private bool CanConvertPlayerMorph() =>
+        CanTargetPackageFace() && IsPlayerWorkspace && SelectedFace is { } face &&
+        (face.ProfileKey.EndsWith("-human-male", StringComparison.OrdinalIgnoreCase) ||
+         face.ProfileKey.EndsWith("-human-female", StringComparison.OrdinalIgnoreCase));
 
     private bool CanCopyMorphData() =>
         CanTargetPackageFace() && !IsAlnFace(SelectedFace);
@@ -169,7 +174,7 @@ public sealed partial class MainWindowViewModel
 
     private async Task ConvertMorphAsync()
     {
-        if (!CanConvertMorph() || SelectedFace is not { } source || WorkspacePackagePath is not { } workspacePath || PackagePath is null)
+        if (!CanConvertMorph() || SelectedFace is not { } source || WorkspacePackagePath is not { } workspacePath || _workspace is null)
         {
             return;
         }
@@ -178,10 +183,12 @@ public sealed partial class MainWindowViewModel
             : source.ProfileKey.StartsWith("le2-", StringComparison.OrdinalIgnoreCase)
                 ? MorphFaceGame.LE2
                 : MorphFaceGame.LE1;
-        var request = _dialogs.ChooseMorphConversionDestination(
-            sourceGame,
-            $"{source.ObjectName}_Converted.pcc",
-            PackagePath);
+        var playerConversion = CanConvertPlayerMorph();
+        if (!playerConversion && PackagePath is null) return;
+        var request = playerConversion
+            ? _dialogs.ChoosePlayerMorphConversionDestination(sourceGame, $"{source.ObjectName}_Converted.ron", _workspace.BrowsePath,
+                MorphFaceConversionService.CanApproximateBakedShape(source.ProfileKey, MorphFaceGame.LE3))
+            : _dialogs.ChooseMorphConversionDestination(sourceGame, $"{source.ObjectName}_Converted.pcc", PackagePath!);
         if (request is null || !await FlushSelectedExportSourceAsync(source))
         {
             return;
@@ -192,6 +199,17 @@ public sealed partial class MainWindowViewModel
         Status = Loc.Format("loc_Shell_Status_ConvertingTo", source.DisplayName, request.TargetGame);
         try
         {
+            if (playerConversion)
+            {
+                var playerResult = await Task.Run(() => _conversionService.ConvertPlayerRon(new PlayerMorphRonConversionRequest(
+                    workspacePath, source.InstancedPath, request.TargetGame, request.DestinationPackagePath, request.ApproximateBakedShape)));
+                var playerWarnings = UserFacingMessageFormatter.FormatWarnings(playerResult.Warnings, playerResult.UserWarnings);
+                var warningText = string.Join("\n", playerWarnings.Select(warning => $"• {warning}"));
+                Status = Loc.Format("loc_PlayerConversion_CompletedStatus", playerResult.DestinationPath);
+                _dialogs.ShowInformation(Loc.Text("loc_Shell_DialogTitle_MorphConverted"),
+                    Loc.Format("loc_PlayerConversion_Completed", request.TargetGame, playerResult.DestinationPath, warningText));
+                return;
+            }
             AppLog.Verbose($"FACE:CONVERT {source.InstancedPath} TO:{request.TargetGame} " +
                 $"FILE:\"{request.DestinationPackagePath}\" NEW:{request.CreateNewPackage}");
             var result = await Task.Run(() => _conversionService.Convert(new MorphFaceConversionRequest(
@@ -242,7 +260,7 @@ public sealed partial class MainWindowViewModel
         {
             AppLog.Error($"FACE:CONVERT-FAILED {source.InstancedPath}", exception);
             ErrorMessage = Loc.Format("loc_Shell_Error_TheMorphCouldNotBe", UserFacingMessageFormatter.Format(exception));
-            Status = Loc.Text("loc_Shell_Status_MorphConversionFailedTheSource");
+            Status = Loc.Text(playerConversion ? "loc_PlayerConversion_FailedStatus" : "loc_Shell_Status_MorphConversionFailedTheSource");
         }
         finally
         {

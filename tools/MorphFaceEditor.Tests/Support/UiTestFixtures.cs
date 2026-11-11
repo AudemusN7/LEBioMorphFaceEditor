@@ -41,7 +41,8 @@ internal static class UiTestFixtures
         StubEditorDialogs? dialogs = null,
         MorphFaceEditor.LegendaryExplorer.TextureRegistry.TextureCatalogService? textureCatalog = null,
         MorphFaceProfileRegistry? previewProfiles = null,
-        ICustomMaterialTemplateCatalog? customMaterials = null)
+        ICustomMaterialTemplateCatalog? customMaterials = null,
+        PlayerMorphBaselineCatalog? playerBaselines = null)
     {
         var scenes = new HeadPreviewSceneFactory();
         var profiles = MorphFaceProfileRegistry.CreateDefault();
@@ -51,10 +52,10 @@ internal static class UiTestFixtures
         return new MainWindowViewModel(
             dialogs ?? new StubEditorDialogs(),
             new MorphFaceCatalogService(profiles),
-            new MorphFacePreviewLoadService(scenes, targets, previewProfiles ?? profiles, reader),
+            new MorphFacePreviewLoadService(scenes, targets, previewProfiles ?? profiles, reader, playerBaselines: playerBaselines),
             scenes, new StubColorDialog(), new PackageReferenceService(reader, textureCatalog),
             new MorphFacePackageWriter(), context,
-            new MorphFaceConversionService(profiles, targets, context, textureCatalog),
+            new MorphFaceConversionService(profiles, targets, context, textureCatalog, playerBaselines: playerBaselines),
             new MorphFaceInterchangeService(), new StubClipboard(),
             detachedMeshPreviewLoadService: customMaterials is null ? null :
                 new DetachedMeshPreviewLoadService(scenes, materialCatalog: customMaterials));
@@ -241,15 +242,25 @@ internal static class UiTestFixtures
         public bool ConfirmDeleteMorphResult { get; set; }
         public bool ConfirmCreateCareerMorph(string name) => true;
         public string? ChooseSaveAsFile(string sourcePath) => SaveAsPath;
-        public NewPlayerMorphChoice? ChooseNewPlayerMorph() => null;
+        public NewPlayerMorphChoice? NewPlayerMorphChoiceResult { get; set; }
+        public NewPlayerMorphChoice? ChooseNewPlayerMorph() => NewPlayerMorphChoiceResult;
         public NewPlayerMorphChoice? MaterialImportTargetChoiceResult { get; set; }
         public NewPlayerMorphChoice? ChooseMaterialImportTarget(MorphFaceGame? game = null) => MaterialImportTargetChoiceResult;
         public NewNpcMorphChoice? NewNpcMorphChoiceResult { get; set; }
         public NewNpcMorphChoice? ChooseNewNpcMorph() => NewNpcMorphChoiceResult;
-        public string? ChooseNewPlayerMorphName(string suggestedName, IReadOnlyCollection<string> existingObjectNames) => null;
+        public string? ChooseNewPlayerMorphName(string suggestedName, IReadOnlyCollection<string> existingObjectNames) => StandaloneNameChoiceResult;
         public string? ChoosePackage(string? initialDirectory = null) => null;
         public MorphPackageSaveRequest? ChooseMorphPackageDestination(string suggestedFileName, string sourcePackagePath) => null;
         public MorphConversionSaveRequest? ChooseMorphConversionDestination(MorphFaceGame sourceGame, string suggestedFileName, string sourcePackagePath) => null;
+        public int PlayerConversionChoiceCount { get; private set; }
+        public string? PlayerConversionSourcePath { get; private set; }
+        public MorphConversionSaveRequest? PlayerConversionChoiceResult { get; set; }
+        public MorphConversionSaveRequest? ChoosePlayerMorphConversionDestination(MorphFaceGame sourceGame, string suggestedFileName, string sourceBrowsePath, bool allowBakedShapeTransfer = false)
+        {
+            PlayerConversionChoiceCount++;
+            PlayerConversionSourcePath = sourceBrowsePath;
+            return PlayerConversionChoiceResult;
+        }
         public string? ChooseCloneName(string suggestedName, IReadOnlyCollection<string> existingObjectNames) => CloneNameChoiceResult;
         public string? ChooseMorphImportFile(string? initialDirectory = null) => MorphImportPath;
         public string? ChooseMaterialImportFile(bool tse, string? initialDirectory = null) => null;

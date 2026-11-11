@@ -11,7 +11,7 @@ internal static class QaCoverageSelection
     {
         "npc-randomisation" or "player-randomisation" or "custom-randomisation" => 100,
         "undo-redo" or "pcsav" or "pcsav-extra" => 1,
-        "custom-human-hair" => 3,
+        "custom-human-hair" or "player-conversion" => 3,
         "native-human-hair" => 4,
         _ => 0
     };

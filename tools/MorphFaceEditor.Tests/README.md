@@ -24,7 +24,7 @@ The default suite is `core`. Positional filters match test or class names withou
 | `mesh` | Mesh geometry, rigs, topology, dependencies and Custom PCCs. |
 | `tooling` | Compiler, Localiser and QA utility checks; these don't launch the QA harness. |
 
-Some tests need installed LE games, current texture registries or local game and save fixtures. These inputs aren't included in the repository; missing prerequisites are reported in the results. Keep local fixtures and generated outputs out of Git. Persistence tests use temporary copies, while standalone workspaces also use MFE's AppData directory. Run from the checkout; direct executable invocation locates it automatically. Live UModel round trips belong in QA.
+Some tests need installed LE games, current texture registries or local game and save fixtures. These inputs aren't included in the repository; missing prerequisites are reported in the results. Known Player baseline tests generate disposable synthetic reference families from installed Player seeds; they do not need private RONs. Keep local fixtures and generated outputs out of Git. Persistence tests use temporary copies, while standalone workspaces also use MFE's AppData directory. Run from the checkout; direct executable invocation locates it automatically. Live UModel round trips belong in QA.
 
 ## Adding tests
 

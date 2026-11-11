@@ -4680,4 +4680,35 @@ Materials: {2}{3}</system:String>
     <system:String x:Key="loc_View_MainWindow_View" xml:space="preserve">¾ View</system:String>
     <!--localiser: {"Key":"loc_View_MainWindow_Wireframe","ReviewedHash":"04B765747018CB132ACEDA1C1FE93DD08B7A282314D17E5EED873B2E7EC62FB9","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_View_MainWindow_Wireframe" xml:space="preserve">Wireframe</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_ApproximateBakedShape","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_PlayerConversion_ApproximateBakedShape" xml:space="preserve">Approximate baked shape</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_ApproximateBakedShapeHelp","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_PlayerConversion_ApproximateBakedShapeHelp" xml:space="preserve">Carries the baked face shape across game meshes. Check the eyes and mouth in the converted output.</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_Description","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_PlayerConversion_Description" xml:space="preserve">Convert this player morph to another game and save it as a new RON file.</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_SaveTitle","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_PlayerConversion_SaveTitle" xml:space="preserve">Save converted player morph</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_ChooseNewFile","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_PlayerConversion_ChooseNewFile" xml:space="preserve">Choose a new RON filename that does not already exist.</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_CompletedStatus","ReviewedHash":null,"DoNotTranslate":false,"Note":"{0} = output path.","SourceHash":null}-->
+    <system:String x:Key="loc_PlayerConversion_CompletedStatus" xml:space="preserve">Converted player morph saved to {0}.</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_Completed","ReviewedHash":null,"DoNotTranslate":false,"Note":"{0} = target game, {1} = output path, {2} = optional warnings.","SourceHash":null}-->
+    <system:String x:Key="loc_PlayerConversion_Completed" xml:space="preserve">Converted player morph to {0} and saved it to:
+{1}{2}</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_UnsupportedGeometry","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_PlayerConversion_UnsupportedGeometry" xml:space="preserve">The morph's LOD0 shape cannot be recreated safely from a supported player baseline. The original remains unchanged.</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_ApproximateResult","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_PlayerConversion_ApproximateResult" xml:space="preserve">MFE approximated the baked face on the LE3 mesh. Check the eyes and mouth in the new RON. Lower LODs use the target game's sliders.</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_MissingBaselineCounterpart","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_PlayerConversion_MissingBaselineCounterpart" xml:space="preserve">This head matches a local Player reference. Add a compatible RON for the target game to the same reference family to convert it.</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_UnsupportedProfile","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_PlayerConversion_UnsupportedProfile" xml:space="preserve">This player morph profile cannot be converted to the selected game.</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_InvalidDestination","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_PlayerConversion_InvalidDestination" xml:space="preserve">Choose a new RON file as the conversion destination.</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_UnsafeOutput","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_PlayerConversion_UnsafeOutput" xml:space="preserve">The converted RON could not be saved safely. The original remains unchanged.</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_FailedStatus","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_PlayerConversion_FailedStatus" xml:space="preserve">Player morph conversion failed; the original was not modified.</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_UnsupportedBones","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_PlayerConversion_UnsupportedBones" xml:space="preserve">The morph contains invalid or unrecognised bone data and cannot be converted safely. The original remains unchanged.</system:String>
 </ResourceDictionary>

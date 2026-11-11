@@ -68,6 +68,8 @@ internal static class CorpusCommands
                 audits[$"{pair.Item1} GlobalMorphs.pcc"],
                 audits[$"{pair.Item1} to {pair.Item2} GlobalMorphs.pcc"],
                 pair.Item1, pair.Item2, (tufAudits[pair.Item1], tufAudits[pair.Item2])))
+            .Concat(IconicPlayerTextureEvidence.Build(pairs).Select(value => new CorpusReconciliationDecision(
+                value.SourceGame, value.TargetGame, "Texture", null, value.SourcePath, value.TargetPath, value.EvidenceCount)))
             .OrderBy(value => value.SourceGame, StringComparer.Ordinal)
             .ThenBy(value => value.TargetGame, StringComparer.Ordinal)
             .ThenBy(value => value.Kind, StringComparer.Ordinal)
@@ -78,7 +80,7 @@ internal static class CorpusCommands
         File.WriteAllText(outputPath, JsonSerializer.Serialize(results, new JsonSerializerOptions
         {
             WriteIndented = true
-        }), new UTF8Encoding(false));
+        }) + "\n", new UTF8Encoding(false));
         Console.WriteLine($"Wrote {results.Length} changed/omitted asset decisions, including reviewed exceptions, to {outputPath}");
     }
 

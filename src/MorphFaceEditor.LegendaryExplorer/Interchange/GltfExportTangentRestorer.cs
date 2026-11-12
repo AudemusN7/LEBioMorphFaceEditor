@@ -104,8 +104,9 @@ internal static class GltfExportTangentRestorer
                 var exportedUv = new Vector2(uvs.Float(index, 0), uvs.Float(index, 1));
                 Require(Vector3.DistanceSquared(exportedPosition, source.Positions[vertex]) <= 0.0002f * 0.0002f &&
                         Vector2.DistanceSquared(exportedUv, source.Uvs[vertex]) <= 0.00001f * 0.00001f);
-                // The native reader owns TangentZ.w -> render handedness. Reflecting Y/Z reverses it.
-                var sign = -source.Handedness[vertex];
+                // The green-down ME -> green-up glTF normal-space Y reversal cancels
+                // the Y/Z coordinate reflection, matching the inverse import conversion.
+                var sign = source.Handedness[vertex];
                 Require(sign is -1f or 1f);
                 var key = (tangents.Path, checked(tangents.Offset + index * tangents.Stride + 12));
                 Require(!patches.TryGetValue(key, out var existing) || existing == sign);

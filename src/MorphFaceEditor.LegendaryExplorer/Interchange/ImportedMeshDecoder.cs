@@ -143,6 +143,7 @@ public static class ImportedMeshDecoder
         Skin? decodedSkin = null;
         var logicalSource = 0;
         var streamOffsets = new Dictionary<string, int>(StringComparer.Ordinal);
+        var streams = new List<(int Offset, int Count)>();
 
         foreach (var node in nodes)
         {
@@ -189,6 +190,7 @@ public static class ImportedMeshDecoder
                     if (localUvs is not null && localUvs.Length != localPositions.Length) throw new InvalidDataException("glTF TEXCOORD_0 count does not match POSITION.");
                     offset = positions.Count;
                     streamOffsets.Add(streamKey, offset);
+                    streams.Add((offset, localPositions.Length));
                     for (var i = 0; i < localPositions.Length; i++)
                     {
                         positions.Add(GltfToCanonicalVector(Vector3.Transform(localPositions[i], world)) * GltfToGameUnits);
@@ -196,13 +198,16 @@ public static class ImportedMeshDecoder
                             ? Vector3.Zero
                             : NormalizeOrZero(GltfToCanonicalVector(
                                 Vector3.TransformNormal(localNormals[i], normalMatrix))));
+                        // Supplied glTF tangents use the green-up normal-map convention.
+                        // ME materials use green-down: that normal-space Y reversal adds
+                        // a sign change to the geometric reflection handled above.
                         tangents.Add(localTangents is null
                             ? Vector4.Zero
                             : new Vector4(
                                 NormalizeOrZero(GltfToCanonicalVector(Vector3.TransformNormal(
                                     new Vector3(localTangents[i].X, localTangents[i].Y, localTangents[i].Z),
                                     normalMatrix))),
-                                changesHandedness ? -localTangents[i].W : localTangents[i].W));
+                                changesHandedness ? localTangents[i].W : -localTangents[i].W));
                         uvs.Add(localUvs is null ? Vector2.Zero : localUvs[i]);
                         normalPresent.Add(localNormals is not null);
                         tangentPresent.Add(localTangents is not null);
@@ -270,12 +275,17 @@ public static class ImportedMeshDecoder
             : generatedNormalValues![index]).ToArray();
         var anyUvs = uvPresent.Any(value => value);
         var finalUvs = anyUvs ? uvs.ToArray() : null;
+        if (MorphFaceInterchangeService.IsLegacyGltfTangentExport(path, model.Asset.Generator, positionArray))
+            GltfTangentCompatibility.RestoreLegacyNativeBasis(positionArray, finalNormals, tangents,
+                finalUvs, indices, streams, tangentPresent, normalPresent, uvPresent);
         var generatedTangentValues = tangentPresent.All(value => value) ? null : GenerateTangents(
             positionArray,
             finalNormals,
             finalUvs,
             indices,
             anyUvs ? uvPresent : null);
+        // Missing tangents are derived in native game space with the native UV basis;
+        // only supplied glTF streams need the normal-map convention conversion.
         Vector4[]? finalTangents = tangentPresent.Any(value => value) || generatedTangentValues is not null
             ? tangents.Select((value, index) => tangentPresent[index]
                 ? value

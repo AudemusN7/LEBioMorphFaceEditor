@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Numerics;
 using System.Text.RegularExpressions;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using LegendaryExplorerCore.Helpers;
 using LegendaryExplorerCore.Packages;
 using LegendaryExplorerCore.Unreal;
@@ -33,6 +34,7 @@ public sealed record MorphMeshExportResult(
 public sealed class MorphFaceInterchangeService
 {
     private const int MinimumUModelBuild = 1589;
+    internal const string CurrentGltfTangentBasis = "GltfGreenUp";
 
     public async Task<MorphMeshExportResult> ExportMeshAsync(
         string packagePath,
@@ -324,7 +326,8 @@ public sealed class MorphFaceInterchangeService
                 continue;
             }
             var sidecarPath = meshPath + ".mfe.json";
-            return WriteSidecar(sidecarPath, candidate, exportedToBase, fitPrior);
+            return WriteSidecar(sidecarPath, candidate, exportedToBase, fitPrior,
+                format == MorphMeshFormat.Gltf ? CurrentGltfTangentBasis : null);
         }
         return null;
     }
@@ -362,7 +365,7 @@ public sealed class MorphFaceInterchangeService
                 {
                     continue;
                 }
-                return WriteSidecar(gltfPath + ".mfe.json", gltfCandidate, exportedToBase, fitPrior);
+                return WriteSidecar(gltfPath + ".mfe.json", gltfCandidate, exportedToBase, fitPrior, CurrentGltfTangentBasis);
             }
         }
         return null;
@@ -372,7 +375,8 @@ public sealed class MorphFaceInterchangeService
         string sidecarPath,
         MorphMeshPositionCandidate candidate,
         int[] exportedToBase,
-        MorphMeshFitPrior fitPrior)
+        MorphMeshFitPrior fitPrior,
+        string? tangentBasis)
     {
         var corrections = exportedToBase.SelectMany((baseIndex, exportedIndex) =>
         {
@@ -394,7 +398,8 @@ public sealed class MorphFaceInterchangeService
                 value.Translation.X,
                 value.Translation.Y,
                 value.Translation.Z)).ToArray(),
-            EncodeBakedLods(fitPrior.BakedLods)));
+            EncodeBakedLods(fitPrior.BakedLods),
+            tangentBasis));
         return sidecarPath;
     }
 
@@ -434,6 +439,53 @@ public sealed class MorphFaceInterchangeService
         if (!File.Exists(path)) return null;
         try { return JsonSerializer.Deserialize<VertexMapSidecar>(File.ReadAllText(path)); }
         catch (JsonException) { return null; }
+    }
+
+    internal static bool IsLegacyGltfTangentExport(string meshPath, string? generator, IReadOnlyList<Vector3> positions)
+    {
+        if (generator?.StartsWith("UE Viewer (umodel) build ", StringComparison.Ordinal) != true ||
+            positions.Count == 0 || positions.Count > int.MaxValue / 3)
+            return false;
+
+        VertexMapSidecar? sidecar;
+        try { sidecar = ReadVertexMapSidecar(meshPath); }
+        catch (IOException) { return false; }
+        catch (UnauthorizedAccessException) { return false; }
+        catch (JsonException) { return false; }
+        if (sidecar is not
+            {
+                Version: 3, TangentBasis: null,
+                CoordinateSystem: "glTF stream 1, XZY, file order",
+                ExportedToBase: not null, Corrections: not null,
+                MorphFeatures: not null, FinalSkeleton: not null, BakedLods: { Length: > 0 }
+            } || string.IsNullOrWhiteSpace(sidecar.BaseHeadPath))
+            return false;
+
+        var count = positions.Count;
+        var mapping = sidecar.ExportedToBase;
+        var corrections = sidecar.Corrections;
+        var lods = sidecar.BakedLods;
+        if (mapping.Length != count || corrections.Length != count * 3 ||
+            mapping.Any(index => index < 0 || index >= count) || mapping.Distinct().Count() != count ||
+            lods[0] is null || lods[0].Length != count * 3 ||
+            lods.Any(lod => lod is null || lod.Length % 3 != 0 || lod.Any(value => !float.IsFinite(value))) ||
+            corrections.Any(value => !float.IsFinite(value)) ||
+            sidecar.MorphFeatures.Any(value => value is null || string.IsNullOrWhiteSpace(value.Name) || !float.IsFinite(value.Offset)) ||
+            sidecar.FinalSkeleton.Any(value => value is null || string.IsNullOrWhiteSpace(value.BoneName) ||
+                !float.IsFinite(value.X) || !float.IsFinite(value.Y) || !float.IsFinite(value.Z)))
+            return false;
+
+        for (var i = 0; i < count; i++)
+        {
+            var position = positions[i];
+            if (!float.IsFinite(position.X) || !float.IsFinite(position.Y) || !float.IsFinite(position.Z)) return false;
+            var correction = new Vector3(corrections[i * 3], corrections[i * 3 + 1], corrections[i * 3 + 2]);
+            var baseOffset = mapping[i] * 3;
+            var baked = new Vector3(lods[0][baseOffset], lods[0][baseOffset + 1], lods[0][baseOffset + 2]);
+            var distance = Vector3.DistanceSquared(position + correction, baked);
+            if (!float.IsFinite(distance) || distance > VertexMapTolerance * VertexMapTolerance) return false;
+        }
+        return true;
     }
 
     private static IReadOnlyList<MorphMeshPositionCandidate> ApplyVertexMapSidecar(
@@ -746,7 +798,8 @@ public sealed class MorphFaceInterchangeService
         string? BaseHeadPath = null,
         SidecarMorphFeature[]? MorphFeatures = null,
         SidecarBoneTranslation[]? FinalSkeleton = null,
-        float[][]? BakedLods = null);
+        float[][]? BakedLods = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? TangentBasis = null);
     private sealed record SidecarMorphFeature(string Name, float Offset);
     private sealed record SidecarBoneTranslation(string BoneName, float X, float Y, float Z);
     private sealed record VertexStream(Vector3[] Positions, Vector2[] TextureCoordinates);

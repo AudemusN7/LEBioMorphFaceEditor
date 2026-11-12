@@ -79,6 +79,13 @@ public static class GltfInverseMorphTests
 
         foreach (var path in new[] { psk, gltf })
         {
+            using var sidecar = JsonDocument.Parse(File.ReadAllText(path + ".mfe.json"));
+            if (path == gltf)
+                TestAssert.Equal(MorphFaceInterchangeService.CurrentGltfTangentBasis,
+                    sidecar.RootElement.GetProperty("TangentBasis").GetString());
+            else
+                TestAssert.True(!sidecar.RootElement.TryGetProperty("TangentBasis", out _),
+                    "PSK sidecars gained a glTF-only tangent convention.");
             var candidates = new MorphFaceInterchangeService().ReadMeshPositions(path, BaseHead);
             var result = MorphMeshInverter.Fit(BaseHead, [], candidates, [], prior.BakedLods);
             TestAssert.True(result.UsedSourcePrior, "The posed mesh did not recover its original authored bake.");
@@ -103,6 +110,8 @@ public static class GltfInverseMorphTests
         TestAssert.True(sidecar is not null, "Expected a proven vertex map sidecar.");
         using var json = JsonDocument.Parse(File.ReadAllText(sidecar!));
         var root = json.RootElement;
+        TestAssert.Equal(MorphFaceInterchangeService.CurrentGltfTangentBasis,
+            root.GetProperty("TangentBasis").GetString());
         TestAssert.Equal("glTF stream 1, XZY, file order", root.GetProperty("CoordinateSystem").GetString());
         var mapping = root.GetProperty("ExportedToBase").EnumerateArray().Select(value => value.GetInt32()).ToArray();
         TestAssert.True(mapping.SequenceEqual(expectedMap), "The glTF map borrowed the PSK export order.");

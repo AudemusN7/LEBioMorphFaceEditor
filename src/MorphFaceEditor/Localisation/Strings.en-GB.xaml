@@ -2768,6 +2768,10 @@ Materials: {2}{3}</system:String>
     <system:String x:Key="loc_Services_MetadataText_Shared_hed_scar_vector_67b0a0_Label" xml:space="preserve">Scar Colour</system:String>
     <!--localiser: {"Key":"loc_Services_MetadataText_Shared_hed_scar_vector_67b0a0_Description","ReviewedHash":"999516585320600E68209DCD3B5AC349D2B5B77817C65929AD94636C1F76C471","DoNotTranslate":true,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_Services_MetadataText_Shared_hed_scar_vector_67b0a0_Description" xml:space="preserve">HED_Scar_Vector</system:String>
+    <!--localiser: {"Key":"loc_Services_MetadataText_Shared_scar_color_Label","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_Services_MetadataText_Shared_scar_color_Label" xml:space="preserve">Scar Color</system:String>
+    <!--localiser: {"Key":"loc_Services_MetadataText_Shared_scar_color_Description","ReviewedHash":null,"DoNotTranslate":false,"Note":"Do not translate Scar_Color.","SourceHash":null}-->
+    <system:String x:Key="loc_Services_MetadataText_Shared_scar_color_Description" xml:space="preserve">Scar_Color · Tints the skin beneath alignment scars in LE2/LE3.</system:String>
     <!--localiser: {"Key":"loc_Services_MetadataText_Shared_hed_spec_add_vector_186be8_Label","ReviewedHash":"DB01B533FD186EB49D69EE596B16E4EE33D128B5857B2F03634CD5BA2504760A","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_Services_MetadataText_Shared_hed_spec_add_vector_186be8_Label" xml:space="preserve">Skin Specular Colour</system:String>
     <!--localiser: {"Key":"loc_Services_MetadataText_Shared_hed_spec_add_vector_186be8_Description","ReviewedHash":"CF1ED847C4EAC0B3CBF9E8214C4D163A252E94A84C82FDB9890003B60C01FCD1","DoNotTranslate":true,"Note":"","SourceHash":null}-->

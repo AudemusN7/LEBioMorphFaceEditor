@@ -297,6 +297,7 @@ internal static class MetadataTextCatalog
             ["HED_Scar_Diffuse_Scalar"] = new(Loc.Text("loc_Services_MetadataText_Shared_hed_scar_diffuse_scalar_364478_Label"), Loc.Text("loc_Services_MetadataText_Shared_hed_scar_diffuse_scalar_364478_Description")),
             ["HED_Scar_Scalar"] = new(Loc.Text("loc_Services_MetadataText_Shared_hed_scar_scalar_2d472f_Label"), Loc.Text("loc_Services_MetadataText_Shared_hed_scar_scalar_2d472f_Description")),
             ["HED_Scar_Vector"] = new(Loc.Text("loc_Services_MetadataText_Shared_hed_scar_vector_67b0a0_Label"), Loc.Text("loc_Services_MetadataText_Shared_hed_scar_vector_67b0a0_Description")),
+            ["Scar_Color"] = new(Loc.Text("loc_Services_MetadataText_Shared_scar_color_Label"), Loc.Text("loc_Services_MetadataText_Shared_scar_color_Description")),
             ["HED_Spec_Add_Vector"] = new(Loc.Text("loc_Services_MetadataText_Shared_hed_spec_add_vector_186be8_Label"), Loc.Text("loc_Services_MetadataText_Shared_hed_spec_add_vector_186be8_Description")),
             ["HED_Spec_Aniso_Exp_Scalar"] = new(Loc.Text("loc_Services_MetadataText_Shared_hed_spec_aniso_exp_scalar_56f2c7_Label"), Loc.Text("loc_Services_MetadataText_Shared_hed_spec_aniso_exp_scalar_56f2c7_Description")),
             ["HED_Spec_NoBrow"] = new(Loc.Text("loc_Services_MetadataText_Shared_hed_spec_nobrow_43c5f2_Label"), Loc.Text("loc_Services_MetadataText_Shared_hed_spec_nobrow_43c5f2_Description")),

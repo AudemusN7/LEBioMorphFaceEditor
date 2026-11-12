@@ -217,9 +217,11 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                 index + 1))
             .ToArray();
         AttachmentMeshes = [HairMesh, .. OtherMeshes];
+        var logProfile = MorphFaceProfileRegistry.CreateDefault().Profiles.FirstOrDefault(profile => profile.Key == profileKey);
         Material = new MaterialEditorViewModel(
             materialSession, colorDialog, references, packagePath, textureCandidates, reportError, metadataCatalog,
-            registryTextureCandidates, textureCatalogProfile, isTextureRegistryAvailable);
+            registryTextureCandidates, textureCatalogProfile, isTextureRegistryAvailable,
+            game: playerRandomisationGame ?? logProfile?.Game);
         CustomMaterialSlots = customMaterialWorkspace?.UsedSlots
             .Select(slot => new CustomMaterialSlotEditorViewModel(
                 customMaterialWorkspace, slot, customMaterialOptions ?? [], reportError))
@@ -232,7 +234,6 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         Material.ControlsChanged += OnMaterialControlsChanged;
         _scalpMaterialSession.ValueChanged += OnScalpMaterialSelectionChanged;
         _cleanState = CreateDraft();
-        var logProfile = MorphFaceProfileRegistry.CreateDefault().Profiles.FirstOrDefault(profile => profile.Key == profileKey);
         _logIdentity = $"{logProfile?.ExportTag.Trim('[', ']') ?? "CUSTOM"}.{_cleanState.Source.InstancedPath.Split('.').Last()}";
         _logGame = (playerRandomisationGame ?? logProfile?.Game)?.ToString() ?? "UNKNOWN";
         _cleanGeometryEdits = session.CaptureGeometryEdits();

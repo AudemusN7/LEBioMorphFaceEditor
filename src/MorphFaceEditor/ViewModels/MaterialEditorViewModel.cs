@@ -23,6 +23,7 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
     private readonly IReadOnlyList<MorphFaceEditor.Models.PackageAssetListItem> _textureCandidates;
     private readonly Action<string> _reportError;
     private readonly IHeadEditorUiProfile _uiProfile;
+    private readonly MorphFaceGame? _game;
     private IReadOnlyList<TextureCatalogCandidate>? _registryCandidates;
     private TextureCatalogProfile? _registryProfile;
     private bool _isRegistryAvailable;
@@ -42,7 +43,8 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
         IHeadEditorUiProfile uiProfile,
         IReadOnlyList<TextureCatalogCandidate>? registryCandidates = null,
         TextureCatalogProfile? registryProfile = null,
-        bool isRegistryAvailable = false)
+        bool isRegistryAvailable = false,
+        MorphFaceGame? game = null)
     {
         _session = session;
         _colorDialog = colorDialog;
@@ -51,6 +53,7 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
         _textureCandidates = textureCandidates;
         _reportError = reportError;
         _uiProfile = uiProfile;
+        _game = game;
         _registryCandidates = registryCandidates;
         _registryProfile = registryProfile;
         _isRegistryAvailable = isRegistryAvailable;
@@ -222,6 +225,20 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
     private bool IsMaterialVisible(string controlName, MaterialParameterKind kind)
     {
         var parameterName = _session.GetSourceParameterName(controlName);
+        if (kind == MaterialParameterKind.Texture &&
+            parameterName.Equals("HED_Scar", StringComparison.OrdinalIgnoreCase) &&
+            _game is MorphFaceGame.LE2 or MorphFaceGame.LE3)
+        {
+            var scopeKey = _session.GetParameterScopeKey(controlName);
+            var faceMaterials = _session.Materials.Materials.Values.Where(material =>
+                material.ContributesFaceControls && material.Family == HeadMaterialFamily.Skin &&
+                string.Equals(material.ParameterScopeKey, scopeKey, StringComparison.OrdinalIgnoreCase)).ToArray();
+            // Only LE1's player face masters sample the ordinary custom-scar texture.
+            if (faceMaterials.Length > 0 && faceMaterials.All(material =>
+                    HeadMaterialCatalog.Find(_game.Value, material.MasterMaterialName)?.HumanFace is
+                        HumanFaceMaterialKind.MalePlayer or HumanFaceMaterialKind.FemalePlayer))
+                return false;
+        }
         return !(kind == MaterialParameterKind.Texture &&
                  _session.GetParameterScopeKey(controlName) is null &&
                  HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(parameterName)) &&

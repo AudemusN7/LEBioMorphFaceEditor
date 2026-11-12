@@ -740,27 +740,14 @@ internal sealed class MorphFaceMaterialReader(
             AddLiteralTexture(parameterSource, uniformTextures.Value, textureValues, GetShader, "__LensFractal", 3);
         }
         if (parameterSource.Game == MEGame.LE1 && family == HeadMaterialFamily.Hair &&
-            !textureValues.ContainsKey("HAIR_Diff"))
+            parameterSource.ObjectNameString.Equals("HMN_HED_PRO_ME3_MASTER_Hair_MAT", StringComparison.OrdinalIgnoreCase) &&
+            !textureValues.ContainsKey("HAIR_Diff") &&
+            textureValues.TryGetValue("MaterialExpressionTextureSampleParameter2D_62", out var hairDiffuse))
         {
-            // LE1's backported ME3 Shepard-hair master exposes its only live
-            // diffuse sampler under the retained expression export name. The
-            // LE2/LE3 versions call the same sampler HAIR_Diff. Promote that
-            // single proven hair diffuse to the shared semantic name while
-            // retaining the anonymous source binding for exact provenance.
-            var anonymousDiffuse = textureValues
-                .Where(value => value.Key.StartsWith(
-                                    "MaterialExpressionTextureSampleParameter2D_",
-                                    StringComparison.OrdinalIgnoreCase) &&
-                                value.Value.ObjectNameString.Contains("HAIR", StringComparison.OrdinalIgnoreCase) &&
-                                value.Value.ObjectNameString.Contains("Diff", StringComparison.OrdinalIgnoreCase))
-                .Select(value => value.Value)
-                .DistinctBy(value => value.UIndex)
-                .Take(2)
-                .ToArray();
-            if (anonymousDiffuse.Length == 1)
-            {
-                textureValues["HAIR_Diff"] = anonymousDiffuse[0];
-            }
+            // This known master's diffuse/opacity sampler retains its expression
+            // name in LE1. Its role is fixed even when a mod renames the texture.
+            // Keep the original binding and expose the shared preview semantic.
+            textureValues["HAIR_Diff"] = hairDiffuse;
         }
 
         var textureMetadata = textureValues

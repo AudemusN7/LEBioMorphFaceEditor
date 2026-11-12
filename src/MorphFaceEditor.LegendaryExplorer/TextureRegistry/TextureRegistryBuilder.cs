@@ -123,7 +123,15 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
         {
             cancellationToken.ThrowIfCancellationRequested();
             var packagePath = files[index];
-            var scan = _scanner.Scan(game, packagePath, cancellationToken);
+            TextureRegistryPackageScan scan;
+            try
+            {
+                scan = _scanner.Scan(game, packagePath, cancellationToken);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException and not OutOfMemoryException)
+            {
+                throw new IOException($"Could not scan package '{packagePath}'.", exception);
+            }
             assets.AddRange(scan.Assets);
             cancellationToken.ThrowIfCancellationRequested();
             foreach (var texture in scan.Textures)

@@ -11,7 +11,8 @@ internal static class PcsavHeadMorphTests
     [
         new("PCSAV rejects corrupt saves and protects externally changed sources", FailedSavesPreserveSources),
         new("PCSAV Save As preserves original and redirects subsequent saves", SaveAsCopies),
-        new("PCSAV changing hair clears hidden hair textures but preserves scalp and unchanged hair", HairTextureClearing),
+        new("PCSAV changing hair clears old maps and preserves explicit replacement diffuse", HairTextureClearing),
+        new("PCSAV fixture preserves and clears native hair diffuse according to the edited projection", HairTextureFixture),
         new("PCSAV rejects new unavailable assets while preserving untouched native references", RuntimeAssetChanges),
         new("PCC Save As preserves original and redirects commits", PackageSaveAsCopies),
         new("Morphs-only RON round-trips features without weakening full head validation", MorphFeaturesRonRoundTrip)
@@ -159,13 +160,65 @@ internal static class PcsavHeadMorphTests
         var original = new HeadMorphPayload("Test.OldHair", [], new([], [], []), new([], [], []));
         var hair = new TextureMaterialOverride("HAIR_DIFF", TestFixtures.CreateIdentity("Test.Hair", "Texture2D"));
         var scalp = hair with { Name = "HED_Scalp_Diff" };
-        original = original with { MaterialData = original.MaterialData with { Textures = [hair, scalp] } };
+        var hidden = hair with { Name = "HAIR_Norm" };
+        original = original with { MaterialData = original.MaterialData with { Textures = [hair, hidden, scalp] } };
         var baseline = original with { MaterialData = original.MaterialData with { Textures = [scalp] } };
         var unchanged = PcsavHeadMorphMerge.ApplyChanges(original, baseline, baseline);
         TestAssert.True(unchanged.MaterialData.Textures.Any(v => v.Name == hair.Name), "Unchanged hair lost native data.");
         var changed = PcsavHeadMorphMerge.ApplyChanges(original, baseline, baseline with { HairMesh = "Test.NewHair" });
-        TestAssert.True(!changed.MaterialData.Textures.Any(v => v.Name == hair.Name) && changed.MaterialData.Textures.Any(v => v.Name == scalp.Name),
-            "Changing hair did not clear its map while preserving scalp maps.");
+        TestAssert.True(!changed.MaterialData.Textures.Any(v => v.Name == hair.Name || v.Name == hidden.Name) && changed.MaterialData.Textures.Any(v => v.Name == scalp.Name),
+            "Changing hair did not clear its old maps while preserving scalp maps.");
+        var replacement = hair with { TextureReference = TestFixtures.CreateIdentity("Test.Replacement", "Texture2D") };
+        var changedWithOverride = PcsavHeadMorphMerge.ApplyChanges(original, baseline, baseline with
+        {
+            HairMesh = "Test.NewHair", MaterialData = baseline.MaterialData with { Textures = [scalp, replacement] }
+        });
+        TestAssert.Equal("Test.Replacement", changedWithOverride.MaterialData.Textures.Single(v => v.Name == hair.Name).TextureReference!.InstancedPath);
+        TestAssert.True(!changedWithOverride.MaterialData.Textures.Any(v => v.Name == hidden.Name), "The old hidden map survived a hair change.");
+    }
+
+    private static void HairTextureFixture()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"MFE-PcsavHair-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            foreach (var mode in new[] { "unchanged", "cleared", "replacement" })
+            {
+                var source = Path.Combine(directory, mode + ".pcsav");
+                File.Copy(Fixtures().First(path => Path.GetFileName(path) == "LE2-Female-Custom.pcsav"), source);
+                var initial = PcsavHeadMorphWorkspace.Open(source);
+                var texture = new TextureMaterialOverride("HAIR_Diff", new("", "BIOG_MFE_Missing.HairDiffuse", 0, "Texture2D"));
+                var hidden = texture with { Name = "HAIR_Norm" };
+                var native = initial.Head with { HairMesh = "BIOG_MFE_Missing.OldHair", MaterialData = initial.Head.MaterialData with
+                {
+                    Textures = initial.Head.MaterialData.Textures.Where(v => !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(v.Name))
+                        .Concat(new[] { texture, hidden }).ToArray()
+                } };
+                File.WriteAllBytes(source, initial.ReplaceHead(native));
+                var workspace = PcsavHeadMorphWorkspace.Open(source);
+                var projection = native with { MaterialData = native.MaterialData with
+                {
+                    Textures = native.MaterialData.Textures.Where(v => !HeadMorphMaterialParameterPolicy.IsExcludedHeadTexture(v.Name)).ToArray()
+                } };
+                workspace.SetEditingBaseline(projection);
+                var edited = mode == "unchanged" ? projection : projection with
+                {
+                    HairMesh = "None", MaterialData = projection.MaterialData with
+                    {
+                        Textures = projection.MaterialData.Textures.Where(v => !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(v.Name))
+                            .Concat(mode == "replacement" ? new[] { texture } : Array.Empty<TextureMaterialOverride>()).ToArray()
+                    }
+                };
+                workspace.SaveEditedHead(edited);
+                var saved = PcsavHeadMorphWorkspace.Open(source).Head;
+                var savedDiffuse = saved.MaterialData.Textures.SingleOrDefault(v => v.Name == texture.Name);
+                TestAssert.Equal(mode != "cleared", savedDiffuse is not null);
+                if (savedDiffuse is not null) TestAssert.Equal(texture.TextureReference!.InstancedPath, savedDiffuse.TextureReference!.InstancedPath);
+                TestAssert.Equal(mode == "unchanged", saved.MaterialData.Textures.Any(v => v.Name == hidden.Name));
+            }
+        }
+        finally { Directory.Delete(directory, recursive: true); }
     }
 
     private static void PackageSaveAsCopies()

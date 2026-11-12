@@ -484,7 +484,7 @@ public sealed class MorphFacePackageContextService
         var data = ReadMorphData(face);
         var materials = morphFeaturesOnly ? new MorphFaceMaterialData([], [], []) : ReadMaterialData(ResolveMaterialOverride(face));
         materials = materials with { Textures = materials.Textures.Where(value =>
-            !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(value.Name)).ToArray() };
+            !HeadMorphMaterialParameterPolicy.IsExcludedHeadTexture(value.Name)).ToArray() };
         return new HeadMorphPayload(
             morphFeaturesOnly ? "None" : hair,
             morphFeaturesOnly ? [] : accessories,

@@ -31,6 +31,7 @@ internal static class UiPickerTests
     [
         new("bound picker controls keep routed hover cancel and commit distinct", PickerControlsKeepHoverAndCommitDistinct),
         new("attachment hover and commit preserve edits without publishing failed loads", AttachmentPreparationPublication),
+        new("hair picker changes clear authored diffuse as one undoable edit", HairChoiceClearsDiffuseWithHistory),
         new("matching scalp maps suppress repeated hair-pair prompts and preserve manual donors", MatchingHairPairIsIdempotent),
         new("CC-only Mohawk pairing keeps pending edits chronological, clears Hair and respects its lock", CcOnlyMohawkPairsAndLocks),
         new("manual hair choices reject stale pairing and decline keeps only the mesh", ManualHairChoiceRejectsStalePairing),
@@ -39,6 +40,59 @@ internal static class UiPickerTests
         new("texture hover cache is bounded and reused by an undoable commit", TexturePickerBoundsPreviewCacheAndPreservesHistory),
         new("late texture decode cannot replace a newer preview or revive a disposed picker", TexturePickerRejectsStalePreviewCacheResults)
     ];
+
+    private static void HairChoiceClearsDiffuseWithHistory() => WpfTestDispatcher.Invoke(() =>
+    {
+        using var reader = new MorphFacePackageReader();
+        using var editor = CreateRandomisationEditor(reader);
+        var first = new HairMeshOption("First", TestFixtures.CreateIdentity("Hair.First", "SkeletalMesh"));
+        var second = new HairMeshOption("Second", TestFixtures.CreateIdentity("Hair.Second", "SkeletalMesh"));
+        var none = new HairMeshOption("None", null);
+        var texture = new DecodedTextureAsset(TestFixtures.CreateIdentity("Hair.AuthoredDiffuse", "Texture2D"),
+            1, 1, [32, 64, 128, 160], "PF_A8R8G8B8", TextureRole.Diffuse,
+            TextureColorSpace.Srgb, TextureAlphaPolicy.Translucency, true, "authored-hair-diffuse");
+
+        // No shell event handler: the picker must still aggregate the mesh and texture edits.
+        editor.HairMesh.SetImportedPreview(second.Identity);
+        editor.HairMesh.SetImportedPreview(first.Identity);
+        editor.Material.MergeMaterialData(new([], [], [new("HAIR_Diff", texture.Source)]),
+            new Dictionary<string, DecodedTextureAsset?> { ["HAIR_Diff"] = texture });
+        var before = editor.CreateDraft();
+        TestAssert.Equal(first.Identity, before.HairMeshReference);
+        TestAssert.Equal(texture.Source, before.MaterialOverrides.Textures.Single(value => value.Name == "HAIR_Diff").TextureReference);
+
+        editor.HairMesh.Preview(second);
+        TestAssert.True(MorphFaceEditorStateComparer.Equals(before, editor.CreateDraft()), "Hover changed the authored hair or diffuse.");
+        editor.HairMesh.CancelPreview();
+        TestAssert.True(MorphFaceEditorStateComparer.Equals(before, editor.CreateDraft()), "Cancelling hover changed the authored hair or diffuse.");
+
+        void AssertCleared(AssetIdentity? mesh)
+        {
+            var draft = editor.CreateDraft();
+            TestAssert.Equal(mesh, draft.HairMeshReference);
+            TestAssert.True(draft.MaterialOverrides.Textures.All(value => value.Name != "HAIR_Diff" || value.TextureReference is null),
+                "The previous hairstyle's diffuse override survived a mesh change.");
+        }
+        editor.HairMesh.Commit(second);
+        AssertCleared(second.Identity);
+        editor.UndoCommand.Execute(null);
+        TestAssert.True(MorphFaceEditorStateComparer.Equals(before, editor.CreateDraft()), "One Undo did not restore both hair and diffuse.");
+        editor.RedoCommand.Execute(null);
+        AssertCleared(second.Identity);
+        editor.UndoCommand.Execute(null);
+
+        // The shell's prepared manual-selection path must group a None selection too.
+        ManualAttachmentSelectionEventArgs? request = null;
+        editor.HairMesh.ManualSelectionRequested += (_, args) => request = args;
+        editor.HairMesh.Commit(none);
+        TestAssert.True(request is not null, "The manual None choice was not prepared.");
+        editor.CommitManualHairSelection(none, request!.Generation, null);
+        AssertCleared(null);
+        editor.UndoCommand.Execute(null);
+        TestAssert.True(MorphFaceEditorStateComparer.Equals(before, editor.CreateDraft()), "Undo did not restore hair and diffuse after None.");
+        editor.RedoCommand.Execute(null);
+        AssertCleared(null);
+    });
 
     private static void PickerControlsKeepHoverAndCommitDistinct() => WpfTestDispatcher.Invoke(() => RunWithDispatcher(async () =>
     {

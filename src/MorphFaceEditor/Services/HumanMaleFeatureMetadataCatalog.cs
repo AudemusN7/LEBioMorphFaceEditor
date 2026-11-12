@@ -58,7 +58,7 @@ public class HumanMaleFeatureMetadataCatalog : IHeadEditorUiProfile
 
     private const string Character = "character";
     private const string Race = "race";
-    private const string Hair = "hair";
+    public const string Hair = "hair";
     private const string Shape = "shape";
     private const string Cheeks = "cheeks";
     private const string Ears = "ears";
@@ -96,7 +96,9 @@ public virtual IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
         new(NeckJaw, Loc.Text("loc_Services_Taxonomy_neck_jaw_7d7d03d1"), Loc.Text("loc_Services_Taxonomy_chin_jaw_neck_adam_s_apple_and_lower_face_struct_c0fb74b0"),
             [new(Jaw, Loc.Text("loc_Services_Taxonomy_jaw_296d1292")), new(Chin, Loc.Text("loc_Services_Taxonomy_chin_cfa4ce51")), new(Neck, Loc.Text("loc_Services_Taxonomy_neck_00020b4f"))]),
         new(Additions, Loc.Text("loc_Services_Taxonomy_additions_966ff941"), Loc.Text("loc_Services_Taxonomy_surface_additions_face_overlays_freckles_scars_a_1f3ef8ca"),
-            [new(Hair, Loc.Text("loc_Services_Taxonomy_hair_3ba4bcee")), new(Addition, Loc.Text("loc_Services_Taxonomy_addition_63d99162")), new(Face, Loc.Text("loc_Services_Taxonomy_face_215db504")), new(Scalp, Loc.Text("loc_Services_Taxonomy_scalp_91d59546"))])
+            [new(Addition, Loc.Text("loc_Services_Taxonomy_addition_63d99162")), new(Face, Loc.Text("loc_Services_Taxonomy_face_215db504")), new(Scalp, Loc.Text("loc_Services_Taxonomy_scalp_91d59546"))]),
+        new(Hair, Loc.Text("loc_Services_Taxonomy_HairTab"), Loc.Text("loc_Services_Taxonomy_HairDescription"),
+            [new(Hair, Loc.Text("loc_Services_Taxonomy_hair_3ba4bcee"))])
     ];
 
     public virtual MorphFeatureMetadata Describe(ResolvedMorphFeature feature, bool sessionCanEdit)
@@ -151,7 +153,7 @@ public virtual IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
     {
         var definition = HumanMaterialProfiles.Describe(parameterName, kind);
         var name = parameterName.ToLowerInvariant();
-        if (IsHairMaterialParameter(parameterName, kind)) return Additions;
+        if (IsHairMaterialParameter(parameterName, kind)) return Hair;
         // The packed teeth selector belongs in Mouth despite using the scalp material family.
         if (kind == MaterialParameterKind.Texture && name == "hed_teeth_diff")
         {
@@ -197,9 +199,9 @@ public virtual IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
     {
         var definition = HumanMaterialProfiles.Describe(parameterName, kind);
         var name = parameterName.ToLowerInvariant();
+        if (GetMaterialCategory(parameterName, kind) == Hair) return Hair;
         if (GetMaterialCategory(parameterName, kind) == Additions)
         {
-            if (IsHairMaterialParameter(parameterName, kind)) return Hair;
             if (name == "mask" && kind == MaterialParameterKind.Scalar)
             {
                 return Scalp;

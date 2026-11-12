@@ -24,6 +24,8 @@ public static class MaterialEditingTests
         new("attachment selection rebases controls without publishing candidates or losing undo", AttachmentSelectionLifecycle),
         new("compiled empty hair support hides ineffective highlight controls and preserves authored overrides", EmptyCompiledHairSupportHidesHighlights),
         new("multi-slot attachment keeps each material's own hair diffuse", MultiSlotAttachmentKeepsOwnDiffuse),
+        new("hair diffuse overrides follow attachment history", HairDiffuseOverridesFollowAttachmentHistory),
+        new("LE1 native hair sampler updates renderer alias", NativeHairSamplerUpdatesAlias),
         new("duplicate face texture overrides remain loadable", DuplicateTextureOverridesRemainLoadable)
     ];
 
@@ -624,4 +626,95 @@ public static class MaterialEditingTests
         TestAssert.Equal(firstTexture.Source, custom.Materials.Materials[first.Key].Textures["HAIR_Diff"].Texture.Source);
 
     }
+    private static void HairDiffuseOverridesFollowAttachmentHistory()
+    {
+        DecodedTextureAsset Texture(string name) => new(TestFixtures.CreateIdentity(name, "Texture2D"),
+            1, 1, [255, 0, 0, 255], "PF_B8G8R8A8", TextureRole.Diffuse,
+            TextureColorSpace.Srgb, TextureAlphaPolicy.Ignore, false, name);
+        var inheritedA = Texture("HairDefaultA");
+        var inheritedB = Texture("HairDefaultB");
+        var authored = Texture("HairAuthored") with
+        {
+            Source = new AssetIdentity("BIOG_Hair.pcc", "BIOG_Hair.Textures.HairAuthored", 42, "Texture2D")
+        };
+        var importedReference = new AssetIdentity("Face.pcc", "BIOG_Hair.Textures.HairAuthored", -9, "Texture2D", true);
+        ResolvedHeadMaterial Hair(string name, DecodedTextureAsset effective, DecodedTextureAsset fallback)
+        {
+            var identity = TestFixtures.CreateIdentity(name, "MaterialInstanceConstant");
+            Dictionary<string, MaterialTextureBinding> Bind(DecodedTextureAsset texture) =>
+                new(StringComparer.OrdinalIgnoreCase) { ["HAIR_Diff"] = new("HAIR_Diff", texture) };
+            return new ResolvedHeadMaterial(MaterialIdentityKey.Create(identity), identity, name,
+                HeadMaterialFamily.Hair, HeadMaterialBlendMode.Masked, false,
+                new Dictionary<string, float>(), new Dictionary<string, Vector4>(), Bind(effective))
+            { DefaultTextures = Bind(fallback), IsPreviewOnlyAttachment = true };
+        }
+        ResolvedHeadMaterialSet Set(ResolvedHeadMaterial material) => new(
+            new Dictionary<string, ResolvedHeadMaterial> { [material.Key] = material });
+        var first = Hair("FirstHair", authored, inheritedA);
+        var second = Hair("SecondHair", inheritedB, inheritedB);
+        var overrides = MorphFaceMaterialOverrides.Empty with
+        {
+            Textures = [new TextureMaterialOverride("HAIR_Diff", importedReference)]
+        };
+        var session = new MaterialEditingSession(overrides, ResolvedHeadMaterialSet.Empty);
+        session.ApplyMaterialSurface(session.PrepareAttachmentMaterials(Set(first)));
+        TestAssert.True(session.TextureParameters.Any(value => value.Name == "HAIR_Diff"), "Hair diffuse control was hidden.");
+        TestAssert.Equal(authored.Source, session.GetPreviewTexture("HAIR_Diff")?.Source);
+        TestAssert.Equal(importedReference, session.CreateOverrides().Textures.Single().TextureReference);
+        TestAssert.Equal(importedReference, session.CaptureInterchangeData().Textures.Single().TextureReference);
+
+        session.ClearHairTextureOverrides();
+        session.ApplyMaterialSurface(session.PrepareAttachmentMaterials(Set(second)));
+        TestAssert.Equal(inheritedB.Source, session.GetPreviewTexture("HAIR_Diff")?.Source);
+        TestAssert.Equal(0, session.CreateOverrides().Textures.Count);
+        session.Undo();
+        TestAssert.Equal(importedReference, session.GetPreviewTexture("HAIR_Diff")?.Source);
+        TestAssert.Equal(importedReference, session.CreateOverrides().Textures.Single().TextureReference);
+        session.Redo();
+        TestAssert.Equal(inheritedB.Source, session.GetPreviewTexture("HAIR_Diff")?.Source);
+        TestAssert.Equal(0, session.CreateOverrides().Textures.Count);
+    }
+
+    private static void NativeHairSamplerUpdatesAlias()
+    {
+        var name = HeadMorphMaterialParameterPolicy.AnonymousHairDiffuseParameter;
+        DecodedTextureAsset Texture(string id) => new(TestFixtures.CreateIdentity(id, "Texture2D"),
+            1, 1, [255, 0, 0, 255], "PF_B8G8R8A8", TextureRole.Diffuse,
+            TextureColorSpace.Srgb, TextureAlphaPolicy.Ignore, false, id);
+        var initial = Texture("NativeHairDefault");
+        var replacement = Texture("NativeHairReplacement");
+        var identity = TestFixtures.CreateIdentity("NativeHair", "MaterialInstanceConstant");
+        var bindings = new Dictionary<string, MaterialTextureBinding>(StringComparer.OrdinalIgnoreCase)
+        {
+            [name] = new(name, initial), ["HAIR_Diff"] = new("HAIR_Diff", initial)
+        };
+        var hair = new ResolvedHeadMaterial(MaterialIdentityKey.Create(identity), identity, "NativeHair",
+            HeadMaterialFamily.Hair, HeadMaterialBlendMode.Masked, false,
+            new Dictionary<string, float>(), new Dictionary<string, Vector4>(), bindings)
+        { DefaultTextures = bindings, IsPreviewOnlyAttachment = true, ContributesFaceControls = false };
+        var session = new MaterialEditingSession(MorphFaceMaterialOverrides.Empty, ResolvedHeadMaterialSet.Empty);
+        session.ApplyMaterialSurface(session.PrepareAttachmentMaterials(new ResolvedHeadMaterialSet(
+            new Dictionary<string, ResolvedHeadMaterial> { [hair.Key] = hair })));
+        TestAssert.True(session.TextureParameters.Select(value => value.Name).SequenceEqual([name]),
+            "The synthetic hair alias appeared as a second control.");
+        session.SetTextureReference(name, replacement);
+        TestAssert.Equal(replacement.Source, session.Materials.Materials[hair.Key].Textures["HAIR_Diff"].Texture.Source);
+        TestAssert.Equal(name, session.CreateOverrides().Textures.Single().Name);
+        TestAssert.Equal(name, session.CaptureInterchangeData().Textures.Single().Name);
+        session.ClearHairTextureOverrides();
+        TestAssert.Equal(initial.Source, session.Materials.Materials[hair.Key].Textures["HAIR_Diff"].Texture.Source);
+        session.Undo();
+        TestAssert.Equal(replacement.Source, session.Materials.Materials[hair.Key].Textures["HAIR_Diff"].Texture.Source);
+        var customHair = hair with { ParameterScopeKey = "custom", IsPreviewOnlyAttachment = false, ContributesFaceControls = true };
+        var custom = new MaterialEditingSession(MorphFaceMaterialOverrides.Empty, new ResolvedHeadMaterialSet(
+            new Dictionary<string, ResolvedHeadMaterial> { [hair.Key] = customHair }));
+        var nativeControl = MaterialParameterControlKey.Create("custom", name);
+        var diffuseControl = MaterialParameterControlKey.Create("custom", "HAIR_Diff");
+        TestAssert.True(custom.TextureParameters.Any(value => value.Name == nativeControl) &&
+                        custom.TextureParameters.Any(value => value.Name == diffuseControl),
+            "Custom material parameters were collapsed into a face-preview alias.");
+        custom.SetTextureReference(nativeControl, replacement);
+        TestAssert.Equal(initial.Source, custom.Materials.Materials[hair.Key].Textures["HAIR_Diff"].Texture.Source);
+    }
+
 }

@@ -24,8 +24,42 @@ internal static class UiProfileTests
         new("TUF face with mismatched bake remains a material preview", LegacyTufPlaceholderRemainsMaterialPreview),
         new("native Turian and Krogan loads preserve unknown authored rows without controls", UnknownAuthoredRowsRemainLoadable),
         new("ALN loads preserve authored bakes without a target set, including static faces", TargetlessAlnPreservesAuthoredGeometry),
-        new("malformed LE3 HMF hair and inert HMM eye metadata remain hidden", MalformedAndInertTargetsStayHidden)
+        new("malformed LE3 HMF hair and inert HMM eye metadata remain hidden", MalformedAndInertTargetsStayHidden),
+        new("human hair material controls have their own category", HumanHairMaterialCategory)
     ];
+
+    private static void HumanHairMaterialCategory()
+    {
+        foreach (var game in new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 })
+        foreach (IHeadEditorUiProfile profile in new IHeadEditorUiProfile[]
+                 { MorphFaceMetadataCatalogRegistry.HumanMaleFor(game), MorphFaceMetadataCatalogRegistry.HumanFemaleFor(game) })
+        {
+            TestAssert.Equal(1, profile.Categories.Count(category => category.Key == HumanMaleFeatureMetadataCatalog.Hair));
+            foreach (var (name, kind) in new[]
+                     {
+                         ("HED_Hair_Colour_Vector", MaterialParameterKind.Vector),
+                         ("Highlight1Color", MaterialParameterKind.Vector),
+                         ("Hightlight1Intensity", MaterialParameterKind.Scalar),
+                         ("Hair_Spec_Aniso_Exp_Scalar", MaterialParameterKind.Scalar),
+                         ("HAIR_Diff", MaterialParameterKind.Texture),
+                         ("HAIR_ADDN_Diff", MaterialParameterKind.Texture),
+                         ("Hair_Stack", MaterialParameterKind.Texture)
+                     })
+            {
+                TestAssert.Equal(HumanMaleFeatureMetadataCatalog.Hair, profile.GetMaterialCategory(name, kind));
+                TestAssert.Equal("hair", profile.GetMaterialSubcategory(name, kind));
+                TestAssert.True(profile.IsMaterialVisible(name, kind), $"{game}: {name} was hidden by the profile.");
+            }
+            foreach (var name in new[] { "HED_Scalp_Mask_Scalar", "HAIR_Mask_Alpha_Scalar", "HED_Scalp_BuzzCut_Alpha_Scalar" })
+            {
+                TestAssert.Equal(HumanMaleFeatureMetadataCatalog.Additions,
+                    profile.GetMaterialCategory(name, MaterialParameterKind.Scalar));
+                TestAssert.Equal("scalp", profile.GetMaterialSubcategory(name, MaterialParameterKind.Scalar));
+            }
+        }
+        TestAssert.True(MorphFaceMetadataCatalogRegistry.AsariParent.Categories.All(category => category.Key != "hair"),
+            "The human hair category leaked into the Asari profile.");
+    }
 
     private static void LegacyTufPlaceholderRemainsMaterialPreview() => WpfTestDispatcher.Invoke(() => RunWithDispatcher(async () =>
     {

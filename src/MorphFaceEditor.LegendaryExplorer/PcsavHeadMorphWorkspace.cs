@@ -133,7 +133,7 @@ public sealed class PcsavHeadMorphWorkspace
             .OfType<string>().ToArray();
         unavailableAttachments = missing;
         return head with { HairMesh = hair, AccessoryMeshes = accessories, MaterialData = head.MaterialData with
-            { Textures = head.MaterialData.Textures.Where(v => !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(v.Name)).ToArray() } };
+            { Textures = head.MaterialData.Textures.Where(v => !HeadMorphMaterialParameterPolicy.IsExcludedHeadTexture(v.Name)).ToArray() } };
     }
 
     /// <summary>Capture MFE's projection once so unavailable assets/controls do not erase native data on save.</summary>
@@ -154,7 +154,7 @@ public sealed class PcsavHeadMorphWorkspace
         var before = new ImportState(_importedHead, _editingBaseline);
         if (!string.Equals(head.HairMesh, (_importedHead ?? _head)?.HairMesh, StringComparison.OrdinalIgnoreCase))
             head = head with { MaterialData = head.MaterialData with { Textures = head.MaterialData.Textures
-                .Where(v => !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(v.Name)).ToArray() } };
+                .Where(v => !HeadMorphMaterialParameterPolicy.IsExcludedHeadTexture(v.Name)).ToArray() } };
         _importedHead = head;
         SetEditingBaseline(draft);
         if (recordHistory)
@@ -174,7 +174,7 @@ public sealed class PcsavHeadMorphWorkspace
         draft.OtherMeshReferences.OfType<AssetIdentity>().Select(v => v.InstancedPath).ToArray(),
         new(draft.MorphFeatures, draft.FinalSkeleton, draft.BakedLods),
         new(draft.MaterialOverrides.Scalars, draft.MaterialOverrides.Vectors,
-            draft.MaterialOverrides.Textures.Where(v => !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(v.Name)).ToArray()));
+            draft.MaterialOverrides.Textures.Where(v => !HeadMorphMaterialParameterPolicy.IsExcludedHeadTexture(v.Name)).ToArray()));
 
     public void SaveEditedHead(HeadMorphPayload edited, string? destination = null)
     {

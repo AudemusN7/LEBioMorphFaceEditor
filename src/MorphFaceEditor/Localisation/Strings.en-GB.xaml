@@ -629,6 +629,12 @@ Choose No to keep the current scalp textures.</system:String>
     <system:String x:Key="loc_Services_Taxonomy_addition_63d99162" xml:space="preserve">ADDITION</system:String>
     <!--localiser: {"Key":"loc_Services_Taxonomy_additions_966ff941","ReviewedHash":"966FF94170D3CDE6ACB3384C255E3CF9084760862D550C8F2D729EAC4520BB54","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_Services_Taxonomy_additions_966ff941" xml:space="preserve">Additions</system:String>
+    <!--localiser: {"Key":"loc_Services_Taxonomy_HairDescription","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_Services_Taxonomy_HairDescription" xml:space="preserve">Hair colour, highlights, and textures.</system:String>
+    <!--localiser: {"Key":"loc_Services_Taxonomy_HairTab","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_Services_Taxonomy_HairTab" xml:space="preserve">Hair</system:String>
+    <!--localiser: {"Key":"loc_Services_Taxonomy_FemaleAdditionsDescription","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_Services_Taxonomy_FemaleAdditionsDescription" xml:space="preserve">Makeup, surface additions, face overlays, freckles, scars, and scalp settings.</system:String>
     <!--localiser: {"Key":"loc_Services_Taxonomy_asari_head_crest_proportions_b5f4248a","ReviewedHash":"B5F4248A095BDACD2A3F3B88AED21015D028DA4D9DCF2464E80E602DAC2FCE36","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_Services_Taxonomy_asari_head_crest_proportions_b5f4248a" xml:space="preserve">Asari head-crest proportions.</system:String>
     <!--localiser: {"Key":"loc_Services_Taxonomy_batarian_specific_cranium_and_regional_colour_co_3ef2e9bb","ReviewedHash":"3EF2E9BB608D8738C93A73FF0C6896607155F91440968CF63292C751C10A140C","DoNotTranslate":false,"Note":"","SourceHash":null}-->

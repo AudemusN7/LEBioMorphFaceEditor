@@ -76,6 +76,7 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
 
     public IReadOnlyList<MaterialTextureEditorViewModel> Textures => _textures;
     public MorphFaceMaterialData CaptureInterchangeData() => _session.CaptureInterchangeData();
+    public void ClearHairTextureOverrides(bool publishPreview = true) => _session.ClearHairTextureOverrides(publishPreview);
     public void MergeMaterialData(MorphFaceMaterialData data, IReadOnlyDictionary<string, DecodedTextureAsset?> textures) =>
         _session.MergeMaterialData(data, textures);
 
@@ -241,7 +242,7 @@ public sealed class MaterialEditorViewModel : ObservableObject, IDisposable
         }
         return !(kind == MaterialParameterKind.Texture &&
                  _session.GetParameterScopeKey(controlName) is null &&
-                 HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(parameterName)) &&
+                 HeadMorphMaterialParameterPolicy.IsExcludedHeadTexture(parameterName)) &&
                !IsEngineEditorOnlyParameter(parameterName) &&
                _uiProfile.IsMaterialVisible(parameterName, kind);
     }

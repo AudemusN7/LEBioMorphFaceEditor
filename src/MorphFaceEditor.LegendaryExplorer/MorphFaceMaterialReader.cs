@@ -513,7 +513,7 @@ internal sealed class MorphFaceMaterialReader(
 
         var textureExports = new Dictionary<string, ExportEntry?>(StringComparer.OrdinalIgnoreCase);
         var textures = properties.GetProp<ArrayProperty<StructProperty>>("m_aTextureOverrides")?
-            .Where(value => !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(
+            .Where(value => !HeadMorphMaterialParameterPolicy.IsExcludedHeadTexture(
                 value.GetProp<NameProperty>("nName")?.Value.Instanced ?? string.Empty))
             .Select(value =>
             {
@@ -581,7 +581,9 @@ internal sealed class MorphFaceMaterialReader(
         {
             vectorValues[value.Name] = value.Value;
         }
-        foreach (var pair in overrideTextures.Where(pair => baseline.Supports(pair.Key, MaterialParameterKind.Texture)))
+        foreach (var pair in overrideTextures.Where(pair => baseline.Supports(pair.Key, MaterialParameterKind.Texture) &&
+                     (!HeadMorphMaterialParameterPolicy.IsEditableHairDiffuseTexture(pair.Key) ||
+                      baseline.Family is HeadMaterialFamily.Hair or HeadMaterialFamily.MaskedHair)))
         {
             if (pair.Value is not null)
             {
@@ -589,7 +591,15 @@ internal sealed class MorphFaceMaterialReader(
                 try
                 {
                     if (decodeTextures)
-                        decodedTextures[pair.Key] = new MaterialTextureBinding(pair.Key, DecodeTexture(MorphFacePackageReader.ToIdentity(pair.Value)!, definition));
+                    {
+                        var texture = DecodeTexture(MorphFacePackageReader.ToIdentity(pair.Value)!, definition);
+                        decodedTextures[pair.Key] = new MaterialTextureBinding(pair.Key, texture);
+                        // The known LE1 hair master exposes this native sampler through a
+                        // synthetic preview alias. Keep that alias in step with the face override.
+                        if (baseline.Family == HeadMaterialFamily.Hair && baseline.Textures.ContainsKey("HAIR_Diff") &&
+                            pair.Key.Equals(HeadMorphMaterialParameterPolicy.AnonymousHairDiffuseParameter, StringComparison.OrdinalIgnoreCase))
+                            decodedTextures["HAIR_Diff"] = new MaterialTextureBinding("HAIR_Diff", texture);
+                    }
                 }
                 catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
                 {

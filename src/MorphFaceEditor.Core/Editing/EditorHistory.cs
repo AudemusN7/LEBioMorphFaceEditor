@@ -21,6 +21,7 @@ public sealed class EditorHistory
     public event EventHandler? HistoryChanged;
     public bool CanUndo => _undo.Count > 0;
     public bool CanRedo => _redo.Count > 0;
+    public bool IsAggregating => _aggregate is not null;
 
     internal TextureHistoryStore.HistoryTextureSnapshot? CaptureTexture(MorphFaceEditor.Core.Materials.DecodedTextureAsset? texture) =>
         texture is null ? null : (_textureStorage ??= new()).Capture(texture);

@@ -159,7 +159,7 @@ internal static partial class QaCases
         }
         // Each interchange and Custom case builds its own seeded input.
         foreach (var format in new[] { MorphMeshFormat.Psk, MorphMeshFormat.Gltf })
-            Add("mesh-" + format.ToString().ToLowerInvariant(), "Edited HMM baked mesh export and Custom reimport",
+            Add("mesh-" + format.ToString().ToLowerInvariant(), "Edited HMM Custom round-trip and seeded HMM/HMF textured export timing",
                 MeshFace, c => MeshRoundTrip(c, format));
         Add("custom-randomisation", "Four-slot HMM custom head with random material families", MeshFace, CustomRandomisation);
         foreach (var route in QaHumanMaterialCoverage.All)

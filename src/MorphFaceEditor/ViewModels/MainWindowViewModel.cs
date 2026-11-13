@@ -67,6 +67,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly AsyncRelayCommand _newPlayerMorphCommand;
     private readonly AsyncRelayCommand _newNpcMorphCommand;
     private readonly RelayCommand _cancelNpcImportCommand;
+    private readonly AsyncRelayCommand _exportMorphPskWithTexturesCommand;
+    private readonly AsyncRelayCommand _exportMorphGltfWithTexturesCommand;
     private readonly AsyncRelayCommand _exportMorphPskCommand;
     private readonly AsyncRelayCommand _exportMorphGltfCommand;
     private readonly AsyncRelayCommand _exportMorphRonCommand;
@@ -202,6 +204,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _newNpcMorphCommand = new AsyncRelayCommand(NewNpcMorphAsync, () => !IsBusy);
         _importMorphCommand = new AsyncRelayCommand(ImportMorphAsync, () => !IsBusy);
         _cancelNpcImportCommand = new RelayCommand(CancelNpcImport, () => CanCancelNpcImport);
+        _exportMorphPskWithTexturesCommand = new AsyncRelayCommand(
+            () => ExportMorphMeshAsync(MorphMeshFormat.Psk, includeTextures: true), CanTargetPackageFace);
+        _exportMorphGltfWithTexturesCommand = new AsyncRelayCommand(
+            () => ExportMorphMeshAsync(MorphMeshFormat.Gltf, includeTextures: true), CanTargetPackageFace);
         _exportMorphPskCommand = new AsyncRelayCommand(
             () => ExportMorphMeshAsync(MorphMeshFormat.Psk), CanTargetPackageFace);
         _exportMorphGltfCommand = new AsyncRelayCommand(
@@ -269,6 +275,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public ICommand NewNpcMorphCommand => _newNpcMorphCommand;
     public ICommand ImportMorphCommand => _importMorphCommand;
     public ICommand CancelNpcImportCommand => _cancelNpcImportCommand;
+    public ICommand ExportMorphPskWithTexturesCommand => _exportMorphPskWithTexturesCommand;
+    public ICommand ExportMorphGltfWithTexturesCommand => _exportMorphGltfWithTexturesCommand;
     public ICommand ExportMorphPskCommand => _exportMorphPskCommand;
     public ICommand ExportMorphGltfCommand => _exportMorphGltfCommand;
     public ICommand ExportMorphRonCommand => _exportMorphRonCommand;

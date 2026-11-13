@@ -13,7 +13,7 @@ namespace MorphFaceEditor.ViewModels;
 /// <summary>Coordinates file interchange while format and package work remain behind services.</summary>
 public sealed partial class MainWindowViewModel
 {
-    private async Task ExportMorphMeshAsync(MorphMeshFormat format)
+    private async Task ExportMorphMeshAsync(MorphMeshFormat format, bool includeTextures = false)
     {
         if (SelectedFace is not { } selected || WorkspacePackagePath is not { } workspacePath)
         {
@@ -31,11 +31,16 @@ public sealed partial class MainWindowViewModel
         Status = Loc.Format("loc_Shell_Status_BakingAndExportingThroughUmodel", selected.DisplayName, format);
         try
         {
-            var result = await _interchangeService.ExportMeshAsync(
+            var preview = IsLoaded(selected) && _loadedFace is { } loaded && Editor is { } editor
+                ? loaded with { Materials = CreatePreviewMaterials(loaded, editor.Material.Materials) }
+                : null;
+            var result = await Task.Run(() => _interchangeService.ExportMeshAsync(
                 workspacePath,
                 selected.InstancedPath,
                 outputDirectory,
-                format);
+                format,
+                includeTextures: includeTextures,
+                previewSource: preview));
             Status = Loc.Format("loc_Shell_Status_ExportedAsFileS", selected.DisplayName, format, result.ProducedFiles.Count);
             _dialogs.ShowInformation(
                 Loc.Text("loc_Shell_DialogTitle_MorphMeshExported"),

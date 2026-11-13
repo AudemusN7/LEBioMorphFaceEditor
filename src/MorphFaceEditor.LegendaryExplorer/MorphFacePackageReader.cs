@@ -94,6 +94,13 @@ public sealed class MorphFacePackageReader : IDisposable
     }
 
     public LoadedMorphFace Load(string packagePath, string exportSelector, bool decodeTextures = true)
+        => LoadCore(packagePath, exportSelector, decodeTextures, includeMaterials: true);
+
+    /// <summary>Loads export geometry and attachments without reading preview materials.</summary>
+    internal LoadedMorphFace LoadExportGeometry(string packagePath, string exportSelector)
+        => LoadCore(packagePath, exportSelector, decodeTextures: false, includeMaterials: false);
+
+    private LoadedMorphFace LoadCore(string packagePath, string exportSelector, bool decodeTextures, bool includeMaterials)
     {
         using var cacheOperation = _packageCache.BeginOperation();
         var started = Stopwatch.GetTimestamp();
@@ -163,10 +170,15 @@ public sealed class MorphFacePackageReader : IDisposable
                 : throw new InvalidDataException($"m_oOtherMeshes[{item.Index}] resolved to {item.Entry.ClassName}, not SkeletalMesh."))
             .ToArray();
         var attachmentTime = Mark(ref checkpoint);
-        var materialResult = _materialReader.Read(export, baseMaterialExports, attachmentMaterialExports,
-            decodeTextures: decodeTextures);
-        var materialTime = Mark(ref checkpoint);
-        document = document with { MaterialOverrides = materialResult.Overrides };
+        MaterialReadResult? materialResult = null;
+        var materialTime = TimeSpan.Zero;
+        if (includeMaterials)
+        {
+            materialResult = _materialReader.Read(export, baseMaterialExports, attachmentMaterialExports,
+                decodeTextures: decodeTextures);
+            materialTime = Mark(ref checkpoint);
+            document = document with { MaterialOverrides = materialResult.Overrides };
+        }
         var diagnostics = TopologyDiagnostics.Analyze(baseHead, document);
         var diagnosticsTime = Mark(ref checkpoint);
         LastLoadMetrics = new MorphFaceLoadMetrics(
@@ -177,16 +189,16 @@ public sealed class MorphFacePackageReader : IDisposable
             attachmentTime,
             materialTime,
             diagnosticsTime,
-            _materialReader.LastReadMetrics.Overrides,
-            _materialReader.LastReadMetrics.Resolution,
-            _materialReader.LastReadMetrics.CacheHits,
-            _materialReader.LastReadMetrics.CacheMisses)
+            includeMaterials ? _materialReader.LastReadMetrics.Overrides : TimeSpan.Zero,
+            includeMaterials ? _materialReader.LastReadMetrics.Resolution : TimeSpan.Zero,
+            includeMaterials ? _materialReader.LastReadMetrics.CacheHits : 0,
+            includeMaterials ? _materialReader.LastReadMetrics.CacheMisses : 0)
         {
-            MaterialDefaults = _materialReader.LastReadMetrics.Defaults,
-            MaterialShaderLookup = _materialReader.LastReadMetrics.ShaderLookup,
-            MaterialTextureDecode = _materialReader.LastReadMetrics.TextureDecode
+            MaterialDefaults = includeMaterials ? _materialReader.LastReadMetrics.Defaults : TimeSpan.Zero,
+            MaterialShaderLookup = includeMaterials ? _materialReader.LastReadMetrics.ShaderLookup : TimeSpan.Zero,
+            MaterialTextureDecode = includeMaterials ? _materialReader.LastReadMetrics.TextureDecode : TimeSpan.Zero
         };
-        return new LoadedMorphFace(document, baseHead, hairMesh, materialResult.Materials, diagnostics)
+        return new LoadedMorphFace(document, baseHead, hairMesh, materialResult?.Materials ?? ResolvedHeadMaterialSet.Empty, diagnostics)
         {
             Game = package.Game switch
             {
@@ -196,7 +208,7 @@ public sealed class MorphFacePackageReader : IDisposable
                 _ => MorphFaceGame.Unsupported
             },
             OtherMeshes = otherMeshes,
-            Warnings = materialResult.Warnings.Concat(referenceWarnings).Distinct().ToArray()
+            Warnings = (materialResult?.Warnings ?? []).Concat(referenceWarnings).Distinct().ToArray()
         };
     }
 

@@ -171,10 +171,9 @@ internal static class StandaloneImportTests
             var priorBytes = File.ReadAllBytes(priorWorkspace.WorkingPath);
             var donorBytes = File.ReadAllBytes(donorPath);
             var workspaceDirectory = Path.GetDirectoryName(priorWorkspace.WorkingPath)!;
-            var filesBefore = Directory.EnumerateFiles(workspaceDirectory)
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            string? candidateWorkspacePath = null;
+            string? candidateTemporaryPath = null;
             using var cancellation = new CancellationTokenSource();
-            var interruptionReached = false;
             try
             {
                 context.ExportRon(donorPath, donor.InstancedPath, ronPath);
@@ -187,7 +186,8 @@ internal static class StandaloneImportTests
                     TestAssert.True(!string.Equals(destination, priorWorkspace.WorkingPath,
                         StringComparison.OrdinalIgnoreCase),
                         "NPC cancellation targeted the prior workspace instead of the off-screen candidate.");
-                    interruptionReached = true;
+                    candidateWorkspacePath = destination;
+                    candidateTemporaryPath = temporaryPath;
                     cancellation.Cancel();
                     throw new OperationCanceledException(cancellation.Token);
                 };
@@ -214,16 +214,20 @@ internal static class StandaloneImportTests
 
                 TestAssert.True(cancelled && cancellation.IsCancellationRequested,
                     "Cancelling during NPC candidate construction did not stop the import.");
-                TestAssert.True(interruptionReached,
+                TestAssert.True(candidateWorkspacePath is not null && candidateTemporaryPath is not null,
                     "NPC cancellation did not reach the pre-install candidate boundary.");
                 TestAssert.True(donorBytes.SequenceEqual(File.ReadAllBytes(donorPath)),
                     "NPC cancellation changed the installed donor PCC.");
                 TestAssert.True(priorBytes.SequenceEqual(File.ReadAllBytes(priorWorkspace.WorkingPath)),
                     "NPC cancellation changed the prior workspace.");
-                var filesAfter = Directory.EnumerateFiles(workspaceDirectory)
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
-                TestAssert.True(filesAfter.SetEquals(filesBefore),
-                    "NPC cancellation left a candidate workspace or temporary PCC in AppData.");
+                TestAssert.True(File.Exists(priorWorkspace.WorkingPath + ".lease"),
+                    "NPC cancellation removed the prior workspace's lease.");
+                TestAssert.True(!File.Exists(candidateWorkspacePath),
+                    $"NPC cancellation left its candidate workspace: {candidateWorkspacePath}");
+                TestAssert.True(!File.Exists(candidateWorkspacePath + ".lease"),
+                    $"NPC cancellation left its candidate lease: {candidateWorkspacePath}.lease");
+                TestAssert.True(!File.Exists(candidateTemporaryPath),
+                    $"NPC cancellation left its temporary PCC: {candidateTemporaryPath}");
             }
             finally
             {

@@ -40,7 +40,7 @@ internal static class TestCatalog
             ["conversion"] = [.. ConversionTests.All, .. PlayerMorphConversionGeometryTests.All, .. MorphTargetCoefficientBasisTests.All, .. PlayerMorphSourceReconcilerTests.All, .. PlayerMorphRonConversionTests.All,
                 .. PlayerMorphBaselineFrameTests.All, .. PlayerKnownBaselineConversionTests.All],
             ["interchange"] = [.. RonCodecTests.All, .. PcsavHeadMorphTests.All,
-                .. MorphFaceInterchangeExportTests.All, .. MaterialInterchangeTests.All,
+                .. MorphFaceInterchangeExportTests.All, .. MorphMeshMaterialExporterTests.All, .. MaterialInterchangeTests.All,
                 .. Le2PlayerMaterialRonIdentityTests.All],
             ["mesh"] = [.. CustomMeshTests.All,
                 .. ImportedSkeletalMeshWriterTests.All, .. CustomMeshPccMaterializerTests.All,

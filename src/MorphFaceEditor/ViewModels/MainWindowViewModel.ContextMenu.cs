@@ -67,6 +67,8 @@ public sealed partial class MainWindowViewModel
         _newNpcMorphCommand.RaiseCanExecuteChanged();
         _exportMorphPskCommand.RaiseCanExecuteChanged();
         _exportMorphGltfCommand.RaiseCanExecuteChanged();
+        _exportMorphPskWithTexturesCommand.RaiseCanExecuteChanged();
+        _exportMorphGltfWithTexturesCommand.RaiseCanExecuteChanged();
         _exportMorphRonCommand.RaiseCanExecuteChanged();
         _assignMorphToActorCommand.RaiseCanExecuteChanged();
         _assignMaterialsToActorCommand.RaiseCanExecuteChanged();

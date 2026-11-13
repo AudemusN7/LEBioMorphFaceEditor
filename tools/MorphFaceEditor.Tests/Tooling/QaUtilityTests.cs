@@ -3,6 +3,7 @@ using System.Text.Json;
 using LegendaryExplorerCore.Packages;
 using LegendaryExplorerCore.Unreal.BinaryConverters;
 using MorphFaceEditor.Core.Deformation;
+using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.Core.Randomisation;
 using MorphFaceEditor.Core.Services;
 using MorphFaceEditor.LegendaryExplorer;
@@ -210,6 +211,22 @@ internal static class QaUtilityTests
             { InstancedPath = "BIOG_HMM_HED_PROMorph.Other.EYE_Iris_Norm" }), "Same leaf in another group was accepted.");
         TestAssert.True(!QaTextureIdentity.SameTexture(donor, saved with
             { ClassName = "TextureCube" }), "A different texture class was accepted.");
+
+        var oldHair = TestFixtures.CreateIdentity("OldHair", "SkeletalMesh");
+        var newHair = TestFixtures.CreateIdentity("NewHair", "SkeletalMesh");
+        var face = new MorphFaceDocument(TestFixtures.CreateIdentity("Face", "BioMorphFace"),
+            new PackageFingerprint(1, DateTime.UnixEpoch, new string('0', 64)), null, oldHair,
+            [], [], new MorphFaceMaterialOverrides(null, [new("Shine", 0.5f)], [],
+                [new("HAIR_Diff", donor), new("HAIR_Mask", donor), new("HED_Diff", saved)]), [], []);
+        var head = QaCases.ToHead(face);
+        TestAssert.True(head.MaterialData.Textures.Select(value => value.Name).SequenceEqual(new[] { "HAIR_Diff", "HED_Diff" }),
+            "QA head comparison must retain editable hair diffuse and exclude attachment-only maps.");
+        var seeded = QaCases.SeedNativeHairDraft(face, newHair);
+        TestAssert.True(seeded.HairMeshReference == newHair &&
+                seeded.MaterialOverrides.Textures.Select(value => value.Name).SequenceEqual(new[] { "HAIR_Mask", "HED_Diff" }) &&
+                seeded.MaterialOverrides.Scalars.SequenceEqual(face.MaterialOverrides.Scalars) &&
+                face.MaterialOverrides.Textures.Count == 3,
+            "Native hair fixture must clear the outgoing diffuse choice while preserving other source values.");
     }
 
     private static void NativeSaveOrdering()
@@ -467,6 +484,26 @@ internal static class QaUtilityTests
                                                       stage.LimitSource == "Global kind policy") &&
                         ron.Stages.Select(stage => stage.TimingKey).Distinct().Count() == 3,
             "RON replacement or unconfirmed routes inherited a matching live-edit timing cap.");
+
+        foreach (var (group, warningMs, failureMs) in new[] { ("mesh-psk", 1400d, 4200d), ("mesh-gltf", 4800d, 14400d) })
+        {
+            var textured = new QaResult(group + "/le2-hmm-npc", "seeded textured export") { Group = group };
+            TestAssert.Equal(1, QaCoverageSelection.PlannedRolls(group));
+            textured.Stages.Add(TimingStage("002 · Textured export · " + QaCases.TexturedMeshExportStage, 100000,
+                QaStageKind.FileTransfer) with { Phase = "Textured export" });
+            textured.Stages.Add(TimingStage("Other file transfer", 100000, QaStageKind.FileTransfer));
+            QaTimingBaseline.Apply(textured);
+            TestAssert.True(textured.Stages[0].TimingKey is not null && textured.Stages[0].LimitMs == warningMs &&
+                textured.Stages[0].FailureLimitMs == failureMs && textured.Stages[0].LimitSource.Contains("1.0.4.1") &&
+                textured.Stages[1].LimitMs == 5000 && textured.Stages[1].FailureLimitMs == 15000,
+                "Textured export must retain its approved frozen caps without changing other transfer limits.");
+            var calibrated = textured.Stages[0];
+            TestAssert.True(!(calibrated with { DurationMs = warningMs }).ExceededLimit &&
+                (calibrated with { DurationMs = warningMs + 0.1 }).ExceededLimit &&
+                !(calibrated with { DurationMs = failureMs }).ExceededFailureLimit &&
+                (calibrated with { DurationMs = failureMs + 0.1 }).ExceededFailureLimit,
+                "Textured export warning/failure boundaries changed.");
+        }
 
         var unknown = new QaResult("new-case/test", "uncalibrated operations");
         foreach (var kind in new[] { QaStageKind.Load, QaStageKind.Randomisation, QaStageKind.FileTransfer,

@@ -28,6 +28,30 @@ public static class HeadMaterialCatalog
     public static bool IsAssignableHeadFamily(HeadMaterialFamily family) =>
         family is not (HeadMaterialFamily.Unknown or HeadMaterialFamily.Accessory);
 
+    public static string? PrimaryNormalParameter(HeadMaterialFamily family,
+        HumanMaterialPreviewModel previewModel, bool isLe3) => previewModel switch
+    {
+        HumanMaterialPreviewModel.Kaiden => "Nm",
+        _ => family switch
+        {
+            HeadMaterialFamily.VorchaSkin => "ALN_HED_Norm",
+            HeadMaterialFamily.VorchaEyes => "Eye_Norm",
+            HeadMaterialFamily.Skin => "HED_Norm",
+            HeadMaterialFamily.AsariSkin => "ASA_HED_Norm",
+            HeadMaterialFamily.SalarianSkin => "SAL_HED_Norm",
+            HeadMaterialFamily.SalarianEyes => "SAL_HED_EYE_Norm",
+            HeadMaterialFamily.TurianSkin => "TUR_HED_Norm",
+            HeadMaterialFamily.TurianEyes when isLe3 => "Eye_Norm",
+            HeadMaterialFamily.TurianEyes => "TUR_EYE_Iris_Norm",
+            HeadMaterialFamily.BatarianSkin => "BAT_HED_Norm",
+            HeadMaterialFamily.KroganSkin => "KRO_HED_Norm",
+            HeadMaterialFamily.KroganEyes => "KRO_EYE_Iris_Norm",
+            HeadMaterialFamily.Scalp => "HED_Scalp_Norm",
+            HeadMaterialFamily.Eyes => "EYE_Iris_Norm",
+            _ => null
+        }
+    };
+
     private static IReadOnlyDictionary<MorphFaceGame, Dictionary<string, HeadMaterialDefinition>> CreateMasters()
     {
         MorphFaceGame[] all = [MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3];

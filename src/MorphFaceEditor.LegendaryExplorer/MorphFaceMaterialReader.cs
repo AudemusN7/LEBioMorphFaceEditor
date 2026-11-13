@@ -23,7 +23,8 @@ internal sealed class MorphFaceMaterialReader(
     PackageCache packageCache,
     GamePackageReferenceResolver referenceResolver)
 {
-    private const long MaximumDecodedTextureBytes = 384L * 1024 * 1024;
+    // A human face's full mip set can exceed 384 MiB, causing repeat decodes on every load.
+    private const long MaximumDecodedTextureBytes = 512L * 1024 * 1024;
     private readonly Dictionary<string, LinkedListNode<DecodedTextureAsset>> _textureCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, CachedTextureIdentity> _textureCacheAliases = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, CachedMaterialMetadata> _materialCache = new(StringComparer.OrdinalIgnoreCase);

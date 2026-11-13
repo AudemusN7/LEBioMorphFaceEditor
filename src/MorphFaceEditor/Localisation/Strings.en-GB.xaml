@@ -1507,6 +1507,8 @@ Mesh-only files cannot recover metadata-only controls, bone-only controls, or ma
     <!--localiser: {"Key":"loc_MeshExport_UnverifiedGltfTangents","ReviewedHash":"FD6E69305B331CC8E757377333BEB7931E2ACED7D7AEFEF251438B5E8A912E0B","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_MeshExport_UnverifiedGltfTangents">The glTF mesh could not be matched safely to its source surface. No export files have been changed.</system:String>
     <system:String x:Key="loc_MeshExport_UnverifiedRoundTrip">Could not verify that this mesh can be reimported without changing the head shape. No export files have been changed.</system:String>
+    <system:String x:Key="loc_MeshExport_MaterialsFailed">The mesh materials and textures could not be exported. No export files have been changed.</system:String>
+    <system:String x:Key="loc_MeshExport_AttachmentFailed">The attachment mesh {0} could not be exported. No export files have been changed.</system:String>
     <system:String x:Key="loc_MeshImport_BoneWeightsReduced" xml:space="preserve">This mesh exceeded the game's limit of four bone influences per vertex. MFE kept the strongest four weights and normalized them for {0} vertices.&#10;&#10;The resting mesh shape is unchanged, but how the mesh deforms when bones move may differ. The original PSK file was not changed.</system:String>
     <system:String x:Key="loc_MeshImport_PlayerBoneWeightsReplaced" xml:space="preserve">The PSK contained {0} vertices with more than four bone influences. Recognised Player heads use the game's original rig and bone weights instead of imported weights.&#10;&#10;The original PSK file was not changed.</system:String>
     <!--localiser: {"Key":"loc_PccSave_AuthoredMaterialInstancePreserved","ReviewedHash":"505987711A27AF6710FEE96FC4F47EBE70AB6B8A51BBEB172ECF5E7CE8022258","DoNotTranslate":false,"Note":"{0} is the authored material instance path; {1} is its preserved destination path.","SourceHash":null}-->
@@ -1648,8 +1650,12 @@ Package: {0}</system:String>
     <system:String x:Key="loc_View_MainWindow_CommitTheLoadedFaceToTheTemporaryPackageWorkspaceWithou" xml:space="preserve">Commit the loaded face to the temporary package workspace without saving the source PCC.</system:String>
     <!--localiser: {"Key":"loc_View_MainWindow_GlTF","ReviewedHash":"C74F919439792582AA4F0B188EC2A928675CDB3BA72797781CEB6DFAA86B313F","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_View_MainWindow_GlTF" xml:space="preserve">glTF</system:String>
+    <!--localiser: {"Key":"loc_View_MainWindow_GlTFWithTextures","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_View_MainWindow_GlTFWithTextures" xml:space="preserve">glTF - with Textures</system:String>
     <!--localiser: {"Key":"loc_View_MainWindow_PSK","ReviewedHash":"F19CB00638F96C79ACBE732A149C4558BB37D4C825BF01DD678F0652C968ACE6","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_View_MainWindow_PSK" xml:space="preserve">PSK</system:String>
+    <!--localiser: {"Key":"loc_View_MainWindow_PSKWithTextures","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_View_MainWindow_PSKWithTextures" xml:space="preserve">PSK - with Textures</system:String>
     <!--localiser: {"Key":"loc_View_SaveNewInstanceWindow_BrowseExisting","ReviewedHash":"ABA95D90D0B456C8299E154015349CC76619FDF0A75D4EE21CF76736D6C3C8CE","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_View_SaveNewInstanceWindow_BrowseExisting" xml:space="preserve">Browse Existing</system:String>
     <!--localiser: {"Key":"loc_View_SaveNewInstanceWindow_ExportTheSelectedMorphAndItsRequiredAssetsWhilePreservi","ReviewedHash":"87E3E9FE948FE3C767213415D26265414A897B43EA2C48A4EF6B331B6AD8026B","DoNotTranslate":false,"Note":"","SourceHash":null}-->

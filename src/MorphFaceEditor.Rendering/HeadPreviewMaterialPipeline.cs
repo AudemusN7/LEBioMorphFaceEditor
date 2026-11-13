@@ -79,7 +79,8 @@ internal readonly partial record struct HeadPreviewMaterialBindings(
 
         return new HeadPreviewMaterialBindings(
             Select(material, PrimaryDiffuseName(material), TextureRole.Diffuse),
-            Select(material, PrimaryNormalName(material), TextureRole.Normal),
+            Select(material, HeadMaterialCatalog.PrimaryNormalParameter(
+                material.Family, material.PreviewModel, material.IsLe3), TextureRole.Normal),
             Select(material, PrimaryMaskName(material), TextureRole.Mask, TextureRole.Specular),
             Select(material, PrimaryDetailName(material.Family), TextureRole.Detail, TextureRole.Tangent),
             SelectByName(material, Auxiliary1Name(material.Family)),
@@ -136,28 +137,6 @@ internal readonly partial record struct HeadPreviewMaterialBindings(
         HeadMaterialFamily.Lashes => "HED_Lash_Diff",
         HeadMaterialFamily.Hair when material.Textures.ContainsKey("HAIR_ADDN_Diff") => "HAIR_ADDN_Diff",
         HeadMaterialFamily.Hair => "HAIR_Diff",
-        _ => null
-    }};
-
-    private static string? PrimaryNormalName(HeadPreviewMaterial material) => material.PreviewModel switch
-    {
-        HumanMaterialPreviewModel.Kaiden => "Nm",
-        _ => material.Family switch
-    {
-        HeadMaterialFamily.VorchaSkin => "ALN_HED_Norm",
-        HeadMaterialFamily.VorchaEyes => "Eye_Norm",
-        HeadMaterialFamily.Skin => "HED_Norm",
-        HeadMaterialFamily.AsariSkin => "ASA_HED_Norm",
-        HeadMaterialFamily.SalarianSkin => "SAL_HED_Norm",
-        HeadMaterialFamily.SalarianEyes => "SAL_HED_EYE_Norm",
-        HeadMaterialFamily.TurianSkin => "TUR_HED_Norm",
-        HeadMaterialFamily.TurianEyes when material.IsLe3 => "Eye_Norm",
-        HeadMaterialFamily.TurianEyes => "TUR_EYE_Iris_Norm",
-        HeadMaterialFamily.BatarianSkin => "BAT_HED_Norm",
-        HeadMaterialFamily.KroganSkin => "KRO_HED_Norm",
-        HeadMaterialFamily.KroganEyes => "KRO_EYE_Iris_Norm",
-        HeadMaterialFamily.Scalp => "HED_Scalp_Norm",
-        HeadMaterialFamily.Eyes => "EYE_Iris_Norm",
         _ => null
     }};
 

@@ -11,7 +11,6 @@ using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.LegendaryExplorer.Interchange;
 using SharpGLTF.Schema2;
 using SharpGLTF.Validation;
-using BinaryMorphFace = LegendaryExplorerCore.Unreal.BinaryConverters.BioMorphFace;
 using BinarySkeletalMesh = LegendaryExplorerCore.Unreal.BinaryConverters.SkeletalMesh;
 
 namespace MorphFaceEditor.LegendaryExplorer;
@@ -41,11 +40,98 @@ public sealed class MorphFaceInterchangeService
         string facePath,
         string outputDirectory,
         MorphMeshFormat format,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool includeTextures = false,
+        LoadedMorphFace? previewSource = null)
     {
-        LegendaryExplorerCoreRuntime.Initialize();
         ArgumentException.ThrowIfNullOrWhiteSpace(outputDirectory);
-        Directory.CreateDirectory(outputDirectory);
+        LegendaryExplorerCoreRuntime.Initialize();
+        // Publish the head, attachments and optional material files as one set.
+        // The existing head path keeps its proven pose and recovery sidecar.
+        var stagingDirectory = Path.Combine(Path.GetTempPath(), $"MorphFaceEditor.ExportSet.{Guid.NewGuid():N}");
+        Directory.CreateDirectory(stagingDirectory);
+        try
+        {
+            using var reader = previewSource is null ? new MorphFacePackageReader() : null;
+            var loaded = previewSource ?? (includeTextures
+                ? reader!.Load(packagePath, facePath)
+                : reader!.LoadExportGeometry(packagePath, facePath));
+            var head = await ExportHeadMeshAsync(packagePath, facePath, stagingDirectory, format, cancellationToken);
+            var files = head.ProducedFiles.ToList();
+            var textureCache = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (includeTextures)
+                AddMaterials(facePath.Split('.').Last(), loaded.BaseHead, head.ProducedFiles, loaded, format, files, textureCache);
+
+            var attachments = new List<(string Role, SkeletalMeshAsset Mesh)>();
+            if (loaded.HairMesh is { } hair) attachments.Add(("Hair", hair));
+            attachments.AddRange(loaded.OtherMeshes.Select((mesh, index) => ($"Accessory_{index + 1}", mesh)));
+            foreach (var (role, mesh) in attachments)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var directory = Path.Combine(stagingDirectory, role);
+                var meshName = role + "_" + mesh.Source.InstancedPath.Split('.').Last();
+                var pose = loaded.UsesNativeAttachmentBindPose ? [] : loaded.Document.FinalSkeleton;
+                var attachment = await ExportAttachmentAsync(mesh, pose, directory, meshName, format, cancellationToken);
+                files.AddRange(attachment);
+                if (includeTextures) AddMaterials(meshName, mesh, attachment, loaded, format, files, textureCache);
+            }
+            cancellationToken.ThrowIfCancellationRequested();
+            return new MorphMeshExportResult(format,
+                PublishMeshFiles(files, stagingDirectory, outputDirectory, cancellationToken), head.ToolOutput);
+        }
+        finally
+        {
+            if (Directory.Exists(stagingDirectory)) Directory.Delete(stagingDirectory, recursive: true);
+        }
+    }
+
+    private static void AddMaterials(string meshName, SkeletalMeshAsset mesh, IReadOnlyList<string> meshFiles,
+        LoadedMorphFace loaded, MorphMeshFormat format, ICollection<string> files, Dictionary<string, string> textureCache)
+    {
+        try
+        {
+            foreach (var file in MorphMeshMaterialExporter.Write(meshName,
+                         mesh, loaded.Materials, meshFiles, format, textureCache, loaded.Game))
+                files.Add(file);
+        }
+        catch (Exception exception) when (UserFacingMessage.FromException(exception) is null)
+        {
+            throw UserFacingMessage.CreateError("loc_MeshExport_MaterialsFailed", exception.ToString());
+        }
+    }
+
+    private static async Task<string[]> ExportAttachmentAsync(SkeletalMeshAsset mesh,
+        IReadOnlyList<BoneTranslation> pose, string directory, string meshName, MorphMeshFormat format,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            Directory.CreateDirectory(directory);
+            var packagePath = CreateAttachmentMeshPackage(mesh, pose, directory, meshName);
+            var (files, _) = await ExportStagedMeshAsync(packagePath, meshName, directory, format, cancellationToken);
+            var completed = new List<string>();
+            foreach (var file in files)
+            {
+                var target = Path.Combine(directory, Path.GetFileName(file));
+                File.Move(file, target);
+                completed.Add(target);
+            }
+            return completed.ToArray();
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException &&
+                                         UserFacingMessage.FromException(exception) is null)
+        {
+            throw UserFacingMessage.CreateError("loc_MeshExport_AttachmentFailed", exception.ToString(), mesh.Source.InstancedPath);
+        }
+    }
+
+    private async Task<MorphMeshExportResult> ExportHeadMeshAsync(
+        string packagePath,
+        string facePath,
+        string outputDirectory,
+        MorphMeshFormat format,
+        CancellationToken cancellationToken)
+    {
         var executable = UModelPath();
         if (!File.Exists(executable))
         {
@@ -60,102 +146,71 @@ public sealed class MorphFaceInterchangeService
                 $"Legendary Explorer's UModel build is {build}; build {MinimumUModelBuild} or newer is required.");
         }
 
-        var temporaryDirectory = Path.Combine(Path.GetTempPath(), $"MorphFaceEditor.Export.{Guid.NewGuid():N}");
-        Directory.CreateDirectory(temporaryDirectory);
-        try
+        var tempPackagePath = CreateAppliedMeshPackage(packagePath, facePath, outputDirectory,
+            out var meshName, out var exportPositions, out _, out var fitPrior);
+        var (produced, toolOutput) = await ExportStagedMeshAsync(tempPackagePath, meshName,
+            outputDirectory, format, cancellationToken);
+        var primary = produced.First(path => Path.GetFileNameWithoutExtension(path)
+            .Equals(meshName, StringComparison.OrdinalIgnoreCase) && IsPrimaryExtension(path, format));
+        var sidecar = TryWriteVertexMapSidecar(primary, format, exportPositions, fitPrior);
+        if (sidecar is null && format == MorphMeshFormat.Gltf)
         {
-            var tempPackagePath = CreateAppliedMeshPackage(
-                packagePath,
-                facePath,
-                temporaryDirectory,
-                out var meshName,
-                out var exportPositions,
-                out var baseHeadPath);
-            var sourceMorph = new MorphFacePackageContextService().CaptureMorphData(packagePath, facePath);
-            var fitPrior = new MorphMeshFitPrior(
-                baseHeadPath,
-                sourceMorph.MorphFeatures,
-                sourceMorph.FinalSkeleton,
-                sourceMorph.BakedLods);
-            var exportDirectory = Path.Combine(temporaryDirectory, format == MorphMeshFormat.Gltf ? "gltf" : "psk");
-            var arguments = new List<string> { "-export", "-lods" };
-            if (format == MorphMeshFormat.Gltf)
-            {
-                arguments.Add("-gltf");
-            }
-            arguments.Add($"-out={exportDirectory}");
-            arguments.Add(tempPackagePath);
-            arguments.Add(meshName);
-            arguments.Add("SkeletalMesh");
-            var run = await RunAsync(executable, arguments, cancellationToken);
-            if (run.ExitCode != 0)
-            {
-                throw new InvalidOperationException(
-                    $"UModel exited with code {run.ExitCode}. {LastUsefulLine(run.Output)}");
-            }
+            var mappingOutput = Path.Combine(outputDirectory, "psk-map");
+            var (mappingFiles, _) = await ExportStagedMeshAsync(tempPackagePath, meshName,
+                mappingOutput, MorphMeshFormat.Psk, cancellationToken);
+            var pskPath = mappingFiles.First(path => Path.GetFileNameWithoutExtension(path)
+                .Equals(meshName, StringComparison.OrdinalIgnoreCase));
+            sidecar = TryWriteGltfVertexMapSidecar(primary, pskPath, exportPositions, fitPrior);
+        }
+        // A posed head requires its recovery map to avoid applying its pose twice on import.
+        return new MorphMeshExportResult(format, [.. produced, RequireVertexMapSidecar(sidecar)], toolOutput);
+    }
 
-            var extensions = format switch
-            {
-                MorphMeshFormat.Psk => new[] { ".psk", ".pskx" },
-                MorphMeshFormat.Gltf => new[] { ".gltf", ".bin" },
-                _ => throw new ArgumentOutOfRangeException(nameof(format))
-            };
-            var produced = Directory.EnumerateFiles(exportDirectory, "*", SearchOption.AllDirectories)
-                .Where(path => extensions.Contains(
-                               Path.GetExtension(path), StringComparer.OrdinalIgnoreCase) &&
-                               IsMeshLodFile(path, meshName))
-                .ToArray();
-            if (!produced.Any(path => IsPrimaryExtension(path, format)))
-            {
-                throw new InvalidDataException(
-                    $"UModel completed but did not produce a {format} mesh. {LastUsefulLine(run.Output)}");
-            }
-            if (format == MorphMeshFormat.Gltf)
-            {
-                using var stagedPackage = MEPackageHandler.OpenMEPackage(tempPackagePath, forceLoadFromDisk: true);
-                var stagedMesh = stagedPackage.Exports.Single().GetBinaryData<BinarySkeletalMesh>();
-                GltfExportTangentRestorer.Restore(stagedMesh, meshName,
-                    produced.Where(path => IsPrimaryExtension(path, format)).ToArray());
-            }
-            var primary = produced.First(path => IsPrimaryExtension(path, format));
-            var sidecar = TryWriteVertexMapSidecar(primary, format, exportPositions, fitPrior);
-            if (sidecar is null && format == MorphMeshFormat.Gltf)
-            {
-                var mappingOutput = Path.Combine(temporaryDirectory, "psk-map");
-                Directory.CreateDirectory(mappingOutput);
-                var mappingRun = await RunAsync(executable,
-                [
-                    "-export", "-lods", $"-out={mappingOutput}",
-                    tempPackagePath, meshName, "SkeletalMesh"
-                ], cancellationToken);
-                if (mappingRun.ExitCode == 0)
-                {
-                    var pskPath = Directory.EnumerateFiles(
-                            mappingOutput, "*", SearchOption.AllDirectories)
-                        .FirstOrDefault(path => IsPrimaryExtension(path, MorphMeshFormat.Psk));
-                    if (pskPath is not null)
-                    {
-                        sidecar = TryWriteGltfVertexMapSidecar(
-                            primary, pskPath, exportPositions, fitPrior);
-                    }
-                }
-            }
-            // A posed mesh without its recovery map would retain the original
-            // bone payload on import and apply that deformation a second time.
-            string[] completed = [.. produced, RequireVertexMapSidecar(sidecar)];
-            completed = PublishMeshFiles(completed, exportDirectory, outputDirectory, cancellationToken);
-            return new MorphMeshExportResult(
-                format,
-                completed,
-                run.Output);
-        }
-        finally
+    private static async Task<(string[] Files, string ToolOutput)> ExportStagedMeshAsync(
+        string packagePath, string meshName, string outputDirectory, MorphMeshFormat format,
+        CancellationToken cancellationToken)
+    {
+        Directory.CreateDirectory(outputDirectory);
+        var arguments = new List<string> { "-export", "-lods" };
+        if (format == MorphMeshFormat.Gltf)
         {
-            if (Directory.Exists(temporaryDirectory))
-            {
-                Directory.Delete(temporaryDirectory, recursive: true);
-            }
+            arguments.Add("-gltf");
         }
+        arguments.Add($"-out={outputDirectory}");
+        arguments.Add(packagePath);
+        arguments.Add(meshName);
+        arguments.Add("SkeletalMesh");
+        var run = await RunAsync(UModelPath(), arguments, cancellationToken);
+        if (run.ExitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"UModel exited with code {run.ExitCode}. {LastUsefulLine(run.Output)}");
+        }
+
+        var extensions = format switch
+        {
+            MorphMeshFormat.Psk => new[] { ".psk", ".pskx" },
+            MorphMeshFormat.Gltf => new[] { ".gltf", ".bin" },
+            _ => throw new ArgumentOutOfRangeException(nameof(format))
+        };
+        var produced = Directory.EnumerateFiles(outputDirectory, "*", SearchOption.AllDirectories)
+            .Where(path => extensions.Contains(
+                           Path.GetExtension(path), StringComparer.OrdinalIgnoreCase) &&
+                           IsMeshLodFile(path, meshName))
+            .ToArray();
+        if (!produced.Any(path => IsPrimaryExtension(path, format)))
+        {
+            throw new InvalidDataException(
+                $"UModel completed but did not produce a {format} mesh. {LastUsefulLine(run.Output)}");
+        }
+        if (format == MorphMeshFormat.Gltf)
+        {
+            using var stagedPackage = MEPackageHandler.OpenMEPackage(packagePath, forceLoadFromDisk: true);
+            var stagedMesh = stagedPackage.Exports.Single().GetBinaryData<BinarySkeletalMesh>();
+            GltfExportTangentRestorer.Restore(stagedMesh, meshName,
+                produced.Where(path => IsPrimaryExtension(path, format)).ToArray());
+        }
+        return (produced, run.Output);
     }
 
     internal static string[] PublishMeshFiles(IReadOnlyList<string> sources, string sourceDirectory,
@@ -246,7 +301,8 @@ public sealed class MorphFaceInterchangeService
         string temporaryDirectory,
         out string meshName,
         out Vector3[] exportPositions,
-        out string baseHeadPath)
+        out string baseHeadPath,
+        out MorphMeshFitPrior fitPrior)
     {
         using var sourcePackage = MEPackageHandler.OpenMEPackage(packagePath, forceLoadFromDisk: true);
         var face = sourcePackage.Exports.SingleOrDefault(export =>
@@ -264,15 +320,13 @@ public sealed class MorphFaceInterchangeService
         var appliedHead = baseHeadExport.GetBinaryData<BinarySkeletalMesh>()
                           ?? throw new InvalidDataException(
                               $"BioMorphFace '{facePath}' base head has no SkeletalMesh binary.");
-        var morphBinary = face.GetBinaryData<BinaryMorphFace>();
-        if (morphBinary.LODs is not { Length: > 0 } bakedLods || bakedLods[0].Length == 0)
+        var sourceMorph = MorphFacePackageCodec.ReadMorphData(face);
+        var bakedLods = sourceMorph.BakedLods;
+        if (bakedLods.Count == 0 || bakedLods[0].Length == 0)
         {
             throw new InvalidDataException($"BioMorphFace '{facePath}' has no baked mesh LODs.");
         }
 
-        var tempPackagePath = Path.Combine(temporaryDirectory, "MorphFaceExport.pcc");
-        MEPackageHandler.CreateAndSavePackage(tempPackagePath, face.Game);
-        using var temporaryPackage = MEPackageHandler.OpenMEPackage(tempPackagePath, forceLoadFromDisk: true);
         var vertexCount = appliedHead.LODModels[0].VertexBufferGPUSkin?.VertexData.Length
                           ?? appliedHead.LODModels[0].ME1VertexBufferGPUSkin.Length;
         if (bakedLods[0].Length != vertexCount)
@@ -281,28 +335,65 @@ public sealed class MorphFaceInterchangeService
                 $"BioMorphFace '{facePath}' LOD 0 has {bakedLods[0].Length} vertices; " +
                 $"its base head has {vertexCount}.");
         }
-        var sourceMorph = MorphFacePackageCodec.ReadMorphData(face);
         exportPositions = MorphMeshExportPose.Apply(appliedHead, bakedLods, sourceMorph.FinalSkeleton);
+        fitPrior = new MorphMeshFitPrior(baseHeadPath, sourceMorph.MorphFeatures, sourceMorph.FinalSkeleton, bakedLods);
+        meshName = face.ObjectName.Instanced;
+        return WriteGeometryPackage(appliedHead, face.Game,
+            Path.Combine(temporaryDirectory, "MorphFaceExport.pcc"), face.ObjectName);
+    }
+
+    internal static string CreateAttachmentMeshPackage(SkeletalMeshAsset source,
+        IReadOnlyList<BoneTranslation> finalSkeleton, string temporaryDirectory, string meshName)
+    {
+        using var sourcePackage = MEPackageHandler.OpenMEPackage(source.Source.PackagePath, forceLoadFromDisk: true);
+        var entry = sourcePackage.FindEntry(source.Source.InstancedPath, "SkeletalMesh")
+            ?? throw new InvalidDataException($"SkeletalMesh '{source.Source.InstancedPath}' was not found in its source package.");
+        using var cache = new PackageCache();
+        var resolved = entry is ExportEntry export ? export
+            : new GamePackageReferenceResolver(cache).Require(entry, "attachment mesh");
+        var mesh = resolved.GetBinaryData<BinarySkeletalMesh>();
+        // The staging package uses identity LOD maps; retain the preview's resolved slots.
+        if (mesh.LODModels.Length != source.Lods.Count)
+            throw new InvalidDataException("Attachment mesh LODs no longer match the loaded geometry.");
+        for (var i = 0; i < mesh.LODModels.Length; i++)
+        {
+            var lod = source.FindLod(i) ?? throw new InvalidDataException("Attachment mesh LOD is missing.");
+            var sections = mesh.LODModels[i].Sections;
+            if (sections.Length != lod.Topology.Sections.Count)
+                throw new InvalidDataException("Attachment mesh sections no longer match the loaded geometry.");
+            for (var j = 0; j < sections.Length; j++)
+            {
+                var slot = lod.Topology.Sections[j].MaterialIndex;
+                if (slot < 0 || slot >= mesh.Materials.Length || slot > ushort.MaxValue)
+                    throw new InvalidDataException("Attachment mesh section has an invalid material slot.");
+                sections[j].MaterialIndex = (ushort)slot;
+                sections[j].NumTriangles = lod.Topology.Sections[j].TriangleCount;
+            }
+        }
+        MorphMeshExportPose.Apply(mesh, [], finalSkeleton);
+        return WriteGeometryPackage(mesh, resolved.Game,
+            Path.Combine(temporaryDirectory, "AttachmentExport.pcc"), meshName);
+    }
+
+    private static string WriteGeometryPackage(BinarySkeletalMesh mesh, MEGame game, string path, NameReference meshName)
+    {
+        MEPackageHandler.CreateAndSavePackage(path, game);
+        using var temporaryPackage = MEPackageHandler.OpenMEPackage(path, forceLoadFromDisk: true);
 
         // UModel only needs the SkeletalMesh binary. Cloning the base head's full
         // dependency graph also clones MICs whose texture parameters can retain
         // valid negative import UIndexes. UModel 1589 then tries to load those
         // imports as exports and aborts before reaching the mesh. Keep the staging
         // package geometry-only and preserve the number of material slots as nulls.
-        Array.Fill(appliedHead.Materials, 0);
-        var clonedHead = ExportCreator.CreateExport(
-            temporaryPackage,
-            face.ObjectName,
-            "SkeletalMesh",
-            indexed: false);
-        clonedHead.WriteProperty(MeshHelper.GetLodInfoForSkeletalMesh(appliedHead, face.Game));
-        clonedHead.WriteBinary(appliedHead);
+        Array.Fill(mesh.Materials, 0);
+        var clonedHead = ExportCreator.CreateExport(temporaryPackage, meshName, "SkeletalMesh", indexed: false);
+        clonedHead.WriteProperty(MeshHelper.GetLodInfoForSkeletalMesh(mesh, game));
+        clonedHead.WriteBinary(mesh);
         // ObjectNameString exposes only the base FName text. Preserve its
         // numeric instance suffix because UModel selects the exported object
         // by the full instance name (for example, Skel_HMM_1).
-        meshName = clonedHead.ObjectName.Instanced;
-        temporaryPackage.Save(tempPackagePath);
-        return tempPackagePath;
+        temporaryPackage.Save(path);
+        return path;
     }
 
     internal static string? TryWriteVertexMapSidecar(

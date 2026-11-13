@@ -79,7 +79,7 @@ internal static partial class QaCases
             .FirstOrDefault()
             ?? throw new InvalidDataException($"The {game} Global Morphs corpus has no deterministic {hair.SexFamily} face seed.");
         var seedPreview = await c.Load(seedFace.PackagePath, seedFace.FacePath);
-        var seededDraft = seedPreview.Loaded.Document with { HairMeshReference = meshIdentity };
+        var seededDraft = SeedNativeHairDraft(seedPreview.Loaded.Document, meshIdentity);
         var seeded = await c.Save(seededDraft, seedFace.PackagePath, $"{sourceKey}-seeded-face.pcc");
         c.Current.Evidence["nativeHairSeed"] = new
         {
@@ -267,6 +267,18 @@ internal static partial class QaCases
             sourceKey, "final save/reopen");
         await c.Render(reopened.Scene, $"{sourceKey}-native-hair-reopened.png");
     }
+
+    internal static MorphFaceDocument SeedNativeHairDraft(MorphFaceDocument source, AssetIdentity mesh) => source with
+    {
+        HairMeshReference = mesh,
+        // Match a hair switch in the editor: the outgoing diffuse choice does not
+        // override the newly selected mesh's native material defaults.
+        MaterialOverrides = source.MaterialOverrides with
+        {
+            Textures = source.MaterialOverrides.Textures
+                .Where(value => !HeadMorphMaterialParameterPolicy.IsEditableHairDiffuseTexture(value.Name)).ToArray()
+        }
+    };
 
     private static ResolvedHeadMaterial RequireHairMaterialOnSelectedMesh(
         MorphFacePreviewLoadResult preview,

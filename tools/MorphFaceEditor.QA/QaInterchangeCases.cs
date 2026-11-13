@@ -9,6 +9,71 @@ namespace MorphFaceEditor.QA;
 
 internal static partial class QaCases
 {
+    internal const string TexturedMeshExportStage = "Textured mesh export through UModel";
+
+    private static async Task TexturedMeshExport(QaContext c, MorphMeshFormat format)
+    {
+        using var phase = c.UseStagePhase("Textured export");
+        var random = c.RandomFor("textured-export-source");
+        var family = random.Next(2) == 0 ? "HMM" : "HMF";
+        var package = c.CorpusPackage(c.Face.Game);
+        var candidates = c.MeasureSync("Inspect textured export donors", () =>
+            QaCoverageSelection.ExcludePaths(MorphFaceReferenceInspector.Inspect(package)
+                .Where(face => face.FacePath.StartsWith(family + ".", StringComparison.OrdinalIgnoreCase) &&
+                    face.HairMeshPath is not null && face.OtherMeshPaths.Count > 0)
+                .OrderBy(face => face.FacePath, StringComparer.OrdinalIgnoreCase), face => face.FacePath,
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase)), QaStageKind.Load);
+        var source = QaCoverageSelection.Pick(candidates, random);
+        c.Current.Evidence["texturedExportSource"] = new { c.Seed, Family = family, Candidates = candidates.Count, Source = source };
+        var preview = await c.Load(source.PackagePath, source.FacePath);
+        using var scope = await c.Editor(preview, source.PackagePath, player: false);
+        var editor = scope.Editor;
+        QaContext.Require(editor.CanEditMorphFeatures, "Textured export donor must support production morph randomisation.");
+        // Keep both authored attachment meshes while randomising the face and materials.
+        foreach (var attachment in editor.AttachmentMeshes) attachment.IsRandomisationLocked = true;
+        var before = editor.CreateDraft();
+        await c.Randomise(editor, purpose: "Textured export randomisation");
+        var draft = editor.CreateDraft();
+        QaContext.Require(!before.MorphFeatures.SequenceEqual(draft.MorphFeatures) &&
+            MaterialSignature(new(before.MaterialOverrides.Scalars, before.MaterialOverrides.Vectors, before.MaterialOverrides.Textures)) !=
+            MaterialSignature(new(draft.MaterialOverrides.Scalars, draft.MaterialOverrides.Vectors, draft.MaterialOverrides.Textures)),
+            "Textured export setup did not change both morphs and materials.");
+        var saved = await c.Save(draft, source.PackagePath, "textured-mesh-source.pcc");
+        var reopened = await c.Load(saved.PackagePath, saved.FaceInstancedPath);
+        AssertGeometry(draft, reopened.Loaded.Document);
+        AssertMaterials(draft, reopened.Loaded.Document);
+        QaContext.Require(reopened.Loaded.HairMesh is not null && reopened.Loaded.OtherMeshes.Count > 0,
+            "Textured export setup must resolve both hair and an accessory mesh.");
+        var exportSource = reopened.Loaded with { Materials = reopened.MaterialEditingSession.Materials };
+
+        // Keep this bundle intact: PSK .mat and material metadata also reference sibling images.
+        var directory = Path.Combine(c.Output, c.Current.Id, c.UniqueName("textured-mesh-" + format));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(3));
+        var result = await c.Measure(TexturedMeshExportStage, () => Task.Run(() =>
+            new MorphFaceInterchangeService().ExportMeshAsync(saved.PackagePath, saved.FaceInstancedPath,
+                directory, format, timeout.Token, includeTextures: true, previewSource: exportSource)), QaStageKind.FileTransfer);
+        var exportMs = c.Current.Stages[^1].DurationMs;
+        c.Current.Artifacts.AddRange(result.ProducedFiles);
+        var metadata = result.ProducedFiles.Where(path => path.EndsWith(".materials.json", StringComparison.OrdinalIgnoreCase)).ToArray();
+        var images = result.ProducedFiles.Where(path => Path.GetExtension(path) is ".png" or ".tga").ToArray();
+        var meshes = result.ProducedFiles.Where(path => format == MorphMeshFormat.Gltf
+            ? Path.GetExtension(path) == ".gltf" : Path.GetExtension(path) is ".psk" or ".pskx").ToArray();
+        QaContext.Require(result.ProducedFiles.All(File.Exists) && images.Length > 0 &&
+            metadata.Length == 2 + reopened.Loaded.OtherMeshes.Count &&
+            meshes.Any(path => Path.GetFileNameWithoutExtension(path) == saved.FaceInstancedPath.Split('.').Last()) &&
+            meshes.Any(path => Path.GetRelativePath(directory, path).StartsWith("Hair" + Path.DirectorySeparatorChar)) &&
+            meshes.Any(path => Path.GetRelativePath(directory, path).StartsWith("Accessory_", StringComparison.Ordinal)),
+            "Textured export omitted head, hair, accessory or material/texture companion files.");
+        c.Current.Evidence["texturedExportBenchmark"] = new
+        {
+            Format = format.ToString(), ExportMs = exportMs, Files = result.ProducedFiles.Count,
+            TextureFiles = images.Length, OutputBytes = result.ProducedFiles.Sum(path => new FileInfo(path).Length),
+            Head = reopened.Loaded.BaseHead.Source, Hair = reopened.Loaded.HairMesh!.Source,
+            Accessories = reopened.Loaded.OtherMeshes.Select(mesh => mesh.Source).ToArray(),
+            Scope = "Warm-process export only: mesh staging, UModel, material/texture writing and publication; setup/save/reopen excluded."
+        };
+    }
+
     private static async Task<(string Path, ImportedMeshAsset Mesh)> ExportMesh(QaContext c, MorphMeshFormat format)
     {
         var source = c.Source(requiredFacePath: MeshFace.FacePath);
@@ -144,6 +209,17 @@ internal static partial class QaCases
             Morphs = detached.Preview.EditingSession.CanEditMorphFeatures,
             Bones = detached.Preview.EditingSession.CanEditBones };
         await c.Render(detached.Preview.Scene, "custom-import.png");
+        var originalEvidence = c.Current.Evidence.ToDictionary(pair => pair.Key, pair => pair.Value);
+        try { await TexturedMeshExport(c, format); }
+        finally
+        {
+            var texturedEvidence = c.Current.Evidence.Where(pair =>
+                !originalEvidence.TryGetValue(pair.Key, out var value) || !ReferenceEquals(value, pair.Value))
+                .ToDictionary(pair => pair.Key, pair => pair.Value);
+            c.Current.Evidence.Clear();
+            foreach (var pair in originalEvidence) c.Current.Evidence.Add(pair.Key, pair.Value);
+            c.Current.Evidence["texturedExport"] = texturedEvidence;
+        }
     }
 
     private static async Task CustomRandomisation(QaContext c)

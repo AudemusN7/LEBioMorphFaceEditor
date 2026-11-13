@@ -10,7 +10,7 @@ internal static class QaCoverageSelection
     internal static int PlannedRolls(string group) => group switch
     {
         "npc-randomisation" or "player-randomisation" or "custom-randomisation" => 100,
-        "undo-redo" or "pcsav" or "pcsav-extra" => 1,
+        "undo-redo" or "pcsav" or "pcsav-extra" or "mesh-psk" or "mesh-gltf" => 1,
         "custom-human-hair" or "player-conversion" => 3,
         "native-human-hair" => 4,
         _ => 0

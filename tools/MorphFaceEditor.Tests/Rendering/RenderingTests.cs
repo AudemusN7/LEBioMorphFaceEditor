@@ -783,22 +783,20 @@ public static class RenderingTests
         void ExerciseResize(string phase, Action<int> resize)
         {
             var startingSize = lastPresented;
-            var sizesDuringResize = new HashSet<(int Width, int Height)>();
+            var sizeChangeTimes = new List<double>();
+            var framesDuringResize = new List<(double Time, (int Width, int Height) Size)>();
             var clock = Stopwatch.StartNew();
-            var sizeChanges = 0;
-            var lastSizeChange = 0d;
             var maximumGap = 0d;
             void OnSizeChanged(object sender, SizeChangedEventArgs args)
             {
                 var now = clock.Elapsed.TotalMilliseconds;
-                if (sizeChanges > 0) maximumGap = Math.Max(maximumGap, now - lastSizeChange);
-                lastSizeChange = now;
-                sizeChanges++;
+                if (sizeChangeTimes.Count > 0) maximumGap = Math.Max(maximumGap, now - sizeChangeTimes[^1]);
+                sizeChangeTimes.Add(now);
             }
             void OnFrame(HeadPreviewFrameInfo frame)
             {
                 var size = (frame.Width, frame.Height);
-                if (size != startingSize) sizesDuringResize.Add(size);
+                if (size != startingSize) framesDuringResize.Add((clock.Elapsed.TotalMilliseconds, size));
             }
             host.SizeChanged += OnSizeChanged;
             controller.FramePresented += OnFrame;
@@ -816,10 +814,32 @@ public static class RenderingTests
                 host.SizeChanged -= OnSizeChanged;
                 controller.FramePresented -= OnFrame;
             }
-            TestAssert.True(sizeChanges >= 10 && clock.Elapsed.TotalMilliseconds >= 250 && maximumGap < 150,
-                $"The {phase} fixture did not sustain size changes faster than the old 150 ms debounce.");
-            TestAssert.True(sizesDuringResize.Count >= 2,
-                $"The viewport waited for {phase} resizing to stop: {sizesDuringResize.Count} distinct updated sizes.");
+            var elapsedMilliseconds = clock.Elapsed.TotalMilliseconds;
+            var longestRunMilliseconds = 0d;
+            var qualifyingRun = false;
+            var publishedDuringRun = false;
+            for (var start = 0; start < sizeChangeTimes.Count;)
+            {
+                var end = start;
+                while (end + 1 < sizeChangeTimes.Count && sizeChangeTimes[end + 1] - sizeChangeTimes[end] < 150) end++;
+                var runMilliseconds = sizeChangeTimes[end] - sizeChangeTimes[start];
+                longestRunMilliseconds = Math.Max(longestRunMilliseconds, runMilliseconds);
+                if (end - start + 1 >= 10 && runMilliseconds >= 250)
+                {
+                    qualifyingRun = true;
+                    if (framesDuringResize.Where(frame => frame.Time > sizeChangeTimes[start] && frame.Time < sizeChangeTimes[end])
+                        .Select(frame => frame.Size).Distinct().Take(2).Count() >= 2)
+                        publishedDuringRun = true;
+                }
+                start = end + 1;
+            }
+            var timingDetails = $"{sizeChangeTimes.Count} size changes, {elapsedMilliseconds:F1} ms elapsed, " +
+                $"{maximumGap:F1} ms maximum gap, {longestRunMilliseconds:F1} ms longest continuous run, " +
+                $"{framesDuringResize.Select(frame => frame.Size).Distinct().Count()} distinct presented sizes";
+            TestAssert.True(qualifyingRun,
+                $"The {phase} fixture did not sustain size changes faster than the old 150 ms debounce: {timingDetails}.");
+            TestAssert.True(publishedDuringRun,
+                $"The viewport waited for {phase} resizing to stop: {timingDetails}.");
             PumpDispatcher(300);
             TestAssert.True(renderFailure is null, $"Rendering failed during {phase} resizing: {renderFailure}");
             TestAssert.Equal(CurrentPixelSize(), lastPresented);

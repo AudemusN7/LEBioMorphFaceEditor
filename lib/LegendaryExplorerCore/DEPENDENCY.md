@@ -1,6 +1,12 @@
 # LegendaryExplorerCore
 
-MFE uses [LegendaryExplorerCore 6.5.0.0, commit 804db0b](https://github.com/ME3Tweaks/LegendaryExplorer/commit/804db0b9a37d6184e8a06e4fecb30270d2fb48c8), built for **.NET 10 / win-x64 / WinRelease** with a portable PDB.
+MFE uses [LegendaryExplorerCore 6.5.0.0, commit 804db0b](https://github.com/ME3Tweaks/LegendaryExplorer/commit/804db0b9a37d6184e8a06e4fecb30270d2fb48c8) plus the [Unicode name-table patch](../../src/MorphFaceEditor/Assets/Licenses/LegendaryExplorerCore-UnicodeNames.patch), built for **.NET 10 / win-x64 / WinRelease** with a portable PDB. The patch preserves Latin-1 names and writes UTF-16 when required in LE1/LE2 PCC name tables, with matching compressed-table sizes. The rest of the source snapshot is unchanged.
+
+To rebuild the managed library, apply the patch at the upstream repository root, then run:
+
+```powershell
+dotnet build LegendaryExplorer/LegendaryExplorerCore/LegendaryExplorerCore.csproj -c WinRelease -p:DebugType=portable -p:EnableSourceControlManagerQueries=false
+```
 
 `TexConverter.dll` is built separately from that same commit's `LegendaryExplorer/TexConverter/TexConverter.vcxproj`, using **WinRelease / x64**, MSVC **14.44.35207** (v143) and Windows SDK **10.0.26100.0**. This replaces the upstream prebuilt DLL, which imports Visual C++ Debug runtimes. The Release project statically links the C/C++ runtime; its remaining non-Windows dependency is the redistributable OpenMP runtime `VCOMP140.DLL`.
 
@@ -17,8 +23,8 @@ Use `dumpbin /dependents TexConverter.dll` to inspect the result before updating
 ```text
 D0417B39CE27BBA575EEC6FB529DFB0614F14750636F0242C0AA7B00CBA7B745  CompressionWrappers.dll
 0E96E67D4D09C7EAABE48FDD3D8B42E659956A9F50B42A759219EE22AE204048  ISACTTools.dll
-5BEFC63667C5B14E1605E8DBB6183ED9C784FCBC9F15B0F2F1B64E97ED6089B0  LegendaryExplorerCore.dll
-67A202181CFD9EA01DE317D932BF0601DEE58BA141D184B8BD341E7DF4F3B0F6  LegendaryExplorerCore.pdb
+EE22CEEB10D206EC628811D37A0B609B5127AFCBF100947A76BC39A8094BEC19  LegendaryExplorerCore.dll
+EA2942B381DF5882A9528EEB71F36B82C5F2F369E2E04ADE46ACAB18DF8F77B4  LegendaryExplorerCore.pdb
 D7FDDC6F0B5A6F2E3D6D2C125B6ABB06B526B6EDEBA8275D5AE91BBED6902F8F  TexConverter.dll
 ```
 

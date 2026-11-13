@@ -11,6 +11,8 @@ using LegendaryExplorerCore.Packages;
 using LegendaryExplorerCore.Unreal.BinaryConverters;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Buffers.Binary;
+using System.Text;
 
 using static MorphFaceEditor.Tests.UiTestFixtures;
 
@@ -30,7 +32,10 @@ internal static class UiWorkspaceTests
         new("partial RON saves retain unrelated edits and chronological dirty state", PartialRonSaveRetainsHistory),
         new("PCC Save As retains staged faces on failure and adopts the successful copy", PccSaveAsAdoptsSuccessfulCopy),
         new("additional Player imports and face switches retain both edited drafts", AdditionalPlayerImportsRetainStagedEdits),
-        new("cancelled or failed career deletion retains source and pending edits", CareerDeletionPreservesStateOnFailure)
+        new("cancelled or failed career deletion retains source and pending edits", CareerDeletionPreservesStateOnFailure),
+        new("career saves preserve Unicode first names through the UI (LE1)", () => CareerUnicodeNameSave(MorphFaceGame.LE1)),
+        new("career saves preserve Unicode first names through the UI (LE2)", () => CareerUnicodeNameSave(MorphFaceGame.LE2)),
+        new("career saves preserve Unicode first names through the UI (LE3)", () => CareerUnicodeNameSave(MorphFaceGame.LE3))
     ];
 
     private static void NewNpcStartsBlank() => RunWithDispatcher(async () =>
@@ -576,6 +581,81 @@ internal static class UiWorkspaceTests
         }
         finally { Directory.Delete(directory, recursive: true); }
     });
+
+    private static void CareerUnicodeNameSave(MorphFaceGame game) => RunWithDispatcher(async () =>
+    {
+        var fixture = PcsavHeadMorphTests.Fixtures().Single(path =>
+            Path.GetFileName(path).StartsWith(game.ToString(), StringComparison.Ordinal));
+        var directory = Path.Combine(Path.GetTempPath(), $"MFE-PcsavUnicode-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            foreach (var name in new[] { "Алексей", "André" })
+            {
+                var source = Path.Combine(directory, Path.GetFileName(fixture));
+                File.Copy(fixture, source, overwrite: true);
+                ReplaceCareerFirstName(source, name);
+                var original = PcsavHeadMorphWorkspace.Open(source);
+                TestAssert.Equal(name, original.FirstName);
+                using var reader = new MorphFacePackageReader();
+                using var shell = CreateMainWindowViewModel(reader, new StubEditorDialogs());
+                await shell.OpenDroppedFileAsync(source);
+                var editor = shell.Editor ?? throw new Exception($"{original.Game}, {name}: {shell.ErrorMessage ?? "Career did not open."}");
+                TestAssert.Equal(name, shell.SelectedFace!.ObjectName);
+                var scalar = editor.Material.Scalars.First();
+                var scalarName = scalar.Name;
+                var value = scalar.Value + 0.125f;
+                scalar.Value = value;
+                await ((AsyncRelayCommand)shell.SaveCommand).ExecuteAsync();
+                TestAssert.True(!shell.HasError && !shell.IsDirty, $"{original.Game}: {shell.ErrorMessage ?? "Career save did not complete."}");
+                var saved = PcsavHeadMorphWorkspace.Open(source);
+                TestAssert.Equal(name, saved.FirstName);
+                TestAssert.Near(value, saved.Head.MaterialData.Scalars.Single(item => item.Name == scalarName).Value, 0.00001f);
+                TestAssert.True(original.UnrelatedPrefix.SequenceEqual(saved.UnrelatedPrefix) &&
+                    original.UnrelatedSuffix.SequenceEqual(saved.UnrelatedSuffix), $"{original.Game}: unrelated career data changed.");
+            }
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    });
+
+    private static void ReplaceCareerFirstName(string path, string name)
+    {
+        var original = PcsavHeadMorphWorkspace.Open(path);
+        var bytes = File.ReadAllBytes(path);
+        var compressed = original.Game == MorphFaceGame.LE1;
+        var type = typeof(PcsavHeadMorphWorkspace);
+        var decompress = type.GetMethod("Decompress", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var compress = type.GetMethod("Compress", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var (payload, blockSize) = compressed
+            ? ((byte[] Payload, int BlockSize))decompress.Invoke(null, [bytes])!
+            : (bytes[..^4], 0);
+        var oldText = Encoding.Latin1.GetBytes(original.FirstName + '\0');
+        var oldString = new byte[4 + oldText.Length];
+        BinaryPrimitives.WriteInt32LittleEndian(oldString, oldText.Length);
+        oldText.CopyTo(oldString, 4);
+        var prefix = original.UnrelatedPrefix.ToArray();
+        var offsets = Enumerable.Range(0, prefix.Length - oldString.Length + 1)
+            .Where(i => prefix.AsSpan(i, oldString.Length).SequenceEqual(oldString)).ToArray();
+        TestAssert.True(offsets.Length == 1, $"{original.Game}: first-name field is not uniquely identifiable.");
+        var newText = Encoding.Unicode.GetBytes(name + '\0');
+        var newString = new byte[4 + newText.Length];
+        BinaryPrimitives.WriteInt32LittleEndian(newString, -(name.Length + 1));
+        newText.CopyTo(newString, 4);
+        var offset = offsets[0];
+        var modified = new byte[payload.Length - oldString.Length + newString.Length];
+        payload.AsSpan(0, offset).CopyTo(modified);
+        newString.CopyTo(modified, offset);
+        payload.AsSpan(offset + oldString.Length).CopyTo(modified.AsSpan(offset + newString.Length));
+        if (compressed)
+            File.WriteAllBytes(path, (byte[])compress.Invoke(null, [modified, blockSize])!);
+        else
+        {
+            var output = new byte[modified.Length + 4];
+            modified.CopyTo(output, 0);
+            BinaryPrimitives.WriteUInt32LittleEndian(output.AsSpan(modified.Length), PcsavHeadMorphWorkspace.Crc32(modified));
+            File.WriteAllBytes(path, output);
+        }
+    }
 
     private static void CareerDeletionPreservesStateOnFailure() => RunWithDispatcher(async () =>
     {

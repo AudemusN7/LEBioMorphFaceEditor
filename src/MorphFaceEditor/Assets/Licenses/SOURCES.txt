@@ -8,6 +8,9 @@ from the installed packages or upstream source snapshots listed below.
 LegendaryExplorerCore 6.5.0.0, TexConverter and CompressionWrappers
 Source snapshot: 804db0b9a37d6184e8a06e4fecb30270d2fb48c8
 https://github.com/ME3Tweaks/LegendaryExplorer/tree/804db0b9a37d6184e8a06e4fecb30270d2fb48c8
+LegendaryExplorerCore includes the local Unicode PCC name-table correction in
+LegendaryExplorerCore-UnicodeNames.patch, bundled alongside these notices.
+Apply that patch to the source snapshot above to obtain the modified source.
 
 LegendaryExplorer.txt: repository LICENSE
 MassEffectModder.txt: Licenses/COPYING_MASSEFFECTMODDER.txt

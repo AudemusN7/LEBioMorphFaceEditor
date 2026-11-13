@@ -20,6 +20,7 @@
     <Resource Include="Assets\MFEIcon\icon.ico" Link="icon.ico" />
     <Resource Include="Assets\MFEIcon\ico_256.png" Link="ico_256.png" />
     <Resource Include="Assets\GameIcons\*.png" />
+    <Resource Include="Assets\Lighting\*.png" />
     <Resource Include="Assets\Licenses\**\*" />
   </ItemGroup>
   <ItemGroup>

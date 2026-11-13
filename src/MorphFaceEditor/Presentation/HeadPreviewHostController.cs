@@ -132,6 +132,12 @@ public sealed class HeadPreviewHostController : IDisposable
         RequestRender();
     }
 
+    public void ResetSide()
+    {
+        ResetCamera(_camera.ResetSide);
+        RequestRender();
+    }
+
     private void ResetCamera(Action resetView)
     {
         resetView();

@@ -40,6 +40,68 @@
                 </DataTrigger>
             </Style.Triggers>
         </Style>
+        <Style x:Key="ViewportLightingButton" TargetType="ListBoxItem">
+            <Setter Property="Width" Value="60" />
+            <Setter Property="Height" Value="60" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle">
+                <Setter.Value>
+                    <Style TargetType="Control">
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="Control">
+                                    <Border CornerRadius="12" Margin="-3" BorderThickness="1"
+                                            BorderBrush="{DynamicResource PrimaryText}" />
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Background" Value="{DynamicResource PreviewHintBackground}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="2" />
+            <Setter Property="ToolTip" Value="{Binding Name}" />
+            <Setter Property="AutomationProperties.Name" Value="{Binding Name}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Grid>
+                            <Border CornerRadius="9" RenderOptions.BitmapScalingMode="HighQuality">
+                                <Border.Background>
+                                    <ImageBrush ImageSource="{Binding IconPath}" Stretch="Uniform" />
+                                </Border.Background>
+                            </Border>
+                            <Border x:Name="StateTint" CornerRadius="9" Opacity="0"
+                                    Background="{TemplateBinding Background}" IsHitTestVisible="False" />
+                            <Border CornerRadius="9" BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}" IsHitTestVisible="False" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="StateTint" Property="Opacity" Value="0.2" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="StateTint" Property="Opacity" Value="0.2" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource HoverBackground}" />
+                </Trigger>
+                <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                    <Setter Property="BorderBrush" Value="{DynamicResource Accent}" />
+                </Trigger>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource SelectionBackground}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource Accent}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
         <Style x:Key="PaneSplitterStyle" TargetType="{x:Type Thumb}">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="Cursor" Value="SizeWE" />
@@ -274,12 +336,6 @@
                               DisplayMemberPath="Name"
                               SelectedValuePath="LodIndex"
                               SelectedValue="{Binding PreviewLod}" />
-                    <TextBlock Text="{DynamicResource loc_View_MainWindow_Lighting}" Foreground="{DynamicResource SecondaryText}" VerticalAlignment="Center" Margin="14,0,7,0" />
-                    <ComboBox Width="120"
-                              ItemsSource="{Binding LightingPresets}"
-                              DisplayMemberPath="Name"
-                              SelectedValuePath="Preset"
-                              SelectedValue="{Binding LightingPreset}" />
                     <CheckBox Content="{DynamicResource loc_View_MainWindow_PostProcessing}" IsChecked="{Binding PostProcessingEnabled}" Margin="14,0,0,0" />
                     <CheckBox Content="{DynamicResource loc_View_MainWindow_ExtendedSliders}" IsChecked="{Binding ExtendedSliders}" Margin="14,0,0,0"
                               ToolTip="{DynamicResource loc_View_MainWindow_AllowSignedZeroCentredSliderRangesTypedValuesRemainUnre}" />
@@ -294,7 +350,7 @@
             <controls:PaneLayoutGrid.ColumnDefinitions>
                 <ColumnDefinition x:Name="FaceBrowserColumn" Width="270" MinWidth="180" />
                 <ColumnDefinition Width="6" />
-                <ColumnDefinition Width="*" MinWidth="300" />
+                <ColumnDefinition x:Name="PreviewColumn" Width="*" MinWidth="300" />
                 <ColumnDefinition Width="6" />
                 <ColumnDefinition x:Name="FaceEditorColumn" Width="600" MinWidth="600" />
             </controls:PaneLayoutGrid.ColumnDefinitions>
@@ -450,11 +506,12 @@
                 <Border HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="14" Background="{DynamicResource PreviewHintBackground}" BorderBrush="{DynamicResource HintBorder}" BorderThickness="1" Padding="10,7" CornerRadius="4">
                     <TextBlock Foreground="{DynamicResource SecondaryText}" FontSize="11" Text="{DynamicResource loc_View_MainWindow_LeftDragOrbitMiddleDragPanRightDragWheelZoom}" />
                 </Border>
-                <StackPanel HorizontalAlignment="Right" VerticalAlignment="Top" Orientation="Horizontal" Margin="14">
+                <StackPanel x:Name="PreviewCameraButtons" HorizontalAlignment="Right" VerticalAlignment="Top" Orientation="Horizontal" Margin="14">
                     <Button Content="{DynamicResource loc_View_MainWindow_Front}" Click="OnFrontClick" Margin="0,0,6,0" />
-                    <Button Content="{DynamicResource loc_View_MainWindow_View}" Click="OnThreeQuarterClick" />
+                    <Button Content="{DynamicResource loc_View_MainWindow_View}" Click="OnThreeQuarterClick" Margin="0,0,6,0" />
+                    <Button Content="{DynamicResource loc_View_MainWindow_Side}" Click="OnSideClick" />
                 </StackPanel>
-                <Button HorizontalAlignment="Left" VerticalAlignment="Top" Margin="14"
+                <Button x:Name="PreviewBackgroundButton" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="14"
                         Command="{Binding EditBackgroundColorCommand}"
                         ToolTip="{DynamicResource loc_View_MainWindow_ChangeThePreviewBackgroundColour}">
                     <StackPanel Orientation="Horizontal">
@@ -465,7 +522,25 @@
                     </StackPanel>
                 </Button>
 
-                <StackPanel VerticalAlignment="Top" Margin="14,62,14,0">
+                <ListBox x:Name="ViewportLightingPresets" HorizontalAlignment="Left" VerticalAlignment="Top"
+                         Margin="14,62,0,14" Padding="0" Background="Transparent" BorderThickness="0"
+                         ItemsSource="{Binding LightingPresets}" SelectionMode="Single"
+                         SelectedValuePath="Preset" SelectedValue="{Binding LightingPreset, Mode=TwoWay}"
+                         ItemContainerStyle="{StaticResource ViewportLightingButton}"
+                         AutomationProperties.Name="{DynamicResource loc_View_MainWindow_Lighting}">
+                    <ListBox.Template>
+                        <ControlTemplate TargetType="ListBox">
+                            <ItemsPresenter />
+                        </ControlTemplate>
+                    </ListBox.Template>
+                    <ListBox.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel />
+                        </ItemsPanelTemplate>
+                    </ListBox.ItemsPanel>
+                </ListBox>
+
+                <StackPanel VerticalAlignment="Top" Margin="88,62,14,0">
                     <Border x:Name="CustomMaterialDatabaseWarning" Background="{DynamicResource PanelBackground}"
                             BorderBrush="{DynamicResource StatusPending}" BorderThickness="1" Padding="10" Margin="0,0,0,8">
                         <Border.Style>

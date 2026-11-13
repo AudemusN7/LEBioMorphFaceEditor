@@ -1866,6 +1866,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 }
 
-public sealed record PreviewLightingChoice(HeadPreviewLightingPreset Preset, string Name);
+public sealed record PreviewLightingChoice(HeadPreviewLightingPreset Preset, string Name)
+{
+    public string IconPath => $"pack://application:,,,/MorphFaceEditor;component/Assets/Lighting/MFE_{Preset}.png";
+}
 public sealed record PreviewLodChoice(int LodIndex, string Name);
 public sealed record RecentFileItem(string FilePath, ICommand OpenCommand);

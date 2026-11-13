@@ -4676,6 +4676,7 @@ Materials: {2}{3}</system:String>
     <system:String x:Key="loc_View_MainWindow_ChangeThePreviewBackgroundColour" xml:space="preserve">Change the preview background colour</system:String>
     <!--localiser: {"Key":"loc_View_MainWindow_Front","ReviewedHash":"A61759020289882109FA92AD765E1200B6A9069B98190891D2747C65474669E2","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_View_MainWindow_Front" xml:space="preserve">Front</system:String>
+    <system:String x:Key="loc_View_MainWindow_Side" xml:space="preserve">Side</system:String>
     <!--localiser: {"Key":"loc_View_MainWindow_HEADPREVIEW","ReviewedHash":"9DA051DF97942C7D4CF76147D79854E22AEFC4CAE494D6245DFA3A4D080447BB","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_View_MainWindow_HEADPREVIEW" xml:space="preserve">LIVE PREVIEW</system:String>
     <!--localiser: {"Key":"loc_View_MainWindow_LOD","ReviewedHash":"BF0DD156298C1469ED85594249B197680090FFF3A49CDF4406CDAE097A0F9DD0","DoNotTranslate":false,"Note":"","SourceHash":null}-->

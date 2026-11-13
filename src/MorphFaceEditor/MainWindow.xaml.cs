@@ -71,8 +71,14 @@ public partial class MainWindow : Window
         if (Math.Abs(FaceEditorColumn.MinWidth - editorMinimum) > 0.5)
             FaceEditorColumn.MinWidth = editorMinimum;
 
+        // Keep Background and all three view presets clear of each other.
+        var previewMinimum = Math.Max(300,
+            PreviewBackgroundButton.DesiredSize.Width + PreviewCameraButtons.DesiredSize.Width);
+        if (Math.Abs(PreviewColumn.MinWidth - previewMinimum) > 0.5)
+            PreviewColumn.MinWidth = previewMinimum;
+
         var chromeWidth = Math.Max(0, ActualWidth - WorkspaceLayout.ActualWidth);
-        var panesMinimum = FaceBrowserColumn.MinWidth + FaceEditorColumn.MinWidth + 300 + 12;
+        var panesMinimum = FaceBrowserColumn.MinWidth + FaceEditorColumn.MinWidth + PreviewColumn.MinWidth + 12;
         // The package caption can yield space; the toolbar's controls cannot.
         var toolbarMinimum = FileToolbar.DesiredSize.Width + PreviewToolbar.DesiredSize.Width + 64;
         var minimum = Math.Max(panesMinimum, toolbarMinimum) + chromeWidth;
@@ -157,7 +163,7 @@ public partial class MainWindow : Window
         var other = ReferenceEquals(pane, FaceBrowserColumn) ? FaceEditorColumn : FaceBrowserColumn;
         // The outside edge stays at the window edge. Only consume space that the
         // viewport can actually give up; never let a drag grow the whole grid.
-        var maximum = WorkspaceLayout.ActualWidth - other.ActualWidth - 300 - 12;
+        var maximum = WorkspaceLayout.ActualWidth - other.ActualWidth - PreviewColumn.MinWidth - 12;
         var change = ReferenceEquals(pane, FaceBrowserColumn) ? horizontalChange : -horizontalChange;
         pane.Width = new GridLength(Math.Clamp(pane.ActualWidth + change, pane.MinWidth,
             Math.Max(pane.MinWidth, maximum)));
@@ -225,6 +231,8 @@ public partial class MainWindow : Window
     private void OnFrontClick(object sender, RoutedEventArgs e) => _previewHost.ResetFront();
 
     private void OnThreeQuarterClick(object sender, RoutedEventArgs e) => _previewHost.ResetThreeQuarter();
+
+    private void OnSideClick(object sender, RoutedEventArgs e) => _previewHost.ResetSide();
 
     private void OnCopyErrorClick(object sender, RoutedEventArgs e)
     {

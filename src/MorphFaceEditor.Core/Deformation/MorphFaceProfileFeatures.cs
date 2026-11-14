@@ -212,8 +212,8 @@ public static class MorphFaceProfileFeatures
         // Proven zero-effect or internal construction/corrective targets.
         "averageHead", "baseHead", "BONE_blinkFix", "DEBUG_EyeLidCorrector", "DEBUG_InnerEyeCorrector",
         "eyeShape_droop", "eye_Shape_droop",
-        // Composite/duplicate variants superseded by the explicit controls in the profile.
-        "BuzzCut", "BuzzCut_WidowsPeak", "flatTop_WidowsPeak", "objobjWillis", "Willis01",
+        // These variants affect geometry beyond the hairstyle region.
+        "objobjWillis", "Willis01",
         // Character-creator metadata with no live geometry. Formal/Sarge/Slick are retained
         // because they are explicitly part of the requested hairstyle surface.
         "None", "Formal", "Sarge", "Slick", "lashes", "eyes_bagOut", "cheeks_gaunt", "eyeShape_liara", "eyeShape_iconic",
@@ -228,7 +228,6 @@ public static class MorphFaceProfileFeatures
         "BONE_blinkFix",
         "Eastwood",
         "rollins",
-        "HAIR_splitSide",
         "HAIR_splitSide\"",
         "None",
         "mouth_cheekMass",

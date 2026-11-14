@@ -210,9 +210,12 @@ public sealed class MorphFaceConversionService(
         var transfer = sourceSession.CaptureSemanticTransferData();
         if (targetBaseline is not null) transfer = sourceBaseline!.CaptureEdits(transfer);
         var targetSession = CreateSession(template, targetProfile);
+        var resetSplitSide = targetProfile.Game == MorphFaceGame.LE3 && targetProfile.Archetype == "human-female";
         if (!targetProfile.IgnoresAuthoredGeometry)
         {
             targetSession.ApplySemanticTransferData(targetBaseline?.ApplyEdits(transfer) ?? transfer);
+            // LE3's target has no LOD0 deltas; suppress its LOD1 deformation before baking.
+            if (resetSplitSide) targetSession.SetFeature("HAIR_splitSide", 0f);
         }
         var convertedDraft = targetSession.CreateDraft(
             hairMeshReference: null,
@@ -310,6 +313,7 @@ public sealed class MorphFaceConversionService(
             .Select(value => value.Name)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var targetNames = targetSession.Features.Select(value => value.Name)
+            .Where(name => !resetSplitSide || !name.Equals("HAIR_splitSide", StringComparison.OrdinalIgnoreCase))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         return new MorphFaceConversionResult(
             saveResult,

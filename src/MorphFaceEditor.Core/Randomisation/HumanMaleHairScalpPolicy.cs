@@ -5,7 +5,8 @@ public static class HumanMaleHairScalpPolicy
 {
     private static readonly IReadOnlySet<string> HairMorphNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        "Afro", "BuzzCut", "deiter", "flatTop", "Formal", "Geezer", "rollins", "Sarge",
+        "Afro", "BuzzCut", "BuzzCut_WidowsPeak", "deiter", "flatTop", "flatTop_WidowsPeak",
+        "Formal", "Geezer", "rollins", "Sarge",
         "Slick", "straightHairline", "widowsPeak", "Willis", "DEBUG_CapCorrector"
     };
 

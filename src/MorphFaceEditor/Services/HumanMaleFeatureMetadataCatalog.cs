@@ -363,7 +363,7 @@ public virtual IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
         {
             return (FacialStructure, Race);
         }
-        if (lower is "afro" or "buzzcut" or "deiter" or "flattop" or "formal" or "geezer" or
+        if (lower is "afro" or "buzzcut" or "buzzcut_widowspeak" or "deiter" or "flattop" or "flattop_widowspeak" or "formal" or "geezer" or
             "rollins" or "sarge" or "debug_capcorrector" or "slick" or "straighthairline" or
             "widowspeak" or "willis")
         {
@@ -412,9 +412,10 @@ public virtual IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
         "race_oldasn" => 0, "race_yngasn" => 1,
         "race_oldblk" => 10, "race_yngblk" => 11,
         "race_oldcauc" => 20, "race_yngcauc" => 21,
-        "afro" => 0, "deiter" => 1, "flattop" => 2, "geezer" => 3,
-        "rollins" => 4, "debug_capcorrector" => 5, "straighthairline" => 6,
-        "widowspeak" => 7, "willis" => 8,
+        "afro" => 0, "buzzcut" => 1, "buzzcut_widowspeak" => 2, "deiter" => 3,
+        "flattop" => 4, "flattop_widowspeak" => 5, "geezer" => 6,
+        "rollins" => 7, "debug_capcorrector" => 8, "straighthairline" => 9,
+        "widowspeak" => 10, "willis" => 11,
 
         // Head — Shape / Cheeks / Ears
         "shape_skinny" => 0, "shape_chubby" => 1,

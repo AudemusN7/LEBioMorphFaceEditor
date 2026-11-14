@@ -13,6 +13,10 @@ internal static class PlayerMorphRonConversionTests
     [
         new("Player RON converts morphed female LE2 to LE3 with bone residual", () => ConvertMorphed(MorphFaceGame.LE2, MorphFaceGame.LE3, StandalonePlayerSex.Female)),
         new("Player RON converts morphed male LE3 to LE1 with bone residual", () => ConvertMorphed(MorphFaceGame.LE3, MorphFaceGame.LE1, StandalonePlayerSex.Male)),
+        new("Player RON resets Split Side from LE1 into LE3", () => ConvertMorphed(MorphFaceGame.LE1, MorphFaceGame.LE3, StandalonePlayerSex.Female, "HAIR_splitSide")),
+        new("Player RON resets Split Side from LE2 into LE3", () => ConvertMorphed(MorphFaceGame.LE2, MorphFaceGame.LE3, StandalonePlayerSex.Female, "HAIR_splitSide")),
+        new("Player RON retains Split Side from LE1 into LE2", () => ConvertMorphed(MorphFaceGame.LE1, MorphFaceGame.LE2, StandalonePlayerSex.Female, "HAIR_splitSide")),
+        new("Player RON retains Split Side from LE2 into LE1", () => ConvertMorphed(MorphFaceGame.LE2, MorphFaceGame.LE1, StandalonePlayerSex.Female, "HAIR_splitSide")),
         new("Player RON rejects LOD0 sculpt and unsafe destinations", RejectUnsupportedGeometryAndDestinations),
         new("Player RON opt-in transfers female LE1 baked surface once", ApproximateBakedShape)
     ];
@@ -32,7 +36,8 @@ internal static class PlayerMorphRonConversionTests
         } };
     }
 
-    private static void ConvertMorphed(MorphFaceGame sourceGame, MorphFaceGame targetGame, StandalonePlayerSex sex)
+    private static void ConvertMorphed(MorphFaceGame sourceGame, MorphFaceGame targetGame, StandalonePlayerSex sex,
+        string? requestedFeature = null)
     {
         var service = PlayerConversionTestFixtures.CreateService(sourceGame, targetGame);
         var directory = Path.Combine(Path.GetTempPath(), $"MFE-PlayerRonTest-{Guid.NewGuid():N}");
@@ -54,13 +59,17 @@ internal static class PlayerMorphRonConversionTests
                     !sourceProfile.MetadataOnlyFeatures.Contains(Name(value)) && !targetProfile.MetadataOnlyFeatures.Contains(Name(value)) &&
                     !sourceProfile.FeatureAliases.ContainsKey(Name(value)) && !targetProfile.FeatureAliases.ContainsKey(Name(value)) &&
                     value.Lods.Any(lod => lod.LodIndex == 0 && lod.Vertices.Count > 0) &&
-                    targetTargets[Name(value)].Lods.Any(lod => lod.LodIndex == 0 && lod.Vertices.Count > 0))
+                    (requestedFeature is null
+                        ? targetTargets[Name(value)].Lods.Any(lod => lod.LodIndex == 0 && lod.Vertices.Count > 0)
+                        : Name(value).Equals(requestedFeature, StringComparison.OrdinalIgnoreCase)))
                 .OrderByDescending(value => value.BoneOffsets.Count + targetTargets[Name(value)].BoneOffsets.Count)
                 .First();
             var feature = Name(sourceTarget);
             var targetTarget = targetTargets[feature];
+            var expectedWeight = targetGame == MorphFaceGame.LE3 &&
+                feature.Equals("HAIR_splitSide", StringComparison.OrdinalIgnoreCase) ? 0f : MorphWeight;
             var sourceWeighted = new[] { new WeightedMorphTarget(feature, sourceTarget, MorphWeight) };
-            var targetWeighted = new[] { new WeightedMorphTarget(feature, targetTarget, MorphWeight) };
+            var targetWeighted = new[] { new WeightedMorphTarget(feature, targetTarget, expectedWeight) };
             var targetBones = target.BaseHead.Topology.ReferenceSkeleton.ToDictionary(b => b.Name, StringComparer.OrdinalIgnoreCase);
             var bone = source.BaseHead.Topology.ReferenceSkeleton
                 .Where(b => targetBones.ContainsKey(b.Name))
@@ -102,8 +111,10 @@ internal static class PlayerMorphRonConversionTests
             TestAssert.Equal(new RonExportProvenance(RonExportProducer.MFE, targetGame,
                 sex == StandalonePlayerSex.Male ? "HMM" : "HMF", true), document.Provenance);
             var converted = document.Head.MorphData;
-            TestAssert.Near(MorphWeight, converted.MorphFeatures.Single(value =>
-                string.Equals(value.Name, feature, StringComparison.OrdinalIgnoreCase)).Offset, 0.000001f);
+            TestAssert.Near(expectedWeight, converted.MorphFeatures.SingleOrDefault(value =>
+                string.Equals(value.Name, feature, StringComparison.OrdinalIgnoreCase))?.Offset ?? 0f, 0.000001f);
+            TestAssert.Equal(expectedWeight == 0f, result.UserWarnings.Any(warning =>
+                warning.LocalizationKey == "loc_Shell_Conversion_UnsupportedSlidersReset"));
             TestAssert.Equal(target.BaseHead.Lods.Count, converted.BakedLods.Count);
             for (var lod = 0; lod < target.BaseHead.Lods.Count; lod++)
             {

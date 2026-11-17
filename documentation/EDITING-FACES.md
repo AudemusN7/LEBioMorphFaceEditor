@@ -10,6 +10,8 @@ The controls offered depend on the face and the workspace. If a control isn't av
 
 The **Features** tab is divided into categories for different sections of the face. Within each category, the controls are organised into groups. Depending on the face, morph sliders for shape might appear next to material scalars. Material basics are covered in [Getting Started](GETTING-STARTED.md).
 
+For human faces, **Hair** includes supported hair shape controls alongside its colour and texture settings. Choose the hair mesh with the selector above Features before changing its texture: switching meshes clears the previous hair texture override so the new hair can use its own. This change can be undone. Available controls depend on the face and hair.
+
 Values can be changed by dragging a slider, opening a colour wheel, or using a texture dropdown, with the result shown in the preview. For more precise adjustments, a number can be typed into the box beside it. A value can also be changed with the scroll wheel over the number box: the normal step is 0.1, holding **Ctrl** changes it by 1, and holding **Shift** changes it by 10. God help you if you hold Shift.
 
 Values outside the displayed slider range can be typed in, though extremes can produce unusual results.
@@ -53,9 +55,9 @@ As a rule of thumb, Cursed morph randomisation gets expontentially more cursed w
 The preview is there to help you inspect your work as you go:
 
 - **Left-drag** to orbit, **middle-drag** to pan, and **right-drag** or use the mouse wheel to zoom.
-- **Front** and **¾ View** return the camera to those views. **Background** opens a colour picker for the preview background. To restore the background for your current interface theme, click **Use theme default**, then **Apply**.
+- **Front**, **¾ View** and **Side** return the camera to those views. **Background** opens a colour picker for the preview background. To restore the background for your current interface theme, click **Use theme default**, then **Apply**.
 - The **Material** menu offers **Shaded**, **Unlit** and **Diagnostic** views. Shaded is useful for normal inspection; Unlit shows the face without the preview lighting, while Diagnostic uses colours to distinguish material families.
-- **Lighting** offers **Studio**, **High Contrast**, **Warm Interior**, **Cool Night** and **Cinematic**. A face can look quite different under each, so it's useful to check more than one. **Post Processing** toggles the preview's presentation effects, and **Wireframe** shows the mesh structure.
+- The lighting preset icons at the upper-left of the preview offer **Studio**, **High Contrast**, **Warm Interior**, **Cool Night** and **Cinematic**. A face can look quite different under each, so it's useful to check more than one. **Post Processing** toggles the preview's presentation effects, and **Wireframe** shows the mesh structure.
 - **Hair / Accessory** shows or hides the resolved attachment in the preview. This checkbox doesn't remove or replace the mesh. The actual selection can be changed using the hair or accessory mesh controls above the Features tab.
 - **LOD** selects which level of detail is shown in the preview. Some LODs are marked **static**, and morph controls may be unavailable for a selected LOD or for features that don't affect it. Choosing an LOD changes the view; it doesn't by itself edit or export the face.
 

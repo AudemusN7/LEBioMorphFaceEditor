@@ -12,8 +12,9 @@ Morph Face Editor (MFE) is a Windows tool for editing Shepard and NPC faces in M
 - Create and edit Human Male/Female, Asari, Salarian, Turian, Krogan, Batarian and Vorcha NPC faces.
 - Change face shape, materials, textures, hair and accessories, with Undo/Redo while you experiment.
 - Randomise a face or selected features. Try **Cursed Mode** when conventional beauty standards are simply too tame for you.
-- Assign NPC faces and materials to actors, and convert compatible faces between LE1, LE2 and LE3.
+- Assign NPC faces and materials to actors, and convert Shepard or compatible NPC heads between LE1, LE2 and LE3.
 - Share headmorphs and material presets, or import PSK/glTF meshes for advanced material work.
+- Export head, hair and accessory meshes as PSK or glTF, with optional material and texture files for your modelling tool.
 
 ## Requirements
 
@@ -48,6 +49,8 @@ Start with **Getting Started**, then follow the guide for your workflow.
 5. Open your file through **File → Open File**, or drag it onto the editor.
 
 The scan finds assets without changing game files. After installing or removing mods, use **Mesh/Texture Databases → Rescan Mods**.
+
+If MFE hasn't found your installation, choose the **Mass Effect Legendary Edition Directory** under **File → Settings → Game Paths**, then build the databases. Changing to a different installation makes the old databases **Outdated**; use **Rebuild** for the games you need. See [Getting Started](documentation/GETTING-STARTED.md#settings) for the steps.
 
 ## Saving your work
 

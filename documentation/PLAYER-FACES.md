@@ -45,11 +45,11 @@ The headmorph should be for the same game and Shepard gender as the destination 
 
 ### Open a headmorph on its own
 
-The headmorph can be opened through **File → Open File** (Ctrl+O). When prompted, the matching LE game is selected (unless it's a LE1/LE2 RON, in which case you may be asked to specify which game workspace to use). Files exported by MFE may already contain the game information, so those prompts can vary based on if it's a TSE or MFE file. On import the imported face is given a name.
+The headmorph can be opened through **File → Open File** (Ctrl+O). When prompted, select the matching LE game and give the imported face a name. Files exported by MFE may already contain the game information, so the prompts vary depending on the file. An untagged LE1/LE2 RON can require you to choose which game it belongs to.
 
 For a Gibbed file, **LE2** is selected for `.me2headmorph` or **LE3** for `.me3headmorph`. This brings your old original-trilogy headmorph into LE2/LE3.
 
-Once opened, the face can be edited in the same way as a career head. A full `.ron` can then be saved with **Export Morph Face** in the face's right-click menu and applied using [Apply a RON to a career save](#apply-a-ron-to-a-career-save). The exported RON can also be imported into a save using Trilogy Save Editor. This is also a good way to convert a ME2 gibbed headmorph into a LE1 compatible morph.
+Once opened, the face can be edited in the same way as a career head. A full `.ron` can then be saved with **Export Morph Face** in the face's right-click menu and applied using [Apply a RON to a career save](#apply-a-ron-to-a-career-save). The exported RON can also be imported into a save using Trilogy Save Editor. To use a ME2 Gibbed headmorph in LE1, open it as LE2 first and then use **Convert Morph** as described below.
 
 An opened full RON can be saved back to its source with **Save File**, or written to a separate RON with **Save As**. Exporting a RON creates a separate headmorph file; it doesn't change a career save by itself.
 
@@ -57,7 +57,11 @@ An opened full RON can be saved back to its source with **Save File**, or writte
 
 Build the mesh/texture databases for both games. Open the head as a Player morph, right-click Shepard in the face list and choose **Convert Morph**. Select the target game and save the new RON. You can then open it in MFE or apply it to a career save for that game.
 
-MFE checks whether the source game's sliders can reproduce the highest-detail head (LOD0) and transfers the sliders and manual bone edits. If the head was built on a custom baked reference, MFE can also use matching starting heads that you supply for the two games.
+MFE checks whether the source game's sliders can reproduce the highest-detail head (LOD0) and transfers the sliders and manual bone edits. If the head was built on a custom baked reference, MFE can also use matching starting heads that you supply for the two games. An unrecognised shape or incompatible rig can prevent a safe conversion; the original remains unchanged.
+
+Some LE3 female hairstyle morphs do not affect LOD0. When converting a female head to LE3, **Split Side** is reset so its lower-LOD deformation does not carry across on its own. Check the hairstyle and scalp in the converted result.
+
+A hair diffuse override can transfer when the target hairstyle supports it and the target texture can be resolved. Some stock overrides deliberately use the target hairstyle's default instead; missing or incompatible assets can also change the result. Check the conversion report and the exported head.
 
 For a female Shepard going from LE1 to LE3, **Approximate baked shape** can carry a sculpt using just the edited Player head and the installed game meshes. MFE first tries its usual conversion. If that cannot reproduce the head, it transfers the visible LOD0 shape, accounting for the final bone pose in each game. Check the eyes and mouth in the exported RON. Lower LODs use the target game's sliders.
 

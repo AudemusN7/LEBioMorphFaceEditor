@@ -84,7 +84,7 @@ public class HumanMaleFeatureMetadataCatalog : IHeadEditorUiProfile
 public virtual IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
     [
         new(FacialStructure, Loc.Text("loc_Services_Taxonomy_facial_structure_812284cf"), Loc.Text("loc_Services_Taxonomy_character_likeness_race_and_geometry_based_hairs_50ee7c21"),
-            [new(Character, Loc.Text("loc_Services_Taxonomy_character_19cd78f5")), new(Race, Loc.Text("loc_Services_Taxonomy_race_c51fb9b5")), new(Hair, Loc.Text("loc_Services_Taxonomy_hair_3ba4bcee"))]),
+            [new(Character, Loc.Text("loc_Services_Taxonomy_character_19cd78f5")), new(Race, Loc.Text("loc_Services_Taxonomy_race_c51fb9b5"))]),
         new(Head, Loc.Text("loc_Services_Taxonomy_head_9bb0aacc"), Loc.Text("loc_Services_Taxonomy_face_shape_cheeks_ears_skin_and_base_head_surfac_11c71fda"),
             [new(Shape, Loc.Text("loc_Services_Taxonomy_shape_cfb25fc2")), new(Ears, Loc.Text("loc_Services_Taxonomy_ears_903a1aed")), new(Cheeks, Loc.Text("loc_Services_Taxonomy_cheeks_daeb3667"))]),
         new(Eyes, Loc.Text("loc_Services_Taxonomy_eyes_a39e9d98"), Loc.Text("loc_Services_Taxonomy_brows_sockets_eyes_eyelids_lashes_pupils_iris_co_76faa4fc"),
@@ -98,7 +98,7 @@ public virtual IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
         new(Additions, Loc.Text("loc_Services_Taxonomy_additions_966ff941"), Loc.Text("loc_Services_Taxonomy_surface_additions_face_overlays_freckles_scars_a_1f3ef8ca"),
             [new(Addition, Loc.Text("loc_Services_Taxonomy_addition_63d99162")), new(Face, Loc.Text("loc_Services_Taxonomy_face_215db504")), new(Scalp, Loc.Text("loc_Services_Taxonomy_scalp_91d59546"))]),
         new(Hair, Loc.Text("loc_Services_Taxonomy_HairTab"), Loc.Text("loc_Services_Taxonomy_HairDescription"),
-            [new(Hair, Loc.Text("loc_Services_Taxonomy_hair_3ba4bcee"))])
+            [new(Shape, Loc.Text("loc_Services_Taxonomy_shape_cfb25fc2")), new(Hair, Loc.Text("loc_Services_Taxonomy_hair_3ba4bcee"))])
     ];
 
     public virtual MorphFeatureMetadata Describe(ResolvedMorphFeature feature, bool sessionCanEdit)
@@ -367,7 +367,7 @@ public virtual IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
             "rollins" or "sarge" or "debug_capcorrector" or "slick" or "straighthairline" or
             "widowspeak" or "willis")
         {
-            return (FacialStructure, Hair);
+            return (Hair, Shape);
         }
         if (lower.StartsWith("shape_")) return (Head, Shape);
         if (lower.StartsWith("cheek") || lower == "mouth_cheekmass") return (Head, Cheeks);
@@ -402,16 +402,18 @@ public virtual IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
         if (lower is "hir_beard" or "hir_beardtipmorph" || lower.StartsWith("jaw_chin") || lower == "jaw_doublechin") return (NeckJaw, Chin);
         if (lower.StartsWith("jaw") || lower == "jawlower") return (NeckJaw, Jaw);
         if (lower.StartsWith("neck")) return (NeckJaw, Neck);
-        return (FacialStructure, Hair);
+        return (Hair, Shape);
     }
 
     private static int GetFeatureSortOrder(string name) => name.ToLowerInvariant() switch
     {
-        // Facial Structure — Character / Race / Hair
+        // Facial Structure — Character / Race
         "anderson" => 0, "joker" => 1, "kaiden" => 2, "eastwood" => 3, "jacob" => 4, "shepard" => 5,
         "race_oldasn" => 0, "race_yngasn" => 1,
         "race_oldblk" => 10, "race_yngblk" => 11,
         "race_oldcauc" => 20, "race_yngcauc" => 21,
+
+        // Hair
         "afro" => 0, "buzzcut" => 1, "buzzcut_widowspeak" => 2, "deiter" => 3,
         "flattop" => 4, "flattop_widowspeak" => 5, "geezer" => 6,
         "rollins" => 7, "debug_capcorrector" => 8, "straighthairline" => 9,

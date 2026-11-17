@@ -945,8 +945,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     private static bool IsHumanHairMorph(MorphFeatureEditorViewModel feature, PlayerHairSex sex) =>
         sex == PlayerHairSex.Male
             ? HumanMaleHairScalpPolicy.IsHairMorph(feature.Name)
-            : feature.CategoryKey.Equals("facial-structure", StringComparison.OrdinalIgnoreCase) &&
-              feature.SubcategoryKey.Equals("hair", StringComparison.OrdinalIgnoreCase);
+            : feature.CategoryKey.Equals(HumanMaleFeatureMetadataCatalog.Hair, StringComparison.OrdinalIgnoreCase);
 
     private bool CanRandomiseScope(EditorRandomisationScope scope, bool includeCursedBones = false)
     {

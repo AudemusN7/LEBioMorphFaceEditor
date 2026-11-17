@@ -55,9 +55,7 @@ public static class ImportedMeshDecoder
             .Where(weight => weight.Weight > 0)
             .GroupBy(weight => weight.Point)
             .ToDictionary(group => group.Key, group => group.OrderByDescending(weight => weight.Weight).ToArray());
-        if (weightsByPoint.Values.Any(influences => influences.Length > 4))
-            throw new InvalidDataException("PSK contains more than four positive bone influences for one point.");
-
+        var reducedPointCount = weightsByPoint.Values.Count(influences => influences.Length > 4);
         var positions = wedges.Select(w => RestorePskHandedness(points[w.PointIndex])).ToArray();
         var uvs = wedges.Select(w => new Vector2(w.U, w.V)).ToArray();
         var sourceIndices = wedges.Select(w => (int)w.PointIndex).ToArray();
@@ -104,14 +102,19 @@ public static class ImportedMeshDecoder
                 var sum = values.Sum(v => v.Weight);
                 if (!float.IsFinite(sum)) throw new InvalidDataException("PSK point weights do not have a finite sum.");
                 if (sum <= 0) continue;
-                var ids = values.Select(v => v.Bone).Concat([0, 0, 0, 0]).Take(4).ToArray();
-                var ws = values.Select(v => v.Weight / sum).Concat([0f, 0f, 0f, 0f]).Take(4).ToArray();
+                var retained = values.Take(4).ToArray();
+                var retainedSum = retained.Sum(v => v.Weight);
+                var ids = retained.Select(v => v.Bone).Concat([0, 0, 0, 0]).Take(4).ToArray();
+                var ws = retained.Select(v => v.Weight / retainedSum).Concat([0f, 0f, 0f, 0f]).Take(4).ToArray();
                 boneIndices[i] = new BoneIndex4(ids[0], ids[1], ids[2], ids[3]);
                 boneWeights[i] = new Vector4(ws[0], ws[1], ws[2], ws[3]);
             }
         }
         return new ImportedMeshAsset(path, positions, normals, tangents, uvs, [.. indices], sections,
-            bones, boneIndices, boneWeights, sourceIndices, generatedNormals, false);
+            bones, boneIndices, boneWeights, sourceIndices, generatedNormals, false)
+        {
+            ReducedBoneInfluencePointCount = reducedPointCount
+        };
     }
 
     private static ImportedMeshAsset ReadGltf(string path)
@@ -140,6 +143,7 @@ public static class ImportedMeshDecoder
         Skin? decodedSkin = null;
         var logicalSource = 0;
         var streamOffsets = new Dictionary<string, int>(StringComparer.Ordinal);
+        var streams = new List<(int Offset, int Count)>();
 
         foreach (var node in nodes)
         {
@@ -186,6 +190,7 @@ public static class ImportedMeshDecoder
                     if (localUvs is not null && localUvs.Length != localPositions.Length) throw new InvalidDataException("glTF TEXCOORD_0 count does not match POSITION.");
                     offset = positions.Count;
                     streamOffsets.Add(streamKey, offset);
+                    streams.Add((offset, localPositions.Length));
                     for (var i = 0; i < localPositions.Length; i++)
                     {
                         positions.Add(GltfToCanonicalVector(Vector3.Transform(localPositions[i], world)) * GltfToGameUnits);
@@ -193,13 +198,16 @@ public static class ImportedMeshDecoder
                             ? Vector3.Zero
                             : NormalizeOrZero(GltfToCanonicalVector(
                                 Vector3.TransformNormal(localNormals[i], normalMatrix))));
+                        // Supplied glTF tangents use the green-up normal-map convention.
+                        // ME materials use green-down: that normal-space Y reversal adds
+                        // a sign change to the geometric reflection handled above.
                         tangents.Add(localTangents is null
                             ? Vector4.Zero
                             : new Vector4(
                                 NormalizeOrZero(GltfToCanonicalVector(Vector3.TransformNormal(
                                     new Vector3(localTangents[i].X, localTangents[i].Y, localTangents[i].Z),
                                     normalMatrix))),
-                                changesHandedness ? -localTangents[i].W : localTangents[i].W));
+                                changesHandedness ? localTangents[i].W : -localTangents[i].W));
                         uvs.Add(localUvs is null ? Vector2.Zero : localUvs[i]);
                         normalPresent.Add(localNormals is not null);
                         tangentPresent.Add(localTangents is not null);
@@ -267,12 +275,17 @@ public static class ImportedMeshDecoder
             : generatedNormalValues![index]).ToArray();
         var anyUvs = uvPresent.Any(value => value);
         var finalUvs = anyUvs ? uvs.ToArray() : null;
+        if (MorphFaceInterchangeService.IsLegacyGltfTangentExport(path, model.Asset.Generator, positionArray))
+            GltfTangentCompatibility.RestoreLegacyNativeBasis(positionArray, finalNormals, tangents,
+                finalUvs, indices, streams, tangentPresent, normalPresent, uvPresent);
         var generatedTangentValues = tangentPresent.All(value => value) ? null : GenerateTangents(
             positionArray,
             finalNormals,
             finalUvs,
             indices,
             anyUvs ? uvPresent : null);
+        // Missing tangents are derived in native game space with the native UV basis;
+        // only supplied glTF streams need the normal-map convention conversion.
         Vector4[]? finalTangents = tangentPresent.Any(value => value) || generatedTangentValues is not null
             ? tangents.Select((value, index) => tangentPresent[index]
                 ? value

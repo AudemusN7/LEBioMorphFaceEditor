@@ -100,6 +100,20 @@ Preferences will need to be reapplied when the editor reopens. Databases will al
     <system:String x:Key="loc_Settings_ThemeLight" xml:space="preserve">Light</system:String>
     <!--localiser: {"Key":"loc_Settings_ThemeSaveFailed","ReviewedHash":"89DAAA6B7F1080E59DC672C8288D42083DC939240C5F49BE6BFF61FD634176BB","DoNotTranslate":false,"Note":"Theme settings save error. {0} = underlying save exception detail.","SourceHash":null}-->
     <system:String x:Key="loc_Settings_ThemeSaveFailed" xml:space="preserve">Could not save your theme: {0}</system:String>
+    <!--localiser: {"Key":"loc_Settings_GamePaths","ReviewedHash":"FFE2F6415DDD02902308C6193566BCC091256E004D6279FFE7B7DF27E344D9F8","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_Settings_GamePaths" xml:space="preserve">Game Paths</system:String>
+    <!--localiser: {"Key":"loc_Settings_LegendaryEditionDirectory","ReviewedHash":"A12F701A31DD8F9335519F2F0C56AE4C4068FED50C471F0C5144CFE5FD6C0D58","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_Settings_LegendaryEditionDirectory" xml:space="preserve">Mass Effect Legendary Edition Directory</system:String>
+    <!--localiser: {"Key":"loc_Settings_Browse","ReviewedHash":"3227AA9666253F7A736509074FB83BC4D47B19582FAAA0233F228746DE29217A","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_Settings_Browse" xml:space="preserve">Browse</system:String>
+    <!--localiser: {"Key":"loc_Settings_InvalidGameDirectory","ReviewedHash":"3F73D9E80875D371FFEE290BDEF242C3E1FB1C5FD416CD79DF697E23B3B16E79","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_Settings_InvalidGameDirectory" xml:space="preserve">Select the Mass Effect Legendary Edition folder containing Game\Launcher\MassEffectLauncher.exe.</system:String>
+    <!--localiser: {"Key":"loc_Settings_GameDirectoryApplied","ReviewedHash":"EC00FE355E7ACDADBB7F5BA102244884AE1DBE5979B2420D182B8AA2DD370117","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_Settings_GameDirectoryApplied" xml:space="preserve">Game directory applied.</system:String>
+    <!--localiser: {"Key":"loc_Settings_GameDirectoryCompressionUnavailable","ReviewedHash":"0791ACAC60B758143EBF1F2DD40CBDC402578CFEC6216963EA439EE554726453","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_Settings_GameDirectoryCompressionUnavailable" xml:space="preserve">Game directory applied, but required game files could not be loaded. Check the application log.</system:String>
+    <!--localiser: {"Key":"loc_Settings_GameDirectorySaveFailed","ReviewedHash":"CA441DEDF3C4545C54F61CB819A1134FF566FB62232DD564FF67B78E07E3FE2D","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_Settings_GameDirectorySaveFailed" xml:space="preserve">Could not update your game directory: {0}</system:String>
     <!--localiser: {"Key":"loc_Settings_ThemeSystem","ReviewedHash":"6725E7BBCD28F3A8A586FA34BF191FD72DDE8B61756932CD3237C17A6F196F1A","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_Settings_ThemeSystem" xml:space="preserve">System</system:String>
     <!--localiser: {"Key":"loc_Settings_Title","ReviewedHash":"74A883A037BC227F91891AB654A753D3A99F31AB06AE5B5D2B6E594A692B41F8","DoNotTranslate":false,"Note":"","SourceHash":null}-->
@@ -244,6 +258,10 @@ No: discard custom asset databases after a successful rebuild.</system:String>
     <system:String x:Key="loc_VM_textureRegistry_developmentSchemaUnsupported" xml:space="preserve">Dev schema v{0} is no longer supported</system:String>
     <!--localiser: {"Key":"loc_VM_textureRegistry_fullBuildFailed","ReviewedHash":"8D8BDFDFC8E3D28723C424D2E400AC66D7D930A3CA9BAB02EE8B9D5EF24DAED5","DoNotTranslate":false,"Note":"Shown for failed official full builds and Rebuild All. The full exception remains in the existing application log entry.","SourceHash":null}-->
     <system:String x:Key="loc_VM_textureRegistry_fullBuildFailed" xml:space="preserve">The basegame texture database could not be rebuilt. Check the application log for details.</system:String>
+    <!--localiser: {"Key":"loc_VM_textureRegistry_noInstalledPackages","ReviewedHash":"8C970A3C01F0EBFCA6723B40F081986E85A57BC0CCE5E681EB650E2A74E476AD","DoNotTranslate":false,"Note":"An installed\u002Dgame scan found no official packages, or an existing installed database was created by an empty scan. Empty custom databases are valid.","SourceHash":null}-->
+    <system:String x:Key="loc_VM_textureRegistry_noInstalledPackages" xml:space="preserve">No installed game packages were found. Check the game directory in Settings, then rebuild this database.</system:String>
+    <!--localiser: {"Key":"loc_VM_textureRegistry_gameDirectoryChanged","ReviewedHash":"F5930EAE49F1D86494478EAEDCF828F2A2AA44FD69ED1B8552EFB8A39AD20430","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_VM_textureRegistry_gameDirectoryChanged" xml:space="preserve">The game directory has changed since this database was built. Rebuild the database to use the selected installation.</system:String>
     <!--localiser: {"Key":"loc_VM_textureRegistry_missingCustomAssets","ReviewedHash":"4DB2760CAF05B6AA918624FA631170D718462E4EFEA5B7AE273CC7A3E46115EE","DoNotTranslate":false,"Note":"Texture Registry rebuild result. {0} = number of custom assets that could not be found; {1} = path to the report listing them.","SourceHash":null}-->
     <system:String x:Key="loc_VM_textureRegistry_missingCustomAssets" xml:space="preserve">{0} custom assets could not be found. Details: {1}</system:String>
     <!--localiser: {"Key":"loc_VM_textureRegistry_modRescanFailed","ReviewedHash":"2D4EBEE68B29DDB35A60C4C1767308AC9AA1BED7059620B33C46219C268C28EB","DoNotTranslate":false,"Note":"","SourceHash":null}-->
@@ -620,6 +638,12 @@ Choose No to keep the current scalp textures.</system:String>
     <system:String x:Key="loc_Services_Taxonomy_addition_63d99162" xml:space="preserve">ADDITION</system:String>
     <!--localiser: {"Key":"loc_Services_Taxonomy_additions_966ff941","ReviewedHash":"966FF94170D3CDE6ACB3384C255E3CF9084760862D550C8F2D729EAC4520BB54","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_Services_Taxonomy_additions_966ff941" xml:space="preserve">Additions</system:String>
+    <!--localiser: {"Key":"loc_Services_Taxonomy_HairDescription","ReviewedHash":"A5256E4FBE4771011FB4442FA001CA14283F92FA835ACCA84AFBD316A9C3598F","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_Services_Taxonomy_HairDescription" xml:space="preserve">Hairstyle morphs, hair colour, highlights, and textures.</system:String>
+    <!--localiser: {"Key":"loc_Services_Taxonomy_HairTab","ReviewedHash":"ABABED4823AB79D226BA3901F6B947C2C7319327DA2BA37068ECBA87672B6EEE","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_Services_Taxonomy_HairTab" xml:space="preserve">Hair</system:String>
+    <!--localiser: {"Key":"loc_Services_Taxonomy_FemaleAdditionsDescription","ReviewedHash":"32EE735DE3198FA28D2E1EEB847DDA86C7F2A7D0F00F5CBD31A53CB246AA1747","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_Services_Taxonomy_FemaleAdditionsDescription" xml:space="preserve">Makeup, eyebrows, face overlays, freckles, scars, and scalp settings.</system:String>
     <!--localiser: {"Key":"loc_Services_Taxonomy_asari_head_crest_proportions_b5f4248a","ReviewedHash":"B5F4248A095BDACD2A3F3B88AED21015D028DA4D9DCF2464E80E602DAC2FCE36","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_Services_Taxonomy_asari_head_crest_proportions_b5f4248a" xml:space="preserve">Asari head-crest proportions.</system:String>
     <!--localiser: {"Key":"loc_Services_Taxonomy_batarian_specific_cranium_and_regional_colour_co_3ef2e9bb","ReviewedHash":"3EF2E9BB608D8738C93A73FF0C6896607155F91440968CF63292C751C10A140C","DoNotTranslate":false,"Note":"","SourceHash":null}-->
@@ -640,8 +664,8 @@ Choose No to keep the current scalp textures.</system:String>
     <system:String x:Key="loc_Services_Taxonomy_brows_sockets_eyes_eyelids_lashes_pupils_iris_co_76faa4fc" xml:space="preserve">Brows, sockets, eyes, eyelids, lashes, pupils, iris colour, and eye textures.</system:String>
     <!--localiser: {"Key":"loc_Services_Taxonomy_character_19cd78f5","ReviewedHash":"19CD78F5EAF2217B56FA720A0CCE3AEBD1C227E03B41360BC9D5A5A91F53A662","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_Services_Taxonomy_character_19cd78f5" xml:space="preserve">CHARACTER</system:String>
-    <!--localiser: {"Key":"loc_Services_Taxonomy_character_likeness_race_and_geometry_based_hairs_50ee7c21","ReviewedHash":"50EE7C216ECA811EA98C703B53FCDC081345D82B2A5F1805126EAAABA05234DA","DoNotTranslate":false,"Note":"","SourceHash":null}-->
-    <system:String x:Key="loc_Services_Taxonomy_character_likeness_race_and_geometry_based_hairs_50ee7c21" xml:space="preserve">Character likeness, race, and geometry-based hairstyles.</system:String>
+    <!--localiser: {"Key":"loc_Services_Taxonomy_character_likeness_race_and_geometry_based_hairs_50ee7c21","ReviewedHash":"EA558CE6E3E0347CCEADAB47A28BB0C11802FC6575D36A91CFCFA6FB01A06FCA","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_Services_Taxonomy_character_likeness_race_and_geometry_based_hairs_50ee7c21" xml:space="preserve">Character and racial presets.</system:String>
     <!--localiser: {"Key":"loc_Services_Taxonomy_character_shapes_0fab481f","ReviewedHash":"0FAB481FCFDBC6CFDBCCF1068FD0DD98D5E674C2A3698D52B11DAC4CF214FE21","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_Services_Taxonomy_character_shapes_0fab481f" xml:space="preserve">CHARACTER SHAPES</system:String>
     <!--localiser: {"Key":"loc_Services_Taxonomy_cheek_neck_skin_colour_tint_and_surface_controls_d0203b6d","ReviewedHash":"D0203B6D094A745F8FB6BC79FD2EAEAF41C478F0B1FC0A8A81B76857B638C606","DoNotTranslate":false,"Note":"","SourceHash":null}-->
@@ -838,7 +862,8 @@ Choose No to keep the current scalp textures.</system:String>
     <system:String x:Key="loc_VM_materialScope_vorcha" xml:space="preserve">Vorcha</system:String>
 
     <!-- Faces - Actor assignment -->
-    <system:String x:Key="loc_ActorAssignment_OutsideActor">'{0}' is not owned by the selected actor and will not be modified.</system:String>
+    <!--localiser: {"Key":"loc_ActorAssignment_OutsideActor","ReviewedHash":"62061D8D4D70E947B5FE69E811BAF71210A5FBB76B7331D3E6EE9EA43479E35B","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_ActorAssignment_OutsideActor">'{0}' is not owned by the selected actor and will not be modified.</system:String>
     <!--localiser: {"Key":"loc_ActorAssignment_Accessory","ReviewedHash":"ADF7651801AEA4615532B8DCF29730FA72FF404908A78A4B4E007EB11156C149","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_ActorAssignment_Accessory">Accessory</system:String>
     <!--localiser: {"Key":"loc_ActorAssignment_AssignedMaterialTargets","ReviewedHash":"960306520DF10C9193CF5BDB5A8817FE683EC2C638B89211D80778D1D572164E","DoNotTranslate":false,"Note":"Actor assignment result. {0} = verified parameter MIC count; {1} = verified hair/accessory mesh count. Save File commits the changes.","SourceHash":null}-->
@@ -1344,6 +1369,8 @@ Mesh-only files cannot recover metadata-only controls, bone-only controls, or ma
     <system:String x:Key="loc_StandaloneImportGameWindow_Continue" xml:space="preserve">Continue</system:String>
     <!--localiser: {"Key":"loc_StandaloneImportGameWindow_NewPlayerPrompt","ReviewedHash":"B229CF671A7A8A9AFB84ED5F3CF2859DAA3DD1E1948BABE4698FB31948EC1D5A","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_StandaloneImportGameWindow_NewPlayerPrompt" xml:space="preserve">Choose the game and gender for your new morph.</system:String>
+    <!--localiser: {"Key":"loc_StandaloneImportGameWindow_MaterialPreviewPrompt","ReviewedHash":"5FC66818B7354ABE021D4E4D206569C5AA8F9FD1D858FB2DD247D476EC17459C","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_StandaloneImportGameWindow_MaterialPreviewPrompt" xml:space="preserve">This file does not contain a head mesh, so MFE will need to load a generic head mesh to preview the materials on. Choose the game and gender this file is intended for. </system:String>
     <!--localiser: {"Key":"loc_StandaloneImportGameWindow_NewNpcPrompt","ReviewedHash":"FD2A315863C1CDFE229E09E90F9CA6A3E037F2BB9507AF32ACFF093BD3767C7D","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_StandaloneImportGameWindow_NewNpcPrompt" xml:space="preserve">Choose the game and archetype for your new NPC morph.</system:String>
     <!--localiser: {"Key":"loc_View_MainWindow_CancelNPCImport","ReviewedHash":"4F42FECB0A47D87ED2B1C1985DC0210CCD94E14DD6EF133794B37B943B3D633F","DoNotTranslate":false,"Note":"","SourceHash":null}-->
@@ -1490,6 +1517,18 @@ Mesh-only files cannot recover metadata-only controls, bone-only controls, or ma
     <system:String x:Key="loc_FileSave_UnsavedTitle" xml:space="preserve">Unsaved File Changes</system:String>
     <!--localiser: {"Key":"loc_MeshExport_UnverifiedGltfTangents","ReviewedHash":"FD6E69305B331CC8E757377333BEB7931E2ACED7D7AEFEF251438B5E8A912E0B","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_MeshExport_UnverifiedGltfTangents">The glTF mesh could not be matched safely to its source surface. No export files have been changed.</system:String>
+    <!--localiser: {"Key":"loc_MeshExport_UnverifiedRoundTrip","ReviewedHash":"AAB2DA49F9E0DCF122A207F203CF3A6EBC85C7155F9AEE6045A01ECBEC9EC8CE","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_MeshExport_UnverifiedRoundTrip">Could not verify that this mesh can be reimported without changing the head shape. No export files have been changed.</system:String>
+    <!--localiser: {"Key":"loc_MeshExport_MaterialsFailed","ReviewedHash":"4F0F94CC44CFAB699A6189E54C7499A994217A6813E7AB29685D4BD68E133B01","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_MeshExport_MaterialsFailed">The mesh materials and textures could not be exported. No export files have been changed.</system:String>
+    <!--localiser: {"Key":"loc_MeshExport_AttachmentFailed","ReviewedHash":"0DE78A8BBB0C96A27C191DAD4D1F37334192A12B560E80D0A6FC461170AB7AD3","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_MeshExport_AttachmentFailed">The attachment mesh {0} could not be exported. No export files have been changed.</system:String>
+    <!--localiser: {"Key":"loc_MeshImport_BoneWeightsReduced","ReviewedHash":"A4081A2767468B7E58C40F58C45636754023F3CB829E56EF443A8496346DA5C0","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_MeshImport_BoneWeightsReduced" xml:space="preserve">This mesh exceeded the game's limit of four bone influences per vertex. MFE kept the strongest four weights and normalized them for {0} vertices.
+
+The resting mesh shape is unchanged, but how the mesh deforms when the face animates may differ. The original PSK file was not changed.</system:String>
+    <!--localiser: {"Key":"loc_MeshImport_PlayerBoneWeightsReplaced","ReviewedHash":"11B9613155FAD8467618E416F6E9D2D1E2933710D04D4B28C306DE7F8B377784","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_MeshImport_PlayerBoneWeightsReplaced" xml:space="preserve">The PSK contained {0} vertices with more than four bone influences. Recognised Player heads use the game's original rig and bone weights instead of imported weights.&#10;&#10;The original PSK file was not changed.</system:String>
     <!--localiser: {"Key":"loc_PccSave_AuthoredMaterialInstancePreserved","ReviewedHash":"505987711A27AF6710FEE96FC4F47EBE70AB6B8A51BBEB172ECF5E7CE8022258","DoNotTranslate":false,"Note":"{0} is the authored material instance path; {1} is its preserved destination path.","SourceHash":null}-->
     <system:String x:Key="loc_PccSave_AuthoredMaterialInstancePreserved" xml:space="preserve">Authored material instance '{0}' was preserved as '{1}' to keep its overrides separate from the stock instance.</system:String>
     <!--localiser: {"Key":"loc_PccSave_ExplicitTextureUnavailable","ReviewedHash":"CFAEE0167FF84DD8552B1AAA48234A78D489821432941A2E9B9EA6AC9BDE6326","DoNotTranslate":false,"Note":"{0} is the texture identity path; {1} is the material parameter name; {2} is the source package path.","SourceHash":null}-->
@@ -1629,8 +1668,12 @@ Package: {0}</system:String>
     <system:String x:Key="loc_View_MainWindow_CommitTheLoadedFaceToTheTemporaryPackageWorkspaceWithou" xml:space="preserve">Commit the loaded face to the temporary package workspace without saving the source PCC.</system:String>
     <!--localiser: {"Key":"loc_View_MainWindow_GlTF","ReviewedHash":"C74F919439792582AA4F0B188EC2A928675CDB3BA72797781CEB6DFAA86B313F","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_View_MainWindow_GlTF" xml:space="preserve">glTF</system:String>
+    <!--localiser: {"Key":"loc_View_MainWindow_GlTFWithTextures","ReviewedHash":"62EEEF3DC5172CCD6EA61327818FB81C7EBE144DCBDF467A35521452E1B4EFEE","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_View_MainWindow_GlTFWithTextures" xml:space="preserve">glTF - with Textures</system:String>
     <!--localiser: {"Key":"loc_View_MainWindow_PSK","ReviewedHash":"F19CB00638F96C79ACBE732A149C4558BB37D4C825BF01DD678F0652C968ACE6","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_View_MainWindow_PSK" xml:space="preserve">PSK</system:String>
+    <!--localiser: {"Key":"loc_View_MainWindow_PSKWithTextures","ReviewedHash":"2E59B3341DC2785C505DEA58811D00F55D2CACD07AFEE8D347E09219E5499443","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_View_MainWindow_PSKWithTextures" xml:space="preserve">PSK - with Textures</system:String>
     <!--localiser: {"Key":"loc_View_SaveNewInstanceWindow_BrowseExisting","ReviewedHash":"ABA95D90D0B456C8299E154015349CC76619FDF0A75D4EE21CF76736D6C3C8CE","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_View_SaveNewInstanceWindow_BrowseExisting" xml:space="preserve">Browse Existing</system:String>
     <!--localiser: {"Key":"loc_View_SaveNewInstanceWindow_ExportTheSelectedMorphAndItsRequiredAssetsWhilePreservi","ReviewedHash":"87E3E9FE948FE3C767213415D26265414A897B43EA2C48A4EF6B331B6AD8026B","DoNotTranslate":false,"Note":"","SourceHash":null}-->
@@ -2739,8 +2782,8 @@ Materials: {2}{3}</system:String>
     <system:String x:Key="loc_Services_MetadataText_Shared_hed_scar_d7f87a_Label" xml:space="preserve">Scar Texture</system:String>
     <!--localiser: {"Key":"loc_Services_MetadataText_Shared_hed_scar_d7f87a_Description","ReviewedHash":"9AE7B18F64ABED5DCF64D231E8FEB0DD1A620EE1E7F480C3CDEC46E674DC2829","DoNotTranslate":false,"Note":"Don't translate the name, only second half","SourceHash":null}-->
     <system:String x:Key="loc_Services_MetadataText_Shared_hed_scar_d7f87a_Description" xml:space="preserve">HED_Scar · RGA = Normals / B = Scar Colour</system:String>
-    <!--localiser: {"Key":"loc_Services_MetadataText_Shared_hed_scar_colour_vector_23f7db_Label","ReviewedHash":"80606B58CB47E71912D18DFD1F8A2317F0B6EAC51592FAD1241418E1AC60C135","DoNotTranslate":false,"Note":"","SourceHash":null}-->
-    <system:String x:Key="loc_Services_MetadataText_Shared_hed_scar_colour_vector_23f7db_Label" xml:space="preserve">Scar Emissive Color</system:String>
+    <!--localiser: {"Key":"loc_Services_MetadataText_Shared_hed_scar_colour_vector_23f7db_Label","ReviewedHash":"463D4D5EBE858A1348EE3EA5D44C3FAEA9522D3E777CBB449A17FA4C18DC339A","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_Services_MetadataText_Shared_hed_scar_colour_vector_23f7db_Label" xml:space="preserve">Scar Emissive Colour</system:String>
     <!--localiser: {"Key":"loc_Services_MetadataText_Shared_hed_scar_colour_vector_23f7db_Description","ReviewedHash":"8C5E675899E50C7E79AFBDDE593CCE892EADA89B47C133153DE9C25627E73263","DoNotTranslate":true,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_Services_MetadataText_Shared_hed_scar_colour_vector_23f7db_Description" xml:space="preserve">HED_Scar_Colour_Vector</system:String>
     <!--localiser: {"Key":"loc_Services_MetadataText_Shared_hed_scar_diffuse_scalar_364478_Label","ReviewedHash":"C7FFE2F1D60A5F9E9F54CA6460A6BE66771BE5CF68159C8D7FD8153EEF889971","DoNotTranslate":false,"Note":"","SourceHash":null}-->
@@ -2755,6 +2798,10 @@ Materials: {2}{3}</system:String>
     <system:String x:Key="loc_Services_MetadataText_Shared_hed_scar_vector_67b0a0_Label" xml:space="preserve">Scar Colour</system:String>
     <!--localiser: {"Key":"loc_Services_MetadataText_Shared_hed_scar_vector_67b0a0_Description","ReviewedHash":"999516585320600E68209DCD3B5AC349D2B5B77817C65929AD94636C1F76C471","DoNotTranslate":true,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_Services_MetadataText_Shared_hed_scar_vector_67b0a0_Description" xml:space="preserve">HED_Scar_Vector</system:String>
+    <!--localiser: {"Key":"loc_Services_MetadataText_Shared_scar_color_Label","ReviewedHash":"015632E2E45AFF89742E9A492BB0CCE58D3AE021ADE71AFB5F0304621586CDD8","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_Services_MetadataText_Shared_scar_color_Label" xml:space="preserve">Scar Colour</system:String>
+    <!--localiser: {"Key":"loc_Services_MetadataText_Shared_scar_color_Description","ReviewedHash":"7C682A4E52E7AF93880076F9DA69590413CE011BA26B463C7F80998C2A892751","DoNotTranslate":false,"Note":"Do not translate Scar_Color.","SourceHash":null}-->
+    <system:String x:Key="loc_Services_MetadataText_Shared_scar_color_Description" xml:space="preserve">Scar_Color · Tints the skin beneath alignment scars in LE2/LE3.</system:String>
     <!--localiser: {"Key":"loc_Services_MetadataText_Shared_hed_spec_add_vector_186be8_Label","ReviewedHash":"DB01B533FD186EB49D69EE596B16E4EE33D128B5857B2F03634CD5BA2504760A","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_Services_MetadataText_Shared_hed_spec_add_vector_186be8_Label" xml:space="preserve">Skin Specular Colour</system:String>
     <!--localiser: {"Key":"loc_Services_MetadataText_Shared_hed_spec_add_vector_186be8_Description","ReviewedHash":"CF1ED847C4EAC0B3CBF9E8214C4D163A252E94A84C82FDB9890003B60C01FCD1","DoNotTranslate":true,"Note":"","SourceHash":null}-->
@@ -4653,6 +4700,8 @@ Materials: {2}{3}</system:String>
     <system:String x:Key="loc_View_MainWindow_ChangeThePreviewBackgroundColour" xml:space="preserve">Change the preview background colour</system:String>
     <!--localiser: {"Key":"loc_View_MainWindow_Front","ReviewedHash":"A61759020289882109FA92AD765E1200B6A9069B98190891D2747C65474669E2","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_View_MainWindow_Front" xml:space="preserve">Front</system:String>
+    <!--localiser: {"Key":"loc_View_MainWindow_Side","ReviewedHash":"630EF00B7C4F54D25B8712CB4EBB5B04264B037A8FCDAC9754F21DF0036881D1","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+<system:String x:Key="loc_View_MainWindow_Side" xml:space="preserve">Side</system:String>
     <!--localiser: {"Key":"loc_View_MainWindow_HEADPREVIEW","ReviewedHash":"9DA051DF97942C7D4CF76147D79854E22AEFC4CAE494D6245DFA3A4D080447BB","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_View_MainWindow_HEADPREVIEW" xml:space="preserve">LIVE PREVIEW</system:String>
     <!--localiser: {"Key":"loc_View_MainWindow_LOD","ReviewedHash":"BF0DD156298C1469ED85594249B197680090FFF3A49CDF4406CDAE097A0F9DD0","DoNotTranslate":false,"Note":"","SourceHash":null}-->
@@ -4667,4 +4716,35 @@ Materials: {2}{3}</system:String>
     <system:String x:Key="loc_View_MainWindow_View" xml:space="preserve">¾ View</system:String>
     <!--localiser: {"Key":"loc_View_MainWindow_Wireframe","ReviewedHash":"04B765747018CB132ACEDA1C1FE93DD08B7A282314D17E5EED873B2E7EC62FB9","DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_View_MainWindow_Wireframe" xml:space="preserve">Wireframe</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_ApproximateBakedShape","ReviewedHash":"1B8CBA1ECD29FC642EB0466669A80815F231809BBE8346106D0468714CCA4FE5","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_PlayerConversion_ApproximateBakedShape" xml:space="preserve">Approximate baked shape</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_ApproximateBakedShapeHelp","ReviewedHash":"666E4649D6B6FACAFF6A2311197E7A53CAC2B98F5499DDC65D587D79EDF62C7E","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_PlayerConversion_ApproximateBakedShapeHelp" xml:space="preserve">Carries the baked face shape across game meshes. Check the eyes and mouth in the converted output.</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_Description","ReviewedHash":"BA42E4F5EC416226AFE2AC0E988809CBCBB4F026B28A3EE57C44FC22E50FFDC5","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_PlayerConversion_Description" xml:space="preserve">Convert this player morph to another game and save it as a new RON file.</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_SaveTitle","ReviewedHash":"302C42711436D13C5E37E5F7C432BD55C598168DC99F2C1E5A7C273AEE7375C6","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_PlayerConversion_SaveTitle" xml:space="preserve">Save converted player morph</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_ChooseNewFile","ReviewedHash":"A0F2A71CEBDBF88DD76B7859914AD70D3074C368616A96423317D776B2FB3508","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_PlayerConversion_ChooseNewFile" xml:space="preserve">Choose a new RON filename that does not already exist.</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_CompletedStatus","ReviewedHash":"25301A4957CCF002EFEB18F0E2148DD721C71F37A5A06AFC35E2E91739CB6049","DoNotTranslate":false,"Note":"{0} = output path.","SourceHash":null}-->
+    <system:String x:Key="loc_PlayerConversion_CompletedStatus" xml:space="preserve">Converted player morph saved to {0}.</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_Completed","ReviewedHash":"C0D385E3F23D6E911A1C71CE2C00DE73EB82C943E650605DB931C44EF99171AD","DoNotTranslate":false,"Note":"{0} = target game, {1} = output path, {2} = optional warnings.","SourceHash":null}-->
+    <system:String x:Key="loc_PlayerConversion_Completed" xml:space="preserve">Converted player morph to {0} and saved it to:
+{1}{2}</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_UnsupportedGeometry","ReviewedHash":"F3C74CA9D73340B0523B87034EC14B605EFB9F1DB7A92A692A15A94117B832E6","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_PlayerConversion_UnsupportedGeometry" xml:space="preserve">The morph's LOD0 shape cannot be recreated safely from a supported player baseline. The original remains unchanged.</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_ApproximateResult","ReviewedHash":"920D3D520EA17400D7FC8AC7EF21832CFF0697E9836400EBA4A03407CBCCEDC6","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_PlayerConversion_ApproximateResult" xml:space="preserve">MFE approximated the baked face on the LE3 mesh. Check the eyes and mouth in the new RON. Lower LODs use the target game's sliders.</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_MissingBaselineCounterpart","ReviewedHash":"D8697C18791423AB2858E35ED0C86B8ACFB1BE397D7A4654C3B2387688FB55DD","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_PlayerConversion_MissingBaselineCounterpart" xml:space="preserve">This head matches a local Player reference. Add a compatible RON for the target game to the same reference family to convert it.</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_UnsupportedProfile","ReviewedHash":"F8CA54BA6D211D109A4AEB0B88070FD2A57107BC0BCDE3CBF222064B3332BBE5","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_PlayerConversion_UnsupportedProfile" xml:space="preserve">This player morph profile cannot be converted to the selected game.</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_InvalidDestination","ReviewedHash":"61683FA4DB44C2C2AA3FB4B89C16562E5AE79060A5BCED3D2682DD8AAF86B2D6","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_PlayerConversion_InvalidDestination" xml:space="preserve">Choose a new RON file as the conversion destination.</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_UnsafeOutput","ReviewedHash":"1A886BA829E3D64CDE43F9B679C7FC08083973D2A04DBD1A09925666F1349391","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_PlayerConversion_UnsafeOutput" xml:space="preserve">The converted RON could not be saved safely. The original remains unchanged.</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_FailedStatus","ReviewedHash":"81E5B25022457D8C6E3CCD30B8DA13CFB78854F7006278C8D6EB7C9E8DA1C42C","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_PlayerConversion_FailedStatus" xml:space="preserve">Player morph conversion failed; the original was not modified.</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_UnsupportedBones","ReviewedHash":"EC6C9F52FB54FECCBD470A834F6B6CF54CF5768F4643B26B6EFD1A3AD610B89F","DoNotTranslate":false,"Note":"","SourceHash":null}-->
+    <system:String x:Key="loc_PlayerConversion_UnsupportedBones" xml:space="preserve">The morph contains invalid or unrecognised bone data and cannot be converted safely. The original remains unchanged.</system:String>
 </ResourceDictionary>

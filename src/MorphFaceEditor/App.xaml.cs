@@ -34,7 +34,9 @@ public partial class App : Application
                 args.ExceptionObject as Exception ?? new Exception(args.ExceptionObject?.ToString()));
         TaskScheduler.UnobservedTaskException += (_, args) =>
             AppLog.Error("APP:TASK-EXCEPTION", args.Exception);
-        LegendaryExplorerCoreRuntime.Initialize(TaskScheduler.FromCurrentSynchronizationContext());
+        LegendaryExplorerCoreRuntime.Initialize(TaskScheduler.FromCurrentSynchronizationContext(),
+            ApplicationPreferencesStore.CreateDefault().Current.LegendaryEditionDirectory);
+        AppLog.Information($"GAME:DIRECTORY {LegendaryExplorerCoreRuntime.LegendaryEditionDirectory ?? "(not detected)"}");
         Themes = ThemeManager.CreateDefault(Resources);
 
 #if DEBUG
@@ -44,8 +46,7 @@ public partial class App : Application
 #endif
 
         var sceneFactory = new HeadPreviewSceneFactory();
-        var textureRegistryPaths = TextureRegistryPaths.CreateDefault();
-        var textureRegistryStore = new TextureRegistryStore(textureRegistryPaths);
+        var textureRegistryStore = TextureRegistryStore.CreateDefault();
         var textureRegistryBuilder = new TextureRegistryBuilder(textureRegistryStore);
         var textureCatalogService = new TextureCatalogService(textureRegistryStore);
         var textureRegistrySettings = new TextureRegistrySettingsViewModel(

@@ -104,6 +104,9 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
             throw new TextureRegistryBuildException(TextureRegistryBuildFailure.OfficialDatabaseRequired,
                 $"Build the {game} installed database before rebuilding its mod database.");
         var officialPackagePaths = modsOnly ? [] : SelectOfficialFilenameWinners(files, game);
+        if (!modsOnly && officialPackagePaths.Count == 0)
+            throw new TextureRegistryBuildException(TextureRegistryBuildFailure.NoInstalledPackages,
+                $"No installed official {game} packages were found. Check the detected installation path. Existing databases were preserved.");
         var officialPaths = officialPackagePaths.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var fingerprints = files.Where(File.Exists).Select(MountedPackageFingerprint.Read).ToArray();
         var occurrencesByPath = new Dictionary<string, List<TextureCatalogOccurrence>>(
@@ -120,7 +123,15 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
         {
             cancellationToken.ThrowIfCancellationRequested();
             var packagePath = files[index];
-            var scan = _scanner.Scan(game, packagePath, cancellationToken);
+            TextureRegistryPackageScan scan;
+            try
+            {
+                scan = _scanner.Scan(game, packagePath, cancellationToken);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException and not OutOfMemoryException)
+            {
+                throw new IOException($"Could not scan package '{packagePath}'.", exception);
+            }
             assets.AddRange(scan.Assets);
             cancellationToken.ThrowIfCancellationRequested();
             foreach (var texture in scan.Textures)
@@ -273,7 +284,11 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
     {
         var candidates = source.Candidates.Select(candidate =>
         {
-            var occurrences = candidate.Occurrences.Where(includeTexture).ToArray();
+            // Ordinary stock-path copies remain excluded from the mod database.
+            // M3TO explicitly declares a different physical source at that identity.
+            var isOfficialIdentity = officialIdentities.Contains(AssetIdentity(candidate.InstancedPath, "Texture2D"));
+            var occurrences = candidate.Occurrences.Where(includeTexture)
+                .Where(value => !includeModOnly || !isOfficialIdentity || value.IsM3toOverride).ToArray();
             return occurrences.Length == 0 ? null : candidate with
             {
                 EffectiveOccurrence = !includeModOnly && occurrences.Contains(candidate.EffectiveOccurrence)
@@ -281,9 +296,7 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
                 Occurrences = occurrences,
                 IsEligibleOfficialDefault = includeModOnly ? false : candidate.IsEligibleOfficialDefault
             };
-        }).Where(value => value is not null).Cast<TextureCatalogCandidate>()
-          .Where(candidate => !includeModOnly || !officialIdentities.Contains(AssetIdentity(candidate.InstancedPath, "Texture2D")))
-          .ToArray();
+        }).Where(value => value is not null).Cast<TextureCatalogCandidate>().ToArray();
 
         var meshes = source.AttachmentMeshes.Select(candidate =>
         {

@@ -8,6 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="MorphFaceEditor.Tests" />
+    <InternalsVisibleTo Include="MorphFaceEditor.QA" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\MorphFaceEditor.Core\MorphFaceEditor.Core.csproj" />

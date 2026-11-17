@@ -17,7 +17,13 @@ internal static class PcsavHeadMorphMerge
         var textures = Merge(original.MaterialData.Textures, baseline.MaterialData.Textures, edited.MaterialData.Textures,
             v => v.Name, (a,b) => (a.TextureReference?.InstancedPath ?? "None") == (b.TextureReference?.InstancedPath ?? "None"));
         if (!string.Equals(hair, original.HairMesh, StringComparison.OrdinalIgnoreCase))
-            textures = textures.Where(v => !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(v.Name)).ToArray();
+        {
+            // Hidden native attachment maps belong to the old mesh. Editable diffuse rows
+            // explicitly present in the new projection belong to the replacement mesh.
+            var authored = edited.MaterialData.Textures.Select(v => v.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            textures = textures.Where(v => !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(v.Name) ||
+                HeadMorphMaterialParameterPolicy.IsEditableHairDiffuseTexture(v.Name) && authored.Contains(v.Name)).ToArray();
+        }
         return new(
             hair,
             baseline.AccessoryMeshes.SequenceEqual(edited.AccessoryMeshes) ? original.AccessoryMeshes : edited.AccessoryMeshes,

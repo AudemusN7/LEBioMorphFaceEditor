@@ -12,9 +12,9 @@ internal static class HeadHairTextureOwnershipTests
 {
     internal static IReadOnlyList<TestCase> All { get; } =
     [
-        new("hair mesh maps are absent from a saved BMO while scalp maps and MIC textures survive",
+        new("supported hair diffuse overrides survive a saved BMO alongside scalp and MIC textures",
             () => RoundTrip(exportNew: false)),
-        new("hair mesh maps are absent from an exported BMO while scalp maps and MIC textures survive",
+        new("supported hair diffuse overrides survive an exported BMO alongside scalp and MIC textures",
             () => RoundTrip(exportNew: true)),
         new("null texture overrides inherit silently while unresolved nonzero references still warn",
             NullTextureOverrideInherits)
@@ -72,7 +72,9 @@ internal static class HeadHairTextureOwnershipTests
             var sourcePath = Path.Combine(directory, "Source.pcc");
             const string rootPath = "BIOG_MFE_HairOwnership";
             var scalpNames = new[] { "HED_Scalp_Diff", "HED_Scalp_Norm", "HED_Scalp_Spec", "HED_Tang" };
-            var hairNames = new[] { "HAIR_Diff", "hair_addn_diff", "HAIR_Norm", "HAIR_CustomMask", "__PROShort01_Diffuse", "Diffuseuse" };
+            var editableHairNames = new[] { "HAIR_Diff", "hair_addn_diff" };
+            var hairNames = editableHairNames.Concat(new[] { "HAIR_Norm", "HAIR_CustomMask", "__PROShort01_Diffuse", "Diffuseuse" }).ToArray();
+            var expectedNames = scalpNames.Concat(editableHairNames).ToArray();
             MorphFaceDocument draft;
             using (var source = MEPackageHandler.CreateMemoryEmptyPackage(sourcePath, MEGame.LE1))
             {
@@ -104,19 +106,19 @@ internal static class HeadHairTextureOwnershipTests
                 var context = new MorphFacePackageContextService();
                 var captured = context.CaptureHead(sourcePath, face.InstancedFullPath);
                 TestAssert.True(captured.MaterialData.Textures.Select(value => value.Name)
-                        .ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(scalpNames),
-                    "Capturing a head promoted mesh-owned hair maps from its BMO.");
+                        .ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(expectedNames),
+                    "Head capture lost supported diffuse overrides or retained unsupported hair maps.");
                 var ronPath = Path.Combine(directory, "Head.ron");
                 context.ExportRon(sourcePath, face.InstancedFullPath, ronPath);
                 TestAssert.True(TseHeadMorphRon.Read(ronPath).MaterialData.Textures.Select(value => value.Name)
-                        .ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(scalpNames),
-                    "The editor head export promoted mesh-owned hair maps into RON.");
+                        .ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(expectedNames),
+                    "Head RON export did not preserve only the supported hair diffuse overrides.");
                 File.Delete(ronPath);
-                // The reader must ignore stale BMO hair maps before resolving the live materials.
+                // The reader exposes supported diffuse overrides and excludes other hair maps.
                 using var cache = new PackageCache();
                 var read = new MorphFaceMaterialReader(cache, new GamePackageReferenceResolver(cache))
                     .Read(face, [], []).Overrides;
-                TestAssert.Equal(scalpNames.Length, read.Textures.Count);
+                TestAssert.Equal(expectedNames.Length, read.Textures.Count);
                 var textureIdentity = MorphFacePackageReader.ToIdentity(texture)!;
                 draft = new MorphFaceDocument(MorphFacePackageReader.ToIdentity(face)!,
                     PackageFingerprint.Capture(sourcePath), MorphFacePackageReader.ToIdentity(mesh), null, [], [],
@@ -152,8 +154,8 @@ internal static class HeadHairTextureOwnershipTests
             var bmoSaved = reopened.FindExport(rootPath + ".Face.MaterialOverrides", "BioMaterialOverride")!;
             var saved = bmoSaved.GetProperty<ArrayProperty<StructProperty>>("m_aTextureOverrides")!;
             TestAssert.True(saved.Select(item => item.GetProp<NameProperty>("nName")!.Value.Instanced)
-                .ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(scalpNames),
-                "BMO output lost scalp maps or retained a mesh-owned hair map.");
+                .ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(expectedNames),
+                "BMO output lost supported overrides or retained an unsupported hair map.");
             var savedMic = reopened.FindExport(rootPath + ".CustomHair_MIC", "MaterialInstanceConstant")!;
             var micTexture = savedMic.GetProperty<ArrayProperty<StructProperty>>("TextureParameterValues")!
                 .Single().GetProp<ObjectProperty>("ParameterValue")!.ResolveToEntry(reopened)!;

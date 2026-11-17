@@ -15,12 +15,12 @@ public partial class StandaloneImportGameWindow : Window
     private readonly TextureCatalogService? _textureCatalog;
 
     public StandaloneImportGameWindow(bool newPlayerMode = false, bool newNpcMode = false,
-        TextureCatalogService? textureCatalog = null)
+        TextureCatalogService? textureCatalog = null, bool materialImportMode = false, MorphFaceGame? importGame = null)
     {
         _textureCatalog = textureCatalog;
         InitializeComponent();
         DarkTitleBar.Apply(this);
-        if (newPlayerMode || newNpcMode)
+        if (newPlayerMode || newNpcMode || materialImportMode)
         {
             Title = Loc.Text(newNpcMode ? "loc_View_MainWindow_NewNpcMorph" : "loc_View_MainWindow_NewPlayerMorph");
             Height = 350;
@@ -33,6 +33,16 @@ public partial class StandaloneImportGameWindow : Window
             ContinueButton.Visibility = Visibility.Visible;
             ContinueButton.IsDefault = true;
             ContinueButton.Content = Loc.Text("loc_StandaloneImportGameWindow_Continue");
+        }
+        if (materialImportMode)
+        {
+            Title = Loc.Text("loc_View_MainWindow_ImportMaterials");
+            PromptText.Text = Loc.Text("loc_StandaloneImportGameWindow_MaterialPreviewPrompt");
+            if (importGame is { } game)
+            {
+                TargetGameSelector.ItemsSource = new[] { game };
+                TargetGameSelector.SelectedIndex = 0;
+            }
         }
         if (newNpcMode)
         {

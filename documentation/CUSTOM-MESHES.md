@@ -15,6 +15,8 @@ For the normal editing and camera controls, see [Editing Faces](EDITING-FACES.md
 
 A recognised player mesh may be opened through the [Player Faces](PLAYER-FACES.md) workflow instead if MFE detects it is valid. If it was previously exported by MFE, its accompanying `.mfe.json` file should be kept beside the mesh with its matching filename when it's brought back in.
 
+The game supports up to four bone influences per vertex. If an imported PSK has more, MFE warns you and keeps and normalises the four strongest weights for those vertices. The resting shape stays the same, but the mesh may deform differently when the face animates. Recognised Player heads use the game's original rig and weights instead. In either case, the original PSK isn't changed.
+
 Without a database, only a limited selection of Human material assets will be available, with no alien materials. If the database is built after the mesh has been opened, the mesh should be reimported to pick up the new choices.
 
 ![Imported custom head with both material slots unassigned](images/custom-mesh-unassigned.png)
@@ -107,6 +109,6 @@ Unrigged meshes can also be exported, but only a minimal root skeleton is added.
 
 Importing a preset keeps the current slot assignments. Only settings supported by those assigned materials are applied; unmatched settings are ignored. The materials should therefore be set up before the preset is imported, rather than expecting it to choose them for you.
 
-For a TSE material preset, **Import TSE RON** is used instead, with a Human material assigned first. **Export TSE RON** is available when at least one material has been assigned and all assigned materials are Human. A MFE material RON can be used for mixed Human and alien material setups. If you want to violate the laws of nature and put googly human eyes on a Salarian, who am I to stand in your way?
+For a TSE material preset, **Import TSE RON** is used instead, with a Human material assigned first. This applies matching material settings to the current assignments; it doesn't import a head mesh or change the assigned material slots. **Export TSE RON** is available when at least one material has been assigned and all assigned materials are Human. A MFE material RON can be used for mixed Human and alien material setups. If you want to violate the laws of nature and put googly human eyes on a Salarian, who am I to stand in your way?
 
 [Back to the documentation](../README.md#documentation)

@@ -57,6 +57,12 @@ public sealed class HeadOrbitCamera
         Pitch = DxMathUtil.DegreesToRadians(4);
     }
 
+    public void ResetSide()
+    {
+        ResetFront();
+        Yaw = DxMathUtil.DegreesToRadians(90);
+    }
+
     public void ResetPosition()
     {
         Target = _bounds.Center;

@@ -23,7 +23,8 @@ internal sealed class MorphFaceMaterialReader(
     PackageCache packageCache,
     GamePackageReferenceResolver referenceResolver)
 {
-    private const long MaximumDecodedTextureBytes = 384L * 1024 * 1024;
+    // A human face's full mip set can exceed 384 MiB, causing repeat decodes on every load.
+    private const long MaximumDecodedTextureBytes = 512L * 1024 * 1024;
     private readonly Dictionary<string, LinkedListNode<DecodedTextureAsset>> _textureCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, CachedTextureIdentity> _textureCacheAliases = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, CachedMaterialMetadata> _materialCache = new(StringComparer.OrdinalIgnoreCase);
@@ -146,6 +147,14 @@ internal sealed class MorphFaceMaterialReader(
     // Attachment and Custom evidence share the same terminal-master capabilities.
     internal ResolvedHeadMaterial ReadFaceAttachmentEvidence(ExportEntry materialExport) =>
         ForFaceControls(ReadMaterialEvidence(materialExport));
+
+    // Conversion stages attachments in an unsaved package, so inspect that exact
+    // material graph without reopening its not-yet-published package path.
+    internal ResolvedHeadMaterial ReadStagedFaceAttachmentEvidence(ExportEntry materialExport)
+    {
+        var identity = MorphFacePackageReader.ToIdentity(materialExport)!;
+        return ForFaceControls(ReadMaterialDefaults(materialExport, identity, MaterialIdentityKey.Create(identity)).Material);
+    }
 
     private static ResolvedHeadMaterial ForFaceControls(ResolvedHeadMaterial material) => material with
     {
@@ -513,7 +522,7 @@ internal sealed class MorphFaceMaterialReader(
 
         var textureExports = new Dictionary<string, ExportEntry?>(StringComparer.OrdinalIgnoreCase);
         var textures = properties.GetProp<ArrayProperty<StructProperty>>("m_aTextureOverrides")?
-            .Where(value => !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(
+            .Where(value => !HeadMorphMaterialParameterPolicy.IsExcludedHeadTexture(
                 value.GetProp<NameProperty>("nName")?.Value.Instanced ?? string.Empty))
             .Select(value =>
             {
@@ -581,7 +590,9 @@ internal sealed class MorphFaceMaterialReader(
         {
             vectorValues[value.Name] = value.Value;
         }
-        foreach (var pair in overrideTextures.Where(pair => baseline.Supports(pair.Key, MaterialParameterKind.Texture)))
+        foreach (var pair in overrideTextures.Where(pair => baseline.Supports(pair.Key, MaterialParameterKind.Texture) &&
+                     (!HeadMorphMaterialParameterPolicy.IsEditableHairDiffuseTexture(pair.Key) ||
+                      baseline.Family is HeadMaterialFamily.Hair or HeadMaterialFamily.MaskedHair)))
         {
             if (pair.Value is not null)
             {
@@ -589,7 +600,15 @@ internal sealed class MorphFaceMaterialReader(
                 try
                 {
                     if (decodeTextures)
-                        decodedTextures[pair.Key] = new MaterialTextureBinding(pair.Key, DecodeTexture(MorphFacePackageReader.ToIdentity(pair.Value)!, definition));
+                    {
+                        var texture = DecodeTexture(MorphFacePackageReader.ToIdentity(pair.Value)!, definition);
+                        decodedTextures[pair.Key] = new MaterialTextureBinding(pair.Key, texture);
+                        // The known LE1 hair master exposes this native sampler through a
+                        // synthetic preview alias. Keep that alias in step with the face override.
+                        if (baseline.Family == HeadMaterialFamily.Hair && baseline.Textures.ContainsKey("HAIR_Diff") &&
+                            pair.Key.Equals(HeadMorphMaterialParameterPolicy.AnonymousHairDiffuseParameter, StringComparison.OrdinalIgnoreCase))
+                            decodedTextures["HAIR_Diff"] = new MaterialTextureBinding("HAIR_Diff", texture);
+                    }
                 }
                 catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
                 {
@@ -740,27 +759,14 @@ internal sealed class MorphFaceMaterialReader(
             AddLiteralTexture(parameterSource, uniformTextures.Value, textureValues, GetShader, "__LensFractal", 3);
         }
         if (parameterSource.Game == MEGame.LE1 && family == HeadMaterialFamily.Hair &&
-            !textureValues.ContainsKey("HAIR_Diff"))
+            parameterSource.ObjectNameString.Equals("HMN_HED_PRO_ME3_MASTER_Hair_MAT", StringComparison.OrdinalIgnoreCase) &&
+            !textureValues.ContainsKey("HAIR_Diff") &&
+            textureValues.TryGetValue("MaterialExpressionTextureSampleParameter2D_62", out var hairDiffuse))
         {
-            // LE1's backported ME3 Shepard-hair master exposes its only live
-            // diffuse sampler under the retained expression export name. The
-            // LE2/LE3 versions call the same sampler HAIR_Diff. Promote that
-            // single proven hair diffuse to the shared semantic name while
-            // retaining the anonymous source binding for exact provenance.
-            var anonymousDiffuse = textureValues
-                .Where(value => value.Key.StartsWith(
-                                    "MaterialExpressionTextureSampleParameter2D_",
-                                    StringComparison.OrdinalIgnoreCase) &&
-                                value.Value.ObjectNameString.Contains("HAIR", StringComparison.OrdinalIgnoreCase) &&
-                                value.Value.ObjectNameString.Contains("Diff", StringComparison.OrdinalIgnoreCase))
-                .Select(value => value.Value)
-                .DistinctBy(value => value.UIndex)
-                .Take(2)
-                .ToArray();
-            if (anonymousDiffuse.Length == 1)
-            {
-                textureValues["HAIR_Diff"] = anonymousDiffuse[0];
-            }
+            // This known master's diffuse/opacity sampler retains its expression
+            // name in LE1. Its role is fixed even when a mod renames the texture.
+            // Keep the original binding and expose the shared preview semantic.
+            textureValues["HAIR_Diff"] = hairDiffuse;
         }
 
         var textureMetadata = textureValues

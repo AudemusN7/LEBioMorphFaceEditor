@@ -3,6 +3,8 @@ using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.LegendaryExplorer.TextureRegistry;
+using MorphFaceEditor.QA;
+using MorphFaceEditor.Rendering;
 using MorphFaceEditor.Services;
 using MorphFaceEditor.Infrastructure;
 using LegendaryExplorerCore.Packages;
@@ -23,8 +25,81 @@ internal static class ConversionTests
         new("attachment lookup rejects a same-named mesh at a different path", AttachmentLookupRejectsSameNameWrongPath),
         new("reviewed hair proxies use exact directional donor identities", ReviewedHairProxiesAreDirectional),
         new("reviewed cross-game texture policy aliases donors and omits inert overrides", ApplyReviewedTextureTransferPolicy),
+        new("iconic FemShep texture references survive cross-game conversion", TransferIconicFemShepTextures),
+        new("Player texture QA verifies the bindings drawn on reopened heads", CheckPlayerPreviewTextures),
         new("later-game alien textures embed package-stored when LE1 has no stock equivalent", EmbedMissingAlienTextureIntoLe1)
     ];
+
+    private static void TransferIconicFemShepTextures()
+    {
+        MorphFaceGame[] games = [MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3];
+        PlayerConversionTestFixtures.Prerequisites(games);
+        static MorphFaceMaterialData Textures(MorphFaceGame game) =>
+            QaPlayerConversionTextures.Expected(game, StandalonePlayerSex.Female);
+        using var destination = MEPackageHandler.CreateMemoryEmptyPackage("MFE-IconicTextures.pcc", MEGame.LE3);
+        var result = TransferTextures(destination, Textures(MorphFaceGame.LE2), MEGame.LE2,
+            "le2-human-female", string.Empty, string.Empty);
+        AssertMaterialEqual(Textures(MorphFaceGame.LE3), result.MaterialData);
+
+        var genericScalp = MaterialWithTextures(
+            ("HED_Scalp_Diff", "BIOG_HMF_HED_PROMorph_R.Diffuse.HMF_HED_PROBase_Scalp_Bald_Diff"),
+            ("HED_Scalp_Norm", "BIOG_HMF_HED_PROMorph_R.Normal.HMF_HED_PROBase_Scalp_Norm"));
+        var lookalike = MaterialWithTextures(("HED_Diff", "CustomHead.PROSheppard.HMF_HED_PROSheppard_Face_Diff_Stack"));
+        // An artist can use the very same normal map in a different supported slot.
+        TextureMaterialOverride SecondaryNormal(MorphFaceGame game) =>
+            Textures(game).Textures.Single(row => row.Name == "HED_Scalp_Norm") with { Name = "HED_Norm_02" };
+        var mixed = genericScalp with { Textures = [.. genericScalp.Textures, SecondaryNormal(MorphFaceGame.LE1), .. lookalike.Textures] };
+        using var le3 = MEPackageHandler.CreateMemoryEmptyPackage("MFE-MixedTextures.pcc", MEGame.LE3);
+        var retained = TransferTextures(le3, mixed, MEGame.LE1, "le1-human-female", string.Empty, string.Empty);
+        AssertMaterialEqual(genericScalp with { Textures = [.. genericScalp.Textures, SecondaryNormal(MorphFaceGame.LE3)] }, retained.MaterialData);
+        var unmapped = retained.UserWarnings.Single(w => w.LocalizationKey == "loc_Services_TextureTransfer_UnmappedOverride");
+        TestAssert.Equal("HED_Diff", unmapped.Arguments[0]);
+    }
+
+    private static void CheckPlayerPreviewTextures()
+    {
+        const MorphFaceGame game = MorphFaceGame.LE3;
+        const StandalonePlayerSex sex = StandalonePlayerSex.Female;
+        var registry = PlayerConversionTestFixtures.Prerequisites(game);
+        var expected = QaPlayerConversionTextures.Expected(game, sex);
+        using var reader = new MorphFacePackageReader();
+        var seed = PlayerConversionTestFixtures.LoadSeed(reader, game, sex);
+        var head = MorphFacePackageContextService.CreateDefaultHead(seed) with { MaterialData = expected };
+        var catalog = registry.ReadAsync(game).GetAwaiter().GetResult();
+        var assets = StandalonePlayerAssetCatalog.ForHead(game, head, catalog.Candidates, seed.Document.Source.PackagePath, catalog.AttachmentMeshes);
+        using var imported = new StandalonePlayerMorphImportService().ImportPlayerHead(game, head, "QaPlayerTextures", assets);
+        var retained = Path.Combine(Path.GetTempPath(), $"MFE-PlayerTextures-{Guid.NewGuid():N}.pcc");
+        try
+        {
+            var draft = reader.Load(imported.Workspace.WorkingPath, imported.ImportedFacePath, decodeTextures: false).Document;
+            var saved = new MorphFacePackageWriter().SaveMorphToPackage(draft, seed.Document.Source.PackagePath, retained, true);
+            using var loader = new MorphFacePreviewLoadService(new(), new(), MorphFaceProfileRegistry.CreateDefault(), new());
+            var preview = loader.LoadAsync(retained, saved.FaceInstancedPath).GetAwaiter().GetResult();
+            QaPlayerConversionTextures.RequireOverrides(expected, new([], [], preview.Loaded.Document.MaterialOverrides.Textures), "Saved Player");
+            QaPlayerConversionTextures.RequireApplied(expected, preview);
+            CheckMissingDrawBindings(expected, preview);
+        }
+        finally { File.Delete(retained); }
+    }
+
+    private static void CheckMissingDrawBindings(MorphFaceMaterialData expected, MorphFacePreviewLoadResult preview)
+    {
+        foreach (var row in expected.Textures)
+        {
+            // Keep the saved overrides and decoded materials intact while removing only the draw binding.
+            HeadPreviewSection RemoveBinding(HeadPreviewSection section)
+            {
+                var textures = new Dictionary<string, HeadPreviewTexture>(section.Material.Textures, StringComparer.OrdinalIgnoreCase);
+                textures.Remove(row.Name);
+                return section with { Material = section.Material with { Textures = textures } };
+            }
+            var scene = preview.Scene with { Meshes = preview.Scene.Meshes.Select(mesh =>
+                mesh with { Sections = mesh.Sections.Select(RemoveBinding).ToArray() }).ToArray() };
+            try { QaPlayerConversionTextures.RequireApplied(expected, preview with { Scene = scene }); }
+            catch (InvalidDataException e) when (e.Message.Contains(row.Name, StringComparison.OrdinalIgnoreCase)) { continue; }
+            throw new Exception($"Player texture QA accepted a preview with {row.Name} missing.");
+        }
+    }
 
     private static void ApplyReviewedTextureTransferPolicy()
     {

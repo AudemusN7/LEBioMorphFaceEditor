@@ -149,8 +149,8 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
             UpdateActiveStatus(previous with
             {
                 State = TextureRegistryState.Failed,
-                ErrorMessage = modsOnly ? LocalizedModsBuildError(exception) : Loc.Text("loc_VM_textureRegistry_fullBuildFailed"),
-                UserError = modsOnly ? ModsBuildError(exception) : UserFacingMessage.Create("loc_VM_textureRegistry_fullBuildFailed")
+                ErrorMessage = UserFacingMessageFormatter.Format(modsOnly ? ModsBuildError(exception) : FullBuildError(exception)),
+                UserError = modsOnly ? ModsBuildError(exception) : FullBuildError(exception)
             });
         }
         finally
@@ -165,8 +165,9 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
         }
     }
 
-    private static string LocalizedModsBuildError(Exception exception) =>
-        UserFacingMessageFormatter.Format(ModsBuildError(exception));
+    private static UserFacingMessage FullBuildError(Exception exception) => UserFacingMessage.Create(
+        exception is TextureRegistryBuildException { Reason: TextureRegistryBuildFailure.NoInstalledPackages }
+            ? "loc_VM_textureRegistry_noInstalledPackages" : "loc_VM_textureRegistry_fullBuildFailed");
 
     private static UserFacingMessage ModsBuildError(Exception exception) => UserFacingMessage.Create(exception switch
     {
@@ -216,8 +217,8 @@ public sealed class TextureRegistrySettingsViewModel : ObservableObject
                     row.Update(previous with
                     {
                         State = TextureRegistryState.Failed,
-                        ErrorMessage = Loc.Text("loc_VM_textureRegistry_fullBuildFailed"),
-                        UserError = UserFacingMessage.Create("loc_VM_textureRegistry_fullBuildFailed")
+                        ErrorMessage = UserFacingMessageFormatter.Format(FullBuildError(exception)),
+                        UserError = FullBuildError(exception)
                     });
                     break;
                 }

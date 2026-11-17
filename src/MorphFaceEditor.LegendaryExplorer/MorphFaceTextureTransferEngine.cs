@@ -50,6 +50,10 @@ internal static class MorphFaceTextureTransferEngine
         var installedAssets = installedAssetsOverride ?? new InstalledGameAssetResolver();
         var textures = new List<TextureMaterialOverride>();
         using var donors = new DonorPackages();
+        IEntry? ResolveTarget(string path, out bool found, bool reviewedAlias = false) => MaterializeTargetTexture(
+            destination, path, targetTemplatePackagePath, donors, targetTextureCatalog,
+            warnings, userWarnings, installedAssets, out found, reviewedAlias);
+
         foreach (var value in source.Textures.Where(value =>
                      value.TextureReference is not null && supportedTextures.Contains(value.Name)))
         {
@@ -63,9 +67,7 @@ internal static class MorphFaceTextureTransferEngine
             IEntry? targetEntry;
             if (decision.Kind == TransferKind.EmbedSource)
             {
-                targetEntry = MaterializeTargetTexture(
-                    destination, sourcePath, targetTemplatePackagePath, donors,
-                    targetTextureCatalog, warnings, userWarnings, installedAssets, out var targetIdentityFound);
+                targetEntry = ResolveTarget(sourcePath, out var targetIdentityFound);
                 if (!targetIdentityFound)
                     targetEntry = EmbedPackageStoredSourceTexture(
                         destination,
@@ -84,10 +86,16 @@ internal static class MorphFaceTextureTransferEngine
                 var requestedPath = CrossGameAssetReconciliationCatalog.NormalizeTargetPath(
                     destination.Game,
                     decision.TargetPath ?? sourcePath)!;
-                targetEntry = MaterializeTargetTexture(
-                    destination, requestedPath, targetTemplatePackagePath, donors,
-                    targetTextureCatalog, warnings, userWarnings, installedAssets, out _,
-                    isReviewedAlias: decision.Kind == TransferKind.Alias);
+                targetEntry = ResolveTarget(requestedPath, out var targetIdentityFound, decision.Kind == TransferKind.Alias);
+                // The same stock texture can be used in several morph slots. An installed
+                // counterpart is a fallback for a missing identity, after slot-specific policy.
+                if (!targetIdentityFound && decision.Kind == TransferKind.Resolve &&
+                    CrossGameAssetReconciliationCatalog.TryResolve(
+                        sourceGame, destination.Game, "Texture", null, sourcePath, out var counterpart) &&
+                    counterpart is not null)
+                {
+                    targetEntry = ResolveTarget(counterpart, out _, reviewedAlias: true);
+                }
             }
 
             if (targetEntry is null)
@@ -230,7 +238,8 @@ internal static class MorphFaceTextureTransferEngine
                 new AssetIdentity(official.FileRef.FilePath, canonicalPath, official.UIndex, "Texture2D"),
                 textureCatalog: null,
                 warnings: warnings,
-                userWarnings: userWarnings);
+                userWarnings: userWarnings,
+                resolvedDonor: official);
         }
         if (FindEntryByCanonicalPath(destination, canonicalPath, "Texture2D") is { } existing)
         {

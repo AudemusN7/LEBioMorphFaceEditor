@@ -117,7 +117,7 @@ internal static class PccTextureDependencyResolver
         return ImportDonor(destination, donorTexture, source.InstancedPath, warnings, userWarnings);
     }
 
-    private static ExportEntry ImportDonor(
+    internal static ExportEntry ImportDonor(
         IMEPackage destination, ExportEntry donorTexture, string requestedPath,
         ICollection<string>? warnings,
         ICollection<UserFacingMessage>? userWarnings)

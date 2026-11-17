@@ -13,7 +13,8 @@ internal static class ThirdPartyNotices
         new("LegendaryExplorerCore", "6.5.0.0", "GNU GPL v3 and component notices",
             "Package reading, writing and Mass Effect data support. Created by the LegendaryExplorer / ME3Explorer community. " +
             "Additional notices below cover the included texture codecs and Psychonauts Explorer audio parsing code.",
-            LecSource, "LegendaryExplorer.txt", "TextureCodecs.txt", "PsychonautsExplorer.txt"),
+            LecSource, "LegendaryExplorer.txt", "TextureCodecs.txt", "PsychonautsExplorer.txt",
+            "SOURCES.txt", "LegendaryExplorerCore-UnicodeNames.patch"),
         new("SharpDX", "4.2.0", "MIT",
             "Direct3D 11 preview and shader support. Includes SharpDX, Direct3D11, DXGI, D3DCompiler and Mathematics. Alexandre Mutel and contributors.",
             "https://github.com/sharpdx/SharpDX", "SharpDX.txt"),

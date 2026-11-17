@@ -2,7 +2,7 @@
 
 MFE is a Windows application for Mass Effect Legendary Edition. The editor does not ship any game assets, so you'll need LE installed so its meshes and textures can be found.
 
-1. The MFE 7z (downloaded here on Github or via Nexus) should be extracted into a folder, with its files kept together.
+1. The MFE release archive (downloaded here on Github or via Nexus) should be extracted into a folder, with its files kept together.
 2. The editor is started by opening **MorphFaceEditor.exe**.
 3. On the welcome screen, the database window is opened with **Build Mesh/Texture Databases**.
 4. The scan is started with **Rebuild** beside the game you'll be working with, or **Rebuild All** for all detected games. Once it's finished, the database window can be closed to reach the editor.
@@ -19,11 +19,14 @@ You can also add custom meshes/textures to the database if it wasn't automatical
 
 ## Settings
 
-Open **File → Settings** to change the editor's appearance and language.
+Open **File → Settings** to change the editor's appearance, language and game directory.
 
 - Choose a **Language**, then restart MFE for the change to take effect.
 - Choose **System**, **Light** or **Dark** under **Theme**. System follows your Windows theme.
 - Select the **Accent Colour** swatch to choose a colour for the interface.
+- Under **Game Paths**, use **Browse** or enter the Mass Effect Legendary Edition folder if MFE hasn't found the right installation. Choose the main folder containing `Game\Launcher\MassEffectLauncher.exe`. A browsed path is applied immediately; a typed path is applied when you press Enter, click away or close Settings.
+
+If you change to another installation, rebuild the databases for the games you use through **Mesh/Texture Databases**. The previous installation's automatically found assets won't be used with the new game directory.
 
 ![Settings with language, theme, accent colour and troubleshooting options](images/settings.png)
 
@@ -39,6 +42,7 @@ Files are opened through **File → Open File**. For most Shepard edits, the PCS
 | --- | --- |
 | **PCSAV** (`.pcsav`) | A LE PC career save. Your Shepard can be edited directly, then saved back into that career file. |
 | **TSE / MFE full headmorph** (`.ron`) | A headmorph previously exported from Trilogy Save Editor or Morph Face Editor. It can be edited on its own or imported onto a Shepard in an open save. |
+| **TSE material preset** (`.ron`) | Material settings used with custom head meshes. Open it on a generic head for preview, or apply it to a custom mesh with compatible Human materials. |
 | **MFE Morph / Material headmorph** (`.ron`) | A headmorph previously exported from Morph Face Editor that contains only morph slider info or material info - this can be imported back into a compatible face.     |
 | **Gibbed headmorph** (`.me2headmorph`, `.me3headmorph`) | A headmorph previously exported from the legacy ME2/ME3 Gibbed save editors. These can be imported for LE2 and LE3, respectively. |
 | **PCC** (`.pcc`) | A game package containing NPC faces. Those faces can be edited and saved directly in the package or exported to another file.     |
@@ -56,7 +60,7 @@ The editor has three main panes:
 - **Live Preview**, in the middle: the face as it currently looks, with camera controls around it.
 - **Face Editor**, on the right: the controls used to change its shape and appearance.
 
-The dividers between these areas can be dragged if a bit more room is needed. There are also additional controls at the top-right for material mode, lighting styles, and various other toggles.
+The dividers between these areas can be dragged if a bit more room is needed. There are also additional controls above the preview for material mode and various other toggles, with lighting presets at the upper-left of the preview.
 
 ![Shepard career save with the Face Browser on the left, preview in the middle and Face Editor on the right](images/player-workspace.png)
 
@@ -82,7 +86,9 @@ The **Textures** sections contain choices for the relevant part of the face. A d
 
 ### Hair and accessories
 
-Hair and accessory meshes can be changed using the selectors above the Features and Bones tabs. The **Hair / Accessory** checkbox above the preview only controls whether they're shown there; the selected hair isn't removed when it's unticked.
+Hair and accessory meshes can be changed using the selectors above the Features and Bones tabs. For human faces, the **Hair** category in Features brings together supported hair shape, colour and texture controls. The controls offered depend on the face and hair being used.
+
+Choose the hair mesh before adjusting its texture. Changing the hair mesh clears the previous hair texture override, so the replacement can use its own texture; the change can be undone. The **Hair / Accessory** checkbox above the preview only controls whether attachments are shown there; the selected hair isn't removed when it's unticked.
 
 ### Undo and randomisation
 
@@ -99,9 +105,9 @@ The controls and randomisation category locks are covered in more detail in [Edi
 | Left mouse drag | Rotate the head. |
 | Middle mouse drag | Move the head. |
 | Mouse wheel or right mouse drag | Zoom in/out. |
-| **Front** or **¾ View** | Snaps the view to a preset. |
+| **Front**, **¾ View** or **Side** | Snaps the view to a preset. |
 
-The **Lighting** menu can be used to check the face under different conditions. **Studio** (the default) is a useful starting point for judging colours. Other visual options, including **Post Processing** and **Wireframe**, are explained in [Editing Faces](EDITING-FACES.md).
+The lighting preset icons at the upper-left of the preview can be used to check the face under different conditions. **Studio** (the default) is a useful starting point for judging colours. Other visual options, including **Post Processing** and **Wireframe**, are explained in [Editing Faces](EDITING-FACES.md).
 
 These settings only affect the preview. The game's own lighting and rendering will still affect the final appearance, so a check in game is worthwhile once the edits have been saved.
 

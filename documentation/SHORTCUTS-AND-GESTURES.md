@@ -46,9 +46,11 @@ Keep the pointer over the preview for these mouse controls:
 | Mouse wheel | Zoom in or out. |
 | Click **Front** | Return to the front view. |
 | Click **¾ View** | Return to the three-quarter view. |
+| Click **Side** | Return to the side view. |
 | Click **Background** | Change the preview background colour. |
 
-Use **Lighting**, **Material**, **LOD**, **Post Processing** and **Wireframe** above the preview to inspect the face. Toggle **Hair / Accessory** to show or hide attachments in the preview; it doesn't remove them from the saved head.
+The five lighting preset buttons run down the upper-left of the preview which let you preview how the face will look under various environments.
+**Material**, **LOD**, **Post Processing** and **Wireframe** provide the other inspection views. Toggle **Hair / Accessory** to show or hide attachments in the preview; it doesn't remove them from the saved head.
 
 ![Preview material, lighting, LOD and visibility controls](images/preview-toolbar.png)
 

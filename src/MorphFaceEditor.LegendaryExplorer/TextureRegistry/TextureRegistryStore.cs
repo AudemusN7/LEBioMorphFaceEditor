@@ -7,8 +7,34 @@ using MorphFaceEditor.Core.Materials;
 namespace MorphFaceEditor.LegendaryExplorer.TextureRegistry;
 
 /// <summary>Reads and atomically replaces MFE's versioned Brotli-compressed registry files.</summary>
-public sealed class TextureRegistryStore(TextureRegistryPaths paths)
+public sealed class TextureRegistryStore(TextureRegistryPaths paths, Func<MorphFaceGame, string?>? installationRoot = null)
 {
+    public static TextureRegistryStore CreateDefault() => new(TextureRegistryPaths.CreateDefault(),
+        _ => LegendaryExplorerCoreRuntime.LegendaryEditionDirectory);
+
+    internal string? InstallationRoot(MorphFaceGame game) => installationRoot?.Invoke(game);
+
+    private TextureRegistryReadResult BindToInstallation(TextureRegistryReadResult result, MorphFaceGame game, bool mods)
+    {
+        if (installationRoot is null || result.Snapshot is not { } snapshot) return result;
+        var sources = mods ? snapshot.MountedPackagePaths : snapshot.OfficialPackagePaths;
+        var emptyMods = mods && snapshot.InstalledPackageCount == 0 && sources.Count == 0 &&
+            snapshot.Candidates.Count == 0 && snapshot.AttachmentMeshes.Count == 0 &&
+            snapshot.MorphFaceTemplates.Count == 0 && snapshot.Assets.Count == 0;
+        if (emptyMods) return result;
+        var root = InstallationRoot(game);
+        var gameFolder = game switch { MorphFaceGame.LE1 => "ME1", MorphFaceGame.LE2 => "ME2", MorphFaceGame.LE3 => "ME3", _ => throw new ArgumentOutOfRangeException(nameof(game)) };
+        var prefix = string.IsNullOrWhiteSpace(root) ? null :
+            Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.Combine(root, "Game", gameFolder))) + Path.DirectorySeparatorChar;
+        if (prefix is not null && sources.Count > 0 && sources.All(path =>
+            Path.GetFullPath(path).StartsWith(prefix, StringComparison.OrdinalIgnoreCase))) return result;
+        return new(result.Status with
+        {
+            State = TextureRegistryState.Outdated,
+            ErrorMessage = "The database belongs to a different or unknown game directory.",
+            UserError = UserFacingMessage.Create("loc_VM_textureRegistry_gameDirectoryChanged")
+        }, null);
+    }
     // Release generation uses MFT1 so development MFTR schema v1 cannot collide.
     public const uint Magic = 0x3154464D;
     public const uint DevelopmentMagic = 0x5254464D;
@@ -92,11 +118,23 @@ public sealed class TextureRegistryStore(TextureRegistryPaths paths)
         return false;
     }
 
-    internal TextureRegistryReadResult ReadWithStatus(MorphFaceGame game) =>
-        ReadWithStatus(game, paths.GetPath(game));
+    internal TextureRegistryReadResult ReadWithStatus(MorphFaceGame game)
+    {
+        var result = ReadWithStatus(game, paths.GetPath(game));
+        // Older builds could publish a successful scan without finding a single package.
+        // Empty mod/manual sidecars remain valid; only the installed database needs sources.
+        return result.Snapshot is { InstalledPackageCount: 0 }
+            ? new(result.Status with
+            {
+                State = TextureRegistryState.Failed,
+                ErrorMessage = "The installed database contains no game packages.",
+                UserError = UserFacingMessage.Create("loc_VM_textureRegistry_noInstalledPackages")
+            }, null)
+            : BindToInstallation(result, game, mods: false);
+    }
 
     internal TextureRegistryReadResult ReadModsWithStatus(MorphFaceGame game) =>
-        ReadWithStatus(game, paths.GetModsPath(game));
+        BindToInstallation(ReadWithStatus(game, paths.GetModsPath(game)), game, mods: true);
 
     internal TextureRegistryReadResult ReadManualWithStatus(MorphFaceGame game) =>
         ReadWithStatus(game, paths.GetManualPath(game));

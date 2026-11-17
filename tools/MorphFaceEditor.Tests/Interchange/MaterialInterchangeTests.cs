@@ -132,6 +132,11 @@ public static class MaterialInterchangeTests
         TestAssert.Equal(MaterialRonCodec.MaterialFileKind.Tse,
             MaterialRonCodec.IdentifyMaterialFile(ownTse.Replace("// MFE RON Type: TSE Materials\n", ""))!.Value);
         TestAssert.Equal(0.25f, FaceMaterialFileService.Read(ownTse, allowTse: false).Parameters.Scalars.Single().Value);
+        var externalTse = string.Join('\n', ownTse.Split('\n').Where(line => !line.StartsWith("//")));
+        TestAssert.Equal(MaterialRonCodec.MaterialFileKind.Tse, MaterialRonCodec.IdentifyMaterialFile(externalTse)!.Value);
+        foreach (var lod in Enumerable.Range(0, 4))
+            TestAssert.Equal<MaterialRonCodec.MaterialFileKind?>(null, MaterialRonCodec.IdentifyMaterialFile(
+                externalTse.Replace($"lod{lod}_vertices: []", $"lod{lod}_vertices: [(0, 0, 0)]")));
         Reject(() => FaceMaterialFileService.Read(untagged, allowTse: false));
         var tse = FaceMaterialFileService.Read(untagged, allowTse: true);
         TestAssert.True(tse.IsTse && tse.Parameters.Scalars.Single().Value == 0.25f,

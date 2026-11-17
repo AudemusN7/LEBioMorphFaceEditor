@@ -61,7 +61,7 @@ public override IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
     public override string GetMaterialCategory(string parameterName, MaterialParameterKind kind)
     {
         var name = parameterName.ToLowerInvariant();
-        if (IsMakeupParameter(name) || IsHairHighlightParameter(name))
+        if (IsMakeupParameter(name))
         {
             return Additions;
         }
@@ -216,12 +216,11 @@ public override IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
             },
             Additions => category with
             {
-                Description = Loc.Text("loc_Services_Taxonomy_makeup_hair_highlights_surface_additions_face_ov_50a0f9b7"),
+                Description = Loc.Text("loc_Services_Taxonomy_FemaleAdditionsDescription"),
                 SliderGroups =
                 [
-                    category.SliderGroups.First(group => group.Key == "hair"),
                     new EditorSubcategoryDefinition(Makeup, Loc.Text("loc_Services_Taxonomy_makeup_0be431f7")),
-                    .. category.SliderGroups.Where(group => group.Key != "hair")
+                    .. category.SliderGroups
                 ]
             },
             _ => category
@@ -230,9 +229,6 @@ public override IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
     private static bool IsMakeupParameter(string name) =>
         name.Contains("brow_tint") || name.Contains("eyeshadow") ||
         name.Contains("lips_tint") || name.Contains("makeup") || name.Contains("blush");
-
-    private static bool IsHairHighlightParameter(string name) =>
-        name.Contains("highlight") || name.Contains("hightlight");
 
     private static bool IsHairHighlightColourVector(string name, MaterialParameterKind kind) =>
         kind == MaterialParameterKind.Vector && name is

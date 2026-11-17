@@ -12,24 +12,48 @@ public partial class ConvertMorphWindow : Window
 {
     private readonly string _sourcePackagePath;
     private readonly string _suggestedFileName;
+    private readonly bool _playerRonMode;
+    private readonly bool _allowBakedShapeTransfer;
 
     public ConvertMorphWindow(
         MorphFaceGame sourceGame,
         string suggestedFileName,
-        string sourcePackagePath)
+        string sourcePackagePath,
+        bool playerRonMode = false,
+        bool allowBakedShapeTransfer = false)
     {
         InitializeComponent();
         DarkTitleBar.Apply(this);
         _sourcePackagePath = sourcePackagePath;
         _suggestedFileName = suggestedFileName;
+        _playerRonMode = playerRonMode;
+        _allowBakedShapeTransfer = playerRonMode && allowBakedShapeTransfer && sourceGame == MorphFaceGame.LE1;
+        if (playerRonMode)
+        {
+            Width = 420;
+            Height = double.NaN;
+            MinHeight = 280;
+            SizeToContent = SizeToContent.Height;
+            DescriptionText.SetResourceReference(System.Windows.Controls.TextBlock.TextProperty, "loc_PlayerConversion_Description");
+            PackageDestinationPanel.Visibility = Visibility.Collapsed;
+        }
+        TargetGameSelector.SelectionChanged += (_, _) => UpdateBakedShapeVisibility();
         TargetGameSelector.ItemsSource = new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 }
             .Where(game => game != sourceGame)
             .ToArray();
         TargetGameSelector.SelectedIndex = 0;
-        DestinationBox.Focus();
+        UpdateBakedShapeVisibility();
+        if (!playerRonMode) DestinationBox.Focus();
     }
 
     public MorphConversionSaveRequest? Request { get; private set; }
+
+    private void UpdateBakedShapeVisibility()
+    {
+        var visible = _allowBakedShapeTransfer && TargetGameSelector.SelectedGame == MorphFaceGame.LE3;
+        BakedShapePanel.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        if (!visible) ApproximateBakedShapeCheckBox.IsChecked = false;
+    }
 
     private void OnBrowse(object sender, RoutedEventArgs e)
     {
@@ -45,6 +69,29 @@ public partial class ConvertMorphWindow : Window
         if (TargetGameSelector.SelectedGame is not MorphFaceGame target)
         {
             ValidationText.Text = Loc.Text("loc_ConvertMorphWindow_ChooseTargetGame");
+            return;
+        }
+        if (_playerRonMode)
+        {
+            var ronDialog = new SaveFileDialog
+            {
+                Title = Loc.Text("loc_PlayerConversion_SaveTitle"),
+                Filter = EditorFileDrop.RonMorphFilter,
+                AddExtension = true,
+                DefaultExt = ".ron",
+                FileName = _suggestedFileName,
+                InitialDirectory = Path.GetDirectoryName(_sourcePackagePath),
+                OverwritePrompt = false
+            };
+            if (ronDialog.ShowDialog(this) != true) return;
+            if (IsSource(ronDialog.FileName) || File.Exists(ronDialog.FileName))
+            {
+                ValidationText.Text = Loc.Text("loc_PlayerConversion_ChooseNewFile");
+                return;
+            }
+            Request = new MorphConversionSaveRequest(target, Path.GetFullPath(ronDialog.FileName), true, null,
+                ApproximateBakedShape: BakedShapePanel.Visibility == Visibility.Visible && ApproximateBakedShapeCheckBox.IsChecked == true);
+            DialogResult = true;
             return;
         }
         var destination = DestinationBox.Text.Trim();

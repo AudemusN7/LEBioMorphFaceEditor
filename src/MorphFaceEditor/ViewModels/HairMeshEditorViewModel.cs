@@ -23,6 +23,7 @@ public sealed class ManualAttachmentSelectionEventArgs(HairMeshOption selection,
 public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
 {
     private readonly AssetReferenceEditingSession _session;
+    private readonly Action<Action>? _applyReferenceChange;
     private HairMeshOption _selected;
     private IReadOnlyList<HairMeshOption> _options;
     private readonly IReadOnlyList<HairMeshOption> _localOptions;
@@ -39,9 +40,11 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
         AssetReferenceEditingSession session,
         IReadOnlyList<PackageAssetListItem> candidates,
         string label,
-        int slotIndex)
+        int slotIndex,
+        Action<Action>? applyReferenceChange = null)
     {
         _session = session;
+        _applyReferenceChange = applyReferenceChange;
         Label = label;
         SlotIndex = slotIndex;
         var options = new List<HairMeshOption> { new(Loc.Text("loc_VM_hairMesh_none"), null) };
@@ -108,7 +111,7 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
                 OnPropertyChanged(nameof(Selected));
                 OnPropertyChanged(nameof(PreviewSelection));
                 if (hadPreview) PreviewChanged?.Invoke(this, EventArgs.Empty);
-                _session.Set(value.Identity);
+                SetReference(value.Identity);
                 return;
             }
             _pendingManualSelection = value;
@@ -143,7 +146,7 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
         if (!IsManualSelectionCurrent(selection, generation)) return false;
         _pendingManualSelection = null;
         _previewSelection = null;
-        _session.Set(selection.Identity);
+        SetReference(selection.Identity);
         OnPropertyChanged(nameof(Selected));
         OnPropertyChanged(nameof(PreviewSelection));
         return true;
@@ -264,7 +267,7 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
             OnPropertyChanged(nameof(Options));
             ApplySearch();
         }
-        _session.Set(value);
+        SetReference(value);
     }
 
     /// <summary>Applies an installed hairstyle choice unless this slot is protected.</summary>
@@ -280,7 +283,7 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
             ApplySearch();
         }
         var changed = !Same(_session.Value, value);
-        if (changed) _session.Set(value);
+        if (changed) SetReference(value);
         return changed;
     }
 
@@ -320,6 +323,13 @@ public sealed class HairMeshEditorViewModel : ObservableObject, IDisposable
         ArgumentNullException.ThrowIfNull(candidate);
         CancelPreview();
         Selected = candidate;
+    }
+
+    private void SetReference(AssetIdentity? value)
+    {
+        if (Same(_session.Value, value)) return;
+        if (_applyReferenceChange is null) _session.Set(value);
+        else _applyReferenceChange(() => _session.Set(value));
     }
 
     private HairMeshOption Find(AssetIdentity? value) =>

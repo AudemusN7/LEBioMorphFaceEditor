@@ -49,6 +49,9 @@ internal sealed class LecTextureRegistryPackageScanner : ITextureRegistryPackage
         var assets = new List<InstalledAssetOccurrence>();
         var origin = GetOrigin(packagePath, meGame);
         var mountPriority = GetMountPriority(packagePath, meGame);
+        var m3toPaths = origin == TextureCatalogOrigin.Mod
+            ? M3toTextureOverrideManifest.ReadTexturePaths(game, packagePath)
+            : null;
         foreach (var export in package.Exports)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -101,6 +104,7 @@ internal sealed class LecTextureRegistryPackageScanner : ITextureRegistryPackage
                 occurrence = new(Path.GetFullPath(packagePath), export.UIndex, mountPriority, origin,
                     0, 0, "Unreadable", "Unknown", false, null);
             }
+            occurrence = occurrence with { IsM3toOverride = m3toPaths?.Contains(export.InstancedFullPath) == true };
             results.Add(new TextureRegistryScannedTexture(export.InstancedFullPath, occurrence) { CanonicalPath = canonicalTexturePath });
         }
 

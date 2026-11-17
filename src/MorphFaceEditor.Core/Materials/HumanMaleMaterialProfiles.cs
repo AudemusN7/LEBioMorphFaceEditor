@@ -376,6 +376,8 @@ public static class HumanMaterialProfiles
             "Highlight1Specularity", "Highlight2Specularity",
             "Highlight1Colour_Specularity", "Highlight2Colour_Specularity");
         AddTexture(result, HeadMaterialFamily.Hair, "HAIR_Diff", "Hair diffuse / opacity", "Hair", TextureRole.Diffuse, TextureColorSpace.Srgb, TextureAlphaPolicy.Translucency);
+        AddTexture(result, HeadMaterialFamily.Hair, HeadMorphMaterialParameterPolicy.AnonymousHairDiffuseParameter,
+            "Hair diffuse / opacity", "Hair", TextureRole.Diffuse, TextureColorSpace.Srgb, TextureAlphaPolicy.Translucency);
         AddTexture(result, HeadMaterialFamily.Hair, "HAIR_ADDN_Diff", "Additional hair diffuse / opacity", "Hair", TextureRole.Diffuse, TextureColorSpace.Srgb, TextureAlphaPolicy.Translucency,
             "LE3 HMF additional-hair packed map: red selects the two highlight lobes, green supplies base colour, and alpha supplies opacity.");
         AddScalars(result, HeadMaterialFamily.Hair, "Hair", 0, 4,

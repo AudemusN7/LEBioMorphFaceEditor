@@ -143,11 +143,11 @@ internal static partial class QaCases
             UnrelatedBytesPreserved = true, FullRonReplacement = true };
     }
 
-    private static HeadMorphPayload ToHead(MorphFaceDocument draft) => new(draft.HairMeshReference?.InstancedPath ?? "None",
+    internal static HeadMorphPayload ToHead(MorphFaceDocument draft) => new(draft.HairMeshReference?.InstancedPath ?? "None",
         draft.OtherMeshReferences.OfType<AssetIdentity>().Select(value => value.InstancedPath).ToArray(),
         new(draft.MorphFeatures, draft.FinalSkeleton, draft.BakedLods),
         new(draft.MaterialOverrides.Scalars, draft.MaterialOverrides.Vectors, draft.MaterialOverrides.Textures
-            .Where(value => !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(value.Name)).ToArray()));
+            .Where(value => !HeadMorphMaterialParameterPolicy.IsExcludedHeadTexture(value.Name)).ToArray()));
 
     private static void RequireHead(HeadMorphPayload expected, HeadMorphPayload actual, string purpose)
     {
@@ -223,10 +223,10 @@ internal static partial class QaCases
                 "TSE Sheploo import did not omit and name its malformed scalp reference.");
         }
         var expectedMaterials = original.MaterialData with { Textures = original.MaterialData.Textures.Where(value =>
-            !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(value.Name) &&
+            !HeadMorphMaterialParameterPolicy.IsExcludedHeadTexture(value.Name) &&
             !string.Equals(value.TextureReference?.InstancedPath, malformedScalp, StringComparison.OrdinalIgnoreCase)).ToArray() };
         var importedMaterials = materials with { Textures = materials.Textures.Where(value =>
-            !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(value.Name)).ToArray() };
+            !HeadMorphMaterialParameterPolicy.IsExcludedHeadTexture(value.Name)).ToArray() };
         QaContext.Require(MaterialSignature(expectedMaterials) == MaterialSignature(importedMaterials),
             "TSE import changed the original BMO material payload: " +
             string.Join("; ", MaterialDifferences(expectedMaterials, importedMaterials)));

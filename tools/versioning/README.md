@@ -4,7 +4,7 @@ Most of this document is LLM instruction for how to handle version bumping.
 
 `Version.props` sets MFE's build version and the number in the title bar.
 
-Use **major.feature.improvement.fix**, keeping major at zero until release. Numbers can go above 9; increasing one resets those after it to zero.
+Use **major.feature.improvement.fix**. The public release series starts at 1.0.0.0. Numbers can go above 9; increasing one resets those after it to zero.
 
 ## Bump the version
 
@@ -26,4 +26,4 @@ Run this once in each new clone:
 git config core.hooksPath .githooks
 ```
 
-The hook rejects unchanged or lower staged versions and checks the resets.
+The pre-commit hook rejects unchanged or lower staged versions and checks the resets. Post-commit and post-merge hooks automatically push `main` and `dev`; other branches remain local until explicitly pushed. Each main push builds one stable public update; each dev push builds one shareable GitHub beta. The resulting commit message is its changelog. See [the release workflow](../../eng/RELEASING.md).

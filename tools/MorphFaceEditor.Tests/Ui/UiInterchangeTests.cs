@@ -19,11 +19,66 @@ internal static class UiInterchangeTests
 {
     internal static IReadOnlyList<TestCase> All { get; } =
     [
+        new("compatible RONs use the chosen game and reuse the open workspace", CompatibleRonRouting),
         new("full RON import preserves existing history and lower-LOD sculpt data", MatchingFullRonKeepsHistory),
         new("RON capture protects against source replacement during destination choice", RonDropUsesCapturedFile),
         new("nonfinite RON export preserves its destination and source", RonExportRejectsNonFiniteFields),
-        new("Custom material RON preserves slot assignments and ignores unsupported values", CustomMeshMaterialRonIgnoresSlots)
+        new("Custom material RON preserves slot assignments and ignores unsupported values", CustomMeshMaterialRonIgnoresSlots),
+        new("PSK imports automatically reduce excess bone influences", PskAutomaticallyReducesInfluences)
     ];
+
+    private static void CompatibleRonRouting() => RunWithDispatcher(async () =>
+    {
+        var ron = Path.Combine(Path.GetTempPath(), $"MFE-CompatibleRon-{Guid.NewGuid():N}.ron");
+        try
+        {
+            var head = new MorphFacePackageContextService().CapturePlayerDefaultHead(MorphFaceGame.LE1, StandalonePlayerSex.Female);
+            foreach (var featuresOnly in new[] { false, true })
+            {
+                void Write(RonExportProvenance metadata)
+                {
+                    if (featuresOnly) TseHeadMorphRon.WriteMorphFeatures(ron, head.MorphData, metadata);
+                    else TseHeadMorphRon.Write(ron, head, metadata);
+                }
+                Write(new(RonExportProducer.MFE, MorphFaceGame.LE1, "HMF", true));
+                using var reader = new MorphFacePackageReader();
+                var dialogs = new StubEditorDialogs
+                {
+                    MorphImportPath = ron,
+                    StandaloneGameChoiceResult = MorphFaceGame.LE2,
+                    StandaloneNameChoiceResult = "CompatibleHead"
+                };
+                using var shell = CreateMainWindowViewModel(reader, dialogs);
+                await shell.OpenDroppedFileAsync(ron);
+                TestAssert.Equal(1, dialogs.StandaloneGameChoiceCount);
+                TestAssert.True(!shell.HasError && shell.Editor is not null && shell.SelectedFace?.ProfileKey == "le2-human-female",
+                    shell.ErrorMessage ?? "Opening the LE1 RON ignored the selected LE2 game.");
+                dialogs.StandaloneNameChoiceResult = "AdditionalHead";
+                await ((AsyncRelayCommand)shell.ImportMorphCommand).ExecuteAsync();
+                TestAssert.True(!shell.HasError && shell.SelectedFace?.ProfileKey == "le2-human-female",
+                    shell.ErrorMessage ?? "The Import menu did not reuse the active game.");
+                TestAssert.Equal(1, dialogs.StandaloneGameChoiceCount);
+                if (!featuresOnly) TestAssert.Equal(2, shell.Faces.Count);
+                var importFace = featuresOnly ? shell.ImportMorphFeaturesRonCommand : shell.ImportMorphFaceRonCommand;
+                TestAssert.True(importFace.CanExecute(null), "The open face did not enable RON import.");
+                await ((AsyncRelayCommand)importFace).ExecuteAsync();
+                TestAssert.True(!shell.HasError, shell.ErrorMessage ?? "Importing the compatible LE1 RON into the LE2 face failed.");
+                var draft = shell.Editor!.CreateDraft();
+                foreach (var incompatible in new[]
+                {
+                    new RonExportProvenance(RonExportProducer.MFE, MorphFaceGame.LE3, "HMF", true),
+                    new RonExportProvenance(RonExportProducer.MFE, MorphFaceGame.LE1, "HMM", true)
+                })
+                {
+                    Write(incompatible);
+                    await ((AsyncRelayCommand)importFace).ExecuteAsync();
+                    TestAssert.True(shell.HasError && MorphFaceEditorStateComparer.Equals(draft, shell.Editor!.CreateDraft()),
+                        "An incompatible game or head profile changed the active face.");
+                }
+            }
+        }
+        finally { if (File.Exists(ron)) File.Delete(ron); }
+    });
 
     private static void MatchingFullRonKeepsHistory() => RunWithDispatcher(async () =>
     {
@@ -248,6 +303,48 @@ internal static class UiInterchangeTests
             editor.UndoCommand.Execute(null);
             TestAssert.True(original.BakedLods[0].SequenceEqual(editor.CreateDraft().BakedLods[0]) && sourceBytes.SequenceEqual(File.ReadAllBytes(meshPath)),
                 "Material import changed geometry or the source mesh.");
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    });
+
+    private static void PskAutomaticallyReducesInfluences() => RunWithDispatcher(async () =>
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"MFE-PskWeights-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var targetPath = Path.Combine(directory, "ManyWeights.psk");
+            var mesh = new PSK
+            {
+                Points = [new(0, 0, 0), new(1, 0, 0), new(0, 1, 0)],
+                Wedges = [new() { PointIndex = 0 }, new() { PointIndex = 1, U = 1 }, new() { PointIndex = 2, V = 1 }],
+                Faces = [new() { WedgeIdx0 = 0, WedgeIdx1 = 1, WedgeIdx2 = 2, MatIndex = 0 }],
+                Materials = [new() { Name = "Skin" }],
+                Bones = Enumerable.Range(0, 6).Select(i => new LegendaryExplorerCore.Unreal.PSA.PSABone
+                    { Name = i == 0 ? "root" : $"bone{i}", ParentIndex = i == 0 ? -1 : 0 }).ToList(),
+                Weights = [.. Enumerable.Range(0, 6).Select(i => new PSK.PSKWeight { Point = 0, Bone = i, Weight = (i + 1) / 21f }),
+                    new() { Point = 1, Bone = 0, Weight = 1 }, new() { Point = 2, Bone = 0, Weight = 1 }],
+                VertexNormals = []
+            };
+            mesh.ToFile(targetPath);
+            var targetBytes = File.ReadAllBytes(targetPath);
+            using var reader = new MorphFacePackageReader();
+            var dialogs = new StubEditorDialogs { StandaloneGameChoiceResult = MorphFaceGame.LE1, StandaloneNameChoiceResult = "Custom" };
+            using var shell = CreateMainWindowViewModel(reader, dialogs);
+            MorphFaceEditor.Rendering.HeadPreviewScene? scene = null;
+            shell.PreviewSceneReady += (value, _) => scene = value;
+            await shell.OpenDroppedFileAsync(targetPath);
+            TestAssert.True(!shell.HasError && shell.IsDetachedMeshWorkspace && shell.Editor is { CanEditBones: true },
+                shell.ErrorMessage ?? "The PSK did not open as a rigged custom mesh.");
+            TestAssert.Equal(Loc.Format("loc_MeshImport_BoneWeightsReduced", 1), dialogs.LastInformation);
+            var vertex = scene!.Meshes.Single().Vertices[0];
+            var weights = vertex.BoneWeights;
+            TestAssert.True(weights.X > 0 && weights.Y > 0 && weights.Z > 0 && weights.W > 0 &&
+                Math.Abs(weights.X + weights.Y + weights.Z + weights.W - 1) < 0.0001f,
+                "Imported mesh did not retain four normalized influences in the preview.");
+            TestAssert.True(new[] { vertex.BoneIndex0, vertex.BoneIndex1, vertex.BoneIndex2, vertex.BoneIndex3 }
+                .Order().SequenceEqual(new uint[] { 2, 3, 4, 5 }), "Imported mesh did not retain the strongest four bones.");
+            TestAssert.True(targetBytes.SequenceEqual(File.ReadAllBytes(targetPath)), "Import changed the source file.");
         }
         finally { Directory.Delete(directory, recursive: true); }
     });

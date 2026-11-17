@@ -37,6 +37,9 @@ public sealed record ImportedMeshAsset(
     bool TangentsWereGenerated = false,
     bool TextureCoordinatesAreComplete = true)
 {
+    /// <summary>Source points whose excess bone weights were limited to four during import.</summary>
+    public int ReducedBoneInfluencePointCount { get; init; }
+
     public bool HasCompleteTextureCoordinates =>
         TextureCoordinates?.Length == Positions.Length && TextureCoordinatesAreComplete;
 

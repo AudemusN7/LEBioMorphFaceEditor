@@ -10,9 +10,9 @@ Start with the error message MFE gives you, then check the relevant section belo
 
 ## A game or database is unavailable
 
-Make sure you have Mass Effect Legendary Edition properly installed, then restart MFE so it can detect it.
+Make sure you have Mass Effect Legendary Edition properly installed. In **File → Settings → Game Paths**, check that the selected directory is the Legendary Edition folder containing `Game\Launcher\MassEffectLauncher.exe`. If necessary, browse to the correct folder; it applies immediately.
 
-Open **Mesh/Texture Databases** and click **Rebuild** beside the game you need. If MFE marks an existing database as outdated, rebuild it for the current version of the editor.
+Open **Mesh/Texture Databases** and click **Rebuild** beside the game you need. If MFE marks an existing database as **Outdated**, rebuild it. Changing the game directory also makes databases built for the previous installation outdated: use a full **Rebuild** for each game you need, not just **Rescan Mods**.
 
 After installing or removing mods, use **Rescan Mods** to refresh an existing database. Build the main database first if you haven't done that yet. Retry the import or reopen the face after the scan. For custom meshes, reimport the mesh to refresh its material choices.
 
@@ -77,6 +77,8 @@ Use a compatible game and archetype. If you need to move a full head between gam
 
 For a previously exported legacy Gibbed Save Editor headmorph, open the `.me2headmorph` or `.me3headmorph` through **File → Open File** and choose LE2 or LE3 respectively. See [Player Faces](PLAYER-FACES.md) for the route into a career save.
 
+An untagged LE1/LE2 RON may need you to choose its game when opening it. A TSE material preset has no head geometry; when opened on its own, MFE loads a generic head to preview its materials. Choose the intended game and gender if prompted.
+
 If the message mentions missing assets or an unavailable database, sort that out before retrying the file. Changing the import action won't supply a missing hairstyle or texture.
 
 ## Saving or exporting fails
@@ -88,6 +90,8 @@ For a file-access or destination error, try **Save As** to a folder you can writ
 If a material or morph-only RON saves successfully but MFE still shows unsaved changes, check whether you've also edited something that format doesn't contain. Export the full headmorph or a PCC to keep those other edits.
 
 For a face export to PCC, use **Save File** to update the currently open package. **Export to PCC** expects a different destination. Custom mesh exports create a new mesh-and-material package, so they use a different save dialog.
+
+Mesh export requires the supported UModel build. If it is missing, export a mesh once from Legendary Explorer to install it, then retry in MFE. Keep the exported mesh, head `.mfe.json` sidecar, any glTF `.bin` files, and the material files and textures together. Textured exports approximate the materials for a modelling tool; packed maps may need manual setup.
 
 Read [Saving, Exporting and Conversion](SAVING-EXPORTING-AND-CONVERSION.md) for the output choices. If the failure continues, export diagnostic logs while the problem and your current edits are still available.
 
@@ -103,7 +107,7 @@ Check that your mod uses the edited PCC and that another installed package isn't
 
 Build databases for both games. If you're converting into an existing PCC, choose one from the target game containing an editable face of the same archetype. If it has no suitable face, create a new conversion PCC first, then export the converted face into your intended package.
 
-Read the conversion report for unsupported sliders and asset warnings. The games don't all have the same controls, so some differences are expected. See [Convert a face to another game](SAVING-EXPORTING-AND-CONVERSION.md#convert-a-face-to-another-game).
+Read the conversion report for unsupported sliders and asset warnings. The games don't all have the same controls, so some differences are expected. In particular, **Split Side** resets when converting a female head to LE3. A missing or incompatible texture or hairstyle can also change the result; some stock overrides deliberately use the target material default. See [Convert a face to another game](SAVING-EXPORTING-AND-CONVERSION.md#convert-a-face-to-another-game).
 
 ## Known limits
 

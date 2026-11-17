@@ -43,7 +43,7 @@ The source packages used to produce the embedded data aren't included in this re
 
 ## Corpus layout
 
-The corpus commands require a separately supplied collection of packages. `corpus-audit` expects nine top-level PCCs whose names contain `GlobalMorphs`, plus `TUF/LE1 TUF.pcc`, `TUF/LE2 TUF.pcc` and `TUF/LE3 TUF.pcc`. Reconciliation and conversion use the named native packages `LE1 GlobalMorphs.pcc`, `LE2 GlobalMorphs.pcc` and `LE3 GlobalMorphs.pcc`, and directional packages such as `LE1 to LE2 GlobalMorphs.pcc`. The material oracle uses the three native packages and three TUF packages.
+The corpus commands require a separately supplied collection of packages. `corpus-audit` expects nine top-level PCCs whose names contain `GlobalMorphs`, plus `TUF/LE1 TUF.pcc`, `TUF/LE2 TUF.pcc` and `TUF/LE3 TUF.pcc`. Reconciliation and conversion use the named native packages `LE1 GlobalMorphs.pcc`, `LE2 GlobalMorphs.pcc` and `LE3 GlobalMorphs.pcc`, and directional packages such as `LE1 to LE2 GlobalMorphs.pcc`. Reconciliation also requires the installed official LE1, LE2 and LE3 iconic human head packages: it derives texture identity mappings from corresponding local exports and uniquely matching parameters on their used LOD0 materials. The material oracle uses the three native packages and three TUF packages.
 
 Conversion stress tests select five faces per family; the full run selects every eligible face. TUF comparisons use the target game's dedicated package. Vorcha conversion isn't supported.
 

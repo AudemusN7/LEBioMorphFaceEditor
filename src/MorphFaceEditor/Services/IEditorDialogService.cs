@@ -14,10 +14,13 @@ public interface IEditorDialogService
         MorphFaceGame sourceGame,
         string suggestedFileName,
         string sourcePackagePath);
+    MorphConversionSaveRequest? ChoosePlayerMorphConversionDestination(
+        MorphFaceGame sourceGame, string suggestedFileName, string sourceBrowsePath, bool allowBakedShapeTransfer = false) => null;
     string? ChooseCloneName(string suggestedName, IReadOnlyCollection<string> existingObjectNames);
     string? ChooseMorphImportFile(string? initialDirectory = null);
     MorphFaceGame? ChooseStandaloneImportGame();
     NewPlayerMorphChoice? ChooseNewPlayerMorph() => null;
+    NewPlayerMorphChoice? ChooseMaterialImportTarget(MorphFaceGame? game = null) => null;
     NewNpcMorphChoice? ChooseNewNpcMorph() => null;
     string? ChooseNewNpcMorphName(string suggestedName) => ChooseStandaloneMorphName(suggestedName, []);
     RonImportDestinationChoice? ChooseRonImportDestination(
@@ -55,7 +58,8 @@ public sealed record MorphConversionSaveRequest(
     MorphFaceGame TargetGame,
     string DestinationPackagePath,
     bool CreateNewPackage,
-    string? TemplatePackagePath);
+    string? TemplatePackagePath,
+    bool ApproximateBakedShape = false);
 
 public enum RonImportDestination
 {

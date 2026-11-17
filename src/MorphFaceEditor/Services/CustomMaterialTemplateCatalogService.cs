@@ -49,7 +49,7 @@ public sealed class CustomMaterialTemplateCatalogService : ICustomMaterialTempla
         TextureRegistryStore? registry = null)
     {
         _reader = reader;
-        _registry = registry ?? new TextureRegistryStore(TextureRegistryPaths.CreateDefault());
+        _registry = registry ?? TextureRegistryStore.CreateDefault();
     }
 
     private static readonly IReadOnlyList<TemplateSource> Sources =

@@ -13,13 +13,13 @@ namespace MorphFaceEditor.QA;
 
 internal static partial class QaCases
 {
-    private static MainWindowViewModel FileWorkflow(QaContext c, QaDialogs dialogs, MorphFacePackageReader reader)
+    private static MainWindowViewModel FileWorkflow(QaContext c, QaDialogs dialogs, MorphFacePackageReader reader, PlayerMorphBaselineCatalog? playerBaselines = null)
     {
         var context = new MorphFacePackageContextService();
         return new(dialogs, new MorphFaceCatalogService(c.Profiles),
-            new MorphFacePreviewLoadService(c.Scenes, c.Targets, c.Profiles, reader), c.Scenes,
+            new MorphFacePreviewLoadService(c.Scenes, c.Targets, c.Profiles, reader, playerBaselines: playerBaselines), c.Scenes,
             new QaColorDialog(), new PackageReferenceService(reader, c.Textures), new MorphFacePackageWriter(), context,
-            new MorphFaceConversionService(c.Profiles, c.Targets, context, c.Textures),
+            new MorphFaceConversionService(c.Profiles, c.Targets, context, c.Textures, playerBaselines: playerBaselines),
             new MorphFaceInterchangeService(), new QaClipboard(), MorphRandomisationCatalog.LoadEmbedded(),
             recentFiles: new RecentFileService(),
             startupPreferences: new StartupPreferencesService(c.Artifact("file-preferences.json")));

@@ -72,6 +72,20 @@
                 </Border>
                 <Border Style="{StaticResource SettingsSection}">
                     <StackPanel>
+                        <TextBlock Text="{DynamicResource loc_Settings_GamePaths}" Style="{StaticResource SettingsHeading}" />
+                        <TextBlock Text="{DynamicResource loc_Settings_LegendaryEditionDirectory}" Margin="0,12,0,8" />
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                            <TextBox x:Name="GameDirectoryPath" VerticalContentAlignment="Center"
+                                     LostKeyboardFocus="OnGameDirectoryLostFocus" KeyDown="OnGameDirectoryKeyDown"
+                                     AutomationProperties.Name="{DynamicResource loc_Settings_LegendaryEditionDirectory}" />
+                            <Button x:Name="BrowseGameDirectoryButton" Grid.Column="1" Content="{DynamicResource loc_Settings_Browse}"
+                                    Click="OnBrowseGameDirectoryClick" Margin="8,0,0,0" MinWidth="85" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource SettingsSection}">
+                    <StackPanel>
                         <TextBlock Text="{DynamicResource loc_Settings_GenerateLogs}" Style="{StaticResource SettingsHeading}" />
                         <TextBlock Text="{DynamicResource loc_Settings_GenerateLogsDescription}" Style="{StaticResource SettingsDescription}" />
                         <StackPanel Orientation="Horizontal">

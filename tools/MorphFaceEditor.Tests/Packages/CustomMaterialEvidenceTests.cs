@@ -15,9 +15,86 @@ public static class CustomMaterialEvidenceTests
         new("material evidence refreshes MIC values and pixels while retaining per-use texture roles", MaterialValuesAndPixelsFollowSourceChanges),
         new("BC7 preview decoding preserves every block mode and authored mip level", Bc7PixelsAndMipsArePreserved),
         new("material evidence preserves custom defaults and empty versus missing compiled support", CustomDefaultsAndCompiledEvidence),
+        new("LE1 backported hair resolves anonymous texture overrides and defaults", Le1AnonymousHairDiffuse),
         new("LE3 Ssk 02 preview preserves its unused null material slot", Ssk02RetainsUnusedNullMaterialSlot),
         new("used null attachment material slots remain invalid", UsedNullAttachmentMaterialSlotsRemainInvalid),
     ];
+
+    private static void Le1AnonymousHairDiffuse()
+    {
+        LegendaryExplorerCoreRuntime.Initialize();
+        const string anonymous = "MaterialExpressionTextureSampleParameter2D_62";
+        var path = Path.Combine(Path.GetTempPath(), $"MFE-AnonymousHair-{Guid.NewGuid():N}.pcc");
+        try
+        {
+            using (var package = MEPackageHandler.CreateMemoryEmptyPackage(path, MEGame.LE1))
+            {
+                ExportEntry Texture(string name, byte[] bgra)
+                {
+                    var texture = package.CreateExport(name, "Texture2D", indexed: false);
+                    texture.WriteProperty(new EnumProperty(new NameReference("PF_A8R8G8B8"),
+                        new NameReference("EPixelFormat"), MEGame.LE1, "Format"));
+                    texture.WriteBinary(new UTexture2D { Mips = [new UTexture2D.Texture2DMipMap(bgra, 1, 1)] });
+                    return texture;
+                }
+
+                var defaultTexture = Texture("DefaultAtlas", [11, 22, 33, 100]);
+                var overrideTexture = Texture("StrandAtlas", [44, 55, 66, 120]);
+                var explicitTexture = Texture("ExplicitAtlas", [77, 88, 99, 140]);
+                var master = package.CreateExport("HMN_HED_PRO_ME3_MASTER_Hair_MAT", "Material", indexed: false);
+                var binary = Material.Create();
+                binary.SM3MaterialResource.ID = Guid.Parse("e7ee3c26-bad1-45ef-a40a-390b62aedd72");
+                master.WriteBinary(binary);
+                var expression = package.CreateExport("StrandParameter", "MaterialExpressionTextureSampleParameter2D", master, indexed: false);
+                expression.WriteProperty(new NameProperty(anonymous, "ParameterName"));
+                expression.WriteProperty(new ObjectProperty(defaultTexture, "Texture"));
+                master.WriteProperty(new ArrayProperty<ObjectProperty>([new ObjectProperty(expression)], "Expressions"));
+                var effects = package.CreateExport("HairEffects", "RvrEffectsMaterialUser", indexed: false);
+                effects.WriteProperty(new ObjectProperty(master, "m_pBaseMaterial"));
+
+                void Mic(string name, params (string Name, ExportEntry Texture)[] overrides)
+                {
+                    var mic = package.CreateExport(name, "MaterialInstanceConstant", indexed: false);
+                    mic.WriteProperty(new ObjectProperty(effects, "Parent"));
+                    if (overrides.Length > 0)
+                        mic.WriteProperty(new ArrayProperty<StructProperty>(overrides.Select(value =>
+                            new StructProperty("TextureParameterValue", false,
+                                new NameProperty(value.Name, "ParameterName"),
+                                new ObjectProperty(value.Texture, "ParameterValue"))).ToList(), "TextureParameterValues"));
+                }
+                Mic("Default_MIC");
+                Mic("Override_MIC", (anonymous, overrideTexture));
+                Mic("Explicit_MIC", (anonymous, overrideTexture), ("HAIR_Diff", explicitTexture));
+                package.Save(path);
+            }
+
+            using var packageCache = new PackageCache();
+            var installed = new InstalledGameAssetResolver(_ => new Dictionary<string, string>(), _ => null);
+            var reader = new MorphFaceMaterialReader(packageCache, new GamePackageReferenceResolver(packageCache, installed));
+            var reopened = PackageSourceCache.GetPackage(packageCache, path)!;
+            ResolvedHeadMaterial Read(string name) => reader.ReadFaceAttachmentEvidence(
+                reopened.FindExport(name, "MaterialInstanceConstant")!);
+            void AssertDiffuse(ResolvedHeadMaterial material, byte[] rgba)
+            {
+                TestAssert.Equal(HeadMaterialFamily.Hair, material.Family);
+                TestAssert.True(material.Textures.TryGetValue("HAIR_Diff", out var binding),
+                    "The anonymous hair texture was not made available to the preview as HAIR_Diff.");
+                var texture = binding!.Texture;
+                TestAssert.True(texture.Rgba8.SequenceEqual(rgba), "The hair diffuse resolved the wrong texture pixels.");
+                TestAssert.Equal(TextureRole.Diffuse, texture.Role);
+                TestAssert.Equal(TextureColorSpace.Srgb, texture.ColorSpace);
+                TestAssert.Equal(TextureAlphaPolicy.Translucency, texture.AlphaPolicy);
+                TestAssert.True(material.Supports("HAIR_Diff", MaterialParameterKind.Texture), "The preview diffuse is not supported.");
+            }
+            var overridden = Read("Override_MIC");
+            AssertDiffuse(overridden, [66, 55, 44, 120]);
+            TestAssert.True(overridden.Textures[anonymous].Texture.Rgba8.SequenceEqual(new byte[] { 66, 55, 44, 120 }),
+                "The original anonymous binding was not retained.");
+            AssertDiffuse(Read("Default_MIC"), [33, 22, 11, 100]);
+            AssertDiffuse(Read("Explicit_MIC"), [99, 88, 77, 140]);
+        }
+        finally { File.Delete(path); }
+    }
 
     private static void Bc7PixelsAndMipsArePreserved()
     {

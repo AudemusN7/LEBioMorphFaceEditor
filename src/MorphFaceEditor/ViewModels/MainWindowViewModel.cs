@@ -67,6 +67,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly AsyncRelayCommand _newPlayerMorphCommand;
     private readonly AsyncRelayCommand _newNpcMorphCommand;
     private readonly RelayCommand _cancelNpcImportCommand;
+    private readonly AsyncRelayCommand _exportMorphPskWithTexturesCommand;
+    private readonly AsyncRelayCommand _exportMorphGltfWithTexturesCommand;
     private readonly AsyncRelayCommand _exportMorphPskCommand;
     private readonly AsyncRelayCommand _exportMorphGltfCommand;
     private readonly AsyncRelayCommand _exportMorphRonCommand;
@@ -202,6 +204,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _newNpcMorphCommand = new AsyncRelayCommand(NewNpcMorphAsync, () => !IsBusy);
         _importMorphCommand = new AsyncRelayCommand(ImportMorphAsync, () => !IsBusy);
         _cancelNpcImportCommand = new RelayCommand(CancelNpcImport, () => CanCancelNpcImport);
+        _exportMorphPskWithTexturesCommand = new AsyncRelayCommand(
+            () => ExportMorphMeshAsync(MorphMeshFormat.Psk, includeTextures: true), CanTargetPackageFace);
+        _exportMorphGltfWithTexturesCommand = new AsyncRelayCommand(
+            () => ExportMorphMeshAsync(MorphMeshFormat.Gltf, includeTextures: true), CanTargetPackageFace);
         _exportMorphPskCommand = new AsyncRelayCommand(
             () => ExportMorphMeshAsync(MorphMeshFormat.Psk), CanTargetPackageFace);
         _exportMorphGltfCommand = new AsyncRelayCommand(
@@ -269,6 +275,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public ICommand NewNpcMorphCommand => _newNpcMorphCommand;
     public ICommand ImportMorphCommand => _importMorphCommand;
     public ICommand CancelNpcImportCommand => _cancelNpcImportCommand;
+    public ICommand ExportMorphPskWithTexturesCommand => _exportMorphPskWithTexturesCommand;
+    public ICommand ExportMorphGltfWithTexturesCommand => _exportMorphGltfWithTexturesCommand;
     public ICommand ExportMorphPskCommand => _exportMorphPskCommand;
     public ICommand ExportMorphGltfCommand => _exportMorphGltfCommand;
     public ICommand ExportMorphRonCommand => _exportMorphRonCommand;
@@ -884,6 +892,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
+    private int _registryLoadGeneration;
+
     private async Task LoadTextureRegistryAsync(
         FaceEditorViewModel editor,
         MorphFaceGame game,
@@ -891,12 +901,16 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         TextureCatalogProfile catalogProfile,
         CancellationToken cancellationToken)
     {
+        var generation = _registryLoadGeneration;
+        var root = LegendaryExplorerCoreRuntime.LegendaryEditionDirectory;
+        bool IsCurrent() => generation == _registryLoadGeneration && Editor == editor &&
+            string.Equals(root, LegendaryExplorerCoreRuntime.LegendaryEditionDirectory, StringComparison.OrdinalIgnoreCase);
         try
         {
             AppLog.Verbose($"REGISTRY:LOAD {profile.Key} {game}");
             var started = System.Diagnostics.Stopwatch.GetTimestamp();
             var catalog = await _referenceService.ReadTextureCatalogAsync(game, cancellationToken);
-            if (cancellationToken.IsCancellationRequested || Editor != editor)
+            if (cancellationToken.IsCancellationRequested || !IsCurrent())
             {
                 return;
             }
@@ -914,7 +928,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                     .Concat(editor.AttachmentMeshes.Select(value => value.Value).OfType<AssetIdentity>()).ToArray();
                 var available = await Task.Run(() => _packageContextService.FindAvailablePlayerAssets(game, references,
                     cancellationToken), cancellationToken);
-                if (cancellationToken.IsCancellationRequested || Editor != editor) return;
+                if (cancellationToken.IsCancellationRequested || !IsCurrent()) return;
                 editor.RestrictPlayerReferences(available);
             }
             editor.UpdateRegistryTextureCandidates(catalog.Candidates, catalogProfile, catalog.IsAvailable);
@@ -939,7 +953,18 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             _activeRegistryProfile is not { } profile ||
             _activeRegistryCatalogProfile is not { } catalogProfile)
             return;
+        _registryLoadGeneration++;
         _ = LoadTextureRegistryAsync(editor, game, profile, catalogProfile, CancellationToken.None);
+    }
+
+    public void RefreshAfterGameDirectoryChanged()
+    {
+        _registryLoadGeneration++;
+        if (Editor is not { } editor || _loadedFace?.Game is not { } game ||
+            _activeRegistryCatalogProfile is not { } catalogProfile) return;
+        editor.UpdateRegistryTextureCandidates([], catalogProfile, false);
+        editor.UpdateRegistryAttachmentMeshes([], IsPlayerWorkspace);
+        RefreshTextureRegistry(game);
     }
 
     private void SetEditor(FaceEditorViewModel? editor, LoadedMorphFace? loaded)
@@ -1518,7 +1543,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             AppLog.Verbose($"FACE:FLUSH {LoadedFacePath} FILE:\"{WorkspacePackagePath}\"");
             var draft = Editor.CreateDraft();
-            var result = await Task.Run(() => _packageWriter.SaveExisting(draft));
+            // Player workspaces are disposable seed copies, initially written
+            // uncompressed and immediately reopened after this flush.
+            bool? compress = IsPlayerWorkspace ? false : null;
+            var result = await Task.Run(() => _packageWriter.SaveExisting(draft, compress));
             MarkWorkspaceChanged(result.FaceInstancedPath);
             var reopened = await RefreshWorkspaceAsync(result.FaceInstancedPath);
             if (!reopened)
@@ -1863,6 +1891,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 }
 
-public sealed record PreviewLightingChoice(HeadPreviewLightingPreset Preset, string Name);
+public sealed record PreviewLightingChoice(HeadPreviewLightingPreset Preset, string Name)
+{
+    public string IconPath => $"pack://application:,,,/MorphFaceEditor;component/Assets/Lighting/MFE_{Preset}.png";
+}
 public sealed record PreviewLodChoice(int LodIndex, string Name);
 public sealed record RecentFileItem(string FilePath, ICommand OpenCommand);

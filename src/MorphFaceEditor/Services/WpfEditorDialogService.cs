@@ -98,6 +98,17 @@ public sealed class WpfEditorDialogService : IEditorDialogService
         return window.ShowDialog() == true ? window.Request : null;
     }
 
+    public MorphConversionSaveRequest? ChoosePlayerMorphConversionDestination(
+        MorphFaceGame sourceGame, string suggestedFileName, string sourceBrowsePath, bool allowBakedShapeTransfer = false)
+    {
+        var window = new ConvertMorphWindow(sourceGame, suggestedFileName, sourceBrowsePath, playerRonMode: true,
+            allowBakedShapeTransfer: allowBakedShapeTransfer)
+        {
+            Owner = Application.Current.MainWindow
+        };
+        return window.ShowDialog() == true ? window.Request : null;
+    }
+
     public string? ChooseCloneName(string suggestedName, IReadOnlyCollection<string> existingObjectNames)
     {
         var window = new CloneMorphWindow(suggestedName, existingObjectNames)
@@ -146,6 +157,14 @@ public sealed class WpfEditorDialogService : IEditorDialogService
         { Owner = Application.Current.MainWindow };
         return window.ShowDialog() == true && window.SelectedGame is { } game && window.SelectedNpcArchetype is { } archetype
             ? new NewNpcMorphChoice(game, archetype) : null;
+    }
+
+    public NewPlayerMorphChoice? ChooseMaterialImportTarget(MorphFaceGame? game = null)
+    {
+        var window = new StandaloneImportGameWindow(materialImportMode: true, importGame: game)
+        { Owner = Application.Current.MainWindow };
+        return window.ShowDialog() == true && window.SelectedGame is { } selectedGame
+            ? new NewPlayerMorphChoice(selectedGame, window.SelectedSex) : null;
     }
 
     public string? ChooseNewNpcMorphName(string suggestedName)

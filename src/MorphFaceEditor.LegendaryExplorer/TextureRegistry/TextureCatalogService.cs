@@ -38,12 +38,15 @@ public sealed class TextureCatalogService(TextureRegistryStore store)
                 if (_cache.TryGetValue(game, out var cached) && cached.Fingerprint == fingerprint)
                     return cached.Result;
 
-            var result = await Task.Run(() => Read(game), cancellationToken).ConfigureAwait(false);
-            cancellationToken.ThrowIfCancellationRequested();
-            // A concurrent rebuild must not label an older snapshot with the new file stamps.
-            if (fingerprint == GetFingerprint(game))
+            while (true)
+            {
+                var result = await Task.Run(() => Read(game), cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+                var current = GetFingerprint(game);
+                if (fingerprint != current) { fingerprint = current; continue; }
                 lock (_cacheLock) _cache[game] = new(fingerprint, result);
-            return result;
+                return result;
+            }
         }
         finally { _gate.Release(); }
     }
@@ -73,7 +76,8 @@ public sealed class TextureCatalogService(TextureRegistryStore store)
     }
 
     private RegistryFingerprint GetFingerprint(MorphFaceGame game) => new(
-        _store.GetFileFingerprint(game), _store.GetModsFileFingerprint(game), _store.GetManualFileFingerprint(game));
+        _store.GetFileFingerprint(game), _store.GetModsFileFingerprint(game), _store.GetManualFileFingerprint(game),
+        _store.InstallationRoot(game));
 
     private static TextureRegistrySnapshot ProjectOfficialDefaultEligibility(
         TextureRegistrySnapshot snapshot, IReadOnlySet<string> officialPackages)
@@ -99,6 +103,7 @@ public sealed class TextureCatalogService(TextureRegistryStore store)
     private readonly record struct RegistryFingerprint(
         (string Path, long Length, DateTime LastWriteTimeUtc)? Installed,
         (string Path, long Length, DateTime LastWriteTimeUtc)? Mods,
-        (string Path, long Length, DateTime LastWriteTimeUtc)? Manual);
+        (string Path, long Length, DateTime LastWriteTimeUtc)? Manual,
+        string? InstallationRoot);
     private sealed record CachedCatalog(RegistryFingerprint Fingerprint, TextureCatalogReadResult Result);
 }

@@ -133,7 +133,7 @@ public static class TextureRegistrySettingsTests
         {
             var store = new TextureRegistryStore(new TextureRegistryPaths(root));
             store.WriteAtomic(new TextureRegistrySnapshot(TextureRegistrySnapshot.CurrentSchemaVersion,
-                MorphFaceGame.LE1, DateTimeOffset.UtcNow, 0, []));
+                MorphFaceGame.LE1, DateTimeOffset.UtcNow, 1, []));
             var invalidations = 0;
             var notifications = 0;
             var settings = new TextureRegistrySettingsViewModel(store, new FakeBuilder(block: true),

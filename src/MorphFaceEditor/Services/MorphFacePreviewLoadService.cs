@@ -1,3 +1,4 @@
+using System.IO;
 using MorphFaceEditor.Core.Services;
 using MorphFaceEditor.Core.Domain;
 using MorphFaceEditor.Core.Editing;
@@ -22,17 +23,21 @@ public sealed class MorphFacePreviewLoadService : IDisposable
     private readonly MorphTargetCatalog _targetCatalog;
     private readonly MorphFaceProfileRegistry _profiles;
     private readonly MorphFacePackageReader _reader;
+    private readonly PlayerMorphSourceReconciler _baselineSources = new();
+    private readonly PlayerMorphBaselineCatalog _playerBaselines;
 
     public MorphFacePreviewLoadService(
         HeadPreviewSceneFactory sceneFactory,
         MorphTargetCatalog targetCatalog,
         MorphFaceProfileRegistry profiles,
-        MorphFacePackageReader reader)
+        MorphFacePackageReader reader,
+        PlayerMorphBaselineCatalog? playerBaselines = null)
     {
         _sceneFactory = sceneFactory;
         _targetCatalog = targetCatalog;
         _profiles = profiles;
         _reader = reader;
+        _playerBaselines = playerBaselines ?? new();
     }
 
     public Task<MorphFacePreviewLoadResult> LoadAsync(
@@ -76,20 +81,28 @@ public sealed class MorphFacePreviewLoadService : IDisposable
                     ? MorphFaceGeometryMode.FixedBake
                     : MorphFaceGeometryMode.MorphEvaluated
                 : geometryMode ?? MorphFaceGeometryMode.MorphEvaluated;
-        var session = new MorphFaceEditingSession(
+        IReadOnlyList<MorphTargetAsset> profileTargets = profileResolution.UsesCustomMesh || profile.IgnoresAuthoredGeometry
+            ? [] : _targetCatalog.Load(profile);
+        MorphFaceEditingSession CreateSession(MorphFaceGeometryMode mode) => new(
             loaded.Document,
             loaded.BaseHead,
-            profileResolution.UsesCustomMesh || profile.IgnoresAuthoredGeometry
-                ? []
-                : _targetCatalog.Load(profile),
+            profileTargets,
             profile.MetadataOnlyFeatures,
             profile.GetDisplayName(),
             profile.FeatureAliases,
             profile.RecognizesBaseVariant,
             geometryEditBlockReason,
             profile.IgnoresAuthoredGeometry,
-            resolvedGeometryMode,
+            mode,
             topologyDiagnostics: loaded.TopologyDiagnostics);
+        var session = CreateSession(resolvedGeometryMode);
+        if (geometryMode is null && session.CanFixMorph &&
+            IsKnownPlayerBaseline(loaded, profile, profileTargets))
+        {
+            // A recognised authored bake is not a broken standard-head bake.
+            // Keep every source field and apply future edits relative to it.
+            session = CreateSession(MorphFaceGeometryMode.RelativeBake);
+        }
         var baseMaterialKeys = loaded.BaseHead.RenderData?.MaterialSlots
             .Where(identity => identity is not null)
             .Select(identity => MaterialIdentityKey.Create(identity!))
@@ -107,6 +120,33 @@ public sealed class MorphFacePreviewLoadService : IDisposable
             $"PCCS:{cache.Packages} PCCBYTES:{cache.EstimatedBytes} PCCHITS:{cache.Hits} PCCMISSES:{cache.Misses}");
         return new MorphFacePreviewLoadResult(loaded, scene, session, materialSession, profile);
     }, cancellationToken);
+
+    private bool IsKnownPlayerBaseline(LoadedMorphFace loaded, MorphFaceProfile profile,
+        IReadOnlyList<MorphTargetAsset> targets)
+    {
+        var baselines = _playerBaselines.ForProfile(profile);
+        if (baselines.Count == 0) return false;
+
+        // A matching shape alone does not establish that the PCC uses the Player rig.
+        try
+        {
+            var sex = profile.Archetype == "human-male" ? StandalonePlayerSex.Male : StandalonePlayerSex.Female;
+            if (!_reader.MatchesPlayerBaseHead(loaded, sex)) return false;
+        }
+        catch (FileNotFoundException)
+        {
+            return false;
+        }
+
+        var matches = 0;
+        foreach (var baseline in baselines)
+        {
+            var frame = PlayerMorphBaselineFrame.TryCreate(baseline, loaded.Document, loaded.BaseHead, profile, targets);
+            if (frame is not null && _baselineSources.Reconcile(loaded.Document, frame.EvaluationBase, profile, targets).IsSupported)
+                matches++;
+        }
+        return matches == 1;
+    }
 
     public void Dispose() => _reader.Dispose();
 }

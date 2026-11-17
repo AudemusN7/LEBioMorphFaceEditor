@@ -124,7 +124,9 @@ The dropdown can be searched by texture name, full path, source package or origi
 
 Hovering over a choice temporarily previews it on the face. Clicking it or pressing **Enter** keeps the selection; **Escape** or closing the picker cancels the temporary preview. The list can also be resized if more room is needed by expanding the Face Editor pane.
 
-The **Show all physical sources** checkbox reveals every instance of a texture's path in the game, including installed, manually added and open-package sources. It's useful when the same texture exists in several places, such as a vanilla copy and a modded one. But you typically shouldn't need to use this, as every instance of a texture under a unique path *should* be identical.
+The **Show all physical sources** checkbox reveals the available instances of a texture's path, including installed, manually added and open-package sources. It's useful when the same texture exists in several places, such as a vanilla copy and a modded one.
+
+Supported texture replacements declared by an installed mod's `.m3to` file can also appear beside the stock texture in the normal list. Check the source package before choosing one. If an installed override isn't showing, use **Rescan Mods** in Mesh/Texture Databases. Randomisation doesn't automatically choose these mod replacements.
 
 Player workspaces only offer assets that can be loaded for Shepard, since player morphs can only use assets that are seekfree (as in stored in a BIOG package or Startup file such as SFXGame, BIOC_Materials etc). NPC/package workspaces have a broader selection, so the lists can differ even with the same database.
 
@@ -155,6 +157,10 @@ The visible hair mesh and the scalp texture aren't always independent. Some styl
 
 **Hair Colour** changes the tint, while scalp controls affect the part drawn onto the head. A mismatch can leave a painted hairline or scalp detail showing beneath a new style.
 
+For human faces, the **Hair** category brings together available hair shape controls, hair colour, highlights and supported hair texture controls. Hair Colour is shared with the scalp, so it can affect both the mesh and the hair drawn onto the head. Where the selected hair material supports an explicit diffuse texture, that can be chosen here too. Other unsupported hair maps remain inherited from the hair material.
+
+Choosing a different hair mesh clears the previous hair diffuse override so the new style can use its own texture. This is part of the same change: one **Undo** restores both the previous hair and its diffuse choice.
+
 ### Saving attachments
 
 For NPCs, hair and accessory changes are applied to the actor through **Assign Materials to Actor**, then the PCC is saved. Existing components are updated; new hair/accessory mesh components aren't created. The steps are covered in [NPC Faces and Actor Assignment](NPC-FACES.md).
@@ -167,7 +173,7 @@ For a compatible face in the same game and archetype, **Copy Material Data** and
 
 **Export Materials** saves an MFE material RON for later use, and **Import Materials** applies one to a compatible face. These presets can also include hair/accessory references where supported, so the result should be checked after import. In a Custom Mesh Workspace, the slot assignments are kept and only settings supported by the assigned materials are applied.
 
-Human material settings can also be transferred through **Import TSE RON** and **Export TSE RON**. These actions handle material data; a full exported headmorph is brought in through **Import Morph Face** instead.
+Human material settings can also be transferred through **Import TSE RON** and **Export TSE RON**. These actions handle material data; a full exported headmorph is brought in through **Import Morph Face** instead. Opening a TSE material preset with empty mesh LODs from an empty workspace loads a generic head to preview the materials. Choose the intended game and gender if prompted.
 
 Material changes still need to be saved through the relevant workflow: directly into a [Player save](PLAYER-FACES.md), applied to the [NPC actor](NPC-FACES.md) and saved, or exported from the [Custom Mesh Workspace](CUSTOM-MESHES.md).
 

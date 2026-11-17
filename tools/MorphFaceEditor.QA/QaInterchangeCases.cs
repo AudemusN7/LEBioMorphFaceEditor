@@ -1,4 +1,5 @@
 using MorphFaceEditor.Core.Domain;
+using MorphFaceEditor.Core.Deformation;
 using MorphFaceEditor.Core.Materials;
 using MorphFaceEditor.LegendaryExplorer;
 using MorphFaceEditor.Services;
@@ -8,6 +9,71 @@ namespace MorphFaceEditor.QA;
 
 internal static partial class QaCases
 {
+    internal const string TexturedMeshExportStage = "Textured mesh export through UModel";
+
+    private static async Task TexturedMeshExport(QaContext c, MorphMeshFormat format)
+    {
+        using var phase = c.UseStagePhase("Textured export");
+        var random = c.RandomFor("textured-export-source");
+        var family = random.Next(2) == 0 ? "HMM" : "HMF";
+        var package = c.CorpusPackage(c.Face.Game);
+        var candidates = c.MeasureSync("Inspect textured export donors", () =>
+            QaCoverageSelection.ExcludePaths(MorphFaceReferenceInspector.Inspect(package)
+                .Where(face => face.FacePath.StartsWith(family + ".", StringComparison.OrdinalIgnoreCase) &&
+                    face.HairMeshPath is not null && face.OtherMeshPaths.Count > 0)
+                .OrderBy(face => face.FacePath, StringComparer.OrdinalIgnoreCase), face => face.FacePath,
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase)), QaStageKind.Load);
+        var source = QaCoverageSelection.Pick(candidates, random);
+        c.Current.Evidence["texturedExportSource"] = new { c.Seed, Family = family, Candidates = candidates.Count, Source = source };
+        var preview = await c.Load(source.PackagePath, source.FacePath);
+        using var scope = await c.Editor(preview, source.PackagePath, player: false);
+        var editor = scope.Editor;
+        QaContext.Require(editor.CanEditMorphFeatures, "Textured export donor must support production morph randomisation.");
+        // Keep both authored attachment meshes while randomising the face and materials.
+        foreach (var attachment in editor.AttachmentMeshes) attachment.IsRandomisationLocked = true;
+        var before = editor.CreateDraft();
+        await c.Randomise(editor, purpose: "Textured export randomisation");
+        var draft = editor.CreateDraft();
+        QaContext.Require(!before.MorphFeatures.SequenceEqual(draft.MorphFeatures) &&
+            MaterialSignature(new(before.MaterialOverrides.Scalars, before.MaterialOverrides.Vectors, before.MaterialOverrides.Textures)) !=
+            MaterialSignature(new(draft.MaterialOverrides.Scalars, draft.MaterialOverrides.Vectors, draft.MaterialOverrides.Textures)),
+            "Textured export setup did not change both morphs and materials.");
+        var saved = await c.Save(draft, source.PackagePath, "textured-mesh-source.pcc");
+        var reopened = await c.Load(saved.PackagePath, saved.FaceInstancedPath);
+        AssertGeometry(draft, reopened.Loaded.Document);
+        AssertMaterials(draft, reopened.Loaded.Document);
+        QaContext.Require(reopened.Loaded.HairMesh is not null && reopened.Loaded.OtherMeshes.Count > 0,
+            "Textured export setup must resolve both hair and an accessory mesh.");
+        var exportSource = reopened.Loaded with { Materials = reopened.MaterialEditingSession.Materials };
+
+        // Keep this bundle intact: PSK .mat and material metadata also reference sibling images.
+        var directory = Path.Combine(c.Output, c.Current.Id, c.UniqueName("textured-mesh-" + format));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(3));
+        var result = await c.Measure(TexturedMeshExportStage, () => Task.Run(() =>
+            new MorphFaceInterchangeService().ExportMeshAsync(saved.PackagePath, saved.FaceInstancedPath,
+                directory, format, timeout.Token, includeTextures: true, previewSource: exportSource)), QaStageKind.FileTransfer);
+        var exportMs = c.Current.Stages[^1].DurationMs;
+        c.Current.Artifacts.AddRange(result.ProducedFiles);
+        var metadata = result.ProducedFiles.Where(path => path.EndsWith(".materials.json", StringComparison.OrdinalIgnoreCase)).ToArray();
+        var images = result.ProducedFiles.Where(path => Path.GetExtension(path) is ".png" or ".tga").ToArray();
+        var meshes = result.ProducedFiles.Where(path => format == MorphMeshFormat.Gltf
+            ? Path.GetExtension(path) == ".gltf" : Path.GetExtension(path) is ".psk" or ".pskx").ToArray();
+        QaContext.Require(result.ProducedFiles.All(File.Exists) && images.Length > 0 &&
+            metadata.Length == 2 + reopened.Loaded.OtherMeshes.Count &&
+            meshes.Any(path => Path.GetFileNameWithoutExtension(path) == saved.FaceInstancedPath.Split('.').Last()) &&
+            meshes.Any(path => Path.GetRelativePath(directory, path).StartsWith("Hair" + Path.DirectorySeparatorChar)) &&
+            meshes.Any(path => Path.GetRelativePath(directory, path).StartsWith("Accessory_", StringComparison.Ordinal)),
+            "Textured export omitted head, hair, accessory or material/texture companion files.");
+        c.Current.Evidence["texturedExportBenchmark"] = new
+        {
+            Format = format.ToString(), ExportMs = exportMs, Files = result.ProducedFiles.Count,
+            TextureFiles = images.Length, OutputBytes = result.ProducedFiles.Sum(path => new FileInfo(path).Length),
+            Head = reopened.Loaded.BaseHead.Source, Hair = reopened.Loaded.HairMesh!.Source,
+            Accessories = reopened.Loaded.OtherMeshes.Select(mesh => mesh.Source).ToArray(),
+            Scope = "Warm-process export only: mesh staging, UModel, material/texture writing and publication; setup/save/reopen excluded."
+        };
+    }
+
     private static async Task<(string Path, ImportedMeshAsset Mesh)> ExportMesh(QaContext c, MorphMeshFormat format)
     {
         var source = c.Source(requiredFacePath: MeshFace.FacePath);
@@ -18,7 +84,12 @@ internal static partial class QaCases
         QaContext.Require(scope.Editor.CanEditMorphFeatures, "The dedicated mesh fixture does not support morph editing.");
         var feature = scope.Editor.Features.First(value => value.IsEditable);
         feature.BeginEdit(); feature.Value += 0.05f; feature.EndEdit();
+        var beforeBoneEdit = scope.Editor.CreateDraft();
+        var bone = scope.Editor.Bones.First(value => value.IsAvailable);
+        bone.BeginEdit(); bone.Value += 0.01f; bone.EndEdit();
         var bake = scope.Editor.CreateDraft();
+        QaContext.Require(!beforeBoneEdit.FinalSkeleton.SequenceEqual(bake.FinalSkeleton),
+            "HMM bone edit did not change the exported final skeleton.");
         QaContext.Require(!original.MorphFeatures.SequenceEqual(bake.MorphFeatures) &&
             original.BakedLods[0].Zip(bake.BakedLods[0]).Any(pair => pair.First != pair.Second),
             "HMM slider edit did not change the exported baked geometry.");
@@ -55,6 +126,15 @@ internal static partial class QaCases
             .DefaultIfEmpty(float.PositiveInfinity).Min();
         QaContext.Require(maxError <= 0.0001f, $"Randomised baked mesh roundtrip differs by {maxError:G9}.");
         c.Current.Evidence["correctedBakeRecoveryMaximumError"] = maxError;
+        var baseHead = reopened.Loaded.BaseHead;
+        var renderData = baseHead.RenderData ?? throw new InvalidDataException("HMM head has no skin weights.");
+        var pose = SkeletalPoseComposer.Compose(baseHead.Topology.ReferenceSkeleton, bake.FinalSkeleton);
+        var posed = CpuSkinningEvaluator.Skin(
+            new DeformationResult(bake.BakedLods[0], baseHead.Normals, 0, []),
+            renderData, pose.SkinningMatrices).Positions;
+        QaContext.Require(posed.Zip(bake.BakedLods[0]).Any(pair =>
+            System.Numerics.Vector3.Distance(pair.First, pair.Second) > 0.0001f),
+            "Mesh fixture has no visible final-skeleton deformation to verify.");
         using var map = System.Text.Json.JsonDocument.Parse(await File.ReadAllTextAsync(path + ".mfe.json"));
         var coordinateSystem = map.RootElement.GetProperty("CoordinateSystem").GetString();
         var mapping = map.RootElement.GetProperty("ExportedToBase").EnumerateArray().Select(value => value.GetInt32()).ToArray();
@@ -62,22 +142,22 @@ internal static partial class QaCases
         QaContext.Require(mapping.Length == bake.BakedLods[0].Length && mapping.Distinct().Count() == mapping.Length &&
             mapping.All(index => index >= 0 && index < mapping.Length), "Mesh export has no valid raw vertex correspondence.");
         var rawError = raw.Positions.Select((position, index) =>
-            System.Numerics.Vector3.Distance(position, bake.BakedLods[0][mapping[index]])).Max();
+            System.Numerics.Vector3.Distance(position, posed[mapping[index]])).Max();
         c.Current.Evidence["rawExportMaximumError"] = rawError;
         // glTF coordinates can be rounded by UModel; measure before applying MFE's recovery corrections.
         c.Current.Evidence["rawMappedErrorScope"] = "Uses the exporter's inverse-morph sidecar map; independently checks the raw vertex set below because interchange may reorder vertices.";
         var rawMatches = candidates.Where(value => value.Positions.Count == bake.BakedLods[0].Length &&
                 value.IsFileOrder)
-            .Select(value => (value.CoordinateSystem, Error: MatchRawVertices(value.Positions, bake.BakedLods[0])))
+            .Select(value => (value.CoordinateSystem, Error: MatchRawVertices(value.Positions, posed)))
             .Append((CoordinateSystem: "Custom decoder canonical coordinates", Error: mesh.Positions.Length == bake.BakedLods[0].Length
-                ? MatchRawVertices(mesh.Positions, bake.BakedLods[0]) : null))
+                ? MatchRawVertices(mesh.Positions, posed) : null))
             .Where(value => value.Error is not null).OrderBy(value => value.Error).ToArray();
         QaContext.Require(rawMatches.Length > 0,
-            "No raw interchange coordinate basis has a one-to-one vertex match to the randomised bake within 0.001 units.");
+            "No raw interchange coordinate basis has a one-to-one vertex match to the posed head within 0.001 units.");
         c.Current.Evidence["rawVertexSetMaximumError"] = rawMatches[0];
         if (rawError > 0.001f)
             c.AddWarnings("Mesh inverse-morph readback", path,
-                [$"MFE inverse-morph importer diagnostic: its sidecar coordinate basis/map differs from the bake by {rawError:G9} units before correction. Corrected recovery passed ({maxError:G9}); independent raw Custom mesh geometry passed ({rawMatches[0].Error:G9}). This concerns the inverse-morph route, not deformation of the exported Custom mesh."]);
+                [$"MFE inverse-morph importer diagnostic: its sidecar coordinate basis/map differs from the posed head by {rawError:G9} units before correction. Corrected recovery passed ({maxError:G9}); independent raw Custom mesh geometry passed ({rawMatches[0].Error:G9}). This concerns the inverse-morph route, not deformation of the exported Custom mesh."]);
         c.Current.Evidence["sourceSlotFamilies"] = c.HmmSlotFamilies;
         c.Current.Evidence["mesh"] = new { Format = format, Vertices = mesh.Positions.Length,
             Indices = mesh.Indices.Length, Sections = mesh.Sections, Bones = mesh.Bones.Count };
@@ -113,11 +193,33 @@ internal static partial class QaCases
         QaContext.Require(!detached.Preview.EditingSession.CanEditMorphFeatures, "Imported custom mesh exposed unproven morph controls.");
         QaContext.Require(detached.Detached.Source.Positions.Length == mesh.Positions.Length, "Custom import changed the vertex stream length.");
         QaContext.Require(detached.Detached.Source.Indices.SequenceEqual(mesh.Indices), "Custom import changed triangle order.");
+        QaContext.Require(detached.Preview.EditingSession.CanEditBones, "Exported Custom mesh lost its editable rig.");
+        var customMesh = detached.Detached.Mesh;
+        var customEvaluation = detached.Preview.EditingSession.Evaluation;
+        var customRenderData = customMesh.RenderData ?? throw new InvalidDataException("Custom mesh has no skin weights.");
+        var baseline = CpuSkinningEvaluator.Skin(customEvaluation.Geometry, customRenderData,
+            customEvaluation.Pose.SkinningMatrices).Positions;
+        var baselineError = baseline.Zip(customMesh.Positions).Max(pair =>
+            System.Numerics.Vector3.Distance(pair.First, pair.Second));
+        QaContext.Require(baselineError <= 0.0001f,
+            $"Custom rig reapplied the exported pose at baseline (maximum error {baselineError:G9}).");
+        c.Current.Evidence["customBaselineMaximumError"] = baselineError;
         c.AddWarnings("Custom workspace import", path, detached.Detached.Warnings);
         c.Current.Evidence["customWorkspace"] = new { Slots = detached.CustomMaterials!.UsedSlots,
             Morphs = detached.Preview.EditingSession.CanEditMorphFeatures,
             Bones = detached.Preview.EditingSession.CanEditBones };
         await c.Render(detached.Preview.Scene, "custom-import.png");
+        var originalEvidence = c.Current.Evidence.ToDictionary(pair => pair.Key, pair => pair.Value);
+        try { await TexturedMeshExport(c, format); }
+        finally
+        {
+            var texturedEvidence = c.Current.Evidence.Where(pair =>
+                !originalEvidence.TryGetValue(pair.Key, out var value) || !ReferenceEquals(value, pair.Value))
+                .ToDictionary(pair => pair.Key, pair => pair.Value);
+            c.Current.Evidence.Clear();
+            foreach (var pair in originalEvidence) c.Current.Evidence.Add(pair.Key, pair.Value);
+            c.Current.Evidence["texturedExport"] = texturedEvidence;
+        }
     }
 
     private static async Task CustomRandomisation(QaContext c)

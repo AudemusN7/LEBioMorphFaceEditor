@@ -1,0 +1,99 @@
+{
+  "build": "1.0.4.1",
+  "reviewDate": "2026-11-13",
+  "description": "Reviewed warm-process textured mesh export only; setup, save and reopen excluded. Some cases exceeded pre-existing unrelated timing limits.",
+  "samples": [
+    {
+      "report": "artifacts/qa/20261113-060017-323b54/qa-cde9a33124ef-results.json",
+      "seed": 13112026,
+      "sha256": "B0478FC20C1184346665B63FA3ED0E8E4026A88B451286214C582ECF44D66DD1",
+      "caseId": "mesh-psk/le2-hmm-npc",
+      "format": "Psk",
+      "exportMs": 822.4093
+    },
+    {
+      "report": "artifacts/qa/20261113-060017-323b54/qa-cde9a33124ef-results.json",
+      "seed": 13112026,
+      "sha256": "B0478FC20C1184346665B63FA3ED0E8E4026A88B451286214C582ECF44D66DD1",
+      "caseId": "mesh-gltf/le2-hmm-npc",
+      "format": "Gltf",
+      "exportMs": 2957.9633
+    },
+    {
+      "report": "artifacts/qa/20261113-060050-e2b115/qa-545b44dcdf0e-results.json",
+      "seed": 1456511452,
+      "sha256": "05C18B9B5D11CB2D0F61AEBB978B08194541E86E892960FF538A4DCD95A58D9C",
+      "caseId": "mesh-psk/le2-hmm-npc",
+      "format": "Psk",
+      "exportMs": 908.1153
+    },
+    {
+      "report": "artifacts/qa/20261113-060050-e2b115/qa-545b44dcdf0e-results.json",
+      "seed": 1456511452,
+      "sha256": "05C18B9B5D11CB2D0F61AEBB978B08194541E86E892960FF538A4DCD95A58D9C",
+      "caseId": "mesh-gltf/le2-hmm-npc",
+      "format": "Gltf",
+      "exportMs": 2753.6778
+    },
+    {
+      "report": "artifacts/qa/20261113-060128-cf0993/qa-7e186c5a9a9a-results.json",
+      "seed": 595156868,
+      "sha256": "82FF4E7A5E019C894864831F1180AA777F2C841C31907FA4FFDBD860D445D2D4",
+      "caseId": "mesh-psk/le2-hmm-npc",
+      "format": "Psk",
+      "exportMs": 850.8636
+    },
+    {
+      "report": "artifacts/qa/20261113-060128-cf0993/qa-7e186c5a9a9a-results.json",
+      "seed": 595156868,
+      "sha256": "82FF4E7A5E019C894864831F1180AA777F2C841C31907FA4FFDBD860D445D2D4",
+      "caseId": "mesh-gltf/le2-hmm-npc",
+      "format": "Gltf",
+      "exportMs": 2640.2968
+    },
+    {
+      "report": "artifacts/qa/20261113-060916-15abc7/qa-15c9996c334d-results.json",
+      "seed": 13112029,
+      "sha256": "0FD8A8FEBA8D9EDCECDFA1791EDB86FA0EB74DB3DC89465674E6B50DDB74157F",
+      "caseId": "mesh-gltf/le2-hmm-npc",
+      "format": "Gltf",
+      "exportMs": 3193.4191
+    },
+    {
+      "report": "artifacts/qa/20261113-060945-9ec7f6/qa-ed2c7d5e08c2-results.json",
+      "seed": 13112029,
+      "sha256": "99B68EAABD739481F1A2DBDD8CBE329CB6CEE97DD320A5BF6BAFA2C5BD80461F",
+      "caseId": "mesh-gltf/le2-hmm-npc",
+      "format": "Gltf",
+      "exportMs": 2954.1296
+    },
+    {
+      "report": "artifacts/qa/20261113-061433-c8b048/qa-e0c2340edd60-results.json",
+      "seed": 621518176,
+      "sha256": "EDA723CE0403483EF595D704C21FCBF32E50D53E0591026ABA55F8E9F13216A6",
+      "caseId": "mesh-gltf/le2-hmm-npc",
+      "format": "Gltf",
+      "exportMs": 2915.5274
+    },
+    {
+      "report": "artifacts/qa/20261113-061501-632234/qa-a11cbb772ff9-results.json",
+      "seed": 590815953,
+      "sha256": "03CD4A92D237FC95B8D8B05EC8B7AB3785A135E40428C36070B47D3ADDDB2C3C",
+      "caseId": "mesh-gltf/le2-hmm-npc",
+      "format": "Gltf",
+      "exportMs": 2986.6428
+    }
+  ],
+  "entries": [
+    {
+      "key": "mesh-psk/le2-hmm-npc | Textured export | Textured mesh export through UModel | FileTransfer | single-stage-duration",
+      "envelopeMs": 908.1153,
+      "marginPercent": 50
+    },
+    {
+      "key": "mesh-gltf/le2-hmm-npc | Textured export | Textured mesh export through UModel | FileTransfer | single-stage-duration",
+      "envelopeMs": 3193.4191,
+      "marginPercent": 50
+    }
+  ]
+}

@@ -17,5 +17,7 @@
   <ItemGroup>
     <EmbeddedResource Include="TimingBaselines/accepted-0.10.0.39.json"
                       LogicalName="MorphFaceEditor.QA.TimingBaselines.accepted-0.10.0.39.json" />
+    <EmbeddedResource Include="TimingBaselines/accepted-textured-mesh-1.0.4.1.json"
+                      LogicalName="MorphFaceEditor.QA.TimingBaselines.accepted-textured-mesh-1.0.4.1.json" />
   </ItemGroup>
 </Project>

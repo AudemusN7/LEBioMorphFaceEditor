@@ -15,14 +15,14 @@
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
-        <TextBlock Text="{DynamicResource loc_View_ConvertMorphWindow_ConvertSliderValuesFinalSkeletonResidualsAndCompatibleM}"
+        <TextBlock x:Name="DescriptionText" Text="{DynamicResource loc_View_ConvertMorphWindow_ConvertSliderValuesFinalSkeletonResidualsAndCompatibleM}"
                    TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}" Margin="0,0,0,15" />
         <StackPanel Grid.Row="1" Margin="0,0,0,13">
             <TextBlock Text="{DynamicResource loc_View_ConvertMorphWindow_TARGETGAME}" Style="{StaticResource FieldLabel}" />
             <controls:GameSelector x:Name="TargetGameSelector" Margin="0,8,0,0"
                                    AutomationProperties.Name="{DynamicResource loc_View_ConvertMorphWindow_TARGETGAME}" />
         </StackPanel>
-        <Grid Grid.Row="2">
+        <Grid x:Name="PackageDestinationPanel" Grid.Row="2">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -37,8 +37,16 @@
                 <Button Grid.Column="1" Content="{DynamicResource loc_View_ConvertMorphWindow_BrowseExisting}" Margin="8,0,0,0" Click="OnBrowse" />
             </Grid>
         </Grid>
-        <TextBlock x:Name="ValidationText" Grid.Row="3" Foreground="{DynamicResource ValidationForeground}" FontSize="11"
-                   Margin="0,8,0,0" TextWrapping="Wrap" />
+        <StackPanel Grid.Row="3">
+            <StackPanel x:Name="BakedShapePanel" Visibility="Collapsed" Margin="0,0,0,4">
+                <CheckBox x:Name="ApproximateBakedShapeCheckBox" Content="{DynamicResource loc_PlayerConversion_ApproximateBakedShape}"
+                          AutomationProperties.HelpText="{DynamicResource loc_PlayerConversion_ApproximateBakedShapeHelp}" />
+                <TextBlock Text="{DynamicResource loc_PlayerConversion_ApproximateBakedShapeHelp}" TextWrapping="Wrap"
+                           Foreground="{DynamicResource SecondaryText}" FontSize="11" Margin="20,5,0,0" />
+            </StackPanel>
+            <TextBlock x:Name="ValidationText" Foreground="{DynamicResource ValidationForeground}" FontSize="11"
+                       Margin="0,8,0,0" TextWrapping="Wrap" />
+        </StackPanel>
         <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
             <Button Content="{DynamicResource loc_Common_Cancel}" IsCancel="True" MinWidth="84" Margin="0,0,8,0" />
             <Button Content="{DynamicResource loc_View_ConvertMorphWindow_ConvertMorph}" IsDefault="True" MinWidth="120" Click="OnConvert" />

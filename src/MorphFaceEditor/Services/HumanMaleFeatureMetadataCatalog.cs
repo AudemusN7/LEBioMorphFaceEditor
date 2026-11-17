@@ -58,7 +58,7 @@ public class HumanMaleFeatureMetadataCatalog : IHeadEditorUiProfile
 
     private const string Character = "character";
     private const string Race = "race";
-    private const string Hair = "hair";
+    public const string Hair = "hair";
     private const string Shape = "shape";
     private const string Cheeks = "cheeks";
     private const string Ears = "ears";
@@ -84,7 +84,7 @@ public class HumanMaleFeatureMetadataCatalog : IHeadEditorUiProfile
 public virtual IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
     [
         new(FacialStructure, Loc.Text("loc_Services_Taxonomy_facial_structure_812284cf"), Loc.Text("loc_Services_Taxonomy_character_likeness_race_and_geometry_based_hairs_50ee7c21"),
-            [new(Character, Loc.Text("loc_Services_Taxonomy_character_19cd78f5")), new(Race, Loc.Text("loc_Services_Taxonomy_race_c51fb9b5")), new(Hair, Loc.Text("loc_Services_Taxonomy_hair_3ba4bcee"))]),
+            [new(Character, Loc.Text("loc_Services_Taxonomy_character_19cd78f5")), new(Race, Loc.Text("loc_Services_Taxonomy_race_c51fb9b5"))]),
         new(Head, Loc.Text("loc_Services_Taxonomy_head_9bb0aacc"), Loc.Text("loc_Services_Taxonomy_face_shape_cheeks_ears_skin_and_base_head_surfac_11c71fda"),
             [new(Shape, Loc.Text("loc_Services_Taxonomy_shape_cfb25fc2")), new(Ears, Loc.Text("loc_Services_Taxonomy_ears_903a1aed")), new(Cheeks, Loc.Text("loc_Services_Taxonomy_cheeks_daeb3667"))]),
         new(Eyes, Loc.Text("loc_Services_Taxonomy_eyes_a39e9d98"), Loc.Text("loc_Services_Taxonomy_brows_sockets_eyes_eyelids_lashes_pupils_iris_co_76faa4fc"),
@@ -96,7 +96,9 @@ public virtual IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
         new(NeckJaw, Loc.Text("loc_Services_Taxonomy_neck_jaw_7d7d03d1"), Loc.Text("loc_Services_Taxonomy_chin_jaw_neck_adam_s_apple_and_lower_face_struct_c0fb74b0"),
             [new(Jaw, Loc.Text("loc_Services_Taxonomy_jaw_296d1292")), new(Chin, Loc.Text("loc_Services_Taxonomy_chin_cfa4ce51")), new(Neck, Loc.Text("loc_Services_Taxonomy_neck_00020b4f"))]),
         new(Additions, Loc.Text("loc_Services_Taxonomy_additions_966ff941"), Loc.Text("loc_Services_Taxonomy_surface_additions_face_overlays_freckles_scars_a_1f3ef8ca"),
-            [new(Hair, Loc.Text("loc_Services_Taxonomy_hair_3ba4bcee")), new(Addition, Loc.Text("loc_Services_Taxonomy_addition_63d99162")), new(Face, Loc.Text("loc_Services_Taxonomy_face_215db504")), new(Scalp, Loc.Text("loc_Services_Taxonomy_scalp_91d59546"))])
+            [new(Addition, Loc.Text("loc_Services_Taxonomy_addition_63d99162")), new(Face, Loc.Text("loc_Services_Taxonomy_face_215db504")), new(Scalp, Loc.Text("loc_Services_Taxonomy_scalp_91d59546"))]),
+        new(Hair, Loc.Text("loc_Services_Taxonomy_HairTab"), Loc.Text("loc_Services_Taxonomy_HairDescription"),
+            [new(Shape, Loc.Text("loc_Services_Taxonomy_shape_cfb25fc2")), new(Hair, Loc.Text("loc_Services_Taxonomy_hair_3ba4bcee"))])
     ];
 
     public virtual MorphFeatureMetadata Describe(ResolvedMorphFeature feature, bool sessionCanEdit)
@@ -151,7 +153,7 @@ public virtual IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
     {
         var definition = HumanMaterialProfiles.Describe(parameterName, kind);
         var name = parameterName.ToLowerInvariant();
-        if (IsHairMaterialParameter(parameterName, kind)) return Additions;
+        if (IsHairMaterialParameter(parameterName, kind)) return Hair;
         // The packed teeth selector belongs in Mouth despite using the scalp material family.
         if (kind == MaterialParameterKind.Texture && name == "hed_teeth_diff")
         {
@@ -197,9 +199,9 @@ public virtual IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
     {
         var definition = HumanMaterialProfiles.Describe(parameterName, kind);
         var name = parameterName.ToLowerInvariant();
+        if (GetMaterialCategory(parameterName, kind) == Hair) return Hair;
         if (GetMaterialCategory(parameterName, kind) == Additions)
         {
-            if (IsHairMaterialParameter(parameterName, kind)) return Hair;
             if (name == "mask" && kind == MaterialParameterKind.Scalar)
             {
                 return Scalp;
@@ -361,11 +363,11 @@ public virtual IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
         {
             return (FacialStructure, Race);
         }
-        if (lower is "afro" or "buzzcut" or "deiter" or "flattop" or "formal" or "geezer" or
+        if (lower is "afro" or "buzzcut" or "buzzcut_widowspeak" or "deiter" or "flattop" or "flattop_widowspeak" or "formal" or "geezer" or
             "rollins" or "sarge" or "debug_capcorrector" or "slick" or "straighthairline" or
             "widowspeak" or "willis")
         {
-            return (FacialStructure, Hair);
+            return (Hair, Shape);
         }
         if (lower.StartsWith("shape_")) return (Head, Shape);
         if (lower.StartsWith("cheek") || lower == "mouth_cheekmass") return (Head, Cheeks);
@@ -400,19 +402,22 @@ public virtual IReadOnlyList<EditorCategoryDefinition> Categories { get; } =
         if (lower is "hir_beard" or "hir_beardtipmorph" || lower.StartsWith("jaw_chin") || lower == "jaw_doublechin") return (NeckJaw, Chin);
         if (lower.StartsWith("jaw") || lower == "jawlower") return (NeckJaw, Jaw);
         if (lower.StartsWith("neck")) return (NeckJaw, Neck);
-        return (FacialStructure, Hair);
+        return (Hair, Shape);
     }
 
     private static int GetFeatureSortOrder(string name) => name.ToLowerInvariant() switch
     {
-        // Facial Structure — Character / Race / Hair
+        // Facial Structure — Character / Race
         "anderson" => 0, "joker" => 1, "kaiden" => 2, "eastwood" => 3, "jacob" => 4, "shepard" => 5,
         "race_oldasn" => 0, "race_yngasn" => 1,
         "race_oldblk" => 10, "race_yngblk" => 11,
         "race_oldcauc" => 20, "race_yngcauc" => 21,
-        "afro" => 0, "deiter" => 1, "flattop" => 2, "geezer" => 3,
-        "rollins" => 4, "debug_capcorrector" => 5, "straighthairline" => 6,
-        "widowspeak" => 7, "willis" => 8,
+
+        // Hair
+        "afro" => 0, "buzzcut" => 1, "buzzcut_widowspeak" => 2, "deiter" => 3,
+        "flattop" => 4, "flattop_widowspeak" => 5, "geezer" => 6,
+        "rollins" => 7, "debug_capcorrector" => 8, "straighthairline" => 9,
+        "widowspeak" => 10, "willis" => 11,
 
         // Head — Shape / Cheeks / Ears
         "shape_skinny" => 0, "shape_chubby" => 1,

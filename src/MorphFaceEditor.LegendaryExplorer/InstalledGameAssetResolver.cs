@@ -11,7 +11,7 @@ public sealed class InstalledGameAssetResolver
 {
     private readonly Func<MEGame, IReadOnlyDictionary<string, string>> _officialFiles;
     private readonly Func<MEGame, TextureRegistrySnapshot?> _snapshot;
-    private readonly Dictionary<MEGame, IReadOnlyDictionary<string, string>> _packageFiles = [];
+    private readonly Dictionary<MEGame, (string? CookedPath, IReadOnlyDictionary<string, string> Files)> _packageFiles = [];
 
     internal InstalledGameAssetResolver(
         Func<MEGame, IReadOnlyDictionary<string, string>>? loadedFiles = null,
@@ -105,9 +105,11 @@ public sealed class InstalledGameAssetResolver
 
     internal IReadOnlyDictionary<string, string> GetPackageFiles(MEGame game)
     {
-        if (!_packageFiles.TryGetValue(game, out var files))
-            _packageFiles[game] = files = _officialFiles(game);
-        return files;
+        var cookedPath = LegendaryExplorerCoreRuntime.GetCookedPath(game);
+        if (!_packageFiles.TryGetValue(game, out var cached) ||
+            !string.Equals(cached.CookedPath, cookedPath, StringComparison.OrdinalIgnoreCase))
+            _packageFiles[game] = cached = (cookedPath, _officialFiles(game));
+        return cached.Files;
     }
 
     internal static ExportEntry RequireExact(PackageCache cache, string packagePath, string path, string className, int index = 0) =>
@@ -154,7 +156,7 @@ public sealed class InstalledGameAssetResolver
     public static IReadOnlyDictionary<string, string> GetOfficialPackages(MorphFaceGame game) =>
         GetOfficialPackageFiles(LecTextureRegistryPackageScanner.ToMeGame(game));
 
-    private static readonly TextureRegistryStore Store = new(TextureRegistryPaths.CreateDefault());
+    private static readonly TextureRegistryStore Store = TextureRegistryStore.CreateDefault();
     private static TextureRegistrySnapshot? ReadSnapshot(MEGame game)
     {
         if (game is not (MEGame.LE1 or MEGame.LE2 or MEGame.LE3)) return null;

@@ -27,9 +27,56 @@ public static class TextureRegistryStoreTests
         new("texture registry builder: mod-only prerequisite and changed-index failures are typed and atomic", ModsOnlyFailuresAreTyped),
         new("texture registry status: detects stale represented sources without disabling catalogues", StaleSourcesAreReportedSeparately),
         new("texture registry runtime: changed or removed package leaves catalogue available", ChangedPackageInvalidatesCachedCatalogue),
+        new("texture registry runtime: install switch rejects old indexed sources", InstallationSwitchRejectsOldSources),
         new("custom assets: missing PCC remains recorded with a relink report", MissingManualPccProducesRelinkReport),
         new("custom assets: selected export appends to sidecar", SelectedExportAppendsToSidecar),
     ];
+
+    private static void InstallationSwitchRejectsOldSources()
+    {
+        using var fixture = RegistryFixture.Create();
+        var basePath = Path.GetDirectoryName(fixture.Paths.GetPath(MorphFaceGame.LE2))!;
+        var rootA = Path.Combine(basePath, "InstallA");
+        var rootB = Path.Combine(basePath, "InstallB");
+        string? root = rootA;
+        string Package(string install, string name) => Path.Combine(install, "Game", "ME2", "BioGame", name);
+        var officialA = Package(rootA, "A.pcc");
+        var officialB = Package(rootB, "B.pcc");
+        var modA = Package(rootA, "Mod.pcc");
+        var manualPath = Path.Combine(basePath, "external", "Manual.pcc");
+        TextureRegistrySnapshot Make(string path, TextureCatalogOrigin origin, string name)
+        {
+            var occurrence = Occurrence(path, 0, origin);
+            return new TextureRegistrySnapshot(TextureRegistrySnapshot.CurrentSchemaVersion, MorphFaceGame.LE2,
+                DateTimeOffset.UtcNow, 1, [new TextureCatalogCandidate(MorphFaceGame.LE2, name, occurrence, [occurrence])])
+            {
+                OfficialPackagePaths = origin == TextureCatalogOrigin.BaseGame ? [path] : [],
+                MountedPackagePaths = [path]
+            };
+        }
+        var store = new TextureRegistryStore(fixture.Paths, _ => root);
+        store.WriteAtomic(Make(officialA, TextureCatalogOrigin.BaseGame, "OfficialA"));
+        store.WriteModsAtomic(Make(modA, TextureCatalogOrigin.Mod, "ModA"));
+        store.WriteManualAtomic(Make(manualPath, TextureCatalogOrigin.Mod, "Manual"));
+        var manualBytes = File.ReadAllBytes(fixture.Paths.GetManualPath(MorphFaceGame.LE2));
+        var catalog = new TextureCatalogService(store);
+        var before = catalog.ReadAsync(MorphFaceGame.LE2).GetAwaiter().GetResult();
+        TestAssert.True(before.IsAvailable && before.Candidates.Any(c => c.InstancedPath == "ModA") &&
+            before.Candidates.Any(c => c.InstancedPath == "Manual"), "Initial catalogue did not include both sidecars.");
+        root = rootB;
+        var after = catalog.ReadAsync(MorphFaceGame.LE2).GetAwaiter().GetResult();
+        TestAssert.Equal(TextureRegistryState.Outdated, store.GetStatus(MorphFaceGame.LE2).State);
+        TestAssert.Equal(TextureRegistryState.Outdated, store.GetModsStatus(MorphFaceGame.LE2).State);
+        TestAssert.True(!after.IsAvailable && after.Candidates.Count == 0, "Cached sources survived the install switch.");
+        TestAssert.True(manualBytes.SequenceEqual(File.ReadAllBytes(fixture.Paths.GetManualPath(MorphFaceGame.LE2))), "Manual sidecar changed.");
+        store.WriteAtomic(Make(officialB, TextureCatalogOrigin.BaseGame, "OfficialB"));
+        var rebuilt = catalog.ReadAsync(MorphFaceGame.LE2).GetAwaiter().GetResult();
+        TestAssert.True(rebuilt.IsAvailable && rebuilt.Candidates.Any(c => c.InstancedPath == "OfficialB") &&
+            rebuilt.Candidates.Any(c => c.InstancedPath == "Manual") && rebuilt.Candidates.All(c => c.InstancedPath != "ModA"),
+            "The rebuilt catalogue did not preserve manual assets or rejected old mods.");
+        root = null;
+        TestAssert.Equal(TextureRegistryState.Outdated, store.GetStatus(MorphFaceGame.LE2).State);
+    }
 
     private static void ModAdditionsMergeFromSidecar()
     {
@@ -247,7 +294,9 @@ public static class TextureRegistryStoreTests
         }
         TestAssert.Equal(0, missingScanner.ScannedPaths.Count);
 
-        fixture.CreateBuilder(new FakePackageScanner(), _ => []).RebuildAsync(MorphFaceGame.LE1)
+        var basePackage = Path.Combine(Path.GetDirectoryName(fixture.Paths.GetPath(MorphFaceGame.LE1))!, "Base.pcc");
+        File.WriteAllBytes(basePackage, [1]);
+        fixture.CreateBuilder(new FakePackageScanner(), _ => [basePackage]).RebuildAsync(MorphFaceGame.LE1)
             .GetAwaiter().GetResult();
         var modsPath = fixture.Paths.GetModsPath(MorphFaceGame.LE1);
         var modsBefore = File.ReadAllBytes(modsPath);

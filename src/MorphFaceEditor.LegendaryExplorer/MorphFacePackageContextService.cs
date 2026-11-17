@@ -118,12 +118,20 @@ public sealed class MorphFacePackageContextService
                 // Stage the authored material and attachment assets first. The base-head
                 // dependency walk can then bind to those exports instead of pre-creating
                 // fragile imports for the same canonical paths.
+                attachments = MorphFaceAttachmentTransferEngine.Transfer(
+                    package,
+                    sourceHair,
+                    sourceOtherMeshes,
+                    ToMeGame(sourceGame),
+                    templatePath);
+                var textureSupport = IncludeTransferredHairDiffuseSupport(
+                    package, attachments.Hair, sourceMaterialData, supportedTextures);
                 transfer = MorphFaceTextureTransferEngine.Transfer(
                     package,
                     sourceMaterialData,
                     supportedScalars,
                     supportedVectors,
-                    supportedTextures,
+                    textureSupport,
                     ToMeGame(sourceGame),
                     sourceProfileKey,
                     sourcePackagePath,
@@ -131,12 +139,6 @@ public sealed class MorphFacePackageContextService
                     sourceTextureCatalog,
                     targetTextureCatalog);
                 WriteMaterialData(package, materialOverride, transfer.MaterialData);
-                attachments = MorphFaceAttachmentTransferEngine.Transfer(
-                    package,
-                    sourceHair,
-                    sourceOtherMeshes,
-                    ToMeGame(sourceGame),
-                    templatePath);
 
                 var baseHead = draft.BaseHeadReference
                                ?? throw new InvalidDataException("The converted face has no target-game base head.");
@@ -182,6 +184,40 @@ public sealed class MorphFacePackageContextService
                 },
                 transfer.MaterialData);
         }
+    }
+
+    private static IReadOnlySet<string> IncludeTransferredHairDiffuseSupport(
+        IMEPackage package,
+        IEntry? transferredHair,
+        MorphFaceMaterialData source,
+        IReadOnlySet<string> baseTextures)
+    {
+        var requested = source.Textures
+            .Where(value => value.TextureReference is not null &&
+                HeadMorphMaterialParameterPolicy.IsEditableHairDiffuseTexture(value.Name) &&
+                !baseTextures.Contains(value.Name))
+            .Select(value => value.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (requested.Count == 0 || transferredHair is not ExportEntry hair) return baseTextures;
+
+        using var cache = new PackageCache { CacheMaxSize = 8 };
+        var resolver = new GamePackageReferenceResolver(cache);
+        var materialReader = new MorphFaceMaterialReader(cache, resolver);
+        var supported = new HashSet<string>(baseTextures, StringComparer.OrdinalIgnoreCase);
+        foreach (var index in hair.GetBinaryData<SkeletalMesh>().Materials ?? [])
+        {
+            if (index == 0) continue;
+            var reference = package.GetEntry(index);
+            var material = reference is null ? null :
+                CanonicalAttachmentMaterialPolicy.ResolveReplacement(hair, reference, cache, null) ?? resolver.Resolve(reference);
+            if (material is null) continue;
+            var evidence = materialReader.ReadStagedFaceAttachmentEvidence(material);
+            if (evidence.Family is not (HeadMaterialFamily.Hair or HeadMaterialFamily.MaskedHair) ||
+                !evidence.ContributesFaceControls) continue;
+            foreach (var name in requested)
+                if (evidence.Supports(name, MaterialParameterKind.Texture)) supported.Add(name);
+        }
+        return supported;
     }
 
     public MorphFaceSaveResult CloneMorph(string packagePath, string facePath, string objectName)
@@ -323,12 +359,20 @@ public sealed class MorphFacePackageContextService
         TextureTransferResult? transfer = null;
         var saveResult = Mutate(packagePath, package =>
         {
+            var attachments = MorphFaceAttachmentTransferEngine.Transfer(
+                package,
+                sourceHair,
+                sourceOtherMeshes,
+                ToMeGame(sourceGame),
+                targetTemplatePackagePath);
+            var textureSupport = IncludeTransferredHairDiffuseSupport(
+                package, attachments.Hair, sourceMaterialData, supportedTextures);
             transfer = MorphFaceTextureTransferEngine.Transfer(
                 package,
                 sourceMaterialData,
                 supportedScalars,
                 supportedVectors,
-                supportedTextures,
+                textureSupport,
                 ToMeGame(sourceGame),
                 sourceProfileKey,
                 sourcePackagePath,
@@ -347,12 +391,6 @@ public sealed class MorphFacePackageContextService
                 materialOverride.ObjectName.Number + 1);
             WriteMorphData(clone, morphData);
             WriteMaterialData(package, materialOverride, transfer.MaterialData);
-            var attachments = MorphFaceAttachmentTransferEngine.Transfer(
-                package,
-                sourceHair,
-                sourceOtherMeshes,
-                ToMeGame(sourceGame),
-                targetTemplatePackagePath);
             WriteAttachments(clone, attachments);
             return new PendingResult(
                 clone.InstancedFullPath,
@@ -484,7 +522,7 @@ public sealed class MorphFacePackageContextService
         var data = ReadMorphData(face);
         var materials = morphFeaturesOnly ? new MorphFaceMaterialData([], [], []) : ReadMaterialData(ResolveMaterialOverride(face));
         materials = materials with { Textures = materials.Textures.Where(value =>
-            !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(value.Name)).ToArray() };
+            !HeadMorphMaterialParameterPolicy.IsExcludedHeadTexture(value.Name)).ToArray() };
         return new HeadMorphPayload(
             morphFeaturesOnly ? "None" : hair,
             morphFeaturesOnly ? [] : accessories,

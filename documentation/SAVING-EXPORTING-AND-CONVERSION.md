@@ -28,7 +28,7 @@ Right-click the face in the **Face Browser** to find these options:
 | **Export Morphs** | Morph-only RON | Morph slider values. It doesn't include bone edits, materials or attachments. |
 | **Export Materials** | Material-only MFE RON | Material values, texture references and supported hair/accessory references. It doesn't include the face shape. |
 | **Export to PCC** | PCC | The face and its required package assets. Custom Mesh workspaces export the mesh and its materials instead. |
-| **Export Morph as Mesh → PSK / glTF** | Mesh files | The face mesh for use in a modelling tool, with an accompanying MFE sidecar file for reimport. |
+| **Export Morph as Mesh → PSK / glTF** | Mesh files | The face and available hair/accessory meshes for a modelling tool, with an MFE sidecar for reimporting the head. Choose the **with Textures** option to include material files and textures. |
 
 RON files reference textures and attachment meshes rather than bundling those assets. If a head or preset uses modded hair or textures and you plan to share it with others, let people know which mods they need.
 
@@ -47,6 +47,8 @@ Use **Export Morph Face** when you want to keep the complete head, including bon
 Use **Export Morphs** to transfer slider values while keeping the destination's materials and attachments. Apply it through **Import Morphs** on a compatible face. This is a slider preset, so use a full head export if the appearance also depends on bone edits or authored geometry.
 
 Use **Export Materials** for an appearance preset. Apply it through **Import Materials** on a compatible face. For the picker, scalp pairings and preset behaviour, see [Materials, Textures and Attachments](MATERIALS-TEXTURES-AND-ATTACHMENTS.md).
+
+Opening a TSE material preset on its own loads a generic head so you can preview its materials. Choose the intended game and gender if prompted; the preset doesn't contain the original face shape.
 
 In a **Custom Mesh Workspace**, **Import TSE RON** and **Export TSE RON** provide Human material presets. These contain material data rather than a full headmorph. See [Custom Meshes](CUSTOM-MESHES.md) for the supported material combinations.
 
@@ -87,11 +89,13 @@ Custom Mesh workspaces use a different PCC export: **Save Mesh and Materials to 
 
 ## Export a mesh for external editing
 
-1. Right-click a supported face and choose **Export Morph as Mesh → PSK** or **glTF**.
-2. Choose an output folder and complete the export.
-3. Keep the accompanying `.mfe.json` file beside the mesh if you plan to bring it back into MFE. Keep any glTF `.bin` files with it too.
+1. Right-click a supported face and choose **Export Morph as Mesh**. Choose **PSK** or **glTF** for geometry, or **PSK - with Textures** or **glTF - with Textures** to include material files and textures.
+2. Choose an output folder and complete the export. MFE exports the head and any available hair and accessories; these are separate meshes, with hair and accessories in their own folders.
+3. Keep the files and folders together, including the head's `.mfe.json` sidecar and any glTF `.bin` files beside their meshes.
 
 The sidecar holds head information that the mesh file alone can't preserve. Its name follows the mesh filename: for example, `MyHead.gltf` has `MyHead.gltf.mfe.json` beside it. Keep those names paired if you move or rename the files.
+
+The textured options also write `.materials.json` information and texture images. PSK exports include `.mat` files and TGA textures; glTF uses PNG for supported diffuse and normal bindings, with other maps in TGA. These material files approximate the game materials for modelling tools. Packed maps and some effects may need manual setup in your modelling tool.
 
 Mesh export requires UModel. If MFE reports that it's missing, export a mesh through Legendary Explorer once to let it install the supported UModel build, then try again. I haven't set up MFE to install UModel independantly since any PCC exports require you to use LEX anyway.
 
@@ -103,7 +107,7 @@ Use a full headmorph RON or PCC as well if you want to keep the complete face se
 
 This is particularly useful for converting a LE1/LE2 face to LE3 and vice-versa, since LE3 uses a morph system that is incompatible with the earlier games. Note that for humans there's a small handful of morph sliders that do not exist in previous games. For example the human male "Jacob" slider does not exist in LE1, so it will not be used when converting a face into LE1.
 
-Start from an open PCC. If you're working on a standalone RON, Gibbed headmorph or PCSAV head, export the face to a new PCC and open that PCC first.
+For Shepard in a Player workspace, you can convert straight to a new Player RON. See [Convert Shepard to another game](PLAYER-FACES.md#convert-shepard-to-another-game). For a PCC conversion, start from an open package and follow the steps below.
 
 1. Build the **Mesh/Texture Databases** for both the source and target games if you haven't already.
 2. Open the source PCC and select the face you want to convert.
@@ -121,7 +125,7 @@ Conversion writes the output PCC directly. It adds a converted face to an existi
 
 ### Check the result
 
-As I mentioned above, while they're actually relatively consistent, the games don't all use the exact same sliders, materials or assets - particularly for human morphs. Check the export report for unsupported sliders, texture or attachment warnings, and any note about source geometry that couldn't fully transfer. Unsupported non-zero sliders reset to neutral in the converted face.
+As I mentioned above, while they're actually relatively consistent, the games don't all use the exact same sliders, materials or assets - particularly for human morphs. Check the export report for unsupported sliders, texture or attachment warnings, and any note about source geometry that couldn't fully transfer. Unsupported non-zero sliders reset to neutral in the converted face. For female heads converted to LE3, **Split Side** is reset because its LE3 morph has no LOD0 deformation. Some stock texture overrides intentionally use the target material default; a selected hair diffuse can transfer when the target hairstyle supports it and the target texture is available.
 
 Inspect the converted face under a few lighting presets and check it in game. For an NPC, assign the converted face and materials to the target actor. For Shepard, export the converted Human head as a full RON, then import it into a matching career save through [Player Faces](PLAYER-FACES.md).
 

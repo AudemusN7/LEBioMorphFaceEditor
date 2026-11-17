@@ -9,12 +9,14 @@ namespace MorphFaceEditor.QA;
 internal static class QaTimingBaseline
 {
     private const string ResourceName = "MorphFaceEditor.QA.TimingBaselines.accepted-0.10.0.39.json";
+    private const string TexturedMeshResourceName = "MorphFaceEditor.QA.TimingBaselines.accepted-textured-mesh-1.0.4.1.json";
     private const string AuditPrefix = "PCC read/import audit ";
     private static readonly Regex ArtifactPrefix = new(@"\b[0-9a-fA-F]{12,32}-\d{4,}-", RegexOptions.CultureInvariant);
     private static readonly Regex GuidName = new(@"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", RegexOptions.CultureInvariant);
     private static readonly Regex WorkspaceGuid = new(@"(?<=\.)[0-9a-fA-F]{32}(?=\.)", RegexOptions.CultureInvariant);
     private static readonly Regex BatchAverage = new(@" · \d+ rolls · average$", RegexOptions.CultureInvariant);
     private static readonly Lazy<Baseline> Accepted = new(ReadAccepted);
+    private static readonly Lazy<TexturedMeshBaseline> TexturedMeshAccepted = new(ReadTexturedMeshAccepted);
 
     internal static string Description
     {
@@ -22,6 +24,7 @@ internal static class QaTimingBaseline
         {
             var source = Accepted.Value.Document.Source;
             return $"Frozen accepted QA baseline {source.Build}, seed {source.Seed}, SHA256 {source.Sha256}; " +
+                   $"textured mesh export supplement from reviewed {TexturedMeshAccepted.Value.Build} dry runs; " +
                    "25% headroom for fixed/native inputs, 50% for seeded variable/derived inputs; " +
                    "at least 100 ms absolute headroom, rounded upward to 100 ms. " +
                    "Severe failure above 2x the fixed-input cap or 3x the variable-input cap. " +
@@ -46,6 +49,13 @@ internal static class QaTimingBaseline
                     ? Accepted.Value.Document.Policy.FixedFailureMultiplier
                     : Accepted.Value.Document.Policy.VariableFailureMultiplier);
                 source = $"Accepted {Accepted.Value.Document.Source.Build} baseline (+{entry.MarginPercent}%)";
+            }
+            else if (stage.Kind == QaStageKind.FileTransfer &&
+                     TexturedMeshAccepted.Value.Entries.TryGetValue(keys[index], out var texturedEntry))
+            {
+                limit = CalculateLimit(texturedEntry, stage.Kind, Accepted.Value.Document.Policy);
+                failureLimit = limit * Accepted.Value.Document.Policy.VariableFailureMultiplier;
+                source = $"Accepted {TexturedMeshAccepted.Value.Build} mesh dry runs (+{texturedEntry.MarginPercent}%)";
             }
             result.Stages[index] = stage with
             {
@@ -153,8 +163,26 @@ internal static class QaTimingBaseline
         return new(document, entries);
     }
 
+    private static TexturedMeshBaseline ReadTexturedMeshAccepted()
+    {
+        using var stream = typeof(QaTimingBaseline).Assembly.GetManifestResourceStream(TexturedMeshResourceName)
+                           ?? throw new InvalidDataException($"Missing textured mesh timing baseline '{TexturedMeshResourceName}'.");
+        var document = JsonSerializer.Deserialize<TexturedMeshDocument>(stream, new JsonSerializerOptions(JsonSerializerDefaults.Web))
+                       ?? throw new InvalidDataException("The textured mesh timing baseline is empty.");
+        var entries = new Dictionary<string, BaselineEntry>(StringComparer.Ordinal);
+        foreach (var entry in document.Entries)
+        {
+            if (!double.IsFinite(entry.EnvelopeMs) || entry.EnvelopeMs < 0 || entry.MarginPercent != 50 ||
+                !entries.TryAdd(entry.Key, entry))
+                throw new InvalidDataException($"Invalid or duplicate textured mesh timing key '{entry.Key}'.");
+        }
+        return new(document.Build, entries);
+    }
+
     private sealed record ArtifactOrigin(string CaseId, string Role, int RoleOccurrence);
     private sealed record Baseline(BaselineDocument Document, IReadOnlyDictionary<string, BaselineEntry> Entries);
+    private sealed record TexturedMeshBaseline(string Build, IReadOnlyDictionary<string, BaselineEntry> Entries);
+    private sealed record TexturedMeshDocument(string Build, IReadOnlyList<BaselineEntry> Entries);
     private sealed record BaselineDocument(int SchemaVersion, BaselineSource Source, MarginPolicy Policy, IReadOnlyList<BaselineEntry> Entries);
     private sealed record BaselineSource(string Build, int Seed, string Sha256, string Report);
     private sealed record MarginPolicy(int FixedMarginPercent, int VariableMarginPercent, double AbsoluteHeadroomMs,

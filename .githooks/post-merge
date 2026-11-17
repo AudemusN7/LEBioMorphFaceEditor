@@ -1,0 +1,2 @@
+#!/bin/sh
+exec pwsh -NoProfile -File eng/Push-ReleaseBranch.ps1

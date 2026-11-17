@@ -13,7 +13,7 @@ namespace MorphFaceEditor.ViewModels;
 /// <summary>Coordinates file interchange while format and package work remain behind services.</summary>
 public sealed partial class MainWindowViewModel
 {
-    private async Task ExportMorphMeshAsync(MorphMeshFormat format)
+    private async Task ExportMorphMeshAsync(MorphMeshFormat format, bool includeTextures = false)
     {
         if (SelectedFace is not { } selected || WorkspacePackagePath is not { } workspacePath)
         {
@@ -31,11 +31,16 @@ public sealed partial class MainWindowViewModel
         Status = Loc.Format("loc_Shell_Status_BakingAndExportingThroughUmodel", selected.DisplayName, format);
         try
         {
-            var result = await _interchangeService.ExportMeshAsync(
+            var preview = IsLoaded(selected) && _loadedFace is { } loaded && Editor is { } editor
+                ? loaded with { Materials = CreatePreviewMaterials(loaded, editor.Material.Materials) }
+                : null;
+            var result = await Task.Run(() => _interchangeService.ExportMeshAsync(
                 workspacePath,
                 selected.InstancedPath,
                 outputDirectory,
-                format);
+                format,
+                includeTextures: includeTextures,
+                previewSource: preview));
             Status = Loc.Format("loc_Shell_Status_ExportedAsFileS", selected.DisplayName, format, result.ProducedFiles.Count);
             _dialogs.ShowInformation(
                 Loc.Text("loc_Shell_DialogTitle_MorphMeshExported"),
@@ -167,6 +172,12 @@ public sealed partial class MainWindowViewModel
 
     private async Task ImportMorphAsync()
     {
+        if (_workspace is { Game: not MorphFaceGame.Unsupported })
+        {
+            var importPath = _dialogs.ChooseMorphImportFile(Path.GetDirectoryName(_workspace.BrowsePath));
+            if (importPath is not null) await ImportMorphAsync(importPath);
+            return;
+        }
         var game = _dialogs.ChooseStandaloneImportGame();
         if (game is null)
         {
@@ -224,8 +235,8 @@ public sealed partial class MainWindowViewModel
         try
         {
             source = await RonImportFile.ReadAsync(sourcePath);
-            if (await TryImportMorphFeaturesRonAsync(sourcePath, source)) return;
-            if (await TryImportMaterialRonAsync(sourcePath, source)) return;
+            if (await TryImportMorphFeaturesRonAsync(sourcePath, source, requestedGame)) return;
+            if (await TryImportMaterialRonAsync(sourcePath, source, requestedGame)) return;
             provenance = await Task.Run(() => TseHeadMorphRon.ReadProvenance(source.Input));
         }
         catch (Exception exception)
@@ -235,8 +246,7 @@ public sealed partial class MainWindowViewModel
             return;
         }
 
-        if ((requestedGame ?? (provenance?.Producer == RonExportProducer.MFE
-                ? provenance.Game : _dialogs.ChooseStandaloneImportGame())) is not { } targetGame) return;
+        if (ChooseRonImportGame(provenance, requestedGame) is not { } targetGame) return;
 
         // Untagged Trilogy Save Editor RONs follow the accepted HMM/HMF Player route.
         if (provenance is null)
@@ -286,6 +296,19 @@ public sealed partial class MainWindowViewModel
 
         await ImportStandaloneNpcMorphAsync(
             sourcePath, provenance.Game, targetGame, archetype, source);
+    }
+
+    private MorphFaceGame? ChooseRonImportGame(RonExportProvenance? provenance, MorphFaceGame? requestedGame = null)
+    {
+        if (requestedGame is not null) return requestedGame;
+        if (provenance?.Producer != RonExportProducer.MFE) return _dialogs.ChooseStandaloneImportGame();
+        if (_workspace is { Game: not MorphFaceGame.Unsupported } workspace &&
+            StandaloneNpcMorphImportService.AreGamesCompatible(provenance.Game, workspace.Game))
+            return workspace.Game;
+
+        // LE1/LE2 tags describe the source, rather than fixing the destination game.
+        return provenance.Game is MorphFaceGame.LE1 or MorphFaceGame.LE2
+            ? _dialogs.ChooseStandaloneImportGame() : provenance.Game;
     }
 
     private async Task ImportStandaloneNpcMorphAsync(
@@ -614,6 +637,9 @@ public sealed partial class MainWindowViewModel
                 career?.SourcePath ?? sourcePath, PackageWorkspace!.SourcePath, append: appendingToCurrentGame);
             OnPropertyChanged(nameof(PackageName));
             OnDirtyStateChanged();
+            var reducedPointCount = meshAnalysis?.ImportedMesh.ReducedBoneInfluencePointCount ?? 0;
+            if (reducedPointCount > 0)
+                importWarnings = [.. importWarnings, Loc.Format("loc_MeshImport_PlayerBoneWeightsReplaced", reducedPointCount)];
             if (importWarnings.Count > 0)
             {
                 Status = Loc.Format("loc_Shell_Status_ImportedWithVisibleAssetWarning", importedFacePath, importWarnings.Count);
@@ -716,6 +742,8 @@ public sealed partial class MainWindowViewModel
         _previewCameraFamily = cameraFamily;
         PreviewSceneReady?.Invoke(result.Preview.Scene, resetCamera);
         var textureCatalogProfile = TextureCatalogProfiles.For(result.Preview.Profile);
+        _activeRegistryProfile = result.Preview.Profile;
+        _activeRegistryCatalogProfile = textureCatalogProfile;
         _ = LoadTextureRegistryAsync(
             editor, game, result.Preview.Profile, textureCatalogProfile, CancellationToken.None);
         foreach (var warning in result.Detached.Warnings)
@@ -729,11 +757,15 @@ public sealed partial class MainWindowViewModel
         OnPropertyChanged(nameof(PackageDisplayName));
         OnDirtyStateChanged();
         RaiseFaceContextCanExecuteChanged();
-        if (result.CustomMaterials is null)
+        var reducedPointCount = result.Detached.Source.ReducedBoneInfluencePointCount;
+        if (result.CustomMaterials is null || reducedPointCount > 0)
         {
+            var warnings = result.CustomMaterials is null ? result.Detached.Warnings.ToList() : [];
+            if (reducedPointCount > 0)
+                warnings.Add(Loc.Format("loc_MeshImport_BoneWeightsReduced", reducedPointCount));
             _dialogs.ShowInformation(
                 Loc.Text("loc_Shell_DialogTitle_MeshImportedWithWarnings"),
-                string.Join("\n\n", result.Detached.Warnings));
+                string.Join("\n\n", warnings));
         }
     }
 

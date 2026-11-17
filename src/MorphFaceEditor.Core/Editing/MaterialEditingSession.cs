@@ -50,6 +50,7 @@ public sealed class MaterialEditingSession
         {
             _textureReferences[value.Name] = null;
         }
+        CaptureDecodedHairOverrides(materials);
         // Build the same effective material set used after every edit before the
         // first preview is created. In particular, face-global overrides may
         // need to be projected across more than one resolved material (Turian
@@ -142,7 +143,7 @@ public sealed class MaterialEditingSession
                 .Select(value => new VectorMaterialOverride(value.Key, value.Value)).ToArray(),
             TextureParameters.Select(value => value.Name).Concat(_originalOverrides.Textures.Select(value => value.Name))
                 .Concat(_textureReferences.Keys).Distinct(StringComparer.OrdinalIgnoreCase)
-                .Where(name => (_hasScopedMaterials || !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(name)) &&
+                .Where(name => (_hasScopedMaterials || !HeadMorphMaterialParameterPolicy.IsExcludedHeadTexture(name)) &&
                                !IsPreviewOnlyAttachmentTexture(name))
                 .Order(StringComparer.OrdinalIgnoreCase)
                 .Select(name => new TextureMaterialOverride(name, GetTextureReference(name))).ToArray());
@@ -261,7 +262,7 @@ public sealed class MaterialEditingSession
                 .Select(value => new ScalarMaterialOverride(value.Key, value.Value)).ToArray(),
             vectors.OrderBy(value => value.Key, StringComparer.OrdinalIgnoreCase)
                 .Select(value => new VectorMaterialOverride(value.Key, value.Value)).ToArray(),
-            textures.Where(value => (_hasScopedMaterials || !HeadMorphMaterialParameterPolicy.IsAttachmentOnlyTexture(value.Key)) &&
+            textures.Where(value => (_hasScopedMaterials || !HeadMorphMaterialParameterPolicy.IsExcludedHeadTexture(value.Key)) &&
                                     !IsPreviewOnlyAttachmentTexture(value.Key))
                 .OrderBy(value => value.Key, StringComparer.OrdinalIgnoreCase)
                 .Select(value => new TextureMaterialOverride(value.Key, value.Value)).ToArray());
@@ -320,10 +321,36 @@ public sealed class MaterialEditingSession
         // Replacing the controls ends their transient texture previews. Authored
         // texture choices remain in the session and are never rebased from hair MICs.
         _previewTextureReferences.Clear();
+        CaptureDecodedHairOverrides(_originalMaterials);
         Materials = surface.Materials;
         MaterialsChanged?.Invoke(this, new MaterialChangedEventArgs(MaterialChangeKind.Surface, null));
         HistoryChanged?.Invoke(this, EventArgs.Empty);
     }
+
+    // Keep a decoded authored choice available when attachment surfaces change;
+    // unresolved identities remain in the original override list for round-tripping.
+    private void CaptureDecodedHairOverrides(ResolvedHeadMaterialSet materials)
+    {
+        if (_hasScopedMaterials) return;
+        foreach (var authored in _originalOverrides.Textures.Where(value =>
+                     HeadMorphMaterialParameterPolicy.IsEditableHairDiffuseTexture(value.Name) &&
+                     value.TextureReference is not null))
+        {
+            if (_textureReferences.ContainsKey(authored.Name)) continue;
+            var texture = materials.Materials.Values.SelectMany(material => material.Textures.Values)
+                .FirstOrDefault(binding => binding.ParameterName.Equals(authored.Name, StringComparison.OrdinalIgnoreCase) &&
+                                           SameTextureRuntimePath(binding.Texture.Source, authored.TextureReference!))?.Texture;
+            // Preview pixels may come from a resolved export, while the authored
+            // BMO reference is a package-local import. Keep the original identity.
+            if (texture is not null) _textureReferences[authored.Name] = texture with { Source = authored.TextureReference! };
+        }
+    }
+
+    private static bool SameTextureRuntimePath(AssetIdentity decoded, AssetIdentity authored) =>
+        string.Equals(decoded.InstancedPath, authored.InstancedPath, StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(TextureCatalogPicker.CanonicalPath(decoded.InstancedPath, decoded.PackagePath),
+            TextureCatalogPicker.CanonicalPath(authored.InstancedPath, authored.PackagePath),
+            StringComparison.OrdinalIgnoreCase);
 
     private static Dictionary<string, T> RebaseValues<T>(
         IReadOnlyDictionary<string, T> defaults,
@@ -424,6 +451,31 @@ public sealed class MaterialEditingSession
         History.Record(TextureKey(name), before, new MaterialTextureState(History.CaptureTexture(texture), true),
             state => RestoreTexture(name, state));
         Refresh(MaterialChangeKind.Texture, name);
+    }
+
+    /// <summary>Returns editable hair textures to the selected attachment's defaults.</summary>
+    public void ClearHairTextureOverrides(bool publishPreview = true)
+    {
+        if (_hasScopedMaterials) return;
+        var names = _originalOverrides.Textures.Select(value => value.Name)
+            .Concat(_textureReferences.Keys)
+            .Where(HeadMorphMaterialParameterPolicy.IsEditableHairDiffuseTexture)
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var before = CaptureBatchState([], [], names);
+        foreach (var name in names) _textureReferences[name] = null;
+        var previewNames = _previewTextureReferences.Keys
+            .Where(HeadMorphMaterialParameterPolicy.IsEditableHairDiffuseTexture).ToArray();
+        foreach (var name in previewNames) _previewTextureReferences.Remove(name);
+        var after = CaptureBatchState([], [], names);
+        if (!BatchEquals(before, after))
+        {
+            History.Record((this, "clear hair textures"), before, after, RestoreBatchEdit);
+            if (publishPreview) Refresh(MaterialChangeKind.Full);
+        }
+        else if (previewNames.Length != 0 && publishPreview)
+        {
+            RefreshPreview(MaterialChangeKind.Full);
+        }
     }
 
     /// <summary>Applies one logical material randomisation as a single history and preview update.</summary>
@@ -768,6 +820,15 @@ public sealed class MaterialEditingSession
                 {
                     textures[parameterName] = new MaterialTextureBinding(parameterName, value.Value);
                 }
+                // LE1's native anonymous sampler is also exposed as a renderer alias.
+                if (!scoped && parameterName.Equals(HeadMorphMaterialParameterPolicy.AnonymousHairDiffuseParameter,
+                        StringComparison.OrdinalIgnoreCase) && material.Textures.ContainsKey("HAIR_Diff"))
+                {
+                    if (textures.TryGetValue(parameterName, out var native))
+                        textures["HAIR_Diff"] = new MaterialTextureBinding("HAIR_Diff", native.Texture);
+                    else
+                        textures.Remove("HAIR_Diff");
+                }
             }
             return material with { Scalars = scalars, Vectors = vectors, Textures = textures };
         }).ToDictionary(material => material.Key, StringComparer.OrdinalIgnoreCase);
@@ -858,24 +919,33 @@ public sealed class MaterialEditingSession
         var values = new Dictionary<string, AssetIdentity?>(StringComparer.OrdinalIgnoreCase);
         foreach (var material in materials.Materials.Values)
         {
-            if (material.IsPreviewOnlyAttachment || !material.ContributesFaceControls) continue;
-            foreach (var value in material.Textures.Values)
+            bool Include(string name) =>
+                !(!scoped && name.Equals("HAIR_Diff", StringComparison.OrdinalIgnoreCase) &&
+                  material.Textures.ContainsKey(HeadMorphMaterialParameterPolicy.AnonymousHairDiffuseParameter)) &&
+                ((!material.IsPreviewOnlyAttachment && material.ContributesFaceControls) ||
+                 (!scoped && material.Family is HeadMaterialFamily.Hair or HeadMaterialFamily.MaskedHair &&
+                  HeadMorphMaterialParameterPolicy.IsEditableHairDiffuseTexture(name)));
+            foreach (var value in material.Textures.Values.Where(value => Include(value.ParameterName)))
                 values.TryAdd(ControlName(material, value.ParameterName, scoped), value.Texture.Source);
-            foreach (var value in material.DefaultTextures.Values)
+            foreach (var value in material.DefaultTextures.Values.Where(value => Include(value.ParameterName)))
                 values.TryAdd(ControlName(material, value.ParameterName, scoped), value.Texture.Source);
-            foreach (var name in material.SupportedTextures) values.TryAdd(ControlName(material, name, scoped), null);
+            foreach (var name in material.SupportedTextures.Where(Include)) values.TryAdd(ControlName(material, name, scoped), null);
         }
         foreach (var value in authored) values.TryAdd(value.Name, value.TextureReference);
         return values
             .Where(value => materials.Materials.Values.Any(material =>
-                !material.IsPreviewOnlyAttachment &&
-                material.ContributesFaceControls &&
+                ((!material.IsPreviewOnlyAttachment && material.ContributesFaceControls) ||
+                 (!scoped && material.Family is HeadMaterialFamily.Hair or HeadMaterialFamily.MaskedHair &&
+                  HeadMorphMaterialParameterPolicy.IsEditableHairDiffuseTexture(value.Key))) &&
+                !(!scoped && value.Key.Equals("HAIR_Diff", StringComparison.OrdinalIgnoreCase) &&
+                  material.Textures.ContainsKey(HeadMorphMaterialParameterPolicy.AnonymousHairDiffuseParameter)) &&
                 AppliesTo(material, value.Key, MaterialParameterKind.Texture, scoped)))
             .Select(value => new TextureMaterialOverride(value.Key, value.Value))
             .ToArray();
     }
 
     private bool IsPreviewOnlyAttachmentTexture(string controlName) =>
+        !(!_hasScopedMaterials && HeadMorphMaterialParameterPolicy.IsEditableHairDiffuseTexture(controlName)) &&
         _originalMaterials.Materials.Values.Any(material =>
             material.IsPreviewOnlyAttachment &&
             AppliesTo(material, controlName, MaterialParameterKind.Texture)) &&

@@ -203,7 +203,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
             ? Loc.Text("loc_VM_faceEditor_attachmentHeadingPreviewOnly")
             : Loc.Text("loc_VM_faceEditor_attachmentHeading");
         HairMesh = new HairMeshEditorViewModel(
-            hairSession, meshCandidates, Loc.Text("loc_VM_faceEditor_hairMesh"), 0);
+            hairSession, meshCandidates, Loc.Text("loc_VM_faceEditor_hairMesh"), 0, ApplyHairReferenceChange);
         _hairRandomiseCommand = new RelayCommand(
             () => Randomise(HairRandomisationScope(), includeCursedBones: false),
             CanRandomiseHair);
@@ -217,9 +217,11 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
                 index + 1))
             .ToArray();
         AttachmentMeshes = [HairMesh, .. OtherMeshes];
+        var logProfile = MorphFaceProfileRegistry.CreateDefault().Profiles.FirstOrDefault(profile => profile.Key == profileKey);
         Material = new MaterialEditorViewModel(
             materialSession, colorDialog, references, packagePath, textureCandidates, reportError, metadataCatalog,
-            registryTextureCandidates, textureCatalogProfile, isTextureRegistryAvailable);
+            registryTextureCandidates, textureCatalogProfile, isTextureRegistryAvailable,
+            game: playerRandomisationGame ?? logProfile?.Game);
         CustomMaterialSlots = customMaterialWorkspace?.UsedSlots
             .Select(slot => new CustomMaterialSlotEditorViewModel(
                 customMaterialWorkspace, slot, customMaterialOptions ?? [], reportError))
@@ -232,7 +234,6 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         Material.ControlsChanged += OnMaterialControlsChanged;
         _scalpMaterialSession.ValueChanged += OnScalpMaterialSelectionChanged;
         _cleanState = CreateDraft();
-        var logProfile = MorphFaceProfileRegistry.CreateDefault().Profiles.FirstOrDefault(profile => profile.Key == profileKey);
         _logIdentity = $"{logProfile?.ExportTag.Trim('[', ']') ?? "CUSTOM"}.{_cleanState.Source.InstancedPath.Split('.').Last()}";
         _logGame = (playerRandomisationGame ?? logProfile?.Game)?.ToString() ?? "UNKNOWN";
         _cleanGeometryEdits = session.CaptureGeometryEdits();
@@ -292,13 +293,13 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         CancelPendingAttachmentSelections();
         using (var aggregate = _history.BeginAggregate())
         {
-            Material.MergeMaterialData(import.Parameters, import.Textures);
             if (import.PreviewAttachments is { } attachments)
             {
                 if (attachments.ApplyHair) HairMesh.SetImportedPreview(attachments.Hair);
                 if (attachments.ApplyAccessory && OtherMeshes.Count > 0)
                     OtherMeshes[0].SetImportedPreview(attachments.Accessory);
             }
+            Material.MergeMaterialData(import.Parameters, import.Textures);
             aggregate.Commit();
         }
         RefreshDirtyState();
@@ -541,9 +542,9 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
         if (_disposed) return false;
         using var aggregate = _history.BeginAggregate();
         applyMorph();
-        Material.ApplyMaterialData(materialData, materialTextures);
         HairMesh.SetImportedPreview(hair);
         OtherMeshes[0].SetImportedPreview(accessory);
+        Material.ApplyMaterialData(materialData, materialTextures);
         _session.ClearCursedBoneOffsets();
         imported?.Invoke(CreateDraft());
         aggregate.Commit();
@@ -944,8 +945,7 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
     private static bool IsHumanHairMorph(MorphFeatureEditorViewModel feature, PlayerHairSex sex) =>
         sex == PlayerHairSex.Male
             ? HumanMaleHairScalpPolicy.IsHairMorph(feature.Name)
-            : feature.CategoryKey.Equals("facial-structure", StringComparison.OrdinalIgnoreCase) &&
-              feature.SubcategoryKey.Equals("hair", StringComparison.OrdinalIgnoreCase);
+            : feature.CategoryKey.Equals(HumanMaleFeatureMetadataCatalog.Hair, StringComparison.OrdinalIgnoreCase);
 
     private bool CanRandomiseScope(EditorRandomisationScope scope, bool includeCursedBones = false)
     {
@@ -1791,6 +1791,15 @@ public sealed class FaceEditorViewModel : ObservableObject, IDisposable
 
     private void OnMaterialPreviewChanged(object? sender, EventArgs e) =>
         MaterialPreviewChanged?.Invoke(this, EventArgs.Empty);
+
+    private void ApplyHairReferenceChange(Action apply)
+    {
+        using var aggregate = _history.IsAggregating ? null : _history.BeginAggregate();
+        // The new attachment publishes its material surface after loading succeeds.
+        Material.ClearHairTextureOverrides(publishPreview: false);
+        apply();
+        aggregate?.Commit();
+    }
 
     private void OnHairMeshPropertyChanged(object? sender,
         System.ComponentModel.PropertyChangedEventArgs e)

@@ -1,0 +1,51 @@
+--- a/LegendaryExplorer/LegendaryExplorerCore/Packages/MEPackage.cs
++++ b/LegendaryExplorer/LegendaryExplorerCore/Packages/MEPackage.cs
+@@ -738,6 +738,11 @@
+             //sw.Stop();
+         }
+ 
++        // Match WriteUnrealString's per-name Latin-1/UTF-16 choice, including its terminator.
++        private static int GetLe1OrLe2NameSize(string name) => string.IsNullOrEmpty(name)
++            ? 4
++            : 4 + (name.Length + 1) * (name.IsLatin1() ? 1 : 2);
++
+         /// <summary>
+         /// Saves the package to stream. If this saving operation is not going to be committed to disk in the same place as the package was loaded from, you should mark this as a 'save as'.
+         /// </summary>
+@@ -767,7 +772,7 @@
+                     break;
+                 case MEGame.LE1:
+                 case MEGame.LE2:
+-                    nameTableSize += 5 * mePackage.NameCount;
++                    nameTableSize = mePackage.names.Sum(GetLe1OrLe2NameSize);
+                     break;
+             }
+ 
+@@ -808,7 +813,7 @@
+                         break;
+                     case MEGame.LE1:
+                     case MEGame.LE2:
+-                        ms.WriteUnrealStringLatin1(name);
++                        ms.WriteUnrealString(name, mePackage.Game);
+                         break;
+                 }
+             }
+@@ -938,8 +943,7 @@
+                         break;
+                     case MEGame.LE1:
+                     case MEGame.LE2:
+-                        nameTableSize = validNameTableSize /* ascii */ + 5 * validNameCount;
+-                        nameTableSize += 4 * invalidNameCount; // 4 bytes for size and nothing else. Null and empty strings are just the length of 0
++                        nameTableSize = package.names.Sum(GetLe1OrLe2NameSize);
+                         break;
+                 }
+ 
+@@ -1061,7 +1065,7 @@
+                         case MEGame.LE2:
+                             foreach (string name in package.names)
+                             {
+-                                ms.WriteUnrealStringLatin1(name);
++                                ms.WriteUnrealString(name, package.Game);
+                             }
+                             break;
+                     }

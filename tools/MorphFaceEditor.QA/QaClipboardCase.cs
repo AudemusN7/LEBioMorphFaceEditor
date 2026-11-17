@@ -260,6 +260,10 @@ internal sealed class QaDialogs : IEditorDialogService
     public string? ChoosePackage(string? initialDirectory = null) => throw Unexpected();
     public MorphPackageSaveRequest? ChooseMorphPackageDestination(string suggestedFileName, string sourcePackagePath) => throw Unexpected();
     public MorphConversionSaveRequest? ChooseMorphConversionDestination(MorphFaceGame sourceGame, string suggestedFileName, string sourcePackagePath) => throw Unexpected();
+    public MorphConversionSaveRequest? PlayerConversionChoice { get; set; }
+    public bool AllowPlayerConversionCancellation { get; set; }
+    public MorphConversionSaveRequest? ChoosePlayerMorphConversionDestination(MorphFaceGame sourceGame, string suggestedFileName, string sourceBrowsePath, bool allowBakedShapeTransfer = false) =>
+        PlayerConversionChoice ?? (AllowPlayerConversionCancellation ? null : throw Unexpected());
     public string? ChooseCloneName(string suggestedName, IReadOnlyCollection<string> existingObjectNames) => throw Unexpected();
     public string? ChooseMorphImportFile(string? initialDirectory = null) => ImportPath ?? throw Unexpected();
     public MorphFaceGame? ChooseStandaloneImportGame() => ImportGame ?? throw Unexpected();

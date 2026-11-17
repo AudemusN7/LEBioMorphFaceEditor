@@ -28,10 +28,9 @@ public static class MaterialRonCodec
             _ = input.MaterialRoot();
             return MaterialFileKind.Mfe;
         }
-        var marked = input.Source.Split('\n').Any(line => line.Trim() is TseMaterialMarker or
-            "// Material settings only; no authored geometry or bone offsets.");
-        if (!marked || !root.TryGetValue("lod0_vertices", out var lod0) || Array(lod0).Count != 0) return null;
-        _ = input.MaterialRoot();
+        if (!Enumerable.Range(0, 4).All(lod => root.TryGetValue($"lod{lod}_vertices", out var vertices) &&
+            vertices is RonSequence { Opening: '[', Count: 0 })) return null;
+        _ = TseRoot(input);
         return MaterialFileKind.Tse;
     }
     public sealed record TseMaterialDocument(

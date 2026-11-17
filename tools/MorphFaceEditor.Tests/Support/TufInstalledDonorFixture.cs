@@ -21,7 +21,7 @@ internal sealed class TufInstalledDonorFixture : IDisposable
         foreach (var game in new[] { MorphFaceGame.LE1, MorphFaceGame.LE2, MorphFaceGame.LE3 })
         {
             var snapshot = new TextureRegistrySnapshot(TextureRegistrySnapshot.CurrentSchemaVersion,
-                game, DateTimeOffset.UtcNow, 0, []);
+                game, DateTimeOffset.UtcNow, 1, []);
             Store.WriteAtomic(snapshot);
             if (!includeDonors) continue;
             var packagePath = PackagePath(game);

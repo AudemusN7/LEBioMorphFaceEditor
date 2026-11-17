@@ -203,7 +203,9 @@ public sealed class MorphFacePackageWriter
     /// Updates the loaded BioMorphFace and its existing BioMaterialOverride in
     /// an adjacent verified copy, then atomically replaces the open PCC.
     /// </summary>
-    public MorphFaceSaveResult SaveExisting(MorphFaceDocument draft)
+    public MorphFaceSaveResult SaveExisting(MorphFaceDocument draft) => SaveExisting(draft, compress: null);
+
+    public MorphFaceSaveResult SaveExisting(MorphFaceDocument draft, bool? compress)
     {
         ArgumentNullException.ThrowIfNull(draft);
         draft = draft with { MaterialOverrides = HeadMorphMaterialParameterPolicy.ForHeadMorph(draft.MaterialOverrides) };
@@ -242,7 +244,7 @@ public sealed class MorphFacePackageWriter
                 overridePath = materialOverride.InstancedFullPath;
                 if (draft.ScalpMaterialSelection is not null || explicitDonors.Length > 0)
                     dependencyGraph = PccPackageWorkflow.CaptureDependencyGraph(face);
-                package.Save(temporaryPath);
+                package.Save(temporaryPath, compress: compress);
             }
 
             Verify(temporaryPath, draft.Source.InstancedPath, draft, integrityBaseline, dependencyGraph);

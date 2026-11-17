@@ -148,6 +148,14 @@ internal sealed class MorphFaceMaterialReader(
     internal ResolvedHeadMaterial ReadFaceAttachmentEvidence(ExportEntry materialExport) =>
         ForFaceControls(ReadMaterialEvidence(materialExport));
 
+    // Conversion stages attachments in an unsaved package, so inspect that exact
+    // material graph without reopening its not-yet-published package path.
+    internal ResolvedHeadMaterial ReadStagedFaceAttachmentEvidence(ExportEntry materialExport)
+    {
+        var identity = MorphFacePackageReader.ToIdentity(materialExport)!;
+        return ForFaceControls(ReadMaterialDefaults(materialExport, identity, MaterialIdentityKey.Create(identity)).Material);
+    }
+
     private static ResolvedHeadMaterial ForFaceControls(ResolvedHeadMaterial material) => material with
     {
         ContributesFaceControls = material.ContributesFaceControls && material.PreviewModel != HumanMaterialPreviewModel.Kaiden

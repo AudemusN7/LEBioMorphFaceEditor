@@ -143,6 +143,7 @@ public partial class SettingsWindow : Window
             AppLog.Information($"GAME:DIRECTORY {LegendaryExplorerCoreRuntime.LegendaryEditionDirectory ?? "(not detected)"}");
             _savedGameDirectoryText = LegendaryExplorerCoreRuntime.LegendaryEditionDirectory ?? string.Empty;
             GameDirectoryPath.Text = _savedGameDirectoryText;
+            _viewModel?.RefreshAfterGameDirectoryChanged();
             OperationStatus.Text = Loc.Text(compressionAvailable
                 ? "loc_Settings_GameDirectoryApplied" : "loc_Settings_GameDirectoryCompressionUnavailable");
             return true;

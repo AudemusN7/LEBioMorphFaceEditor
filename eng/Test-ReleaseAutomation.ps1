@@ -4,7 +4,7 @@ $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $temporary = Join-Path $root ('artifacts/release-automation/tests-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $temporary -Force | Out-Null
 $previousTestState = Get-Variable MfeReleaseTestState -Scope Global -ValueOnly -ErrorAction SilentlyContinue
-$global:MfeReleaseTestState = @{ Release=$null; Latest=$null; Calls=[Collections.Generic.List[string]]::new(); Branch="dev"; PushCount=0 }
+$global:MfeReleaseTestState = @{ Release=$null; Latest=$null; Calls=[Collections.Generic.List[string]]::new(); Branch="dev"; PushCount=0; ReleaseReadError=$null }
 $commit = 'a' * 40
 $archive = Join-Path $temporary 'MFE.zip'
 [IO.File]::WriteAllText($archive,'test archive')
@@ -21,12 +21,27 @@ function gh {
     $global:LASTEXITCODE = 0
     if ($arguments[0] -eq 'api') {
         if ($arguments[1] -like '*/commits/*') { return $commit }
-        $found = if ($arguments[1].EndsWith('/latest')) { $global:MfeReleaseTestState.Latest } else { $global:MfeReleaseTestState.Release }
+        if ($arguments[1].EndsWith('/latest')) { $found = $global:MfeReleaseTestState.Latest }
+        elseif ($arguments[1] -like '*/releases/tags/*') {
+            # Pending draft tags are not visible through the published-release endpoint.
+            $found = $global:MfeReleaseTestState.Release
+            if ($found -and $found.draft) { $found = $null }
+        }
+        else { throw 'Unexpected mocked API endpoint.' }
         if ($null -eq $found) { $global:LASTEXITCODE = 1; return 'gh: Not Found (HTTP 404)' }
         return ($found | ConvertTo-Json)
     }
     if ($arguments[0] -ne 'release') { throw 'Unexpected mocked command.' }
     switch ($arguments[1]) {
+        view {
+            if ($global:MfeReleaseTestState.ReleaseReadError) {
+                $global:LASTEXITCODE = 1
+                return $global:MfeReleaseTestState.ReleaseReadError
+            }
+            $found = $global:MfeReleaseTestState.Release
+            if ($null -eq $found) { $global:LASTEXITCODE = 1; return 'release not found' }
+            return (@{ body=$found.body; isDraft=$found.draft; isPrerelease=$found.prerelease } | ConvertTo-Json)
+        }
         create {
             $notesIndex = [Array]::IndexOf($arguments,'--notes-file')
             $global:MfeReleaseTestState.Release = @{ body=[IO.File]::ReadAllText($arguments[$notesIndex+1]); draft=$true; prerelease=($arguments -contains '--prerelease') }
@@ -55,13 +70,21 @@ try {
     Run-Stage Prepare
     Assert $global:MfeReleaseTestState.Release.draft 'A new release must remain a draft.'
     Assert ($global:MfeReleaseTestState.Release.body.StartsWith("Fix texture imports`n`nKeep the exact commit body.")) 'Commit message changed.'
+    foreach ($readError in @('gh: Bad credentials (HTTP 401)', 'error connecting to api.github.com')) {
+        $global:MfeReleaseTestState.ReleaseReadError = $readError
+        $callCount = $global:MfeReleaseTestState.Calls.Count
+        Expect-Failure { Run-Stage Prepare } '*Unable to read GitHub release*'
+        Assert (@($global:MfeReleaseTestState.Calls | Select-Object -Skip $callCount | Where-Object { $_ -match '^release\|(create|edit|delete)\|' }).Count -eq 0) 'A failed lookup changed an existing release.'
+    }
+    $global:MfeReleaseTestState.ReleaseReadError = $null
     Expect-Failure { Run-Stage Publish } '*Nexus upload must complete*'
     Run-Stage BeginNexus
+    Assert ($global:MfeReleaseTestState.Release.body.Contains('<!-- mfe-nexus:started -->')) 'A pending draft was not found before the Nexus upload.'
     Expect-Failure { Run-Stage Prepare } '*uncertain result*'
     Run-Stage CompleteNexus '12345'
     $callCount = $global:MfeReleaseTestState.Calls.Count
     Run-Stage Prepare
-    Assert (($global:MfeReleaseTestState.Calls | Select-Object -Skip $callCount | Where-Object { $_ -like 'release|*' }).Count -eq 0) 'Retry replaced already uploaded assets.'
+    Assert (($global:MfeReleaseTestState.Calls | Select-Object -Skip $callCount | Where-Object { $_ -match '^release\|(create|edit|delete)\|' }).Count -eq 0) 'Retry replaced already uploaded assets.'
     Assert ((Get-Content -Raw $env:GITHUB_OUTPUT).Contains('skip_nexus=true')) 'Retry did not skip Nexus.'
     Run-Stage Publish
     Assert (!$global:MfeReleaseTestState.Release.draft) 'Completed release was not published.'
@@ -95,7 +118,12 @@ try {
     Assert (@($betaCalls | Where-Object { $_ -like '*mfe-nexus*' -or $_ -like 'api|*/releases/latest' }).Count -eq 0) 'Beta touched stable publication state.'
     $callCount = $global:MfeReleaseTestState.Calls.Count
     Run-Stage PublishBeta
-    Assert (@($global:MfeReleaseTestState.Calls | Select-Object -Skip $callCount | Where-Object { $_ -like 'release|*' }).Count -eq 0) 'Published beta was uploaded again.'
+    Assert (@($global:MfeReleaseTestState.Calls | Select-Object -Skip $callCount | Where-Object { $_ -match '^release\|(create|edit|delete)\|' }).Count -eq 0) 'Published beta was uploaded again.'
+    $global:MfeReleaseTestState.Release.draft = $true
+    $callCount = $global:MfeReleaseTestState.Calls.Count
+    Run-Stage PublishBeta
+    Assert (!$global:MfeReleaseTestState.Release.draft) 'An interrupted beta draft was not published on retry.'
+    Assert (@($global:MfeReleaseTestState.Calls | Select-Object -Skip $callCount | Where-Object { $_ -like 'release|delete|*' }).Count -eq 1) 'An interrupted beta draft was not found before replacement.'
     Write-Host 'PASS shareable beta publication, channel separation, stable latest protection and idempotent retries.'
 
     function git {

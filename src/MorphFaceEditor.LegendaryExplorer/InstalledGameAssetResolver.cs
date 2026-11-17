@@ -156,7 +156,7 @@ public sealed class InstalledGameAssetResolver
     public static IReadOnlyDictionary<string, string> GetOfficialPackages(MorphFaceGame game) =>
         GetOfficialPackageFiles(LecTextureRegistryPackageScanner.ToMeGame(game));
 
-    private static readonly TextureRegistryStore Store = new(TextureRegistryPaths.CreateDefault());
+    private static readonly TextureRegistryStore Store = TextureRegistryStore.CreateDefault();
     private static TextureRegistrySnapshot? ReadSnapshot(MEGame game)
     {
         if (game is not (MEGame.LE1 or MEGame.LE2 or MEGame.LE3)) return null;

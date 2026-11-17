@@ -86,7 +86,7 @@ internal sealed class PlayerRuntimeAssetValidator(Func<MorphFaceGame, IEnumerabl
         // Include mounted mod BIOGs and deliberately registered external packages.
         // Registry membership supplies a location, never proof of seekfree storage.
         var loaded = MELoadedFiles.GetFilesLoadedInGame(LecTextureRegistryPackageScanner.ToMeGame(game), forceReload: true);
-        var store = new TextureRegistryStore(TextureRegistryPaths.CreateDefault());
+        var store = TextureRegistryStore.CreateDefault();
         return loaded.Values.Concat(store.ReadManualWithStatus(game).Snapshot?.ManualAssets
             .Where(asset => !asset.IsMissing && Path.GetFileNameWithoutExtension(asset.PackagePath)
                 .StartsWith("BIOG_", StringComparison.OrdinalIgnoreCase) &&

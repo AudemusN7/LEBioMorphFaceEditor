@@ -17,6 +17,7 @@ internal static class UiPlayerConversionTests
     [
         new("Player conversion cancellation preserves RON career and new drafts", PlayerSourcesCancel),
         new("Player conversion includes unsaved edits without saving the source", PlayerConversionIncludesUnsavedEdits),
+        new("Player conversion retains selectable hair diffuse override", PlayerConversionRetainsHairDiffuse),
         new("conversion eligibility preserves PCC, NPC and detached mesh boundaries", OtherWorkspaceEligibility)
     ];
 
@@ -134,6 +135,93 @@ internal static class UiPlayerConversionTests
             TestAssert.True(shell.Editor?.CreateDraft().Source.PackagePath == sourceWorkingPath &&
                 shell.SelectedFace?.ProfileKey == "le2-human-female",
                 "Conversion replaced the source workspace with its output.");
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    });
+
+    private static void PlayerConversionRetainsHairDiffuse() => RunWithDispatcher(async () =>
+    {
+        const string hair = "BIOG_HMM_HIR_PRO_R.PROCustomBraids01.HMM_HIR_PROCustomBraids01_MDL";
+        const string texture = "BIOG_HMM_HIR_PRO_R.PROCustomFade01.HMM_HIR_PROCustomFade01_Diff";
+        var catalogue = Prerequisites(MorphFaceGame.LE1, MorphFaceGame.LE2);
+        foreach (var game in new[] { MorphFaceGame.LE1, MorphFaceGame.LE2 })
+        {
+            var assets = await catalogue.ReadAsync(game);
+            if (!assets.AttachmentMeshes.Any(row => row.CanonicalPath.Equals(hair, StringComparison.OrdinalIgnoreCase)) ||
+                !assets.Candidates.Any(row => row.InstancedPath.Equals(texture, StringComparison.OrdinalIgnoreCase)))
+                throw new TestSkippedException($"Installed {game} registry must contain the Braids mesh and Fade diffuse.");
+        }
+        var directory = Path.Combine(Path.GetTempPath(), $"MFE-HairDiffuseConversion-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var source = Path.Combine(directory, "Source.ron");
+            var destination = Path.Combine(directory, "Converted.ron");
+            using var reader = new MorphFacePackageReader();
+            var targetAssets = await catalogue.ReadAsync(MorphFaceGame.LE2);
+            var targetHair = targetAssets.AttachmentMeshes.Single(row => row.CanonicalPath.Equals(hair, StringComparison.OrdinalIgnoreCase));
+            var occurrence = targetHair.Occurrences.First(row => Path.GetFileName(row.PackagePath).Equals("BIOG_HMM_HIR_PRO_R.pcc", StringComparison.OrdinalIgnoreCase));
+            var targetAttachment = reader.LoadDetachedAttachment(occurrence.PackagePath, occurrence.InstancedPath);
+            TestAssert.True(targetAttachment.Materials.Materials.Values.Any(material =>
+                material.Family == HeadMaterialFamily.Hair && material.Supports("HAIR_Diff", MaterialParameterKind.Texture)),
+                "The actual target hairstyle does not support HAIR_Diff; this is not a valid regression case.");
+            var seed = LoadSeed(reader, MorphFaceGame.LE1, StandalonePlayerSex.Male);
+            var neutral = MorphFacePackageContextService.CreateDefaultHead(seed);
+            var head = neutral with { HairMesh = hair, MorphData = neutral.MorphData with
+            {
+                BakedLods = [seed.BaseHead.Lods[0].Positions.ToArray()]
+            } };
+            TseHeadMorphRon.Write(source, head, new(RonExportProducer.MFE, MorphFaceGame.LE1, "HMM", true));
+            var dialogs = new StubEditorDialogs { StandaloneGameChoiceResult = MorphFaceGame.LE1,
+                StandaloneNameChoiceResult = "Player", PlayerConversionChoiceResult = new(MorphFaceGame.LE2, destination, true, null) };
+            using var shell = CreateMainWindowViewModel(reader, dialogs, catalogue);
+            await shell.OpenDroppedFileAsync(source);
+            var editor = shell.Editor ?? throw new Exception(shell.ErrorMessage ?? "Player source did not open.");
+            TestAssert.True(editor.CreateDraft().HairMeshReference?.InstancedPath.Equals(hair, StringComparison.OrdinalIgnoreCase) == true,
+                "The selected Player hairstyle was not imported.");
+            // Wait for the real registry refresh and use the same texture picker as the user.
+            var timeout = DateTime.UtcNow.AddSeconds(30);
+            while (DateTime.UtcNow < timeout && !editor.Material.Textures.Any(row => row.Name == "HAIR_Diff" && row.IsRegistryAvailable))
+                await Task.Delay(25);
+            var diffuse = editor.Material.Textures.Single(row => row.Name == "HAIR_Diff" && row.IsRegistryAvailable);
+            diffuse.SearchText = texture;
+            var choice = diffuse.Candidates.Single(row => row.InstancedPath.Equals(texture, StringComparison.OrdinalIgnoreCase));
+            diffuse.CommitTexture(choice);
+            while (DateTime.UtcNow < timeout && (diffuse.IsBusy || !editor.CreateDraft().MaterialOverrides.Textures.Any(row =>
+                       row.Name == "HAIR_Diff" && row.TextureReference?.InstancedPath.Equals(texture, StringComparison.OrdinalIgnoreCase) == true)))
+                await Task.Delay(25);
+            TestAssert.True(editor.CreateDraft().MaterialOverrides.Textures.Any(row => row.Name == "HAIR_Diff" &&
+                row.TextureReference?.InstancedPath.Equals(texture, StringComparison.OrdinalIgnoreCase) == true),
+                shell.ErrorMessage ?? "The texture picker did not author the selected hair diffuse.");
+            TestAssert.True(shell.ConvertMorphCommand.CanExecute(null), "Player conversion was unavailable.");
+            await ((AsyncRelayCommand)shell.ConvertMorphCommand).ExecuteAsync();
+            TestAssert.True(!shell.HasError && File.Exists(destination), shell.ErrorMessage ?? "Player conversion did not create a RON.");
+            var converted = TseHeadMorphRon.ReadDocument(destination);
+            TestAssert.True(converted.Head.HairMesh.Equals(hair, StringComparison.OrdinalIgnoreCase),
+                "The target hairstyle was not transferred; the diffuse comparison would be invalid.");
+            TestAssert.True(converted.Head.MaterialData.Textures.Any(row => row.Name == "HAIR_Diff" &&
+                row.TextureReference?.InstancedPath.Equals(texture, StringComparison.OrdinalIgnoreCase) == true),
+                "Conversion dropped the selected hair diffuse even though the target hairstyle transferred.");
+
+            // Both PCC publication routes share the same authored source and target
+            // attachment evidence; verify the saved packages, not just the transfer result.
+            var sourcePackage = editor.CreateDraft().Source.PackagePath;
+            var sourceFace = shell.SelectedFace!.InstancedPath;
+            var template = StandalonePlayerMorphImportService.ResolveInstalledSeed(MorphFaceGame.LE2);
+            var service = CreateService(MorphFaceGame.LE1, MorphFaceGame.LE2);
+            foreach (var createNew in new[] { true, false })
+            {
+                var output = Path.Combine(directory, createNew ? "New.pcc" : "Existing.pcc");
+                if (!createNew) File.Copy(template, output);
+                var result = service.Convert(new MorphFaceConversionRequest(sourcePackage, sourceFace,
+                    MorphFaceGame.LE2, output, createNew, createNew ? template : null));
+                var saved = new MorphFacePackageContextService().CaptureHead(output, result.SaveResult.FaceInstancedPath);
+                TestAssert.True(saved.HairMesh.Equals(hair, StringComparison.OrdinalIgnoreCase),
+                    $"PCC conversion (new={createNew}) did not transfer the target hairstyle.");
+                TestAssert.True(saved.MaterialData.Textures.Any(row => row.Name == "HAIR_Diff" &&
+                    row.TextureReference?.InstancedPath.Equals(texture, StringComparison.OrdinalIgnoreCase) == true),
+                    $"PCC conversion (new={createNew}) dropped the selected hair diffuse.");
+            }
         }
         finally { Directory.Delete(directory, recursive: true); }
     });

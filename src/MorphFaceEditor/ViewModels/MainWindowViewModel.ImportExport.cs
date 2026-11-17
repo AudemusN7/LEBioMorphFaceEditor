@@ -742,6 +742,8 @@ public sealed partial class MainWindowViewModel
         _previewCameraFamily = cameraFamily;
         PreviewSceneReady?.Invoke(result.Preview.Scene, resetCamera);
         var textureCatalogProfile = TextureCatalogProfiles.For(result.Preview.Profile);
+        _activeRegistryProfile = result.Preview.Profile;
+        _activeRegistryCatalogProfile = textureCatalogProfile;
         _ = LoadTextureRegistryAsync(
             editor, game, result.Preview.Profile, textureCatalogProfile, CancellationToken.None);
         foreach (var warning in result.Detached.Warnings)

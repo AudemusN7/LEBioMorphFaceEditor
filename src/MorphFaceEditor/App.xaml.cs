@@ -46,8 +46,7 @@ public partial class App : Application
 #endif
 
         var sceneFactory = new HeadPreviewSceneFactory();
-        var textureRegistryPaths = TextureRegistryPaths.CreateDefault();
-        var textureRegistryStore = new TextureRegistryStore(textureRegistryPaths);
+        var textureRegistryStore = TextureRegistryStore.CreateDefault();
         var textureRegistryBuilder = new TextureRegistryBuilder(textureRegistryStore);
         var textureCatalogService = new TextureCatalogService(textureRegistryStore);
         var textureRegistrySettings = new TextureRegistrySettingsViewModel(

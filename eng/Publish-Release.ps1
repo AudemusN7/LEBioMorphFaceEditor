@@ -24,9 +24,20 @@ function Invoke-Gh([string[]]$Arguments) {
     return ($result -join "`n")
 }
 function Get-Release([string]$Selector) {
-    $result = & gh api "repos/$repository/releases/$Selector" 2>&1
-    if ($LASTEXITCODE -eq 0) { return (($result -join "`n") | ConvertFrom-Json) }
-    if (($result -join "`n") -match 'HTTP 404') { return $null }
+    $byTag = $Selector.StartsWith('tags/')
+    if ($byTag) {
+        # The CLI resolves pending draft tags as well as published releases.
+        $result = & gh release view $Selector.Substring(5) --repo $repository --json body,isDraft,isPrerelease 2>&1
+    } else {
+        $result = & gh api "repos/$repository/releases/$Selector" 2>&1
+    }
+    if ($LASTEXITCODE -eq 0) {
+        $found = ($result -join "`n") | ConvertFrom-Json
+        if ($byTag) { return [pscustomobject]@{ body=$found.body; draft=$found.isDraft; prerelease=$found.isPrerelease } }
+        return $found
+    }
+    $errorText = ($result -join "`n").Trim()
+    if (($byTag -and $errorText -eq 'release not found') -or (!$byTag -and $errorText -match 'HTTP 404')) { return $null }
     throw "Unable to read GitHub release $Selector."
 }
 function Set-Notes([string]$Body) {

@@ -70,6 +70,20 @@ Quando riaprirai l'editor dovrai reimpostare le preferenze. Dovrai anche ricrear
     <system:String x:Key="loc_Settings_ThemeLight" xml:space="preserve">Chiaro</system:String>
     <!--localiser: {"Key":"loc_Settings_ThemeSaveFailed","ReviewedHash":null,"DoNotTranslate":false,"Note":"Theme settings save error. {0} = underlying save exception detail.","SourceHash":null}-->
     <system:String x:Key="loc_Settings_ThemeSaveFailed" xml:space="preserve">Impossibile salvare il tema: {0}</system:String>
+    <!--localiser: {"Key":"loc_Settings_GamePaths","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"FFE2F6415DDD02902308C6193566BCC091256E004D6279FFE7B7DF27E344D9F8"}-->
+    <system:String x:Key="loc_Settings_GamePaths" xml:space="preserve">Percorsi dei giochi</system:String>
+    <!--localiser: {"Key":"loc_Settings_LegendaryEditionDirectory","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"A12F701A31DD8F9335519F2F0C56AE4C4068FED50C471F0C5144CFE5FD6C0D58"}-->
+    <system:String x:Key="loc_Settings_LegendaryEditionDirectory" xml:space="preserve">Cartella di Mass Effect Legendary Edition</system:String>
+    <!--localiser: {"Key":"loc_Settings_Browse","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"3227AA9666253F7A736509074FB83BC4D47B19582FAAA0233F228746DE29217A"}-->
+    <system:String x:Key="loc_Settings_Browse" xml:space="preserve">Sfoglia</system:String>
+    <!--localiser: {"Key":"loc_Settings_InvalidGameDirectory","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"3F73D9E80875D371FFEE290BDEF242C3E1FB1C5FD416CD79DF697E23B3B16E79"}-->
+    <system:String x:Key="loc_Settings_InvalidGameDirectory" xml:space="preserve">Seleziona la cartella di Mass Effect Legendary Edition contenente Game\Launcher\MassEffectLauncher.exe.</system:String>
+    <!--localiser: {"Key":"loc_Settings_GameDirectoryApplied","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"EC00FE355E7ACDADBB7F5BA102244884AE1DBE5979B2420D182B8AA2DD370117"}-->
+    <system:String x:Key="loc_Settings_GameDirectoryApplied" xml:space="preserve">Cartella di gioco applicata.</system:String>
+    <!--localiser: {"Key":"loc_Settings_GameDirectoryCompressionUnavailable","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"0791ACAC60B758143EBF1F2DD40CBDC402578CFEC6216963EA439EE554726453"}-->
+    <system:String x:Key="loc_Settings_GameDirectoryCompressionUnavailable" xml:space="preserve">Cartella di gioco applicata, ma non è stato possibile caricare i file di gioco necessari. Controlla il registro dell'applicazione.</system:String>
+    <!--localiser: {"Key":"loc_Settings_GameDirectorySaveFailed","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"CA441DEDF3C4545C54F61CB819A1134FF566FB62232DD564FF67B78E07E3FE2D"}-->
+    <system:String x:Key="loc_Settings_GameDirectorySaveFailed" xml:space="preserve">Impossibile aggiornare la cartella di gioco: {0}</system:String>
     <system:String x:Key="loc_Settings_ThemeSystem" xml:space="preserve">Sistema</system:String>
     <system:String x:Key="loc_Settings_Title" xml:space="preserve">Impostazioni</system:String>
     <!--localiser: {"Key":"loc_Settings_ZipFilter","ReviewedHash":null,"DoNotTranslate":false,"Note":"Windows file\u002Dpicker filter. Translate descriptive labels only; preserve wildcard patterns, extensions and '|' separators.","SourceHash":null}-->
@@ -147,6 +161,10 @@ No: elimina i database delle risorse personalizzate dopo una ricostruzione riusc
     <system:String x:Key="loc_VM_textureRegistry_developmentSchemaUnsupported" xml:space="preserve">Lo schema di sviluppo v{0} non è più supportato</system:String>
     <!--localiser: {"Key":"loc_VM_textureRegistry_fullBuildFailed","ReviewedHash":null,"DoNotTranslate":false,"Note":"Shown for failed official full builds and Rebuild All. The full exception remains in the existing application log entry.","SourceHash":null}-->
     <system:String x:Key="loc_VM_textureRegistry_fullBuildFailed" xml:space="preserve">Impossibile ricreare il database delle texture del gioco base. Consulta il registro dell’applicazione per i dettagli.</system:String>
+    <!--localiser: {"Key":"loc_VM_textureRegistry_noInstalledPackages","ReviewedHash":null,"DoNotTranslate":false,"Note":"An installed-game scan found no official packages, or an existing installed database was created by an empty scan. Empty custom databases are valid.","SourceHash":"8C970A3C01F0EBFCA6723B40F081986E85A57BC0CCE5E681EB650E2A74E476AD"}-->
+    <system:String x:Key="loc_VM_textureRegistry_noInstalledPackages" xml:space="preserve">Nessun package di gioco installato trovato. Controlla la cartella di gioco nelle impostazioni, quindi ricrea questo database.</system:String>
+    <!--localiser: {"Key":"loc_VM_textureRegistry_gameDirectoryChanged","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"F5930EAE49F1D86494478EAEDCF828F2A2AA44FD69ED1B8552EFB8A39AD20430"}-->
+    <system:String x:Key="loc_VM_textureRegistry_gameDirectoryChanged" xml:space="preserve">La cartella di gioco è cambiata dalla creazione di questo database. Ricrea il database per usare l’installazione selezionata.</system:String>
     <!--localiser: {"Key":"loc_VM_textureRegistry_missingCustomAssets","ReviewedHash":null,"DoNotTranslate":false,"Note":"Texture Registry rebuild result. {0} = number of custom assets that could not be found; {1} = path to the report listing them.","SourceHash":null}-->
     <system:String x:Key="loc_VM_textureRegistry_missingCustomAssets" xml:space="preserve">Impossibile trovare {0} risorse personalizzate. Dettagli: {1}</system:String>
     <system:String x:Key="loc_VM_textureRegistry_modRescanFailed" xml:space="preserve">Impossibile aggiornare il database delle mod. Consulta il registro e riprova.</system:String>
@@ -378,6 +396,12 @@ Scegli No per mantenere le texture attuali.</system:String>
     <!-- Face Editor - Section Names -->
     <system:String x:Key="loc_Services_Taxonomy_addition_63d99162" xml:space="preserve">AGGIUNTE</system:String>
     <system:String x:Key="loc_Services_Taxonomy_additions_966ff941" xml:space="preserve">Aggiunte</system:String>
+    <!--localiser: {"Key":"loc_Services_Taxonomy_HairDescription","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"3DA00DAAC79EC4A160C17300D312953EB1FE3976DA862CB99189E232DAA1449B"}-->
+    <system:String x:Key="loc_Services_Taxonomy_HairDescription" xml:space="preserve">Colore, colpi di sole e texture dei capelli.</system:String>
+    <!--localiser: {"Key":"loc_Services_Taxonomy_HairTab","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"ABABED4823AB79D226BA3901F6B947C2C7319327DA2BA37068ECBA87672B6EEE"}-->
+    <system:String x:Key="loc_Services_Taxonomy_HairTab" xml:space="preserve">Capelli</system:String>
+    <!--localiser: {"Key":"loc_Services_Taxonomy_FemaleAdditionsDescription","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"32EE735DE3198FA28D2E1EEB847DDA86C7F2A7D0F00F5CBD31A53CB246AA1747"}-->
+    <system:String x:Key="loc_Services_Taxonomy_FemaleAdditionsDescription" xml:space="preserve">Trucco, sopracciglia, sovrapposizioni del viso, lentiggini, cicatrici e impostazioni del cuoio capelluto.</system:String>
     <system:String x:Key="loc_Services_Taxonomy_asari_head_crest_proportions_b5f4248a" xml:space="preserve">Proporzioni della cresta cranica asari.</system:String>
     <system:String x:Key="loc_Services_Taxonomy_batarian_specific_cranium_and_regional_colour_co_3ef2e9bb" xml:space="preserve">Controlli specifici del cranio batarian e del colore delle aree.</system:String>
     <system:String x:Key="loc_Services_Taxonomy_bite_196fedce" xml:space="preserve">MORSO</system:String>
@@ -490,6 +514,8 @@ Scegli No per mantenere le texture attuali.</system:String>
     <system:String x:Key="loc_VM_materialScope_vorcha" xml:space="preserve">Vorcha</system:String>
 
     <!-- Faces - Actor assignment -->
+    <!--localiser: {"Key":"loc_ActorAssignment_OutsideActor","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"62061D8D4D70E947B5FE69E811BAF71210A5FBB76B7331D3E6EE9EA43479E35B"}-->
+    <system:String x:Key="loc_ActorAssignment_OutsideActor" xml:space="preserve">'{0}' non appartiene all'attore selezionato e non verrà modificato.</system:String>
     <system:String x:Key="loc_ActorAssignment_Accessory" xml:space="preserve">Accessorio</system:String>
     <!--localiser: {"Key":"loc_ActorAssignment_AssignedMaterialTargets","ReviewedHash":null,"DoNotTranslate":false,"Note":"Actor assignment result. {0} = verified parameter MIC count; {1} = verified hair/accessory mesh count. Save File commits the changes.","SourceHash":null}-->
     <system:String x:Key="loc_ActorAssignment_AssignedMaterialTargets" xml:space="preserve">Assegnati e verificati {0} MIC con parametri e {1} mesh di capelli/accessori. Usa «Salva file» per conservare queste modifiche.</system:String>
@@ -975,6 +1001,20 @@ I soli file mesh non permettono di recuperare i controlli presenti solo nei meta
     <system:String x:Key="loc_FileSave_UnsavedSummary" xml:space="preserve">Questo file contiene modifiche non salvate.</system:String>
     <system:String x:Key="loc_FileSave_UnsavedTitle" xml:space="preserve">Modifiche al file non salvate</system:String>
     <system:String x:Key="loc_MeshExport_UnverifiedGltfTangents" xml:space="preserve">Impossibile associare in modo sicuro la mesh glTF alla superficie di origine. Nessun file di esportazione è stato modificato.</system:String>
+    <!--localiser: {"Key":"loc_MeshExport_UnverifiedRoundTrip","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"AAB2DA49F9E0DCF122A207F203CF3A6EBC85C7155F9AEE6045A01ECBEC9EC8CE"}-->
+    <system:String x:Key="loc_MeshExport_UnverifiedRoundTrip" xml:space="preserve">Impossibile verificare che questa mesh possa essere reimportata senza modificare la forma della testa. Nessun file esportato è stato modificato.</system:String>
+    <!--localiser: {"Key":"loc_MeshExport_MaterialsFailed","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"4F0F94CC44CFAB699A6189E54C7499A994217A6813E7AB29685D4BD68E133B01"}-->
+    <system:String x:Key="loc_MeshExport_MaterialsFailed" xml:space="preserve">Impossibile esportare i materiali e le texture della mesh. Nessun file esportato è stato modificato.</system:String>
+    <!--localiser: {"Key":"loc_MeshExport_AttachmentFailed","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"0DE78A8BBB0C96A27C191DAD4D1F37334192A12B560E80D0A6FC461170AB7AD3"}-->
+    <system:String x:Key="loc_MeshExport_AttachmentFailed" xml:space="preserve">Impossibile esportare la mesh dell'accessorio {0}. Nessun file esportato è stato modificato.</system:String>
+    <!--localiser: {"Key":"loc_MeshImport_BoneWeightsReduced","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"A4081A2767468B7E58C40F58C45636754023F3CB829E56EF443A8496346DA5C0"}-->
+    <system:String x:Key="loc_MeshImport_BoneWeightsReduced" xml:space="preserve">Questa mesh superava il limite del gioco di quattro influenze ossee per vertice. MFE ha mantenuto i quattro pesi più forti e li ha normalizzati per {0} vertici.
+
+La forma della mesh a riposo rimane invariata, ma la deformazione durante le animazioni facciali potrebbe cambiare. Il file PSK originale non è stato modificato.</system:String>
+    <!--localiser: {"Key":"loc_MeshImport_PlayerBoneWeightsReplaced","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"11B9613155FAD8467618E416F6E9D2D1E2933710D04D4B28C306DE7F8B377784"}-->
+    <system:String x:Key="loc_MeshImport_PlayerBoneWeightsReplaced" xml:space="preserve">Il PSK conteneva {0} vertici con più di quattro influenze ossee. Le teste del giocatore riconosciute usano il rig e i pesi ossei originali del gioco anziché quelli importati.
+
+Il file PSK originale non è stato modificato.</system:String>
     <!--localiser: {"Key":"loc_PccSave_AuthoredMaterialInstancePreserved","ReviewedHash":null,"DoNotTranslate":false,"Note":"{0} is the authored material instance path; {1} is its preserved destination path.","SourceHash":null}-->
     <system:String x:Key="loc_PccSave_AuthoredMaterialInstancePreserved" xml:space="preserve">L’istanza di materiale creata «{0}» è stata mantenuta come «{1}» per tenere i suoi valori sostituiti separati dall’istanza del gioco base.</system:String>
     <!--localiser: {"Key":"loc_PccSave_ExplicitTextureUnavailable","ReviewedHash":null,"DoNotTranslate":false,"Note":"{0} is the texture identity path; {1} is the material parameter name; {2} is the source package path.","SourceHash":null}-->
@@ -1075,7 +1115,11 @@ Pacchetto: {0}</system:String>
     <system:String x:Key="loc_UnsavedChangesWindow_UnsavedStandaloneMorphChanges" xml:space="preserve">Modifiche non salvate al morph standalone</system:String>
     <system:String x:Key="loc_View_MainWindow_CommitTheLoadedFaceToTheTemporaryPackageWorkspaceWithou" xml:space="preserve">Applica il volto caricato all'area di lavoro temporanea del pacchetto senza salvare il PCC di origine.</system:String>
     <system:String x:Key="loc_View_MainWindow_GlTF" xml:space="preserve">glTF</system:String>
+    <!--localiser: {"Key":"loc_View_MainWindow_GlTFWithTextures","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"62EEEF3DC5172CCD6EA61327818FB81C7EBE144DCBDF467A35521452E1B4EFEE"}-->
+    <system:String x:Key="loc_View_MainWindow_GlTFWithTextures" xml:space="preserve">glTF - con texture</system:String>
     <system:String x:Key="loc_View_MainWindow_PSK" xml:space="preserve">PSK</system:String>
+    <!--localiser: {"Key":"loc_View_MainWindow_PSKWithTextures","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"2E59B3341DC2785C505DEA58811D00F55D2CACD07AFEE8D347E09219E5499443"}-->
+    <system:String x:Key="loc_View_MainWindow_PSKWithTextures" xml:space="preserve">PSK - con texture</system:String>
     <system:String x:Key="loc_View_SaveNewInstanceWindow_BrowseExisting" xml:space="preserve">Sfoglia esistente</system:String>
     <system:String x:Key="loc_View_SaveNewInstanceWindow_ExportTheSelectedMorphAndItsRequiredAssetsWhilePreservi" xml:space="preserve">Esporta il morph selezionato e le risorse richieste mantenendone il percorso completo dell'istanza. Scegli un PCC esistente per aggiungerlo oppure lascia il campo vuoto per creare un nuovo PCC minimo.</system:String>
     <system:String x:Key="loc_View_SaveNewInstanceWindow_Save" xml:space="preserve">Salva</system:String>
@@ -1567,6 +1611,10 @@ Materiali: {2}{3}</system:String>
     <system:String x:Key="loc_Services_MetadataText_Shared_hed_scar_diffuse_scalar_364478_Label" xml:space="preserve">Intensità del colore delle cicatrici</system:String>
     <system:String x:Key="loc_Services_MetadataText_Shared_hed_scar_scalar_2d472f_Label" xml:space="preserve">Cicatrice</system:String>
     <system:String x:Key="loc_Services_MetadataText_Shared_hed_scar_vector_67b0a0_Label" xml:space="preserve">Colore della cicatrice</system:String>
+    <!--localiser: {"Key":"loc_Services_MetadataText_Shared_scar_color_Label","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"015632E2E45AFF89742E9A492BB0CCE58D3AE021ADE71AFB5F0304621586CDD8"}-->
+    <system:String x:Key="loc_Services_MetadataText_Shared_scar_color_Label" xml:space="preserve">Colore delle cicatrici</system:String>
+    <!--localiser: {"Key":"loc_Services_MetadataText_Shared_scar_color_Description","ReviewedHash":null,"DoNotTranslate":false,"Note":"Do not translate Scar_Color.","SourceHash":"7C682A4E52E7AF93880076F9DA69590413CE011BA26B463C7F80998C2A892751"}-->
+    <system:String x:Key="loc_Services_MetadataText_Shared_scar_color_Description" xml:space="preserve">Scar_Color · Colora la pelle sotto le cicatrici di allineamento in LE2/LE3.</system:String>
     <system:String x:Key="loc_Services_MetadataText_Shared_hed_spec_add_vector_186be8_Label" xml:space="preserve">Colore speculare della pelle</system:String>
     <system:String x:Key="loc_Services_MetadataText_Archetype_HumanMale_hed_spec_nobrow_a131ce_Label" xml:space="preserve">Speculare senza sopracciglia</system:String>
     <system:String x:Key="loc_Services_MetadataText_Shared_hed_spec_nobrow_43c5f2_Label" xml:space="preserve">Soppressione dello speculare aggiuntivo</system:String>
@@ -2188,6 +2236,8 @@ Materiali: {2}{3}</system:String>
     <system:String x:Key="loc_View_MainWindow_Background" xml:space="preserve">Sfondo</system:String>
     <system:String x:Key="loc_View_MainWindow_ChangeThePreviewBackgroundColour" xml:space="preserve">Modifica il colore dello sfondo dell'anteprima</system:String>
     <system:String x:Key="loc_View_MainWindow_Front" xml:space="preserve">Fronte</system:String>
+    <!--localiser: {"Key":"loc_View_MainWindow_Side","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"630EF00B7C4F54D25B8712CB4EBB5B04264B037A8FCDAC9754F21DF0036881D1"}-->
+    <system:String x:Key="loc_View_MainWindow_Side" xml:space="preserve">Lato</system:String>
     <system:String x:Key="loc_View_MainWindow_HEADPREVIEW" xml:space="preserve">ANTEPRIMA IN TEMPO REALE</system:String>
     <system:String x:Key="loc_View_MainWindow_LOD" xml:space="preserve">LOD</system:String>
     <system:String x:Key="loc_View_MainWindow_LeftDragOrbitMiddleDragPanRightDragWheelZoom" xml:space="preserve">Trascina sinistro: orbita   ·   trascina centrale: sposta   ·   trascina destro / rotellina: zoom</system:String>
@@ -2217,6 +2267,8 @@ Materiali: {2}{3}</system:String>
     <system:String x:Key="loc_Shell_Status_ReleasingWorkspaceMemory" xml:space="preserve">Liberazione della memoria dell’area di lavoro…</system:String>
     <!--localiser: {"Key":"loc_View_MainWindow_NewNpcMorph","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"228F8BBB7C4A828AEA95F12FE2D13E6B5252B7F0C67F1608DC59D1AC3C0FE686"}-->
     <system:String x:Key="loc_View_MainWindow_NewNpcMorph" xml:space="preserve">Nuovo morph NPC</system:String>
+    <!--localiser: {"Key":"loc_StandaloneImportGameWindow_MaterialPreviewPrompt","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"5FC66818B7354ABE021D4E4D206569C5AA8F9FD1D858FB2DD247D476EC17459C"}-->
+    <system:String x:Key="loc_StandaloneImportGameWindow_MaterialPreviewPrompt" xml:space="preserve">Questo file non contiene una mesh della testa, quindi MFE deve caricare una mesh generica per mostrare le anteprime dei materiali. Scegli il gioco e il genere a cui è destinato questo file. </system:String>
     <!--localiser: {"Key":"loc_StandaloneImportGameWindow_NewNpcPrompt","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"FD2A315863C1CDFE229E09E90F9CA6A3E037F2BB9507AF32ACFF093BD3767C7D"}-->
     <system:String x:Key="loc_StandaloneImportGameWindow_NewNpcPrompt" xml:space="preserve">Scegli il gioco e l’archetipo per il nuovo morph NPC.</system:String>
     <!--localiser: {"Key":"loc_CloneMorphWindow_NameNewNpcMorph","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"AB7114D261F0125C0802E1042CB45F59F4E9AE1BA514C1A163FF2F9AEEA87CA0"}-->
@@ -2227,4 +2279,35 @@ Materiali: {2}{3}</system:String>
     <system:String x:Key="loc_Shell_Status_CreatedNpcDefaults" xml:space="preserve">Creato {0} dai valori predefiniti del NPC {1} {2}.</system:String>
     <!--localiser: {"Key":"loc_Shell_Error_NewNpcMorphFailed","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"BC3093B8A316777F45E6B41FBEBD0733806972D0CF805097CD6E5CDDC40031AF"}-->
     <system:String x:Key="loc_Shell_Error_NewNpcMorphFailed" xml:space="preserve">Impossibile creare il morph NPC: {0}</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_ApproximateBakedShape","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"1B8CBA1ECD29FC642EB0466669A80815F231809BBE8346106D0468714CCA4FE5"}-->
+    <system:String x:Key="loc_PlayerConversion_ApproximateBakedShape" xml:space="preserve">Forma precalcolata approssimata</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_ApproximateBakedShapeHelp","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"666E4649D6B6FACAFF6A2311197E7A53CAC2B98F5499DDC65D587D79EDF62C7E"}-->
+    <system:String x:Key="loc_PlayerConversion_ApproximateBakedShapeHelp" xml:space="preserve">Trasferisce la forma precalcolata del viso tra le mesh dei giochi. Controlla occhi e bocca nel risultato convertito.</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_Description","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"BA42E4F5EC416226AFE2AC0E988809CBCBB4F026B28A3EE57C44FC22E50FFDC5"}-->
+    <system:String x:Key="loc_PlayerConversion_Description" xml:space="preserve">Converti questo morph del giocatore per un altro gioco e salvalo come nuovo file RON.</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_SaveTitle","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"302C42711436D13C5E37E5F7C432BD55C598168DC99F2C1E5A7C273AEE7375C6"}-->
+    <system:String x:Key="loc_PlayerConversion_SaveTitle" xml:space="preserve">Salva il morph del giocatore convertito</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_ChooseNewFile","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"A0F2A71CEBDBF88DD76B7859914AD70D3074C368616A96423317D776B2FB3508"}-->
+    <system:String x:Key="loc_PlayerConversion_ChooseNewFile" xml:space="preserve">Scegli un nuovo nome di file RON che non esista già.</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_CompletedStatus","ReviewedHash":null,"DoNotTranslate":false,"Note":"{0} = output path.","SourceHash":"25301A4957CCF002EFEB18F0E2148DD721C71F37A5A06AFC35E2E91739CB6049"}-->
+    <system:String x:Key="loc_PlayerConversion_CompletedStatus" xml:space="preserve">Morph del giocatore convertito salvato in {0}.</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_Completed","ReviewedHash":null,"DoNotTranslate":false,"Note":"{0} = target game, {1} = output path, {2} = optional warnings.","SourceHash":"C0D385E3F23D6E911A1C71CE2C00DE73EB82C943E650605DB931C44EF99171AD"}-->
+    <system:String x:Key="loc_PlayerConversion_Completed" xml:space="preserve">Morph del giocatore convertito per {0} e salvato in:
+{1}{2}</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_UnsupportedGeometry","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"F3C74CA9D73340B0523B87034EC14B605EFB9F1DB7A92A692A15A94117B832E6"}-->
+    <system:String x:Key="loc_PlayerConversion_UnsupportedGeometry" xml:space="preserve">La forma LOD0 del morph non può essere ricreata in sicurezza da una base del giocatore supportata. L’originale rimane invariato.</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_ApproximateResult","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"920D3D520EA17400D7FC8AC7EF21832CFF0697E9836400EBA4A03407CBCCEDC6"}-->
+    <system:String x:Key="loc_PlayerConversion_ApproximateResult" xml:space="preserve">MFE ha approssimato il viso precalcolato sulla mesh di LE3. Controlla occhi e bocca nel nuovo RON. I LOD inferiori usano i cursori del gioco di destinazione.</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_MissingBaselineCounterpart","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"D8697C18791423AB2858E35ED0C86B8ACFB1BE397D7A4654C3B2387688FB55DD"}-->
+    <system:String x:Key="loc_PlayerConversion_MissingBaselineCounterpart" xml:space="preserve">Questa testa corrisponde a un riferimento locale del giocatore. Per convertirla, aggiungi un RON compatibile con il gioco di destinazione alla stessa famiglia di riferimenti.</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_UnsupportedProfile","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"F8CA54BA6D211D109A4AEB0B88070FD2A57107BC0BCDE3CBF222064B3332BBE5"}-->
+    <system:String x:Key="loc_PlayerConversion_UnsupportedProfile" xml:space="preserve">Questo profilo di morph del giocatore non può essere convertito per il gioco selezionato.</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_InvalidDestination","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"61683FA4DB44C2C2AA3FB4B89C16562E5AE79060A5BCED3D2682DD8AAF86B2D6"}-->
+    <system:String x:Key="loc_PlayerConversion_InvalidDestination" xml:space="preserve">Scegli un nuovo file RON come destinazione della conversione.</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_UnsafeOutput","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"1A886BA829E3D64CDE43F9B679C7FC08083973D2A04DBD1A09925666F1349391"}-->
+    <system:String x:Key="loc_PlayerConversion_UnsafeOutput" xml:space="preserve">Impossibile salvare in sicurezza il RON convertito. L’originale rimane invariato.</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_FailedStatus","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"81E5B25022457D8C6E3CCD30B8DA13CFB78854F7006278C8D6EB7C9E8DA1C42C"}-->
+    <system:String x:Key="loc_PlayerConversion_FailedStatus" xml:space="preserve">Conversione del morph del giocatore non riuscita; l’originale non è stato modificato.</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_UnsupportedBones","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"EC6C9F52FB54FECCBD470A834F6B6CF54CF5768F4643B26B6EFD1A3AD610B89F"}-->
+    <system:String x:Key="loc_PlayerConversion_UnsupportedBones" xml:space="preserve">Il morph contiene dati ossei non validi o non riconosciuti e non può essere convertito in sicurezza. L’originale rimane invariato.</system:String>
 </ResourceDictionary>

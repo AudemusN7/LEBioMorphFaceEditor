@@ -2212,4 +2212,87 @@
     <system:String x:Key="loc_Shell_Status_CreatedNpcDefaults" xml:space="preserve">NPC の標準設定 {1} {2} から {0} を作成しました。</system:String>
     <!--localiser: {"Key":"loc_Shell_Error_NewNpcMorphFailed","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":null}-->
     <system:String x:Key="loc_Shell_Error_NewNpcMorphFailed" xml:space="preserve">NPC モーフを作成できませんでした: {0}</system:String>
+    <!--localiser: {"Key":"loc_Settings_GamePaths","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"FFE2F6415DDD02902308C6193566BCC091256E004D6279FFE7B7DF27E344D9F8"}-->
+    <system:String x:Key="loc_Settings_GamePaths" xml:space="preserve">ゲームのパス</system:String>
+    <!--localiser: {"Key":"loc_Settings_LegendaryEditionDirectory","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"A12F701A31DD8F9335519F2F0C56AE4C4068FED50C471F0C5144CFE5FD6C0D58"}-->
+    <system:String x:Key="loc_Settings_LegendaryEditionDirectory" xml:space="preserve">Mass Effect Legendary Editionのフォルダー</system:String>
+    <!--localiser: {"Key":"loc_Settings_Browse","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"3227AA9666253F7A736509074FB83BC4D47B19582FAAA0233F228746DE29217A"}-->
+    <system:String x:Key="loc_Settings_Browse" xml:space="preserve">参照</system:String>
+    <!--localiser: {"Key":"loc_Settings_InvalidGameDirectory","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"3F73D9E80875D371FFEE290BDEF242C3E1FB1C5FD416CD79DF697E23B3B16E79"}-->
+    <system:String x:Key="loc_Settings_InvalidGameDirectory" xml:space="preserve">Game\Launcher\MassEffectLauncher.exeを含むMass Effect Legendary Editionのフォルダーを選択してください。</system:String>
+    <!--localiser: {"Key":"loc_Settings_GameDirectoryApplied","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"EC00FE355E7ACDADBB7F5BA102244884AE1DBE5979B2420D182B8AA2DD370117"}-->
+    <system:String x:Key="loc_Settings_GameDirectoryApplied" xml:space="preserve">ゲームフォルダーを適用しました。</system:String>
+    <!--localiser: {"Key":"loc_Settings_GameDirectoryCompressionUnavailable","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"0791ACAC60B758143EBF1F2DD40CBDC402578CFEC6216963EA439EE554726453"}-->
+    <system:String x:Key="loc_Settings_GameDirectoryCompressionUnavailable" xml:space="preserve">ゲームフォルダーを適用しましたが、必要なゲームファイルを読み込めませんでした。アプリケーションログを確認してください。</system:String>
+    <!--localiser: {"Key":"loc_Settings_GameDirectorySaveFailed","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"CA441DEDF3C4545C54F61CB819A1134FF566FB62232DD564FF67B78E07E3FE2D"}-->
+    <system:String x:Key="loc_Settings_GameDirectorySaveFailed" xml:space="preserve">ゲームフォルダーを更新できませんでした: {0}</system:String>
+    <!--localiser: {"Key":"loc_VM_textureRegistry_noInstalledPackages","ReviewedHash":null,"DoNotTranslate":false,"Note":"An installed-game scan found no official packages, or an existing installed database was created by an empty scan. Empty custom databases are valid.","SourceHash":"8C970A3C01F0EBFCA6723B40F081986E85A57BC0CCE5E681EB650E2A74E476AD"}-->
+    <system:String x:Key="loc_VM_textureRegistry_noInstalledPackages" xml:space="preserve">インストール済みのゲームパッケージが見つかりませんでした。設定でゲームフォルダーを確認し、このデータベースを再構築してください。</system:String>
+    <!--localiser: {"Key":"loc_VM_textureRegistry_gameDirectoryChanged","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"F5930EAE49F1D86494478EAEDCF828F2A2AA44FD69ED1B8552EFB8A39AD20430"}-->
+    <system:String x:Key="loc_VM_textureRegistry_gameDirectoryChanged" xml:space="preserve">このデータベースの構築後にゲームフォルダーが変更されました。選択したインストール先を使用するには、データベースを再構築してください。</system:String>
+    <!--localiser: {"Key":"loc_Services_Taxonomy_HairDescription","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"3DA00DAAC79EC4A160C17300D312953EB1FE3976DA862CB99189E232DAA1449B"}-->
+    <system:String x:Key="loc_Services_Taxonomy_HairDescription" xml:space="preserve">髪の色、ハイライト、テクスチャ。</system:String>
+    <!--localiser: {"Key":"loc_Services_Taxonomy_HairTab","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"ABABED4823AB79D226BA3901F6B947C2C7319327DA2BA37068ECBA87672B6EEE"}-->
+    <system:String x:Key="loc_Services_Taxonomy_HairTab" xml:space="preserve">髪</system:String>
+    <!--localiser: {"Key":"loc_Services_Taxonomy_FemaleAdditionsDescription","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"32EE735DE3198FA28D2E1EEB847DDA86C7F2A7D0F00F5CBD31A53CB246AA1747"}-->
+    <system:String x:Key="loc_Services_Taxonomy_FemaleAdditionsDescription" xml:space="preserve">メイク、眉、顔のオーバーレイ、そばかす、傷跡、頭皮の設定。</system:String>
+    <!--localiser: {"Key":"loc_ActorAssignment_OutsideActor","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"62061D8D4D70E947B5FE69E811BAF71210A5FBB76B7331D3E6EE9EA43479E35B"}-->
+    <system:String x:Key="loc_ActorAssignment_OutsideActor" xml:space="preserve">'{0}'は選択したアクターに属していないため、変更されません。</system:String>
+    <!--localiser: {"Key":"loc_StandaloneImportGameWindow_MaterialPreviewPrompt","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"5FC66818B7354ABE021D4E4D206569C5AA8F9FD1D858FB2DD247D476EC17459C"}-->
+    <system:String x:Key="loc_StandaloneImportGameWindow_MaterialPreviewPrompt" xml:space="preserve">このファイルには頭部メッシュが含まれていないため、マテリアルをプレビューするには汎用の頭部メッシュを読み込む必要があります。このファイルの対象となるゲームと性別を選択してください。</system:String>
+    <!--localiser: {"Key":"loc_MeshExport_UnverifiedRoundTrip","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"AAB2DA49F9E0DCF122A207F203CF3A6EBC85C7155F9AEE6045A01ECBEC9EC8CE"}-->
+    <system:String x:Key="loc_MeshExport_UnverifiedRoundTrip" xml:space="preserve">このメッシュを頭部の形状を変えずに再インポートできることを確認できませんでした。エクスポートファイルは変更されていません。</system:String>
+    <!--localiser: {"Key":"loc_MeshExport_MaterialsFailed","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"4F0F94CC44CFAB699A6189E54C7499A994217A6813E7AB29685D4BD68E133B01"}-->
+    <system:String x:Key="loc_MeshExport_MaterialsFailed" xml:space="preserve">メッシュのマテリアルとテクスチャをエクスポートできませんでした。エクスポートファイルは変更されていません。</system:String>
+    <!--localiser: {"Key":"loc_MeshExport_AttachmentFailed","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"0DE78A8BBB0C96A27C191DAD4D1F37334192A12B560E80D0A6FC461170AB7AD3"}-->
+    <system:String x:Key="loc_MeshExport_AttachmentFailed" xml:space="preserve">アタッチメントメッシュ {0} をエクスポートできませんでした。エクスポートファイルは変更されていません。</system:String>
+    <!--localiser: {"Key":"loc_MeshImport_BoneWeightsReduced","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"A4081A2767468B7E58C40F58C45636754023F3CB829E56EF443A8496346DA5C0"}-->
+    <system:String x:Key="loc_MeshImport_BoneWeightsReduced" xml:space="preserve">このメッシュは、頂点あたりのボーン影響数がゲームの上限である4を超えていました。MFEは影響の大きい4つのウェイトを残し、{0}個の頂点で正規化しました。
+
+静止時のメッシュ形状は変わりませんが、顔のアニメーション時の変形が異なる場合があります。元のPSKファイルは変更されていません。</system:String>
+    <!--localiser: {"Key":"loc_MeshImport_PlayerBoneWeightsReplaced","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"11B9613155FAD8467618E416F6E9D2D1E2933710D04D4B28C306DE7F8B377784"}-->
+    <system:String x:Key="loc_MeshImport_PlayerBoneWeightsReplaced" xml:space="preserve">PSKには、4つを超えるボーンの影響を受ける頂点が{0}個含まれていました。認識されたプレイヤー頭部には、インポートしたウェイトではなく、ゲーム本来のリグとボーンウェイトが使用されます。
+
+元のPSKファイルは変更されていません。</system:String>
+    <!--localiser: {"Key":"loc_View_MainWindow_GlTFWithTextures","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"62EEEF3DC5172CCD6EA61327818FB81C7EBE144DCBDF467A35521452E1B4EFEE"}-->
+    <system:String x:Key="loc_View_MainWindow_GlTFWithTextures" xml:space="preserve">glTF - テクスチャ付き</system:String>
+    <!--localiser: {"Key":"loc_View_MainWindow_PSKWithTextures","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"2E59B3341DC2785C505DEA58811D00F55D2CACD07AFEE8D347E09219E5499443"}-->
+    <system:String x:Key="loc_View_MainWindow_PSKWithTextures" xml:space="preserve">PSK - テクスチャ付き</system:String>
+    <!--localiser: {"Key":"loc_Services_MetadataText_Shared_scar_color_Label","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"015632E2E45AFF89742E9A492BB0CCE58D3AE021ADE71AFB5F0304621586CDD8"}-->
+    <system:String x:Key="loc_Services_MetadataText_Shared_scar_color_Label" xml:space="preserve">傷跡の色</system:String>
+    <!--localiser: {"Key":"loc_Services_MetadataText_Shared_scar_color_Description","ReviewedHash":null,"DoNotTranslate":false,"Note":"Do not translate Scar_Color.","SourceHash":"7C682A4E52E7AF93880076F9DA69590413CE011BA26B463C7F80998C2A892751"}-->
+    <system:String x:Key="loc_Services_MetadataText_Shared_scar_color_Description" xml:space="preserve">Scar_Color · LE2/LE3のアラインメント傷跡の下にある肌に色を付けます。</system:String>
+    <!--localiser: {"Key":"loc_View_MainWindow_Side","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"630EF00B7C4F54D25B8712CB4EBB5B04264B037A8FCDAC9754F21DF0036881D1"}-->
+    <system:String x:Key="loc_View_MainWindow_Side" xml:space="preserve">側面</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_ApproximateBakedShape","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"1B8CBA1ECD29FC642EB0466669A80815F231809BBE8346106D0468714CCA4FE5"}-->
+    <system:String x:Key="loc_PlayerConversion_ApproximateBakedShape" xml:space="preserve">ベイク済み形状を近似</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_ApproximateBakedShapeHelp","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"666E4649D6B6FACAFF6A2311197E7A53CAC2B98F5499DDC65D587D79EDF62C7E"}-->
+    <system:String x:Key="loc_PlayerConversion_ApproximateBakedShapeHelp" xml:space="preserve">ベイク済みの顔の形状を別のゲームのメッシュに引き継ぎます。変換結果の目と口を確認してください。</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_Description","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"BA42E4F5EC416226AFE2AC0E988809CBCBB4F026B28A3EE57C44FC22E50FFDC5"}-->
+    <system:String x:Key="loc_PlayerConversion_Description" xml:space="preserve">このプレイヤーモーフを別のゲーム用に変換し、新しいRONファイルとして保存します。</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_SaveTitle","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"302C42711436D13C5E37E5F7C432BD55C598168DC99F2C1E5A7C273AEE7375C6"}-->
+    <system:String x:Key="loc_PlayerConversion_SaveTitle" xml:space="preserve">変換したプレイヤーモーフを保存</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_ChooseNewFile","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"A0F2A71CEBDBF88DD76B7859914AD70D3074C368616A96423317D776B2FB3508"}-->
+    <system:String x:Key="loc_PlayerConversion_ChooseNewFile" xml:space="preserve">既存のファイルと重複しない新しいRONファイル名を選択してください。</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_CompletedStatus","ReviewedHash":null,"DoNotTranslate":false,"Note":"{0} = output path.","SourceHash":"25301A4957CCF002EFEB18F0E2148DD721C71F37A5A06AFC35E2E91739CB6049"}-->
+    <system:String x:Key="loc_PlayerConversion_CompletedStatus" xml:space="preserve">変換したプレイヤーモーフを {0} に保存しました。</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_Completed","ReviewedHash":null,"DoNotTranslate":false,"Note":"{0} = target game, {1} = output path, {2} = optional warnings.","SourceHash":"C0D385E3F23D6E911A1C71CE2C00DE73EB82C943E650605DB931C44EF99171AD"}-->
+    <system:String x:Key="loc_PlayerConversion_Completed" xml:space="preserve">プレイヤーモーフを {0} 用に変換し、次の場所に保存しました:
+{1}{2}</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_UnsupportedGeometry","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"F3C74CA9D73340B0523B87034EC14B605EFB9F1DB7A92A692A15A94117B832E6"}-->
+    <system:String x:Key="loc_PlayerConversion_UnsupportedGeometry" xml:space="preserve">このモーフのLOD0形状は、サポートされているプレイヤーの基準形状から安全に再現できません。元のファイルは変更されません。</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_ApproximateResult","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"920D3D520EA17400D7FC8AC7EF21832CFF0697E9836400EBA4A03407CBCCEDC6"}-->
+    <system:String x:Key="loc_PlayerConversion_ApproximateResult" xml:space="preserve">MFEはLE3のメッシュ上にベイク済みの顔を近似しました。新しいRONの目と口を確認してください。下位LODには変換先ゲームのスライダーが使用されます。</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_MissingBaselineCounterpart","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"D8697C18791423AB2858E35ED0C86B8ACFB1BE397D7A4654C3B2387688FB55DD"}-->
+    <system:String x:Key="loc_PlayerConversion_MissingBaselineCounterpart" xml:space="preserve">この頭部はローカルのプレイヤー参照に一致します。変換するには、変換先ゲーム用の互換RONを同じ参照ファミリーに追加してください。</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_UnsupportedProfile","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"F8CA54BA6D211D109A4AEB0B88070FD2A57107BC0BCDE3CBF222064B3332BBE5"}-->
+    <system:String x:Key="loc_PlayerConversion_UnsupportedProfile" xml:space="preserve">このプレイヤーモーフのプロファイルは、選択したゲームに変換できません。</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_InvalidDestination","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"61683FA4DB44C2C2AA3FB4B89C16562E5AE79060A5BCED3D2682DD8AAF86B2D6"}-->
+    <system:String x:Key="loc_PlayerConversion_InvalidDestination" xml:space="preserve">変換先として新しいRONファイルを選択してください。</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_UnsafeOutput","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"1A886BA829E3D64CDE43F9B679C7FC08083973D2A04DBD1A09925666F1349391"}-->
+    <system:String x:Key="loc_PlayerConversion_UnsafeOutput" xml:space="preserve">変換したRONを安全に保存できませんでした。元のファイルは変更されていません。</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_FailedStatus","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"81E5B25022457D8C6E3CCD30B8DA13CFB78854F7006278C8D6EB7C9E8DA1C42C"}-->
+    <system:String x:Key="loc_PlayerConversion_FailedStatus" xml:space="preserve">プレイヤーモーフの変換に失敗しました。元のファイルは変更されていません。</system:String>
+    <!--localiser: {"Key":"loc_PlayerConversion_UnsupportedBones","ReviewedHash":null,"DoNotTranslate":false,"Note":"","SourceHash":"EC6C9F52FB54FECCBD470A834F6B6CF54CF5768F4643B26B6EFD1A3AD610B89F"}-->
+    <system:String x:Key="loc_PlayerConversion_UnsupportedBones" xml:space="preserve">このモーフには無効または認識できないボーンデータが含まれているため、安全に変換できません。元のファイルは変更されていません。</system:String>
 </ResourceDictionary>

@@ -892,6 +892,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
+    private int _registryLoadGeneration;
+
     private async Task LoadTextureRegistryAsync(
         FaceEditorViewModel editor,
         MorphFaceGame game,
@@ -899,12 +901,16 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         TextureCatalogProfile catalogProfile,
         CancellationToken cancellationToken)
     {
+        var generation = _registryLoadGeneration;
+        var root = LegendaryExplorerCoreRuntime.LegendaryEditionDirectory;
+        bool IsCurrent() => generation == _registryLoadGeneration && Editor == editor &&
+            string.Equals(root, LegendaryExplorerCoreRuntime.LegendaryEditionDirectory, StringComparison.OrdinalIgnoreCase);
         try
         {
             AppLog.Verbose($"REGISTRY:LOAD {profile.Key} {game}");
             var started = System.Diagnostics.Stopwatch.GetTimestamp();
             var catalog = await _referenceService.ReadTextureCatalogAsync(game, cancellationToken);
-            if (cancellationToken.IsCancellationRequested || Editor != editor)
+            if (cancellationToken.IsCancellationRequested || !IsCurrent())
             {
                 return;
             }
@@ -922,7 +928,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                     .Concat(editor.AttachmentMeshes.Select(value => value.Value).OfType<AssetIdentity>()).ToArray();
                 var available = await Task.Run(() => _packageContextService.FindAvailablePlayerAssets(game, references,
                     cancellationToken), cancellationToken);
-                if (cancellationToken.IsCancellationRequested || Editor != editor) return;
+                if (cancellationToken.IsCancellationRequested || !IsCurrent()) return;
                 editor.RestrictPlayerReferences(available);
             }
             editor.UpdateRegistryTextureCandidates(catalog.Candidates, catalogProfile, catalog.IsAvailable);
@@ -947,7 +953,18 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             _activeRegistryProfile is not { } profile ||
             _activeRegistryCatalogProfile is not { } catalogProfile)
             return;
+        _registryLoadGeneration++;
         _ = LoadTextureRegistryAsync(editor, game, profile, catalogProfile, CancellationToken.None);
+    }
+
+    public void RefreshAfterGameDirectoryChanged()
+    {
+        _registryLoadGeneration++;
+        if (Editor is not { } editor || _loadedFace?.Game is not { } game ||
+            _activeRegistryCatalogProfile is not { } catalogProfile) return;
+        editor.UpdateRegistryTextureCandidates([], catalogProfile, false);
+        editor.UpdateRegistryAttachmentMeshes([], IsPlayerWorkspace);
+        RefreshTextureRegistry(game);
     }
 
     private void SetEditor(FaceEditorViewModel? editor, LoadedMorphFace? loaded)

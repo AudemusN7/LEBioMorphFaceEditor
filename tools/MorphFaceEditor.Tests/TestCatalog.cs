@@ -17,7 +17,7 @@ internal static class TestCatalog
                 .. HairMaterialTests.All, .. EyeMaterialTests.All, .. AsariMaterialTests.All,
                 .. SalarianMaterialTests.All, .. TurianMaterialTests.All, .. BatarianMaterialTests.All,
                 .. KroganMaterialTests.All, .. VorchaMaterialTests.All],
-            ["registry"] = [.. TextureRegistryStoreTests.All, .. TextureCatalogTests.All,
+            ["registry"] = [.. TextureRegistryStoreTests.All, .. M3toTextureRegistryTests.All, .. TextureCatalogTests.All,
                 .. InstalledAssetResolutionTests.All, .. TextureTransferDonorPolicyTests.All],
             ["rendering"] = [.. RenderingTests.All, .. AmbientOcclusionRenderingTests.All,
                 .. EnvironmentLightingTests.All, .. EnvironmentRenderingTests.All,

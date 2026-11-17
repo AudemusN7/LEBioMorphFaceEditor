@@ -284,7 +284,11 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
     {
         var candidates = source.Candidates.Select(candidate =>
         {
-            var occurrences = candidate.Occurrences.Where(includeTexture).ToArray();
+            // Ordinary stock-path copies remain excluded from the mod database.
+            // M3TO explicitly declares a different physical source at that identity.
+            var isOfficialIdentity = officialIdentities.Contains(AssetIdentity(candidate.InstancedPath, "Texture2D"));
+            var occurrences = candidate.Occurrences.Where(includeTexture)
+                .Where(value => !includeModOnly || !isOfficialIdentity || value.IsM3toOverride).ToArray();
             return occurrences.Length == 0 ? null : candidate with
             {
                 EffectiveOccurrence = !includeModOnly && occurrences.Contains(candidate.EffectiveOccurrence)
@@ -292,9 +296,7 @@ public sealed class TextureRegistryBuilder : ITextureRegistryBuilder
                 Occurrences = occurrences,
                 IsEligibleOfficialDefault = includeModOnly ? false : candidate.IsEligibleOfficialDefault
             };
-        }).Where(value => value is not null).Cast<TextureCatalogCandidate>()
-          .Where(candidate => !includeModOnly || !officialIdentities.Contains(AssetIdentity(candidate.InstancedPath, "Texture2D")))
-          .ToArray();
+        }).Where(value => value is not null).Cast<TextureCatalogCandidate>().ToArray();
 
         var meshes = source.AttachmentMeshes.Select(candidate =>
         {

@@ -29,6 +29,8 @@ public sealed record TextureCatalogOccurrence(
     string? TextureFileCacheName)
 {
     public IReadOnlyList<TextureMipStorageRecord> Mips { get; init; } = [];
+    /// <summary>This physical source is explicitly declared by its mod's M3TO manifest.</summary>
+    public bool IsM3toOverride { get; init; }
     public string PackageName => Path.GetFileName(PackagePath);
     public string OriginLabel => Origin switch
     {

@@ -631,9 +631,11 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
     {
         if (includePhysicalSources)
             return candidate.Occurrences.Append(candidate.EffectiveOccurrence).Distinct();
+        var overrides = candidate.Occurrences.Append(candidate.EffectiveOccurrence)
+            .Where(value => value.IsM3toOverride);
         if (candidate.IsEligibleOfficialDefault && candidate.EffectiveOccurrence.Origin is
                 TextureCatalogOrigin.BaseGame or TextureCatalogOrigin.OfficialDlc)
-            return [candidate.EffectiveOccurrence];
+            return overrides.Prepend(candidate.EffectiveOccurrence).Distinct();
         // Keep unique custom paths selectable without constructing a row for
         // every installed copy. Physical alternatives are expanded on request.
         var alternatives = candidate.Occurrences.Append(candidate.EffectiveOccurrence);
@@ -641,32 +643,45 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
             .OrderBy(value => value.Origin == TextureCatalogOrigin.Manual ? 0 : 1)
             .ThenBy(value => value.PackagePath, StringComparer.OrdinalIgnoreCase)
             .ThenBy(value => value.ExportUIndex).FirstOrDefault();
-        return [selected ?? candidate.EffectiveOccurrence];
+        return overrides.Prepend(selected ?? candidate.EffectiveOccurrence).Distinct();
     }
 
     private IReadOnlyList<MaterialTextureOption> BuildDefaultOptions(
         IReadOnlyList<MaterialTextureOption> physicalOptions)
     {
         var current = _session.GetTextureReference(Name);
+        // A local row may already represent the exact same physical export as a
+        // registry override, so retain its override visibility after deduplication.
+        var overrideKeys = TextureCatalogPicker.Select(_registryCandidates)
+            .SelectMany(candidate => candidate.Occurrences.Append(candidate.EffectiveOccurrence)
+                .Where(occurrence => occurrence.IsM3toOverride)
+                .Select(occurrence => PhysicalCandidateKey(candidate.InstancedPath,
+                    occurrence.PackagePath, occurrence.ExportUIndex)))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var selected = physicalOptions.Skip(1)
             .GroupBy(CanonicalOptionPath, StringComparer.OrdinalIgnoreCase)
-            .Select(group =>
+            .SelectMany(group =>
             {
                 var values = group.ToArray();
+                var overrides = values.Where(option => overrideKeys.Contains(PhysicalCandidateKey(
+                    option.InstancedPath,
+                    option.RegistryCandidate?.EffectiveOccurrence.PackagePath ?? option.Asset?.Identity.PackagePath ?? string.Empty,
+                    option.RegistryCandidate?.EffectiveOccurrence.ExportUIndex ?? option.Asset?.Identity.UIndex ?? 0))).ToArray();
+                var ordinary = values.Except(overrides).ToArray();
                 var explicitlySelected = current is { IsExplicitTextureDonor: true }
-                    ? values.FirstOrDefault(option => option.MatchesIdentity(current))
+                    ? ordinary.FirstOrDefault(option => option.MatchesIdentity(current))
                     : null;
-                if (explicitlySelected is not null) return explicitlySelected;
+                if (explicitlySelected is not null) return overrides.Prepend(explicitlySelected);
 
                 // The opened TUF package can contain newer artwork than the install.
                 var localTuf = FindTrustedTufWorkspaceOption(values[0].InstancedPath);
-                if (localTuf is not null && values.Contains(localTuf)) return localTuf;
-                var official = values.FirstOrDefault(option => option.RegistryCandidate is { } candidate &&
+                if (localTuf is not null && ordinary.Contains(localTuf)) return overrides.Prepend(localTuf);
+                var official = ordinary.FirstOrDefault(option => option.RegistryCandidate is { } candidate &&
                     _officialDefaultKeys.Contains(PhysicalCandidateKey(candidate.InstancedPath,
                         candidate.EffectiveOccurrence.PackagePath, candidate.EffectiveOccurrence.ExportUIndex)));
-                if (official is not null) return official;
+                if (official is not null) return overrides.Prepend(official);
 
-                return values
+                var fallback = ordinary
                     .Where(option => option.RegistryCandidate is null ||
                         option.RegistryCandidate.EffectiveOccurrence.Origin == TextureCatalogOrigin.Manual)
                     .OrderBy(option => option.RegistryCandidate?.EffectiveOccurrence.Origin == TextureCatalogOrigin.Manual ? 1 : 0)
@@ -676,15 +691,14 @@ public sealed class MaterialTextureEditorViewModel : ObservableObject, IDisposab
                     .ThenBy(option => option.Asset?.Identity.UIndex ??
                                       option.RegistryCandidate?.EffectiveOccurrence.ExportUIndex ?? 0)
                     .FirstOrDefault()
-                    ?? values
+                    ?? ordinary
                         .Where(option => option.RegistryCandidate?.EffectiveOccurrence.Origin == TextureCatalogOrigin.Mod)
                         .OrderBy(option => option.RegistryCandidate!.EffectiveOccurrence.PackagePath,
                             StringComparer.OrdinalIgnoreCase)
                         .ThenBy(option => option.RegistryCandidate!.EffectiveOccurrence.ExportUIndex)
                         .FirstOrDefault();
+                return fallback is null ? overrides : overrides.Prepend(fallback);
             })
-            .Where(option => option is not null)
-            .Cast<MaterialTextureOption>()
             .OrderBy(CanonicalOptionPath, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 

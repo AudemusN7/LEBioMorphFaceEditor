@@ -37,6 +37,7 @@ internal static class UiPickerTests
         new("manual hair choices reject stale pairing and decline keeps only the mesh", ManualHairChoiceRejectsStalePairing),
         new("mesh picker preserves manual sources and requires proven Player runtime backing", RegistryDeduplicatesAutomaticOccurrences),
         new("physical texture donors remain distinct and explicit choices survive collapsing", TexturePickerDeduplicatesPhysicalExports),
+        new("verified M3TO texture overrides remain visible beside stock", TexturePickerShowsM3toOverrides),
         new("texture hover cache is bounded and reused by an undoable commit", TexturePickerBoundsPreviewCacheAndPreservesHistory),
         new("late texture decode cannot replace a newer preview or revive a disposed picker", TexturePickerRejectsStalePreviewCacheResults)
     ];
@@ -748,6 +749,72 @@ internal static class UiPickerTests
         editor.ShowAllPhysicalSources = false;
         TestAssert.True(editor.SelectedTexture?.RegistryCandidate?.EffectiveOccurrence.PackagePath == mod.PackagePath,
             "Collapsing physical sources discarded the user's explicitly selected donor.");
+    }
+
+    private static void TexturePickerShowsM3toOverrides()
+    {
+        var session = MaterialTestFixtures.CreateSession();
+        const string path = "BIOG_MFE_Test.Textures.Shared_Diff";
+        var pathOnlyTexture = CreateTestTexture(string.Empty, path, "HED_Diff");
+        session.SetTextureReference("HED_Diff", pathOnlyTexture with
+        {
+            Source = pathOnlyTexture.Source with { UIndex = 0 }
+        });
+        var official = new TextureCatalogOccurrence(
+            "BIOG_MFE_Test.pcc", 41, 100, TextureCatalogOrigin.BaseGame, 128, 128,
+            "PF_DXT1", "TEXTUREGROUP_Character", false, null);
+        var replacement = official with
+        {
+            PackagePath = "DLC_MOD_Test\\CookedPCConsole\\BIOG_MFE_Test.pcc",
+            ExportUIndex = 42,
+            Origin = TextureCatalogOrigin.Mod,
+            IsM3toOverride = true
+        };
+        var ordinary = replacement with
+        {
+            PackagePath = "DLC_MOD_Other\\CookedPCConsole\\BIOG_MFE_Test.pcc",
+            ExportUIndex = 43,
+            IsM3toOverride = false
+        };
+        var candidate = new TextureCatalogCandidate(MorphFaceGame.LE3, path, official,
+            [official, replacement, ordinary]) { IsEligibleOfficialDefault = true };
+        using var editor = new MaterialTextureEditorViewModel(
+            session,
+            HumanMaterialProfiles.Describe("HED_Diff", MaterialParameterKind.Texture, HeadMaterialFamily.Skin),
+            new ImmediateTextureLoader(), "opened.pcc", [], _ => { }, [candidate],
+            isRegistryAvailable: true);
+
+        string[] Sources() => editor.Candidates.Where(option => option.InstancedPath == path)
+            .Select(option => option.RegistryCandidate!.EffectiveOccurrence.PackagePath).ToArray();
+        void AssertNormalRows()
+        {
+            var sources = Sources();
+            TestAssert.True(sources.Length == 2 && sources.Contains(official.PackagePath) &&
+                sources.Contains(replacement.PackagePath),
+                "Normal picker must show stock and the verified override, but hide ordinary copies.");
+        }
+
+        AssertNormalRows();
+        TestAssert.Equal(official.PackagePath,
+            editor.SelectedTexture?.RegistryCandidate?.EffectiveOccurrence.PackagePath);
+        editor.ShowAllPhysicalSources = true;
+        TestAssert.True(Sources().Length == 3 && Sources().Contains(ordinary.PackagePath),
+            "Expanded picker did not show the ordinary physical copy.");
+        editor.ShowAllPhysicalSources = false;
+        AssertNormalRows();
+        var selected = editor.Candidates.Single(option =>
+            option.RegistryCandidate?.EffectiveOccurrence.PackagePath == replacement.PackagePath);
+        editor.PreviewTextureAsync(selected).GetAwaiter().GetResult();
+        TestAssert.Equal(replacement.PackagePath, session.GetPreviewTexture("HED_Diff")?.Source.PackagePath);
+        editor.CommitTexture(selected);
+        TestAssert.Equal(replacement.PackagePath, session.GetTextureReference("HED_Diff")?.PackagePath);
+        TestAssert.True(session.GetTextureReference("HED_Diff")?.IsExplicitTextureDonor == true,
+            "Selecting the override did not preserve explicit donor intent.");
+        editor.ShowAllPhysicalSources = true;
+        editor.ShowAllPhysicalSources = false;
+        AssertNormalRows();
+        TestAssert.Equal(replacement.PackagePath,
+            editor.SelectedTexture?.RegistryCandidate?.EffectiveOccurrence.PackagePath);
     }
 
     private static void TexturePickerBoundsPreviewCacheAndPreservesHistory()
